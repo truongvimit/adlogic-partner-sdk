@@ -25,13 +25,16 @@ Then declare the dependencies:
 
 ```groovy
 dependencies {
-    implementation 'com.github.truongvimit:ads:1.0.0'
-    implementation 'com.github.truongvimit:onboardkitorigin:1.0.0'
+    implementation 'com.github.truongvimit.Example-AdLogic-Partner:ads:1.0.0'
+    implementation 'com.github.truongvimit.Example-AdLogic-Partner:onboardkitorigin:1.0.0'
 
     // Tracker ships in debug builds only — keep it out of release
-    debugImplementation 'com.github.truongvimit:adtracer:1.0.0'
+    debugImplementation 'com.github.truongvimit.Example-AdLogic-Partner:adtracer:1.0.0'
 }
 ```
+
+Note the group id: because this repository publishes several modules, JitPack namespaces them as
+`com.github.<user>.<repo>` rather than `com.github.<user>`. The repository name is part of the group.
 
 Replace `1.0.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
