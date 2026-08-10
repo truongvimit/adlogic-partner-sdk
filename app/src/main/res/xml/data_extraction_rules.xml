@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+
+    <!-- ===== CLOUD BACKUP (Google Drive) ===== -->
+    <cloud-backup
+        disableIfNoEncryptionCapabilities="true">
+
+        <!-- INCLUDE -->
+        <include
+            domain="sharedpref"
+            path="." />
+
+        <include
+            domain="database"
+            path="." />
+
+        <include
+            domain="file"
+            path="." />
+
+        <!-- EXCLUDE -->
+        <!-- Không backup cache -->
+        <exclude
+            domain="file"
+            path="cache" />
+
+        <!-- Không backup Ads / attribution -->
+        <exclude
+            domain="sharedpref"
+            path="adjust_preferences" />
+
+        <exclude
+            domain="sharedpref"
+            path="firebase_installations" />
+
+    </cloud-backup>
+
+    <!-- ===== DEVICE TO DEVICE TRANSFER ===== -->
+    <device-transfer>
+
+        <!-- INCLUDE -->
+        <include
+            domain="sharedpref"
+            path="user_settings.xml" />
+
+        <include
+            domain="database"
+            path="user.db" />
+
+    </device-transfer>
+
+</data-extraction-rules>

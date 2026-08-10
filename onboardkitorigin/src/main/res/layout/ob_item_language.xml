@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma language row: 64dp, #F5F5F5 r8, flag 28, label 24sp, radio 20 at end. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="@dimen/ob_language_row_gap">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/ob_language_row_height"
+        android:background="@drawable/ob_bg_language_row"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/ob_screen_padding">
+
+        <ImageView
+            android:id="@+id/ob_language_flag"
+            android:layout_width="@dimen/ob_flag_size"
+            android:layout_height="@dimen/ob_flag_size"
+            android:importantForAccessibility="no"
+            android:adjustViewBounds="true"
+            tools:src="@drawable/ob_flag_en_us" />
+
+        <TextView
+            android:id="@+id/ob_language_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/ob_poppins_regular"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/ob_text_primary"
+            android:textSize="@dimen/ob_text_language"
+            tools:text="English" />
+
+        <ImageView
+            android:id="@+id/ob_language_radio"
+            android:layout_width="@dimen/ob_radio_size"
+            android:layout_height="@dimen/ob_radio_size"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ob_radio_selector" />
+    </LinearLayout>
+</FrameLayout>

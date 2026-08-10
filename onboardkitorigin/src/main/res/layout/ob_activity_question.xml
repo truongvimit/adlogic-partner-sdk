@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Question screen: one prompt, 2-column option grid, CTA appears on selection, native bottom. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <TextView
+        android:id="@+id/ob_question_title"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/ob_header_height"
+        android:ellipsize="end"
+        android:fontFamily="@font/ob_outfit_semibold"
+        android:gravity="start|center_vertical"
+        android:maxLines="2"
+        android:paddingStart="21dp"
+        android:paddingEnd="21dp"
+        android:textColor="@color/ob_text_header"
+        android:textSize="@dimen/ob_text_header"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="@string/ob_question_title_default" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/ob_question_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/ob_question_cta"
+        app:layout_constraintTop_toBottomOf="@id/ob_question_title" />
+
+    <TextView
+        android:id="@+id/ob_question_cta"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/ob_cta_height"
+        android:layout_marginHorizontal="@dimen/ob_screen_padding"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/ob_bg_cta_pill"
+        android:fontFamily="@font/ob_urbanist_bold"
+        android:gravity="center"
+        android:text="@string/ob_question_cta_default"
+        android:textColor="@color/ob_white"
+        android:textSize="@dimen/ob_text_cta"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_block" />
+
+    <FrameLayout
+        android:id="@+id/ob_ad_block"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintHeight_percent="0.35">
+
+        <FrameLayout
+            android:id="@+id/ob_native_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <include
+            android:id="@+id/ob_native_shimmer"
+            layout="@layout/ob_shimmer_native_cta_bottom" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

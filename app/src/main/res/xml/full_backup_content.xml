@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+
+    <!-- INCLUDE -->
+
+    <!-- Backup toàn bộ SharedPreferences -->
+    <include
+        domain="sharedpref"
+        path="." />
+
+    <!-- Backup database -->
+    <include
+        domain="database"
+        path="." />
+
+    <!-- Backup file nội bộ -->
+    <include
+        domain="file"
+        path="." />
+
+    <!-- Backup file external app-specific -->
+    <include
+        domain="external"
+        path="." />
+
+    <!-- EXCLUDE -->
+
+    <!-- Không backup cache -->
+    <exclude
+        domain="file"
+        path="cache" />
+
+    <!-- Không backup database tạm -->
+    <exclude
+        domain="database"
+        path="temp.db" />
+
+</full-backup-content>

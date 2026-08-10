@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.itg.template.ui.component.custom.BlurLoadingLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <eightbitlab.com.blurview.BlurTarget
+        android:id="@+id/blurTarget"
+        android:layout_width="match_parent"
+        app:blurOverlayColor="@color/gntGray"
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/blurSourceImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+    </eightbitlab.com.blurview.BlurTarget>
+
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/blurView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="@dimen/_200sdp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/rounded_dialog"
+            android:backgroundTint="#DDF1FF"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/animLoading"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:elevation="8dp"
+                android:padding="@dimen/_16sdp"
+                app:layout_constraintDimensionRatio="1:0.6"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:lottie_autoPlay="true"
+                app:lottie_loop="true"
+                app:lottie_rawRes="@raw/prepare_ads" />
+
+            <com.itg.template.ui.component.custom.LoadingDotsTextView
+                style="@style/text_bold_16"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="@dimen/_8sdp"
+                app:layout_constraintTop_toBottomOf="@+id/animLoading"
+                app:loadingText="Loading ads" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </eightbitlab.com.blurview.BlurView>
+
+</com.itg.template.ui.component.custom.BlurLoadingLayout>
+

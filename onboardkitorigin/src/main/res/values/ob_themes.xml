@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ob_Theme_OnboardKit" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ob_white</item>
+        <item name="android:statusBarColor">@color/ob_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/ob_white</item>
+    </style>
+
+    <style name="ob_Theme_OnboardKit_FullScreenAd" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ob_white</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/ob_black</item>
+    </style>
+</resources>

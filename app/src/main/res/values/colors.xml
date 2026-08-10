@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="color_main">#0573B8</color>
+    <color name="color_bg_main">#F4F4F4</color>
+    <color name="color_3346F1">#3346f1</color>
+    <color name="color_FFA510">#FFA510</color>
+    <color name="color_9E9E9E">#9E9E9E</color>
+    <color name="colorBackground">#ffffff</color>
+    <color name="colorDisable">#bcbcbc</color>
+    <color name="textPrimary">#1F1F1F</color>
+    <color name="color_button">#3397FF</color>
+
+    <!-- Dashboard colors -->
+    <color name="color_header_start">#0573B8</color>
+    <color name="color_header_end">#3397FF</color>
+    <color name="color_section_bg">#F8FAFE</color>
+    <color name="color_card_bg">#FFFFFF</color>
+    <color name="color_success">#2E7D32</color>
+    <color name="color_error">#C62828</color>
+    <color name="color_warning">#F57F17</color>
+    <color name="color_divider">#E8EDF2</color>
+    <color name="color_text_secondary">#5F6368</color>
+    <color name="color_inter_card">#EDE7F6</color>
+    <color name="color_native_card">#E3F2FD</color>
+    <color name="color_flag_card">#FFF3E0</color>
+    <color name="color_util_card">#E8F5E9</color>
+
+</resources>

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+
+    <application
+        android:name="com.itg.template.app.GlobalApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/full_backup_content"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Main">
+
+        <activity
+            android:name=".ui.component.splash.SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <activity
+            android:name="com.itg.template.ui.component.main.MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="LockedOrientationActivity" />
+
+        <activity
+            android:name=".ui.component.setting.SettingActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="LockedOrientationActivity" />
+
+        <activity
+            android:name=".ui.component.uninstall.ConfirmUninstallActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="LockedOrientationActivity" />
+        <activity
+            android:name=".ui.component.uninstall.SurveyActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="LockedOrientationActivity" />
+
+        <activity
+            android:name=".ui.component.welcome.WelcomeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="LockedOrientationActivity" />
+
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${app_id}" />
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id" />
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/facebook_client_token" />
+        <meta-data
+            android:name="com.facebook.sdk.AutoInitEnabled"
+            android:value="true" />
+        <meta-data
+            android:name="com.facebook.sdk.AutoLogAppEventsEnabled"
+            android:value="true" />
+        <meta-data
+            android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
+            android:value="true" />
+    </application>
+
+
+</manifest>

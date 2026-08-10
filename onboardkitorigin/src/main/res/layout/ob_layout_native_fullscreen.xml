@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "OB3 ads": full-bleed media, top/bottom scrims, advertiser bar, headline+body, CTA pill. -->
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/ob_black">
+
+        <com.google.android.gms.ads.nativead.MediaView
+            android:id="@+id/ad_media"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="114dp"
+            android:layout_gravity="top"
+            android:background="@drawable/ob_gradient_top_scrim" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="213dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/ob_gradient_bottom_scrim" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:layout_gravity="top">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:layout_gravity="start"
+                android:background="@color/ob_white"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/ob_poppins_semibold"
+                    android:text="@string/ob_ad_badge"
+                    android:textColor="@color/ob_text_secondary"
+                    android:textSize="11sp" />
+
+                <ImageView
+                    android:layout_width="17dp"
+                    android:layout_height="17dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ob_ic_chevron_down" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/ad_advertiser"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:maxLines="1"
+                android:textColor="@color/ob_white"
+                android:textSize="17sp"
+                tools:text="Sponsor" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:orientation="horizontal"
+                android:paddingEnd="2dp"
+                tools:ignore="RtlSymmetry">
+
+                <ImageView
+                    android:layout_width="23dp"
+                    android:layout_height="23dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ob_ic_info" />
+
+                <ImageView
+                    android:layout_width="23dp"
+                    android:layout_height="23dp"
+                    android:layout_marginStart="6dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ob_ic_adchoices" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_bold"
+                android:maxLines="1"
+                android:textColor="@color/ob_white"
+                android:textSize="17sp"
+                tools:text="Grab" />
+
+            <TextView
+                android:id="@+id/ad_body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:maxLines="2"
+                android:textColor="@color/ob_white"
+                android:textSize="17sp"
+                tools:text="Body" />
+
+            <TextView
+                android:id="@+id/ad_call_to_action"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/ob_cta_height"
+                android:layout_marginStart="@dimen/ob_screen_padding"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="@dimen/ob_screen_padding"
+                android:layout_marginBottom="@dimen/ob_screen_padding"
+                android:background="@drawable/ob_bg_cta_pill"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_urbanist_bold"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="@color/ob_white"
+                android:textSize="@dimen/ob_text_cta"
+                tools:text="LEARN MORE" />
+        </LinearLayout>
+    </FrameLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

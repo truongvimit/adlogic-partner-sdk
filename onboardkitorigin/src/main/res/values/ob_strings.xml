@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ob_choose_language">Choose Language</string>
+    <string name="ob_next">Next</string>
+    <string name="ob_get_started">Get Started</string>
+    <string name="ob_skip">Skip</string>
+    <string name="ob_loading">Loading…</string>
+    <string name="ob_ad_badge" translatable="false">Ad</string>
+    <string name="ob_sponsored" translatable="false">Sponsored</string>
+
+    <string name="ob_sample_title_1">Dive into endless love stories</string>
+    <string name="ob_sample_subtitle_1">Discover fresh romance, drama, and unforgettable moments anytime.</string>
+    <string name="ob_sample_title_2">Enhance and beautify photos</string>
+    <string name="ob_sample_subtitle_2">Improve the quality and aesthetics of your photos with advanced editing tools.</string>
+
+    <string name="ob_question_title_default">What do you want to explore?</string>
+    <string name="ob_question_cta_default">Continue</string>
+</resources>

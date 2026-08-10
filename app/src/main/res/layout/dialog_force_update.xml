@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.itg.template.ui.component.custom.BlurLoadingLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <eightbitlab.com.blurview.BlurTarget
+        android:id="@+id/blurTarget"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/blurSourceImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+    </eightbitlab.com.blurview.BlurTarget>
+
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/blurView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="@dimen/_250sdp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/rounded_dialog"
+            android:padding="@dimen/_16sdp">
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/animLoading"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:elevation="8dp"
+                android:padding="@dimen/_16sdp"
+                app:layout_constraintDimensionRatio="1:0.6"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:lottie_autoPlay="true"
+                app:lottie_loop="true"
+                app:lottie_rawRes="@raw/rocket_force_update" />
+
+            <ImageView
+                android:id="@+id/imgForceUpdate"
+                android:layout_width="@dimen/_72sdp"
+                android:layout_height="@dimen/_72sdp"
+                android:layout_marginBottom="@dimen/_12sdp"
+                android:scaleType="centerInside"
+                android:src="@mipmap/ic_launcher"
+                app:layout_constraintBottom_toTopOf="@+id/txtForceUpdateTitle"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/animLoading"
+                app:layout_constraintVertical_chainStyle="packed" />
+
+            <TextView
+                android:id="@+id/txtForceUpdateTitle"
+                style="@style/text_bold_16"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/_8sdp"
+                android:gravity="center"
+                android:text="@string/we_re_better_than_ever"
+                android:textColor="@color/textPrimary"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/imgForceUpdate" />
+
+            <TextView
+                android:id="@+id/txtForceUpdateDescription"
+                style="@style/text_regular_12"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/_8sdp"
+                android:gravity="center"
+                android:text="@string/force_update_message"
+                android:textColor="@color/textPrimary"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/txtForceUpdateTitle" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnUpdateNow"
+                style="@style/text_bold_12"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/_16sdp"
+                android:backgroundTint="@color/color_button"
+                android:gravity="center"
+                android:text="@string/update_now"
+                android:textColor="@color/white"
+
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/txtForceUpdateDescription" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </eightbitlab.com.blurview.BlurView>
+
+</com.itg.template.ui.component.custom.BlurLoadingLayout>
+

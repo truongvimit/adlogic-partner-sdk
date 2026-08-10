@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.itg.template.ui.component.custom.BlurLoadingLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <eightbitlab.com.blurview.BlurTarget
+        android:id="@+id/blurTarget"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/blurSourceImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+    </eightbitlab.com.blurview.BlurTarget>
+
+    <eightbitlab.com.blurview.BlurView
+        android:id="@+id/blurView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="@dimen/_250sdp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/rounded_dialog">
+
+            <ImageView
+                android:id="@+id/animNoInternet"
+                android:layout_width="@dimen/_80sdp"
+                android:layout_height="0dp"
+                android:elevation="8dp"
+                android:padding="@dimen/_16sdp"
+                android:src="@drawable/ic_no_internet"
+                app:layout_constraintDimensionRatio="1:1"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:lottie_autoPlay="true"
+                app:lottie_loop="true"
+                app:lottie_rawRes="@raw/prepare_ads" />
+
+            <TextView
+                android:id="@+id/txtNoInternet"
+                style="@style/text_bold_16"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_16sdp"
+                android:layout_marginTop="@dimen/_8sdp"
+                android:layout_marginEnd="@dimen/_16sdp"
+                android:gravity="center"
+                android:text="@string/no_internet_title"
+                android:textColor="@color/textPrimary"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/animNoInternet" />
+
+            <TextView
+                android:id="@+id/txtNoInternetDesc"
+                style="@style/text_regular_12"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_16sdp"
+                android:layout_marginTop="@dimen/_4sdp"
+                android:layout_marginEnd="@dimen/_16sdp"
+                android:gravity="center"
+                android:text="@string/no_internet_message"
+                android:textColor="@color/textPrimary"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/txtNoInternet" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenSettings"
+                style="@style/text_bold_12"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_16sdp"
+                android:layout_marginTop="@dimen/_16sdp"
+                android:layout_marginEnd="@dimen/_16sdp"
+                android:layout_marginBottom="@dimen/_16sdp"
+                android:backgroundTint="@color/color_button"
+                android:gravity="center"
+                android:text="@string/open_settings"
+                android:textColor="@color/white"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/txtNoInternetDesc" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </eightbitlab.com.blurview.BlurView>
+
+</com.itg.template.ui.component.custom.BlurLoadingLayout>
+

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen native step (OB3): ad fills the screen, delayed Skip, fallback when no fill. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <FrameLayout
+        android:id="@+id/ob_native_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/ob_native_shimmer"
+        layout="@layout/ob_shimmer_native_fullscreen" />
+
+    <LinearLayout
+        android:id="@+id/ob_fullscreen_fallback"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ob_fallback_image"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:importantForAccessibility="no" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/ob_skip_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|top"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/ob_bg_skip"
+        android:fontFamily="@font/ob_poppins_semibold"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:text="@string/ob_skip"
+        android:textColor="@color/ob_white"
+        android:textSize="14sp"
+        android:visibility="gone" />
+</FrameLayout>

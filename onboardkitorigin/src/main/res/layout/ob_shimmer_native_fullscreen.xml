@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirror skeleton of ob_layout_native_fullscreen. -->
+<com.facebook.shimmer.ShimmerFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/ob_white">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/ob_shimmer_bone" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:layout_gravity="top">
+
+            <View
+                android:layout_width="45dp"
+                android:layout_height="24dp"
+                android:layout_gravity="start"
+                android:background="@color/ob_white" />
+
+            <View
+                android:layout_width="65dp"
+                android:layout_height="17dp"
+                android:layout_gravity="center"
+                android:background="@drawable/ob_bg_shimmer_bone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="120dp"
+                android:layout_height="17dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/ob_bg_shimmer_bone" />
+
+            <View
+                android:layout_width="220dp"
+                android:layout_height="17dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/ob_bg_shimmer_bone" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/ob_cta_height"
+                android:layout_marginStart="@dimen/ob_screen_padding"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="@dimen/ob_screen_padding"
+                android:layout_marginBottom="@dimen/ob_screen_padding"
+                android:background="@drawable/ob_bg_shimmer_bone_pill" />
+        </LinearLayout>
+    </FrameLayout>
+</com.facebook.shimmer.ShimmerFrameLayout>

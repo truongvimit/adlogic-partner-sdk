@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent">
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/creenRating"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginHorizontal="@dimen/_20sdp"
+            app:cardCornerRadius="10dp"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:background="@color/white"
+                android:orientation="vertical"
+                android:paddingHorizontal="5dp"
+                android:paddingBottom="20dp">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="@dimen/_150sdp"
+                    android:layout_height="@dimen/_110sdp"
+                    android:src="@drawable/img_rating_app_v2"/>
+
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginHorizontal="5dp"
+                    android:gravity="center"
+                    android:maxLines="2"
+                    android:paddingHorizontal="5dp"
+                    android:text="@string/txt_do_you_like_our_app"
+                    android:textColor="@color/black"
+                    android:textSize="@dimen/_14sdp" />
+
+                <TextView
+                    android:id="@+id/tvContent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginHorizontal="@dimen/_30sdp"
+                    android:layout_marginVertical="10dp"
+                    android:gravity="center"
+                    android:maxLines="2"
+                    android:paddingHorizontal="10dp"
+                    android:text="@string/txt_rate_5_star"
+                    android:textColor="#5F5F5F"
+                    android:textSize="@dimen/_10sdp" />
+
+                <com.willy.ratingbar.ScaleRatingBar
+                    android:id="@+id/simpleRatingBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:srb_clickable="true"
+                    app:srb_scrollable="true"
+                    app:srb_stepSize="1"/>
+
+                <TextView
+                    android:id="@+id/btnLater"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:paddingHorizontal="@dimen/_8sdp"
+                    android:paddingVertical="@dimen/_4sdp"
+                    android:text="@string/txt_later"
+                    android:textAllCaps="false"
+                    android:textColor="#B4B4B4"
+                    android:textSize="@dimen/_14sdp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

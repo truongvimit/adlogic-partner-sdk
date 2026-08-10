@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+    </data>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/_12sdp"
+        app:cardBackgroundColor="#ffffff"
+        app:cardCornerRadius="@dimen/_40sdp"
+        app:cardElevation="0dp"
+        app:rippleColor="#10000000"
+        app:strokeColor="@android:color/transparent"
+        app:strokeWidth="@dimen/_1sdp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingHorizontal="@dimen/_13sdp"
+            android:paddingVertical="@dimen/_8sdp">
+
+            <androidx.appcompat.widget.AppCompatRadioButton
+                android:id="@+id/rbLanguageSelected"
+                android:layout_width="@dimen/_28sdp"
+                android:layout_height="@dimen/_28sdp"
+                android:background="@null"
+                android:buttonTint="@color/radio_button_language"
+                android:checked="true"
+                android:clickable="false"
+                android:scaleX="1.15"
+                android:scaleY="1.15" />
+
+            <TextView
+                android:id="@+id/tvLanguageName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_4sdp"
+                android:textColor="#000000"
+                android:textSize="@dimen/_15sdp"
+                android:textStyle="bold"
+                tools:text="English" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</layout>

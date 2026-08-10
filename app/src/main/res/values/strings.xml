@@ -1,0 +1,57 @@
+<resources>
+    <string name="app_name" translatable="false">ITG Project Base</string>
+    <string name="language" translatable="false">Language</string>
+    <string name="ads_are_about_to_be_shown">Ads are about to be shown...</string>
+    <string name="please_select_language">Please select language</string>
+    <string name="get_started">Get Started</string>
+    <string name="next">next</string>
+    <string name="txt_continue">Continue</string>
+    <string name="txt_request_record_permission">Recording is the permission required for the app to work</string>
+    <string name="txt_denie">To use this feature, you need permission</string>
+    <string name="txt_thanks_you_for_rating">Thanks you for rating!</string>
+    <string name="txt_later" translatable="false"><u>Later</u></string>
+    <string name="txt_rate_5_star" translatable="false">If you like this app, please rate our app 5 stars in store!</string>
+    <string name="txt_do_you_like_our_app" translatable="false">Do you like our app?</string>
+    <string name="onboarding_title_1">Dive into endless love stories</string>
+    <string name="onboarding_des_1">Discover fresh romance, drama, and unforgettable moments anytime.</string>
+    <string name="onboarding_title_2">Your romance world, reimagined</string>
+    <string name="onboarding_des_2">Experience stories your way with seamless reading and curated vibes.</string>
+    <string name="onboarding_title_3">Fall in love with every story</string>
+    <string name="onboarding_des_3">Unlock a universe of passion, twists, and heartwarming journeys.</string>
+    <string name="onboarding_title_4">Your personal story library</string>
+    <string name="onboarding_des_4">Organize, revisit, and enjoy all your favorite stories in one place.</string>
+
+    <string name="applying_selected_language" translatable="false">Applying selected language...</string>
+    <string name="text_restart_app">Restart App</string>
+    <string name="crash_info_title">Crash Information</string>
+    <string name="close">Close</string>
+    <string name="ad_config_invalid_message">Invalid ad configuration. Please verify ad_config.json.</string>
+    <!--    Uninstall-->
+    <string name="content_confirm_uninstall">Why remvove the app</string>
+    <string name="try_again">Try Again</string>
+    <string name="still_want_to_uninstall">Still want to uninstall</string>
+    <string name="issues_encountered_during_usage">Issues encountered during usage</string>
+    <string name="txt_cancel">Cancel</string>
+    <string name="txt_uninstall">Uninstall</string>
+    <string name="survey_1">Feature does not working</string>
+    <string name="survey_2">Too many ads</string>
+    <string name="survey_3">I don’t need it</string>
+    <string name="survey_4">Other</string>
+    <string name="loading_label">Loading</string>
+    <string name="no_internet_title">No Internet Connection</string>
+    <string name="no_internet_message">Please check your network settings to continue using the app.</string>
+    <string name="open_settings">Open Settings</string>
+    <string name="force_update_message">A new version is available. Please update to continue using the app.</string>
+    <string name="update_now">Update Now</string>
+    <string name="update_later">Maybe Later</string>
+    <string name="setting">Setting</string>
+    <string name="rate">Rate</string>
+    <string name="feedback">Feedback</string>
+    <string name="share_with_friend">Share with friend</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="let_me_recommend">Let me recommend</string>
+    <string name="share_to">Share to</string>
+    <string name="we_re_better_than_ever">We’re better than ever</string>
+    <string name="well_comeback">Welcome back!</string>
+    <string name="start">Start</string>
+</resources>

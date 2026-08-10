@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Splash": centered logo + app name, loading bar at 83% height, optional banner slot. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <LinearLayout
+        android:id="@+id/ob_splash_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.38">
+
+        <ImageView
+            android:id="@+id/ob_splash_logo"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:importantForAccessibility="no"
+            tools:src="@android:drawable/sym_def_app_icon" />
+
+        <TextView
+            android:id="@+id/ob_splash_app_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:fontFamily="@font/ob_mulish_bold"
+            android:letterSpacing="0.02"
+            android:textColor="@color/ob_text_splash_title"
+            android:textSize="36sp"
+            tools:text="StoryReels" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ob_splash_loading"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/ob_splash_ad_container"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.9">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/ob_mulish_medium"
+            android:letterSpacing="0.01"
+            android:text="@string/ob_loading"
+            android:textColor="@color/ob_text_splash_loading"
+            android:textSize="18sp" />
+
+        <ProgressBar
+            android:id="@+id/ob_splash_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="220dp"
+            android:layout_height="6dp"
+            android:layout_marginTop="12dp"
+            android:indeterminate="false"
+            android:max="100"
+            android:progress="30"
+            android:progressDrawable="@drawable/ob_progress_splash" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/ob_splash_ad_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:visibility="visible">
+
+        <include layout="@layout/layout_banner_control" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

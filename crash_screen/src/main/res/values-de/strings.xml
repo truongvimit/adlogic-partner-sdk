@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<string name="error_occurred_explanation">Ein unerwarteter Fehler ist aufgetreten.\nEntschuldigung für die Unannehmlichkeiten.</string>
+<string name="restart_app">App neu starten</string>
+<string name="close_app">App schließen</string>
+<string name="error_details">Fehlerdetails</string>
+<string name="error_details_title">Fehlerdetails</string>
+<string name="error_details_close">Schließen</string>
+<string name="error_details_copy">In die Zwischenablage kopieren</string>
+<string name="error_details_copied">In die Zwischenablage kopiert</string>
+<string name="error_details_clipboard_label">Fehlerinformationen</string>
+</resources>

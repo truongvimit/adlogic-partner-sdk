@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Design tokens from Figma "Onboard Template" 6.4.0 -->
+    <color name="ob_accent">#FF375E</color>
+    <color name="ob_white">#FFFFFF</color>
+    <color name="ob_black">#000000</color>
+
+    <color name="ob_text_primary">#222222</color>
+    <color name="ob_text_header">#070707</color>
+    <color name="ob_text_subtitle">#131318</color>
+    <color name="ob_text_secondary">#797C80</color>
+    <color name="ob_text_splash_title">#2F2F2F</color>
+    <color name="ob_text_splash_loading">#646C79</color>
+    <color name="ob_icon_gray">#949494</color>
+
+    <color name="ob_row_bg">#F5F5F5</color>
+    <color name="ob_ad_block_bg">#F5F7FF</color>
+    <color name="ob_ad_compact_bg">#F5F5F5</color>
+    <color name="ob_ad_compact_cta_bg">#33B7B7B7</color>
+    <color name="ob_ad_compact_border">#F1F1F1</color>
+
+    <color name="ob_content_card_bg">#80FFFFFF</color>
+    <color name="ob_dot_active">#66FF375E</color>
+    <color name="ob_dot_inactive">#66FFFFFF</color>
+    <color name="ob_indicator_active">#FF375E</color>
+    <color name="ob_indicator_inactive">#66FF375E</color>
+
+    <color name="ob_progress_track">#DEDEDE</color>
+    <color name="ob_radio_stroke">#757575</color>
+    <color name="ob_shimmer_bone">#EDEFF5</color>
+    <color name="ob_scrim_black_50">#80000000</color>
+    <color name="ob_scrim_black_70">#B3000000</color>
+    <color name="ob_skip_bg">#66000000</color>
+</resources>

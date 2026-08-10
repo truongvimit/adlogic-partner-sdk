@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<string name="error_occurred_explanation">Đã xảy ra một lỗi không mong muốn.\nXin lỗi vì sự bất tiện này.</string>
+<string name="restart_app">Khởi động lại ứng dụng</string>
+<string name="close_app">Đóng ứng dụng</string>
+<string name="error_details">Chi tiết lỗi</string>
+<string name="error_details_title">Chi tiết lỗi</string>
+<string name="error_details_close">Đóng</string>
+<string name="error_details_copy">Sao chép vào clipboard</string>
+<string name="error_details_copied">Đã sao chép vào clipboard</string>
+<string name="error_details_clipboard_label">Thông tin lỗi</string>
+</resources>

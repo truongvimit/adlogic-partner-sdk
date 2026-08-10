@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="text_regular">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/textPrimary</item>
+        <item name="android:gravity">start</item>
+        <item name="android:fontFamily">@font/regular</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="text_medium" parent="text_regular">
+        <item name="android:fontFamily">@font/medium</item>
+    </style>
+
+    <style name="text_semi_bold" parent="text_regular">
+        <item name="android:fontFamily">@font/semi_bold</item>
+    </style>
+
+    <style name="text_bold" parent="text_regular">
+        <item name="android:fontFamily">@font/bold</item>
+    </style>
+
+    <style name="text_regular_24" parent="text_regular">
+        <item name="android:textSize">@dimen/_24ssp</item>
+    </style>
+
+    <style name="text_regular_22" parent="text_regular">
+        <item name="android:textSize">@dimen/_22ssp</item>
+    </style>
+
+    <style name="text_regular_20" parent="text_regular">
+        <item name="android:textSize">@dimen/_20ssp</item>
+    </style>
+
+    <style name="text_regular_18" parent="text_regular">
+        <item name="android:textSize">@dimen/_18ssp</item>
+    </style>
+
+    <style name="text_regular_16" parent="text_regular">
+        <item name="android:textSize">@dimen/_16ssp</item>
+    </style>
+
+    <style name="text_regular_14" parent="text_regular">
+        <item name="android:textSize">@dimen/_14ssp</item>
+    </style>
+
+    <style name="text_regular_12" parent="text_regular">
+        <item name="android:textSize">@dimen/_12ssp</item>
+    </style>
+
+    <style name="text_regular_10" parent="text_regular">
+        <item name="android:textSize">@dimen/_10ssp</item>
+    </style>
+
+    <style name="text_regular_8" parent="text_regular">
+        <item name="android:textSize">@dimen/_8ssp</item>
+    </style>
+
+    <style name="text_regular_6" parent="text_regular">
+        <item name="android:textSize">@dimen/_6ssp</item>
+    </style>
+
+    <style name="text_medium_24" parent="text_medium">
+        <item name="android:textSize">@dimen/_24ssp</item>
+    </style>
+
+    <style name="text_medium_22" parent="text_medium">
+        <item name="android:textSize">@dimen/_22ssp</item>
+    </style>
+
+    <style name="text_medium_20" parent="text_medium">
+        <item name="android:textSize">@dimen/_20ssp</item>
+    </style>
+
+    <style name="text_medium_18" parent="text_medium">
+        <item name="android:textSize">@dimen/_18ssp</item>
+    </style>
+
+    <style name="text_medium_16" parent="text_medium">
+        <item name="android:textSize">@dimen/_16ssp</item>
+    </style>
+
+    <style name="text_medium_14" parent="text_medium">
+        <item name="android:textSize">@dimen/_14ssp</item>
+    </style>
+
+    <style name="text_medium_12" parent="text_medium">
+        <item name="android:textSize">@dimen/_12ssp</item>
+    </style>
+
+    <style name="text_medium_10" parent="text_medium">
+        <item name="android:textSize">@dimen/_10ssp</item>
+    </style>
+
+    <style name="text_medium_8" parent="text_medium">
+        <item name="android:textSize">@dimen/_8ssp</item>
+    </style>
+
+    <style name="text_medium_6" parent="text_medium">
+        <item name="android:textSize">@dimen/_6ssp</item>
+    </style>
+
+    <style name="text_semi_bold_24" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_24ssp</item>
+    </style>
+
+    <style name="text_semi_bold_22" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_22ssp</item>
+    </style>
+
+    <style name="text_semi_bold_20" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_20ssp</item>
+    </style>
+
+    <style name="text_semi_bold_18" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_18ssp</item>
+    </style>
+
+    <style name="text_semi_bold_16" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_16ssp</item>
+    </style>
+
+    <style name="text_semi_bold_14" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_14ssp</item>
+    </style>
+
+    <style name="text_semi_bold_12" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_12ssp</item>
+    </style>
+
+    <style name="text_semi_bold_10" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_10ssp</item>
+    </style>
+
+    <style name="text_semi_bold_8" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_8ssp</item>
+    </style>
+
+    <style name="text_semi_bold_6" parent="text_semi_bold">
+        <item name="android:textSize">@dimen/_6ssp</item>
+    </style>
+
+    <style name="text_bold_24" parent="text_bold">
+        <item name="android:textSize">@dimen/_24ssp</item>
+    </style>
+
+    <style name="text_bold_22" parent="text_bold">
+        <item name="android:textSize">@dimen/_22ssp</item>
+    </style>
+
+    <style name="text_bold_20" parent="text_bold">
+        <item name="android:textSize">@dimen/_20ssp</item>
+    </style>
+
+    <style name="text_bold_18" parent="text_bold">
+        <item name="android:textSize">@dimen/_18ssp</item>
+    </style>
+
+    <style name="text_bold_16" parent="text_bold">
+        <item name="android:textSize">@dimen/_16ssp</item>
+    </style>
+
+    <style name="text_bold_14" parent="text_bold">
+        <item name="android:textSize">@dimen/_14ssp</item>
+    </style>
+
+    <style name="text_bold_12" parent="text_bold">
+        <item name="android:textSize">@dimen/_12ssp</item>
+    </style>
+
+    <style name="text_bold_10" parent="text_bold">
+        <item name="android:textSize">@dimen/_10ssp</item>
+    </style>
+
+    <style name="text_bold_8" parent="text_bold">
+        <item name="android:textSize">@dimen/_8ssp</item>
+    </style>
+
+    <style name="text_bold_6" parent="text_bold">
+        <item name="android:textSize">@dimen/_6ssp</item>
+    </style>
+
+    <style name="TabTextStyle" parent="TextAppearance.Design.Tab">
+        <item name="textAllCaps">false</item>
+        <item name="android:textSize">@dimen/_12ssp</item>
+    </style>
+
+    <style name="btnIconCommon">
+        <item name="android:layout_width">@dimen/button_height</item>
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:background">?android:selectableItemBackgroundBorderless</item>
+        <item name="android:gravity">center</item>
+        <item name="android:padding">@dimen/padding_button_height</item>
+    </style>
+
+    <style name="adsCtaNativeCommon">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginStart">15dp</item>
+        <item name="android:layout_marginEnd">15dp</item>
+        <item name="android:layout_marginTop">5dp</item>
+        <item name="android:layout_marginBottom">5dp</item>
+        <item name="android:background">@drawable/ads_native_common_cta</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">15dp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="adsBackgroundNativeCommon">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/ads_native_common_bg</item>
+    </style>
+
+</resources>

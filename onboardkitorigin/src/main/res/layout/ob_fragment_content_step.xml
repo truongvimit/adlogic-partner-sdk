@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "OB1": full-bleed image (59%), translucent text card over its bottom edge,
+     dots + Next inside the card, native ad block anchored bottom (41%). -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <ImageView
+        android:id="@+id/ob_step_image"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_block"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:src="@drawable/ob_img_onboard_sample_1" />
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/ob_step_player"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_block"
+        app:layout_constraintTop_toTopOf="parent"
+        app:resize_mode="zoom"
+        app:use_controller="false" />
+
+    <LinearLayout
+        android:id="@+id/ob_step_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/ob_screen_padding"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/ob_bg_content_card"
+        android:elevation="4dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="18dp"
+        app:layout_constraintBottom_toBottomOf="@id/ob_step_image"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/ob_step_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/ob_poppins_semibold"
+            android:gravity="center"
+            android:textColor="@color/ob_text_primary"
+            android:textSize="@dimen/ob_text_title"
+            tools:text="@string/ob_sample_title_1" />
+
+        <TextView
+            android:id="@+id/ob_step_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/ob_poppins_medium"
+            android:gravity="center"
+            android:textColor="@color/ob_text_subtitle"
+            android:textSize="@dimen/ob_text_subtitle"
+            tools:text="@string/ob_sample_subtitle_1" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:layout_marginTop="4dp"
+            android:paddingHorizontal="4dp">
+
+            <io.onboardkit.ui.widget.ObStepIndicator
+                android:id="@+id/ob_step_indicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|center_vertical"
+                app:ob_dotColorActive="@color/ob_dot_active"
+                app:ob_dotColorInactive="@color/ob_dot_inactive"
+                app:ob_dotSize="@dimen/ob_dot_size"
+                app:ob_dotSpacing="@dimen/ob_dot_spacing" />
+
+            <io.onboardkit.ui.widget.ObPrimaryButton
+                android:id="@+id/ob_primary_cta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:fontFamily="@font/ob_poppins_bold"
+                android:minWidth="48dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:textSize="14sp"
+                app:ob_bgColorLast="@android:color/transparent"
+                app:ob_bgColorNext="@android:color/transparent"
+                app:ob_textColorLast="@color/ob_accent"
+                app:ob_textColorNext="@color/ob_accent"
+                app:ob_textLast="@string/ob_get_started"
+                app:ob_textNext="@string/ob_next" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/ob_ad_block"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintHeight_percent="0.41">
+
+        <FrameLayout
+            android:id="@+id/ob_native_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <include
+            android:id="@+id/ob_native_shimmer"
+            layout="@layout/ob_shimmer_native_cta_top" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

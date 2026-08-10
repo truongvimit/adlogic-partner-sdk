@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Two-state primary button: "Next" vs "Get Started" -->
+    <declare-styleable name="ObPrimaryButton">
+        <attr name="ob_textNext" format="string" />
+        <attr name="ob_textLast" format="string" />
+        <attr name="ob_textColorNext" format="color" />
+        <attr name="ob_textColorLast" format="color" />
+        <attr name="ob_bgColorNext" format="color" />
+        <attr name="ob_bgColorLast" format="color" />
+        <attr name="ob_cornerRadius" format="dimension" />
+    </declare-styleable>
+
+    <declare-styleable name="ObStepIndicator">
+        <attr name="ob_dotColorActive" format="color" />
+        <attr name="ob_dotColorInactive" format="color" />
+        <attr name="ob_dotSize" format="dimension" />
+        <attr name="ob_dotSpacing" format="dimension" />
+    </declare-styleable>
+</resources>

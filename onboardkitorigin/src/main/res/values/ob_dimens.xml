@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="ob_screen_padding">16dp</dimen>
+    <dimen name="ob_block_padding_v">12dp</dimen>
+    <dimen name="ob_block_gap">16dp</dimen>
+    <dimen name="ob_radius_small">8dp</dimen>
+    <dimen name="ob_radius_compact">10dp</dimen>
+    <dimen name="ob_radius_card">24dp</dimen>
+
+    <dimen name="ob_cta_height">48dp</dimen>
+    <dimen name="ob_cta_height_small">44dp</dimen>
+
+    <dimen name="ob_language_row_height">64dp</dimen>
+    <dimen name="ob_language_row_gap">8dp</dimen>
+    <!-- Figma LFO: header ends y=100, first row starts y=116. -->
+    <dimen name="ob_language_list_top">16dp</dimen>
+    <dimen name="ob_flag_size">28dp</dimen>
+    <dimen name="ob_radio_size">20dp</dimen>
+    <dimen name="ob_header_height">62dp</dimen>
+
+    <dimen name="ob_ad_attribution_height">20dp</dimen>
+    <dimen name="ob_ad_badge_width">19dp</dimen>
+    <dimen name="ob_ad_badge_height">14dp</dimen>
+    <dimen name="ob_ad_icon_size">16dp</dimen>
+    <dimen name="ob_ad_compact_icon">32dp</dimen>
+
+    <dimen name="ob_dot_size">8dp</dimen>
+    <dimen name="ob_dot_spacing">6dp</dimen>
+
+    <dimen name="ob_text_title">20sp</dimen>
+    <dimen name="ob_text_subtitle">14sp</dimen>
+    <dimen name="ob_text_headline">14sp</dimen>
+    <dimen name="ob_text_body">12sp</dimen>
+    <dimen name="ob_text_cta">18sp</dimen>
+    <dimen name="ob_text_language">24sp</dimen>
+    <dimen name="ob_text_header">18sp</dimen>
+    <dimen name="ob_text_ad_badge">8sp</dimen>
+</resources>

@@ -1,0 +1,6 @@
+include ':app'
+rootProject.name = "Example-AdLogic-Partner"
+include ':crash_screen'
+include ':ads'
+include ':onboardkitorigin'
+include ':adtracer'

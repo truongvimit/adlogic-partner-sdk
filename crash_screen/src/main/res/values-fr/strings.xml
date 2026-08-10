@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<string name="error_occurred_explanation">Une erreur inattendue est survenue.\nDésolé pour le désagrément.</string>
+<string name="restart_app">Redémarrer l\'application</string>
+<string name="close_app">Fermer l\'application</string>
+<string name="error_details">Détails de l\'erreur</string>
+<string name="error_details_title">Détails de l\'erreur</string>
+<string name="error_details_close">Fermer</string>
+<string name="error_details_copy">Copier dans le presse-papiers</string>
+<string name="error_details_copied">Copié dans le presse-papiers</string>
+<string name="error_details_clipboard_label">Informations sur l\'erreur</string>
+</resources>

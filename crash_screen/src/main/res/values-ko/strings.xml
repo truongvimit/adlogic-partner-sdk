@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<string name="error_occurred_explanation">예기치 않은 오류가 발생했습니다.\n불편을 드려 죄송합니다.</string>
+<string name="restart_app">앱 재시작</string>
+<string name="close_app">앱 닫기</string>
+<string name="error_details">오류 세부정보</string>
+<string name="error_details_title">오류 세부정보</string>
+<string name="error_details_close">닫기</string>
+<string name="error_details_copy">클립보드에 복사</string>
+<string name="error_details_copied">클립보드에 복사됨</string>
+<string name="error_details_clipboard_label">오류 정보</string>
+</resources>

@@ -1,0 +1,12 @@
+# JitPack build configuration.
+#
+# JDK 17 is required: :adtracer and :onboardkitorigin compile against Java 17 bytecode,
+# and AGP 8.12 itself refuses to run on anything older than 17.
+jdk:
+  - openjdk17
+
+# Only the three publishable library modules are built. :app is deliberately excluded —
+# it needs a signing config and a real google-services.json, and consumers never need it.
+# JitPack exports VERSION as the tag being built; the root build.gradle reads it.
+install:
+  - ./gradlew :ads:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal -x test --no-daemon --stacktrace

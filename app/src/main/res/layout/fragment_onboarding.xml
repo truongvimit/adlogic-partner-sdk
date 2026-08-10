@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+    </data>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#f3f3f3">
+
+        <ImageView
+            android:id="@+id/ivBackground"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:elevation="-2dp"
+            android:src="@drawable/ic_vietnamese"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <LinearLayout
+            android:id="@+id/llIndicatorContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/_8sdp"
+            android:layout_marginStart="@dimen/_15sdp"
+            android:layout_marginBottom="@dimen/_14sdp"
+            app:layout_constraintBottom_toTopOf="@id/flAds"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="@dimen/_4sdp"
+                android:adjustViewBounds="true"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_onboarding_indicator"
+                tools:src="@drawable/ic_onboarding_indicator_selected" />
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="@dimen/_4sdp"
+                android:adjustViewBounds="true"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_onboarding_indicator" />
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="@dimen/_4sdp"
+                android:adjustViewBounds="true"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_onboarding_indicator" />
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:adjustViewBounds="true"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_onboarding_indicator" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/_32sdp"
+            android:layout_marginBottom="@dimen/_4sdp"
+            android:gravity="center"
+            android:textColor="#000000"
+            android:textSize="@dimen/_14sdp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toTopOf="@+id/tvContent"
+            tools:layout_editor_absoluteX="42dp"
+            tools:text="Your Screen, Always Ready" />
+
+        <TextView
+            android:id="@+id/tvContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/_32sdp"
+            android:layout_marginBottom="@dimen/_20sdp"
+            android:gravity="center"
+            android:textColor="#5E000000"
+            android:textSize="@dimen/_12sdp"
+            app:layout_constraintBottom_toTopOf="@+id/tvNext"
+            tools:text="Quickly check time, date, and notifications while your phone is idle." />
+
+        <TextView
+            android:id="@+id/tvNext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="@dimen/_15sdp"
+            android:background="@drawable/bg_btn_next"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="@dimen/_14sdp"
+            android:paddingVertical="@dimen/_3sdp"
+            android:text="@string/next"
+            android:textAllCaps="true"
+            android:textColor="#000000"
+            android:textSize="@dimen/_10sdp"
+            app:layout_constraintBottom_toBottomOf="@+id/llIndicatorContainer"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/llIndicatorContainer" />
+
+        <FrameLayout
+            android:id="@+id/flAds"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/_3sdp"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <include
+                android:id="@+id/shimmerAds"
+                layout="@layout/layout_shimmer_native_medium"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </FrameLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

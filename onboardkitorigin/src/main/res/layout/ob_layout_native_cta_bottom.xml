@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Ad Layout 1": attribution top, media middle, CTA pill bottom. Used on LFO/Question. -->
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/ob_bg_ad_block"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/ob_ad_attribution_height"
+            android:layout_marginStart="@dimen/ob_screen_padding"
+            android:layout_marginTop="@dimen/ob_block_padding_v"
+            android:layout_marginEnd="@dimen/ob_screen_padding"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="@dimen/ob_ad_badge_width"
+                android:layout_height="@dimen/ob_ad_badge_height"
+                android:background="@drawable/ob_bg_ad_badge"
+                android:fontFamily="@font/ob_poppins_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="@string/ob_ad_badge"
+                android:textColor="@color/ob_white"
+                android:textSize="@dimen/ob_text_ad_badge" />
+
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="15dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:maxLines="1"
+                android:textColor="@color/ob_text_primary"
+                android:textSize="@dimen/ob_text_headline"
+                tools:text="StreamYard is a live streaming studio" />
+
+            <ImageView
+                android:layout_width="@dimen/ob_ad_icon_size"
+                android:layout_height="@dimen/ob_ad_icon_size"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ob_ic_info" />
+        </LinearLayout>
+
+        <com.google.android.gms.ads.nativead.MediaView
+            android:id="@+id/ad_media"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="@dimen/ob_block_gap"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/ad_call_to_action"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/ob_cta_height_small"
+            android:layout_marginStart="@dimen/ob_screen_padding"
+            android:layout_marginTop="@dimen/ob_block_gap"
+            android:layout_marginEnd="@dimen/ob_screen_padding"
+            android:layout_marginBottom="@dimen/ob_block_padding_v"
+            android:background="@drawable/ob_bg_cta_pill"
+            android:ellipsize="end"
+            android:fontFamily="@font/ob_urbanist_bold"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/ob_white"
+            android:textSize="@dimen/ob_text_cta"
+            tools:text="LEARN MORE" />
+    </LinearLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

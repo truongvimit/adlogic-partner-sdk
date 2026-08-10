@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+build/
+bin/
+gen/
+out/
+obj/
+release/
+
+# Compiled artifacts
+*.apk
+*.aab
+*.ap_
+*.aar
+*.dex
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Java / JVM crash logs
+hs_err_pid*
+replay_pid*
+
+# ---------------------------------------------------------------------------
+# Gradle
+# ---------------------------------------------------------------------------
+.gradle/
+.kotlin/
+local.properties
+
+# ---------------------------------------------------------------------------
+# Native build
+# ---------------------------------------------------------------------------
+.cxx/
+.externalNativeBuild/
+
+# ---------------------------------------------------------------------------
+# Android Studio / IntelliJ
+# ---------------------------------------------------------------------------
+# Ignore .idea wholesale, then whitelist the few files worth sharing with the team.
+.idea/*
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/runConfigurations/
+
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+captures/
+
+# ---------------------------------------------------------------------------
+# Secrets and signing
+# ---------------------------------------------------------------------------
+# NEVER commit signing material or credentials.
+*.jks
+*.keystore
+*.p12
+*.pepk
+keystore.properties
+signing.properties
+.signing/
+secrets.properties
+*.pem
+*.key
+
+# ---------------------------------------------------------------------------
+# AI / editor tooling (may contain API keys)
+# ---------------------------------------------------------------------------
+firebender.json
+.firebender/
+.aider*
+.claude/
+.cursor/
+
+# ---------------------------------------------------------------------------
+# Logs and temporary files
+# ---------------------------------------------------------------------------
+*.log
+*.bak
+*.tmp
+*~
+*.swp
+*.orig
+*.rej
+
+# ---------------------------------------------------------------------------
+# Bundled tooling archives and large assets (not needed to build the project)
+# ---------------------------------------------------------------------------
+plugins/*.zip
+img.png
+
+# ---------------------------------------------------------------------------
+# OS cruft
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
