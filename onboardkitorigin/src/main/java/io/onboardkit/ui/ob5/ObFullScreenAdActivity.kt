@@ -10,18 +10,25 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.NativeTemplate
 import io.onboardkit.core.StepId
+import io.onboardkit.core.analytics.AdSkipReason
+import io.onboardkit.core.analytics.AnalyticsEvent
+import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
-import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
+import io.trackkit.AdFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Standalone full-screen native (OB5). Uses its own OB5 ad pool, honors premium like every
@@ -30,23 +37,41 @@ import kotlinx.coroutines.launch
  */
 class ObFullScreenAdActivity : BaseOnboardActivity() {
 
+    override val screenName: String = "ob_fullscreen_ad"
+
     private lateinit var binding: ObActivityFullscreenAdBinding
     private var skipJob: Job? = null
     private var autoDismissJob: Job? = null
     private var adBound = false
+
+    /** -1 until the step is counted; stays -1 on the policy-declined path, which shows nothing. */
+    private var stepIndex = -1
+    private var shownAtMs = 0L
+
+    /** A skip tap racing the auto-dismiss timer used to launch the next screen twice. */
+    private val navigated = AtomicBoolean(false)
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         binding = ObActivityFullscreenAdBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         if (!sdk.policy().canShowNative(this, AdPlacement.Ob5)) {
-            navigateNext()
+            AdPlacement.Ob5.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.POLICY)
+            navigateNext(StepExit.SKIP)
             return
         }
 
         OnboardingSdk.session.recordStepShown(StepId.OB5)
+        // OB5 lives outside the pager, so it never passes through the host's page-change and
+        // next() hooks — the two places every other step is counted. Reported here instead, or it
+        // would be the one step in the flow with a view but no completion, which is exactly the
+        // hole the audited SDK had (`complete_ob5` never existed).
+        stepIndex = OnboardingSdk.session.stepsShown.indexOf(StepId.OB5)
+        shownAtMs = System.currentTimeMillis()
+        OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
+
         sdk.provider()?.suppressAppResume(javaClass)
-        binding.obSkipButton.setOnClickListener { navigateNext() }
+        binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()
         scheduleSkip()
@@ -58,18 +83,23 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         val provider = sdk.provider()
         val unit = config.ads.ob5Native ?: config.ads.fullScreenStepNative
         if (provider == null || unit == null) {
-            navigateNext()
+            AdPlacement.Ob5.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_UNIT)
+            navigateNext(StepExit.AD_FAILED)
             return
         }
-        val listener = object : AdEventListener {
-            override fun onLoaded() {
-                runOnUiThread { bindAd() }
-            }
+        val listener = AdPlacement.Ob5.tracked(
+            AdFormat.NATIVE_FULL_SCREEN,
+            object : AdEventListener {
+                override fun onLoaded() {
+                    runOnUiThread { bindAd() }
+                }
 
-            override fun onFailedToLoad() {
-                runOnUiThread { showSkipNow() }
-            }
-        }
+                override fun onFailedToLoad() {
+                    runOnUiThread { showSkipNow() }
+                }
+            },
+        )
+        AdPlacement.Ob5.trackRequest(AdFormat.NATIVE_FULL_SCREEN)
         if (!bindAd(listener)) {
             provider.preloadNative(
                 this,
@@ -93,6 +123,8 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         ) == true
         if (bound) {
             adBound = true
+            // The ad_show event itself is latched inside the tracked listener, which bindNative
+            // notifies; only the SDK-facing event bus is fed here.
             OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.Ob5.key))
         }
         return bound
@@ -115,7 +147,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)
         autoDismissJob = lifecycleScope.launch {
             delay(seconds * 1_000)
-            navigateNext()
+            navigateNext(StepExit.AUTO_DISMISS)
         }
     }
 
@@ -124,9 +156,20 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         binding.obSkipButton.visibility = View.VISIBLE
     }
 
-    private fun navigateNext() {
+    private fun navigateNext(exitReason: String) {
+        if (!navigated.compareAndSet(false, true)) return
         skipJob?.cancel()
         autoDismissJob?.cancel()
+        if (stepIndex >= 0) {
+            OnboardingSdk.track(
+                AnalyticsEvent.StepCompleted(
+                    StepId.OB5,
+                    stepIndex,
+                    System.currentTimeMillis() - shownAtMs,
+                    exitReason,
+                ),
+            )
+        }
         val config = sdk.requireConfig()
         if (sdk.flags().enableQuestion && config.question != null) {
             ObQuestionActivity.start(this, QuestionSource.NEW_USER)
@@ -134,15 +177,8 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
             return
         }
         lifecycleScope.launch {
-            val gate = sdk.paywall()
-            if (gate != null && gate.shouldShow(PaywallPlacement.AFTER_ONBOARDING)) {
-                when (gate.present(this@ObFullScreenAdActivity, PaywallPlacement.AFTER_ONBOARDING)) {
-                    PaywallOutcome.Purchased,
-                    PaywallOutcome.Dismissed,
-                    PaywallOutcome.ContinueWithAds,
-                    -> Unit
-                }
-            }
+            // Outcome ignored: the flow completes either way
+            sdk.presentPaywall(this@ObFullScreenAdActivity, PaywallPlacement.AFTER_ONBOARDING)
             OnboardingSdk.completeFlow(this@ObFullScreenAdActivity)
             finish()
         }
@@ -157,6 +193,9 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     companion object {
+        /** Same variant key the pager stamps on its AD_FULL_SCREEN pages, so OB3 and OB5 compare. */
+        private const val VARIANT = "fullscreen"
+
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, ObFullScreenAdActivity::class.java))
         }

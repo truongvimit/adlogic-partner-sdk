@@ -1,78 +1,65 @@
 package com.ads.module.funtion;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+/**
+ * Per-ad-unit click counter behind the interstitial daily cap.
+ *
+ * <p>Counts are keyed by ad unit id and live in their own prefs file so the whole window can be
+ * wiped with a single {@code clear()}. The window start is {@link #KEY_FIRST_TIME}; its absence —
+ * not a separate boolean — is what marks "no window open yet".
+ *
+ * <p>The rollover check runs inside {@link #getNumClickAdsPerDay} and
+ * {@link #increaseNumClickAdsPerDay} rather than being a step callers must remember. It used to be
+ * an explicit {@code setupAdmobData} call that only one of the three touch points made, guarded by
+ * an inverted flag that could never become true — so the window never opened, {@code KEY_FIRST_TIME}
+ * was never written, and the daily reset never ran.
+ */
 public class AdmobHelper {
-    private static final String FILE_SETTING = "setting.pref";
     private static final String FILE_SETTING_ADMOB = "setting_admob.pref";
-    private static final String IS_PURCHASE = "IS_PURCHASE";
-    private static final String IS_FIRST_OPEN = "IS_FIRST_OPEN";
     private static final String KEY_FIRST_TIME = "KEY_FIRST_TIME";
 
-    public static void setPurchased(Activity activity, boolean isPurchased) {
-        SharedPreferences pref = activity.getSharedPreferences(FILE_SETTING, Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = pref.edit();
-        editor.putBoolean(IS_PURCHASE, isPurchased);
-        editor.apply();
-    }
-
-    public static boolean isPurchased(Activity activity) {
-        return activity.getSharedPreferences(FILE_SETTING, Context.MODE_PRIVATE).getBoolean(IS_PURCHASE, false);
-    }
+    private static final long WINDOW_MS = 24L * 60 * 60 * 1000;
 
     /**
-     * Trả về số click của 1 ads nào đó
-     *
-     * @param context
-     * @param idAds
-     * @return
+     * Clicks recorded for {@code idAds} in the current 24h window.
      */
     public static int getNumClickAdsPerDay(Context context, String idAds) {
-        return context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE).getInt(idAds, 0);
+        rolloverIfDue(context);
+        return prefs(context).getInt(idAds, 0);
     }
 
-    /**
-     * Tăng số click trên 1 ads
-     *
-     * @param context
-     * @param idAds
-     */
+    /** Records one click on {@code idAds}. */
     public static void increaseNumClickAdsPerDay(Context context, String idAds) {
-        SharedPreferences pre = context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE);
-        int count = pre.getInt(idAds, 0);
-        pre.edit().putInt(idAds, count + 1).apply();
+        rolloverIfDue(context);
+        SharedPreferences pre = prefs(context);
+        pre.edit().putInt(idAds, pre.getInt(idAds, 0) + 1).apply();
     }
 
     /**
-     * nếu lần đầu mở app lưu thời gian đầu tiên vào SharedPreferences
-     * nếu thời gian hiện tại so với thời gian đầu được 1 ngày thì reset lại data của admod.
+     * Opens the window on first use and wipes every counter once it is 24h old.
      *
-     * @param context
+     * <p>A negative elapsed time also rolls over: the user moved the device clock backwards, and
+     * the alternative is a window that never expires.
      */
-    public static void setupAdmobData(Context context) {
-        if (isFirstOpenApp(context)) {
-            context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE).edit().putLong(KEY_FIRST_TIME, System.currentTimeMillis()).apply();
-            context.getSharedPreferences(FILE_SETTING, Context.MODE_PRIVATE).edit().putBoolean(IS_FIRST_OPEN, true).apply();
+    private static synchronized void rolloverIfDue(Context context) {
+        SharedPreferences pre = prefs(context);
+        long windowStart = pre.getLong(KEY_FIRST_TIME, 0L);
+        long now = System.currentTimeMillis();
+        if (windowStart == 0L) {
+            pre.edit().putLong(KEY_FIRST_TIME, now).apply();
             return;
         }
-        long firstTime = context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE).getLong(KEY_FIRST_TIME, System.currentTimeMillis());
-        long rs = System.currentTimeMillis() - firstTime;
-
-        // qua q ngày reset lại data
-        if (rs >= 24 * 60 * 60 * 1000) {
-            resetAdmobData(context);
+        long elapsed = now - windowStart;
+        if (elapsed >= 0 && elapsed < WINDOW_MS) {
+            return;
         }
+        // clear() then put() on one editor: clear is applied first, so the new window survives
+        pre.edit().clear().putLong(KEY_FIRST_TIME, now).apply();
     }
 
-
-    private static void resetAdmobData(Context context) {
-        context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE).edit().clear().apply();
-        context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE).edit().putLong(KEY_FIRST_TIME, System.currentTimeMillis()).apply();
-    }
-
-    private static boolean isFirstOpenApp(Context context) {
-        return context.getSharedPreferences(FILE_SETTING, Context.MODE_PRIVATE).getBoolean(IS_FIRST_OPEN, false);
+    private static SharedPreferences prefs(Context context) {
+        return context.getSharedPreferences(FILE_SETTING_ADMOB, Context.MODE_PRIVATE);
     }
 }

@@ -12,16 +12,20 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.config.ObLanguages
+import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityLanguageBinding
 import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
-import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.trackkit.AdFormat
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
@@ -37,6 +41,8 @@ import kotlinx.coroutines.launch
  * leaving the screen, so selection and scroll position are naturally preserved.
  */
 class ObLanguageActivity : BaseOnboardActivity() {
+
+    override val screenName: String = "ob_language"
 
     private lateinit var binding: ObActivityLanguageBinding
     private lateinit var adapter: LanguageAdapter
@@ -77,8 +83,14 @@ class ObLanguageActivity : BaseOnboardActivity() {
             sdk.preload().onLanguageShown(this)
         }
 
-        OnboardingSdk.track(AnalyticsEvent.LanguageViewed(1, adTier = 0))
+        // SETTINGS is a re-entry, not a first open — counting it would inflate the LFO funnel
+        if (mode == LanguageScreenMode.FIRST_OPEN) {
+            OnboardingSdk.track(AnalyticsEvent.LanguageViewed(1, variant = adVariant()))
+        }
     }
+
+    /** The remote template bucket this screen's native was built with. */
+    private fun adVariant(): String = sdk.flags().templateLanguage
 
     /** Remote CSV filtered against the app's catalog; empty result falls back to the catalog. */
     private fun resolveLanguages(): List<ObLanguage> {
@@ -96,7 +108,15 @@ class ObLanguageActivity : BaseOnboardActivity() {
         binding.obLanguageConfirm.alpha = 1f
         OnboardingSdk.emitEvent(OnboardingEvent.LanguageSelected(language.code))
 
-        if (mode != LanguageScreenMode.FIRST_OPEN || secondAdShown) return
+        if (mode != LanguageScreenMode.FIRST_OPEN) return
+
+        // The tap itself. The audited SDK had no equivalent — it could not distinguish "picked a
+        // language then hesitated" from "never engaged", because the only LFO signal was the exit.
+        OnboardingSdk.track(
+            AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
+        )
+
+        if (secondAdShown) return
 
         val config = sdk.requireConfig()
         if (!config.language.secondNativeOnSelectEnabled ||
@@ -106,6 +126,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
         }
 
         secondAdShown = true
+        // Slot 1 is genuinely finished here, so it reports its own completion — the audited SDK's
+        // `lfo1_complete`, which fired on exactly this transition (tap on LFO1 -> open LFO2).
+        // Screen 2's completion comes from the Next button, with screen_index=2. Two events with
+        // two different indexes is two screens, not a double count.
         OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(1, language.code))
         showSecondNativeSlot()
     }
@@ -116,7 +140,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         binding.obAdBlock2.visibility = View.VISIBLE
         sdk.provider()?.releaseNative(AdPlacement.Language1)
         setupNativeAd(AdPlacement.Language2)
-        OnboardingSdk.track(AnalyticsEvent.LanguageViewed(2, adTier = 0))
+        OnboardingSdk.track(AnalyticsEvent.LanguageViewed(2, variant = adVariant()))
     }
 
     private fun adBlockFor(placement: AdPlacement): ViewGroup =
@@ -144,7 +168,13 @@ class ObLanguageActivity : BaseOnboardActivity() {
         } else {
             config.ads.languageNative
         }
-        if (provider == null || unit == null || !sdk.policy().canShowNative(this, placement)) {
+        if (provider == null || unit == null) {
+            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.NO_UNIT)
+            adBlockFor(placement).visibility = View.GONE
+            return
+        }
+        if (!sdk.policy().canShowNative(this, placement)) {
+            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.POLICY)
             adBlockFor(placement).visibility = View.GONE
             return
         }
@@ -152,20 +182,24 @@ class ObLanguageActivity : BaseOnboardActivity() {
             sdk.flags().templateLanguage,
             config.ads.languageTemplate,
         )
+        placement.trackRequest(AdFormat.NATIVE)
         val bound = provider.bindNative(
             this,
             placement,
             containerFor(placement),
             shimmerFor(placement),
-            object : AdEventListener {
-                override fun onLoaded() {
-                    runOnUiThread { bindIfPossible(placement) }
-                }
+            placement.tracked(
+                AdFormat.NATIVE,
+                object : AdEventListener {
+                    override fun onLoaded() {
+                        runOnUiThread { bindIfPossible(placement) }
+                    }
 
-                override fun onFailedToLoad() {
-                    runOnUiThread { shimmerFor(placement).visibility = View.GONE }
-                }
-            },
+                    override fun onFailedToLoad() {
+                        runOnUiThread { shimmerFor(placement).visibility = View.GONE }
+                    }
+                },
+            ),
         )
         if (!bound) {
             provider.preloadNative(
@@ -239,16 +273,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
         }
     }
 
+    /** Outcome is intentionally ignored: the flow completes either way. */
     private suspend fun presentPaywallIfAny() {
-        val gate = sdk.paywall() ?: return
-        if (gate.shouldShow(PaywallPlacement.AFTER_ONBOARDING)) {
-            when (gate.present(this, PaywallPlacement.AFTER_ONBOARDING)) {
-                PaywallOutcome.Purchased,
-                PaywallOutcome.Dismissed,
-                PaywallOutcome.ContinueWithAds,
-                -> Unit
-            }
-        }
+        sdk.presentPaywall(this, PaywallPlacement.AFTER_ONBOARDING)
     }
 
     override fun handleBack() {

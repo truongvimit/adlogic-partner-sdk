@@ -80,7 +80,15 @@ public class Admob {
     private String nativeId;
     private int numShowAds = 3;
 
-    private int maxClickAds = 100;
+    /**
+     * Interstitial clicks allowed per ad unit per 24h before the unit stops loading and showing.
+     * {@code 0} — the default — means no cap.
+     *
+     * <p>Off by default on purpose: the cap shipped for a long time with its counter never
+     * incremented, so "no cap" is the behaviour every existing partner build actually has. Turning
+     * it on is an opt-in via {@link #setMaxClickAdsPerDay(int)}, typically driven by remote config.
+     */
+    private volatile int maxClickAds = 0;
     private Handler handlerTimeout;
     private Runnable rdTimeout;
     private PrepareLoadingAdsDialog dialog;
@@ -97,10 +105,50 @@ public class Admob {
 
     InterstitialAd mInterstitialSplash;
 
-    private String tokenAdjust;
 
+    /**
+     * @param maxClickAds clicks per ad unit per 24h before interstitials from that unit stop being
+     *                    loaded and shown. {@code 0} or negative disables the cap. Safe to call at
+     *                    any time — remote config typically applies it once the fetch lands.
+     */
     public void setMaxClickAdsPerDay(int maxClickAds) {
+        if (this.maxClickAds == maxClickAds) {
+            return;
+        }
         this.maxClickAds = maxClickAds;
+        Log.i(TAG, maxClickAds > 0
+                ? "Interstitial click cap enabled: " + maxClickAds + " clicks/ad unit/day"
+                : "Interstitial click cap disabled");
+    }
+
+    /**
+     * Records one ad click against the daily cap.
+     *
+     * <p>Called from {@code ERainLogEventManager.logClickAdsEvent}, the module's single click choke
+     * point, so a newly added ad format cannot ship with its clicks uncounted. Counts are per ad
+     * unit, so clicks on a native only ever gate that native's own unit.
+     */
+    public void recordAdClick(Context context, String adUnitId) {
+        if (maxClickAds <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
+            return;
+        }
+        AdmobHelper.increaseNumClickAdsPerDay(context, adUnitId);
+    }
+
+    /**
+     * True when {@code adUnitId} has burned through its daily click allowance.
+     */
+    private boolean isClickCapReached(Context context, String adUnitId) {
+        if (maxClickAds <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
+            return false;
+        }
+        int clicks = AdmobHelper.getNumClickAdsPerDay(context, adUnitId);
+        if (clicks < maxClickAds) {
+            return false;
+        }
+        Log.w(TAG, "Interstitial suppressed: ad unit hit the daily click cap ("
+                + clicks + "/" + maxClickAds + "). Resets 24h after the window opened.");
+        return true;
     }
 
     public static Admob getInstance() {
@@ -128,31 +176,12 @@ public class Admob {
         this.disableAdResumeWhenClickAds = disableAdResumeWhenClickAds;
     }
 
-    public void init(Context context, List<String> testDeviceList, String tokenAdjust) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            String processName = Application.getProcessName();
-            String packageName = context.getPackageName();
-            if (!packageName.equals(processName)) {
-                WebView.setDataDirectorySuffix(processName);
-            }
-        }
-        MobileAds.initialize(context, initializationStatus -> {
-            Map<String, AdapterStatus> statusMap = initializationStatus.getAdapterStatusMap();
-            for (String adapterClass : statusMap.keySet()) {
-                AdapterStatus status = statusMap.get(adapterClass);
-                if (status != null) {
-                    Log.d(TAG, String.format("Adapter name: %s, Description: %s, Latency: %d",
-                            adapterClass, status.getDescription(), status.getLatency()));
-                }
-            }
-        });
+    public void init(Context context, List<String> testDeviceList) {
+        initInternal(context);
         MobileAds.setRequestConfiguration(new RequestConfiguration.Builder().setTestDeviceIds(testDeviceList).build());
-
-        this.tokenAdjust = tokenAdjust;
-        this.context = context;
     }
 
-    public void init(Context context, String tokenAdjust) {
+    private void initInternal(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             String processName = Application.getProcessName();
             String packageName = context.getPackageName();
@@ -160,7 +189,6 @@ public class Admob {
                 WebView.setDataDirectorySuffix(processName);
             }
         }
-
         MobileAds.initialize(context, initializationStatus -> {
             Map<String, AdapterStatus> statusMap = initializationStatus.getAdapterStatusMap();
             for (String adapterClass : statusMap.keySet()) {
@@ -171,9 +199,9 @@ public class Admob {
                 }
             }
         });
-
-        this.tokenAdjust = tokenAdjust;
-        this.context = context;
+        // Application context, always: this field lives on a process-wide singleton, so storing an
+        // Activity here — which the two-arg init() lets a partner pass — would leak it forever.
+        this.context = context.getApplicationContext();
     }
 
     public boolean isShowLoadingSplash() {
@@ -419,9 +447,7 @@ public class Admob {
                     mInterstitialSplash.getAdUnitId(),
                     mInterstitialSplash.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-            if (tokenAdjust != null) {
-                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId(), tokenAdjust);
-            }
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
         });
 
         if (handlerTimeout != null && rdTimeout != null) {
@@ -555,9 +581,7 @@ public class Admob {
                     mInterstitialSplash.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
 
-            if (tokenAdjust != null) {
-                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId(), tokenAdjust);
-            }
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
         });
 
         if (handlerTimeout != null && rdTimeout != null) {
@@ -693,7 +717,7 @@ public class Admob {
      * @return
      */
     public void getInterstitialAds(Context context, String id, AdCallback adCallback) {
-        if (AppPurchase.getInstance().isPurchased(context) || AdmobHelper.getNumClickAdsPerDay(context, id) >= maxClickAds) {
+        if (AppPurchase.getInstance().isPurchased(context) || isClickCapReached(context, id)) {
             adCallback.onInterstitialLoad(null);
             return;
         }
@@ -711,9 +735,7 @@ public class Admob {
                                     interstitialAd.getAdUnitId(),
                                     interstitialAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId());
                         });
                     }
 
@@ -763,7 +785,8 @@ public class Admob {
      * @param callback
      */
     public void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback) {
-        AdmobHelper.setupAdmobData(context);
+        // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
+        // so it can no longer be skipped by the load-time gate that never called it.
         if (AppPurchase.getInstance().isPurchased(context)) {
             callback.onNextAction();
             return;
@@ -826,7 +849,7 @@ public class Admob {
             }
         });
 
-        if (AdmobHelper.getNumClickAdsPerDay(context, mInterstitialAd.getAdUnitId()) < maxClickAds) {
+        if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
             showInterstitialAd(context, mInterstitialAd, callback);
             return;
         }
@@ -934,13 +957,6 @@ public class Admob {
      * @param id
      * @deprecated Using loadInlineBanner()
      */
-    @Deprecated
-    public void loadBanner(final Activity mActivity, String id, Boolean useInlineAdaptive) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, null, useInlineAdaptive, BANNER_INLINE_LARGE_STYLE);
-    }
-
     /**
      * Load quảng cáo Banner Trong Activity set Inline adaptive banners
      *
@@ -963,13 +979,6 @@ public class Admob {
      * @param useInlineAdaptive
      * @deprecated Using loadInlineBanner() with callback
      */
-    @Deprecated
-    public void loadBanner(final Activity mActivity, String id, final AdCallback callback, Boolean useInlineAdaptive) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, useInlineAdaptive, BANNER_INLINE_LARGE_STYLE);
-    }
-
     /**
      * Load quảng cáo Banner Trong Activity set Inline adaptive banners
      *
@@ -1042,13 +1051,6 @@ public class Admob {
      * @param rootView
      * @deprecated Using loadInlineBannerFragment()
      */
-    @Deprecated
-    public void loadBannerFragment(final Activity mActivity, String id, final View rootView, Boolean useInlineAdaptive) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, null, useInlineAdaptive, BANNER_INLINE_LARGE_STYLE);
-    }
-
     /**
      * Load Quảng Cáo Banner Trong Fragment set Inline adaptive banners
      *
@@ -1073,13 +1075,6 @@ public class Admob {
      * @param useInlineAdaptive
      * @deprecated Using loadInlineBannerFragment() with callback
      */
-    @Deprecated
-    public void loadBannerFragment(final Activity mActivity, String id, final View rootView, final AdCallback callback, Boolean useInlineAdaptive) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, useInlineAdaptive, BANNER_INLINE_LARGE_STYLE);
-    }
-
     /**
      * Load Quảng Cáo Banner Trong Fragment set Inline adaptive banners
      *
@@ -1162,9 +1157,7 @@ public class Admob {
                                     adView.getAdUnitId(),
                                     adView.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.BANNER);
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                         });
                     }
 
@@ -1245,9 +1238,7 @@ public class Admob {
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.BANNER);
-                        if (tokenAdjust != null) {
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId(), tokenAdjust);
-                        }
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                     });
                     if (callback != null) {
                         callback.onAdLoaded();
@@ -1315,9 +1306,7 @@ public class Admob {
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.BANNER);
-                        if (tokenAdjust != null) {
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId(), tokenAdjust);
-                        }
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                     });
                     if (callback != null) {
                         callback.onAdLoaded();
@@ -1444,9 +1433,7 @@ public class Admob {
                                 adValue,
                                 id,
                                 nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        if (tokenAdjust != null) {
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                        }
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                     });
                 })
                 .withAdListener(new AdListener() {
@@ -1502,9 +1489,7 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                     }
                 })
@@ -1564,9 +1549,7 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                         populateUnifiedNativeAdView(nativeAd, adView);
                         frameLayout.removeAllViews();
@@ -1631,9 +1614,7 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                         populateUnifiedNativeAdView(nativeAd, adView);
                         frameLayout.removeAllViews();
@@ -1692,9 +1673,7 @@ public class Admob {
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
 
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                     }
                 })
@@ -1754,9 +1733,7 @@ public class Admob {
                                 adValue,
                                 id,
                                 nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        if (tokenAdjust != null) {
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id, tokenAdjust);
-                        }
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                     });
                     populateUnifiedNativeAdView(nativeAd, adView);
                     frameLayout.removeAllViews();
@@ -1904,9 +1881,7 @@ public class Admob {
                             adValue,
                             rewardedAd.getAdUnitId(), Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    if (tokenAdjust != null) {
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId(), tokenAdjust);
-                    }
+                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
             }
 
@@ -1942,9 +1917,7 @@ public class Admob {
                             rewardedAd.getAdUnitId(),
                             Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    if (tokenAdjust != null) {
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId(), tokenAdjust);
-                    }
+                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
 
             }
@@ -1981,9 +1954,7 @@ public class Admob {
                             rewardedAd.getAdUnitId(),
                             rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    if (tokenAdjust != null) {
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId(), tokenAdjust);
-                    }
+                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
             }
 
@@ -2795,9 +2766,7 @@ public class Admob {
                                     mInterSplashHigh1.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
 
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh1.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh1.getAdUnitId());
                         }
                     });
 
@@ -3031,9 +3000,7 @@ public class Admob {
                                     mInterSplashHigh2.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
 
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh2.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh2.getAdUnitId());
                         }
                     });
 
@@ -3266,9 +3233,7 @@ public class Admob {
                                     mInterSplashHigh3.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
 
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh3.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh3.getAdUnitId());
                         }
                     });
 
@@ -3501,9 +3466,7 @@ public class Admob {
                                     mInterSplashNormal.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
 
-                            if (tokenAdjust != null) {
-                                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId(), tokenAdjust);
-                            }
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId());
                         }
                     });
 
@@ -3546,9 +3509,7 @@ public class Admob {
                     mInterSplashNormal.getAdUnitId(),
                     mInterSplashNormal.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-            if (tokenAdjust != null) {
-                ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId(), tokenAdjust);
-            }
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId());
         });
 
         if (handlerTimeoutNormal != null && rdTimeoutNormal != null) {

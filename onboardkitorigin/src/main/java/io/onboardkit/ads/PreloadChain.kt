@@ -71,8 +71,16 @@ class PreloadChain internal constructor(
     }
 
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {
-        enabledSteps.getOrNull(index + 1)?.let { preloadForStep(activity, it) }
-            ?: preloadQuestion(activity)
+        val next = enabledSteps.getOrNull(index + 1)
+        if (next != null) {
+            preloadForStep(activity, next)
+            return
+        }
+        // Last pager step: warm every possible exit. OB5 used to have a preload function nobody
+        // called, so isOb5NativeReady was false forever and decideExit could never pick GoToOb5 —
+        // the whole OB5 screen was unreachable in production.
+        if (flags().enableStepOb5) preloadOb5(activity)
+        preloadQuestion(activity)
     }
 
     fun preloadQuestion(activity: Activity) {

@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import io.onboardkit.OnboardingSdk
+import io.trackkit.Tracker
 import java.util.Locale
 
 /**
@@ -40,6 +41,9 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
             return
         }
         applySystemBars()
+        // Before onCreateSafe: a screen that navigates away from its own onCreate would otherwise
+        // never be counted as viewed.
+        screenName?.let { Tracker.screen(it, javaClass.simpleName) }
         onCreateSafe(savedInstanceState)
         onBackPressedDispatcher.addCallback(
             this,
@@ -50,6 +54,13 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
             },
         )
     }
+
+    /**
+     * `screen_view` name for this screen, or null to opt out. Kept separate from the class name so
+     * an app subclassing [io.onboardkit.ui.splash.ObSplashActivity] still reports as `ob_splash`
+     * instead of under whatever it called its own class.
+     */
+    protected open val screenName: String? = null
 
     /** Called only when the SDK is ready — subclasses build their UI here. */
     protected abstract fun onCreateSafe(savedInstanceState: Bundle?)

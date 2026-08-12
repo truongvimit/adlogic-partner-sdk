@@ -3,7 +3,6 @@ package com.ads.module.application;
 import androidx.multidex.MultiDexApplication;
 
 import com.ads.module.config.ERainAdConfig;
-import com.ads.module.util.AppUtil;
 import com.ads.module.util.SharePreferenceUtils;
 
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ public abstract class AdsMultiDexApplication extends MultiDexApplication {
         if (SharePreferenceUtils.getInstallTime(this) == 0) {
             SharePreferenceUtils.setInstallTime(this);
         }
-        AppUtil.currentTotalRevenue001Ad = SharePreferenceUtils.getCurrentTotalRevenue001Ad(this);
     }
 
 

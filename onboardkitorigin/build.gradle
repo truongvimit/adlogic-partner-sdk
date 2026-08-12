@@ -68,6 +68,9 @@ dependencies {
 
     implementation "com.facebook.shimmer:shimmer:$shimmer_version"
 
+    // api, not implementation: partner AnalyticsPlugins and sinks talk to Tracker/TrackkitEvents
+    api project(':trackkit')
+
     // Default ad provider bridges to the project's ads module; apps may inject their own provider instead
     implementation project(':ads')
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"

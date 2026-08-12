@@ -12,17 +12,21 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.QuestionConfig
 import io.onboardkit.config.SelectionMode
 import io.onboardkit.core.QuestionAnswer
 import io.onboardkit.core.StepId
+import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityQuestionBinding
-import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.remote.uiconfig.RemoteQuestionParser
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.trackkit.AdFormat
 import kotlinx.coroutines.launch
 
 enum class QuestionSource { NEW_USER, OLD_USER }
@@ -33,6 +37,8 @@ enum class QuestionSource { NEW_USER, OLD_USER }
  * is opt-in with throttling.
  */
 class ObQuestionActivity : BaseOnboardActivity() {
+
+    override val screenName: String = "ob_question"
 
     private lateinit var binding: ObActivityQuestionBinding
     private lateinit var adapter: QuestionAdapter
@@ -115,9 +121,13 @@ class ObQuestionActivity : BaseOnboardActivity() {
         val config = sdk.requireConfig()
         val provider = sdk.provider()
         val unit = config.ads.questionNative
-        if (provider == null || unit == null ||
-            !sdk.policy().canShowNative(this, AdPlacement.QuestionNative)
-        ) {
+        if (provider == null || unit == null) {
+            AdPlacement.QuestionNative.trackSkipped(AdFormat.NATIVE, AdSkipReason.NO_UNIT)
+            binding.obAdBlock.visibility = View.GONE
+            return
+        }
+        if (!sdk.policy().canShowNative(this, AdPlacement.QuestionNative)) {
+            AdPlacement.QuestionNative.trackSkipped(AdFormat.NATIVE, AdSkipReason.POLICY)
             binding.obAdBlock.visibility = View.GONE
             return
         }
@@ -125,31 +135,35 @@ class ObQuestionActivity : BaseOnboardActivity() {
             sdk.flags().templateQuestion,
             config.ads.questionTemplate,
         )
+        AdPlacement.QuestionNative.trackRequest(AdFormat.NATIVE)
         val bound = provider.bindNative(
             this,
             AdPlacement.QuestionNative,
             binding.obNativeContainer,
             binding.obNativeShimmer.root,
-            object : AdEventListener {
-                override fun onLoaded() {
-                    runOnUiThread {
-                        if (!isFinishing) {
-                            sdk.provider()?.bindNative(
-                                this@ObQuestionActivity,
-                                AdPlacement.QuestionNative,
-                                binding.obNativeContainer,
-                                binding.obNativeShimmer.root,
-                            )
+            AdPlacement.QuestionNative.tracked(
+                AdFormat.NATIVE,
+                object : AdEventListener {
+                    override fun onLoaded() {
+                        runOnUiThread {
+                            if (!isFinishing) {
+                                sdk.provider()?.bindNative(
+                                    this@ObQuestionActivity,
+                                    AdPlacement.QuestionNative,
+                                    binding.obNativeContainer,
+                                    binding.obNativeShimmer.root,
+                                )
+                            }
                         }
                     }
-                }
 
-                override fun onFailedToLoad() {
-                    runOnUiThread {
-                        binding.obNativeShimmer.root.visibility = View.GONE
+                    override fun onFailedToLoad() {
+                        runOnUiThread {
+                            binding.obNativeShimmer.root.visibility = View.GONE
+                        }
                     }
-                }
-            },
+                },
+            ),
         )
         if (!bound) {
             provider.preloadNative(
@@ -172,15 +186,25 @@ class ObQuestionActivity : BaseOnboardActivity() {
         OnboardingSdk.emitEvent(OnboardingEvent.QuestionAnswered(answers))
         OnboardingSdk.track(AnalyticsEvent.QuestionCompleted(answers.size))
 
+        // Policy is checked before readiness so a premium user is reported as a policy skip rather
+        // than as an unfilled slot — the two mean very different things in the fill-rate report.
         val provider = sdk.provider()
-        if (provider != null &&
-            sdk.policy().canShowInterstitial(this, AdPlacement.QuestionInterstitial) &&
-            provider.isInterstitialReady(AdPlacement.QuestionInterstitial)
-        ) {
-            provider.showInterstitial(this, AdPlacement.QuestionInterstitial) { forwardToNext() }
-        } else {
-            forwardToNext()
+        val reason = when {
+            provider == null -> AdSkipReason.NO_UNIT
+            !sdk.policy().canShowInterstitial(this, AdPlacement.QuestionInterstitial) ->
+                AdSkipReason.POLICY
+
+            !provider.isInterstitialReady(AdPlacement.QuestionInterstitial) ->
+                AdSkipReason.NOT_READY
+
+            else -> null
         }
+        if (reason != null) {
+            AdPlacement.QuestionInterstitial.trackSkipped(AdFormat.INTERSTITIAL, reason)
+            forwardToNext()
+            return
+        }
+        provider?.showInterstitial(this, AdPlacement.QuestionInterstitial) { forwardToNext() }
     }
 
     private fun forwardWithoutShowing() {
@@ -193,15 +217,8 @@ class ObQuestionActivity : BaseOnboardActivity() {
             QuestionSource.OLD_USER -> PaywallPlacement.AFTER_QUESTION_OLD_USER
         }
         lifecycleScope.launch {
-            val gate = sdk.paywall()
-            if (gate != null && gate.shouldShow(placement)) {
-                when (gate.present(this@ObQuestionActivity, placement)) {
-                    PaywallOutcome.Purchased,
-                    PaywallOutcome.Dismissed,
-                    PaywallOutcome.ContinueWithAds,
-                    -> Unit
-                }
-            }
+            // Outcome ignored: the flow completes either way
+            sdk.presentPaywall(this@ObQuestionActivity, placement)
             OnboardingSdk.completeFlow(this@ObQuestionActivity)
             finish()
         }

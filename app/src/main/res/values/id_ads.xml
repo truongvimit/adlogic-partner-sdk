@@ -3,6 +3,9 @@
     <string name="adjust_token" translatable="false">123456789</string>
     <string name="facebook_app_id" translatable="false">123456789</string>
     <string name="facebook_client_token" translatable="false">123456789</string>
+    <!-- Adjust event token fired on every paid impression (TikTok/Meta value signal). -->
     <string name="event_token" translatable="false">12345</string>
+    <!-- Adjust event token for in-app purchase revenue. Blank = skipped, never sent empty. -->
+    <string name="adjust_event_token_purchase" translatable="false"></string>
 
 </resources>

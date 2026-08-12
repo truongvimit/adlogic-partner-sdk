@@ -8,17 +8,11 @@ public class SharePreferenceUtils {
 
     private final static String KEY_INSTALL_TIME = "KEY_INSTALL_TIME";
 
-    private final static String KEY_CURRENT_TOTAL_REVENUE_AD = "KEY_CURRENT_TOTAL_REVENUE_AD";
-
-    private final static String KEY_CURRENT_TOTAL_REVENUE_001_AD = "KEY_CURRENT_TOTAL_REVENUE_001_AD";
-
-    private final static String KEY_PUSH_EVENT_REVENUE_3_DAY = "KEY_PUSH_EVENT_REVENUE_3_DAY";
-
-    private final static String KEY_PUSH_EVENT_REVENUE_7_DAY = "KEY_PUSH_EVENT_REVENUE_7_DAY";
-
     private final static String KEY_LAST_IMPRESSION_INTERSTITIAL_TIME = "KEY_LAST_IMPRESSION_INTERSTITIAL_TIME";
 
     private final static String KEY_IS_ORGANIC = "KEY_IS_ORGANIC";
+
+    private final static String KEY_INSTALL_REFERRER_TRACKED = "KEY_INSTALL_REFERRER_TRACKED";
 
     public static long getInstallTime(Context context) {
         SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -30,47 +24,9 @@ public class SharePreferenceUtils {
         pre.edit().putLong(KEY_INSTALL_TIME, System.currentTimeMillis()).apply();
     }
 
-    public static float getCurrentTotalRevenueAd(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return pre.getFloat(KEY_CURRENT_TOTAL_REVENUE_AD, 0);
-    }
-
-    public static void updateCurrentTotalRevenueAd(Context context, float revenue) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        float currentTotalRevenue = pre.getFloat(KEY_CURRENT_TOTAL_REVENUE_AD, 0);
-        currentTotalRevenue += revenue / 1000000.0;
-        pre.edit().putFloat(KEY_CURRENT_TOTAL_REVENUE_AD, currentTotalRevenue).apply();
-    }
-
-    public static float getCurrentTotalRevenue001Ad(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return pre.getFloat(KEY_CURRENT_TOTAL_REVENUE_001_AD, 0);
-    }
-
-    public static void updateCurrentTotalRevenue001Ad(Context context, float revenue) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        pre.edit().putFloat(KEY_CURRENT_TOTAL_REVENUE_001_AD, revenue).apply();
-    }
-
-    public static boolean isPushRevenue3Day(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return pre.getBoolean(KEY_PUSH_EVENT_REVENUE_3_DAY, false);
-    }
-
-    public static void setPushedRevenue3Day(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        pre.edit().putBoolean(KEY_PUSH_EVENT_REVENUE_3_DAY, true).apply();
-    }
-
-    public static boolean isPushRevenue7Day(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return pre.getBoolean(KEY_PUSH_EVENT_REVENUE_7_DAY, false);
-    }
-
-    public static void setPushedRevenue7Day(Context context) {
-        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        pre.edit().putBoolean(KEY_PUSH_EVENT_REVENUE_7_DAY, true).apply();
-    }
+    // The cumulative ad-revenue persistence (total, $0.01 bucket, D3/D7 milestone flags) that used
+    // to live here belongs to Trackkit's AdRevenueAccumulator now; the mirror copy was deleted
+    // rather than left to drift out of sync with the real one.
 
     public static long getLastImpressionInterstitialTime(Context context) {
         SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -90,5 +46,18 @@ public class SharePreferenceUtils {
     public static void setIsOrganic(Context context, boolean isOrganic) {
         SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         pre.edit().putBoolean(KEY_IS_ORGANIC, isOrganic).apply();
+    }
+
+    /**
+     * The install referrer never changes, so it is read and reported exactly once per install.
+     */
+    public static boolean isInstallReferrerTracked(Context context) {
+        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return pre.getBoolean(KEY_INSTALL_REFERRER_TRACKED, false);
+    }
+
+    public static void setInstallReferrerTracked(Context context) {
+        SharedPreferences pre = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        pre.edit().putBoolean(KEY_INSTALL_REFERRER_TRACKED, true).apply();
     }
 }

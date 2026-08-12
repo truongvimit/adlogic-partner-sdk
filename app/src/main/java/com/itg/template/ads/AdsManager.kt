@@ -15,6 +15,8 @@ import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.billing.AppPurchase
 import com.ads.module.funtion.AdCallback
+import com.ads.module.tracking.AdTracking
+import io.trackkit.AdFormat
 import com.ads.module.funtion.AdType
 import com.ads.module.funtion.RewardCallback
 import com.ads.module.util.AppConstant
@@ -23,7 +25,6 @@ import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.android.gms.ads.rewarded.RewardedAd
-import com.itg.template.tracking.AdsTracking
 import com.itg.template.ui.bases.ext.goneView
 import java.util.Collections
 import java.util.WeakHashMap
@@ -50,6 +51,29 @@ object AdsManager {
 
     private var rewardExample: RewardedAd? = null
 
+    /**
+     * Binds every configured ad unit to its placement, once, before the ads SDK starts.
+     *
+     * AdMob's paid-event callback only knows the ad unit, so :ads reads the placement back from
+     * [io.trackkit.PlacementRegistry] — same shape as ironSource's register-once
+     * addImpressionDataListener, where per-impression context the SDK cannot know is supplied
+     * out-of-band instead of by wrapping call sites.
+     *
+     * The config key *is* the placement name, so the mapping cannot drift from AdRemoteConfig.
+     * OnboardKit re-registers its own units under its placement keys when it loads them.
+     */
+    fun registerAdPlacements() {
+        val config = runCatching { AdRemoteConfig.getInstance() }.getOrNull() ?: return
+        config.ads.forEach { (placement, unit) ->
+            unit.waterfallIds.forEach { adUnitId ->
+                AdTracking.registerPlacement(
+                    adUnitId,
+                    placement
+                )
+            }
+        }
+    }
+
     private fun loadNativeInternal(
         activity: Activity,
         placement: String,
@@ -65,15 +89,16 @@ object AdsManager {
             !shouldDisplay -> "ua_gate"
             else -> null
         }
+        // A load that never happened, and why — the only ad facts the SDK cannot observe itself
         if (skipReason != null) {
-            AdsTracking.nativeLoadSkipped(placement, skipReason)
+            AdTracking.skipped(placement, AdFormat.NATIVE, skipReason)
             liveData.postValue(null)
             return
         }
-        AdsTracking.nativeLoadRequested(placement, config.id)
+        AdTracking.request(placement, AdFormat.NATIVE, config.id)
         ERainAd.getInstance().loadNativeAdResultCallback(
             activity, config.id, layoutRes,
-            AdsTracking.trackedNativeLoadCallback(placement, object : AdCallback() {
+            object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     super.onNativeAdLoaded(nativeAd)
                     adConfigMap[nativeAd] = config
@@ -84,7 +109,7 @@ object AdsManager {
                     super.onAdFailedToLoad(adError)
                     liveData.postValue(null)
                 }
-            }),
+            },
         )
     }
 
@@ -189,20 +214,18 @@ object AdsManager {
             else -> null
         }
         if (skipReason != null) {
-            AdsTracking.interLoadSkipped("inter_onboarding", skipReason)
+            AdTracking.skipped("inter_onboarding", AdFormat.INTERSTITIAL, skipReason)
             interOnboarding = null
             return
         }
-        AdsTracking.interLoadRequested("inter_onboarding", config.id)
+        AdTracking.request("inter_onboarding", AdFormat.INTERSTITIAL, config.id)
         interOnboarding = ERainAd.getInstance().getInterstitialAds(
-            context, config.id,
-            AdsTracking.trackedInterLoadCallback("inter_onboarding", object : AdCallback() {}),
+            context, config.id, object : AdCallback() {},
         )
     }
 
     fun showInterOnboarding(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
         val interstitial = interOnboarding
-        AdsTracking.interShowRequested("inter_onboarding")
         val blockReason = when {
             interstitial == null || !interstitial.isReady -> "not_ready"
             AppPurchase.getInstance().isPurchased(context) -> "purchased"
@@ -212,15 +235,17 @@ object AdsManager {
         if (blockReason == null && interstitial != null) {
             ERainAd.getInstance().forceShowInterstitial(
                 context, interstitial,
-                AdsTracking.trackedInterShowCallback("inter_onboarding", object : AdCallback() {
+                object : AdCallback() {
                     override fun onNextAction() {
                         super.onNextAction()
                         onAction()
                     }
-                }, reloads = true), true,
+                },
+                true,
             )
         } else {
-            AdsTracking.interShowBlocked("inter_onboarding", blockReason ?: "unknown")
+            // A show the app declined before the SDK was ever asked
+            AdTracking.skipped("inter_onboarding", AdFormat.INTERSTITIAL, blockReason ?: "unknown")
             onAction()
         }
     }
@@ -234,20 +259,18 @@ object AdsManager {
             else -> null
         }
         if (skipReason != null) {
-            AdsTracking.interLoadSkipped("inter_welcome", skipReason)
+            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, skipReason)
             interWelcomeAd = null
             return
         }
-        AdsTracking.interLoadRequested("inter_welcome", config.id)
+        AdTracking.request("inter_welcome", AdFormat.INTERSTITIAL, config.id)
         interWelcomeAd = ERainAd.getInstance().getInterstitialAds(
-            context, config.id,
-            AdsTracking.trackedInterLoadCallback("inter_welcome", object : AdCallback() {}),
+            context, config.id, object : AdCallback() {},
         )
     }
 
     fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
         val interstitial = interWelcomeAd
-        AdsTracking.interShowRequested("inter_welcome")
         val blockReason = when {
             interstitial == null || !interstitial.isReady -> "not_ready"
             AppPurchase.getInstance().isPurchased(context) -> "purchased"
@@ -257,15 +280,16 @@ object AdsManager {
         if (blockReason == null && interstitial != null) {
             ERainAd.getInstance().forceShowInterstitial(
                 context, interstitial,
-                AdsTracking.trackedInterShowCallback("inter_welcome", object : AdCallback() {
+                object : AdCallback() {
                     override fun onNextAction() {
                         super.onNextAction()
                         onAction()
                     }
-                }, reloads = false), false,
+                },
+                false,
             )
         } else {
-            AdsTracking.interShowBlocked("inter_welcome", blockReason ?: "unknown")
+            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, blockReason ?: "unknown")
             onAction()
         }
     }
@@ -282,23 +306,21 @@ object AdsManager {
             else -> null
         }
         if (skipReason != null) {
-            AdsTracking.rewardLoadSkipped("reward_example", skipReason)
+            AdTracking.skipped("reward_example", AdFormat.REWARDED, skipReason)
             onFailed()
             return
         }
 
-        AdsTracking.rewardLoadRequested("reward_example", config.id)
+        AdTracking.request("reward_example", AdFormat.REWARDED, config.id)
         ERainAd.getInstance().initRewardAds(
             activity,
             config.id,
             object : AdCallback() {
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
                     super.onRewardAdLoaded(rewardedAd)
-                    AdsTracking.rewardLoaded("reward_example")
                     rewardExample = rewardedAd
 
                     var isEarn = false
-                    AdsTracking.rewardShowRequested("reward_example")
                     ERainAd.getInstance().showRewardAds(
                         activity,
                         rewardExample,
@@ -306,31 +328,25 @@ object AdsManager {
                             override fun onUserEarnedReward(var1: RewardItem?) {
                                 isEarn = true
                                 rewardExample = null
-                                AdsTracking.rewardEarned("reward_example")
                             }
 
                             override fun onRewardedAdClosed() {
-                                AdsTracking.rewardClosed("reward_example", isEarn)
                                 if (isEarn) onSuccess()
                                 else onFailed()
                             }
 
                             override fun onRewardedAdFailedToShow(codeError: Int) {
                                 rewardExample = null
-                                AdsTracking.rewardShowFailed("reward_example", codeError)
                                 onFailed()
                             }
 
-                            override fun onAdClicked() {
-                                AdsTracking.rewardClicked("reward_example")
-                            }
+                            override fun onAdClicked() = Unit
                         }
                     )
                 }
 
                 override fun onAdFailedToLoad(i: LoadAdError?) {
                     super.onAdFailedToLoad(i)
-                    AdsTracking.rewardLoadFailed("reward_example", i)
                     onFailed()
                 }
             }
@@ -349,18 +365,18 @@ object AdsManager {
             // Mirror the SDK's own purchased gate so a silent internal no-op is not
             // recorded as a pending request
             if (AppPurchase.getInstance().isPurchased(activity)) {
-                AdsTracking.bannerLoadSkipped(placement, "purchased")
+                AdTracking.skipped(placement, AdFormat.BANNER, "purchased")
             } else {
-                AdsTracking.bannerLoadRequested(placement, adUnitConfig.id)
+                AdTracking.request(placement, AdFormat.BANNER, adUnitConfig.id)
             }
-            val callback = AdsTracking.trackedBannerCallback(placement, object : AdCallback() {
+            val callback = object : AdCallback() {
                 override fun onAdFailedToLoad(i: LoadAdError?) {
                     super.onAdFailedToLoad(i)
                     frAds.goneView()
                     Timber.tag("AdsManager_Banner")
                         .d("Load banner on ${activity.javaClass.simpleName} failed by : ${i?.message}")
                 }
-            }, collapsible = isCollapse)
+            }
             if (isCollapse) ERainAd.getInstance().loadCollapsibleBanner(
                 activity,
                 adUnitConfig.id,
@@ -369,7 +385,7 @@ object AdsManager {
             )
             else ERainAd.getInstance().loadBanner(activity, adUnitConfig.id, callback)
         } else {
-            AdsTracking.bannerLoadSkipped(placement, "disabled_config")
+            AdTracking.skipped(placement, AdFormat.BANNER, "disabled_config")
             frAds.removeAllViews()
             frAds.goneView()
         }
@@ -397,12 +413,6 @@ object AdsManager {
     }
 
     fun clearAll() {
-        if (interOnboarding?.isReady == true) {
-            AdsTracking.discarded("inter_onboarding", "INTERSTITIAL", "clear_all")
-        }
-        if (interWelcomeAd?.isReady == true) {
-            AdsTracking.discarded("inter_welcome", "INTERSTITIAL", "clear_all")
-        }
         nativeSurveyAdLive.postValue(null)
         nativeConfirmUninstallAdLive.postValue(null)
         nativeWelcomeAdLive.postValue(null)

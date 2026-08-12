@@ -11,15 +11,22 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.NativeTemplate
 import io.onboardkit.core.StepId
+import io.onboardkit.core.analytics.AdSkipReason
+import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObFragmentAdStepBinding
 import io.onboardkit.ui.pager.LazyStepFragment
+import io.trackkit.AdFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Full-screen native step (OB3). No app content — the ad IS the page. Guarantees an exit:
@@ -33,9 +40,13 @@ class AdStepFragment : LazyStepFragment() {
     private var autoNextJob: Job? = null
     private var adBound = false
     private var adFailed = false
+    private val impressionHandled = AtomicBoolean(false)
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
+
+    private val position: Int
+        get() = requireArguments().getInt(ARG_POSITION)
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -50,7 +61,9 @@ class AdStepFragment : LazyStepFragment() {
         b.obFallbackImage.setImageDrawable(
             requireContext().packageManager.getApplicationIcon(requireContext().applicationInfo),
         )
-        b.obSkipButton.setOnClickListener { requireStepHost().next() }
+        b.obSkipButton.setOnClickListener {
+            requireStepHost().next(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
+        }
     }
 
     override fun onStepFirstSelected() {
@@ -83,25 +96,33 @@ class AdStepFragment : LazyStepFragment() {
         val provider = OnboardingSdk.provider()
         val placement = AdPlacement.StepFullScreen(stepId)
         val unit = config.ads.fullScreenStepNative
-        if (provider == null || unit == null ||
-            !OnboardingSdk.policy().canShowNative(activity, placement)
-        ) {
+        if (provider == null || unit == null) {
+            placement.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_UNIT)
             showFallback()
             return
         }
-        val listener = object : AdEventListener {
-            override fun onLoaded() {
-                activity.runOnUiThread { bindAd() }
-            }
-
-            override fun onFailedToLoad() {
-                activity.runOnUiThread { onAdFailed() }
-            }
-
-            override fun onImpression() {
-                activity.runOnUiThread { onAdImpression() }
-            }
+        if (!OnboardingSdk.policy().canShowNative(activity, placement)) {
+            placement.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.POLICY)
+            showFallback()
+            return
         }
+        val listener = placement.tracked(
+            AdFormat.NATIVE_FULL_SCREEN,
+            object : AdEventListener {
+                override fun onLoaded() {
+                    activity.runOnUiThread { bindAd() }
+                }
+
+                override fun onFailedToLoad() {
+                    activity.runOnUiThread { onAdFailed() }
+                }
+
+                override fun onImpression() {
+                    activity.runOnUiThread { onAdImpression() }
+                }
+            },
+        )
+        placement.trackRequest(AdFormat.NATIVE_FULL_SCREEN)
         if (!bindAd(listener)) {
             provider.preloadNative(
                 activity,
@@ -132,7 +153,13 @@ class AdStepFragment : LazyStepFragment() {
         return bound
     }
 
+    /**
+     * Reached twice on the common path — once from the provider's listener notification inside
+     * `bindNative`, once from [bindAd]'s own post-bind branch — so both the event and the auto-next
+     * timer are latched. Before the latch OB3 reported two impressions and armed two timers.
+     */
     private fun onAdImpression() {
+        if (!impressionHandled.compareAndSet(false, true)) return
         OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
         scheduleAutoNext()
     }
@@ -141,9 +168,13 @@ class AdStepFragment : LazyStepFragment() {
         adFailed = true
         showFallback()
         val definition = definition()
-        if (definition?.autoNextEnabled == true) {
-            // Failed ad page has nothing to show — advance immediately
-            stepHost?.next()
+        if (definition?.autoNextEnabled == true &&
+            stepHost?.currentIndex?.value == position
+        ) {
+            // Failed ad page has nothing to show — advance immediately. Gated on still being the
+            // selected page: the failure callback outlives selection, and next() acts on whatever
+            // page is CURRENT, so a late failure used to advance a step the user was reading.
+            stepHost?.next(StepExit.AD_FAILED)
         }
     }
 
@@ -178,7 +209,7 @@ class AdStepFragment : LazyStepFragment() {
         autoNextJob?.cancel()
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(definition.autoNextDelayMs)
-            stepHost?.next()
+            stepHost?.next(StepExit.AUTO_NEXT)
         }
     }
 
@@ -188,6 +219,7 @@ class AdStepFragment : LazyStepFragment() {
         activity?.let { OnboardingSdk.provider()?.allowAppResume(it.javaClass) }
         binding = null
         adBound = false
+        impressionHandled.set(false)
         super.onDestroyView()
     }
 

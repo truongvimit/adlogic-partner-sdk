@@ -24,6 +24,13 @@ internal class OnboardingSession {
     /** CAS guard: the completion callback must fire exactly once per run. */
     val finished = AtomicBoolean(false)
 
+    /** Stamped by `OnboardingSdk.start`; end-to-end duration of the whole first-open flow. */
+    @Volatile
+    var startedAtMs: Long = 0L
+
+    val elapsedMs: Long
+        get() = if (startedAtMs == 0L) 0L else System.currentTimeMillis() - startedAtMs
+
     fun recordStepShown(stepId: StepId) {
         if (!stepsShown.contains(stepId)) stepsShown.add(stepId)
     }
@@ -42,5 +49,6 @@ internal class OnboardingSession {
         stepsShown.clear()
         answers.clear()
         finished.set(false)
+        startedAtMs = 0L
     }
 }

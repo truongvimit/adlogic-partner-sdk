@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.trackkit'
+    compileSdk compile_sdk_version
+
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        // Java partners implement TrackSink directly; without this every default method
+        // becomes abstract on the Java side and the 'only id + onEvent are required' promise breaks.
+        freeCompilerArgs += ["-Xjvm-default=all"]
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// Deliberately vendor-free: :ads and :onboardkitorigin depend on this contract, and must not
+// inherit Firebase / Adjust / Meta from it. Vendors live in the :trackkit-* sink modules.
+dependencies {
+    compileOnly "androidx.annotation:annotation:1.9.1"
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.13'
+    testImplementation 'androidx.test:core:1.6.1'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from(components["release"])
+                artifactId = "trackkit"
+            }
+        }
+    }
+}

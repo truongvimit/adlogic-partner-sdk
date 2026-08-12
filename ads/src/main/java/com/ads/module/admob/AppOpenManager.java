@@ -689,7 +689,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
 
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         if (!isAppOpenShowed) {
@@ -798,7 +798,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
                     }
 
@@ -895,7 +895,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
                     }
 
@@ -963,7 +963,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         splashAdOpen = appOpenAd;
@@ -1099,7 +1099,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     interstitialAd.getAdUnitId(),
                                     interstitialAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId());
                         });
 
                         splashAdInter = interstitialAd;
@@ -1264,7 +1264,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             appOpenAd.getAdUnitId(),
                             appOpenAd.getResponseInfo()
                                     .getMediationAdapterClassName(), AdType.APP_OPEN);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                    ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                 });
 
                 splashAdHigh = appOpenAd;
@@ -1351,7 +1351,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         splashAdAll = appOpenAd;
@@ -1583,7 +1583,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                 appOpenAd.getAdUnitId(),
                                 appOpenAd.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.APP_OPEN);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                     });
                     if (isShowAdIfReady) {
                         long elapsedTime = System.currentTimeMillis() - currentTimeMillis;
@@ -1656,7 +1656,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                 appOpenAd.getAdUnitId(),
                                 appOpenAd.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.APP_OPEN);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId(), ERainAdConfig.ADJUST_TOKEN_TIKTOK);
+                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                     });
                     if (isShowAdIfReady) {
                         AppOpenManager.this.showAppOpenSplash(context, adCallback);

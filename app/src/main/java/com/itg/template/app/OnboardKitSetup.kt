@@ -67,7 +67,10 @@ object OnboardKitSetup {
                 ob5Native = ads?.native_onboarding_fullscreen_1_4.toNative(),
             )
         }
-            .onSuccess { OnboardingSdk.configure(it) }
+            .onSuccess { config ->
+                OnboardingSdk.configure(config)
+                    .onFailure { Timber.e(it, "OnboardKit rejected the config") }
+            }
             .onFailure { Timber.e(it, "OnboardKit config invalid") }
     }
 

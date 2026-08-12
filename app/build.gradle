@@ -168,9 +168,18 @@ dependencies {
     // OnboardKit — first-open flow (splash, language, onboarding, question)
     implementation project(':onboardkitorigin')
 
+    // Trackkit — single analytics fan-out. The core is vendor-free; each sink brings its own SDK.
+    implementation project(':trackkit')
+    implementation project(':trackkit-firebase')
+
     // Debug-only ad lifecycle tracker + embedded dashboard; absent from release builds
     debugImplementation project(':adtracer')
-    implementation 'com.github.Infinity-Technologies-Global:DevConfig:1.0.7-partner'
+    // DevConfig still drags in the published ERain-Studio AAR, whose classes are the same
+    // com.ads.module.* types this project builds locally as :ads. R8 fails on the duplicate
+    // (com.ads.module.ump.IAdConsentCallBack$DefaultImpls). The local module wins.
+    implementation('com.github.Infinity-Technologies-Global:DevConfig:1.0.7-partner') {
+        exclude group: 'com.github.trongluan99', module: 'ERain-Studio'
+    }
     implementation "com.github.Infinity-Technologies-Global:Module-Update-GDPR:$module_update_gdpr_version"
     implementation "com.google.android.play:review-ktx:$play_review_ktx_version"
     implementation "com.facebook.shimmer:shimmer:$shimmer_version"

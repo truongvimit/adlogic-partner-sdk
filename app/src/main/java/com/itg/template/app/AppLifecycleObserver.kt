@@ -5,10 +5,11 @@ import androidx.lifecycle.LifecycleOwner
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.billing.AppPurchase
+import com.ads.module.tracking.AdTracking
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.inter_welcome
-import com.itg.template.tracking.AdsTracking
 import com.itg.template.ui.component.splash.SplashActivity
+import io.trackkit.AdFormat
 import com.itg.template.ui.component.uninstall.SurveyActivity
 import com.itg.template.ui.component.welcome.WelcomeActivity
 import com.itg.template.utils.Routes
@@ -34,8 +35,8 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
         val isDisable = listActivityDisableResume.any { clazz ->
             clazz.isInstance(currentActivity)
         }
-        // Same gate chain and order as before; the reason is captured so blocked welcome-resume
-        // opportunities become visible to the debug tracker
+        // Same gate chain and order as before; the reason is captured so a welcome-resume the app
+        // declined is still reported — the ads SDK is never called and cannot know it happened
         val blockReason = when {
             isDisable -> "disabled_activity"
             !ResumeAdsEntryRule.shouldShowWelcomeOnResume() -> "mode_not_welcome"
@@ -45,10 +46,9 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
             else -> null
         }
         if (blockReason == null) {
-            AdsTracking.resumeOpportunity("welcome_launched")
             Routes.startWelcomeActivity(currentActivity)
         } else {
-            AdsTracking.resumeOpportunity(blockReason)
+            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, blockReason)
         }
     }
 

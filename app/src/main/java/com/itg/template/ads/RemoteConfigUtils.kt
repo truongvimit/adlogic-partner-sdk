@@ -20,7 +20,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 object RemoteConfigUtils {
+
+    /** Volatile: written on the fetch callback thread, read from the main thread by every getter. */
+    @Volatile
     var completed = false
+        private set
+
     private const val ON_SHOW_NAVIGATION_BUTTON = "on_show_navigation_button"
     private const val ON_SHOW_DIALOG_CONSENT = "on_show_dialog_consent"
     private const val DELAY_SHOW_LANGUAGE_DONE_BUTTON = "delay_button_done_language"
@@ -30,12 +35,19 @@ object RemoteConfigUtils {
 
     private const val ON_ENABLE_UNINSTALL_WIDGET = "on_enable_uninstall_widget"
 
+    /**
+     * Interstitial clicks allowed per ad unit per 24h. `0` disables the cap — UA's on/off switch,
+     * and the default, so the feature stays dormant until someone deliberately turns it on.
+     */
+    private const val MAX_CLICK_ADS_PER_DAY = "max_click_ads_per_day"
+
     private val mapConditionForAd: HashMap<String, Any> = hashMapOf(
         ON_SHOW_DIALOG_CONSENT to true,
         ON_SHOW_NAVIGATION_BUTTON to false,
         DELAY_SHOW_LANGUAGE_DONE_BUTTON to true,
         ON_ENABLE_UNINSTALL_WIDGET to false,
         TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON to DEFAULT_TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON,
+        MAX_CLICK_ADS_PER_DAY to 0L,
     )
     
     //Default layout
@@ -48,19 +60,39 @@ object RemoteConfigUtils {
     fun getOnShowDialogConsent(): Boolean = getBoolean(ON_SHOW_DIALOG_CONSENT)
     fun getOnEnableUninstallWidget(): Boolean = getBoolean(ON_ENABLE_UNINSTALL_WIDGET, false)
 
+    /** `0` = cap off. Coerced so a negative remote value cannot mean anything other than off. */
+    fun getMaxClickAdsPerDay(): Int =
+        getLong(MAX_CLICK_ADS_PER_DAY, 0).coerceAtLeast(0).toInt()
+
     interface Listener {
         fun loadSuccess()
     }
 
-    lateinit var listener: Listener
-    private lateinit var remoteConfig: FirebaseRemoteConfig
+    /**
+     * Private and nullable, not a public `lateinit`.
+     *
+     * [Listener] is implemented by the launcher Activity, and this is a process-wide `object`: a
+     * strong field here kept that Activity — its whole view tree and any ad it held — alive for
+     * the life of the process. The reference is dropped the moment it fires, and [detach] lets a
+     * screen that dies before the fetch lands release it early.
+     */
+    private var listener: Listener? = null
+
+    /** Lazy, not `lateinit`: a getter reached before [init] would otherwise throw. */
+    private val remoteConfig: FirebaseRemoteConfig by lazy { Firebase.remoteConfig }
+
     private val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
     private val adUnitConfigAdapter = moshi.adapter(AdUnitConfig::class.java)
     private val forceUpdateAdapter = moshi.adapter(ForceUpdateConfig::class.java)
 
     fun init(context: Context, mListener: Listener) {
         listener = mListener
-        remoteConfig = getFirebaseRemoteConfig(context)
+        startFetch(context)
+    }
+
+    /** Call from `onDestroy` so a screen torn down mid-fetch is not held until the fetch returns. */
+    fun detach(mListener: Listener) {
+        if (listener === mListener) listener = null
     }
 
     private fun getDefaultsFromAdConfig(context: Context): Map<String, Any> {
@@ -80,9 +112,7 @@ object RemoteConfigUtils {
         return defaults
     }
 
-    private fun getFirebaseRemoteConfig(context: Context): FirebaseRemoteConfig {
-        remoteConfig = Firebase.remoteConfig
-
+    private fun startFetch(context: Context) {
         val configSettings = remoteConfigSettings {
             minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) {
                 0
@@ -98,11 +128,15 @@ object RemoteConfigUtils {
             }
             setDefaultsAsync(defaults)
             fetchAndActivate().addOnCompleteListener {
-                listener.loadSuccess()
+                // completed FIRST: every getter here returns its hardcoded default while this is
+                // false, so a listener reading remote values saw defaults, never the fetched ones.
                 completed = true
+                // One-shot: take and clear before invoking, so nothing is retained afterwards
+                val pending = listener
+                listener = null
+                pending?.loadSuccess()
             }
         }
-        return remoteConfig
     }
 
     private fun getBoolean(key: String, defaultValue: Boolean = false): Boolean {

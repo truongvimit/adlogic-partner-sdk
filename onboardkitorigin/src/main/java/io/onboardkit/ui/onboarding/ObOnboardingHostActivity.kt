@@ -12,11 +12,11 @@ import io.onboardkit.core.StepHost
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 import io.onboardkit.core.analytics.AnalyticsEvent
+import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityOnboardingBinding
 import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
-import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
@@ -35,6 +35,8 @@ import kotlinx.coroutines.launch
  * default (buttons navigate); back goes one step backwards and exits only from the first step.
  */
 class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
+
+    override val screenName: String = "ob_onboarding"
 
     private lateinit var binding: ObActivityOnboardingBinding
     private lateinit var pagerAdapter: StepPagerAdapter
@@ -113,7 +115,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val stepId = enabledStepIds.getOrNull(position) ?: return
         OnboardingSdk.session.recordStepShown(stepId)
         OnboardingSdk.emitEvent(OnboardingEvent.StepViewed(stepId, position))
-        OnboardingSdk.track(AnalyticsEvent.StepViewed(stepId, position))
+        // variantKey is the remote template bucket the page was built with — without it a funnel
+        // difference between two remote buckets is unattributable
+        OnboardingSdk.track(
+            AnalyticsEvent.StepViewed(stepId, position, pagerAdapter.pageAt(position)?.variantKey),
+        )
         sdk.preload().onStepSelected(this, enabledStepIds, position)
 
         // The page may not be attached yet on first layout; post until the fragment exists
@@ -124,13 +130,29 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     // ── StepHost ──
 
-    override fun next() {
+    /**
+     * The single completion point for a step, whichever page type it was.
+     *
+     * Content steps used to report their own completion while ad steps reported none at all, so
+     * `fo_step_complete` silently under-counted by the number of OB3-style pages in the flow. Dwell
+     * is read off the fragment here rather than passed in, so both page types measure it the same
+     * way.
+     */
+    override fun next(exitReason: String?) {
+        // Mid-transition next() is always a duplicate: a CTA double-tap, or a late ad callback
+        // firing while the pager is already animating away. Letting it through completed the NEXT
+        // step with zero dwell and jumped a page.
+        if (binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return
         val position = binding.obStepPager.currentItem
         enabledStepIds.getOrNull(position)?.let { stepId ->
+            val dwellMs = pagerAdapter.fragmentAt(position)?.dwellMs() ?: 0L
             // SDK scope, not lifecycleScope: the last step finishes this Activity right away.
             val store = sdk.stateStoreOrNull()
             if (store != null) sdk.scope().launch { store.markStepCompleted(stepId) }
-            OnboardingSdk.emitEvent(OnboardingEvent.StepCompleted(stepId, 0))
+            OnboardingSdk.emitEvent(OnboardingEvent.StepCompleted(stepId, dwellMs))
+            OnboardingSdk.track(
+                AnalyticsEvent.StepCompleted(stepId, position, dwellMs, exitReason ?: StepExit.CTA),
+            )
         }
         if (position < enabledStepIds.size - 1) {
             binding.obStepPager.setCurrentItem(position + 1, true)
@@ -146,21 +168,12 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         return true
     }
 
-    override fun skipTo(stepId: StepId) {
-        val index = enabledStepIds.indexOf(stepId)
-        if (index >= 0) binding.obStepPager.setCurrentItem(index, true)
-    }
-
     override fun finishFlow(reason: FinishReason) {
         lifecycleScope.launch {
             presentAfterOnboardingPaywall()
             OnboardingSdk.completeFlow(this@ObOnboardingHostActivity)
             finish()
         }
-    }
-
-    override fun setProgressVisible(visible: Boolean) {
-        // Indicators live inside content steps; full-screen ad steps simply have none.
     }
 
     // ── Exit handoff ──
@@ -196,16 +209,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         }
     }
 
+    /** Outcome is intentionally ignored: the flow completes either way. */
     private suspend fun presentAfterOnboardingPaywall() {
-        val gate = sdk.paywall() ?: return
-        if (gate.shouldShow(PaywallPlacement.AFTER_ONBOARDING)) {
-            when (gate.present(this, PaywallPlacement.AFTER_ONBOARDING)) {
-                PaywallOutcome.Purchased,
-                PaywallOutcome.Dismissed,
-                PaywallOutcome.ContinueWithAds,
-                -> Unit
-            }
-        }
+        sdk.presentPaywall(this, PaywallPlacement.AFTER_ONBOARDING)
     }
 
     override fun handleBack() {

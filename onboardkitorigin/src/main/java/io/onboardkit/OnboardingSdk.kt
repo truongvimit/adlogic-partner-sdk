@@ -17,6 +17,7 @@ import io.onboardkit.core.SkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.AnalyticsHub
 import io.onboardkit.core.analytics.AnalyticsPlugin
+import io.onboardkit.core.analytics.TrackkitPlugin
 import io.onboardkit.core.events.EventBus
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.core.session.OnboardingSession
@@ -27,6 +28,8 @@ import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.flow.StartDecision
 import io.onboardkit.paywall.PaywallGate
+import io.onboardkit.paywall.PaywallOutcome
+import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.remote.ObRemote
 import io.onboardkit.ui.language.LanguageScreenMode
 import io.onboardkit.ui.language.ObLanguageActivity
@@ -82,9 +85,19 @@ object OnboardingSdk {
         var paywallGate: PaywallGate? = null
         var listener: OnboardingListener? = null
         internal val analyticsPlugins = mutableListOf<AnalyticsPlugin>()
+        internal var autoTrackkit = true
 
         fun analyticsPlugin(plugin: AnalyticsPlugin) {
             analyticsPlugins += plugin
+        }
+
+        /**
+         * Forward the flow's funnel to `Tracker` through [TrackkitPlugin]. On by default — the
+         * canonical funnel is the reason the SDK depends on `:trackkit`. Turn it off only when
+         * the app forwards these events itself through its own [AnalyticsPlugin].
+         */
+        fun trackkitAutoTracking(enabled: Boolean) {
+            autoTrackkit = enabled
         }
     }
 
@@ -99,6 +112,8 @@ object OnboardingSdk {
         adProvider = builder.adProvider
         paywallGate = builder.paywallGate
         listener = builder.listener
+        // Partners get the canonical first-open funnel without wiring a plugin themselves
+        if (builder.autoTrackkit) AnalyticsHub.addPlugin(TrackkitPlugin)
         builder.analyticsPlugins.forEach(AnalyticsHub::addPlugin)
         stateStore = OnboardingStateStore(app)
         // Async preload (per DataStore guidance): seeds the language so attachBaseContext, which
@@ -115,6 +130,12 @@ object OnboardingSdk {
     /** Stores the validated config. Build it with [io.onboardkit.config.onboardKitConfig]. */
     fun configure(newConfig: OnboardKitConfig): Result<Unit> {
         if (application == null) {
+            // Logged here too, not only returned: most callers fire-and-forget the Result, and a
+            // dropped config means the whole flow silently skips at start().
+            Log.e(
+                TAG,
+                "configure() called before install() — config dropped, onboarding will be skipped"
+            )
             return Result.failure(IllegalStateException("Call install() before configure()"))
         }
         config = newConfig
@@ -176,6 +197,7 @@ object OnboardingSdk {
             return
         }
         session.reset()
+        session.startedAtMs = System.currentTimeMillis()
         session.passthrough = options.passthrough
         session.selectedLanguage = stateStore?.current()?.languageSelected
 
@@ -184,6 +206,9 @@ object OnboardingSdk {
         }
 
         eventBus.emit(OnboardingEvent.FlowStarted)
+        // Before the skip/start decision on purpose: it is the denominator of every `fo_` rate,
+        // and a flow that decided to skip still has to appear in the funnel.
+        track(AnalyticsEvent.FlowStarted())
         when (val decision = if (options.forceRestart) {
             StartDecision.Start(FlowDestination.LANGUAGE, 0)
         } else {
@@ -244,6 +269,36 @@ object OnboardingSdk {
 
     internal fun paywall(): PaywallGate? = paywallGate
 
+    /**
+     * The only way a screen presents the paywall.
+     *
+     * Five checkpoints call this (splash, language, pager exit, OB5, question); routing them all
+     * through here is what makes `iap_paywall_view` comparable across them instead of each screen
+     * deciding on its own whether an unshown gate still counts as a view.
+     *
+     * Returns null when no gate is installed or the gate declined to show — the caller just
+     * continues, exactly as before.
+     */
+    internal suspend fun presentPaywall(
+        activity: Activity,
+        placement: PaywallPlacement,
+    ): PaywallOutcome? {
+        val gate = paywallGate ?: return null
+        if (!gate.shouldShow(placement)) return null
+        val key = placement.name.lowercase()
+        track(AnalyticsEvent.PaywallViewed(key))
+        eventBus.emit(OnboardingEvent.PaywallShown(key))
+        val outcome = gate.present(activity, placement)
+        track(AnalyticsEvent.PaywallResolved(key, outcome.trackingName()))
+        return outcome
+    }
+
+    private fun PaywallOutcome.trackingName(): String = when (this) {
+        PaywallOutcome.Purchased -> AnalyticsEvent.PAYWALL_PURCHASED
+        PaywallOutcome.Dismissed -> AnalyticsEvent.PAYWALL_DISMISSED
+        PaywallOutcome.ContinueWithAds -> AnalyticsEvent.PAYWALL_CONTINUE_WITH_ADS
+    }
+
     internal fun scope(): CoroutineScope = sdkScope
 
     internal fun emitEvent(event: OnboardingEvent) = eventBus.emit(event)
@@ -277,7 +332,7 @@ object OnboardingSdk {
         if (store != null) sdkScope.launch { store.markFlowCompleted() }
         adProvider?.releaseAll()
         eventBus.emit(OnboardingEvent.FlowCompleted(session.stepsShown.toList()))
-        track(AnalyticsEvent.FlowCompleted(session.stepsShown.size))
+        track(AnalyticsEvent.FlowCompleted(session.stepsShown.size, session.elapsedMs))
         deliverOutcome(
             context,
             OnboardingOutcome.Completed(

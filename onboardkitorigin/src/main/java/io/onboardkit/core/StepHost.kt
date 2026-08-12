@@ -10,14 +10,19 @@ interface StepHost {
     val currentIndex: StateFlow<Int>
     val totalSteps: StateFlow<Int>
 
-    fun next()
+    fun next() = next(null)
+
+    /**
+     * @param exitReason how the step was left — the CTA, a skip, auto-next, an unfilled ad. It ends
+     * up on the step-completed event, which is the only way to tell a step users finished from one
+     * they escaped.
+     */
+    fun next(exitReason: String?)
 
     /** Returns false when already at the first step (caller may then exit or ignore). */
     fun back(): Boolean
 
-    fun skipTo(stepId: StepId)
 
     fun finishFlow(reason: FinishReason)
 
-    fun setProgressVisible(visible: Boolean)
 }

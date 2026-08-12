@@ -21,8 +21,8 @@ import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.config.AdTierStrategy
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
+import io.trackkit.PlacementRegistry
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Default [OnboardingAdProvider] backed by the project's `:ads` module (ERainAd/AdMob).
@@ -46,7 +46,13 @@ class ERainAdProvider : OnboardingAdProvider {
     private val interstitials = ConcurrentHashMap<String, ApInterstitialAd>()
     private val interInFlight = ConcurrentHashMap.newKeySet<String>()
     private val interRaces = ConcurrentHashMap<String, TierRace<ApInterstitialAd>>()
-    private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<AdEventListener>>()
+
+    /**
+     * One observer per placement — the screen currently showing it. A list here grew one wrapper
+     * per recycled fragment instance: every stale wrapper re-reported ad_show / ad_load_failed
+     * (each carries its own latch) and pinned its dead Activity until releaseAll.
+     */
+    private val listeners = ConcurrentHashMap<String, AdEventListener>()
 
     override fun isPremium(context: Context): Boolean =
         runCatching { AppPurchase.getInstance().isPurchased(context) }.getOrDefault(false)
@@ -61,6 +67,9 @@ class ERainAdProvider : OnboardingAdProvider {
             Log.w(TAG, "Native $key has no usable ad unit id — skipping")
             return
         }
+        // AdMob's paid-event callback only knows the ad unit; this is the only place that knows
+        // which onboarding screen asked for it, so the mapping is registered before the request.
+        ids.forEach { PlacementRegistry.register(it, key) }
         if (!nativeInFlight.add(key)) return
         when (request.unit.strategy) {
             AdTierStrategy.CASCADE -> loadNativeCascade(activity, request, ids, 0)
@@ -198,6 +207,10 @@ class ERainAdProvider : OnboardingAdProvider {
         nativeBuffers.remove(key)?.let(::destroyNative)
         // A parallel race can still be holding buffered losers for this placement
         nativeRaces.remove(key)?.drainAll()?.forEach(::destroyNative)
+        // Draining marks the race decided, so its callbacks resolve to Late and neither
+        // publishNative nor failNative ever runs — without this line the in-flight marker stayed
+        // set forever and every future preload for the placement was silently skipped.
+        nativeInFlight.remove(key)
         listeners.remove(key)
     }
 
@@ -218,6 +231,7 @@ class ERainAdProvider : OnboardingAdProvider {
             notifyListeners(key) { it.onFailedToLoad() }
             return
         }
+        ids.forEach { PlacementRegistry.register(it, key) }
         if (!interInFlight.add(key)) return
         when (unit.strategy) {
             AdTierStrategy.CASCADE -> loadInterCascade(context, key, ids, 0)
@@ -370,11 +384,11 @@ class ERainAdProvider : OnboardingAdProvider {
     }
 
     private fun addListener(key: String, listener: AdEventListener) {
-        listeners.getOrPut(key) { CopyOnWriteArrayList() }.addIfAbsent(listener)
+        listeners[key] = listener
     }
 
     private fun notifyListeners(key: String, block: (AdEventListener) -> Unit) {
-        listeners[key]?.forEach { runCatching { block(it) } }
+        listeners[key]?.let { runCatching { block(it) } }
     }
 
     private companion object {

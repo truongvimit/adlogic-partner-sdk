@@ -5,7 +5,6 @@ import android.app.Activity
 /** Checkpoints where a paywall may interleave with the flow. */
 enum class PaywallPlacement {
     SPLASH_INTER,
-    BEFORE_LANGUAGE,
     AFTER_ONBOARDING,
     AFTER_QUESTION_OLD_USER,
 }

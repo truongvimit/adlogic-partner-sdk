@@ -13,7 +13,6 @@ import com.ads.module.ads.wrapper.ApNativeAd
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.itg.template.R
-import com.itg.template.tracking.AdsTracking
 import com.itg.template.ui.bases.ext.dpToPx
 
 import android.view.ViewGroup
@@ -29,7 +28,6 @@ fun populateNativeAdView(
     containerShimmerLoading: ShimmerFrameLayout,
 ) {
     if (apNativeAd.admobNativeAd == null && apNativeAd.nativeView == null) {
-        AdsTracking.nativeRenderDropped(apNativeAd)
         containerShimmerLoading.visibility = View.GONE
         return
     }
@@ -101,7 +99,6 @@ fun populateNativeAdView(
     Admob.getInstance().populateUnifiedNativeAdView(apNativeAd.admobNativeAd, adView)
     adPlaceHolder.removeAllViews()
     adPlaceHolder.addView(adView)
-    AdsTracking.nativeRendered(apNativeAd)
 }
 
 private fun applyCtaColor(ctaButton: View, colorCTA: String) {

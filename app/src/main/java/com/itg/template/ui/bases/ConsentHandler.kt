@@ -12,7 +12,14 @@ import com.itg.template.app.AppConstants
 import com.itg.template.data.pref.AppSharedPref
 import com.itg.template.utils.ITGTrackingHelper
 import com.itg.template.utils.ITGTrackingHelper.logEvent
+import com.ads.module.event.MmpTracking
+import io.trackkit.Tracker
+import io.trackkit.TrackkitEvents
 
+/**
+ * UMP flow wrapper — and the app's single consent gate: every terminal path funnels through
+ * [resolveConsent], which is the only place `Tracker.setConsent` is called.
+ */
 class ConsentHandler(
     private val activity: Activity,
     private val appSharedPref: AppSharedPref,
@@ -29,11 +36,14 @@ class ConsentHandler(
             return@Runnable
         }
         consentCallbackHandled = true
+        // UMP never answered — unblock the flow, but report it as an error, not as a grant.
+        resolveConsent(granted = true, status = STATUS_ERROR)
         onConsentFlowCompleted(true)
     }
 
     fun requestConsent() {
         logEvent(getLoadConsentEvent(), null)
+        Tracker.track(TrackkitEvents.ConsentEvents.Requested())
         consentCallbackHandled = false
         consentTimeoutHandler.postDelayed(
             consentTimeoutRunnable,
@@ -60,6 +70,7 @@ class ConsentHandler(
         clear()
         canPersonalized = true
         logEvent(getConsentErrorEvent(), null)
+        resolveConsent(granted = true, status = STATUS_ERROR, errorCode = formError.errorCode)
         onConsentFlowCompleted(canPersonalized)
     }
 
@@ -85,12 +96,14 @@ class ConsentHandler(
         clear()
         logEvent(getNotUsingDisplayConsentEvent(), null)
         canPersonalized = true
+        resolveConsent(granted = true, status = STATUS_NOT_REQUIRED)
         onNotUsingAdConsent?.invoke()
         onConsentFlowCompleted(canPersonalized)
     }
 
     override fun onRequestShowDialog() {
         logEvent(getDisplayConsentEvent(), null)
+        Tracker.track(TrackkitEvents.ConsentEvents.Shown())
     }
 
     override fun testDeviceID(): String = "ED3576D8FCF2F8C52AD8E98B4CFA4005"
@@ -103,7 +116,25 @@ class ConsentHandler(
             ITGAdConsent.resetConsentDialog()
             logEvent(getRefuseConsentEvent(), null)
         }
+        resolveConsent(
+            granted = canPersonalized,
+            status = if (canPersonalized) STATUS_GRANTED else STATUS_DENIED,
+        )
         onConsentSuccess?.invoke(canPersonalized) ?: onConsentFlowCompleted(canPersonalized)
+    }
+
+    /**
+     * The single consent gate. Do not call `Tracker.setConsent` anywhere else.
+     *
+     * UMP asks about **ads**, so only the ads axis follows the user's answer. First-party analytics
+     * stays granted: refusing personalised ads must not also erase `first_open`, retention and the
+     * onboarding funnel. Sinks translate the pair into their own vendor switch.
+     */
+    private fun resolveConsent(granted: Boolean, status: String, errorCode: Int? = null) {
+        Tracker.track(TrackkitEvents.ConsentEvents.Result(status, errorCode))
+        Tracker.setConsent(analytics = true, ads = granted)
+        // Adjust is not a Trackkit sink — it lives in :ads — so the same gate relays to it here.
+        MmpTracking.setConsent(true, granted)
     }
 
     private fun getLoadConsentEvent(): String = when (trackingSuffix) {
@@ -140,6 +171,14 @@ class ConsentHandler(
         1 -> ITGTrackingHelper.CONSENT_ERROR_1
         2 -> ITGTrackingHelper.CONSENT_ERROR_2
         else -> ITGTrackingHelper.CONSENT_ERROR_1
+    }
+
+    private companion object {
+        // Values of the `status` param on consent_result.
+        const val STATUS_GRANTED = "granted"
+        const val STATUS_DENIED = "denied"
+        const val STATUS_NOT_REQUIRED = "not_required"
+        const val STATUS_ERROR = "error"
     }
 }
 

@@ -1,6 +1,7 @@
 package com.itg.template.ui.component.splash
 
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.ads.ERainAd
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
@@ -53,12 +54,18 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
     }
 
     override fun loadSuccess() {
-        // Remote values were already activated by the SDK sync before this listener fires
+        // UA owns the interstitial click cap from here: 0 turns it off, N caps each ad unit at N
+        // clicks per 24h. Applied on every fetch so a mid-session activation takes effect without
+        // a relaunch; until the fetch lands the SDK default (off) stands.
+        ERainAd.getInstance().setMaxClickAdsPerDay(RemoteConfigUtils.getMaxClickAdsPerDay())
     }
 
     override fun onDestroy() {
         consentHandler?.clear()
         consentHandler = null
+        // The fetch may still be in flight; without this the process-wide RemoteConfigUtils holds
+        // this Activity until it returns.
+        RemoteConfigUtils.detach(this)
         super.onDestroy()
     }
 }

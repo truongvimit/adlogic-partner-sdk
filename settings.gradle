@@ -4,3 +4,9 @@ include ':crash_screen'
 include ':ads'
 include ':onboardkitorigin'
 include ':adtracer'
+
+// Analytics: vendor-free contract + one module per vendor, so a partner build only pulls the
+// sinks it actually uses. Adjust is deliberately absent — the MMP lives in :ads.
+// Firebase is the only analytics destination for now; add a sink module per vendor as needed.
+include ':trackkit'
+include ':trackkit-firebase'

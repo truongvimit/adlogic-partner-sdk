@@ -52,8 +52,6 @@ public class AppPurchase {
     private String price = "1.49$";
     private String oldPrice = "2.99$";
 
-    @Deprecated
-    private String productId;
     private ArrayList<QueryProductDetailsParams.Product> listSubscriptionId;
     private ArrayList<QueryProductDetailsParams.Product> listINAPId;
     private PurchaseListener purchaseListener;
@@ -519,16 +517,6 @@ public class AppPurchase {
         }
     }
 
-    @Deprecated
-    public void purchase(Activity activity) {
-        if (productId == null) {
-            Toast.makeText(activity, "Product id must not be empty!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        purchase(activity, productId);
-    }
-
 
     public String purchase(Activity activity, String productId) {
         if (skuListINAPFromStore == null) {
@@ -808,14 +796,6 @@ public class AppPurchase {
         return offerToken;
     }
 
-    public void consumePurchase() {
-        if (productId == null) {
-            Log.e(TAG, "Consume Purchase false:productId null ");
-            return;
-        }
-        consumePurchase(productId);
-    }
-
     public void consumePurchase(String productId) {
         if (billingClient == null || !billingClient.isReady()) {
             Log.e(TAG, "BillingClient is not ready");
@@ -914,11 +894,6 @@ public class AppPurchase {
         }
     }
 
-
-    @Deprecated
-    public String getPrice() {
-        return getPrice(productId);
-    }
 
     public String getPrice(String productId) {
 

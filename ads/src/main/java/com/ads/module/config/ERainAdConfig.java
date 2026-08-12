@@ -7,15 +7,10 @@ import java.util.List;
 
 public class ERainAdConfig {
 
-    //switch mediation use for app
-    public static final int PROVIDER_ADMOB = 0;
-    public static final int PROVIDER_MAX = 1;
-
     public static final String ENVIRONMENT_DEVELOP = "develop";
     public static final String ENVIRONMENT_PRODUCTION = "production";
 
     public static final String DEFAULT_TOKEN_FACEBOOK_SDK = "client_token";
-    public static String ADJUST_TOKEN_TIKTOK = "client_token_adjust_tiktok";
 
     private boolean isVariantDev = false;
 
@@ -24,18 +19,12 @@ public class ERainAdConfig {
      */
     private AdjustConfig adjustConfig;
 
-    /**
-     * eventNamePurchase push event to adjust when user purchased
-     */
-    private String eventNamePurchase = "";
     private String idAdResume;
     private List<String> listDeviceTest = new ArrayList();
 
     private Application application;
     private boolean enableAdResume = false;
     private String facebookClientToken = DEFAULT_TOKEN_FACEBOOK_SDK;
-
-    private String adjustTokenTiktok;
 
     /**
      * intervalInterstitialAd: time between two interstitial ad impressions
@@ -52,14 +41,6 @@ public class ERainAdConfig {
         this.application = application;
     }
 
-    /**
-     * @param isVariantDev
-     */
-    @Deprecated
-    public void setVariant(Boolean isVariantDev) {
-        this.isVariantDev = isVariantDev;
-    }
-
     public void setEnvironment(String environment) {
         this.isVariantDev = environment.equals(ENVIRONMENT_DEVELOP);
     }
@@ -70,10 +51,6 @@ public class ERainAdConfig {
 
     public void setAdjustConfig(AdjustConfig adjustConfig) {
         this.adjustConfig = adjustConfig;
-    }
-
-    public String getEventNamePurchase() {
-        return eventNamePurchase;
     }
 
     public Application getApplication() {
@@ -131,12 +108,4 @@ public class ERainAdConfig {
         return this.facebookClientToken;
     }
 
-    public String getAdjustTokenTiktok() {
-        return adjustTokenTiktok;
-    }
-
-    public void setAdjustTokenTiktok(String adjustTokenTiktok) {
-        ADJUST_TOKEN_TIKTOK = adjustTokenTiktok;
-        this.adjustTokenTiktok = adjustTokenTiktok;
-    }
 }

@@ -15,13 +15,18 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.core.StepId
-import io.onboardkit.core.analytics.AnalyticsEvent
+import io.onboardkit.core.analytics.AdSkipReason
+import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.databinding.ObFragmentContentStepBinding
 import io.onboardkit.remote.uiconfig.UiStepStyle
 import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
+import io.trackkit.AdFormat
 
 /**
  * Content step (OB1/OB2/OB4 style). Layout resolves in three tiers: app-injected layout →
@@ -73,10 +78,8 @@ class ContentStepFragment : LazyStepFragment() {
             b.obPrimaryCta.overrideLabels(it.buttonNextText, it.buttonLastText, it.buttonTextColor)
             it.sliderColor?.let { color -> b.obStepIndicator.setColors(color) }
         }
-        b.obPrimaryCta.setOnClickListener {
-            OnboardingSdk.track(AnalyticsEvent.StepCompleted(stepId, dwellMs()))
-            requireStepHost().next()
-        }
+        // Completion is reported by the host, which sees every page type and both exit paths
+        b.obPrimaryCta.setOnClickListener { requireStepHost().next(StepExit.CTA) }
     }
 
     private fun bindStaticContent(
@@ -151,23 +154,31 @@ class ContentStepFragment : LazyStepFragment() {
         val provider = OnboardingSdk.provider()
         val placement = AdPlacement.StepNative(stepId)
         val unit = config.ads.contentStepNative
-        if (provider == null || unit == null ||
-            !OnboardingSdk.policy().canShowNative(activity, placement)
-        ) {
+        if (provider == null || unit == null) {
+            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.NO_UNIT)
             b.obAdBlock.visibility = View.GONE
             return
         }
-        val listener = object : AdEventListener {
-            override fun onLoaded() {
-                activity.runOnUiThread { bindAd() }
-            }
-
-            override fun onFailedToLoad() {
-                activity.runOnUiThread {
-                    if (!adBound) binding?.obAdBlock?.visibility = View.GONE
-                }
-            }
+        if (!OnboardingSdk.policy().canShowNative(activity, placement)) {
+            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.POLICY)
+            b.obAdBlock.visibility = View.GONE
+            return
         }
+        val listener = placement.tracked(
+            AdFormat.NATIVE,
+            object : AdEventListener {
+                override fun onLoaded() {
+                    activity.runOnUiThread { bindAd() }
+                }
+
+                override fun onFailedToLoad() {
+                    activity.runOnUiThread {
+                        if (!adBound) binding?.obAdBlock?.visibility = View.GONE
+                    }
+                }
+            },
+        )
+        placement.trackRequest(AdFormat.NATIVE)
         if (!bindAd(listener)) {
             val template = NativeTemplates.fromRemote(
                 OnboardingSdk.flags().templateContent,

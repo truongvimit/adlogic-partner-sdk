@@ -44,7 +44,8 @@ abstract class LazyStepFragment : Fragment() {
         onStepUnselected(dwellMs())
     }
 
-    protected fun dwellMs(): Long =
+    /** Internal, not protected: the pager host reads it to report step completion in one place. */
+    internal fun dwellMs(): Long =
         if (selectedAtMs == 0L) 0L else System.currentTimeMillis() - selectedAtMs
 
     /** View bootstrap; runs exactly once per view lifetime. No ad requests here. */

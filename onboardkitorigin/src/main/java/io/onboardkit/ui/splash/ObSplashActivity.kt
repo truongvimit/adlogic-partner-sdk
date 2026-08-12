@@ -13,14 +13,21 @@ import io.onboardkit.R
 import io.onboardkit.StartOptions
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.tracked
+import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.AdLoadStrategy
+import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.flow.StartDecision
 import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.trackkit.AdFormat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,6 +44,8 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 open class ObSplashActivity : BaseOnboardActivity() {
 
+    override val screenName: String = "ob_splash"
+
     private val startedAtMs = System.currentTimeMillis()
     private val navigated = AtomicBoolean(false)
     private val interstitialGate = CompletableDeferred<Unit>()
@@ -48,6 +57,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         setContentView(layout)
         bindDefaultViews()
         OnboardingSdk.emitEvent(OnboardingEvent.SplashViewed(0))
+        OnboardingSdk.track(AnalyticsEvent.SplashViewed())
 
         lifecycleScope.launch { runSplashPipeline() }
     }
@@ -103,37 +113,57 @@ open class ObSplashActivity : BaseOnboardActivity() {
         val cfg = sdk.requireConfig()
         val provider = sdk.provider()
         if (provider == null) {
+            AdPlacement.SplashInterstitial.trackSkipped(AdFormat.INTERSTITIAL, AdSkipReason.NO_UNIT)
             interstitialGate.complete(Unit)
             return
         }
 
-        if (cfg.ads.splashBanner != null && sdk.policy().canShowBanner(this)) {
-            findViewById<FrameLayout?>(R.id.ob_splash_ad_container)?.visibility =
-                android.view.View.VISIBLE
-            provider.loadBanner(this, cfg.ads.splashBanner)
-        }
+        loadSplashBanner(cfg.ads.splashBanner, provider)
 
         val interUnit = resolveSplashInterUnit(cfg.ads.splashInterstitial)
-        if (interUnit == null ||
-            !sdk.policy().canShowInterstitial(this, AdPlacement.SplashInterstitial)
-        ) {
+        if (interUnit == null) {
+            AdPlacement.SplashInterstitial.trackSkipped(AdFormat.INTERSTITIAL, AdSkipReason.NO_UNIT)
             interstitialGate.complete(Unit)
             return
         }
+        if (!sdk.policy().canShowInterstitial(this, AdPlacement.SplashInterstitial)) {
+            AdPlacement.SplashInterstitial.trackSkipped(AdFormat.INTERSTITIAL, AdSkipReason.POLICY)
+            interstitialGate.complete(Unit)
+            return
+        }
+        AdPlacement.SplashInterstitial.trackRequest(AdFormat.INTERSTITIAL)
         provider.loadInterstitial(
             this,
             AdPlacement.SplashInterstitial,
             interUnit,
-            object : AdEventListener {
-                override fun onLoaded() {
-                    interstitialGate.complete(Unit)
-                }
+            AdPlacement.SplashInterstitial.tracked(
+                AdFormat.INTERSTITIAL,
+                object : AdEventListener {
+                    override fun onLoaded() {
+                        interstitialGate.complete(Unit)
+                    }
 
-                override fun onFailedToLoad() {
-                    interstitialGate.complete(Unit)
-                }
-            },
+                    override fun onFailedToLoad() {
+                        interstitialGate.complete(Unit)
+                    }
+                },
+            ),
         )
+    }
+
+    private fun loadSplashBanner(unit: BannerAdUnit?, provider: OnboardingAdProvider) {
+        if (unit == null) {
+            AdPlacement.SplashBanner.trackSkipped(AdFormat.BANNER, AdSkipReason.NO_UNIT)
+            return
+        }
+        if (!sdk.policy().canShowBanner(this)) {
+            AdPlacement.SplashBanner.trackSkipped(AdFormat.BANNER, AdSkipReason.POLICY)
+            return
+        }
+        findViewById<FrameLayout?>(R.id.ob_splash_ad_container)?.visibility =
+            android.view.View.VISIBLE
+        AdPlacement.SplashBanner.trackRequest(AdFormat.BANNER)
+        provider.loadBanner(this, unit, AdPlacement.SplashBanner.tracked(AdFormat.BANNER))
     }
 
     /** Remote id override beats the compile-time id, matching the original's splash-inter rule. */
@@ -148,19 +178,15 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private fun navigateOnce() {
         if (!navigated.compareAndSet(false, true)) return
         OnboardingSdk.track(
-            AnalyticsEvent.SplashViewed(System.currentTimeMillis() - startedAtMs),
+            AnalyticsEvent.SplashCompleted(System.currentTimeMillis() - startedAtMs),
         )
         lifecycleScope.launch {
-            val gate = sdk.paywall()
-            if (gate != null && gate.shouldShow(PaywallPlacement.SPLASH_INTER)) {
-                when (gate.present(this@ObSplashActivity, PaywallPlacement.SPLASH_INTER)) {
-                    PaywallOutcome.Purchased -> {
-                        proceedToFlow()
-                        return@launch
-                    }
-
-                    PaywallOutcome.Dismissed, PaywallOutcome.ContinueWithAds -> Unit
-                }
+            // A purchase here removes the reason to show the interstitial at all
+            if (sdk.presentPaywall(this@ObSplashActivity, PaywallPlacement.SPLASH_INTER)
+                == PaywallOutcome.Purchased
+            ) {
+                proceedToFlow()
+                return@launch
             }
             showSplashInterThenProceed()
         }

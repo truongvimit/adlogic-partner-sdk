@@ -7,6 +7,9 @@ gen/
 out/
 obj/
 release/
+# …but not the release source set: `release/` was swallowing app/src/release, so release-only
+# sources were never committed and a fresh clone could not build the release variant.
+!*/src/release/
 
 # Compiled artifacts
 *.apk

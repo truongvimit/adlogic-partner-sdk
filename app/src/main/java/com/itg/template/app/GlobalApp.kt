@@ -20,18 +20,23 @@ import com.ads.module.application.AdsMultiDexApplication
 import com.ads.module.billing.AppPurchase
 import com.ads.module.config.AdjustConfig
 import com.ads.module.config.ERainAdConfig
-import com.google.android.gms.ads.MobileAds
 import com.itg.devconfig.DevConfig
 import com.itg.template.BuildConfig
 import com.itg.template.R
 import com.itg.template.ads.AdRemoteConfig
+import com.itg.template.ads.AdsManager
 import com.itg.template.data.pref.AppSharedPreferencesApp
-import com.itg.template.tracking.AdsTracking
+import com.itg.template.tracking.installDebugSinks
 import com.itg.template.ui.component.main.MainActivity
 import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.ConfirmUninstallActivity
 import dagger.hilt.android.HiltAndroidApp
 import io.onboardkit.OnboardingSdk
+import io.trackkit.Tracker
+import io.trackkit.TrackerConfig
+import io.trackkit.TrackkitEvents
+import io.trackkit.firebase.FirebaseSink
+import io.trackkit.sink.ConsoleSink
 import io.onboardkit.ads.erain.ERainAdProvider
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -55,7 +60,11 @@ class GlobalApp : AdsMultiDexApplication() {
 
     override fun onCreate() {
         super.onCreate()
-        MobileAds.initialize(this) {}
+        // First, before any SDK: everything below emits through Tracker, and events tracked
+        // before install() would only be buffered, not attributed to this session.
+        initTracking()
+        // No MobileAds.initialize here: ERainAd.init -> Admob.init is the single canonical site
+        // (it also logs per-adapter status); a second call just races the first for no gain.
         DevConfig.init(
             context = this,
             nkhStudioVersion = BuildConfig.ERAIN_STUDIO_VERSION,
@@ -69,15 +78,37 @@ class GlobalApp : AdsMultiDexApplication() {
             Timber.plant(Timber.DebugTree())
         }
         initAdRemoteConfig()
+        // Bind ad units to placements before any ad can load: the paid-event bridge in :ads reads
+        // the placement back from the registry, and an unregistered unit reports as "unknown"
+        AdsManager.registerAdPlacements()
         initAds()
-        // Debug-only ad tracker; must attach before OnboardKit so its provider gets wrapped
-        AdsTracking.init(this)
         initOnboardKit()
 
         // Unconditionally register lifecycle observer and callbacks so dynamic welcome/resume toggling works during testing
         ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())
         registerActivityLifecycleCallbacks(AppActivityLifecycleCallbacks())
     }
+
+    private fun initTracking() {
+        Tracker.install(
+            this,
+            TrackerConfig(
+                appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+                strictValidation = BuildConfig.DEBUG,
+                logLevel = if (BuildConfig.DEBUG) 2 else 1,
+            ),
+        )
+        // Firebase is the only destination Trackkit owns. Adjust is not a sink at all — the MMP
+        // lives in :ads, where every signal it consumes already originates. See ARCHITECTURE.md.
+        //
+        // collectionFollowsConsent = false: Consent Mode already denies ad storage on refusal, and
+        // a hard collection switch would also kill first_open, retention and the onboarding funnel.
+        Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
+        if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+        // AdTracer dashboard, debug builds only — a sink, so no ad call site knows it exists
+        installDebugSinks()
+    }
+
 
     private fun initAdRemoteConfig() {
         AdRemoteConfig.initializeFromAssets(this)
@@ -89,9 +120,18 @@ class GlobalApp : AdsMultiDexApplication() {
         mERainAdConfig = ERainAdConfig(this, environment)
 
         val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+        // Both tokens default to "" and nothing used to set them, so every impression and every
+        // purchase reached Adjust as AdjustEvent("") and was dropped server-side without a trace.
+        // Mint them on the Adjust dashboard; a blank one is skipped with a warning, never sent.
+        adjustConfig.eventAdImpression = getString(R.string.event_token)
+        adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
+        // Without it Adjust has nothing to forward to Meta, so Meta-attributed campaigns stay
+        // empty in the Adjust dashboard.
+        adjustConfig.fbAppId = getString(R.string.facebook_app_id)
         mERainAdConfig.adjustConfig = adjustConfig
         mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-        mERainAdConfig.adjustTokenTiktok = resources.getString(R.string.event_token)
+        // No adjustTokenTiktok here: every impression path falls back to
+        // adjustConfig.eventAdImpression (set above) — one token, one door.
         mERainAdConfig.intervalInterstitialAd = 35
 
         mERainAdConfig.idAdResume = ""
@@ -111,7 +151,7 @@ class GlobalApp : AdsMultiDexApplication() {
 
     private fun initOnboardKit() {
         OnboardingSdk.install(this) {
-            adProvider = AdsTracking.wrapOnboardingProvider(ERainAdProvider())
+            adProvider = ERainAdProvider()
             listener = OnboardingListener { context, outcome ->
                 if (outcome is OnboardingOutcome.Completed) {
                     outcome.selectedLanguage?.let {

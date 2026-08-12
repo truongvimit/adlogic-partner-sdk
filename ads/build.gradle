@@ -42,6 +42,9 @@ android {
 }
 
 dependencies {
+    // api, not implementation: partner apps call Tracker / AdFormat through :ads.
+    api project(':trackkit')
+
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
@@ -88,6 +91,8 @@ dependencies {
     implementation 'com.google.android.play:app-update:2.1.0'
     implementation 'com.google.android.play:app-update-ktx:2.1.0'
     api 'com.google.android.ump:user-messaging-platform:4.0.0'
+
+    testImplementation 'junit:junit:4.13.2'
 }
 
 // AGP creates the 'release' software component late, so the publication must be configured
