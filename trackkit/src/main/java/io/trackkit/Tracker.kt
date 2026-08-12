@@ -2,6 +2,7 @@ package io.trackkit
 
 import android.content.Context
 import android.util.Log
+import io.trackkit.Tracker.install
 import io.trackkit.internal.AdRevenueAccumulator
 import io.trackkit.internal.EventValidator
 import io.trackkit.internal.PendingBuffer
@@ -93,6 +94,14 @@ object Tracker {
         }
         flushPending()
         verbose { "installed — session=${session?.sessionId} sinks=${sinks.map { it.id }}" }
+        // A sinkless Tracker validates every event and then hands it to an empty list. That is the
+        // exact failure the taxonomy exists to prevent, so it is a warning and not silence.
+        if (sinks.isEmpty()) {
+            warn(
+                "install() ran with no sink — every event will be validated and then discarded. " +
+                        "Call Tracker.addSink(FirebaseSink()) (or your own TrackSink) to send them."
+            )
+        }
     }
 
     /** Registers destinations. Safe to call before or after [install]; duplicate ids are ignored. */
