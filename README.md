@@ -2,6 +2,8 @@
 
 # Ads Integration Guide — Base Project (EN)
 
+> Module guides: **[trackkit](trackkit/README.md)** · **[OnboardKit](onboardkitorigin/README.md)**
+
 This document is the **mandatory reference standard** for partner teams integrating ads into Infinity products. Any ad-related change must follow the architecture, load/show flow, and gating rules defined in this base project.
 
 ---
@@ -33,14 +35,14 @@ Then declare the dependencies:
 
 ```groovy
 dependencies {
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.2.0'
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.2.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.3.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.3.0'
 
     // Pick the sinks you actually want. Without a sink, Tracker validates and drops events.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.2.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
 
     // Tracker ships in debug builds only — keep it out of release
-    debugImplementation 'com.github.truongvimit.adlogic-partner-sdk:adtracer:1.2.0'
+    debugImplementation 'com.github.truongvimit.adlogic-partner-sdk:adtracer:1.3.0'
 }
 ```
 
@@ -53,7 +55,7 @@ Note the group id: because this repository publishes several modules, JitPack na
 and JitPack derives it from the GitHub URL — it is not something `build.gradle` or `jitpack.yml` can
 override. Flattening it to `com.github.truongvimit:ads` would require one repository per module.
 
-Replace `1.2.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
+Replace `1.3.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
 > **Note:** `onboardkitorigin` depends on `ads` at runtime scope, so its ad classes (`com.ads.module.*`) are not on your compile classpath through it. Declare `ads` explicitly, as shown above, if you call those APIs directly.
 
@@ -137,11 +139,15 @@ Order in `GlobalApp.onCreate()` (mandatory):
 
 | Step | Call | Purpose |
 |:---:|------|---------|
-| 1 | `MobileAds.initialize(this)` | Initialize Google Mobile Ads SDK |
+| 1 | `initTracking()` | `Tracker.install(...)` + `Tracker.addSink(...)` — **must be first**, see §1.6 |
 | 2 | `DevConfig.init(...)` | DevConfig UI — ads lib versions (see §1.3) |
 | 3 | `initAdRemoteConfig()` | `AdRemoteConfig.initializeFromAssets(this)` |
 | 4 | `initAds()` | `ERainAd` + resume/inter rules (see §1.5) |
-| 5 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | Register `AppLifecycleObserver` when welcome flow applies |
+| 5 | `initOnboardKit()` | `OnboardingSdk.install(...)` — see the OnboardKit guide |
+| 6 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | Register `AppLifecycleObserver` when welcome flow applies |
+
+Do **not** call `MobileAds.initialize()` yourself: `ERainAd.init()` → `Admob.init()` already does it,
+and with the adapter-status logging attached. A second call just races the first.
 
 - `SplashActivity.checkRemoteConfigResult()`:
   - `AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())` to apply latest remote config.
@@ -186,9 +192,8 @@ In the current base, the core integration is implemented in `GlobalApp.initAds()
 1. Select `environment` by build type (`ERainAdConfig.ENVIRONMENT_DEVELOP` / `ERainAdConfig.ENVIRONMENT_PRODUCTION`).
 2. Create `mERainAdConfig = ERainAdConfig(this, environment)`.
 3. Set required config fields before calling `ERainAd.init(...)`:
-   - `adjustConfig`
+   - `adjustConfig` — app token plus the event tokens (see the table in §1.5.1)
    - `facebookClientToken`
-   - `adjustTokenTiktok`
    - `intervalInterstitialAd`
    - `idAdResume`
 4. Call `ERainAd.getInstance().init(this, mERainAdConfig)`.
@@ -204,9 +209,13 @@ private fun initAds() {
         if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
     mERainAdConfig = ERainAdConfig(this, environment)
 
-    mERainAdConfig.adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    adjustConfig.eventAdImpression = getString(R.string.event_token)
+    adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
+    adjustConfig.fbAppId = getString(R.string.facebook_app_id)
+
+    mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.adjustTokenTiktok = resources.getString(R.string.event_token)
     mERainAdConfig.intervalInterstitialAd = 35
     mERainAdConfig.idAdResume = ""
 
@@ -215,6 +224,65 @@ private fun initAds() {
 ```
 
 > Note: `initAdRemoteConfig()` should still run before `initAds()`, and remote config is still synced in `SplashActivity` via `RemoteConfigUtils.init(...)` + `AdRemoteConfig.initialize(...)`.
+
+### 1.5.1 Adjust tokens — one token, one door
+
+| Field | What it is | Blank means |
+|---|---|---|
+| `adjustToken` | App token from the Adjust dashboard | Adjust never initialises; an error is logged |
+| `eventAdImpression` | Event token fired on **every** paid impression, on top of `Adjust.trackAdRevenue` | The event is skipped — the normal case |
+| `eventNamePurchase` | Event token fired when a purchase completes | Purchase revenue is skipped, with a warning |
+| `fbAppId` | Meta app id, so Adjust can forward to Meta | Meta-attributed campaigns stay empty in Adjust |
+
+Every token is a six-character id minted on the Adjust dashboard, **not** an event name. A blank one
+is skipped deliberately: `AdjustEvent("")` is accepted client-side, dropped server-side, and the
+revenue disappears with no signal. There is exactly one place to set the impression token —
+`adjustConfig.eventAdImpression`. Every ad format (interstitial, native, banner, rewarded, app-open)
+reads that same field.
+
+### 1.6 Tracking — `Tracker.install()` is mandatory
+
+This is the step partners miss most often, because nothing crashes without it.
+
+`ads` does **not** log analytics itself. Every impression, click and purchase it observes is handed
+to `Tracker` (from `trackkit`), which fans out to whatever sinks you registered. Register none and
+`Tracker` validates each event and then hands it to an empty list — the data silently never arrives.
+Since 1.3.0 that case logs a warning at install time, but the fix is to wire it:
+
+```kotlin
+private fun initTracking() {
+    Tracker.install(
+        this,
+        TrackerConfig(
+            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+            strictValidation = BuildConfig.DEBUG,   // taxonomy mistakes fail in QA, never in prod
+            logLevel = if (BuildConfig.DEBUG) 2 else 1,
+        ),
+    )
+    Tracker.addSink(FirebaseSink())                 // from trackkit-firebase
+    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+}
+```
+
+Call it **first** in `onCreate()`. Events tracked before `install()` are buffered, not lost, but they
+are flushed with the session data of whatever session is current when install finally runs.
+
+What you get for free once a sink exists — no call sites of your own:
+
+| Signal | Emitted by | Event names |
+|---|---|---|
+| Ad lifecycle | `ads`, per ad unit | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
+| Paid impressions + ad LTV | `ads`, from the AdMob paid-event callback | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
+| Purchases | `ads`, from the billing callback | `iap_success` |
+| First-open funnel | `onboardkitorigin` | `fo_*` — see the OnboardKit guide |
+
+Two things stay yours: the UMP outcome (`Tracker.setConsent(analytics, ads)` — call it from your
+consent callback, exactly once) and any product event of your own (`Tracker.track("...")`).
+
+Adjust is **not** a sink and needs no wiring here. It is an MMP, it lives inside `ads`, and it is
+configured through `adjustConfig` in §1.5. See `trackkit/ARCHITECTURE.md` for why the split exists.
+
+---
 
 ## 2. Load/Show Ads by placement
 

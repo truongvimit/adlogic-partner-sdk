@@ -2,6 +2,8 @@
 
 # Ads Integration Guide — Base Project (HI)
 
+> Module दस्तावेज़: **[trackkit](trackkit/README.hi.md)** · **[OnboardKit](onboardkitorigin/README.hi.md)**
+
 यह दस्तावेज़ Infinity products में ads integration के लिए partner teams का **mandatory reference standard** है। Ads से जुड़ा कोई भी बदलाव इसी base project में defined architecture, load/show flow, और gating rules के अनुसार होना चाहिए।
 
 ---
@@ -71,11 +73,16 @@ Detailed UI/Ads reference (CTA size, Done button delay, native placement by page
 
 | Step | Call | Purpose |
 |:---:|------|---------|
-| 1 | `MobileAds.initialize(this)` | Google Mobile Ads SDK initialize |
+| 1 | `initTracking()` | `Tracker.install(...)` + `Tracker.addSink(...)` — **सबसे पहले अनिवार्य**, §1.6 देखें |
 | 2 | `DevConfig.init(...)` | DevConfig UI — ads lib versions (§1.3 देखें) |
 | 3 | `initAdRemoteConfig()` | `AdRemoteConfig.initializeFromAssets(this)` |
 | 4 | `initAds()` | `ERainAd` + resume/inter rules (§1.5 देखें) |
-| 5 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | welcome flow हो तो `AppLifecycleObserver` register |
+| 5 | `initOnboardKit()` | `OnboardingSdk.install(...)` — OnboardKit दस्तावेज़ देखें |
+| 6 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | welcome flow हो तो `AppLifecycleObserver` register |
+
+`MobileAds.initialize()` **खुद मत बुलाइए**: `ERainAd.init()` → `Admob.init()` पहले ही यह कर देता है,
+साथ में हर adapter का status भी log करता है। दूसरी बार बुलाने से सिर्फ़ पहली call के साथ बेकार की
+race लगती है।
 
 - `SplashActivity.checkRemoteConfigResult()`:
   - latest remote config apply: `AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())`
@@ -120,9 +127,8 @@ DevConfig.init(
 1. build type के अनुसार `environment` चुनें (`ERainAdConfig.ENVIRONMENT_DEVELOP` / `ERainAdConfig.ENVIRONMENT_PRODUCTION`)।
 2. `mERainAdConfig = ERainAdConfig(this, environment)` बनाएं।
 3. `ERainAd.init(...)` call से पहले required fields set करें:
-   - `adjustConfig`
+   - `adjustConfig` — app token और event tokens (§1.5.1 की तालिका देखें)
    - `facebookClientToken`
-   - `adjustTokenTiktok`
    - `intervalInterstitialAd`
    - `idAdResume`
 4. `ERainAd.getInstance().init(this, mERainAdConfig)` call करें।
@@ -138,9 +144,13 @@ private fun initAds() {
         if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
     mERainAdConfig = ERainAdConfig(this, environment)
 
-    mERainAdConfig.adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    adjustConfig.eventAdImpression = getString(R.string.event_token)
+    adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
+    adjustConfig.fbAppId = getString(R.string.facebook_app_id)
+
+    mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.adjustTokenTiktok = resources.getString(R.string.event_token)
     mERainAdConfig.intervalInterstitialAd = 35
     mERainAdConfig.idAdResume = ""
 
@@ -149,6 +159,67 @@ private fun initAds() {
 ```
 
 > Note: `initAdRemoteConfig()` को `initAds()` से पहले call करना चाहिए, और remote config sync फिर भी `SplashActivity` में `RemoteConfigUtils.init(...)` + `AdRemoteConfig.initialize(...)` से होता है।
+
+### 1.5.1 Adjust tokens — एक token, एक दरवाज़ा
+
+| Field | यह क्या है | खाली होने पर |
+|---|---|---|
+| `adjustToken` | Adjust dashboard से लिया गया app token | Adjust कभी initialize नहीं होता; error log होता है |
+| `eventAdImpression` | **हर** paid impression पर fire होने वाला event token, `Adjust.trackAdRevenue` के ऊपर | event skip हो जाता है — यही सामान्य स्थिति है |
+| `eventNamePurchase` | purchase पूरा होने पर fire होने वाला event token | purchase revenue skip, warning के साथ |
+| `fbAppId` | Meta app id, ताकि Adjust डेटा Meta को भेज सके | Adjust dashboard में Meta-attributed campaigns खाली रहेंगे |
+
+हर token, Adjust dashboard पर बनाया गया छह-अक्षर का id है — event **नाम नहीं**। खाली token
+जानबूझकर skip किया जाता है: `AdjustEvent("")` client पर स्वीकार होता है, server पर drop हो जाता है,
+और revenue बिना किसी संकेत के गायब हो जाता है। impression token सेट करने की जगह ठीक **एक** है —
+`adjustConfig.eventAdImpression`। हर ad format (interstitial, native, banner, rewarded, app-open)
+उसी एक field को पढ़ता है।
+
+### 1.6 Tracking — `Tracker.install()` अनिवार्य है
+
+यह वह step है जो partners सबसे ज़्यादा छोड़ देते हैं, क्योंकि इसके बिना कुछ crash नहीं होता।
+
+`ads` खुद analytics log **नहीं** करता। जो भी impression, click और purchase वह देखता है, सब
+`Tracker` (`trackkit` से) को सौंप देता है, और `Tracker` उसे आपके registered sinks तक पहुँचाता है।
+एक भी sink register न हो तो `Tracker` हर event validate करके एक खाली list को थमा देता है — डेटा
+चुपचाप कहीं नहीं पहुँचता। 1.3.0 से यह स्थिति install के समय warning log करती है, पर असली समाधान
+सही wiring है:
+
+```kotlin
+private fun initTracking() {
+    Tracker.install(
+        this,
+        TrackerConfig(
+            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+            strictValidation = BuildConfig.DEBUG,   // taxonomy की गलती QA में फेल हो, production में नहीं
+            logLevel = if (BuildConfig.DEBUG) 2 else 1,
+        ),
+    )
+    Tracker.addSink(FirebaseSink())                 // trackkit-firebase से
+    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+}
+```
+
+इसे `onCreate()` में **सबसे पहले** बुलाइए। `install()` से पहले track किए गए events buffer होते हैं,
+खोते नहीं — पर वे उसी session के डेटा के साथ flush होंगे जो install के समय चल रहा हो।
+
+sink मौजूद होते ही ये सब अपने आप मिलता है — आपकी तरफ़ से एक भी call site नहीं चाहिए:
+
+| Signal | किसने भेजा | Event names |
+|---|---|---|
+| Ad lifecycle | `ads`, हर ad unit के लिए | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
+| Paid impressions + ad LTV | `ads`, AdMob के paid-event callback से | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
+| Purchases | `ads`, billing callback से | `iap_success` |
+| First-open funnel | `onboardkitorigin` | `fo_*` — OnboardKit दस्तावेज़ देखें |
+
+दो चीज़ें आपकी ही रहती हैं: UMP का नतीजा (`Tracker.setConsent(analytics, ads)` — अपने consent
+callback से, ठीक एक बार) और अपने product events (`Tracker.track("...")`)।
+
+Adjust **sink नहीं है** और यहाँ किसी wiring की ज़रूरत नहीं। वह एक MMP है, `ads` के अंदर रहता है,
+और §1.5 के `adjustConfig` से configure होता है। यह विभाजन क्यों है, इसके लिए
+`trackkit/ARCHITECTURE.md` देखें।
+
+---
 
 ## 2. Load/Show Ads by placement
 

@@ -2,6 +2,8 @@
 
 # Hướng dẫn tích hợp Ads — Base Project (VI)
 
+> Tài liệu module: **[trackkit](trackkit/README.vi.md)** · **[OnboardKit](onboardkitorigin/README.vi.md)**
+
 Tài liệu này là **chuẩn tham chiếu bắt buộc** dành cho đối tác phát triển khi tích hợp quảng cáo trên các sản phẩm của Infinity. Mọi thay đổi liên quan Ads phải tuân thủ kiến trúc, luồng load/show và các rule gating được mô tả trong project base này.
 
 ---
@@ -65,11 +67,15 @@ Thứ tự trong `GlobalApp.onCreate()` (bắt buộc follow):
 
 | Bước | Gọi tại | Mục đích |
 |:---:|---------|----------|
-| 1 | `MobileAds.initialize(this)` | Khởi tạo Google Mobile Ads SDK |
+| 1 | `initTracking()` | `Tracker.install(...)` + `Tracker.addSink(...)` — **bắt buộc đầu tiên**, xem mục 1.6 |
 | 2 | `DevConfig.init(...)` | DevConfig UI — version libs ads (xem mục 1.3) |
 | 3 | `initAdRemoteConfig()` | `AdRemoteConfig.initializeFromAssets(this)` |
 | 4 | `initAds()` | `ERainAd` + rule resume/inter (xem mục 1.5) |
-| 5 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | Đăng ký `AppLifecycleObserver` nếu cần welcome flow |
+| 5 | `initOnboardKit()` | `OnboardingSdk.install(...)` — xem tài liệu OnboardKit |
+| 6 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | Đăng ký `AppLifecycleObserver` nếu cần welcome flow |
+
+**Không** tự gọi `MobileAds.initialize()`: `ERainAd.init()` → `Admob.init()` đã gọi rồi, kèm log
+trạng thái từng adapter. Gọi lần hai chỉ tạo ra một cuộc đua vô ích với lần đầu.
 
 - `SplashActivity.checkRemoteConfigResult()`:
   - `AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())` để apply config mới nhất từ remote.
@@ -114,9 +120,8 @@ Trong base hiện tại, phần tích hợp chính nằm ở `GlobalApp.initAds(
 1. Chọn `environment` theo build type (`ERainAdConfig.ENVIRONMENT_DEVELOP` / `ERainAdConfig.ENVIRONMENT_PRODUCTION`).
 2. Tạo `mERainAdConfig = ERainAdConfig(this, environment)`.
 3. Set các trường config cần thiết trước khi `ERainAd.init(...)`:
-   - `adjustConfig`
+   - `adjustConfig` — app token cùng các event token (xem bảng ở mục 1.5.1)
    - `facebookClientToken`
-   - `adjustTokenTiktok`
    - `intervalInterstitialAd`
    - `idAdResume`
 4. Gọi `ERainAd.getInstance().init(this, mERainAdConfig)`.
@@ -132,9 +137,13 @@ private fun initAds() {
         if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
     mERainAdConfig = ERainAdConfig(this, environment)
 
-    mERainAdConfig.adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
+    adjustConfig.eventAdImpression = getString(R.string.event_token)
+    adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
+    adjustConfig.fbAppId = getString(R.string.facebook_app_id)
+
+    mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.adjustTokenTiktok = resources.getString(R.string.event_token)
     mERainAdConfig.intervalInterstitialAd = 35
     mERainAdConfig.idAdResume = ""
 
@@ -143,6 +152,64 @@ private fun initAds() {
 ```
 
 > Lưu ý: `initAdRemoteConfig()` vẫn cần gọi trước `initAds()`, và config remote vẫn được đồng bộ lại ở `SplashActivity` qua `RemoteConfigUtils.init(...)` + `AdRemoteConfig.initialize(...)`.
+
+### 1.5.1 Adjust token — một token, một cửa
+
+| Trường | Là gì | Để trống nghĩa là |
+|---|---|---|
+| `adjustToken` | App token lấy từ dashboard Adjust | Adjust không bao giờ khởi tạo; có log lỗi |
+| `eventAdImpression` | Event token bắn ở **mọi** paid impression, chồng lên `Adjust.trackAdRevenue` | Bỏ qua event — đây là trường hợp bình thường |
+| `eventNamePurchase` | Event token bắn khi purchase thành công | Bỏ qua doanh thu purchase, kèm cảnh báo |
+| `fbAppId` | Meta app id để Adjust forward sang Meta | Campaign do Meta attribute sẽ rỗng trên Adjust |
+
+Mỗi token là một id sáu ký tự sinh trên dashboard Adjust, **không phải** tên event. Token rỗng bị
+chặn có chủ đích: `AdjustEvent("")` được nhận ở client, bị drop ở server, và doanh thu biến mất
+không một tín hiệu nào. Chỉ có **một** chỗ đặt token impression — `adjustConfig.eventAdImpression`.
+Mọi định dạng ads (interstitial, native, banner, rewarded, app-open) đều đọc đúng trường đó.
+
+### 1.6 Tracking — `Tracker.install()` là bắt buộc
+
+Đây là bước partner hay bỏ sót nhất, vì thiếu nó không có gì crash cả.
+
+`ads` **không** tự ghi analytics. Mọi impression, click và purchase nó quan sát được đều đẩy sang
+`Tracker` (của `trackkit`), rồi `Tracker` fan-out tới các sink bạn đăng ký. Không đăng ký sink nào
+thì `Tracker` validate từng event xong đưa vào một danh sách rỗng — dữ liệu im lặng không bao giờ
+tới đâu. Từ 1.3.0 trường hợp này có log cảnh báo lúc install, nhưng cách sửa là nối dây cho đúng:
+
+```kotlin
+private fun initTracking() {
+    Tracker.install(
+        this,
+        TrackerConfig(
+            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+            strictValidation = BuildConfig.DEBUG,   // sai taxonomy thì fail ở QA, không phải ở prod
+            logLevel = if (BuildConfig.DEBUG) 2 else 1,
+        ),
+    )
+    Tracker.addSink(FirebaseSink())                 // từ trackkit-firebase
+    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+}
+```
+
+Gọi **đầu tiên** trong `onCreate()`. Event phát trước `install()` được buffer chứ không mất, nhưng
+sẽ được flush kèm dữ liệu của session đang chạy tại thời điểm install thực sự xảy ra.
+
+Những gì tự có sẵn khi đã có sink — không cần một call site nào của bạn:
+
+| Tín hiệu | Phát bởi | Tên event |
+|---|---|---|
+| Vòng đời ads | `ads`, theo từng ad unit | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
+| Paid impression + ad LTV | `ads`, từ callback paid-event của AdMob | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
+| Purchase | `ads`, từ callback billing | `iap_success` |
+| Phễu first-open | `onboardkitorigin` | `fo_*` — xem tài liệu OnboardKit |
+
+Hai thứ vẫn thuộc về bạn: kết quả UMP (`Tracker.setConsent(analytics, ads)` — gọi từ callback consent,
+đúng một lần) và event sản phẩm riêng (`Tracker.track("...")`).
+
+Adjust **không** phải sink và không cần nối dây ở đây. Nó là MMP, nằm trong `ads`, và được cấu hình
+qua `adjustConfig` ở mục 1.5. Xem `trackkit/ARCHITECTURE.md` để hiểu vì sao lại tách như vậy.
+
+---
 
 ## 2. Cơ chế load/show Ads theo vị trí
 

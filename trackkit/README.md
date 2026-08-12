@@ -1,13 +1,15 @@
 # Trackkit
 
+> Tiếng Việt: **[README.vi.md](README.vi.md)** · हिन्दी: **[README.hi.md](README.hi.md)** · Architecture: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+
 Trackkit is the single fan-out point for analytics in this project. Every event the app, `:ads` and
 `:onboardkitorigin` produce goes through one facade, so consent gating, default params, name
 validation, dedupe and ad-revenue accumulation are implemented **once** instead of being copied into
-each partner build. It replaces the per-partner copies of `FirebaseAnalyticsUtil`, `ERainAdjust`,
-`ERainLogEventManager` and `ITGTrackingHelper` — four wrappers that disagreed with each other about
-currency, revenue units and whether Adjust was even enabled. The core module has **no vendor
-dependency**: Firebase, Adjust and Meta live in separate sink modules, so a partner that only wants
-Firebase never compiles the other two SDKs into its APK.
+each partner build. It replaced four hand-rolled wrappers that disagreed with each other about
+currency, revenue units and whether Adjust was even enabled; none of them survive. The core module
+has **no vendor dependency at all** — its whole dependency block is one `compileOnly` annotation
+artifact — so adding `:trackkit` contributes nothing to your APK. Vendors live in separate sink
+modules: a partner who only wants Firebase never compiles any other analytics SDK.
 
 **[ARCHITECTURE.md](ARCHITECTURE.md)** explains the module layering — which module may depend on
 SDK, and why instrumentation lives in the module that owns the ad object rather than at your call
@@ -31,15 +33,15 @@ repositories {
 ```groovy
 dependencies {
     // The contract. Depend on this from any module that emits events.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit:1.2.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit:1.3.0'
 
     // Sinks — take only the vendors you actually ship.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.2.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
 }
 ```
 
 Because this repository publishes several modules, JitPack namespaces them as
-`com.github.<user>.<repo>`; the repository name is part of the group id. Replace `1.2.0` with the
+`com.github.<user>.<repo>`; the repository name is part of the group id. Replace `1.3.0` with the
 git tag you want to consume.
 
 Inside this repository the modules are wired as projects instead:
@@ -82,8 +84,8 @@ Then, wherever UMP resolves — **exactly one place in the app**:
 Tracker.setConsent(analytics = granted, ads = granted)
 ```
 
-That is the whole integration. You do **not** wrap ad callbacks: `:ads` creates the AdMob and
-AppLovin ad objects, so `:ads` attaches the paid-event listener and reports the ad lifecycle. Pass
+That is the whole integration. You do **not** wrap ad callbacks: `:ads` creates the AdMob ad
+objects, so `:ads` attaches the paid-event listener and reports the ad lifecycle. Pass
 your own `AdCallback` exactly as you always did and it comes back unwrapped. See
 [ARCHITECTURE.md §6](ARCHITECTURE.md#6-the-instrumentation-rule) for why.
 
@@ -115,24 +117,28 @@ event-specific ones.
 | `ad_revenue_micro_flush` | the un-flushed bucket crosses 0.01 of the reporting currency                  | `value`, `currency`                                                                                   | `:trackkit`                 |
 | `ad_revenue_d3`          | first paid impression at least 3 days after install (once)                    | `value`, `currency`                                                                                   | `:trackkit`                 |
 | `ad_revenue_d7`          | first paid impression at least 7 days after install (once)                    | `value`, `currency`                                                                                   | `:trackkit`                 |
+| `fo_flow_start`          | the first-open flow was entered (denominator; fires even when it skips)       | —                                                                                                     | `:onboardkitorigin`         |
 | `fo_splash_view`         | splash screen shown                                                           | —                                                                                                     | `:onboardkitorigin`         |
 | `fo_splash_complete`     | splash finished                                                               | `dwell_ms`                                                                                            | `:onboardkitorigin`         |
 | `fo_language_view`       | a language screen shown                                                       | `screen_index`, `variant`                                                                             | `:onboardkitorigin`         |
 | `fo_language_select`     | a language row tapped                                                         | `screen_index`, `language`                                                                            | `:onboardkitorigin`         |
 | `fo_language_complete`   | language confirmed                                                            | `screen_index`, `language`, `dwell_ms`                                                                | `:onboardkitorigin`         |
+| `fo_language_flow_complete` | the whole language flow finished                                           | `language`                                                                                            | `:onboardkitorigin`         |
 | `fo_step_view`           | an onboarding step shown                                                      | `step`, `index`, `variant`                                                                            | `:onboardkitorigin`         |
 | `fo_step_complete`       | an onboarding step left                                                       | `step`, `index`, `dwell_ms`, `exit_reason`                                                            | `:onboardkitorigin`         |
 | `fo_question_view`       | question screen shown                                                         | `source`                                                                                              | `:onboardkitorigin`         |
 | `fo_question_answer`     | an option toggled                                                             | `option_id`, `selected`                                                                               | `:onboardkitorigin`         |
 | `fo_question_complete`   | questions submitted                                                           | `count`                                                                                               | `:onboardkitorigin`         |
-| `fo_flow_complete`       | the whole first-open flow finished                                            | `count`, `dwell_ms`                                                                                   | `:onboardkitorigin`         |
-| `iap_paywall_view`       | paywall shown                                                                 | `source`                                                                                              | `:app`                      |
+| `fo_flow_complete`       | the whole first-open flow finished                                            | `steps_shown`, `dwell_ms`                                                                                   | `:onboardkitorigin`         |
+| `iap_paywall_view`       | paywall shown                                                                 | `source`                                                                                              | `:app`, `:onboardkitorigin` |
+| `iap_paywall_result`     | the paywall closed, whatever the outcome                                      | `source`, `status` (`purchased` / `dismissed` / `continue_with_ads`)                                  | `:onboardkitorigin`         |
 | `iap_click`              | a product tapped on the paywall                                               | `source`, `product_id`                                                                                | `:app`                      |
 | `iap_success`            | purchase acknowledged                                                         | `product_id`, `value`, `currency`, `source`                                                           | `:app`                      |
 | `iap_fail`               | billing returned an error                                                     | `product_id`, `error_code`                                                                            | `:app`                      |
 | `iap_dismiss`            | paywall closed without buying                                                 | `source`                                                                                              | `:app`                      |
 | `consent_request`        | UMP form requested (once per session)                                         | —                                                                                                     | `:app`                      |
 | `consent_shown`          | UMP form actually displayed (once per session)                                | —                                                                                                     | `:app`                      |
+| `app_install_referrer`   | Play install referrer, read once per install through the MMP                  | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant`            | `:ads`                      |
 | `consent_result`         | UMP resolved                                                                  | `status` (`granted` / `denied` / `not_required` / `error`), `error_code`                              | `:app`                      |
 | `app_ui_click`           | compat shim for the old `logEventClick`                                       | `screen`, `action`                                                                                    | `:app`                      |
 | `app_screen_flow`        | compat shim for the old `fromScreenToScreen`                                  | `from_screen`, `to_screen`                                                                            | `:app`                      |
@@ -280,39 +286,27 @@ also why `logEventClick` and `fromScreenToScreen` no longer concatenate — `"On
 
 ---
 
-## Migrating from the old wrappers
+## Design decisions you inherit
 
-| Old call                                                                        | New call                                                                                     |
-|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| `ERainLogEventManager.logPaidAdImpression(ctx, adValue, unitId, adapter, type)` | `Tracker.adRevenue(AdImpression(...))`                                                       |
-| `ERainLogEventManager.logClickAdsEvent(ctx, unitId)`                            | `Tracker.track(TrackkitEvents.Ad.Click(placement, format, unitId))`                          |
-| `ERainLogEventManager.logCurrentTotalRevenueAd(ctx, name)`                      | nothing — `ad_revenue_total` is automatic                                                    |
-| `ERainLogEventManager.logTotalRevenue001Ad(ctx)`                                | nothing — `ad_revenue_micro_flush` is automatic                                              |
-| `ERainLogEventManager.logTotalRevenueAdIn3DaysIfNeed(ctx)`                      | nothing — `ad_revenue_d3` is automatic                                                       |
-| `ERainLogEventManager.logTotalRevenueAdIn7DaysIfNeed(ctx)`                      | nothing — `ad_revenue_d7` is automatic                                                       |
-| `ERainAdjust.onTrackEvent(name)`                                                | `Tracker.track(name)` plus a token entry in the Adjust map                                   |
-| `ERainAdjust.onTrackRevenuePurchase(revenue, currency)`                         | `Tracker.track(TrackkitEvents.Iap.Success(productId, value, currency))`                      |
-| `FirebaseAnalyticsUtil.logEventWithAds(ctx, bundle)`                            | `Tracker.adRevenue(AdImpression(...))`                                                       |
-| `FacebookEventUtils.*` / `AppEventsLogger.logPurchase` per impression           | nothing — Meta is not a destination in this build; the hardcoded VND multiplier is gone      |
-| `ITGTrackingHelper.logEvent(name, bundle)`                                      | `Tracker.track(name, params)`                                                                |
-| `ITGTrackingHelper.logEventClick(activity, event, bundle)`                      | `Tracker.track(SimpleEvent("app_ui_click", mapOf("screen" to …, "action" to …)))`            |
-| `ITGTrackingHelper.fromScreenToScreen(from, to)`                                | `Tracker.track(SimpleEvent("app_screen_flow", mapOf("from_screen" to …, "to_screen" to …)))` |
-| `ITGTrackingHelper.addScreenTrack(name)`                                        | `Tracker.screen(name)`                                                                       |
-| `ITGTrackingHelper.userProperty(name, value)`                                   | `Tracker.setUserProperty(name, value)`                                                       |
+These are deliberate, and each one fixes a specific defect found while auditing the previous
+generation of this pipeline. If a number looks "wrong" against an old dashboard, this is why.
 
-Behaviour differences to expect after migrating — all of them intentional:
-
-- **No currency conversion.** The old path multiplied AdMob revenue by `26000` and MAX revenue by
-  `25000` and reported the result to Meta as VND. `AdImpression.currency` is now reported as the ad
-  SDK gave it, and mixed-currency impressions are excluded from the cumulative total rather than
-  summed into a meaningless figure.
+- **No currency conversion, ever.** The old path multiplied AdMob revenue by `26000` and MAX revenue
+  by `25000` — two different hardcoded rates in one file — and reported the result to Meta as VND.
+  `AdImpression.currency` is now reported exactly as the ad SDK gave it, and impressions in a
+  currency other than `TrackerConfig.reportingCurrency` are excluded from the cumulative total
+  rather than summed into a meaningless figure.
 - **No purchase event per impression.** Meta `logPurchase` used to fire on every single ad
-  impression. It doesn't any more.
-- **Purchase revenue is no longer divided by 1,000,000.** The old `onTrackRevenue` divided
-  unconditionally, so IAP revenue — already expressed in currency units — was reported about a
-  million times too small.
-- **One source of truth for Adjust.** `ERainAdjust.enableAdjust` and `AdjustConfig.isEnableAdjust()`
-  could disagree; now the sink is either registered or it is not.
+  impression. Nothing does that now.
+- **Purchase revenue is not divided by 1,000,000.** The old helper divided unconditionally, so IAP
+  revenue — already in currency units — was reported about a million times too small.
+- **One source of truth for Adjust.** Two independent flags used to disagree, so "Adjust off" still
+  leaked events. Now a single check covers both the config switch and whether `Adjust.initSdk`
+  actually succeeded.
 - **Every ad event carries a placement**, and `ad_show` / `ad_show_failed` exist at all, so show
-  rate
-  and show failures are finally visible.
+  rate and show failures are visible rather than inferred.
+- **No variable inside an event name.** The audited SDK emitted `ob1_complete`, `ob2_complete`, …
+  *and* a parallel `complete_ob1`, `complete_ob2`, … family that double-counted the same transition
+  on two different clocks. Here there is one `fo_step_complete` carrying a `step` param.
+- **A blank Adjust token is skipped, not sent.** `AdjustEvent("")` is accepted client-side and
+  dropped server-side, so an empty token loses the revenue with no signal at all.
