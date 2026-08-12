@@ -5,8 +5,13 @@
 jdk:
   - openjdk17
 
-# Only the three publishable library modules are built. :app is deliberately excluded —
-# it needs a signing config and a real google-services.json, and consumers never need it.
+# Only the publishable library modules are built. :app is deliberately excluded — it needs a
+# signing config and a real google-services.json, and consumers never need it.
 # JitPack exports VERSION as the tag being built; the root build.gradle reads it.
+#
+# :trackkit is not optional here even though no consumer asks for it by name: :ads and
+# :onboardkitorigin declare `api project(':trackkit')`, so their POMs carry a hard dependency on
+# it. Leaving it out of this list would publish two SDKs that point at an artifact that does not
+# exist, and both would fail to resolve.
 install:
-  - ./gradlew :ads:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal -x test --no-daemon --stacktrace
+  - ./gradlew :trackkit:publishToMavenLocal :trackkit-firebase:publishToMavenLocal :ads:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal -x test --no-daemon --stacktrace

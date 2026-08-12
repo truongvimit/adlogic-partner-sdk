@@ -8,7 +8,15 @@ This document is the **mandatory reference standard** for partner teams integrat
 
 ## Consuming the SDKs via JitPack
 
-Three modules of this project are published as libraries: `ads` (ad loading/showing), `onboardkitorigin` (first-open flow) and `adtracer` (debug-only ad lifecycle tracker).
+Five modules are published as libraries:
+
+| Module | Role |
+|---|---|
+| `ads` | Ad loading and showing |
+| `onboardkitorigin` | First-open flow: splash, language, onboarding |
+| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`, taxonomy) |
+| `trackkit-firebase` | Firebase/GA4 sink for `trackkit` |
+| `adtracer` | Debug-only ad lifecycle dashboard |
 
 Add the JitPack repository:
 
@@ -25,18 +33,25 @@ Then declare the dependencies:
 
 ```groovy
 dependencies {
-    implementation 'com.github.truongvimit.Example-AdLogic-Partner:ads:1.0.0'
-    implementation 'com.github.truongvimit.Example-AdLogic-Partner:onboardkitorigin:1.0.0'
+    implementation 'com.github.truongvimit.Example-AdLogic-Partner:ads:1.1.0'
+    implementation 'com.github.truongvimit.Example-AdLogic-Partner:onboardkitorigin:1.1.0'
+
+    // Pick the sinks you actually want. Without a sink, Tracker validates and drops events.
+    implementation 'com.github.truongvimit.Example-AdLogic-Partner:trackkit-firebase:1.1.0'
 
     // Tracker ships in debug builds only — keep it out of release
-    debugImplementation 'com.github.truongvimit.Example-AdLogic-Partner:adtracer:1.0.0'
+    debugImplementation 'com.github.truongvimit.Example-AdLogic-Partner:adtracer:1.1.0'
 }
 ```
+
+You do not need to declare `trackkit` yourself: `ads` and `onboardkitorigin` expose it as an `api`
+dependency, and `trackkit-firebase` pulls it in too. Declare it explicitly only if you write your
+own `TrackSink` in a module that depends on neither.
 
 Note the group id: because this repository publishes several modules, JitPack namespaces them as
 `com.github.<user>.<repo>` rather than `com.github.<user>`. The repository name is part of the group.
 
-Replace `1.0.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
+Replace `1.1.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
 > **Note:** `onboardkitorigin` depends on `ads` at runtime scope, so its ad classes (`com.ads.module.*`) are not on your compile classpath through it. Declare `ads` explicitly, as shown above, if you call those APIs directly.
 
