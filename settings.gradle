@@ -1,5 +1,5 @@
 include ':app'
-rootProject.name = "Example-AdLogic-Partner"
+rootProject.name = "adlogic-partner-sdk"
 include ':crash_screen'
 include ':ads'
 include ':onboardkitorigin'

@@ -10,7 +10,7 @@ Tài liệu này là **chuẩn tham chiếu bắt buộc** dành cho đối tác
 
 ### 1. Base chung cho toàn bộ ứng dụng
 
-Project `Example-AdLogic-Partner` được xây dựng như **template/base** cho mọi app Android trong hệ sinh thái. Đối tác fork hoặc nhân bản từ base này để đảm bảo:
+Project `adlogic-partner-sdk` được xây dựng như **template/base** cho mọi app Android trong hệ sinh thái. Đối tác fork hoặc nhân bản từ base này để đảm bảo:
 
 - Cùng một cách tổ chức package Ads (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`).
 - Cùng cơ chế đọc config từ asset và Firebase Remote Config.

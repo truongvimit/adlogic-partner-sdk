@@ -10,7 +10,7 @@
 
 ### 1. सभी apps के लिए shared base
 
-`Example-AdLogic-Partner` ecosystem के सभी Android apps के लिए **template/base** के रूप में design किया गया है। Partners को इस base को fork/clone करके यह सुनिश्चित करना चाहिए:
+`adlogic-partner-sdk` ecosystem के सभी Android apps के लिए **template/base** के रूप में design किया गया है। Partners को इस base को fork/clone करके यह सुनिश्चित करना चाहिए:
 
 - वही Ads package structure (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`)
 - वही config source flow (assets + Firebase Remote Config)

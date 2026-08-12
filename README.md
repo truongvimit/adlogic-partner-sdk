@@ -33,14 +33,14 @@ Then declare the dependencies:
 
 ```groovy
 dependencies {
-    implementation 'com.github.truongvimit.Example-AdLogic-Partner:ads:1.1.0'
-    implementation 'com.github.truongvimit.Example-AdLogic-Partner:onboardkitorigin:1.1.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.2.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.2.0'
 
     // Pick the sinks you actually want. Without a sink, Tracker validates and drops events.
-    implementation 'com.github.truongvimit.Example-AdLogic-Partner:trackkit-firebase:1.1.0'
+    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.2.0'
 
     // Tracker ships in debug builds only — keep it out of release
-    debugImplementation 'com.github.truongvimit.Example-AdLogic-Partner:adtracer:1.1.0'
+    debugImplementation 'com.github.truongvimit.adlogic-partner-sdk:adtracer:1.2.0'
 }
 ```
 
@@ -49,9 +49,11 @@ dependency, and `trackkit-firebase` pulls it in too. Declare it explicitly only 
 own `TrackSink` in a module that depends on neither.
 
 Note the group id: because this repository publishes several modules, JitPack namespaces them as
-`com.github.<user>.<repo>` rather than `com.github.<user>`. The repository name is part of the group.
+`com.github.<user>.<repo>` rather than `com.github.<user>`. The repository name is part of the group,
+and JitPack derives it from the GitHub URL — it is not something `build.gradle` or `jitpack.yml` can
+override. Flattening it to `com.github.truongvimit:ads` would require one repository per module.
 
-Replace `1.1.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
+Replace `1.2.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
 > **Note:** `onboardkitorigin` depends on `ads` at runtime scope, so its ad classes (`com.ads.module.*`) are not on your compile classpath through it. Declare `ads` explicitly, as shown above, if you call those APIs directly.
 
@@ -74,7 +76,7 @@ That file is intentionally not committed: it is environment-specific and carries
 
 ### 1. Shared base for all apps
 
-`Example-AdLogic-Partner` is designed as the **template/base** for all Android apps in the ecosystem. Partners should fork or clone this base to keep:
+`adlogic-partner-sdk` is designed as the **template/base** for all Android apps in the ecosystem. Partners should fork or clone this base to keep:
 
 - The same Ads package structure (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`).
 - The same config source flow (assets + Firebase Remote Config).
