@@ -66,8 +66,8 @@ interface OnboardingAdProvider {
 
     fun isInterstitialReady(placement: AdPlacement): Boolean
 
-    /** Shows if ready, otherwise invokes [onNextAction] immediately. Never blocks the flow. */
-    fun showInterstitial(activity: Activity, placement: AdPlacement, onNextAction: () -> Unit)
+    /** Shows if ready, otherwise invokes [onFinished] immediately. Never blocks the flow. */
+    fun showInterstitial(activity: Activity, placement: AdPlacement, onFinished: () -> Unit)
 
     /** Requires the ads-module banner include (`banner_container` + `shimmer_container_banner`). */
     fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener? = null)

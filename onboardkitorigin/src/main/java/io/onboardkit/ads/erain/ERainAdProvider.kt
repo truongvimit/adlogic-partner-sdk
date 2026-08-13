@@ -327,11 +327,11 @@ class ERainAdProvider : OnboardingAdProvider {
     override fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,
-        onNextAction: () -> Unit,
+        onFinished: () -> Unit,
     ) {
         val ad = interstitials[placement.key]
         if (ad == null || !ad.isReady) {
-            onNextAction()
+            onFinished()
             return
         }
         interstitials.remove(placement.key)
@@ -339,8 +339,8 @@ class ERainAdProvider : OnboardingAdProvider {
             activity,
             ad,
             object : AdCallback() {
-                override fun onNextAction() {
-                    onNextAction()
+                override fun onAdClosed() {
+                    onFinished()
                 }
             },
             false,
