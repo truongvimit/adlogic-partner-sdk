@@ -49,6 +49,7 @@ object OnboardKitSetup {
                 AdFullScreenStepDefinition(
                     StepId.OB3,
                     remoteEnableKey = "ob_enable_step_ob3",
+                    autoNextEnabled = true
                 ),
                 ContentStepDefinition(
                     StepId.OB4,
