@@ -26,17 +26,21 @@ repositories {
 ```
 
 ```groovy
+// Thay <tag> bằng một tag tại https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
 dependencies {
     // Hợp đồng. Module nào phát event thì phụ thuộc vào đây.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
 
     // Sink — chỉ lấy vendor bạn thật sự ship.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
 
 Vì repo này publish nhiều module, JitPack đặt group là `com.github.<user>.<repo>` — tên repo là một
-phần của group id. Thay `1.3.0` bằng git tag bạn muốn dùng. Yêu cầu JDK 17, `minSdk` 24.
+phần của group id. Giữ mọi module trên cùng một tag — chúng publish cùng nhau và không được test
+chéo giữa các version. Yêu cầu JDK 17, `minSdk` 24.
 
 Trong nội bộ repo thì khai bằng project:
 

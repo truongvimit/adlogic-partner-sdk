@@ -26,18 +26,21 @@ repositories {
 ```
 
 ```groovy
+// <tag> की जगह https://github.com/truongvimit/adlogic-partner-sdk/tags से कोई tag डालें
+def sdkVersion = '<tag>'
+
 dependencies {
     // Contract. जो भी module event भेजता है, वह इस पर depend करे।
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
 
     // Sinks — सिर्फ़ वही vendors लें जो आप वाकई ship करते हैं।
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
 
 चूँकि यह repository कई modules publish करती है, JitPack इनका group `com.github.<user>.<repo>` रखता
-है — repository का नाम group id का हिस्सा है। `1.3.0` की जगह वह git tag डालें जो आप उपयोग करना चाहते
-हैं। JDK 17 और `minSdk` 24 चाहिए।
+है — repository का नाम group id का हिस्सा है। सभी modules को एक ही tag पर रखें — ये साथ publish होते
+हैं और versions के बीच cross-tested नहीं हैं। JDK 17 और `minSdk` 24 चाहिए।
 
 इसी repository के अंदर modules project के रूप में जुड़ते हैं:
 

@@ -174,7 +174,8 @@ Mọi định dạng ads (interstitial, native, banner, rewarded, app-open) đ�
 `ads` **không** tự ghi analytics. Mọi impression, click và purchase nó quan sát được đều đẩy sang
 `Tracker` (của `trackkit`), rồi `Tracker` fan-out tới các sink bạn đăng ký. Không đăng ký sink nào
 thì `Tracker` validate từng event xong đưa vào một danh sách rỗng — dữ liệu im lặng không bao giờ
-tới đâu. Từ 1.3.0 trường hợp này có log cảnh báo lúc install, nhưng cách sửa là nối dây cho đúng:
+tới đâu. `Tracker.install` có log cảnh báo khi chạy mà không có sink nào, nhưng cách sửa là nối dây
+cho đúng:
 
 ```kotlin
 private fun initTracking() {

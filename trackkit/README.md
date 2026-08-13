@@ -31,18 +31,21 @@ repositories {
 ```
 
 ```groovy
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
 dependencies {
     // The contract. Depend on this from any module that emits events.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
 
     // Sinks — take only the vendors you actually ship.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
 
 Because this repository publishes several modules, JitPack namespaces them as
-`com.github.<user>.<repo>`; the repository name is part of the group id. Replace `1.3.0` with the
-git tag you want to consume.
+`com.github.<user>.<repo>`; the repository name is part of the group id. Keep every module on the
+same tag — they are published together and are not tested across versions.
 
 Inside this repository the modules are wired as projects instead:
 

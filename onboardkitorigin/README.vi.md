@@ -20,12 +20,17 @@ một sink thì mọi event SDK này phát ra đều bị validate rồi vứt �
 ## 1. Cài đặt Gradle
 
 ```groovy
+// Thay <tag> bằng một tag tại https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
 dependencies {
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.3.0'
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.3.0'          // cho ERainAdProvider
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"          // cho ERainAdProvider
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
+
+Giữ mọi module trên cùng một tag — chúng publish cùng nhau và không được test chéo giữa các version.
 
 `onboardkitorigin` phụ thuộc `ads` ở runtime scope, nên `com.ads.module.*` **không** nằm trên compile
 classpath của bạn qua nó — phải khai `ads` tường minh nếu bạn khởi tạo `ERainAdProvider` hoặc gọi API

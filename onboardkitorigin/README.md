@@ -20,12 +20,17 @@ sink, every event this SDK emits is validated and then discarded.
 ## 1. Gradle setup
 
 ```groovy
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
 dependencies {
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.3.0'
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.3.0'          // for ERainAdProvider
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"          // for ERainAdProvider
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
+
+Keep every module on the same tag — they are published together and are not tested across versions.
 
 `onboardkitorigin` depends on `ads` at runtime scope, so `com.ads.module.*` is not on your compile
 classpath through it — declare `ads` explicitly if you construct `ERainAdProvider` or touch ad APIs.

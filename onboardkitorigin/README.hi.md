@@ -20,12 +20,17 @@ ad unit ids, content, और flow ख़त्म होने पर कहा�
 ## 1. Gradle setup
 
 ```groovy
+// <tag> की जगह https://github.com/truongvimit/adlogic-partner-sdk/tags से कोई tag डालें
+def sdkVersion = '<tag>'
+
 dependencies {
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.3.0'
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.3.0'          // ERainAdProvider के लिए
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"          // ERainAdProvider के लिए
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 }
 ```
+
+सभी modules को एक ही tag पर रखें — ये साथ publish होते हैं और versions के बीच cross-tested नहीं हैं।
 
 `onboardkitorigin`, `ads` पर runtime scope में निर्भर है, इसलिए `com.ads.module.*` उसके ज़रिए आपके
 compile classpath पर **नहीं** आता — अगर आप `ERainAdProvider` बनाते हैं या ad APIs सीधे छूते हैं तो

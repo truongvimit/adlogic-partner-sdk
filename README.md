@@ -34,17 +34,24 @@ repositories {
 Then declare the dependencies:
 
 ```groovy
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
 dependencies {
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:ads:1.3.0'
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
 
     // Pick the sinks you actually want. Without a sink, Tracker validates and drops events.
-    implementation 'com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:1.3.0'
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 
-    // Tracker ships in debug builds only — keep it out of release
-    debugImplementation 'com.github.truongvimit.adlogic-partner-sdk:adtracer:1.3.0'
+    // adtracer ships in debug builds only — keep it out of release
+    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
 ```
+
+Keep every module on the same tag. They are published together from one repository and are not
+tested against each other across versions. Note the double quotes: Groovy only interpolates
+`$sdkVersion` in double-quoted strings.
 
 You do not need to declare `trackkit` yourself: `ads` and `onboardkitorigin` expose it as an `api`
 dependency, and `trackkit-firebase` pulls it in too. Declare it explicitly only if you write your
@@ -55,7 +62,7 @@ Note the group id: because this repository publishes several modules, JitPack na
 and JitPack derives it from the GitHub URL — it is not something `build.gradle` or `jitpack.yml` can
 override. Flattening it to `com.github.truongvimit:ads` would require one repository per module.
 
-Replace `1.3.0` with the git tag you want to consume. Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
+Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
 > **Note:** `onboardkitorigin` depends on `ads` at runtime scope, so its ad classes (`com.ads.module.*`) are not on your compile classpath through it. Declare `ads` explicitly, as shown above, if you call those APIs directly.
 
@@ -247,7 +254,7 @@ This is the step partners miss most often, because nothing crashes without it.
 `ads` does **not** log analytics itself. Every impression, click and purchase it observes is handed
 to `Tracker` (from `trackkit`), which fans out to whatever sinks you registered. Register none and
 `Tracker` validates each event and then hands it to an empty list — the data silently never arrives.
-Since 1.3.0 that case logs a warning at install time, but the fix is to wire it:
+`Tracker.install` logs a warning when it runs with no sink, but the fix is to wire it:
 
 ```kotlin
 private fun initTracking() {

@@ -182,8 +182,8 @@ private fun initAds() {
 `ads` खुद analytics log **नहीं** करता। जो भी impression, click और purchase वह देखता है, सब
 `Tracker` (`trackkit` से) को सौंप देता है, और `Tracker` उसे आपके registered sinks तक पहुँचाता है।
 एक भी sink register न हो तो `Tracker` हर event validate करके एक खाली list को थमा देता है — डेटा
-चुपचाप कहीं नहीं पहुँचता। 1.3.0 से यह स्थिति install के समय warning log करती है, पर असली समाधान
-सही wiring है:
+चुपचाप कहीं नहीं पहुँचता। `Tracker.install` बिना किसी sink के चलने पर warning log करता है, पर असली
+समाधान सही wiring है:
 
 ```kotlin
 private fun initTracking() {
