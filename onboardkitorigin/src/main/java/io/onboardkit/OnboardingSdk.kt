@@ -6,10 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import io.onboardkit.ads.AdPolicy
+import io.onboardkit.ads.AdsGuard
+import io.onboardkit.ads.ObAppResume
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.PreloadChain
 import io.onboardkit.config.OnboardKitConfig
+import io.onboardkit.core.ObLog
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.core.QuestionAnswer
@@ -73,11 +75,16 @@ object OnboardingSdk {
     private var paywallGate: PaywallGate? = null
     private var listener: OnboardingListener? = null
 
+    /** Gate for every ad request; see [setCanRequestAds]. */
+    @Volatile
+    private var adsAllowed: Boolean = true
+
     private val eventBus = EventBus()
     internal val session = OnboardingSession()
     private val sdkScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private lateinit var adPolicy: AdPolicy
+    private lateinit var adsGuard: AdsGuard
+    private lateinit var appResumeGuard: ObAppResume
     private lateinit var preloadChain: PreloadChain
 
     class InstallBuilder internal constructor() {
@@ -120,10 +127,9 @@ object OnboardingSdk {
         // cannot suspend, can wrap the locale for a returning user.
         stateStore?.let { store -> sdkScope.launch { session.seedLanguage(store.current().languageSelected) } }
         remote = ObRemote(app)
-        adPolicy = AdPolicy(adProvider, ::configOrNull) { remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags() }
-        preloadChain = PreloadChain(adProvider, adPolicy, ::configOrNull) {
-            remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags()
-        }
+        adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
+        appResumeGuard = ObAppResume(adsGuard, adProvider)
+        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags)
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }
 
@@ -144,9 +150,36 @@ object OnboardingSdk {
 
     fun isReady(): Boolean = application != null && config != null
 
+    /**
+     * Turns the `OB_FLOW` logcat trace on or off. On by default so a partner integrating the SDK
+     * can see the whole flow without changing anything; turn it off for release builds.
+     */
+    fun setFlowLogging(enabled: Boolean) {
+        ObLog.enabled = enabled
+    }
+
     fun setListener(newListener: OnboardingListener) {
         listener = newListener
     }
+
+    /**
+     * Whether an ad request may go out at all — the app's consent answer, in one switch.
+     *
+     * [io.onboardkit.ui.splash.ObSplashActivity] sets it from `onConsentRequired`, so an app that
+     * runs consent through the splash needs nothing else. Set it directly only when consent is
+     * resolved somewhere the splash cannot see.
+     *
+     * `false` blocks every placement with [io.onboardkit.ads.AdSkipReason.CONSENT_NOT_GRANTED];
+     * the flow still runs, just without ads. Defaults to `true` so an app with no consent step
+     * behaves as before.
+     */
+    fun setCanRequestAds(allowed: Boolean) {
+        if (adsAllowed == allowed) return
+        adsAllowed = allowed
+        ObLog.d(ObLog.Section.GATE, "canRequestAds=$allowed")
+    }
+
+    fun canRequestAds(): Boolean = adsAllowed
 
     fun addAnalyticsPlugin(plugin: AnalyticsPlugin) = AnalyticsHub.addPlugin(plugin)
 
@@ -205,15 +238,32 @@ object OnboardingSdk {
             stateStore?.reset()
         }
 
-        eventBus.emit(OnboardingEvent.FlowStarted)
-        // Before the skip/start decision on purpose: it is the denominator of every `fo_` rate,
-        // and a flow that decided to skip still has to appear in the funnel.
-        track(AnalyticsEvent.FlowStarted())
-        when (val decision = if (options.forceRestart) {
+        val decision = if (options.forceRestart) {
             StartDecision.Start(FlowDestination.LANGUAGE, 0)
         } else {
             shouldStart()
-        }) {
+        }
+        startResolved(activity, decision, options)
+    }
+
+    /**
+     * Launches a decision that was resolved earlier, without suspending.
+     *
+     * The splash resolves its destination before the ad barrier so this handoff can run from an
+     * interstitial's "ad is on screen" callback: a suspension point there would let the screen
+     * finish before the destination had actually started.
+     */
+    internal fun startResolved(
+        activity: Activity,
+        decision: StartDecision,
+        options: StartOptions = StartOptions(),
+    ) {
+        ObLog.d(ObLog.Section.NAV, "startResolved decision=$decision")
+        eventBus.emit(OnboardingEvent.FlowStarted)
+        // Before the skip/start branch on purpose: it is the denominator of every `fo_` rate,
+        // and a flow that decided to skip still has to appear in the funnel.
+        track(AnalyticsEvent.FlowStarted())
+        when (decision) {
             is StartDecision.Skip -> deliverOutcome(
                 activity,
                 OnboardingOutcome.Skipped(decision.reason, options.passthrough),
@@ -263,7 +313,10 @@ object OnboardingSdk {
 
     internal fun provider(): OnboardingAdProvider? = adProvider
 
-    internal fun policy(): AdPolicy = adPolicy
+    internal fun guard(): AdsGuard = adsGuard
+
+    /** Transient app-resume suppression; permanent rules live in [guard]. */
+    fun appResume(): ObAppResume = appResumeGuard
 
     internal fun preload(): PreloadChain = preloadChain
 

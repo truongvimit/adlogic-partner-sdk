@@ -24,15 +24,21 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
     private val appSharedPref by lazy { AppSharedPreferencesApp(this) }
     private var consentHandler: ConsentHandler? = null
 
-    override suspend fun onConsentRequired() {
-        if (appSharedPref.isConfirmConsent || appSharedPref.isUserGlobal || !isNetwork()) return
-        suspendCancellableCoroutine { continuation ->
+    /**
+     * Returns whether ads may be requested. Anything other than a completed consent flow answers
+     * `false`, so no ad request goes out while the form is still on screen.
+     */
+    override suspend fun onConsentRequired(): Boolean {
+        // Already answered in a previous session, or a region where UMP does not apply
+        if (appSharedPref.isConfirmConsent || appSharedPref.isUserGlobal) return true
+        if (!isNetwork()) return false
+        return suspendCancellableCoroutine { continuation ->
             consentHandler = ConsentHandler(
                 activity = this,
                 appSharedPref = appSharedPref,
                 trackingSuffix = 1,
-                onConsentFlowCompleted = {
-                    if (continuation.isActive) continuation.resume(Unit)
+                onConsentFlowCompleted = { canPersonalized ->
+                    if (continuation.isActive) continuation.resume(canPersonalized)
                 },
             )
             consentHandler?.requestConsent()

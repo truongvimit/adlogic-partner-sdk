@@ -121,19 +121,68 @@ steps(
 
 Step **order is fixed in code**; remote config can only toggle a step off, never reorder. That is
 deliberate — a reorderable remote list is how the audited SDK ended up firing the wrong step's
-completion event when a step was disabled.
+completion event when a step was disabled. A step is toggled by its `StepId`: `StepId.OB1` reads
+`ob_enable_step_ob1`, and so on through OB5.
+
+#### Per-page ad units, and the numbering trap
+
+`contentStepNative` is the shared pool for content pages. To sell pages separately, give a page its
+own entry — anything not listed falls back to the shared pool, so declaring one page does not force
+you to declare them all:
+
+```kotlin
+ads = AdsConfig(
+    contentStepNative = NativeAdUnit("…/shared"),      // used by pages with no entry below
+    stepNatives = mapOf(
+        StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
+        StepId.OB2 to NativeAdUnit("…/3333"),
+    ),
+)
+```
+
+Watch the numbering. `StepId` counts **positions in the flow**, and the ad-only page occupies one of
+them — so in the default OB1, OB2, **OB3 = full-screen ad**, OB4 layout, the third *content* page is
+`StepId.OB4`. If your remote keys count content pages (`native_ob1..3`) they will not line up, and
+`StepId.OB3 to native("native_fs")` reads like a typo. Name the roles once, where the flow is
+declared, and the rest of the file stops lying:
+
+```kotlin
+private object Page {
+    val CONTENT_1      = StepId.OB1
+    val CONTENT_2      = StepId.OB2
+    val AD_FULL_SCREEN = StepId.OB3
+    val CONTENT_3      = StepId.OB4
+}
+```
+
+Every unit above is a **waterfall**: the list is ordered highest floor first, and the provider walks
+it one id at a time, 30 s per floor, stopping at the first fill. `NativeAdUnit("id")` is simply a
+one-floor waterfall.
+
+#### Where ads are requested
+
+The preload chain runs one screen ahead, and the ad-only page runs two: it has no content of its
+own, so arriving there without a filled ad leaves the user on a spinner.
+
+| While the user is on | The SDK requests |
+|---|---|
+| Splash (after remote) | language native, first step native, splash banner + interstitial |
+| Language | second language native, first step native |
+| Step *n* | step *n+1*, plus the next ad-only step wherever it is |
+| Last step | OB5 and question |
 
 ### 2.3 Splash — subclass, do not copy
 
-Your launcher activity extends `ObSplashActivity`. The timing, the four parallel tasks, the barrier
-and the interstitial are already inside; you fill in the hooks you need.
+Your launcher activity extends `ObSplashActivity`. The sequence — consent, remote fetch, ad
+requests, billing, minimum display — is already inside; you fill in the hooks you need.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
 
-    override suspend fun onConsentRequired() {
-        // Show UMP here; return when resolved. A hard timeout applies regardless.
+    /** Return whether ads may now be requested. Show UMP here. */
+    override suspend fun onConsentRequired(): Boolean {
         // Call Tracker.setConsent(analytics, ads) exactly once from your consent callback.
+        return userGrantedConsent
     }
 
     override suspend fun onInitBilling() { /* AppPurchase init */ }
@@ -141,6 +190,11 @@ class SplashActivity : ObSplashActivity() {
     override fun onRemoteFetched() { /* your own remote keys are ready */ }
 }
 ```
+
+`onConsentRequired` is the gate for **every** ad in the flow, not just the splash one. Returning
+`false` — or not returning inside `consentTimeoutMs` — runs the whole onboarding without ads rather
+than requesting them unanswered; each placement reports `consent_not_granted` so the skip is
+visible instead of silent. The remote fetch overlaps consent (it requests no ads); ad loads do not.
 
 Declare it as the launcher in your manifest as usual. Do not call `OnboardingSdk.start()` yourself —
 `ObSplashActivity` does it once its pipeline resolves.
@@ -209,6 +263,46 @@ Native templates use the standard AdMob ids (`ad_headline`, `ad_media`, `ad_call
 
 ---
 
+## 4.1 Showing an ad from a screen of your own
+
+You do not need this for the built-in flow — the SDK's screens already load and show their own ads.
+It is for a screen you add inside the flow. There are two entry points and nothing else:
+
+```kotlin
+// Full-screen ad. Two moments, because they are not the same moment.
+showInterstitial(
+    AdPlacement.SplashInterstitial,
+    onNext = { startNextScreen() },   // the ad is up: start the destination UNDER it
+    onFinished = { finish() },        // the ad is gone: only now finish this screen
+)
+
+// Native slot
+showNativeAd(
+    placement = AdPlacement.QuestionNative,
+    unit = config.ads.questionNative,
+    container = binding.nativeContainer,
+    shimmer = binding.nativeShimmer.root,
+    onUnavailable = { binding.adBlock.isVisible = false },
+)
+```
+
+Starting the destination at `onNext` gives it the whole display time of the ad to inflate and bind,
+so it is already painted when the ad closes. Both callbacks run **at most once**, `onNext` always
+before `onFinished`, on every path — including the ones where no ad appears at all. Your screen
+needs no guard of its own.
+
+If the next move is only decided after the ad — a paywall branch, say — leave `onNext` out and do
+the work in `onFinished`. The cost is one visible stall; the benefit is not starting a destination
+you might not want.
+
+Never call `finish()` from `onNext`: the Activity handed to `show()` must outlive the ad, and
+finishing it there kills the impression you just paid to load.
+
+To ask before acting, `OnboardingSdk.guard().skipReason(context, placement)` returns `null` when the
+ad may show, or the precise reason it may not.
+
+---
+
 ## 5. Remote config keys
 
 All prefixed `ob_` so they cannot collide with your app's own namespace. Defaults live in code
@@ -217,8 +311,10 @@ All prefixed `ob_` so they cannot collide with your app's own namespace. Default
 **Kill switches** `ob_enable_all_ads`, `ob_enable_ui_content`
 **Steps** `ob_enable_step_ob1`…`ob5`, `ob_enable_question`, `ob_enable_question_old_user`
 **Language** `ob_enable_language_native_2`, `ob_pass_lfo_if_completed`, `ob_language_supported_codes` (CSV)
-**Ads** `ob_reuse_splash_inter`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_splash_inter_id`
-**Timing** `ob_splash_min_display_ms`, `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
+**Ads on/off** `ob_reuse_splash_inter`, `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled`
+**Ad unit override** `ob_ads_splash_inter_id`, `ob_ads_splash_inter_id_old_user` (blank = use the compiled ids)
+**Frequency** `ob_ads_interstitial_interval_sec`, `ob_ads_click_cap_per_day` — both default `0`, meaning off
+**Timing** `ob_splash_min_display_ms` (3000), `ob_splash_ad_budget_ms` (60000), `ob_splash_banner_wait_ms` (0), `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
 **Skip buttons** `ob_show_skip_ob3`, `ob_show_skip_ob5`
 **Templates** `ob_native_template_{content,language,question}` = `cta_top` | `cta_bottom` | `compact`
 **Server-driven UI** `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`
@@ -226,6 +322,13 @@ All prefixed `ob_` so they cannot collide with your app's own namespace. Default
 
 `ob_enable_step_ob5` defaults to **false**: OB5 is a standalone full-screen ad screen, off unless you
 ask for it.
+
+The two frequency keys default to `0` on purpose. The `:ads` module already has its own click cap,
+and a second cap quietly subtracting impressions is not something anyone finds in a quarter. Turn
+one on and the block is reported as `interval_not_elapsed` / `click_cap`, never as silence.
+
+> Every reason an ad did not show, the order the rules run in, and how to read the `OB_FLOW` logcat
+> trace: **[ADS_GATING.md](ADS_GATING.md)**.
 
 ---
 

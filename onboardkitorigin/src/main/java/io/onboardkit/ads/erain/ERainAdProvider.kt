@@ -2,183 +2,134 @@ package io.onboardkit.ads.erain
 
 import android.app.Activity
 import android.content.Context
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.billing.AppPurchase
 import com.ads.module.funtion.AdCallback
+import com.ads.module.funtion.AdmobHelper
+import com.ads.module.util.SharePreferenceUtils
 import com.facebook.shimmer.ShimmerFrameLayout
+import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
-import io.onboardkit.config.AdTierStrategy
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.core.ObLog
 import io.trackkit.PlacementRegistry
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Default [OnboardingAdProvider] backed by the project's `:ads` module (ERainAd/AdMob).
+ * Default [OnboardingAdProvider], backed by the project's `:ads` module (AdMob legacy).
  *
- * Waterfall: every placement walks its own ordered tier list, highest floor first, with the
- * per-unit [AdTierStrategy] deciding whether tiers are tried one at a time
- * ([AdTierStrategy.CASCADE]) or all at once with the highest fill winning
- * ([AdTierStrategy.PARALLEL]).
+ * Each placement walks its own ad unit list top to bottom — highest floor first, next id only
+ * once the current one fails to fill. One request in flight per placement, and the in-flight
+ * marker is cleared on both success and failure so a placement that failed can be retried.
  *
- * One in-flight request per placement, and the in-flight marker is removed on BOTH success and
- * failure so a failed load can retry later instead of returning null forever.
- *
- * All race state is keyed per placement rather than held in fields, so concurrent placements
- * (the preload chain runs several) cannot read each other's tiers.
+ * Buffered ads carry their load time: GMA drops an unshown ad after roughly an hour, and a stale
+ * wrapper reports itself as ready right up until `show()` silently does nothing.
  */
-class ERainAdProvider : OnboardingAdProvider {
+class ERainAdProvider(
+    /**
+     * How long one ad unit may take before the waterfall moves to the next floor.
+     *
+     * `30 s` is the audited `REQUEST_AD_TIMEOUT`; the whole waterfall is bounded by the caller's
+     * own budget (`ob_splash_ad_budget_ms`, `60 s`, the audited `LOAD_AD_TIMEOUT`). Lowering this
+     * trades fill rate for speed — measure before you do.
+     */
+    private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+) : OnboardingAdProvider {
 
-    private val nativeBuffers = ConcurrentHashMap<String, ApNativeAd>()
+    private val natives = ConcurrentHashMap<String, CachedAd<ApNativeAd>>()
     private val nativeInFlight = ConcurrentHashMap.newKeySet<String>()
-    private val nativeRaces = ConcurrentHashMap<String, TierRace<ApNativeAd>>()
-    private val interstitials = ConcurrentHashMap<String, ApInterstitialAd>()
+    private val interstitials = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
     private val interInFlight = ConcurrentHashMap.newKeySet<String>()
-    private val interRaces = ConcurrentHashMap<String, TierRace<ApInterstitialAd>>()
 
     /**
-     * One observer per placement — the screen currently showing it. A list here grew one wrapper
-     * per recycled fragment instance: every stale wrapper re-reported ad_show / ad_load_failed
-     * (each carries its own latch) and pinned its dead Activity until releaseAll.
+     * One observer per placement — the screen currently showing it. A list here grew a wrapper per
+     * recycled fragment, and every stale wrapper re-reported load events against a dead Activity.
      */
     private val listeners = ConcurrentHashMap<String, AdEventListener>()
 
     override fun isPremium(context: Context): Boolean =
         runCatching { AppPurchase.getInstance().isPurchased(context) }.getOrDefault(false)
 
-    // ── Native ──
-
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
         if (isNativeReady(request.placement)) return
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
-            Log.w(TAG, "Native $key has no usable ad unit id — skipping")
+            ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
             return
         }
-        // AdMob's paid-event callback only knows the ad unit; this is the only place that knows
-        // which onboarding screen asked for it, so the mapping is registered before the request.
+        // GMA's paid-event callback only knows the ad unit id; this is the only place that knows
+        // which onboarding screen asked for it.
         ids.forEach { PlacementRegistry.register(it, key) }
         if (!nativeInFlight.add(key)) return
-        when (request.unit.strategy) {
-            AdTierStrategy.CASCADE -> loadNativeCascade(activity, request, ids, 0)
-            AdTierStrategy.PARALLEL -> loadNativeParallel(activity, request, ids)
-        }
-    }
-
-    private fun loadNativeCascade(
-        activity: Activity,
-        request: NativeAdRequest,
-        ids: List<String>,
-        index: Int,
-    ) {
-        val key = request.placement.key
-        if (index >= ids.size) {
-            failNative(key, "cascade exhausted ${ids.size} tier(s)")
-            return
-        }
-        ERainAd.getInstance().loadNativeAdResultCallback(
+        ObLog.d(ObLog.Section.LOAD, "$key native waterfall tiers=${ids.size} top=${shortId(ids.first())}")
+        AdWaterfall.loadNative(
             activity,
-            ids[index],
+            ids,
             request.layoutRes,
+            tierTimeoutMs,
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     publishNative(key, nativeAd)
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
-                    Log.w(TAG, "Native $key tier $index failed: ${error?.message}")
-                    loadNativeCascade(activity, request, ids, index + 1)
+                    failNative(key, "all ${ids.size} tier(s) failed")
                 }
 
                 override fun onAdClicked() {
-                    notifyListeners(key) { it.onClicked() }
+                    notifyListener(key) { it.onClicked() }
                 }
             },
         )
     }
 
-    private fun loadNativeParallel(
-        activity: Activity,
-        request: NativeAdRequest,
-        ids: List<String>,
-    ) {
-        val key = request.placement.key
-        val race = TierRace<ApNativeAd>(ids.size)
-        nativeRaces[key] = race
-        ids.forEachIndexed { index, adUnitId ->
-            ERainAd.getInstance().loadNativeAdResultCallback(
-                activity,
-                adUnitId,
-                request.layoutRes,
-                object : AdCallback() {
-                    override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                        when (val outcome = race.onFill(index, nativeAd)) {
-                            is RaceOutcome.Won -> {
-                                race.drainLosers().forEach(::destroyNative)
-                                publishNative(key, outcome.value)
-                            }
-                            // Buffered: a higher tier is still deciding and may still beat it
-                            RaceOutcome.Pending -> Unit
-                            // Every tier already settled — this fill has nowhere to go
-                            RaceOutcome.Late, RaceOutcome.Lost -> destroyNative(nativeAd)
-                        }
-                    }
-
-                    override fun onAdFailedToLoad(error: LoadAdError?) {
-                        Log.w(TAG, "Native $key tier $index failed: ${error?.message}")
-                        when (val outcome = race.onFail(index)) {
-                            is RaceOutcome.Won -> {
-                                race.drainLosers().forEach(::destroyNative)
-                                publishNative(key, outcome.value)
-                            }
-                            RaceOutcome.Lost -> failNative(key, "all ${ids.size} tier(s) failed")
-                            RaceOutcome.Pending, RaceOutcome.Late -> Unit
-                        }
-                    }
-
-                    override fun onAdClicked() {
-                        notifyListeners(key) { it.onClicked() }
-                    }
-                },
-            )
-        }
-    }
-
     private fun publishNative(key: String, ad: ApNativeAd) {
-        nativeBuffers.put(key, ad)?.let(::destroyNative)
-        nativeRaces.remove(key)
+        ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
+        natives.put(key, CachedAd(ad))?.let { destroyNative(it.ad) }
         nativeInFlight.remove(key)
-        notifyListeners(key) { it.onLoaded() }
+        notifyListener(key) { it.onLoaded() }
     }
 
     private fun failNative(key: String, reason: String) {
-        nativeRaces.remove(key)
+        ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — $reason")
         nativeInFlight.remove(key)
-        Log.w(TAG, "Native $key unfilled: $reason")
-        notifyListeners(key) { it.onFailedToLoad() }
+        notifyListener(key) { it.onFailedToLoad() }
     }
 
     private fun destroyNative(ad: ApNativeAd) {
         runCatching { ad.admobNativeAd?.destroy() }
     }
 
-    override fun isNativeReady(placement: AdPlacement): Boolean =
-        nativeBuffers[placement.key] != null
+    override fun isNativeReady(placement: AdPlacement): Boolean = takeFreshNative(placement) != null
 
     override fun isNativeLoading(placement: AdPlacement): Boolean =
         placement.key in nativeInFlight
+
+    /** Drops the buffer when it has gone stale, so a caller never binds an expired ad. */
+    private fun takeFreshNative(placement: AdPlacement): CachedAd<ApNativeAd>? {
+        val cached = natives[placement.key] ?: return null
+        if (cached.isFresh) return cached
+        ObLog.w(ObLog.Section.LOAD, "${placement.key} native EXPIRED — dropping buffer")
+        natives.remove(placement.key)
+        destroyNative(cached.ad)
+        return null
+    }
 
     override fun bindNative(
         activity: Activity,
@@ -187,34 +138,23 @@ class ERainAdProvider : OnboardingAdProvider {
         shimmer: View?,
         listener: AdEventListener?,
     ): Boolean {
-        listener?.let { addListener(placement.key, it) }
-        val ad = nativeBuffers.remove(placement.key) ?: return false
+        listener?.let { listeners[placement.key] = it }
+        val cached = takeFreshNative(placement) ?: return false
         val frame = container as? FrameLayout ?: return false
-        val shimmerFrame = shimmer as? ShimmerFrameLayout
-        if (shimmerFrame != null) {
-            ERainAd.getInstance().populateNativeAdView(activity, ad, frame, shimmerFrame)
-        } else {
-            val holder = ShimmerFrameLayout(activity)
-            ERainAd.getInstance().populateNativeAdView(activity, ad, frame, holder)
-        }
+        natives.remove(placement.key)
+        val shimmerFrame = shimmer as? ShimmerFrameLayout ?: ShimmerFrameLayout(activity)
+        ERainAd.getInstance().populateNativeAdView(activity, cached.ad, frame, shimmerFrame)
         // GMA counts the impression once the view tree is bound and visible
-        notifyListeners(placement.key) { it.onImpression() }
+        notifyListener(placement.key) { it.onImpression() }
         return true
     }
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
-        nativeBuffers.remove(key)?.let(::destroyNative)
-        // A parallel race can still be holding buffered losers for this placement
-        nativeRaces.remove(key)?.drainAll()?.forEach(::destroyNative)
-        // Draining marks the race decided, so its callbacks resolve to Late and neither
-        // publishNative nor failNative ever runs — without this line the in-flight marker stayed
-        // set forever and every future preload for the placement was silently skipped.
+        natives.remove(key)?.let { destroyNative(it.ad) }
         nativeInFlight.remove(key)
         listeners.remove(key)
     }
-
-    // ── Interstitial ──
 
     override fun loadInterstitial(
         context: Context,
@@ -223,129 +163,138 @@ class ERainAdProvider : OnboardingAdProvider {
         listener: AdEventListener?,
     ) {
         val key = placement.key
-        listener?.let { addListener(key, it) }
-        if (isInterstitialReady(placement)) return
+        listener?.let { listeners[key] = it }
+        // Report the buffered ad instead of staying silent: a caller waiting on onLoaded would
+        // otherwise hang until its own budget expired.
+        if (isInterstitialReady(placement)) {
+            notifyListener(key) { it.onLoaded() }
+            return
+        }
         val ids = unit.loadOrder
         if (ids.isEmpty()) {
-            Log.w(TAG, "Interstitial $key has no usable ad unit id — skipping")
-            notifyListeners(key) { it.onFailedToLoad() }
+            ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
+            notifyListener(key) { it.onFailedToLoad() }
             return
         }
         ids.forEach { PlacementRegistry.register(it, key) }
+        // A load is already running; its completion notifies the listener registered above.
         if (!interInFlight.add(key)) return
-        when (unit.strategy) {
-            AdTierStrategy.CASCADE -> loadInterCascade(context, key, ids, 0)
-            AdTierStrategy.PARALLEL -> loadInterParallel(context, key, ids)
-        }
-    }
-
-    private fun loadInterCascade(context: Context, key: String, ids: List<String>, index: Int) {
-        if (index >= ids.size) {
-            failInterstitial(key, "cascade exhausted ${ids.size} tier(s)")
-            return
-        }
-        val ad = ERainAd.getInstance().getInterstitialAds(
+        ObLog.d(ObLog.Section.LOAD, "$key inter waterfall tiers=${ids.size} top=${shortId(ids.first())}")
+        AdWaterfall.loadInterstitial(
             context,
-            ids[index],
+            ids,
+            tierTimeoutMs,
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
-                    if (apInterstitialAd != null) publishInterstitial(key, apInterstitialAd)
+                    if (apInterstitialAd == null) {
+                        failInterstitial(key, "waterfall returned no ad")
+                        return
+                    }
+                    publishInterstitial(key, apInterstitialAd)
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
-                    Log.w(TAG, "Interstitial $key tier $index failed: ${error?.message}")
-                    loadInterCascade(context, key, ids, index + 1)
+                    failInterstitial(key, "all ${ids.size} tier(s) failed")
                 }
             },
         )
-        // Safe in cascade: only one tier is ever outstanding, so this cannot clobber a
-        // higher-floor wrapper. Deliberately not done in parallel mode for that reason.
-        if (ad != null) interstitials[key] = ad
-    }
-
-    private fun loadInterParallel(context: Context, key: String, ids: List<String>) {
-        val race = TierRace<ApInterstitialAd>(ids.size)
-        interRaces[key] = race
-        ids.forEachIndexed { index, adUnitId ->
-            ERainAd.getInstance().getInterstitialAds(
-                context,
-                adUnitId,
-                object : AdCallback() {
-                    override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
-                        // The ads SDK reports a phantom null fill for purchased/capped users;
-                        // treat it as this tier failing rather than as a win
-                        if (apInterstitialAd == null) {
-                            settleInterFail(key, race, index, ids.size, "null wrapper")
-                            return
-                        }
-                        when (val outcome = race.onFill(index, apInterstitialAd)) {
-                            is RaceOutcome.Won -> publishInterstitial(key, outcome.value)
-                            RaceOutcome.Pending, RaceOutcome.Late, RaceOutcome.Lost -> Unit
-                        }
-                    }
-
-                    override fun onAdFailedToLoad(error: LoadAdError?) {
-                        settleInterFail(key, race, index, ids.size, error?.message.orEmpty())
-                    }
-                },
-            )
-        }
-    }
-
-    private fun settleInterFail(
-        key: String,
-        race: TierRace<ApInterstitialAd>,
-        index: Int,
-        tierCount: Int,
-        reason: String,
-    ) {
-        Log.w(TAG, "Interstitial $key tier $index failed: $reason")
-        when (val outcome = race.onFail(index)) {
-            is RaceOutcome.Won -> publishInterstitial(key, outcome.value)
-            RaceOutcome.Lost -> failInterstitial(key, "all $tierCount tier(s) failed")
-            RaceOutcome.Pending, RaceOutcome.Late -> Unit
-        }
     }
 
     private fun publishInterstitial(key: String, ad: ApInterstitialAd) {
-        interstitials[key] = ad
-        interRaces.remove(key)
+        ObLog.d(ObLog.Section.LOAD, "$key inter FILLED id=${shortId(ad.interstitialAd?.adUnitId)}")
+        interstitials[key] = CachedAd(ad)
         interInFlight.remove(key)
-        notifyListeners(key) { it.onLoaded() }
+        notifyListener(key) { it.onLoaded() }
     }
 
     private fun failInterstitial(key: String, reason: String) {
-        interRaces.remove(key)
+        ObLog.w(ObLog.Section.LOAD, "$key inter UNFILLED — $reason")
         interInFlight.remove(key)
-        Log.w(TAG, "Interstitial $key unfilled: $reason")
-        notifyListeners(key) { it.onFailedToLoad() }
+        notifyListener(key) { it.onFailedToLoad() }
     }
 
     override fun isInterstitialReady(placement: AdPlacement): Boolean =
-        interstitials[placement.key]?.isReady == true
+        takeFreshInterstitial(placement) != null
 
+    private fun takeFreshInterstitial(placement: AdPlacement): ApInterstitialAd? {
+        val cached = interstitials[placement.key] ?: return null
+        if (!cached.isFresh) {
+            ObLog.w(ObLog.Section.LOAD, "${placement.key} inter EXPIRED — dropping buffer")
+            interstitials.remove(placement.key)
+            return null
+        }
+        return cached.ad.takeIf { it.isReady }
+    }
+
+    /**
+     * Maps the module's show callbacks onto the two moments the flow cares about.
+     *
+     * | module | mapped to |
+     * |---|---|
+     * | `onInterstitialShow` | commit marker only — tells the two `onNextAction` cases apart |
+     * | `onNextAction` after commit | [ObInterstitialCallback.onNextAction] — ad is on screen |
+     * | `onNextAction` without commit | terminal: the interval / click-cap short circuit |
+     * | `onAdClosed` | terminal: dismissed |
+     * | `onAdFailedToShow` | terminal: failed |
+     *
+     * `onInterstitialShow` is deliberately not the prewarm point: it lands 800 ms before the
+     * module re-checks that the Activity is still RESUMED, so starting the next screen on it makes
+     * that check fail and the ad is dropped. See [ERainTuning].
+     */
     override fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,
-        onFinished: () -> Unit,
+        callback: ObInterstitialCallback,
     ) {
-        val ad = interstitials[placement.key]
-        if (ad == null || !ad.isReady) {
-            onFinished()
+        val ad = takeFreshInterstitial(placement)
+        if (ad == null) {
+            callback.onAdSkipped(AdSkipReason.NOT_READY)
             return
         }
+        // Full-screen ads are single use; drop the buffer before showing so it can never show twice
         interstitials.remove(placement.key)
+        val committed = AtomicBoolean(false)
         ERainAd.getInstance().forceShowInterstitial(
             activity,
             ad,
             object : AdCallback() {
+                override fun onInterstitialShow() {
+                    committed.set(true)
+                }
+
+                override fun onNextAction() {
+                    if (committed.get()) {
+                        callback.onNextAction()
+                    } else {
+                        // No commit marker means the module short circuited before showing
+                        ObLog.w(ObLog.Section.SHOW, "${placement.key} declined by the ads module")
+                        callback.onAdSkipped(AdSkipReason.CAPPED_BY_ADS_MODULE)
+                    }
+                }
+
                 override fun onAdClosed() {
-                    onFinished()
+                    callback.onAdClosed()
+                }
+
+                override fun onAdFailedToShow(adError: AdError?) {
+                    ObLog.w(ObLog.Section.SHOW, "${placement.key} onAdFailedToShow: ${adError?.message}")
+                    callback.onAdSkipped(AdSkipReason.FAILED_TO_SHOW)
+                }
+
+                override fun onAdClicked() {
+                    notifyListener(placement.key) { it.onClicked() }
                 }
             },
             false,
         )
     }
+
+    override fun lastInterstitialShownAtMs(context: Context): Long =
+        runCatching { SharePreferenceUtils.getLastImpressionInterstitialTime(context) }
+            .getOrDefault(0L)
+
+    override fun clicksToday(context: Context, adUnitId: String): Int =
+        runCatching { AdmobHelper.getNumClickAdsPerDay(context, adUnitId) }.getOrDefault(0)
 
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
         ERainAd.getInstance().loadBanner(
@@ -359,6 +308,10 @@ class ERainAdProvider : OnboardingAdProvider {
                 override fun onAdFailedToLoad(error: LoadAdError?) {
                     listener?.onFailedToLoad()
                 }
+
+                override fun onAdClicked() {
+                    listener?.onClicked()
+                }
             },
         )
     }
@@ -367,100 +320,43 @@ class ERainAdProvider : OnboardingAdProvider {
         runCatching { AppOpenManager.getInstance().disableAppResumeWithActivity(activityClass) }
     }
 
-    override fun allowAppResume(activityClass: Class<out Activity>) {
-        runCatching { AppOpenManager.getInstance().enableAppResumeWithActivity(activityClass) }
-    }
-
     override fun releaseAll() {
-        nativeBuffers.values.forEach(::destroyNative)
-        nativeBuffers.clear()
-        nativeRaces.values.forEach { race -> race.drainAll().forEach(::destroyNative) }
-        nativeRaces.clear()
+        natives.values.forEach { destroyNative(it.ad) }
+        natives.clear()
         nativeInFlight.clear()
         interstitials.clear()
-        interRaces.clear()
         interInFlight.clear()
         listeners.clear()
     }
 
-    private fun addListener(key: String, listener: AdEventListener) {
-        listeners[key] = listener
-    }
-
-    private fun notifyListeners(key: String, block: (AdEventListener) -> Unit) {
+    private fun notifyListener(key: String, block: (AdEventListener) -> Unit) {
         listeners[key]?.let { runCatching { block(it) } }
     }
 
+    /** Ad unit ids are long and share a prefix; the tail is what identifies them in a log. */
+    private fun shortId(id: String?): String =
+        id?.takeIf { it.isNotBlank() }?.takeLast(ID_TAIL_LENGTH) ?: "-"
+
     private companion object {
-        const val TAG = "OnboardKit.ERainAds"
+        const val ID_TAIL_LENGTH = 10
+
     }
-}
-
-/** Result of feeding one tier's outcome into a [TierRace]. */
-internal sealed interface RaceOutcome<out T> {
-    /** Higher tiers are still undecided; a fill (if any) stays buffered. */
-    data object Pending : RaceOutcome<Nothing>
-
-    /** [value] is the highest floor that filled — deliver it. */
-    data class Won<T>(val value: T) : RaceOutcome<T>
-
-    /** Every tier failed. */
-    data object Lost : RaceOutcome<Nothing>
-
-    /** The race was already decided; the caller owns (and must discard) whatever it passed in. */
-    data object Late : RaceOutcome<Nothing>
 }
 
 /**
- * Priority resolution for a parallel tier load.
+ * A buffered ad and when it arrived.
  *
- * A tier only wins once every higher-priority tier has failed, so the winner is always the
- * highest floor that actually filled — never simply whichever callback landed first, which is
- * the mistake the `:ads` module's 4-tier helpers are prone to. Callbacks arrive on the main
- * thread today, but the ads SDK makes no such guarantee across tiers, hence the locking.
+ * GMA discards an unshown interstitial or native after about an hour, and the wrapper keeps
+ * reporting itself ready afterwards — the expiry has to be tracked here.
  */
-internal class TierRace<T : Any>(private val size: Int) {
+internal class CachedAd<T : Any>(
+    val ad: T,
+    private val loadedAtMs: Long = System.currentTimeMillis(),
+) {
+    val isFresh: Boolean get() = System.currentTimeMillis() - loadedAtMs < MAX_AGE_MS
 
-    private val lock = Any()
-    private val fills = HashMap<Int, T>()
-    private val failed = HashSet<Int>()
-    private var decided = false
-
-    fun onFill(index: Int, value: T): RaceOutcome<T> = synchronized(lock) {
-        if (decided) return RaceOutcome.Late
-        fills[index] = value
-        decide()
-    }
-
-    fun onFail(index: Int): RaceOutcome<T> = synchronized(lock) {
-        if (decided) return RaceOutcome.Late
-        failed += index
-        decide()
-    }
-
-    /** Buffered fills that lost the race, cleared so they are released exactly once. */
-    fun drainLosers(): List<T> = drainAll()
-
-    /** Everything still buffered — used when a placement is released mid-race. */
-    fun drainAll(): List<T> = synchronized(lock) {
-        decided = true
-        val remaining = fills.values.toList()
-        fills.clear()
-        remaining
-    }
-
-    private fun decide(): RaceOutcome<T> {
-        for (index in 0 until size) {
-            val fill = fills[index]
-            if (fill != null) {
-                decided = true
-                fills.remove(index)
-                return RaceOutcome.Won(fill)
-            }
-            // This tier has not reported yet, so a higher floor may still win
-            if (index !in failed) return RaceOutcome.Pending
-        }
-        decided = true
-        return RaceOutcome.Lost
+    private companion object {
+        /** GMA discards an unshown interstitial or native after one hour. */
+        const val MAX_AGE_MS = 60 * 60 * 1_000L
     }
 }

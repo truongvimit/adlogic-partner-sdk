@@ -76,9 +76,15 @@ public class ERainAdConfig {
     }
 
 
+    /**
+     * Sets the app-resume ad unit and switches app-resume on.
+     * <p>
+     * A blank id switches it back off: enabling it anyway made AppOpenManager request an ad with
+     * an empty unit, which GMA rejects with "Cannot determine request type" on every cold start.
+     */
     public void setIdAdResume(String idAdResume) {
         this.idAdResume = idAdResume;
-        enableAdResume = true;
+        enableAdResume = idAdResume != null && !idAdResume.trim().isEmpty();
     }
 
     public Boolean isEnableAdResume() {

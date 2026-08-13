@@ -8,16 +8,14 @@ import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.NativeAdRequest
-import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.tracked
-import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.showInterstitial
+import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.config.ObLanguages
-import io.onboardkit.core.analytics.AdSkipReason
+import io.onboardkit.core.ObLog
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityLanguageBinding
@@ -25,7 +23,6 @@ import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
-import io.trackkit.AdFormat
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
@@ -161,63 +158,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         }
 
     private fun setupNativeAd(placement: AdPlacement) {
-        val config = sdk.requireConfig()
-        val provider = sdk.provider()
-        val unit = if (placement == AdPlacement.Language2) {
-            config.ads.languageDupNative ?: config.ads.languageNative
-        } else {
-            config.ads.languageNative
-        }
-        if (provider == null || unit == null) {
-            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.NO_UNIT)
-            adBlockFor(placement).visibility = View.GONE
-            return
-        }
-        if (!sdk.policy().canShowNative(this, placement)) {
-            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.POLICY)
-            adBlockFor(placement).visibility = View.GONE
-            return
-        }
-        val template = NativeTemplates.fromRemote(
-            sdk.flags().templateLanguage,
-            config.ads.languageTemplate,
-        )
-        placement.trackRequest(AdFormat.NATIVE)
-        val bound = provider.bindNative(
-            this,
-            placement,
-            containerFor(placement),
-            shimmerFor(placement),
-            placement.tracked(
-                AdFormat.NATIVE,
-                object : AdEventListener {
-                    override fun onLoaded() {
-                        runOnUiThread { bindIfPossible(placement) }
-                    }
-
-                    override fun onFailedToLoad() {
-                        runOnUiThread { shimmerFor(placement).visibility = View.GONE }
-                    }
-                },
-            ),
-        )
-        if (!bound) {
-            provider.preloadNative(
-                this,
-                NativeAdRequest(placement, unit, NativeTemplates.layoutFor(template)),
-            )
-        }
-    }
-
-    private fun bindIfPossible(placement: AdPlacement) {
-        if (isFinishing || isDestroyed) return
-        // A late slot-1 callback must not repaint the block the user already moved past
-        if (secondAdShown && placement == AdPlacement.Language1) return
-        sdk.provider()?.bindNative(
-            this,
-            placement,
-            containerFor(placement),
-            shimmerFor(placement),
+        showNativeAd(
+            placement = placement,
+            unit = sdk.requireConfig().ads.nativeUnitFor(placement),
+            container = containerFor(placement),
+            shimmer = shimmerFor(placement),
+            onUnavailable = { adBlockFor(placement).visibility = View.GONE },
         )
     }
 
@@ -236,46 +182,68 @@ class ObLanguageActivity : BaseOnboardActivity() {
         // SDK scope, not lifecycleScope: navigation finishes this Activity right away.
         val store = sdk.stateStoreOrNull()
         if (store != null) sdk.scope().launch { store.markLfoCompleted() }
-        showReusedInterThen { goNextFromLanguage() }
+        leaveLanguage()
     }
 
-    /** Splash interstitial not yet shown may be reused at LFO's Next, per remote flag. */
-    private fun showReusedInterThen(next: () -> Unit) {
-        val provider = sdk.provider()
-        if (provider != null && sdk.flags().reuseSplashInter &&
-            provider.isInterstitialReady(AdPlacement.SplashInterstitial)
-        ) {
-            provider.showInterstitial(this, AdPlacement.SplashInterstitial) { next() }
-        } else {
-            next()
+    private fun leaveLanguage() {
+        val config = sdk.requireConfig()
+        val enabled = FlowNavigator.enabledSteps(config, sdk.flags(), sdk.guard().isPremium(this))
+        ObLog.d(ObLog.Section.NAV, "ob_language enabledSteps=${enabled.map { it.value }}")
+        if (enabled.isNotEmpty()) {
+            reuseInterstitialThenLeave { ObOnboardingHostActivity.start(this, resumeIndex = 0) }
+            return
+        }
+        when (FlowNavigator.decideExit(
+            sdk.flags(),
+            config,
+            hasReusableSplashInterstitial = false,
+            isOb5NativeReady = false,
+        )) {
+            ExitDecision.GoToQuestion ->
+                reuseInterstitialThenLeave { ObQuestionActivity.start(this, QuestionSource.NEW_USER) }
+
+            else -> endFlow()
         }
     }
 
-    private fun goNextFromLanguage() {
-        val config = sdk.requireConfig()
-        val enabled = FlowNavigator.enabledSteps(config, sdk.flags())
-        if (enabled.isNotEmpty()) {
-            ObOnboardingHostActivity.start(this, resumeIndex = 0)
+    /**
+     * A splash interstitial that was loaded but never shown is offered here instead of being
+     * thrown away — that is the whole point of `ob_reuse_splash_inter`.
+     */
+    private fun reuseInterstitialThenLeave(startNext: () -> Unit) {
+        if (!sdk.flags().reuseSplashInter) {
+            ObLog.d(ObLog.Section.SHOW, "splash_inter reuse off (ob_reuse_splash_inter)")
+            AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PLACEMENT_OFF_BY_REMOTE)
+            startNext()
             finish()
             return
         }
-        when (FlowNavigator.decideExit(sdk.flags(), config, false, false)) {
-            ExitDecision.GoToQuestion -> {
-                ObQuestionActivity.start(this, QuestionSource.NEW_USER)
-                finish()
-            }
-
-            else -> lifecycleScope.launch {
-                presentPaywallIfAny()
-                OnboardingSdk.completeFlow(this@ObLanguageActivity)
-                finish()
-            }
-        }
+        showInterstitial(
+            AdPlacement.SplashInterstitial,
+            onNext = startNext,
+            onFinished = { finish() },
+        )
     }
 
-    /** Outcome is intentionally ignored: the flow completes either way. */
-    private suspend fun presentPaywallIfAny() {
-        sdk.presentPaywall(this, PaywallPlacement.AFTER_ONBOARDING)
+    /**
+     * Nothing starts underneath the ad here: whether the flow ends at a paywall or back in the
+     * host app is only decided after it, so there is no destination to warm up.
+     */
+    private fun endFlow() {
+        if (!sdk.flags().reuseSplashInter) {
+            completeAndFinish()
+            return
+        }
+        showInterstitial(AdPlacement.SplashInterstitial, onFinished = { completeAndFinish() })
+    }
+
+    private fun completeAndFinish() {
+        lifecycleScope.launch {
+            // Paywall outcome is intentionally ignored: the flow completes either way
+            sdk.presentPaywall(this@ObLanguageActivity, PaywallPlacement.AFTER_ONBOARDING)
+            OnboardingSdk.completeFlow(this@ObLanguageActivity)
+            finish()
+        }
     }
 
     override fun handleBack() {

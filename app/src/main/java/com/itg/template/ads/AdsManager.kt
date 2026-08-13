@@ -10,6 +10,7 @@ import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
+import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
@@ -83,7 +84,7 @@ object AdsManager {
         shouldDisplay: Boolean = true,
     ) {
         val skipReason = when {
-            !config.isEnable -> "disabled_config"
+            !config.isUsable -> "disabled_config"
             AppPurchase.getInstance().isPurchased(activity) -> "purchased"
             !activity.isNetworkAvailable() -> "offline"
             !shouldDisplay -> "ua_gate"
@@ -95,18 +96,17 @@ object AdsManager {
             liveData.postValue(null)
             return
         }
-        AdTracking.request(placement, AdFormat.NATIVE, config.id)
-        ERainAd.getInstance().loadNativeAdResultCallback(
-            activity, config.id, layoutRes,
+        // waterfallIds, not id: the list is the waterfall, highest floor first
+        AdTracking.request(placement, AdFormat.NATIVE, config.waterfallIds.first())
+        AdWaterfall.loadNative(
+            activity, config.waterfallIds, layoutRes,
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    super.onNativeAdLoaded(nativeAd)
                     adConfigMap[nativeAd] = config
                     liveData.postValue(nativeAd)
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    super.onAdFailedToLoad(adError)
                     liveData.postValue(null)
                 }
             },
@@ -206,92 +206,128 @@ object AdsManager {
     }
 
     fun loadInterOnboarding(context: Context, ignoreLimit: Boolean = false) {
-        val config = AdRemoteConfig.inter_onboarding
-        val skipReason = when {
-            !config.isEnable -> "disabled_config"
-            AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            !ignoreLimit && !ERainAd.getInstance().getShouldDisplayInterOnboarding(config.enableUaCheck) -> "ua_gate"
-            else -> null
-        }
-        if (skipReason != null) {
-            AdTracking.skipped("inter_onboarding", AdFormat.INTERSTITIAL, skipReason)
-            interOnboarding = null
-            return
-        }
-        AdTracking.request("inter_onboarding", AdFormat.INTERSTITIAL, config.id)
-        interOnboarding = ERainAd.getInstance().getInterstitialAds(
-            context, config.id, object : AdCallback() {},
-        )
+        val passesUaGate = ignoreLimit ||
+            ERainAd.getInstance()
+                .getShouldDisplayInterOnboarding(AdRemoteConfig.inter_onboarding.enableUaCheck)
+        loadInterstitial(
+            context,
+            "inter_onboarding",
+            AdRemoteConfig.inter_onboarding,
+            interOnboarding,
+            passesUaGate,
+        ) { interOnboarding = it }
     }
 
     fun showInterOnboarding(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        val interstitial = interOnboarding
-        val blockReason = when {
-            interstitial == null || !interstitial.isReady -> "not_ready"
-            AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            !ignoreLimit -> "ignore_limit_false"
-            else -> null
-        }
-        if (blockReason == null && interstitial != null) {
-            ERainAd.getInstance().forceShowInterstitial(
-                context, interstitial,
-                object : AdCallback() {
-                    override fun onNextAction() {
-                        super.onNextAction()
-                        onAction()
-                    }
-                },
-                true,
-            )
-        } else {
-            // A show the app declined before the SDK was ever asked
-            AdTracking.skipped("inter_onboarding", AdFormat.INTERSTITIAL, blockReason ?: "unknown")
-            onAction()
-        }
+        showInterstitial(context, "inter_onboarding", interOnboarding, onAction)
+        interOnboarding = null
     }
 
     fun loadInterWelcome(context: Context, ignoreLimit: Boolean = false) {
-        val config = AdRemoteConfig.inter_welcome
-        val skipReason = when {
-            !config.isEnable -> "disabled_config"
-            AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            !ignoreLimit -> "ignore_limit_false"
-            else -> null
-        }
-        if (skipReason != null) {
-            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, skipReason)
-            interWelcomeAd = null
-            return
-        }
-        AdTracking.request("inter_welcome", AdFormat.INTERSTITIAL, config.id)
-        interWelcomeAd = ERainAd.getInstance().getInterstitialAds(
-            context, config.id, object : AdCallback() {},
-        )
+        val passesUaGate = ignoreLimit ||
+            ERainAd.getInstance()
+                .getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)
+        loadInterstitial(
+            context,
+            "inter_welcome",
+            AdRemoteConfig.inter_welcome,
+            interWelcomeAd,
+            passesUaGate,
+        ) { interWelcomeAd = it }
     }
 
     fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        val interstitial = interWelcomeAd
-        val blockReason = when {
-            interstitial == null || !interstitial.isReady -> "not_ready"
+        showInterstitial(context, "inter_welcome", interWelcomeAd, onAction)
+        interWelcomeAd = null
+    }
+
+    /**
+     * Runs the placement's waterfall and hands the winner to [onResolved], or `null` when nothing
+     * filled. Keeps [buffered] instead when it is still usable.
+     *
+     * `ignoreLimit` only bypasses the UA gate — it used to gate the load itself, so every call
+     * with the default argument skipped with `ignore_limit_false` and never had an ad to show.
+     */
+    private fun loadInterstitial(
+        context: Context,
+        placement: String,
+        config: AdUnitConfig,
+        buffered: ApInterstitialAd?,
+        passesUaGate: Boolean,
+        onResolved: (ApInterstitialAd?) -> Unit,
+    ) {
+        // One cached ad per placement; re-requesting over a ready one burns a request and the fill
+        if (buffered?.isReady == true) return
+        val skipReason = when {
+            !config.isUsable -> "disabled_config"
             AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            !ignoreLimit -> "ignore_limit_false"
+            !context.isNetworkAvailable() -> "offline"
+            !passesUaGate -> "ua_gate"
             else -> null
         }
-        if (blockReason == null && interstitial != null) {
-            ERainAd.getInstance().forceShowInterstitial(
-                context, interstitial,
-                object : AdCallback() {
-                    override fun onNextAction() {
-                        super.onNextAction()
-                        onAction()
-                    }
-                },
-                false,
-            )
-        } else {
-            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, blockReason ?: "unknown")
-            onAction()
+        if (skipReason != null) {
+            AdTracking.skipped(placement, AdFormat.INTERSTITIAL, skipReason)
+            onResolved(null)
+            return
         }
+        // waterfallIds, not id: the list is the waterfall, highest floor first
+        AdTracking.request(placement, AdFormat.INTERSTITIAL, config.waterfallIds.first())
+        AdWaterfall.loadInterstitial(
+            context,
+            config.waterfallIds,
+            object : AdCallback() {
+                override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
+                    onResolved(apInterstitialAd)
+                }
+
+                override fun onAdFailedToLoad(adError: LoadAdError?) {
+                    onResolved(null)
+                }
+            },
+        )
+    }
+
+    /**
+     * Shows [ad] and runs [onAction] exactly once, whatever the module reports.
+     *
+     * Wiring only `onNextAction` — as this did — loses the callback entirely when the show fails,
+     * because `openActivityAfterShowInterAds` is pinned on and the module then reports the failure
+     * through `onAdFailedToShow` alone. The screen was left waiting forever.
+     */
+    private fun showInterstitial(
+        context: Context,
+        placement: String,
+        ad: ApInterstitialAd?,
+        onAction: () -> Unit,
+    ) {
+        val blockReason = when {
+            ad == null || !ad.isReady -> "not_ready"
+            AppPurchase.getInstance().isPurchased(context) -> "purchased"
+            else -> null
+        }
+        if (blockReason != null || ad == null) {
+            AdTracking.skipped(placement, AdFormat.INTERSTITIAL, blockReason ?: "unknown")
+            onAction()
+            return
+        }
+        val proceeded = java.util.concurrent.atomic.AtomicBoolean(false)
+        val proceed = { if (proceeded.compareAndSet(false, true)) onAction() }
+        ERainAd.getInstance().forceShowInterstitial(
+            context, ad,
+            object : AdCallback() {
+                override fun onNextAction() = proceed()
+
+                override fun onAdClosed() = proceed()
+
+                override fun onAdFailedToShow(adError: com.google.android.gms.ads.AdError?) {
+                    AdTracking.skipped(placement, AdFormat.INTERSTITIAL, "failed_to_show")
+                    Timber.tag("AdsManager").w("Show $placement failed: ${adError?.message}")
+                    proceed()
+                }
+            },
+            // Reloading is the caller's job; letting the module do it too double-requests the unit
+            false,
+        )
     }
 
     fun loadAndShowReward(

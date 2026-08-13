@@ -1,6 +1,7 @@
 package io.onboardkit.ads
 
 import androidx.annotation.LayoutRes
+import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.config.NativeTemplate
 
@@ -24,11 +25,35 @@ object NativeTemplates {
         else -> fallback
     }
 
+    /**
+     * The layout a placement's native is inflated with — the single answer for both the preload
+     * and the screen that binds it.
+     *
+     * A native is inflated at request time, so a screen resolving the template differently from
+     * the preload chain silently re-requests instead of using what is already buffered.
+     */
     @LayoutRes
-    fun shimmerFor(template: NativeTemplate): Int = when (template) {
-        NativeTemplate.CTA_BOTTOM -> R.layout.ob_shimmer_native_cta_bottom
-        NativeTemplate.CTA_TOP -> R.layout.ob_shimmer_native_cta_top
-        NativeTemplate.COMPACT -> R.layout.ob_shimmer_native_compact
-        NativeTemplate.FULL_SCREEN -> R.layout.ob_shimmer_native_fullscreen
+    internal fun layoutForPlacement(placement: AdPlacement): Int {
+        val ads = OnboardingSdk.configOrNull()?.ads
+        val flags = OnboardingSdk.flags()
+        val template = when (placement) {
+            AdPlacement.Language1, AdPlacement.Language2 ->
+                fromRemote(flags.templateLanguage, ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM)
+
+            is AdPlacement.StepNative ->
+                fromRemote(flags.templateContent, ads?.contentStepTemplate ?: NativeTemplate.CTA_TOP)
+
+            AdPlacement.QuestionNative ->
+                fromRemote(flags.templateQuestion, ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM)
+
+            is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> NativeTemplate.FULL_SCREEN
+
+            AdPlacement.SplashBanner,
+            AdPlacement.SplashInterstitial,
+            AdPlacement.QuestionInterstitial,
+            AdPlacement.AppResume,
+            -> NativeTemplate.CTA_BOTTOM
+        }
+        return layoutFor(template)
     }
 }

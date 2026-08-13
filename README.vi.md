@@ -125,10 +125,13 @@ Trong base hiện tại, phần tích hợp chính nằm ở `GlobalApp.initAds(
    - `intervalInterstitialAd`
    - `idAdResume`
 4. Gọi `ERainAd.getInstance().init(this, mERainAdConfig)`.
-5. Set các rule bổ sung cho resume/inter:
-   - `Admob.getInstance().setDisableAdResumeWhenClickAds(true)`
-   - `Admob.getInstance().setOpenActivityAfterShowInterAds(true)`
-   - `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` cho các màn cần loại trừ.
+5. Gọi `ERainTuning.install()` — **một lần**, ngay sau `ERainAd.init`.
+   Nó ghim các cờ process-wide của module (`openActivityAfterShowInterAds`,
+   `disableAdResumeWhenClickAds`). **Đừng tự set**: chúng thay đổi *ý nghĩa của callback*, nên bật
+   tắt theo từng màn sẽ để process ở đúng trạng thái mà màn cuối cùng chết trong đó — và một màn
+   chết giữa hai lần toggle thì để sai vĩnh viễn.
+6. `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` chỉ cho các màn **của app**.
+   OnboardKit tự loại trừ màn của nó.
 
 Snippet tham chiếu:
 ```kotlin
@@ -144,7 +147,9 @@ private fun initAds() {
 
     mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.intervalInterstitialAd = 35
+    // 0 = module không tự áp interval; xem §3.2
+    mERainAdConfig.intervalInterstitialAd = 0
+    // Id rỗng tự tắt app-resume — không bao giờ request với ad unit rỗng
     mERainAdConfig.idAdResume = ""
 
     ERainAd.getInstance().init(this, mERainAdConfig)
@@ -214,9 +219,54 @@ qua `adjustConfig` ở mục 1.5. Xem `trackkit/ARCHITECTURE.md` để hiểu v�
 
 ## 2. Cơ chế load/show Ads theo vị trí
 
+### 2.0 Một vị trí, nhiều ad unit id — waterfall
+
+Một vị trí không phải một ad unit id, mà là **một danh sách có thứ tự**: tầng cao trước, all-price
+cuối. `AdWaterfall` request từng id một và dừng ở id đầu tiên fill được, nên tầng thấp chỉ được hỏi
+sau khi tầng trên nó đã fail.
+
+```kotlin
+AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
+AdWaterfall.loadInterstitial(context, adUnitIds, callback)
+```
+
+Truyền một id thì nó chạy y như load thường. Id rỗng và id trùng bị loại, nên payload remote điền
+thiếu không tạo lỗ hổng trong thứ tự. Mỗi bước bị chặn bởi `REQUEST_AD_TIMEOUT` (30 s): một tầng
+không bao giờ trả lời cũng không thể treo các tầng dưới nó.
+
+Đây là **đường load duy nhất**. `AdsManager` và OnboardKit đều đi qua nó, nên hai bên không thể lệch
+nhau. Đừng gọi `ERainAd.loadNativeAdResultCallback` / `getInterstitialAds` với một `config.id` —
+làm vậy là tiêu tầng all-price và không bao giờ chạm tầng cao.
+
+#### Đặt tên tầng trong remote config
+
+Mỗi tầng là một key riêng. Hậu tố chính là bậc thang:
+
+| Key | Bậc |
+|---|---|
+| `native_lang_high` | tầng cao nhất, request đầu tiên |
+| `native_lang_high1` … `native_lang_high9` | các tầng tiếp theo, theo thứ tự số |
+| `native_lang` | all-price, luôn cuối cùng |
+
+`AdRemoteConfig.tiersFor("native_lang")` giải bậc thang đó thành thứ tự request. Thêm một tầng cho
+một vị trí là **thay đổi remote config, không phải thay đổi code** — khai key là nó vào waterfall.
+Cố ý **không có `_medium`**: nó chỉ là `_high1` mang tên khác, và hai cách viết cho cùng một tầng là
+cách nhanh nhất để payload khai cả hai.
+
+Cần hơn mười tầng, hoặc thứ tự không phải cao→thấp? Đưa thẳng các id vào mảng `ids` của một key —
+danh sách đó được lấy làm waterfall nguyên văn:
+
+```json
+"inter_splash": { "id": "…/allprice", "ids": ["…/high", "…/high1"], "isEnable": true }
+```
+
+> Mỗi vị trí phải có ad unit id riêng. Hai vị trí dùng chung một id thì không thể tách nhau trong
+> báo cáo doanh thu: paid-event callback của AdMob chỉ biết ad unit, còn `PlacementRegistry` map nó
+> về vị trí nào **request sau cùng**.
+
 ### 2.1 Splash
 - Inter Splash:
-  - Điều kiện: `AdRemoteConfig.inter_splash.isEnable == true` và có mạng.
+  - Điều kiện: `AdRemoteConfig.tiersFor("inter_splash")` khác rỗng (có ít nhất một tầng đang bật) và có mạng.
   - API: `ERainAd.getInstance().loadSplashInterstitialAds(...)`.
   - Sau khi load thành công (`onAdLoaded`) thì preload `native_language`.
 - Open Resume:
@@ -250,12 +300,36 @@ qua `adjustConfig` ở mục 1.5. Xem `trackkit/ARCHITECTURE.md` để hiểu v�
 ## 3. Điều kiện chung để Ads được load
 
 Trong `AdsManager`, một ad chỉ load khi thỏa đủ:
-- `adUnitConfig.isEnable == true`.
+- `adUnitConfig.isUsable` — bật **và** có ít nhất một id khác rỗng.
 - `!AppPurchase.getInstance().isPurchased(...)`.
 - Có mạng.
 - Với các vị trí bắt buộc gate organic: `getShouldDisplay*(config.enableUaCheck) == true`.
 
-Nếu fail 1 điều kiện, native LiveData trả `null` để UI ẩn ad container.
+Nếu fail 1 điều kiện, native LiveData trả `null` để UI ẩn ad container, và lý do được báo đúng một
+lần qua `AdTracking.skipped(...)`.
+
+### 3.1 Consent chặn mọi request
+
+Không ad nào được request trước khi luồng consent trả lời — đây là luật policy, không phải cuộc đua.
+Splash giải quyết và công bố câu trả lời một lần:
+
+```kotlin
+class SplashActivity : ObSplashActivity() {
+    override suspend fun onConsentRequired(): Boolean = /* true khi được phép request ads */
+}
+```
+
+Trả `false` — hoặc không trả lời trong `consentTimeoutMs` — sẽ gọi `OnboardingSdk.setCanRequestAds(false)`,
+và mọi vị trí báo `consent_not_granted` thay vì load. Flow vẫn chạy, chỉ là chạy không ad.
+`ConsentHandler` hiện form UMP **một lần mỗi process**, nên splash và các màn sau dùng chung một câu
+trả lời thay vì hỏi hai lần.
+
+### 3.2 Tần suất interstitial chỉ nằm ở một chỗ
+
+Giữ `ERainAdConfig.intervalInterstitialAd = 0`. Interval của module nuốt interstitial im lặng —
+caller không phân biệt được với một lần user đóng ad — nên tần suất do
+`ob_ads_interstitial_interval_sec` sở hữu: chỉnh được từ remote và báo `interval_not_elapsed` khi
+chặn. Hai cap cho một luật là loại bug không ai tìm ra trong một quý.
 
 ## 4. Chuẩn `getShouldDisplay*` theo từng vị trí (bắt buộc 100%)
 

@@ -26,13 +26,21 @@ data class RemoteFlags(
     val passLfoIfCompleted: Boolean = ObRemoteKeys.PASS_LFO_IF_COMPLETED.default,
     val languageSupportedCodes: String = ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
     val reuseSplashInter: Boolean = ObRemoteKeys.REUSE_SPLASH_INTER.default,
+    val adsSplashBanner: Boolean = ObRemoteKeys.ADS_SPLASH_BANNER.default,
+    val adsSplashInter: Boolean = ObRemoteKeys.ADS_SPLASH_INTER.default,
     val adsLanguageNative: Boolean = ObRemoteKeys.ADS_LANGUAGE_NATIVE.default,
     val adsContentNative: Boolean = ObRemoteKeys.ADS_CONTENT_NATIVE.default,
     val adsFullScreenNative: Boolean = ObRemoteKeys.ADS_FULLSCREEN_NATIVE.default,
     val adsQuestionNative: Boolean = ObRemoteKeys.ADS_QUESTION_NATIVE.default,
     val adsQuestionInter: Boolean = ObRemoteKeys.ADS_QUESTION_INTER.default,
+    val adsAppResume: Boolean = ObRemoteKeys.ADS_APP_RESUME.default,
     val adsSplashInterId: String = ObRemoteKeys.ADS_SPLASH_INTER_ID.default,
+    val adsSplashInterIdOldUser: String = ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.default,
+    val interstitialIntervalSec: Long = ObRemoteKeys.INTERSTITIAL_INTERVAL_SEC.default,
+    val clickCapPerDay: Int = ObRemoteKeys.CLICK_CAP_PER_DAY.default.toInt(),
     val splashMinDisplayMs: Long = ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.default,
+    val splashAdBudgetMs: Long = ObRemoteKeys.SPLASH_AD_BUDGET_MS.default,
+    val splashBannerWaitMs: Long = ObRemoteKeys.SPLASH_BANNER_WAIT_MS.default,
     val skipButtonDelaySec: Long = ObRemoteKeys.SKIP_BUTTON_DELAY_SEC.default,
     val fullScreenAutoDismissSec: Long = ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC.default,
     val showSkipOb3: Boolean = ObRemoteKeys.SHOW_SKIP_OB3.default,
@@ -55,6 +63,22 @@ data class RemoteFlags(
         StepId.QUESTION -> enableQuestion
         else -> true
     }
+
+    /**
+     * One line with every flag that can stop an ad, for the flow log.
+     *
+     * The point is to see the whole permission surface in a single logcat entry rather than
+     * inferring it from which ads failed to appear.
+     */
+    fun adSummary(): String = "flags allAds=$enableAllAds " +
+        "splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
+        "content=$adsContentNative fullScreen=$adsFullScreenNative " +
+        "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
+        "reuseSplashInter=$reuseSplashInter intervalSec=$interstitialIntervalSec " +
+        "clickCap=$clickCapPerDay minDisplayMs=$splashMinDisplayMs " +
+        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs " +
+        "interIdOverride=${adsSplashInterId.isNotBlank()} " +
+        "interIdOldOverride=${adsSplashInterIdOldUser.isNotBlank()}"
 
     /** Any tutorial page enabled → the pager flow can show. */
     val anyTutorialStepEnabled: Boolean
@@ -89,14 +113,23 @@ data class RemoteFlags(
                 languageSupportedCodes = reader.string(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key)
                     ?: ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
                 reuseSplashInter = bool(ObRemoteKeys.REUSE_SPLASH_INTER),
+                adsSplashBanner = bool(ObRemoteKeys.ADS_SPLASH_BANNER),
+                adsSplashInter = bool(ObRemoteKeys.ADS_SPLASH_INTER),
                 adsLanguageNative = bool(ObRemoteKeys.ADS_LANGUAGE_NATIVE),
                 adsContentNative = bool(ObRemoteKeys.ADS_CONTENT_NATIVE),
                 adsFullScreenNative = bool(ObRemoteKeys.ADS_FULLSCREEN_NATIVE),
                 adsQuestionNative = bool(ObRemoteKeys.ADS_QUESTION_NATIVE),
                 adsQuestionInter = bool(ObRemoteKeys.ADS_QUESTION_INTER),
+                adsAppResume = bool(ObRemoteKeys.ADS_APP_RESUME),
                 adsSplashInterId = reader.string(ObRemoteKeys.ADS_SPLASH_INTER_ID.key)
                     ?: ObRemoteKeys.ADS_SPLASH_INTER_ID.default,
+                adsSplashInterIdOldUser = reader.string(ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.key)
+                    ?: ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.default,
+                interstitialIntervalSec = long(ObRemoteKeys.INTERSTITIAL_INTERVAL_SEC),
+                clickCapPerDay = long(ObRemoteKeys.CLICK_CAP_PER_DAY).toInt(),
                 splashMinDisplayMs = long(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS),
+                splashAdBudgetMs = long(ObRemoteKeys.SPLASH_AD_BUDGET_MS),
+                splashBannerWaitMs = long(ObRemoteKeys.SPLASH_BANNER_WAIT_MS),
                 skipButtonDelaySec = long(ObRemoteKeys.SKIP_BUTTON_DELAY_SEC),
                 fullScreenAutoDismissSec = long(ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC),
                 showSkipOb3 = bool(ObRemoteKeys.SHOW_SKIP_OB3),

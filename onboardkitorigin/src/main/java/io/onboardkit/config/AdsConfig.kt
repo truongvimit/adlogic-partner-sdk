@@ -1,36 +1,14 @@
 package io.onboardkit.config
 
-/**
- * How a placement spends its ad unit ids when it has more than one.
- *
- * Pick [CASCADE] unless you have a reason not to — it is the default and the safe choice.
- * This is unrelated to [AdLoadStrategy], which only decides *when* the splash starts loading.
- */
-enum class AdTierStrategy {
-    /**
-     * Try one id at a time, top to bottom, moving on only when the current one fails to fill.
-     *
-     * Costs one request per attempt and keeps each id's match rate honest, but a failed id adds
-     * its own timeout to the wait. Default; correct for every placement the user is not staring
-     * at a spinner for.
-     */
-    CASCADE,
-
-    /**
-     * Request every id at once and show the highest-priority one that filled.
-     *
-     * Fastest fill, but it spends a request on every id and drags down the match rate of the
-     * ids that lose the race. Reasonable on splash, where the wait is visible; wasteful deeper
-     * in the flow.
-     */
-    PARALLEL,
-}
+import io.onboardkit.ads.AdPlacement
+import io.onboardkit.core.StepId
 
 /**
  * The ad unit ids one placement may use, ordered highest floor first.
  *
- * You normally do not build this by hand. Prefer the named constructors, which make the floor
- * order impossible to get backwards:
+ * The provider walks them one at a time and stops at the first fill, so a lower floor is only
+ * requested once the one above it has failed. You normally do not build this by hand — prefer the
+ * named constructors, which make the floor order impossible to get backwards:
  *
  * ```
  * // one ad unit, no waterfall — the common case
@@ -48,13 +26,8 @@ enum class AdTierStrategy {
  */
 sealed interface AdUnitTiers {
 
-    /**
-     * The ids as declared, **highest floor first**. Position is priority: the first entry is
-     * requested first (or wins the race, under [AdTierStrategy.PARALLEL]).
-     */
+    /** The ids as declared, **highest floor first**. Position is request order. */
     val tiers: List<String>
-
-    val strategy: AdTierStrategy
 
     /** The ids a provider actually requests: [tiers] minus blanks and repeats. */
     val loadOrder: List<String> get() = tiers.filter { it.isNotBlank() }.distinct()
@@ -70,50 +43,40 @@ sealed interface AdUnitTiers {
 }
 
 /** Ad unit ids for a native placement. See [AdUnitTiers] for how to build one. */
-data class NativeAdUnit(
-    override val tiers: List<String>,
-    override val strategy: AdTierStrategy = AdTierStrategy.CASCADE,
-) : AdUnitTiers {
+data class NativeAdUnit(override val tiers: List<String>) : AdUnitTiers {
 
     /** A single ad unit id, no waterfall. */
     constructor(adUnitId: String) : this(listOf(adUnitId))
 
     companion object {
         /**
-         * A waterfall with its floors named, so the priority order cannot be swapped by
-         * accident. Arguments read in request order: high → medium → all-price.
+         * A waterfall with its floors named, so the priority order cannot be swapped by accident.
+         * Arguments read in request order: high → medium → all-price.
          */
         fun waterfall(
             highFloor: String,
             mediumFloor: String? = null,
             allPrice: String,
-            strategy: AdTierStrategy = AdTierStrategy.CASCADE,
-        ): NativeAdUnit =
-            NativeAdUnit(listOfNotNull(highFloor, mediumFloor, allPrice), strategy)
+        ): NativeAdUnit = NativeAdUnit(listOfNotNull(highFloor, mediumFloor, allPrice))
     }
 }
 
 /** Ad unit ids for an interstitial placement. See [AdUnitTiers] for how to build one. */
-data class InterstitialAdUnit(
-    override val tiers: List<String>,
-    override val strategy: AdTierStrategy = AdTierStrategy.CASCADE,
-) : AdUnitTiers {
+data class InterstitialAdUnit(override val tiers: List<String>) : AdUnitTiers {
 
     /** A single ad unit id, no waterfall. */
     constructor(adUnitId: String) : this(listOf(adUnitId))
 
     companion object {
         /**
-         * A waterfall with its floors named, so the priority order cannot be swapped by
-         * accident. Arguments read in request order: high → medium → all-price.
+         * A waterfall with its floors named, so the priority order cannot be swapped by accident.
+         * Arguments read in request order: high → medium → all-price.
          */
         fun waterfall(
             highFloor: String,
             mediumFloor: String? = null,
             allPrice: String,
-            strategy: AdTierStrategy = AdTierStrategy.CASCADE,
-        ): InterstitialAdUnit =
-            InterstitialAdUnit(listOfNotNull(highFloor, mediumFloor, allPrice), strategy)
+        ): InterstitialAdUnit = InterstitialAdUnit(listOfNotNull(highFloor, mediumFloor, allPrice))
     }
 }
 
@@ -152,15 +115,55 @@ data class AdsConfig(
      * first native for this one. Same screen, second impression — give it its own ad unit id.
      */
     val languageDupNative: NativeAdUnit? = null,
+    /** Shared by every content page that has no entry in [stepNatives]. */
     val contentStepNative: NativeAdUnit? = null,
     val fullScreenStepNative: NativeAdUnit? = null,
+    /**
+     * Per-page ad units, for apps that sell each onboarding page separately.
+     *
+     * A page with no entry here falls back to [contentStepNative] / [fullScreenStepNative], so
+     * declaring one page does not force you to declare them all.
+     *
+     * ```
+     * stepNatives = mapOf(
+     *     StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
+     *     StepId.OB2 to NativeAdUnit("…/3333"),
+     * )
+     * ```
+     */
+    val stepNatives: Map<StepId, NativeAdUnit> = emptyMap(),
     /** OB5 pool is its own field — the original reused OB3's config by accident. */
     val ob5Native: NativeAdUnit? = null,
     val questionNative: NativeAdUnit? = null,
     val questionInterstitial: InterstitialAdUnit? = null,
+    /** App-resume / app-open ad, shown when the app returns to the foreground. */
+    val appResume: InterstitialAdUnit? = null,
     val contentStepTemplate: NativeTemplate = NativeTemplate.CTA_TOP,
     val languageTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
     val questionTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
     val skipAdOnlyStepsWhenPremium: Boolean = true,
-)
+) {
+
+    /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */
+    fun nativeUnitFor(placement: AdPlacement): NativeAdUnit? = unitFor(placement) as? NativeAdUnit
+
+    /**
+     * The ad units a placement may spend, or `null` when the partner left the slot empty.
+     *
+     * One mapping for the whole SDK: the gate, the preload chain and the screens used to each
+     * reach into a different field, which is how OB5 ended up silently reusing OB3's pool.
+     */
+    fun unitFor(placement: AdPlacement): AdUnitTiers? = when (placement) {
+        AdPlacement.SplashBanner -> splashBanner?.let { NativeAdUnit(it.id) }
+        AdPlacement.SplashInterstitial -> splashInterstitial
+        AdPlacement.Language1 -> languageNative
+        AdPlacement.Language2 -> languageDupNative ?: languageNative
+        is AdPlacement.StepNative -> stepNatives[placement.stepId] ?: contentStepNative
+        is AdPlacement.StepFullScreen -> stepNatives[placement.stepId] ?: fullScreenStepNative
+        AdPlacement.Ob5 -> ob5Native ?: stepNatives[StepId.OB5] ?: fullScreenStepNative
+        AdPlacement.QuestionNative -> questionNative
+        AdPlacement.QuestionInterstitial -> questionInterstitial
+        AdPlacement.AppResume -> appResume
+    }
+}

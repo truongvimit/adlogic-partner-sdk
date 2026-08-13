@@ -7,22 +7,14 @@ import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.lifecycle.lifecycleScope
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.NativeAdRequest
-import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.tracked
-import io.onboardkit.ads.trackRequest
-import io.onboardkit.ads.trackSkipped
+import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.AdFullScreenStepDefinition
-import io.onboardkit.config.NativeTemplate
 import io.onboardkit.core.StepId
-import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObFragmentAdStepBinding
 import io.onboardkit.ui.pager.LazyStepFragment
-import io.trackkit.AdFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -67,21 +59,15 @@ class AdStepFragment : LazyStepFragment() {
     }
 
     override fun onStepFirstSelected() {
-        val activity = activity ?: return
-        OnboardingSdk.provider()?.suppressAppResume(activity.javaClass)
         requestAd()
         scheduleSkipButton()
     }
 
     override fun onStepSelected() {
-        val activity = activity ?: return
-        OnboardingSdk.provider()?.suppressAppResume(activity.javaClass)
         if (adBound) scheduleAutoNext()
     }
 
     override fun onStepUnselected(dwellMs: Long) {
-        val activity = activity ?: return
-        OnboardingSdk.provider()?.allowAppResume(activity.javaClass)
         skipJob?.cancel()
         autoNextJob?.cancel()
     }
@@ -92,65 +78,15 @@ class AdStepFragment : LazyStepFragment() {
     private fun requestAd() {
         val b = binding ?: return
         val activity = activity ?: return
-        val config = OnboardingSdk.configOrNull() ?: return
-        val provider = OnboardingSdk.provider()
-        val placement = AdPlacement.StepFullScreen(stepId)
-        val unit = config.ads.fullScreenStepNative
-        if (provider == null || unit == null) {
-            placement.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_UNIT)
-            showFallback()
-            return
-        }
-        if (!OnboardingSdk.policy().canShowNative(activity, placement)) {
-            placement.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.POLICY)
-            showFallback()
-            return
-        }
-        val listener = placement.tracked(
-            AdFormat.NATIVE_FULL_SCREEN,
-            object : AdEventListener {
-                override fun onLoaded() {
-                    activity.runOnUiThread { bindAd() }
-                }
-
-                override fun onFailedToLoad() {
-                    activity.runOnUiThread { onAdFailed() }
-                }
-
-                override fun onImpression() {
-                    activity.runOnUiThread { onAdImpression() }
-                }
-            },
+        activity.showNativeAd(
+            placement = AdPlacement.StepFullScreen(stepId),
+            unit = OnboardingSdk.configOrNull()?.ads?.fullScreenStepNative,
+            container = b.obNativeContainer,
+            shimmer = b.obNativeShimmer.root,
+            onBound = { adBound = true },
+            onShown = { onAdImpression() },
+            onUnavailable = { onAdFailed() },
         )
-        placement.trackRequest(AdFormat.NATIVE_FULL_SCREEN)
-        if (!bindAd(listener)) {
-            provider.preloadNative(
-                activity,
-                NativeAdRequest(
-                    placement,
-                    unit,
-                    NativeTemplates.layoutFor(NativeTemplate.FULL_SCREEN),
-                ),
-            )
-        }
-    }
-
-    private fun bindAd(listener: AdEventListener? = null): Boolean {
-        val b = binding ?: return false
-        val activity = activity ?: return false
-        if (adBound) return true
-        val bound = OnboardingSdk.provider()?.bindNative(
-            activity,
-            AdPlacement.StepFullScreen(stepId),
-            b.obNativeContainer,
-            b.obNativeShimmer.root,
-            listener,
-        ) == true
-        if (bound) {
-            adBound = true
-            onAdImpression()
-        }
-        return bound
     }
 
     /**
@@ -216,7 +152,6 @@ class AdStepFragment : LazyStepFragment() {
     override fun onDestroyView() {
         skipJob?.cancel()
         autoNextJob?.cancel()
-        activity?.let { OnboardingSdk.provider()?.allowAppResume(it.javaClass) }
         binding = null
         adBound = false
         impressionHandled.set(false)

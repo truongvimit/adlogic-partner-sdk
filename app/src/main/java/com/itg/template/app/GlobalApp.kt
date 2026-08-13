@@ -13,7 +13,6 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.application.AdsMultiDexApplication
@@ -38,13 +37,11 @@ import io.trackkit.TrackkitEvents
 import io.trackkit.firebase.FirebaseSink
 import io.trackkit.sink.ConsoleSink
 import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.erain.ERainTuning
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
-import io.onboardkit.ui.language.ObLanguageActivity
-import io.onboardkit.ui.ob5.ObFullScreenAdActivity
-import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
-import io.onboardkit.ui.question.ObQuestionActivity
 import timber.log.Timber
+import java.util.Arrays
 import kotlin.jvm.java
 
 @HiltAndroidApp
@@ -132,21 +129,25 @@ class GlobalApp : AdsMultiDexApplication() {
         mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
         // No adjustTokenTiktok here: every impression path falls back to
         // adjustConfig.eventAdImpression (set above) — one token, one door.
-        mERainAdConfig.intervalInterstitialAd = 35
+        // 0 = the ads module enforces no interval of its own. Frequency is owned by OnboardKit's
+        // ob_ads_interstitial_interval_sec, which is remote-tunable and reports why an ad was
+        // skipped. With 35 here the module silently swallowed the splash interstitial on any
+        // relaunch inside 35s, and nothing downstream could tell that apart from a dismissal.
+        mERainAdConfig.intervalInterstitialAd = 0
 
         mERainAdConfig.idAdResume = ""
+        mERainAdConfig.listDeviceTest = listOf("1E25A7D66221E2116062EA114AFE2982")
 
         ERainAd.getInstance().init(this, mERainAdConfig)
 
-        Admob.getInstance().setDisableAdResumeWhenClickAds(true)
-        Admob.getInstance().setOpenActivityAfterShowInterAds(true)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ObLanguageActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ObOnboardingHostActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ObFullScreenAdActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ObQuestionActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
+        // Process-wide ad-module switches live in one place and are set once. Screen-by-screen
+        // toggling is what let a splash finish itself before its own interstitial could show.
+        ERainTuning.install()
 
+        // OnboardKit excludes its own screens from app-resume when they start, so only the
+        // app's own screens are listed here.
+        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
+        AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
     }
 
     private fun initOnboardKit() {

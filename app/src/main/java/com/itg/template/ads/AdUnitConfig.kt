@@ -17,8 +17,6 @@ data class AdUnitConfig(
      * exactly the legacy behaviour of [id] alone, so existing remote payloads keep working.
      */
     val ids: List<String> = emptyList(),
-    /** `cascade` (one tier at a time, default) or `parallel` (all tiers, highest fill wins). */
-    val tierStrategy: String = TIER_STRATEGY_CASCADE,
 ) {
 
     /**
@@ -33,12 +31,4 @@ data class AdUnitConfig(
 
     /** True when this unit is switched on and has at least one usable id. */
     val isUsable: Boolean get() = isEnable && waterfallIds.isNotEmpty()
-
-    val isParallelTiers: Boolean
-        get() = tierStrategy.equals(TIER_STRATEGY_PARALLEL, ignoreCase = true)
-
-    companion object {
-        const val TIER_STRATEGY_CASCADE = "cascade"
-        const val TIER_STRATEGY_PARALLEL = "parallel"
-    }
 }

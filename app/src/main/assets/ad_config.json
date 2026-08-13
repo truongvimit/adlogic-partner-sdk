@@ -21,7 +21,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_language_1_click": {
@@ -30,7 +35,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_language_2": {
@@ -39,7 +49,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_language_2_click": {
@@ -48,7 +63,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_onboarding_1_1": {
@@ -57,7 +77,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_onboarding_2_1": {
@@ -66,7 +91,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_onboarding_1_4": {
@@ -75,7 +105,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_onboarding_2_4": {
@@ -84,7 +119,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_onboarding_fullscreen_1_3": {
@@ -93,7 +133,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": true
   },
   "native_onboarding_fullscreen_2_3": {
@@ -102,7 +147,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": true
   },
   "native_onboarding_fullscreen_1_4": {
@@ -111,7 +161,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": true
   },
   "native_onboarding_fullscreen_2_4": {
@@ -120,7 +175,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": true
   },
   "native_permission": {
@@ -129,7 +189,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_home": {
@@ -138,7 +203,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "inter_onboarding": {
@@ -158,7 +228,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_confirm_uninstall": {
@@ -167,7 +242,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "native_welcome": {
@@ -176,7 +256,12 @@
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
-    "components": ["icon_headline", "body", "media", "cta"],
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   },
   "inter_welcome": {
@@ -187,6 +272,203 @@
   "reward_example": {
     "id": "ca-app-pub-3940256099942544/5224354917",
     "isEnable": true,
+    "enable_ua_check": false
+  },
+  "inter_splash_high": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "inter_back": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "native_lang_high": {
+    "id": "ca-app-pub-7208941695689653/1611434606",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_lang": {
+    "id": "ca-app-pub-7208941695689653/1611434606",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_lang_alt_high": {
+    "id": "ca-app-pub-7208941695689653/1519348533",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_lang_alt": {
+    "id": "ca-app-pub-7208941695689653/1519348533",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_ob1_high": {
+    "id": "ca-app-pub-7208941695689653/5251296713",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_ob1": {
+    "id": "ca-app-pub-7208941695689653/5251296713",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_ob2_high": {
+    "id": "ca-app-pub-7208941695689653/5251296713",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_ob2": {
+    "id": "ca-app-pub-7208941695689653/5251296713",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_ob3_high": {
+    "id": "ca-app-pub-7208941695689653/8727507290",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": true
+  },
+  "native_ob3": {
+    "id": "ca-app-pub-7208941695689653/8727507290",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": true
+  },
+  "native_fs_high": {
+    "id": "ca-app-pub-7208941695689653/8727507290",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": true
+  },
+  "native_fs": {
+    "id": "ca-app-pub-7208941695689653/8727507290",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": true
+  },
+  "inter_splash_high1": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "native_uninstall": {
+    "id": "ca-app-pub-7208941695689653/9849017274",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": "BOTTOM",
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
     "enable_ua_check": false
   }
 }

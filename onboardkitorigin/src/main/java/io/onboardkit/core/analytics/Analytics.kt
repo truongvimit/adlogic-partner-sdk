@@ -158,18 +158,6 @@ internal object StepExit {
     const val AUTO_DISMISS = "auto_dismiss"
 }
 
-/** Values of [AnalyticsEvent.AdSkipped.reason] — why no request was made. */
-internal object AdSkipReason {
-    /** Premium user, or a remote flag turned this slot off. */
-    const val POLICY = "policy"
-
-    /** No ad unit configured for the slot, or no provider installed. */
-    const val NO_UNIT = "no_ad_unit"
-
-    /** Allowed and requested, but nothing was buffered by the time the slot needed it. */
-    const val NOT_READY = "not_ready"
-}
-
 /** Drops null entries so an absent variant never lands in a bundle as the string "null". */
 private fun paramsOf(vararg pairs: Pair<String, Any?>): Map<String, Any> =
     pairs.mapNotNull { (key, value) -> value?.let { key to it } }.toMap()

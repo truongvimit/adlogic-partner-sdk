@@ -132,10 +132,13 @@ DevConfig.init(
    - `intervalInterstitialAd`
    - `idAdResume`
 4. `ERainAd.getInstance().init(this, mERainAdConfig)` call करें।
-5. resume/inter के extra rules apply करें:
-   - `Admob.getInstance().setDisableAdResumeWhenClickAds(true)`
-   - `Admob.getInstance().setOpenActivityAfterShowInterAds(true)`
-   - excluded screens के लिए `AppOpenManager.getInstance().disableAppResumeWithActivity(...)`।
+5. `ERainTuning.install()` call करें — **एक बार**, `ERainAd.init` के तुरंत बाद।
+   यह module के process-wide switches (`openActivityAfterShowInterAds`,
+   `disableAdResumeWhenClickAds`) को pin करता है। इन्हें ख़ुद मत set कीजिए: ये बदलते हैं कि एक
+   *callback का मतलब क्या है*, इसलिए हर screen पर toggle करने से process उसी हालत में छूट जाता है
+   जिसमें आख़िरी screen मरी थी — और दो toggle के बीच मरी screen उसे हमेशा के लिए ग़लत छोड़ देती है।
+6. `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` सिर्फ़ अपनी **app की** screens
+   के लिए। OnboardKit अपनी screens ख़ुद exclude कर लेता है।
 
 Reference snippet:
 ```kotlin
@@ -151,7 +154,9 @@ private fun initAds() {
 
     mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.intervalInterstitialAd = 35
+    // 0 = module apna interval lagu nahi karta; §3.2 dekhein
+    mERainAdConfig.intervalInterstitialAd = 0
+    // Khali id app-resume band kar deta hai — khali ad unit se request nahi jata
     mERainAdConfig.idAdResume = ""
 
     ERainAd.getInstance().init(this, mERainAdConfig)
@@ -223,9 +228,54 @@ Adjust **sink नहीं है** और यहाँ किसी wiring क�
 
 ## 2. Load/Show Ads by placement
 
+### 2.0 एक placement, कई ad unit id — waterfall
+
+एक placement एक ad unit id नहीं है, वह एक **क्रमबद्ध list** है: सबसे ऊँचा floor पहले, all-price
+आख़िर में। `AdWaterfall` एक बार में एक id request करता है और पहले fill पर रुक जाता है, इसलिए नीचे का
+floor तभी माँगा जाता है जब उसके ऊपर वाला fail हो चुका हो।
+
+```kotlin
+AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
+AdWaterfall.loadInterstitial(context, adUnitIds, callback)
+```
+
+एक ही id दें तो यह सामान्य load जैसा ही चलता है। खाली और दोहराए गए id हटा दिए जाते हैं, इसलिए अधूरा
+remote payload क्रम में छेद नहीं बना सकता। हर step `REQUEST_AD_TIMEOUT` (30 s) से बँधा है: जो floor
+कभी जवाब न दे, वह नीचे के floors को रोक नहीं सकता।
+
+यही **एकमात्र load path** है। `AdsManager` और OnboardKit दोनों इसी से जाते हैं, इसलिए वे अलग नहीं हो
+सकते। `ERainAd.loadNativeAdResultCallback` / `getInterstitialAds` को अकेले `config.id` के साथ मत
+बुलाइए — वह all-price floor खर्च करता है और ऊँचे floor को कभी छूता ही नहीं।
+
+#### Remote config में floors के नाम
+
+हर floor अपनी अलग key है। Suffix ही सीढ़ी का पायदान है:
+
+| Key | पायदान |
+|---|---|
+| `native_lang_high` | सबसे ऊँचा floor, पहले request |
+| `native_lang_high1` … `native_lang_high9` | आगे के floors, संख्या के क्रम में |
+| `native_lang` | all-price, हमेशा आख़िर में |
+
+`AdRemoteConfig.tiersFor("native_lang")` उस सीढ़ी को request order में बदल देता है। किसी placement
+में floor जोड़ना **remote-config change है, code change नहीं** — key declare कीजिए, वह waterfall
+में शामिल हो जाएगा। `_medium` जान‑बूझकर नहीं रखा गया: वह दूसरे नाम से `_high1` ही होता, और एक floor
+के दो नाम होने पर payload दोनों declare कर बैठता है।
+
+दस से ज़्यादा floors चाहिए, या क्रम high→low नहीं है? Id सीधे किसी एक key के `ids` array में डाल
+दीजिए — वह list ज्यों की त्यों waterfall मानी जाती है:
+
+```json
+"inter_splash": { "id": "…/allprice", "ids": ["…/high", "…/high1"], "isEnable": true }
+```
+
+> हर placement को उसके अपने ad unit id दीजिए। दो placements एक ही id साझा करें तो revenue reporting
+> में उन्हें अलग नहीं किया जा सकता: AdMob का paid-event callback सिर्फ़ ad unit जानता है, और
+> `PlacementRegistry` उसे उस placement से जोड़ता है जिसने **सबसे बाद में** request किया था।
+
 ### 2.1 Splash
 - Inter Splash:
-  - Condition: `AdRemoteConfig.inter_splash.isEnable == true` और network available
+  - Condition: `AdRemoteConfig.tiersFor("inter_splash")` ख़ाली न हो (कम से कम एक enabled floor) और network available
   - API: `ERainAd.getInstance().loadSplashInterstitialAds(...)`
   - successful load (`onAdLoaded`) के बाद `native_language` preload
 - Open Resume:
@@ -259,12 +309,37 @@ Adjust **sink नहीं है** और यहाँ किसी wiring क�
 ## 3. Global conditions for loading ads
 
 `AdsManager` में ad तभी load होगा जब सभी conditions pass हों:
-- `adUnitConfig.isEnable == true`
+- `adUnitConfig.isUsable` — enabled **और** कम से कम एक ग़ैर-खाली id हो
 - `!AppPurchase.getInstance().isPurchased(...)`
 - Network available
 - mandatory organic-gated placements के लिए: `getShouldDisplay*(config.enableUaCheck) == true`
 
-कोई भी condition fail होने पर native LiveData `null` emit करेगा, इसलिए UI ad container hide करेगा।
+कोई भी condition fail होने पर native LiveData `null` emit करेगा, इसलिए UI ad container hide करेगा,
+और कारण एक बार `AdTracking.skipped(...)` से report होता है।
+
+### 3.1 Consent हर request को gate करता है
+
+Consent flow के जवाब देने से पहले कोई ad request नहीं जा सकता — यह policy का नियम है, जीतने की दौड़
+नहीं। Splash इसे हल करके जवाब एक ही बार प्रकाशित करता है:
+
+```kotlin
+class SplashActivity : ObSplashActivity() {
+    override suspend fun onConsentRequired(): Boolean = /* true जब ads request किए जा सकें */
+}
+```
+
+`false` जवाब — या `consentTimeoutMs` के भीतर कोई जवाब न आना — `OnboardingSdk.setCanRequestAds(false)`
+बुलाता है, और तब हर placement load करने की जगह `consent_not_granted` report करता है। Flow फिर भी
+चलता है, बस बिना ads के। `ConsentHandler` UMP form **प्रति process एक बार** दिखाता है, इसलिए splash
+और बाद की स्क्रीन एक ही जवाब साझा करती हैं, दो बार नहीं पूछतीं।
+
+### 3.2 Interstitial frequency सिर्फ़ एक जगह
+
+`ERainAdConfig.intervalInterstitialAd = 0` ही रखिए। Module का अपना interval interstitial को चुपचाप
+निगल जाता है — caller उसे dismissal से अलग नहीं कर पाता — इसलिए frequency का मालिक
+`ob_ads_interstitial_interval_sec` है: remote से बदलने योग्य, और block करने पर
+`interval_not_elapsed` report करता है। एक नियम के लिए दो cap वह bug है जो एक तिमाही तक किसी को नहीं
+मिलता।
 
 ## 4. `getShouldDisplay*` standard per placement (100% mandatory)
 

@@ -1,6 +1,7 @@
 package io.onboardkit.flow
 
 import io.onboardkit.config.AdFullScreenStepDefinition
+import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.QuestionConfig
 import io.onboardkit.config.QuestionOption
@@ -127,6 +128,27 @@ class FlowNavigatorTest {
     fun `disabling one step drops it from order without reordering`() {
         val enabled = FlowNavigator.enabledSteps(config, flags.copy(enableStepOb2 = false))
         assertEquals(listOf(StepId.OB1, StepId.OB3, StepId.OB4), enabled)
+    }
+
+    @Test
+    fun `premium users get no ad-only page`() {
+        // OB3 is the AD_FULL_SCREEN page of the default config
+        assertEquals(
+            listOf(StepId.OB1, StepId.OB2, StepId.OB4),
+            FlowNavigator.enabledSteps(config, flags, isPremium = true),
+        )
+    }
+
+    @Test
+    fun `premium keeps ad-only pages when the app opted out of skipping them`() {
+        val keepAll = onboardKitConfig {
+            defaultSteps()
+            ads = AdsConfig(skipAdOnlyStepsWhenPremium = false)
+        }.getOrThrow()
+        assertEquals(
+            listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4),
+            FlowNavigator.enabledSteps(keepAll, flags, isPremium = true),
+        )
     }
 
     @Test

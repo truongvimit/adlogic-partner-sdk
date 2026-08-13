@@ -9,7 +9,7 @@ import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
 
-/** Callbacks a screen can observe for one placement. All optional. */
+/** Load-time callbacks a screen can observe for one placement. All optional. */
 interface AdEventListener {
     fun onLoaded() {}
     fun onFailedToLoad() {}
@@ -24,27 +24,26 @@ data class NativeAdRequest(
 )
 
 /**
- * Vendor seam: the flow talks to this interface only. The SDK ships [io.onboardkit.ads.erain.ERainAdProvider]
- * bridging the project's ads module; apps may inject any other implementation (or none).
+ * Vendor seam: the flow talks to this interface only.
+ *
+ * The SDK ships [io.onboardkit.ads.erain.ERainAdProvider], which bridges the project's `:ads`
+ * module (AdMob legacy). Apps may inject any other implementation, or none at all — every
+ * placement then reports [AdSkipReason.NO_PROVIDER] instead of failing.
  */
 interface OnboardingAdProvider {
 
     fun isPremium(context: Context): Boolean
 
-    /** Fire-and-forget waterfall preload (high floor first, then all-price). Idempotent. */
+    /** Fire-and-forget waterfall preload, highest floor first. Idempotent per placement. */
     fun preloadNative(activity: Activity, request: NativeAdRequest)
 
     fun isNativeReady(placement: AdPlacement): Boolean
 
     fun isNativeLoading(placement: AdPlacement): Boolean
 
-    /** Preload is worthwhile only when nothing is buffered and nothing is in flight. */
-    fun shouldPreloadNative(placement: AdPlacement): Boolean =
-        !isNativeReady(placement) && !isNativeLoading(placement)
-
     /**
      * Binds the buffered native into [container], swapping [shimmer] out.
-     * Returns false when no ad is available (caller keeps or hides the shimmer).
+     * Returns false when nothing is buffered — the caller keeps or hides the shimmer.
      */
     fun bindNative(
         activity: Activity,
@@ -66,16 +65,29 @@ interface OnboardingAdProvider {
 
     fun isInterstitialReady(placement: AdPlacement): Boolean
 
-    /** Shows if ready, otherwise invokes [onFinished] immediately. Never blocks the flow. */
-    fun showInterstitial(activity: Activity, placement: AdPlacement, onFinished: () -> Unit)
+    /**
+     * Shows the buffered interstitial for [placement].
+     *
+     * Must call [ObInterstitialCallback.onNextAction] at most once, and exactly one terminal
+     * callback. Callers rely on "the ad is on screen" and "the ad is gone" being two distinct
+     * moments — see [showInterstitial].
+     */
+    fun showInterstitial(
+        activity: Activity,
+        placement: AdPlacement,
+        callback: ObInterstitialCallback,
+    )
+
+    /** Wall clock of the last interstitial impression, `0` when the provider does not track it. */
+    fun lastInterstitialShownAtMs(context: Context): Long = 0L
+
+    /** Clicks spent on [adUnitId] in the current 24 h window, `0` when unknown. */
+    fun clicksToday(context: Context, adUnitId: String): Int = 0
 
     /** Requires the ads-module banner include (`banner_container` + `shimmer_container_banner`). */
     fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener? = null)
 
-    /** Blocks app-resume ads while a full-screen native is visible (no stacked ads). */
     fun suppressAppResume(activityClass: Class<out Activity>)
-
-    fun allowAppResume(activityClass: Class<out Activity>)
 
     fun releaseAll()
 }

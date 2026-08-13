@@ -45,22 +45,28 @@ internal class TrackedAdListener(
     }
 
     override fun onClicked() {
+        // Every click in the flow passes through here, which makes it the one place that can tell
+        // the resume guard the user is about to leave for an ad — a screen-by-screen hook would
+        // be one missed override away from an app-resume ad greeting them on the way back.
+        OnboardingSdk.appResume().onAdClicked()
         delegate?.onClicked()
     }
 }
 
 /** Wraps [listener] so this placement's load outcome and first impression reach analytics. */
 internal fun AdPlacement.tracked(
-    format: AdFormat,
     listener: AdEventListener? = null,
 ): AdEventListener = TrackedAdListener(key, format, listener)
 
 /** A load is about to go out for this placement. */
-internal fun AdPlacement.trackRequest(format: AdFormat) {
+internal fun AdPlacement.trackRequest() {
     OnboardingSdk.track(AnalyticsEvent.AdRequested(key, format))
 }
 
-/** Policy declined this placement before any request went out. */
-internal fun AdPlacement.trackSkipped(format: AdFormat, reason: String) {
-    OnboardingSdk.track(AnalyticsEvent.AdSkipped(key, format, reason))
+/**
+ * No ad was shown for this placement. [reason] is the precise cause, not a bucket — a dashboard
+ * that cannot tell "premium" from "no fill" cannot act on either.
+ */
+internal fun AdPlacement.trackSkipped(reason: AdSkipReason) {
+    OnboardingSdk.track(AnalyticsEvent.AdSkipped(key, format, reason.key))
 }

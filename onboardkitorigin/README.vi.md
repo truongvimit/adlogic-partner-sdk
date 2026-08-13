@@ -122,19 +122,67 @@ steps(
 
 **Thứ tự step cố định trong code**; remote config chỉ có thể tắt một step, không bao giờ đổi thứ tự.
 Đây là chủ đích — một danh sách sắp xếp được từ remote chính là cách SDK bị audit bắn nhầm event
-hoàn thành của step khác khi có step bị tắt.
+hoàn thành của step khác khi có step bị tắt. Một step được bật/tắt theo `StepId` của nó:
+`StepId.OB1` đọc `ob_enable_step_ob1`, tương tự tới OB5.
+
+#### Ad unit riêng từng trang, và cái bẫy đánh số
+
+`contentStepNative` là pool dùng chung cho các trang content. Muốn bán riêng từng trang thì khai
+entry riêng cho trang đó — trang nào không khai sẽ rơi về pool chung, nên khai một trang không bắt
+bạn phải khai hết:
+
+```kotlin
+ads = AdsConfig(
+    contentStepNative = NativeAdUnit("…/shared"),      // dùng cho trang không có entry dưới đây
+    stepNatives = mapOf(
+        StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
+        StepId.OB2 to NativeAdUnit("…/3333"),
+    ),
+)
+```
+
+Chú ý cách đánh số. `StepId` đếm **vị trí trong flow**, và trang ad-only chiếm một vị trí — nên với
+bố cục mặc định OB1, OB2, **OB3 = trang ad full-screen**, OB4, thì trang *content* thứ ba là
+`StepId.OB4`. Nếu remote key của bạn đếm theo trang content (`native_ob1..3`) thì hai bên không
+khớp, và `StepId.OB3 to native("native_fs")` đọc lên y như gõ nhầm. Đặt tên vai trò một lần, ngay
+chỗ khai flow, thì phần còn lại của file hết nói dối:
+
+```kotlin
+private object Page {
+    val CONTENT_1      = StepId.OB1
+    val CONTENT_2      = StepId.OB2
+    val AD_FULL_SCREEN = StepId.OB3
+    val CONTENT_3      = StepId.OB4
+}
+```
+
+Mọi unit ở trên đều là **waterfall**: danh sách xếp tầng cao trước, provider đi từng id một, 30 s mỗi
+tầng, dừng ở tầng đầu tiên fill được. `NativeAdUnit("id")` chỉ là waterfall một tầng.
+
+#### Ad được request lúc nào
+
+Chuỗi preload chạy trước một màn, riêng trang ad-only chạy trước hai: nó không có nội dung nào của
+riêng nó, nên tới nơi mà ad chưa fill là user ngồi nhìn spinner.
+
+| Khi user đang ở | SDK request |
+|---|---|
+| Splash (sau remote) | native language, native step đầu, banner + interstitial splash |
+| Language | native language thứ hai, native step đầu |
+| Step *n* | step *n+1*, cộng thêm step ad-only kế tiếp dù nó ở đâu |
+| Step cuối | OB5 và question |
 
 ### 2.3 Splash — kế thừa, đừng chép
 
-Activity launcher của bạn kế thừa `ObSplashActivity`. Phần định thời, bốn tác vụ chạy song song, hàng
-rào đồng bộ và interstitial đã nằm sẵn bên trong; bạn chỉ điền các hook cần dùng.
+Activity launcher của bạn kế thừa `ObSplashActivity`. Chuỗi xử lý — consent, fetch remote, request
+ads, billing, thời gian hiện tối thiểu — đã nằm sẵn bên trong; bạn chỉ điền các hook cần dùng.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
 
-    override suspend fun onConsentRequired() {
-        // Hiện UMP ở đây; return khi đã có kết quả. Vẫn có timeout cứng bao ngoài.
+    /** Trả về "ads đã được phép request chưa". Hiện UMP ở đây. */
+    override suspend fun onConsentRequired(): Boolean {
         // Gọi Tracker.setConsent(analytics, ads) đúng một lần từ callback consent.
+        return userGrantedConsent
     }
 
     override suspend fun onInitBilling() { /* khởi tạo AppPurchase */ }
@@ -142,6 +190,11 @@ class SplashActivity : ObSplashActivity() {
     override fun onRemoteFetched() { /* remote key riêng của bạn đã sẵn sàng */ }
 }
 ```
+
+`onConsentRequired` là cổng chặn cho **mọi** ad trong flow, không riêng cái ở splash. Trả `false` —
+hoặc không trả lời trong `consentTimeoutMs` — sẽ chạy cả onboarding không ad thay vì request khi
+chưa có câu trả lời; mỗi vị trí báo `consent_not_granted` nên việc bỏ qua là thấy được chứ không im
+lặng. Fetch remote chạy song song với consent (nó không request ad nào); còn load ad thì không.
 
 Khai nó là launcher trong manifest như bình thường. **Không** tự gọi `OnboardingSdk.start()` —
 `ObSplashActivity` gọi khi pipeline của nó xong.
@@ -210,6 +263,44 @@ Template native dùng id chuẩn của AdMob (`ad_headline`, `ad_media`, `ad_cal
 
 ---
 
+## 4.1 Show ad từ màn của riêng bạn
+
+Bạn không cần phần này cho flow có sẵn — các màn của SDK tự load và show ad của chúng. Phần này dành
+cho màn bạn tự thêm vào flow. Có đúng hai entry point, không có gì khác:
+
+```kotlin
+// Full-screen ad. Hai mốc, vì chúng không phải cùng một mốc.
+showInterstitial(
+    AdPlacement.SplashInterstitial,
+    onNext = { startNextScreen() },   // ad đã lên: start đích DƯỚI nó
+    onFinished = { finish() },        // ad đã đóng: lúc này mới finish màn hiện tại
+)
+
+// Native slot
+showNativeAd(
+    placement = AdPlacement.QuestionNative,
+    unit = config.ads.questionNative,
+    container = binding.nativeContainer,
+    shimmer = binding.nativeShimmer.root,
+    onUnavailable = { binding.adBlock.isVisible = false },
+)
+```
+
+Start đích ở `onNext` cho nó trọn thời gian ad hiển thị để inflate và bind, nên khi ad đóng là nó đã
+vẽ xong. Cả hai callback chạy **tối đa một lần**, `onNext` luôn trước `onFinished`, trên mọi đường —
+kể cả đường không có ad nào. Màn của bạn không cần cờ chống gọi hai lần.
+
+Nếu bước kế chỉ quyết định được sau ad — ví dụ nhánh paywall — thì bỏ `onNext`, làm hết trong
+`onFinished`. Cái giá là user thấy khựng một nhịp; cái được là không start một đích có thể không dùng.
+
+Tuyệt đối không gọi `finish()` trong `onNext`: Activity truyền vào `show()` phải sống lâu hơn ad,
+finish ở đó là giết đúng cái impression bạn vừa tốn tiền load.
+
+Muốn hỏi trước khi làm: `OnboardingSdk.guard().skipReason(context, placement)` trả `null` khi được
+show, hoặc trả đúng lý do khi không.
+
+---
+
 ## 5. Remote config key
 
 Tất cả đều có tiền tố `ob_` nên không đụng namespace remote của app bạn. Giá trị mặc định nằm trong
@@ -218,8 +309,10 @@ code (`ObRemoteKeys`) — không có file defaults XML nào phải đồng bộ.
 **Kill switch** `ob_enable_all_ads`, `ob_enable_ui_content`
 **Steps** `ob_enable_step_ob1`…`ob5`, `ob_enable_question`, `ob_enable_question_old_user`
 **Language** `ob_enable_language_native_2`, `ob_pass_lfo_if_completed`, `ob_language_supported_codes` (CSV)
-**Ads** `ob_reuse_splash_inter`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_splash_inter_id`
-**Thời gian** `ob_splash_min_display_ms`, `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
+**Bật/tắt ads** `ob_reuse_splash_inter`, `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled`
+**Override ad unit** `ob_ads_splash_inter_id`, `ob_ads_splash_inter_id_old_user` (rỗng = dùng id compile-time)
+**Tần suất** `ob_ads_interstitial_interval_sec`, `ob_ads_click_cap_per_day` — cả hai mặc định `0`, nghĩa là tắt
+**Thời gian** `ob_splash_min_display_ms` (3000), `ob_splash_ad_budget_ms` (60000), `ob_splash_banner_wait_ms` (0), `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
 **Nút skip** `ob_show_skip_ob3`, `ob_show_skip_ob5`
 **Template** `ob_native_template_{content,language,question}` = `cta_top` | `cta_bottom` | `compact`
 **UI điều khiển từ server** `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`

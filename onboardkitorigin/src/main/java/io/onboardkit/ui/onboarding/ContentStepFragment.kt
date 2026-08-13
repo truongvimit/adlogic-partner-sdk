@@ -11,22 +11,15 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.bumptech.glide.Glide
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
-import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.NativeAdRequest
-import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.tracked
-import io.onboardkit.ads.trackRequest
-import io.onboardkit.ads.trackSkipped
+import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.core.StepId
-import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.databinding.ObFragmentContentStepBinding
 import io.onboardkit.remote.uiconfig.UiStepStyle
 import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
-import io.trackkit.AdFormat
 
 /**
  * Content step (OB1/OB2/OB4 style). Layout resolves in three tiers: app-injected layout →
@@ -150,60 +143,15 @@ class ContentStepFragment : LazyStepFragment() {
     private fun requestNativeAd() {
         val b = binding ?: return
         val activity = activity ?: return
-        val config = OnboardingSdk.configOrNull() ?: return
-        val provider = OnboardingSdk.provider()
-        val placement = AdPlacement.StepNative(stepId)
-        val unit = config.ads.contentStepNative
-        if (provider == null || unit == null) {
-            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.NO_UNIT)
-            b.obAdBlock.visibility = View.GONE
-            return
-        }
-        if (!OnboardingSdk.policy().canShowNative(activity, placement)) {
-            placement.trackSkipped(AdFormat.NATIVE, AdSkipReason.POLICY)
-            b.obAdBlock.visibility = View.GONE
-            return
-        }
-        val listener = placement.tracked(
-            AdFormat.NATIVE,
-            object : AdEventListener {
-                override fun onLoaded() {
-                    activity.runOnUiThread { bindAd() }
-                }
-
-                override fun onFailedToLoad() {
-                    activity.runOnUiThread {
-                        if (!adBound) binding?.obAdBlock?.visibility = View.GONE
-                    }
-                }
-            },
+        if (adBound) return
+        activity.showNativeAd(
+            placement = AdPlacement.StepNative(stepId),
+            unit = OnboardingSdk.configOrNull()?.ads?.contentStepNative,
+            container = b.obNativeContainer,
+            shimmer = b.obNativeShimmer.root,
+            onBound = { adBound = true },
+            onUnavailable = { if (!adBound) binding?.obAdBlock?.visibility = View.GONE },
         )
-        placement.trackRequest(AdFormat.NATIVE)
-        if (!bindAd(listener)) {
-            val template = NativeTemplates.fromRemote(
-                OnboardingSdk.flags().templateContent,
-                config.ads.contentStepTemplate,
-            )
-            provider.preloadNative(
-                activity,
-                NativeAdRequest(placement, unit, NativeTemplates.layoutFor(template)),
-            )
-        }
-    }
-
-    private fun bindAd(listener: AdEventListener? = null): Boolean {
-        val b = binding ?: return false
-        val activity = activity ?: return false
-        if (adBound) return true
-        val bound = OnboardingSdk.provider()?.bindNative(
-            activity,
-            AdPlacement.StepNative(stepId),
-            b.obNativeContainer,
-            b.obNativeShimmer.root,
-            listener,
-        ) == true
-        if (bound) adBound = true
-        return bound
     }
 
     private fun startVideoIfAny() {

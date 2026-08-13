@@ -14,6 +14,26 @@ data class AdRemoteConfig(
         private const val RELEASE_FILE_NAME = "ad_config.json"
         private const val DEBUG_FILE_NAME = "ad_config_debug.json"
 
+        /** How deep the numbered rungs go: `_high1`…`_high9`. */
+        private const val MAX_NUMBERED_FLOORS = 9
+
+        /**
+         * Every floor key a placement may declare, in request order:
+         * `_high`, `_high1`…`_high9`, then the bare key.
+         *
+         * One named rung and a number is the whole vocabulary — a separate `_medium` would only
+         * be `_high1` under another name, and two ways to spell the same floor is how a payload
+         * ends up declaring both. The bare key is always the all-price floor and always last.
+         *
+         * Only keys that exist are read, so a placement with two floors costs two lookups. The
+         * audited SDK numbers its floors the same way (`_high`, `_high1`, `_high2`).
+         *
+         * Need more than ten floors, or an order that is not high→low? Put the ids straight into
+         * one key's `ids` array — that list is taken as the waterfall, verbatim and unlimited.
+         */
+        private val FLOOR_SUFFIXES: List<String> =
+            listOf("_high") + (1..MAX_NUMBERED_FLOORS).map { "_high$it" } + ""
+
         @Volatile
         private var instance: AdRemoteConfig? = null
 
@@ -116,6 +136,30 @@ data class AdRemoteConfig(
             return fromAssets(context, fileName)
         }
     }
+
+    /**
+     * The ad unit ids for [baseKey], highest floor first.
+     *
+     * Remote config spells a waterfall as one key per floor — `<key>_high`, `<key>_high1`, …,
+     * `<key>` — rather than a list inside one key, so this is what turns that convention into
+     * request order. A placement uses however many floors it actually declares: missing or
+     * disabled ones are simply absent, and one with no usable floor returns an empty list.
+     *
+     * ```
+     * tiersFor("inter_splash")  // [inter_splash_high, inter_splash_high1, inter_splash]
+     * tiersFor("native_lang")   // [native_lang_high, native_lang]
+     * tiersFor("banner_home")   // [banner_home] — single floor, still valid
+     * ```
+     *
+     * Adding a floor to every placement at once is a one-line change to [FLOOR_SUFFIXES]; adding
+     * one to a single placement needs no code at all, only the remote key.
+     */
+    fun tiersFor(baseKey: String): List<String> =
+        FLOOR_SUFFIXES
+            .mapNotNull { suffix -> ads[baseKey + suffix] }
+            .filter { it.isUsable }
+            .flatMap { it.waterfallIds }
+            .distinct()
 
     private fun getAdUnit(key: String): AdUnitConfig {
         val adUnitConfig = ads[key]

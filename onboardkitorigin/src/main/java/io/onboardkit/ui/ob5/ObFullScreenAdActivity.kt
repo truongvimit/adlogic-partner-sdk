@@ -6,16 +6,12 @@ import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.lifecycleScope
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.NativeAdRequest
-import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.tracked
-import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackSkipped
-import io.onboardkit.config.NativeTemplate
+import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
-import io.onboardkit.core.analytics.AdSkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
@@ -24,7 +20,6 @@ import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
-import io.trackkit.AdFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,8 +50,8 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         binding = ObActivityFullscreenAdBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        if (!sdk.policy().canShowNative(this, AdPlacement.Ob5)) {
-            AdPlacement.Ob5.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.POLICY)
+        sdk.guard().skipReason(this, AdPlacement.Ob5)?.let { reason ->
+            AdPlacement.Ob5.trackSkipped(reason)
             navigateNext(StepExit.SKIP)
             return
         }
@@ -70,7 +65,6 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
 
-        sdk.provider()?.suppressAppResume(javaClass)
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()
@@ -79,55 +73,21 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     private fun requestAd() {
-        val config = sdk.requireConfig()
-        val provider = sdk.provider()
-        val unit = config.ads.ob5Native ?: config.ads.fullScreenStepNative
-        if (provider == null || unit == null) {
-            AdPlacement.Ob5.trackSkipped(AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_UNIT)
-            navigateNext(StepExit.AD_FAILED)
-            return
-        }
-        val listener = AdPlacement.Ob5.tracked(
-            AdFormat.NATIVE_FULL_SCREEN,
-            object : AdEventListener {
-                override fun onLoaded() {
-                    runOnUiThread { bindAd() }
-                }
-
-                override fun onFailedToLoad() {
-                    runOnUiThread { showSkipNow() }
-                }
+        showNativeAd(
+            placement = AdPlacement.Ob5,
+            unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.Ob5),
+            container = binding.obNativeContainer,
+            shimmer = binding.obNativeShimmer.root,
+            onBound = {
+                adBound = true
+                OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.Ob5.key))
+            },
+            // Nothing configured means this screen has no reason to exist; a failed load still
+            // leaves a screen the user must be able to leave.
+            onUnavailable = { reason ->
+                if (reason == AdSkipReason.NO_AD_UNIT) navigateNext(StepExit.AD_FAILED) else showSkipNow()
             },
         )
-        AdPlacement.Ob5.trackRequest(AdFormat.NATIVE_FULL_SCREEN)
-        if (!bindAd(listener)) {
-            provider.preloadNative(
-                this,
-                NativeAdRequest(
-                    AdPlacement.Ob5,
-                    unit,
-                    NativeTemplates.layoutFor(NativeTemplate.FULL_SCREEN),
-                ),
-            )
-        }
-    }
-
-    private fun bindAd(listener: AdEventListener? = null): Boolean {
-        if (adBound) return true
-        val bound = sdk.provider()?.bindNative(
-            this,
-            AdPlacement.Ob5,
-            binding.obNativeContainer,
-            binding.obNativeShimmer.root,
-            listener,
-        ) == true
-        if (bound) {
-            adBound = true
-            // The ad_show event itself is latched inside the tracked listener, which bindNative
-            // notifies; only the SDK-facing event bus is fed here.
-            OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.Ob5.key))
-        }
-        return bound
     }
 
     private fun scheduleSkip() {
@@ -157,6 +117,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     private fun navigateNext(exitReason: String) {
+        ObLog.d(ObLog.Section.NAV, "from=ob5 exit=$exitReason")
         if (!navigated.compareAndSet(false, true)) return
         skipJob?.cancel()
         autoDismissJob?.cancel()
@@ -187,7 +148,6 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     override fun onDestroy() {
         skipJob?.cancel()
         autoDismissJob?.cancel()
-        sdk.provider()?.allowAppResume(javaClass)
         sdk.provider()?.releaseNative(AdPlacement.Ob5)
         super.onDestroy()
     }

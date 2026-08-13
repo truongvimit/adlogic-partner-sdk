@@ -122,19 +122,68 @@ steps(
 
 **Steps का क्रम code में तय है**; remote config सिर्फ़ किसी step को बंद कर सकता है, क्रम कभी नहीं
 बदल सकता। यह जानबूझकर है — remote से पुनःक्रमित होने वाली सूची ही वह कारण थी जिससे audit किया गया
-SDK, कोई step बंद होने पर ग़लत step का completion event भेजने लगता था।
+SDK, कोई step बंद होने पर ग़लत step का completion event भेजने लगता था। Step अपने `StepId` से
+toggle होता है: `StepId.OB1` `ob_enable_step_ob1` पढ़ता है, इसी तरह OB5 तक।
+
+#### प्रति-page ad units, और numbering का जाल
+
+`contentStepNative` content pages का साझा pool है। किसी page को अलग बेचना हो तो उसे अपनी entry
+दीजिए — जो listed नहीं है वह साझा pool पर लौट आता है, इसलिए एक page declare करने से सब declare
+करना ज़रूरी नहीं:
+
+```kotlin
+ads = AdsConfig(
+    contentStepNative = NativeAdUnit("…/shared"),      // नीचे entry न रखने वाले pages इसे लेते हैं
+    stepNatives = mapOf(
+        StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
+        StepId.OB2 to NativeAdUnit("…/3333"),
+    ),
+)
+```
+
+Numbering पर ध्यान दीजिए। `StepId` **flow में position** गिनता है, और ad-only page उनमें से एक जगह
+घेरता है — इसलिए default OB1, OB2, **OB3 = full-screen ad**, OB4 में तीसरा *content* page
+`StepId.OB4` है। अगर आपकी remote keys content pages गिनती हैं (`native_ob1..3`) तो दोनों मेल नहीं
+खाएँगी, और `StepId.OB3 to native("native_fs")` typo जैसा दिखेगा। भूमिकाओं के नाम एक बार, वहीं रखिए
+जहाँ flow declare होता है — बाक़ी फ़ाइल झूठ बोलना बंद कर देगी:
+
+```kotlin
+private object Page {
+    val CONTENT_1      = StepId.OB1
+    val CONTENT_2      = StepId.OB2
+    val AD_FULL_SCREEN = StepId.OB3
+    val CONTENT_3      = StepId.OB4
+}
+```
+
+ऊपर की हर unit एक **waterfall** है: list सबसे ऊँचे floor से शुरू होती है, provider एक बार में एक id
+लेता है, प्रति floor 30 s, और पहले fill पर रुक जाता है। `NativeAdUnit("id")` बस एक-floor वाला
+waterfall है।
+
+#### Ads कब request होते हैं
+
+Preload chain एक screen आगे चलती है, और ad-only page के लिए दो: उसके पास अपना कोई content नहीं है,
+इसलिए बिना भरे ad के वहाँ पहुँचना user को spinner पर छोड़ देता है।
+
+| User जिस screen पर है | SDK क्या request करता है |
+|---|---|
+| Splash (remote के बाद) | language native, पहला step native, splash banner + interstitial |
+| Language | दूसरा language native, पहला step native |
+| Step *n* | step *n+1*, और अगला ad-only step जहाँ भी हो |
+| आख़िरी step | OB5 और question |
 
 ### 2.3 Splash — subclass कीजिए, copy नहीं
 
-आपकी launcher activity `ObSplashActivity` को extend करती है। timing, चार समानांतर tasks, barrier
-और interstitial सब पहले से अंदर हैं; आप बस ज़रूरी hooks भरते हैं।
+आपकी launcher activity `ObSplashActivity` को extend करती है। पूरा क्रम — consent, remote fetch, ad
+requests, billing, minimum display — पहले से अंदर है; आप बस ज़रूरी hooks भरते हैं।
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
 
-    override suspend fun onConsentRequired() {
-        // UMP यहाँ दिखाइए; नतीजा आने पर return कीजिए। बाहर एक hard timeout फिर भी लगा रहता है।
+    /** लौटाइए कि अब ads request किए जा सकते हैं या नहीं। UMP यहाँ दिखाइए। */
+    override suspend fun onConsentRequired(): Boolean {
         // अपने consent callback से Tracker.setConsent(analytics, ads) ठीक एक बार बुलाइए।
+        return userGrantedConsent
     }
 
     override suspend fun onInitBilling() { /* AppPurchase init */ }
@@ -142,6 +191,11 @@ class SplashActivity : ObSplashActivity() {
     override fun onRemoteFetched() { /* आपकी अपनी remote keys तैयार हैं */ }
 }
 ```
+
+`onConsentRequired` पूरे flow के **हर** ad का gate है, सिर्फ़ splash वाले का नहीं। `false` लौटाना —
+या `consentTimeoutMs` के भीतर न लौटना — पूरे onboarding को बिना ads चलाता है, बजाय बिना जवाब के
+request करने के; हर placement `consent_not_granted` report करता है ताकि skip चुपचाप न रहे। Remote
+fetch consent के साथ-साथ चलता है (वह कोई ad request नहीं करता); ad loads नहीं चलते।
 
 इसे manifest में हमेशा की तरह launcher घोषित कीजिए। `OnboardingSdk.start()` **खुद मत बुलाइए** —
 `ObSplashActivity` अपना pipeline पूरा होते ही बुला देता है।
@@ -210,6 +264,45 @@ Native templates मानक AdMob ids (`ad_headline`, `ad_media`, `ad_call_to_
 
 ---
 
+## 4.1 अपनी screen से ad दिखाना
+
+Built-in flow के लिए इसकी ज़रूरत नहीं — SDK की screens अपने ads ख़ुद load और show करती हैं। यह उस
+screen के लिए है जो आप flow के अंदर जोड़ते हैं। सिर्फ़ दो entry points हैं, और कुछ नहीं:
+
+```kotlin
+// Full-screen ad. दो पल, क्योंकि वे एक ही पल नहीं हैं।
+showInterstitial(
+    AdPlacement.SplashInterstitial,
+    onNext = { startNextScreen() },   // ad ऊपर है: destination उसके नीचे start कीजिए
+    onFinished = { finish() },        // ad जा चुका: तभी यह screen finish कीजिए
+)
+
+// Native slot
+showNativeAd(
+    placement = AdPlacement.QuestionNative,
+    unit = config.ads.questionNative,
+    container = binding.nativeContainer,
+    shimmer = binding.nativeShimmer.root,
+    onUnavailable = { binding.adBlock.isVisible = false },
+)
+```
+
+`onNext` पर destination start करने से उसे ad के पूरे display time में inflate और bind होने का मौक़ा
+मिलता है, इसलिए ad बंद होते ही वह तैयार रहती है। दोनों callbacks **ज़्यादा से ज़्यादा एक बार** चलते
+हैं, `onNext` हमेशा `onFinished` से पहले, हर रास्ते पर — उन रास्तों पर भी जहाँ कोई ad आता ही नहीं।
+आपकी screen को अपना कोई guard नहीं चाहिए।
+
+अगला क़दम ad के बाद ही तय होता है — जैसे paywall — तो `onNext` छोड़ दीजिए और काम `onFinished` में
+कीजिए। क़ीमत है एक दिखने वाला ठहराव; फ़ायदा है ऐसी destination start न करना जो शायद चाहिए ही नहीं।
+
+`onNext` से `finish()` कभी मत बुलाइए: `show()` को दी गई Activity को ad से ज़्यादा जीना है, वहाँ
+finish करना उसी impression को मार देता है जिसे load करने के पैसे आपने अभी दिए।
+
+करने से पहले पूछना हो: `OnboardingSdk.guard().skipReason(context, placement)` ad दिखाया जा सकता है
+तो `null` लौटाता है, वरना ठीक-ठीक कारण।
+
+---
+
 ## 5. Remote config keys
 
 सभी keys पर `ob_` prefix है ताकि आपके app के अपने namespace से टकराव न हो। Default values code में
@@ -218,8 +311,10 @@ Native templates मानक AdMob ids (`ad_headline`, `ad_media`, `ad_call_to_
 **Kill switches** `ob_enable_all_ads`, `ob_enable_ui_content`
 **Steps** `ob_enable_step_ob1`…`ob5`, `ob_enable_question`, `ob_enable_question_old_user`
 **Language** `ob_enable_language_native_2`, `ob_pass_lfo_if_completed`, `ob_language_supported_codes` (CSV)
-**Ads** `ob_reuse_splash_inter`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_splash_inter_id`
-**Timing** `ob_splash_min_display_ms`, `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
+**Ads on/off** `ob_reuse_splash_inter`, `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled`
+**Ad unit override** `ob_ads_splash_inter_id`, `ob_ads_splash_inter_id_old_user` (खाली = compiled ids)
+**Frequency** `ob_ads_interstitial_interval_sec`, `ob_ads_click_cap_per_day` — दोनों default `0`, यानी बंद
+**Timing** `ob_splash_min_display_ms` (3000), `ob_splash_ad_budget_ms` (60000), `ob_splash_banner_wait_ms` (0), `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
 **Skip buttons** `ob_show_skip_ob3`, `ob_show_skip_ob5`
 **Templates** `ob_native_template_{content,language,question}` = `cta_top` | `cta_bottom` | `compact`
 **Server-driven UI** `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`

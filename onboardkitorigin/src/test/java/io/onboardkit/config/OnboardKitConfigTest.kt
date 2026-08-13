@@ -80,15 +80,10 @@ class OnboardKitConfigTest {
     }
 
     @Test
-    fun `tier strategy defaults to cascade and is configurable per placement`() {
-        assertEquals(AdTierStrategy.CASCADE, NativeAdUnit("x").strategy)
-        assertEquals(
-            AdTierStrategy.PARALLEL,
-            InterstitialAdUnit(
-                tiers = listOf("a", "b"),
-                strategy = AdTierStrategy.PARALLEL,
-            ).strategy,
-        )
+    fun `waterfall keeps declared floor order and drops blanks`() {
+        val unit = NativeAdUnit.waterfall(highFloor = "high", allPrice = "all")
+        assertEquals(listOf("high", "all"), unit.loadOrder)
+        assertEquals("high", unit.topTierId)
     }
 
     @Test
@@ -138,10 +133,7 @@ class OnboardKitConfigTest {
             defaultSteps()
             ads = AdsConfig(
                 languageNative = NativeAdUnit(tiers = listOf("high", "mid", "all")),
-                splashInterstitial = InterstitialAdUnit(
-                    tiers = listOf("i-high", "i-mid", "i-all"),
-                    strategy = AdTierStrategy.PARALLEL,
-                ),
+                splashInterstitial = InterstitialAdUnit(tiers = listOf("i-high", "i-mid", "i-all")),
             )
         }
         assertTrue(result.isSuccess)

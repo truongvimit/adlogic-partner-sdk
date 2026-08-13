@@ -93,10 +93,10 @@ class OnboardKitConfigBuilder internal constructor() {
     /** The classic OB1..OB4 template: three content steps and one full-screen ad step. */
     fun defaultSteps() {
         stepList += listOf(
-            ContentStepDefinition(StepId.OB1, remoteEnableKey = "ob_enable_step_ob1"),
-            ContentStepDefinition(StepId.OB2, remoteEnableKey = "ob_enable_step_ob2"),
-            AdFullScreenStepDefinition(StepId.OB3, remoteEnableKey = "ob_enable_step_ob3"),
-            ContentStepDefinition(StepId.OB4, remoteEnableKey = "ob_enable_step_ob4"),
+            ContentStepDefinition(StepId.OB1),
+            ContentStepDefinition(StepId.OB2),
+            AdFullScreenStepDefinition(StepId.OB3),
+            ContentStepDefinition(StepId.OB4),
         )
     }
 

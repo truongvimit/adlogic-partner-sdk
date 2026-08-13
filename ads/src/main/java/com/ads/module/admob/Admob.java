@@ -880,47 +880,82 @@ public class Admob {
      */
     private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback) {
         currentClicked++;
-        if (currentClicked >= numShowAds && mInterstitialAd != null) {
-            if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                try {
-                    if (dialog != null && dialog.isShowing())
-                        dialog.dismiss();
-                    dialog = new PrepareLoadingAdsDialog(context);
-                    dialog.setCancelable(false);
-                    try {
-                        callback.onInterstitialShow();
-                        dialog.show();
-                        AppOpenManager.getInstance().setInterstitialShowing(true);
-                    } catch (Exception e) {
-                        callback.onNextAction();
-                        return;
-                    }
-                } catch (Exception e) {
-                    dialog = null;
-                    e.printStackTrace();
-                }
-                new Handler().postDelayed(() -> {
-                    if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                        if (openActivityAfterShowInterAds && callback != null) {
-                            callback.onNextAction();
-                            new Handler().postDelayed(() -> {
-                                if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                                    dialog.dismiss();
-                            }, 1500);
-                        }
-                        mInterstitialAd.show((Activity) context);
-                    } else {
-                        if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                            dialog.dismiss();
-                        callback.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
-                    }
-                }, 800);
-            }
-            currentClicked = 0;
-        } else if (callback != null) {
+        if (currentClicked < numShowAds || mInterstitialAd == null) {
             if (dialog != null) {
                 dialog.dismiss();
             }
+            if (callback != null) {
+                callback.onNextAction();
+            }
+            return;
+        }
+
+        currentClicked = 0;
+
+        // Every exit below reports something. This branch used to return in silence when the
+        // process was not resumed, leaving the caller waiting on a callback that never came.
+        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            notifyShowFailed(callback, "Show fail: process is not resumed");
+            return;
+        }
+
+        // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
+        // turns what was a ClassCastException on a background thread into a normal skip.
+        if (!(context instanceof AppCompatActivity)) {
+            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity");
+            return;
+        }
+
+        // The loading dialog is cosmetic; failing to put it up must never cost an impression.
+        try {
+            if (dialog != null && dialog.isShowing())
+                dialog.dismiss();
+            dialog = new PrepareLoadingAdsDialog(context);
+            dialog.setCancelable(false);
+            dialog.show();
+            AppOpenManager.getInstance().setInterstitialShowing(true);
+        } catch (Exception e) {
+            dialog = null;
+            Log.w(TAG, "showInterstitialAd: loading dialog unavailable, showing the ad anyway", e);
+        }
+
+        // Committed to showing. Call sites use this to tell the two meanings of onNextAction
+        // apart, so it has to fire on every path that reaches show().
+        if (callback != null) {
+            callback.onInterstitialShow();
+        }
+
+        new Handler().postDelayed(() -> {
+            if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                if (openActivityAfterShowInterAds && callback != null) {
+                    callback.onNextAction();
+                    new Handler().postDelayed(() -> {
+                        if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
+                            dialog.dismiss();
+                    }, 1500);
+                }
+                mInterstitialAd.show((Activity) context);
+            } else {
+                if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
+                    dialog.dismiss();
+                notifyShowFailed(callback, "Show fail in background after show loading ad");
+            }
+        }, 800);
+    }
+
+    /**
+     * Reports a presentation that never reached the screen.
+     * <p>
+     * onNextAction is still fired when openActivityAfterShowInterAds is off, because that is the
+     * signal legacy call sites advance their flow on.
+     */
+    private void notifyShowFailed(AdCallback callback, String message) {
+        if (callback == null) {
+            return;
+        }
+        Log.e(TAG, "showInterstitialAd: " + message);
+        callback.onAdFailedToShow(new AdError(0, message, TAG));
+        if (!openActivityAfterShowInterAds) {
             callback.onNextAction();
         }
     }

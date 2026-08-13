@@ -3,6 +3,7 @@ package io.onboardkit.flow
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
+import io.onboardkit.core.StepType
 import io.onboardkit.core.state.OnboardingState
 import io.onboardkit.remote.RemoteFlags
 
@@ -66,9 +67,24 @@ object FlowNavigator {
         return StartDecision.Skip(SkipReason.DISABLED_BY_REMOTE)
     }
 
-    /** Fixed order from config; remote can only drop entries, never reorder. */
-    fun enabledSteps(config: OnboardKitConfig, flags: RemoteFlags): List<StepId> =
-        config.steps.filter { flags.isStepEnabled(it.id) }.map { it.id }
+    /**
+     * The pages this run will actually show, in configured order.
+     *
+     * @param isPremium drops the pages whose only content is an ad, honouring
+     *   [io.onboardkit.config.AdsConfig.skipAdOnlyStepsWhenPremium]. A paying user staring at an
+     *   empty ad slot is the worst version of both.
+     */
+    fun enabledSteps(
+        config: OnboardKitConfig,
+        flags: RemoteFlags,
+        isPremium: Boolean = false,
+    ): List<StepId> {
+        val dropAdOnly = isPremium && config.ads.skipAdOnlyStepsWhenPremium
+        return config.steps
+            .filter { flags.isStepEnabled(it.id) }
+            .filterNot { dropAdOnly && it.type == StepType.AD_FULL_SCREEN }
+            .map { it.id }
+    }
 
     /** Checkpoint: resume right after the last completed step. */
     fun resumeIndex(state: OnboardingState, enabledSteps: List<StepId>): Int {

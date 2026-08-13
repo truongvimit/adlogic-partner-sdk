@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import io.onboardkit.OnboardingSdk
+import io.onboardkit.core.ObLog
 import io.trackkit.Tracker
 import java.util.Locale
 
@@ -34,13 +35,19 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ObLog.d(ObLog.Section.SCREEN, "create ${javaClass.simpleName} ready=${OnboardingSdk.isReady()}")
         if (!OnboardingSdk.isReady()) {
+            ObLog.w(ObLog.Section.SCREEN, "${javaClass.simpleName} SDK not ready — restarting from launcher")
             restartedByGuard = true
             OnboardingSdk.restartFromLauncher(this)
             finish()
             return
         }
         applySystemBars()
+        // Every SDK screen is off-limits to app-resume ads: they all either show a full-screen ad
+        // of their own or are a step the user is mid-way through. Doing it here means a partner
+        // cannot forget one — the audited app listed them by hand in Application.onCreate.
+        OnboardingSdk.appResume().excludeScreen(javaClass)
         // Before onCreateSafe: a screen that navigates away from its own onCreate would otherwise
         // never be counted as viewed.
         screenName?.let { Tracker.screen(it, javaClass.simpleName) }

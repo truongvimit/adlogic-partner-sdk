@@ -204,10 +204,13 @@ In the current base, the core integration is implemented in `GlobalApp.initAds()
    - `intervalInterstitialAd`
    - `idAdResume`
 4. Call `ERainAd.getInstance().init(this, mERainAdConfig)`.
-5. Apply extra resume/inter rules:
-   - `Admob.getInstance().setDisableAdResumeWhenClickAds(true)`
-   - `Admob.getInstance().setOpenActivityAfterShowInterAds(true)`
-   - `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` for excluded screens.
+5. Call `ERainTuning.install()` — **once**, right after `ERainAd.init`.
+   It pins the module's process-wide switches (`openActivityAfterShowInterAds`,
+   `disableAdResumeWhenClickAds`). Do **not** set them yourself: they change what a *callback
+   means*, so toggling them per screen leaves the process in whatever state the last screen died
+   in, and a screen that dies between two toggles leaves it wrong for good.
+6. `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` for your **own** excluded
+   screens only. OnboardKit excludes its own screens automatically.
 
 Reference snippet:
 ```kotlin
@@ -223,7 +226,9 @@ private fun initAds() {
 
     mERainAdConfig.adjustConfig = adjustConfig
     mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    mERainAdConfig.intervalInterstitialAd = 35
+    // 0 = the ads module enforces no interval of its own; see §3.2
+    mERainAdConfig.intervalInterstitialAd = 0
+    // A blank id switches app-resume off — it never requests with an empty ad unit
     mERainAdConfig.idAdResume = ""
 
     ERainAd.getInstance().init(this, mERainAdConfig)
@@ -293,9 +298,54 @@ configured through `adjustConfig` in §1.5. See `trackkit/ARCHITECTURE.md` for w
 
 ## 2. Load/Show Ads by placement
 
+### 2.0 One placement, many ad unit ids — the waterfall
+
+A placement is not one ad unit id, it is an **ordered list**: highest floor first, all-price last.
+`AdWaterfall` requests them one at a time and stops at the first fill, so a lower floor is only
+ever asked for after the one above it has failed.
+
+```kotlin
+AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
+AdWaterfall.loadInterstitial(context, adUnitIds, callback)
+```
+
+Pass one id and it behaves exactly like a plain load. Blank and repeated ids are dropped, so a
+half-filled remote payload cannot open a hole in the order. Every step is bounded by
+`REQUEST_AD_TIMEOUT` (30 s): a floor that never answers cannot stall the floors below it.
+
+This is the **only** load path. `AdsManager` and OnboardKit both go through it, which is why they
+cannot drift apart. Do not call `ERainAd.loadNativeAdResultCallback` / `getInterstitialAds` with a
+single `config.id` — that spends the all-price floor and never touches the high one.
+
+#### Naming the floors in remote config
+
+Each floor is its own remote key. The suffix is the rung:
+
+| Key | Rung |
+|---|---|
+| `native_lang_high` | highest floor, requested first |
+| `native_lang_high1` … `native_lang_high9` | further floors, in numeric order |
+| `native_lang` | all-price, always last |
+
+`AdRemoteConfig.tiersFor("native_lang")` resolves that ladder into request order. Adding a floor to
+a placement is a **remote-config change, never a code change** — declare the key and it joins the
+waterfall. There is deliberately no `_medium`: it would only be `_high1` under a second name, and
+two spellings for one floor is how a payload ends up declaring both.
+
+Need more than ten floors, or an order that is not high→low? Put the ids straight into one key's
+`ids` array — that list is taken as the waterfall verbatim:
+
+```json
+"inter_splash": { "id": "…/allprice", "ids": ["…/high", "…/high1"], "isEnable": true }
+```
+
+> Give every placement its own ad unit ids. Two placements sharing one id cannot be told apart in
+> revenue reporting: AdMob's paid-event callback knows only the ad unit, and `PlacementRegistry`
+> maps it back to whichever placement requested it last.
+
 ### 2.1 Splash
 - Inter Splash:
-  - Condition: `AdRemoteConfig.inter_splash.isEnable == true` and network available.
+  - Condition: `AdRemoteConfig.tiersFor("inter_splash")` is non-empty (at least one enabled floor) and network available.
   - API: `ERainAd.getInstance().loadSplashInterstitialAds(...)`.
   - On successful load (`onAdLoaded`), preload `native_language`.
 - Open Resume:
@@ -329,12 +379,36 @@ configured through `adjustConfig` in §1.5. See `trackkit/ARCHITECTURE.md` for w
 ## 3. Global conditions for loading ads
 
 In `AdsManager`, an ad loads only when all conditions pass:
-- `adUnitConfig.isEnable == true`
+- `adUnitConfig.isUsable` — enabled **and** has at least one non-blank id
 - `!AppPurchase.getInstance().isPurchased(...)`
 - Network available
 - For mandatory organic-gated placements: `getShouldDisplay*(config.enableUaCheck) == true`
 
-If any condition fails, native LiveData emits `null` so UI hides the ad container.
+If any condition fails, native LiveData emits `null` so UI hides the ad container, and the reason
+is reported once through `AdTracking.skipped(...)`.
+
+### 3.1 Consent gates every request
+
+No ad request may go out before the consent flow has answered — that is a policy rule, not a race
+to win. The splash resolves it and publishes the answer once:
+
+```kotlin
+class SplashActivity : ObSplashActivity() {
+    override suspend fun onConsentRequired(): Boolean = /* true when ads may be requested */
+}
+```
+
+A `false` answer — or no answer inside `consentTimeoutMs` — calls `OnboardingSdk.setCanRequestAds(false)`,
+and every placement then reports `consent_not_granted` instead of loading. The flow still runs; it
+just runs without ads. `ConsentHandler` shows the UMP form **once per process**, so splash and any
+later screen share one answer rather than asking twice.
+
+### 3.2 Interstitial frequency lives in one place
+
+Keep `ERainAdConfig.intervalInterstitialAd = 0`. The module's own interval swallows an interstitial
+silently — the caller cannot tell it apart from a dismissal — so frequency is owned by
+`ob_ads_interstitial_interval_sec`, which is remote-tunable and reports `interval_not_elapsed` when
+it blocks. Two caps for one rule is a bug nobody finds for a quarter.
 
 ## 4. `getShouldDisplay*` standard per placement (100% mandatory)
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import io.onboardkit.core.StepId
+import io.onboardkit.ads.AdSkipReason
 import io.trackkit.AdFormat
 import io.trackkit.TrackSink
 import io.trackkit.Tracker
@@ -142,13 +143,16 @@ class TrackkitPluginTest {
         TrackkitPlugin.execute(AnalyticsEvent.AdRequested("language1", AdFormat.NATIVE))
         TrackkitPlugin.execute(AnalyticsEvent.AdFailed("language1", AdFormat.NATIVE))
         TrackkitPlugin.execute(
-            AnalyticsEvent.AdSkipped("question_native", AdFormat.NATIVE, AdSkipReason.POLICY),
+            AnalyticsEvent.AdSkipped("question_native", AdFormat.NATIVE, AdSkipReason.PLACEMENT_OFF_BY_REMOTE.key),
         )
 
         assertEquals(listOf("ad_request", "ad_load_failed", "ad_skipped"), sink.names())
         assertEquals("language1", sink.paramsOf("ad_request")["placement"])
         assertEquals("native", sink.paramsOf("ad_load_failed")["ad_format"])
-        assertEquals("policy", sink.paramsOf("ad_skipped")["reason"])
+        assertEquals(
+            AdSkipReason.PLACEMENT_OFF_BY_REMOTE.key,
+            sink.paramsOf("ad_skipped")["reason"],
+        )
     }
 
     @Test
@@ -260,7 +264,7 @@ class TrackkitPluginTest {
             AnalyticsEvent.AdRequested("ob5", AdFormat.NATIVE_FULL_SCREEN),
             AnalyticsEvent.AdImpression("ob5"),
             AnalyticsEvent.AdFailed("ob5", AdFormat.NATIVE_FULL_SCREEN),
-            AnalyticsEvent.AdSkipped("ob5", AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_UNIT),
+            AnalyticsEvent.AdSkipped("ob5", AdFormat.NATIVE_FULL_SCREEN, AdSkipReason.NO_AD_UNIT.key),
             AnalyticsEvent.PaywallViewed("after_onboarding"),
             AnalyticsEvent.PaywallResolved("after_onboarding", AnalyticsEvent.PAYWALL_DISMISSED),
         ).forEach(TrackkitPlugin::execute)

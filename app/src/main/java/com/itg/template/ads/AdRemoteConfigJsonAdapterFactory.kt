@@ -55,7 +55,6 @@ class AdRemoteConfigJsonAdapterFactory : JsonAdapter.Factory {
                 var positionCTA = "BOTTOM"
                 var components: List<String> = listOf("icon_headline", "body", "media", "cta")
                 var ids: List<String> = emptyList()
-                var tierStrategy = AdUnitConfig.TIER_STRATEGY_CASCADE
                 reader.beginObject()
                 while (reader.hasNext()) {
                     when (reader.nextName()) {
@@ -70,9 +69,6 @@ class AdRemoteConfigJsonAdapterFactory : JsonAdapter.Factory {
                         // Waterfall tiers, highest floor first. Absent in legacy payloads, where
                         // "id" alone remains the single tier.
                         "ids" -> ids = readStringList(reader)
-                        "tierStrategy" -> tierStrategy =
-                            safeNextString(reader, AdUnitConfig.TIER_STRATEGY_CASCADE)
-                                .lowercase(Locale.US)
                         else -> reader.skipValue()
                     }
                 }
@@ -87,7 +83,6 @@ class AdRemoteConfigJsonAdapterFactory : JsonAdapter.Factory {
                     positionCTA = positionCTA,
                     components = components,
                     ids = ids,
-                    tierStrategy = tierStrategy
                 )
             }
 

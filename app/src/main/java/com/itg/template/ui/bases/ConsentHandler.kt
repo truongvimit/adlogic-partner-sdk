@@ -13,6 +13,7 @@ import com.itg.template.data.pref.AppSharedPref
 import com.itg.template.utils.ITGTrackingHelper
 import com.itg.template.utils.ITGTrackingHelper.logEvent
 import com.ads.module.event.MmpTracking
+import io.onboardkit.OnboardingSdk
 import io.trackkit.Tracker
 import io.trackkit.TrackkitEvents
 
@@ -41,7 +42,18 @@ class ConsentHandler(
         onConsentFlowCompleted(true)
     }
 
+    /**
+     * Shows the UMP flow, at most once per process.
+     *
+     * A second caller resolves immediately with the answer the first one got. Splash and Main both
+     * ask, and without this the user was shown the form twice in one session: splash timed out
+     * with the form still up, so `isConfirmConsent` was still false when Main checked.
+     */
     fun requestConsent() {
+        if (!claimRequestSlot()) {
+            onConsentFlowCompleted(sessionCanPersonalized)
+            return
+        }
         logEvent(getLoadConsentEvent(), null)
         Tracker.track(TrackkitEvents.ConsentEvents.Requested())
         consentCallbackHandled = false
@@ -131,8 +143,11 @@ class ConsentHandler(
      * onboarding funnel. Sinks translate the pair into their own vendor switch.
      */
     private fun resolveConsent(granted: Boolean, status: String, errorCode: Int? = null) {
+        sessionCanPersonalized = granted
         Tracker.track(TrackkitEvents.ConsentEvents.Result(status, errorCode))
         Tracker.setConsent(analytics = true, ads = granted)
+        // The single point that lets ad requests start; the SDK blocks every placement until it
+        OnboardingSdk.setCanRequestAds(granted)
         // Adjust is not a Trackkit sink — it lives in :ads — so the same gate relays to it here.
         MmpTracking.setConsent(true, granted)
     }
@@ -179,6 +194,14 @@ class ConsentHandler(
         const val STATUS_DENIED = "denied"
         const val STATUS_NOT_REQUIRED = "not_required"
         const val STATUS_ERROR = "error"
+
+        /** Process-wide: the UMP form belongs to the session, not to whichever screen asks. */
+        private val requested = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        @Volatile
+        private var sessionCanPersonalized = false
+
+        fun claimRequestSlot(): Boolean = requested.compareAndSet(false, true)
     }
 }
 

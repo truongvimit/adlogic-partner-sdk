@@ -7,7 +7,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.showInterstitial
 import io.onboardkit.core.FinishReason
+import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepHost
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
@@ -55,7 +57,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         setContentView(binding.root)
 
         val config = sdk.requireConfig()
-        enabledStepIds = FlowNavigator.enabledSteps(config, sdk.flags())
+        enabledStepIds = FlowNavigator.enabledSteps(config, sdk.flags(), sdk.guard().isPremium(this))
+        ObLog.d(ObLog.Section.SCREEN, "ob_onboarding steps=${enabledStepIds.map { it.value }}")
         if (enabledStepIds.isEmpty()) {
             finishFlow(FinishReason.EMPTY_FLOW)
             return
@@ -188,12 +191,13 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             provider?.isInterstitialReady(AdPlacement.SplashInterstitial) == true,
             isOb5NativeReady = provider?.isNativeReady(AdPlacement.Ob5) == true,
         )
+        ObLog.d(ObLog.Section.NAV, "ob_onboarding exit_decision=$decision")
         when (decision) {
-            ExitDecision.ShowReusedInterstitialThenComplete -> {
-                provider?.showInterstitial(this, AdPlacement.SplashInterstitial) {
-                    finishFlow(FinishReason.COMPLETED)
-                } ?: finishFlow(FinishReason.COMPLETED)
-            }
+            ExitDecision.ShowReusedInterstitialThenComplete ->
+                showInterstitial(
+                    AdPlacement.SplashInterstitial,
+                    onFinished = { finishFlow(FinishReason.COMPLETED) },
+                )
 
             ExitDecision.GoToOb5 -> {
                 ObFullScreenAdActivity.start(this)
