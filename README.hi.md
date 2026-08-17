@@ -379,6 +379,12 @@ BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
 `pollAdNative`, buffer > 1 supported)। `placement` set करने पर helper खुद standard reason keys के
 साथ `ad_request` / skip telemetry report करता है।
 
+**Reload कभी blink नहीं करता।** Shimmer *खाली* slot का है: वह सिर्फ़ तब तक दिखता है जब तक placement
+के पास कोई ad नहीं है। एक बार ad screen पर आ गया, तो reload — timer से, resume पर, या किसी नीचे वाले
+waterfall floor के ज़रिए — उसके नीचे चुपचाप चलता है; live ad अपनी जगह बनाए रखता है और नया creative
+उसे ठीक उसी पल replace करता है जिस पल वह fill होता है। जिस reload को fill नहीं मिलता वह कुछ भी नहीं
+बदलता, इसलिए कोई slot कभी ad → shimmer → ad नहीं जा सकता।
+
 ## 3. Global conditions for loading ads
 
 Ad तभी load होगा जब सभी conditions pass हों — जाँच एक ही जगह होती है, `AdGate.skipReason(...)` में:

@@ -332,8 +332,10 @@ class NativeAdHelper(
         }
         val previous = nativeAd
         nativeAd = ad
-        if (previous != null && previous !== ad) destroyNative(previous)
+        // Bind first, destroy after: the outgoing ad backs the view on screen until the
+        // new one replaces it, so the slot never blanks between the two
         setState(AdNativeState.Loaded(ad))
+        if (previous != null && previous !== ad) destroyNative(previous)
         listeners.forEach { it.onNativeAdLoaded(ad) }
     }
 
