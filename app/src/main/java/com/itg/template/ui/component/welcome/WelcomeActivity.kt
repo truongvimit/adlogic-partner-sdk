@@ -1,15 +1,13 @@
 package com.itg.template.ui.component.welcome
 
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.helper.adnative.NativeAdParam
 import com.itg.template.R
+import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.AdsManager
-import com.itg.template.ads.populateNativeAdView
+import com.itg.template.ads.native_welcome
 import com.itg.template.databinding.ActivityWelcomeBinding
 import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
-import com.itg.template.ui.bases.ext.goneView
-import com.itg.template.ui.bases.ext.isNetwork
-import com.itg.template.ui.bases.ext.visibleView
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -20,15 +18,15 @@ class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
 
     override fun initViews() {
         super.initViews()
-        AdsManager.loadNativeWelcome(this, R.layout.layout_native_welcome)
+        // The helper owns the native from here: gate, load, bind, hide on skip/fail/offline
+        AdsManager.nativeHelper(
+            this, this, "native_welcome", AdRemoteConfig.native_welcome,
+            R.layout.layout_native_welcome,
+        )
+            .setNativeContentView(mBinding.frAds)
+            .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
+            .requestAds(NativeAdParam.Request)
         AdsManager.loadInterWelcome(this)
-    }
-
-    override fun observerData() {
-        super.observerData()
-        AdsManager.nativeWelcomeAdLive.observe(this) { ad ->
-            renderWelcomeAd(ad)
-        }
     }
 
     override fun onClickViews() {
@@ -38,19 +36,5 @@ class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
                 finish()
             }
         }
-    }
-
-    private fun renderWelcomeAd(ad: ApNativeAd?) {
-        if (ad == null || !isNetwork()) {
-            mBinding.frAds.goneView()
-            return
-        }
-        mBinding.frAds.visibleView()
-        populateNativeAdView(
-            this,
-            ad,
-            mBinding.frAds,
-            mBinding.shimmerAds.shimmerNativeLarge
-        )
     }
 }

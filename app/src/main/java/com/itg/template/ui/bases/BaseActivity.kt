@@ -15,9 +15,6 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.databinding.DataBindingUtil
 import androidx.databinding.ViewDataBinding
-import com.ads.module.admob.Admob
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.funtion.AdCallback
 import com.itg.template.R
 import com.itg.template.app.AppConstants
 import com.itg.template.data.pref.AppSharedPref
@@ -127,18 +124,6 @@ abstract class BaseActivity<VB : ViewDataBinding> : AppCompatActivity() {
 
             insets
         }
-    }
-
-    protected fun showInterNotCheckGap(interAd: ApInterstitialAd?, func: (() -> Unit)) {
-        if (interAd != null) {
-            Admob.getInstance()
-                .forceShowInterstitial(this, interAd.interstitialAd, object : AdCallback() {
-                    override fun onNextAction() {
-                        super.onNextAction()
-                        func.invoke()
-                    }
-                })
-        } else func.invoke()
     }
 
     protected fun showLoading() {

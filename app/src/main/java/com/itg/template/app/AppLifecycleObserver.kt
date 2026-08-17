@@ -3,8 +3,7 @@ package com.itg.template.app
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.billing.AppPurchase
+import com.ads.module.helper.AdGate
 import com.ads.module.tracking.AdTracking
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.inter_welcome
@@ -41,8 +40,8 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
             isDisable -> "disabled_activity"
             !ResumeAdsEntryRule.shouldShowWelcomeOnResume() -> "mode_not_welcome"
             AppOpenManager.getInstance().isInterstitialShowing -> "interstitial_showing"
-            AppPurchase.getInstance().isPurchased(currentActivity.applicationContext) -> "purchased"
-            !ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck) -> "ua_gate"
+            AdGate.isPurchased(currentActivity.applicationContext) -> "purchased"
+            !AdGate.passesUaGate(AdRemoteConfig.inter_welcome.enableUaCheck) -> "ua_gate"
             else -> null
         }
         if (blockReason == null) {

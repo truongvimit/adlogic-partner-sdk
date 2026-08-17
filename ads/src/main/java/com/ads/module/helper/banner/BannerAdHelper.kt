@@ -59,9 +59,21 @@ class BannerAdHelper(
     private val listeners = CopyOnWriteArrayList<AdCallback>()
     private val resumeCount = AtomicInteger(0)
 
+    // When the next interval reload is due; ON_STOP kills the timer, this survives it
+    private var nextReloadAtMs = 0L
+
     private val resumeReloadRunnable = Runnable {
-        if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && isActiveState()) {
-            requestAds(BannerAdParam.Reload)
+        // enableAutoReload placements may also recover from a Cancel (e.g. offline) here
+        val active = isActiveState() || config.enableAutoReload
+        if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && active) {
+            val now = System.currentTimeMillis()
+            if (!config.enableAutoReload || now >= nextReloadAtMs) {
+                requestAds(BannerAdParam.Reload)
+            } else {
+                // Interval not elapsed: resume the paused timer for the remaining time
+                mainHandler.removeCallbacks(autoReloadRunnable)
+                mainHandler.postDelayed(autoReloadRunnable, nextReloadAtMs - now)
+            }
         }
     }
 
@@ -112,6 +124,8 @@ class BannerAdHelper(
                 hideShimmer()
                 setState(AdBannerState.Fail)
             }
+            // A transient block (offline, momentary gate) must not end the interval chain
+            armAutoReload()
             return
         }
         if (param is BannerAdParam.Reload && !canReloadAd()) return
@@ -172,6 +186,10 @@ class BannerAdHelper(
             } ?: emptyList()
         }
         setState(AdBannerState.Loading)
+        // Request-time anchor; the impression callback re-stamps when it lands
+        if (config.enableAutoReload) {
+            nextReloadAtMs = System.currentTimeMillis() + config.autoReloadTime
+        }
         placement?.let { key ->
             config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
             AdTracking.request(key, AdFormat.BANNER, config.idAds)
@@ -231,6 +249,8 @@ class BannerAdHelper(
                 // Terminal must leave Loading or requestAds stays gated forever; a survivor
                 // still on screen is Loaded, not Fail
                 setState(if (oldViews.isEmpty()) AdBannerState.Fail else AdBannerState.Loaded)
+                // A no-fill must not end the interval chain — the next tick retries
+                armAutoReload()
                 listeners.forEach { it.onAdFailedToLoad(adError) }
             }
 
@@ -267,6 +287,7 @@ class BannerAdHelper(
 
     private fun armAutoReload() {
         if (!config.enableAutoReload || !canReloadAd()) return
+        nextReloadAtMs = System.currentTimeMillis() + config.autoReloadTime
         mainHandler.removeCallbacks(autoReloadRunnable)
         mainHandler.postDelayed(autoReloadRunnable, config.autoReloadTime)
     }

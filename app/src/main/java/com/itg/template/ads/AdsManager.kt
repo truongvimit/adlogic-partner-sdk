@@ -3,44 +3,36 @@ package com.itg.template.ads
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
-import android.widget.FrameLayout
-import androidx.appcompat.app.AppCompatActivity
+import androidx.annotation.LayoutRes
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.MutableLiveData
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
-import com.ads.module.helper.banner.BannerAdHelper
+import com.ads.module.helper.adnative.NativeAdConfig
+import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
 import com.ads.module.tracking.AdTracking
-import com.ads.module.util.AppConstant
+import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
-import com.itg.template.ui.bases.ext.goneView
 import io.trackkit.AdFormat
 import java.util.Collections
 import java.util.WeakHashMap
 import timber.log.Timber
 
 /**
- * The app's placement catalog and delivery layer: maps [AdRemoteConfig] slots onto the
- * SDK's gate/store/helpers and publishes results to the screens' LiveData.
- *
- * Mechanism (cache, expiry, dedup, show contract) lives in `com.ads.module.helper`;
- * only placement policy stays here.
+ * The app's placement catalog: maps [AdRemoteConfig] slots onto the SDK's gate, stores,
+ * and view helpers. Mechanism (cache, expiry, dedup, show contract, view lifecycle) lives
+ * in `com.ads.module.helper`; only placement policy stays here.
  */
 @SuppressLint("StaticFieldLeak")
 object AdsManager {
 
-    val nativeSurveyAdLive = MutableLiveData<ApNativeAd?>()
-    val nativeConfirmUninstallAdLive = MutableLiveData<ApNativeAd?>()
-    val nativeWelcomeAdLive = MutableLiveData<ApNativeAd?>()
-    val nativePermissionAdLive = MutableLiveData<ApNativeAd?>()
-    val nativeHomeAdLive = MutableLiveData<ApNativeAd?>()
     // Auto-resolve config for each loaded native ad. Weak keys: a native ad holds an inflated
     // view tree, so strong references here would pin view hierarchies for the process lifetime
     private val adConfigMap: MutableMap<ApNativeAd, AdUnitConfig> =
@@ -71,92 +63,36 @@ object AdsManager {
         }
     }
 
-    private fun loadNativeInternal(
+    /**
+     * The standard native integration for one placement: waterfall + UA gate from
+     * [AdRemoteConfig], the app's CTA/component styling as the binder, telemetry keyed by
+     * the placement. A screen hands its views over and calls `requestAds` once:
+     *
+     * ```
+     * AdsManager.nativeHelper(this, this, "native_welcome", AdRemoteConfig.native_welcome, layout)
+     *     .setNativeContentView(binding.frAds)
+     *     .setShimmerLayoutView(binding.shimmer)
+     *     .requestAds(NativeAdParam.Request)
+     * ```
+     */
+    fun nativeHelper(
         activity: Activity,
+        lifecycleOwner: LifecycleOwner,
         placement: String,
         config: AdUnitConfig,
-        layoutRes: Int,
-        liveData: MutableLiveData<ApNativeAd?>,
-        passesUaGate: Boolean = true,
-    ) {
-        // A load that never happened, and why — same chain and reason keys as always
-        val skipReason = AdGate.skipReason(activity, config.isUsable, passesUaGate)
-        if (skipReason != null) {
-            AdTracking.skipped(placement, AdFormat.NATIVE, skipReason.key)
-            liveData.postValue(null)
-            return
-        }
-        // waterfallIds, not id: the list is the waterfall, highest floor first
-        AdTracking.request(placement, AdFormat.NATIVE, config.waterfallIds.first())
-        AdWaterfall.loadNative(
-            activity, config.waterfallIds, layoutRes,
-            object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    adConfigMap[nativeAd] = config
-                    liveData.postValue(nativeAd)
-                }
-
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    liveData.postValue(null)
-                }
-            },
-        )
-    }
-
-    fun loadNativePermission(activity: Activity, layoutRes: Int) {
-        val config = AdRemoteConfig.native_permission
-        loadNativeInternal(
-            activity,
-            "native_permission",
-            config,
-            layoutRes,
-            nativePermissionAdLive,
-            AdGate.passesUaGate(config.enableUaCheck)
-        )
-    }
-
-    fun loadNativeHome(activity: Activity, layoutRes: Int) {
-        val config = AdRemoteConfig.native_home
-        loadNativeInternal(
-            activity,
-            "native_home",
-            config,
-            layoutRes,
-            nativeHomeAdLive,
-            AdGate.passesUaGate(config.enableUaCheck)
-        )
-    }
-
-    fun loadNativeSurvey(activity: Activity, layoutRes: Int) {
-        val config = AdRemoteConfig.native_survey
-        loadNativeInternal(
-            activity, "native_survey", config, layoutRes, nativeSurveyAdLive,
-            AdGate.passesUaGate(config.enableUaCheck)
-        )
-    }
-
-    fun loadNativeConfirmUninstall(activity: Activity, layoutRes: Int) {
-        val config = AdRemoteConfig.native_confirm_uninstall
-        loadNativeInternal(
-            activity,
-            "native_confirm_uninstall",
-            config,
-            layoutRes,
-            nativeConfirmUninstallAdLive,
-            AdGate.passesUaGate(config.enableUaCheck)
-        )
-    }
-
-    fun loadNativeWelcome(activity: Activity, layoutRes: Int) {
-        val config = AdRemoteConfig.native_welcome
-        loadNativeInternal(
-            activity,
-            "native_welcome",
-            config,
-            layoutRes,
-            nativeWelcomeAdLive,
-            AdGate.passesUaGate(config.enableUaCheck)
-        )
+        @LayoutRes layoutRes: Int,
+    ): NativeAdHelper {
+        val nativeConfig =
+            NativeAdConfig(config.waterfallIds, config.isUsable, false, layoutRes).also {
+                it.forceUaCheck = config.enableUaCheck
+            }
+        return NativeAdHelper(activity, lifecycleOwner, nativeConfig)
+            .setNativeAdBinder { act, ad, container, shimmer ->
+                populateNativeAdView(
+                    act, ad, config, container, shimmer ?: ShimmerFrameLayout(act),
+                )
+            }
+            .also { it.placement = placement }
     }
 
     // ── Dashboard / Test helpers (ignore shouldDisplay) ──
@@ -175,14 +111,25 @@ object AdsManager {
         } catch (_: Exception) {
             AdUnitConfig(id = "", isEnable = false)
         }
-        // Force the UA gate open to bypass SDK limits
-        loadNativeInternal(
-            activity,
-            "preview_$configKey",
-            config,
-            layoutRes,
-            nativeDashboardPreviewLive,
-            passesUaGate = true
+        val skipReason = AdGate.skipReason(activity, config.isUsable)
+        if (skipReason != null) {
+            AdTracking.skipped("preview_$configKey", AdFormat.NATIVE, skipReason.key)
+            nativeDashboardPreviewLive.postValue(null)
+            return
+        }
+        AdTracking.request("preview_$configKey", AdFormat.NATIVE, config.waterfallIds.first())
+        AdWaterfall.loadNative(
+            activity, config.waterfallIds, layoutRes,
+            object : AdCallback() {
+                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                    adConfigMap[nativeAd] = config
+                    nativeDashboardPreviewLive.postValue(nativeAd)
+                }
+
+                override fun onAdFailedToLoad(adError: LoadAdError?) {
+                    nativeDashboardPreviewLive.postValue(null)
+                }
+            },
         )
     }
 
@@ -257,48 +204,8 @@ object AdsManager {
         )
     }
 
-    fun loadBanner(
-        activity: AppCompatActivity,
-        adUnitConfig: AdUnitConfig,
-        frAds: FrameLayout,
-        isCollapse: Boolean,
-        placement: String = "banner_home",
-    ) {
-        if (adUnitConfig.isEnable) {
-            BannerAdHelper.resetPlaceholder(activity, frAds)
-            // Mirror the SDK's own purchased gate so a silent internal no-op is not
-            // recorded as a pending request
-            if (AdGate.isPurchased(activity)) {
-                AdTracking.skipped(placement, AdFormat.BANNER, AdSkipReason.PURCHASED.key)
-            } else {
-                AdTracking.request(placement, AdFormat.BANNER, adUnitConfig.id)
-            }
-            val callback = object : AdCallback() {
-                override fun onAdFailedToLoad(i: LoadAdError?) {
-                    super.onAdFailedToLoad(i)
-                    frAds.goneView()
-                    Timber.tag("AdsManager_Banner")
-                        .d("Load banner on ${activity.javaClass.simpleName} failed by : ${i?.message}")
-                }
-            }
-            if (isCollapse) ERainAd.getInstance().loadCollapsibleBanner(
-                activity,
-                adUnitConfig.id,
-                AppConstant.CollapsibleGravity.BOTTOM,
-                callback,
-            )
-            else ERainAd.getInstance().loadBanner(activity, adUnitConfig.id, callback)
-        } else {
-            AdTracking.skipped(placement, AdFormat.BANNER, AdSkipReason.DISABLED_CONFIG.key)
-            frAds.removeAllViews()
-            frAds.goneView()
-        }
-    }
-
     fun clearAll() {
-        nativeSurveyAdLive.postValue(null)
-        nativeConfirmUninstallAdLive.postValue(null)
-        nativeWelcomeAdLive.postValue(null)
+        nativeDashboardPreviewLive.postValue(null)
         // Per-key: the store is process-wide and OnboardKit owns placements of its own
         InterstitialAdManager.release("inter_onboarding")
         InterstitialAdManager.release("inter_welcome")
