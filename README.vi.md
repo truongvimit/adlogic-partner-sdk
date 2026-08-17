@@ -29,7 +29,7 @@ Project `adlogic-partner-sdk` được xây dựng như **template/base** cho m�
 
 - Cùng một cách tổ chức package Ads (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`).
 - Cùng cơ chế đọc config từ asset và Firebase Remote Config.
-- Cùng pattern quan sát kết quả load (LiveData) và populate native ad.
+- Cùng pattern giao view cho render native/banner (`AdsManager.nativeHelper`, `BaseActivityWithBanner` — xem mục 2.6).
 - Cùng entry QA qua DevSetting trên màn Language.
 
 Mục tiêu: giảm sai lệch giữa các app, dễ bảo trì, dễ audit và dễ hỗ trợ kỹ thuật tập trung.
@@ -59,10 +59,10 @@ Khi customize UI, chỉ được thay layout/container; **không được bỏ**
 Với màn hình **do app tự thêm** (không có sẵn trong base), đối tác vẫn phải tuân thủ **cùng bộ rule**:
 
 1. Khai báo placement trong `ad_config.json` / `ad_config_debug.json` và property tương ứng trong `AdRemoteConfig`.
-2. Thêm method load trong `AdsManager` (native qua `loadNativeInternal`, inter qua `InterstitialAdManager.load` + `show` — xem mục 2.6).
-3. Activity/Fragment: gọi load ở `initViews` (có thể `postDelayed` ngắn), observe LiveData, `populateNativeAdView` khi có ad; ẩn container khi `null`.
-4. Nếu placement thuộc nhóm nhạy cảm (onboarding-like, welcome, home, permission, widget…): **bắt buộc 100%** gate bằng `AdGate.passesUaGate(config.enableUaCheck)` — xem mục 4.
-5. Banner: extend `BaseActivityWithBanner`, cấu hình `BannerConfig`, không tự load banner ngoài `AdsManager.loadBanner`.
+2. Native: tạo helper cho placement qua `AdsManager.nativeHelper(...)`; inter qua `InterstitialAdManager.load` + `show` — xem mục 2.6.
+3. Activity/Fragment: giao container + shimmer cho helper ở `initViews` và gọi `requestAds(NativeAdParam.Request)` — ẩn slot khi skip/fail là việc của helper, không phải của màn hình.
+4. Nếu placement thuộc nhóm nhạy cảm (onboarding-like, welcome, home, permission, widget…): **bắt buộc 100%** gate bằng `AdGate.passesUaGate(config.enableUaCheck)` — factory `nativeHelper` tự nối gate từ `config.enableUaCheck`; xem mục 4.
+5. Banner: extend `BaseActivityWithBanner` và khai báo `BannerConfig` — base chạy trên `BannerAdHelper`; không tự load banner bằng tay.
 
 Tài liệu UI/Ads chi tiết (kích thước CTA, delay nút Done, vị trí native theo page): [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/).
 
@@ -304,7 +304,7 @@ danh sách đó được lấy làm waterfall nguyên văn:
 
 ### 2.4 Welcome / Resume
 - Native welcome:
-  - `AdsManager.loadNativeWelcome(...)`, gate `AdGate.passesUaGate(config.enableUaCheck)`.
+  - `AdsManager.nativeHelper(activity, owner, "native_welcome", AdRemoteConfig.native_welcome, layout)`, gate UA từ `config.enableUaCheck`.
 - Inter welcome:
   - `AdsManager.loadInterWelcome(...)`, `AdsManager.showInterWelcome(...)`.
   - Flow welcome được kích hoạt bởi `AppLifecycleObserver` nếu `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` và `shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck)` cho phép.
@@ -420,15 +420,15 @@ theo từng placement:
 
 | Vị trí Ads | Default `enable_ua_check` trong ad_config.json | Method / chỗ dùng trong code |
 |------------|:----------------------------------------------:|------------------------------|
-| **NativeOnboardingFull1** | `true` | `AdsManager.loadNativeOnboardingFull` (+ chèn page full ở `OnBoardingActivity`) |
-| **NativeOnboardingFull2** | `true` | `AdsManager.loadNativeOnboardingFull2` (+ chèn page full ở `OnBoardingActivity`) |
-| **NativeOnboardingNormal2** | `false` | `AdsManager.loadNativeOnboarding4` |
-| **NativeHome** | `false` | `AdsManager.loadNativeHome` |
-| **NativePermission** | `false` | `AdsManager.loadNativePermission` |
+| **NativeOnboardingFull1** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_3", ...)` (+ chèn page full ở `OnBoardingActivity`) |
+| **NativeOnboardingFull2** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_4", ...)` (+ chèn page full ở `OnBoardingActivity`) |
+| **NativeOnboardingNormal2** | `false` | `AdsManager.nativeHelper(..., "native_onboarding_1_4", ...)` |
+| **NativeHome** | `false` | `AdsManager.nativeHelper(..., "native_home", ...)` |
+| **NativePermission** | `false` | `AdsManager.nativeHelper(..., "native_permission", ...)` |
 | **InterOnboarding** | `true` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
-| **NativeWelcomeBack** | `false` | `AdsManager.loadNativeWelcome` |
-| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (chuyển hướng màn Welcome, qua `shouldDisplayForUa`) |
-| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
+| **NativeWelcomeBack** | `false` | `AdsManager.nativeHelper(..., "native_welcome", ...)` trong `WelcomeActivity` |
+| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (chuyển hướng màn Welcome, qua `AdGate.passesUaGate`) |
+| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `nativeHelper` trong `SurveyActivity` / `ConfirmUninstallActivity` |
 
 > **Default trong `ad_config`:** khi khai báo JSON, các placement trên phải set `enable_ua_check` đúng default cột trên trừ khi Infinity chỉ định khác. Ví dụ Full1/Full2/`inter_onboarding` mặc định `true`; các vị trí còn lại mặc định `false`.
 
@@ -458,15 +458,19 @@ AdGate.passesUaGate(config.enableUaCheck)
 ### 4.4 Pattern bắt buộc khi load
 
 ```kotlin
-loadNativeInternal(
-    activity,
+AdsManager.nativeHelper(
+    activity, lifecycleOwner,
     "native_onboarding_fullscreen_1_3",
-    config,
+    AdRemoteConfig.native_onboarding_fullscreen_1_3,
     layoutRes,
-    liveData,
-    AdGate.passesUaGate(config.enableUaCheck)
 )
+    .setNativeContentView(binding.frAds)
+    .setShimmerLayoutView(binding.shimmer)
+    .requestAds(NativeAdParam.Request)
 ```
+
+Factory tự đưa `config.enableUaCheck` vào gate UA của helper, nên màn hình không thể quên
+hay hard-code nó.
 
 **Không đạt chuẩn nếu:**
 - Bỏ qua gate ở bất kỳ vị trí nào trong bảng trên.
@@ -499,12 +503,15 @@ if (AdRemoteConfig.inter_splash.isEnable && isNetwork(this)) {
 } else moveActivity()
 ```
 
-### 6.2 Native (qua AdsManager)
+### 6.2 Native (qua AdsManager.nativeHelper)
 ```kotlin
-AdsManager.loadNativeOnboarding1(this, appSharedPref.firstOnBoarding, R.layout.layout_native_onboarding)
-AdsManager.nativeOnboarding1AdLive.observe(this) { ad ->
-    if (ad == null) hideAd() else showAd(ad)
-}
+AdsManager.nativeHelper(
+    this, this, "native_welcome", AdRemoteConfig.native_welcome, R.layout.layout_native_welcome,
+)
+    .setNativeContentView(mBinding.frAds)
+    .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
+    .requestAds(NativeAdParam.Request)
+// No observe/hide code: the helper binds on fill and hides the slot on skip/fail
 ```
 
 ### 6.3 Inter (Onboarding)

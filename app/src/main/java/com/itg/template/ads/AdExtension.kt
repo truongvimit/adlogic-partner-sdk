@@ -27,12 +27,27 @@ fun populateNativeAdView(
     adPlaceHolder: FrameLayout,
     containerShimmerLoading: ShimmerFrameLayout,
 ) {
+    populateNativeAdView(
+        activity, apNativeAd, AdsManager.getAdConfig(apNativeAd), adPlaceHolder,
+        containerShimmerLoading,
+    )
+}
+
+/**
+ * Config-explicit variant — the binder shape [com.itg.template.ads.AdsManager.nativeHelper]
+ * plugs into `NativeAdHelper`, so styling never depends on the ad-to-config lookup.
+ */
+fun populateNativeAdView(
+    activity: Activity,
+    apNativeAd: ApNativeAd,
+    config: AdUnitConfig?,
+    adPlaceHolder: FrameLayout,
+    containerShimmerLoading: ShimmerFrameLayout,
+) {
     if (apNativeAd.admobNativeAd == null && apNativeAd.nativeView == null) {
         containerShimmerLoading.visibility = View.GONE
         return
     }
-
-    val config = AdsManager.getAdConfig(apNativeAd)
 
     val adView = LayoutInflater.from(activity)
         .inflate(apNativeAd.layoutCustomNative, null) as NativeAdView

@@ -1,34 +1,38 @@
 package com.itg.template.ui.component.uninstall
 
 import android.widget.FrameLayout
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.helper.adnative.NativeAdParam
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.itg.template.R
+import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.AdsManager
-import com.itg.template.ads.populateNativeAdView
+import com.itg.template.ads.native_confirm_uninstall
 import com.itg.template.databinding.ActivityConfirmUninstallBinding
 import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
-import com.itg.template.ui.bases.ext.goneView
-import com.itg.template.ui.bases.ext.visibleView
 import com.itg.template.utils.Routes
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class ConfirmUninstallActivity : BaseActivity<ActivityConfirmUninstallBinding>(){
+class ConfirmUninstallActivity : BaseActivity<ActivityConfirmUninstallBinding>() {
 
     override fun getLayoutActivity() = R.layout.activity_confirm_uninstall
 
     override fun initViews() {
         super.initViews()
-        AdsManager.loadNativeConfirmUninstall(this, R.layout.layout_native_ad_medium)
+        setupNativeAd()
     }
 
-    override fun observerData() {
-        super.observerData()
-        AdsManager.nativeConfirmUninstallAdLive.observe(this) { ad ->
-            renderConfirmUninstallAd(ad)
-        }
+    // The helper owns the ad from here: gate, load, bind, and hiding the slot on skip/fail
+    private fun setupNativeAd() {
+        val frAds = mBinding.root.findViewById<FrameLayout>(R.id.fr_ads) ?: return
+        val helper = AdsManager.nativeHelper(
+            this, this, "native_confirm_uninstall", AdRemoteConfig.native_confirm_uninstall,
+            R.layout.layout_native_ad_medium,
+        ).setNativeContentView(frAds)
+        mBinding.root.findViewById<ShimmerFrameLayout>(R.id.shimmer_ads)
+            ?.let { helper.setShimmerLayoutView(it) }
+        helper.requestAds(NativeAdParam.Request)
     }
 
     override fun onClickViews() {
@@ -53,19 +57,6 @@ class ConfirmUninstallActivity : BaseActivity<ActivityConfirmUninstallBinding>()
     private fun whenBack() {
         Routes.startMainActivity(this)
         finish()
-    }
-
-    private fun renderConfirmUninstallAd(ad: ApNativeAd?) {
-        val frAds = mBinding.root.findViewById<FrameLayout>(R.id.fr_ads) ?: return
-        if (ad == null) {
-            frAds.goneView()
-            return
-        }
-        frAds.visibleView()
-        val shimmer = mBinding.root.findViewById<ShimmerFrameLayout>(R.id.shimmer_ads)
-        if (shimmer != null) {
-            populateNativeAdView(this, ad, frAds, shimmer)
-        }
     }
 
     override fun onBackPressed() {

@@ -31,7 +31,7 @@
 
 - वही Ads package structure (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`)
 - वही config source flow (assets + Firebase Remote Config)
-- native ad rendering के लिए वही LiveData observation pattern
+- native/banner rendering के लिए वही view-handover pattern (`AdsManager.nativeHelper`, `BaseActivityWithBanner` — §2.6 देखें)
 - Language screen पर DevSetting के जरिए वही QA entry
 
 लक्ष्य: app-to-app drift कम करना, maintainability बेहतर करना, audit आसान बनाना, और technical support को centralized रखना।
@@ -66,10 +66,10 @@ UI customization के समय केवल layout/container बदलें�
 किसी भी **new custom screen** (जो base में पहले से नहीं है) के लिए वही rule set लागू होगा:
 
 1. `ad_config.json` / `ad_config_debug.json` में placement keys जोड़ें और `AdRemoteConfig` में matching properties जोड़ें।
-2. `AdsManager` में load methods जोड़ें (native के लिए `loadNativeInternal`, interstitial के लिए `InterstitialAdManager.load` + `show` — §2.6 देखें)।
-3. Activity/Fragment में `initViews` पर load करें (optional short `postDelayed`), LiveData observe करें, ad मिलने पर `populateNativeAdView` call करें, `null` होने पर container hide करें।
-4. sensitive placements (onboarding-like, welcome, home, permission, widget...) के लिए **100% mandatory**: `AdGate.passesUaGate(config.enableUaCheck)` से gate करें — section 4 देखें।
-5. banner के लिए `BaseActivityWithBanner` extend करें, `BannerConfig` configure करें, `AdsManager.loadBanner` के बाहर banner load न करें।
+2. Native: placement का helper `AdsManager.nativeHelper(...)` से बनाएं; interstitial के लिए `InterstitialAdManager.load` + `show` — §2.6 देखें।
+3. Activity/Fragment में: `initViews` पर container + shimmer helper को hand over करें और `requestAds(NativeAdParam.Request)` call करें — skip/fail पर slot hide करना helper का काम है, screen का नहीं।
+4. sensitive placements (onboarding-like, welcome, home, permission, widget...) के लिए **100% mandatory**: `AdGate.passesUaGate(config.enableUaCheck)` से gate करें — `nativeHelper` factory इसे `config.enableUaCheck` से automatically wire कर देती है; section 4 देखें।
+5. banner के लिए `BaseActivityWithBanner` extend करें और `BannerConfig` declare करें — base `BannerAdHelper` पर चलता है; banner हाथ से load न करें।
 
 Detailed UI/Ads reference (CTA size, Done button delay, native placement by page):  
 [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/).
@@ -315,7 +315,7 @@ remote payload क्रम में छेद नहीं बना सकत
 
 ### 2.4 Welcome / Resume
 - Native welcome:
-  - `AdsManager.loadNativeWelcome(...)`, gate: `AdGate.passesUaGate(config.enableUaCheck)`
+  - `AdsManager.nativeHelper(activity, owner, "native_welcome", AdRemoteConfig.native_welcome, layout)`, `config.enableUaCheck` से UA-gated
 - Inter welcome:
   - `AdsManager.loadInterWelcome(...)`, `AdsManager.showInterWelcome(...)`
   - Welcome flow `AppLifecycleObserver` द्वारा trigger होता है जब `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` और `shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck)` allow करते हैं।
@@ -431,15 +431,15 @@ config flag बदलता है:
 
 | Ad placement | Default `enable_ua_check` in ad_config.json | Code usage |
 |--------------|:-------------------------------------------:|------------|
-| **NativeOnboardingFull1** | `true` | `AdsManager.loadNativeOnboardingFull` (+ `OnBoardingActivity` में full page insert) |
-| **NativeOnboardingFull2** | `true` | `AdsManager.loadNativeOnboardingFull2` (+ `OnBoardingActivity` में full page insert) |
-| **NativeOnboardingNormal2** | `false` | `AdsManager.loadNativeOnboarding4` |
-| **NativeHome** | `false` | `AdsManager.loadNativeHome` |
-| **NativePermission** | `false` | `AdsManager.loadNativePermission` |
+| **NativeOnboardingFull1** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_3", ...)` (+ `OnBoardingActivity` में full page insert) |
+| **NativeOnboardingFull2** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_4", ...)` (+ `OnBoardingActivity` में full page insert) |
+| **NativeOnboardingNormal2** | `false` | `AdsManager.nativeHelper(..., "native_onboarding_1_4", ...)` |
+| **NativeHome** | `false` | `AdsManager.nativeHelper(..., "native_home", ...)` |
+| **NativePermission** | `false` | `AdsManager.nativeHelper(..., "native_permission", ...)` |
 | **InterOnboarding** | `true` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
-| **NativeWelcomeBack** | `false` | `AdsManager.loadNativeWelcome` |
-| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (welcome activity redirection, `shouldDisplayForUa` के जरिए) |
-| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
+| **NativeWelcomeBack** | `false` | `WelcomeActivity` में `AdsManager.nativeHelper(..., "native_welcome", ...)` |
+| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (welcome activity redirection, `AdGate.passesUaGate` के जरिए) |
+| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `SurveyActivity` / `ConfirmUninstallActivity` में `nativeHelper` |
 
 > **ad_config defaults:** JSON declare करते समय ऊपर वाले column के default `enable_ua_check` set करें, जब तक Infinity अलग value न दे। उदाहरण: Full1/Full2/`inter_onboarding` default `true`; बाकी placements default `false`।
 
@@ -469,15 +469,19 @@ AdGate.passesUaGate(config.enableUaCheck)
 ### 4.4 Mandatory load pattern
 
 ```kotlin
-loadNativeInternal(
-    activity,
+AdsManager.nativeHelper(
+    activity, lifecycleOwner,
     "native_onboarding_fullscreen_1_3",
-    config,
+    AdRemoteConfig.native_onboarding_fullscreen_1_3,
     layoutRes,
-    liveData,
-    AdGate.passesUaGate(config.enableUaCheck)
 )
+    .setNativeContentView(binding.frAds)
+    .setShimmerLayoutView(binding.shimmer)
+    .requestAds(NativeAdParam.Request)
 ```
+
+Factory `config.enableUaCheck` को helper के UA gate में feed कर देती है, इसलिए कोई screen
+इसे न भूल सकती है, न hard-code कर सकती है।
 
 **Compliant नहीं अगर:**
 - ऊपर की table में किसी placement पर gate skip करें।
@@ -510,12 +514,15 @@ if (AdRemoteConfig.inter_splash.isEnable && isNetwork(this)) {
 } else moveActivity()
 ```
 
-### 6.2 Native (via AdsManager)
+### 6.2 Native (via AdsManager.nativeHelper)
 ```kotlin
-AdsManager.loadNativeOnboarding1(this, appSharedPref.firstOnBoarding, R.layout.layout_native_onboarding)
-AdsManager.nativeOnboarding1AdLive.observe(this) { ad ->
-    if (ad == null) hideAd() else showAd(ad)
-}
+AdsManager.nativeHelper(
+    this, this, "native_welcome", AdRemoteConfig.native_welcome, R.layout.layout_native_welcome,
+)
+    .setNativeContentView(mBinding.frAds)
+    .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
+    .requestAds(NativeAdParam.Request)
+// No observe/hide code: the helper binds on fill and hides the slot on skip/fail
 ```
 
 ### 6.3 Inter (Onboarding)

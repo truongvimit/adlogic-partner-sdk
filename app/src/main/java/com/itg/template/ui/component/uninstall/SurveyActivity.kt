@@ -2,16 +2,17 @@ package com.itg.template.ui.component.uninstall
 
 import android.content.Intent
 import android.provider.Settings
+import android.widget.FrameLayout
 import androidx.core.net.toUri
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.helper.adnative.NativeAdParam
+import com.facebook.shimmer.ShimmerFrameLayout
 import com.itg.template.R
+import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.AdsManager
-import com.itg.template.ads.populateNativeAdView
+import com.itg.template.ads.native_survey
 import com.itg.template.databinding.ActivitySurveyBinding
 import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
-import com.itg.template.ui.bases.ext.goneView
-import com.itg.template.ui.bases.ext.visibleView
 import com.itg.template.utils.Routes
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -22,26 +23,19 @@ class SurveyActivity : BaseActivity<ActivitySurveyBinding>() {
 
     override fun initViews() {
         super.initViews()
-        AdsManager.loadNativeSurvey(this, R.layout.layout_native_ad_medium)
+        setupNativeAd()
     }
 
-    override fun observerData() {
-        super.observerData()
-        AdsManager.nativeSurveyAdLive.observe(this) { ad -> renderSurveyAd(ad) }
-    }
-
-    private fun renderSurveyAd(ad: ApNativeAd?) {
-        val frAds = mBinding.root.findViewById<android.widget.FrameLayout>(R.id.fr_ads)
-            ?: return
-        if (ad == null) {
-            frAds.goneView()
-            return
-        }
-        frAds.visibleView()
-        val shimmer = mBinding.root.findViewById<com.facebook.shimmer.ShimmerFrameLayout>(R.id.shimmer_ads)
-        if (shimmer != null) {
-            populateNativeAdView(this, ad, frAds, shimmer)
-        }
+    // The helper owns the ad from here: gate, load, bind, and hiding the slot on skip/fail
+    private fun setupNativeAd() {
+        val frAds = mBinding.root.findViewById<FrameLayout>(R.id.fr_ads) ?: return
+        val helper = AdsManager.nativeHelper(
+            this, this, "native_survey", AdRemoteConfig.native_survey,
+            R.layout.layout_native_ad_medium,
+        ).setNativeContentView(frAds)
+        mBinding.root.findViewById<ShimmerFrameLayout>(R.id.shimmer_ads)
+            ?.let { helper.setShimmerLayoutView(it) }
+        helper.requestAds(NativeAdParam.Request)
     }
 
     override fun onClickViews() {

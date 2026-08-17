@@ -1,14 +1,15 @@
 package com.itg.template.ui.bases
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.widget.FrameLayout
 import androidx.databinding.ViewDataBinding
-import com.ads.module.billing.AppPurchase
+import com.ads.module.helper.AdGate
+import com.ads.module.helper.banner.BannerAdConfig
+import com.ads.module.helper.banner.BannerAdHelper
+import com.ads.module.helper.banner.BannerAdParam
+import com.ads.module.helper.banner.BannerType
 import com.itg.template.R
 import com.itg.template.ads.AdUnitConfig
-import com.itg.template.ads.AdsManager
 import com.itg.template.ui.bases.ext.goneView
 import com.itg.template.ui.bases.ext.visibleView
 
@@ -21,109 +22,43 @@ data class BannerConfig(
     val isCollapse: Boolean = false
 )
 
+/**
+ * Screens with a banner slot declare a [bannerConfig] and inherit the whole banner
+ * lifecycle: [BannerAdHelper] owns load, waterfall fallback, reload-on-resume, the
+ * auto-reload timer, and teardown.
+ */
 abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>() {
-
-    companion object {
-        private const val DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER = 2000L
-    }
 
     abstract val bannerConfig: BannerConfig
 
-    private var timeNeedReloadBanner = 0L
-    private var reloadBannerHandler: Handler? = null
-
-    private val reloadBannerRunnable: Runnable = object : Runnable {
-        override fun run() {
-            if (isDestroyed || isFinishing) return
-            val shouldReloadBanner = shouldReloadBanner()
-
-            if (timeNeedReloadBanner < System.currentTimeMillis() && shouldReloadBanner) {
-                loadBanner()
-            }
-
-            if (shouldReloadBanner) {
-                reloadBannerHandler?.removeCallbacks(reloadBannerRunnable)
-                reloadBannerHandler?.postDelayed(this, DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER)
-            } else {
-                cleanupHandler()
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        loadBanner()
+        setupBanner()
     }
 
-    override fun onResume() {
-        super.onResume()
-        reloadBannerIfNeeded()
-    }
-
-    override fun onPause() {
-        cleanupHandler()
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        cleanupHandler()
-        super.onDestroy()
-    }
-
-    private fun loadBanner() {
-        val frAds = findViewById<FrameLayout>(R.id.fr_banner)
-
-        if (!shouldShowBanner()) {
-            timeNeedReloadBanner = 0
-            frAds?.goneView()
-            cleanupHandler()
+    private fun setupBanner() {
+        val frAds = findViewById<FrameLayout>(R.id.fr_banner) ?: return
+        val unit = bannerConfig.adUnitConfig
+        if (!unit.isEnable || AdGate.isPurchased(this)) {
+            frAds.goneView()
             return
         }
-
-        frAds?.visibleView()
-        val adUnitConfig = bannerConfig.adUnitConfig
-        AdsManager.loadBanner(
-            this@BaseActivityWithBanner,
-            adUnitConfig,
-            frAds,
-            bannerConfig.isCollapse
-        )
-
-        val distanceReloadBanner = adUnitConfig.reloadIntervalSeconds ?: 0
-        if (distanceReloadBanner > 0) {
-            timeNeedReloadBanner = System.currentTimeMillis() + distanceReloadBanner * 1000L
-        }
-    }
-
-    private fun reloadBannerIfNeeded() {
-        if (shouldReloadBanner()) {
-            if (reloadBannerHandler == null) {
-                reloadBannerHandler = Handler(Looper.getMainLooper())
+        frAds.visibleView()
+        val reloadSeconds = unit.reloadIntervalSeconds ?: 0
+        val config = BannerAdConfig(
+            unit.waterfallIds,
+            canShowAds = unit.isEnable,
+            canReloadAds = reloadSeconds > 0,
+            bannerType = if (bannerConfig.isCollapse) BannerType.Collapsible() else BannerType.Normal,
+        ).also {
+            if (reloadSeconds > 0) {
+                it.enableAutoReload = true
+                it.autoReloadTime = reloadSeconds * 1000L
             }
-            reloadBannerHandler?.postDelayed(
-                reloadBannerRunnable,
-                DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER
-            )
-        } else {
-            cleanupHandler()
         }
-    }
-
-    private fun shouldShowBanner(): Boolean {
-        val isAdEnabled = bannerConfig.adUnitConfig.isEnable
-                && !AppPurchase.getInstance().isPurchased(this)
-        val frAds = findViewById<FrameLayout>(R.id.fr_banner)
-        return isAdEnabled && frAds != null
-    }
-
-    private fun shouldReloadBanner(): Boolean {
-        val shouldShowBanner = shouldShowBanner()
-        val distanceReloadBanner = bannerConfig.adUnitConfig.reloadIntervalSeconds ?: 0
-        return shouldShowBanner && distanceReloadBanner > 0
-    }
-
-    private fun cleanupHandler() {
-        reloadBannerHandler?.removeCallbacksAndMessages(null)
-        reloadBannerHandler = null
+        BannerAdHelper(this, this, config)
+            .attachInto(frAds)
+            .also { it.placement = "banner_home" }
+            .requestAds(BannerAdParam.Request)
     }
 }
