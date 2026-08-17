@@ -283,6 +283,10 @@ class BannerAdHelper(
                     )
                 }
         }
+        // The loaders raise the shimmer on every request, and it is drawn over the banner.
+        // With an ad still on screen that reads as ad → shimmer → ad, so undo it in the same
+        // main-loop message: the live banner stays until the new one renders over it
+        if (oldViews.isNotEmpty()) hideShimmer()
     }
 
     private fun armAutoReload() {

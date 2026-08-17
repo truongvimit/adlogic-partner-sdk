@@ -368,6 +368,12 @@ BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
 `pollAdNative`, hỗ trợ buffer > 1). Set `placement` là helper tự báo telemetry `ad_request` / skip
 với đúng bộ reason key chuẩn.
 
+**Reload không nháy.** Shimmer thuộc về slot *rỗng*: nó chỉ hiện khi placement chưa có ad nào. Một
+khi ad đã nằm trên màn hình, việc reload — theo timer, lúc resume, hay qua một mức sàn waterfall
+thấp hơn — chạy im lặng bên dưới nó; ad đang sống vẫn giữ nguyên chỗ và creative mới chỉ thay thế
+nó đúng khoảnh khắc fill được. Một lần reload không có fill thì chẳng đổi gì cả, nên một slot không
+bao giờ có thể đi ad → shimmer → ad.
+
 ## 3. Điều kiện chung để Ads được load
 
 Một ad chỉ load khi thỏa đủ các điều kiện, đánh giá tại đúng một chỗ — `AdGate.skipReason(...)`:
