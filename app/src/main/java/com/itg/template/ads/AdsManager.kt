@@ -3,34 +3,36 @@ package com.itg.template.ads
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import android.os.Build
-import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.billing.AppPurchase
 import com.ads.module.funtion.AdCallback
+import com.ads.module.helper.AdGate
+import com.ads.module.helper.AdSkipReason
+import com.ads.module.helper.banner.BannerAdHelper
+import com.ads.module.helper.interstitial.InterLoadOptions
+import com.ads.module.helper.interstitial.InterShowCallback
+import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.ads.module.helper.reward.RewardAdManager
 import com.ads.module.tracking.AdTracking
-import io.trackkit.AdFormat
-import com.ads.module.funtion.AdType
-import com.ads.module.funtion.RewardCallback
 import com.ads.module.util.AppConstant
-import com.google.android.gms.ads.AdValue
-import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.rewarded.RewardItem
-import com.google.android.gms.ads.rewarded.RewardedAd
 import com.itg.template.ui.bases.ext.goneView
+import io.trackkit.AdFormat
 import java.util.Collections
 import java.util.WeakHashMap
 import timber.log.Timber
 
+/**
+ * The app's placement catalog and delivery layer: maps [AdRemoteConfig] slots onto the
+ * SDK's gate/store/helpers and publishes results to the screens' LiveData.
+ *
+ * Mechanism (cache, expiry, dedup, show contract) lives in `com.ads.module.helper`;
+ * only placement policy stays here.
+ */
 @SuppressLint("StaticFieldLeak")
 object AdsManager {
 
@@ -45,12 +47,6 @@ object AdsManager {
         Collections.synchronizedMap(WeakHashMap())
 
     fun getAdConfig(ad: ApNativeAd): AdUnitConfig? = adConfigMap[ad]
-
-    private var interSplashAd: ApInterstitialAd? = null
-    private var interOnboarding: ApInterstitialAd? = null
-    private var interWelcomeAd: ApInterstitialAd? = null
-
-    private var rewardExample: RewardedAd? = null
 
     /**
      * Binds every configured ad unit to its placement, once, before the ads SDK starts.
@@ -81,18 +77,12 @@ object AdsManager {
         config: AdUnitConfig,
         layoutRes: Int,
         liveData: MutableLiveData<ApNativeAd?>,
-        shouldDisplay: Boolean = true,
+        passesUaGate: Boolean = true,
     ) {
-        val skipReason = when {
-            !config.isUsable -> "disabled_config"
-            AppPurchase.getInstance().isPurchased(activity) -> "purchased"
-            !activity.isNetworkAvailable() -> "offline"
-            !shouldDisplay -> "ua_gate"
-            else -> null
-        }
-        // A load that never happened, and why — the only ad facts the SDK cannot observe itself
+        // A load that never happened, and why — same chain and reason keys as always
+        val skipReason = AdGate.skipReason(activity, config.isUsable, passesUaGate)
         if (skipReason != null) {
-            AdTracking.skipped(placement, AdFormat.NATIVE, skipReason)
+            AdTracking.skipped(placement, AdFormat.NATIVE, skipReason.key)
             liveData.postValue(null)
             return
         }
@@ -121,8 +111,8 @@ object AdsManager {
             config,
             layoutRes,
             nativePermissionAdLive,
-            ERainAd.getInstance().getShouldDisplayNativePermission(config.enableUaCheck)
-            )
+            AdGate.passesUaGate(config.enableUaCheck)
+        )
     }
 
     fun loadNativeHome(activity: Activity, layoutRes: Int) {
@@ -133,38 +123,39 @@ object AdsManager {
             config,
             layoutRes,
             nativeHomeAdLive,
-            ERainAd.getInstance().getShouldDisplayNativeHome(config.enableUaCheck)
+            AdGate.passesUaGate(config.enableUaCheck)
         )
     }
 
     fun loadNativeSurvey(activity: Activity, layoutRes: Int) {
+        val config = AdRemoteConfig.native_survey
         loadNativeInternal(
-            activity, "native_survey", AdRemoteConfig.native_survey, layoutRes, nativeSurveyAdLive,
-            ERainAd.getInstance()
-                .getShouldDisplayWidgetUninstall(AdRemoteConfig.native_survey.enableUaCheck)
+            activity, "native_survey", config, layoutRes, nativeSurveyAdLive,
+            AdGate.passesUaGate(config.enableUaCheck)
         )
     }
 
     fun loadNativeConfirmUninstall(activity: Activity, layoutRes: Int) {
+        val config = AdRemoteConfig.native_confirm_uninstall
         loadNativeInternal(
             activity,
             "native_confirm_uninstall",
-            AdRemoteConfig.native_confirm_uninstall,
+            config,
             layoutRes,
             nativeConfirmUninstallAdLive,
-            ERainAd.getInstance()
-                .getShouldDisplayWidgetUninstall(AdRemoteConfig.native_confirm_uninstall.enableUaCheck)
+            AdGate.passesUaGate(config.enableUaCheck)
         )
     }
 
     fun loadNativeWelcome(activity: Activity, layoutRes: Int) {
+        val config = AdRemoteConfig.native_welcome
         loadNativeInternal(
             activity,
             "native_welcome",
-            AdRemoteConfig.native_welcome,
+            config,
             layoutRes,
             nativeWelcomeAdLive,
-            ERainAd.getInstance().getShouldDisplayNativeWelcomeBack(AdRemoteConfig.native_welcome.enableUaCheck)
+            AdGate.passesUaGate(config.enableUaCheck)
         )
     }
 
@@ -184,14 +175,14 @@ object AdsManager {
         } catch (_: Exception) {
             AdUnitConfig(id = "", isEnable = false)
         }
-        // Force shouldDisplay = true to bypass SDK limits
+        // Force the UA gate open to bypass SDK limits
         loadNativeInternal(
             activity,
             "preview_$configKey",
             config,
             layoutRes,
             nativeDashboardPreviewLive,
-            shouldDisplay = true
+            passesUaGate = true
         )
     }
 
@@ -206,128 +197,48 @@ object AdsManager {
     }
 
     fun loadInterOnboarding(context: Context, ignoreLimit: Boolean = false) {
-        val passesUaGate = ignoreLimit ||
-            ERainAd.getInstance()
-                .getShouldDisplayInterOnboarding(AdRemoteConfig.inter_onboarding.enableUaCheck)
-        loadInterstitial(
+        val config = AdRemoteConfig.inter_onboarding
+        InterstitialAdManager.load(
             context,
             "inter_onboarding",
-            AdRemoteConfig.inter_onboarding,
-            interOnboarding,
-            passesUaGate,
-        ) { interOnboarding = it }
+            config.waterfallIds,
+            InterLoadOptions(
+                enabled = config.isUsable,
+                passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
+            ),
+        )
     }
 
     fun showInterOnboarding(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        showInterstitial(context, "inter_onboarding", interOnboarding, onAction)
-        interOnboarding = null
+        InterstitialAdManager.show(context, "inter_onboarding", onCompleteOnce(onAction))
     }
 
     fun loadInterWelcome(context: Context, ignoreLimit: Boolean = false) {
-        val passesUaGate = ignoreLimit ||
-            ERainAd.getInstance()
-                .getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)
-        loadInterstitial(
+        val config = AdRemoteConfig.inter_welcome
+        InterstitialAdManager.load(
             context,
             "inter_welcome",
-            AdRemoteConfig.inter_welcome,
-            interWelcomeAd,
-            passesUaGate,
-        ) { interWelcomeAd = it }
+            config.waterfallIds,
+            InterLoadOptions(
+                enabled = config.isUsable,
+                passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
+            ),
+        )
     }
 
     fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        showInterstitial(context, "inter_welcome", interWelcomeAd, onAction)
-        interWelcomeAd = null
+        InterstitialAdManager.show(context, "inter_welcome", onCompleteOnce(onAction))
     }
 
-    /**
-     * Runs the placement's waterfall and hands the winner to [onResolved], or `null` when nothing
-     * filled. Keeps [buffered] instead when it is still usable.
-     *
-     * `ignoreLimit` only bypasses the UA gate — it used to gate the load itself, so every call
-     * with the default argument skipped with `ignore_limit_false` and never had an ad to show.
-     */
-    private fun loadInterstitial(
-        context: Context,
-        placement: String,
-        config: AdUnitConfig,
-        buffered: ApInterstitialAd?,
-        passesUaGate: Boolean,
-        onResolved: (ApInterstitialAd?) -> Unit,
-    ) {
-        // One cached ad per placement; re-requesting over a ready one burns a request and the fill
-        if (buffered?.isReady == true) return
-        val skipReason = when {
-            !config.isUsable -> "disabled_config"
-            AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            !context.isNetworkAvailable() -> "offline"
-            !passesUaGate -> "ua_gate"
-            else -> null
+    /** The store fires onComplete exactly once, whatever the module reports. */
+    private fun onCompleteOnce(onAction: () -> Unit) = object : InterShowCallback() {
+        override fun onSkipped(reason: AdSkipReason) {
+            if (reason == AdSkipReason.FAILED_TO_SHOW) {
+                Timber.tag("AdsManager").w("Interstitial show failed")
+            }
         }
-        if (skipReason != null) {
-            AdTracking.skipped(placement, AdFormat.INTERSTITIAL, skipReason)
-            onResolved(null)
-            return
-        }
-        // waterfallIds, not id: the list is the waterfall, highest floor first
-        AdTracking.request(placement, AdFormat.INTERSTITIAL, config.waterfallIds.first())
-        AdWaterfall.loadInterstitial(
-            context,
-            config.waterfallIds,
-            object : AdCallback() {
-                override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
-                    onResolved(apInterstitialAd)
-                }
 
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    onResolved(null)
-                }
-            },
-        )
-    }
-
-    /**
-     * Shows [ad] and runs [onAction] exactly once, whatever the module reports.
-     *
-     * Wiring only `onNextAction` — as this did — loses the callback entirely when the show fails,
-     * because `openActivityAfterShowInterAds` is pinned on and the module then reports the failure
-     * through `onAdFailedToShow` alone. The screen was left waiting forever.
-     */
-    private fun showInterstitial(
-        context: Context,
-        placement: String,
-        ad: ApInterstitialAd?,
-        onAction: () -> Unit,
-    ) {
-        val blockReason = when {
-            ad == null || !ad.isReady -> "not_ready"
-            AppPurchase.getInstance().isPurchased(context) -> "purchased"
-            else -> null
-        }
-        if (blockReason != null || ad == null) {
-            AdTracking.skipped(placement, AdFormat.INTERSTITIAL, blockReason ?: "unknown")
-            onAction()
-            return
-        }
-        val proceeded = java.util.concurrent.atomic.AtomicBoolean(false)
-        val proceed = { if (proceeded.compareAndSet(false, true)) onAction() }
-        ERainAd.getInstance().forceShowInterstitial(
-            context, ad,
-            object : AdCallback() {
-                override fun onNextAction() = proceed()
-
-                override fun onAdClosed() = proceed()
-
-                override fun onAdFailedToShow(adError: com.google.android.gms.ads.AdError?) {
-                    AdTracking.skipped(placement, AdFormat.INTERSTITIAL, "failed_to_show")
-                    Timber.tag("AdsManager").w("Show $placement failed: ${adError?.message}")
-                    proceed()
-                }
-            },
-            // Reloading is the caller's job; letting the module do it too double-requests the unit
-            false,
-        )
+        override fun onComplete() = onAction()
     }
 
     fun loadAndShowReward(
@@ -336,56 +247,13 @@ object AdsManager {
         onFailed: () -> Unit
     ) {
         val config = AdRemoteConfig.reward_example
-        val skipReason = when {
-            !config.isEnable -> "disabled_config"
-            AppPurchase.getInstance().isPurchased(activity) -> "purchased"
-            else -> null
-        }
-        if (skipReason != null) {
-            AdTracking.skipped("reward_example", AdFormat.REWARDED, skipReason)
-            onFailed()
-            return
-        }
-
-        AdTracking.request("reward_example", AdFormat.REWARDED, config.id)
-        ERainAd.getInstance().initRewardAds(
+        RewardAdManager.loadAndShow(
             activity,
-            config.id,
-            object : AdCallback() {
-                override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
-                    super.onRewardAdLoaded(rewardedAd)
-                    rewardExample = rewardedAd
-
-                    var isEarn = false
-                    ERainAd.getInstance().showRewardAds(
-                        activity,
-                        rewardExample,
-                        object : RewardCallback {
-                            override fun onUserEarnedReward(var1: RewardItem?) {
-                                isEarn = true
-                                rewardExample = null
-                            }
-
-                            override fun onRewardedAdClosed() {
-                                if (isEarn) onSuccess()
-                                else onFailed()
-                            }
-
-                            override fun onRewardedAdFailedToShow(codeError: Int) {
-                                rewardExample = null
-                                onFailed()
-                            }
-
-                            override fun onAdClicked() = Unit
-                        }
-                    )
-                }
-
-                override fun onAdFailedToLoad(i: LoadAdError?) {
-                    super.onAdFailedToLoad(i)
-                    onFailed()
-                }
-            }
+            "reward_example",
+            config.waterfallIds,
+            enabled = config.isEnable,
+            onSuccess = { onSuccess() },
+            onFailed = { onFailed() },
         )
     }
 
@@ -397,11 +265,11 @@ object AdsManager {
         placement: String = "banner_home",
     ) {
         if (adUnitConfig.isEnable) {
-            removeBannerView(activity, frAds)
+            BannerAdHelper.resetPlaceholder(activity, frAds)
             // Mirror the SDK's own purchased gate so a silent internal no-op is not
             // recorded as a pending request
-            if (AppPurchase.getInstance().isPurchased(activity)) {
-                AdTracking.skipped(placement, AdFormat.BANNER, "purchased")
+            if (AdGate.isPurchased(activity)) {
+                AdTracking.skipped(placement, AdFormat.BANNER, AdSkipReason.PURCHASED.key)
             } else {
                 AdTracking.request(placement, AdFormat.BANNER, adUnitConfig.id)
             }
@@ -421,30 +289,9 @@ object AdsManager {
             )
             else ERainAd.getInstance().loadBanner(activity, adUnitConfig.id, callback)
         } else {
-            AdTracking.skipped(placement, AdFormat.BANNER, "disabled_config")
+            AdTracking.skipped(placement, AdFormat.BANNER, AdSkipReason.DISABLED_CONFIG.key)
             frAds.removeAllViews()
             frAds.goneView()
-        }
-    }
-
-    @SuppressLint("InflateParams")
-    private fun removeBannerView(activity: Activity, frAds: FrameLayout) {
-        try {
-            val container = frAds.findViewById<FrameLayout>(com.ads.module.R.id.banner_container)
-            if (container != null) {
-                for (i in 0 until container.childCount) {
-                    val view = container.getChildAt(i)
-                    if (view is AdView) {
-                        view.destroy()
-                        container.removeView(view)
-                    }
-                }
-            }
-            val shimmerFrameLayout = LayoutInflater.from(activity)
-                .inflate(com.ads.module.R.layout.layout_banner_control, null)
-            frAds.removeAllViews()
-            frAds.addView(shimmerFrameLayout)
-        } catch (_: Exception) {
         }
     }
 
@@ -452,23 +299,8 @@ object AdsManager {
         nativeSurveyAdLive.postValue(null)
         nativeConfirmUninstallAdLive.postValue(null)
         nativeWelcomeAdLive.postValue(null)
-        interSplashAd = null
-        interOnboarding = null
-        interWelcomeAd = null
-    }
-
-    private fun Context.isNetworkAvailable(): Boolean {
-        val connectivityManager =
-            getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-        } else {
-            @Suppress("DEPRECATION")
-            connectivityManager.activeNetworkInfo?.isConnectedOrConnecting == true
-        }
+        // Per-key: the store is process-wide and OnboardKit owns placements of its own
+        InterstitialAdManager.release("inter_onboarding")
+        InterstitialAdManager.release("inter_welcome")
     }
 }

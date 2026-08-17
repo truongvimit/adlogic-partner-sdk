@@ -13,9 +13,14 @@ import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.billing.AppPurchase
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.AdmobHelper
+import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
+import com.ads.module.helper.adnative.NativeAdConfig
+import com.ads.module.helper.adnative.NativeAdPreload
+import com.ads.module.helper.interstitial.InterLoadOptions
+import com.ads.module.helper.interstitial.InterShowCallback
+import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.util.SharePreferenceUtils
 import com.facebook.shimmer.ShimmerFrameLayout
-import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
@@ -31,14 +36,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Default [OnboardingAdProvider], backed by the project's `:ads` module (AdMob legacy).
+ * Default [OnboardingAdProvider]: a thin adapter over the `:ads` helper layer.
  *
- * Each placement walks its own ad unit list top to bottom — highest floor first, next id only
- * once the current one fails to fill. One request in flight per placement, and the in-flight
- * marker is cleared on both success and failure so a placement that failed can be retried.
- *
- * Buffered ads carry their load time: GMA drops an unshown ad after roughly an hour, and a stale
- * wrapper reports itself as ready right up until `show()` silently does nothing.
+ * Buffering, expiry, in-flight dedup and the show contract all live in
+ * [NativeAdPreload] / [InterstitialAdManager]; this class only translates between the
+ * onboarding flow's placement/callback vocabulary and the module's. Telemetry stays with
+ * the flow's own AdTelemetry, so the managers are called with reporting off.
  */
 class ERainAdProvider(
     /**
@@ -51,10 +54,7 @@ class ERainAdProvider(
     private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
 ) : OnboardingAdProvider {
 
-    private val natives = ConcurrentHashMap<String, CachedAd<ApNativeAd>>()
-    private val nativeInFlight = ConcurrentHashMap.newKeySet<String>()
-    private val interstitials = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
-    private val interInFlight = ConcurrentHashMap.newKeySet<String>()
+    private val preload = NativeAdPreload.getInstance()
 
     /**
      * One observer per placement — the screen currently showing it. A list here grew a wrapper per
@@ -62,12 +62,18 @@ class ERainAdProvider(
      */
     private val listeners = ConcurrentHashMap<String, AdEventListener>()
 
+    /** Buffer observers, one per placement; also the roster of keys this provider owns. */
+    private val nativeBridges = ConcurrentHashMap<String, AdCallback>()
+    private val interKeys = ConcurrentHashMap.newKeySet<String>()
+
+    // GMA requires destroy() on every consumed NativeAd; the buffer only owns unpolled ones
+    private val boundNatives = ConcurrentHashMap<String, ApNativeAd>()
+
     override fun isPremium(context: Context): Boolean =
         runCatching { AppPurchase.getInstance().isPurchased(context) }.getOrDefault(false)
 
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
-        if (isNativeReady(request.placement)) return
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
             ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
@@ -76,60 +82,20 @@ class ERainAdProvider(
         // GMA's paid-event callback only knows the ad unit id; this is the only place that knows
         // which onboarding screen asked for it.
         ids.forEach { PlacementRegistry.register(it, key) }
-        if (!nativeInFlight.add(key)) return
-        ObLog.d(ObLog.Section.LOAD, "$key native waterfall tiers=${ids.size} top=${shortId(ids.first())}")
-        AdWaterfall.loadNative(
-            activity,
-            ids,
-            request.layoutRes,
-            tierTimeoutMs,
-            object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    publishNative(key, nativeAd)
-                }
-
-                override fun onAdFailedToLoad(error: LoadAdError?) {
-                    failNative(key, "all ${ids.size} tier(s) failed")
-                }
-
-                override fun onAdClicked() {
-                    notifyListener(key) { it.onClicked() }
-                }
-            },
-        )
+        ensureNativeBridge(key)
+        val covered =
+            preload.preloadWithKeyIfEmpty(key, activity, nativeConfig(ids, request.layoutRes))
+        // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
+        if (!covered && !isNativeReady(request.placement)) {
+            notifyListener(key) { it.onFailedToLoad() }
+        }
     }
 
-    private fun publishNative(key: String, ad: ApNativeAd) {
-        ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
-        natives.put(key, CachedAd(ad))?.let { destroyNative(it.ad) }
-        nativeInFlight.remove(key)
-        notifyListener(key) { it.onLoaded() }
-    }
-
-    private fun failNative(key: String, reason: String) {
-        ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — $reason")
-        nativeInFlight.remove(key)
-        notifyListener(key) { it.onFailedToLoad() }
-    }
-
-    private fun destroyNative(ad: ApNativeAd) {
-        runCatching { ad.admobNativeAd?.destroy() }
-    }
-
-    override fun isNativeReady(placement: AdPlacement): Boolean = takeFreshNative(placement) != null
+    override fun isNativeReady(placement: AdPlacement): Boolean =
+        preload.getAdNative(placement.key) != null
 
     override fun isNativeLoading(placement: AdPlacement): Boolean =
-        placement.key in nativeInFlight
-
-    /** Drops the buffer when it has gone stale, so a caller never binds an expired ad. */
-    private fun takeFreshNative(placement: AdPlacement): CachedAd<ApNativeAd>? {
-        val cached = natives[placement.key] ?: return null
-        if (cached.isFresh) return cached
-        ObLog.w(ObLog.Section.LOAD, "${placement.key} native EXPIRED — dropping buffer")
-        natives.remove(placement.key)
-        destroyNative(cached.ad)
-        return null
-    }
+        preload.isPreloadInProgress(placement.key)
 
     override fun bindNative(
         activity: Activity,
@@ -139,11 +105,13 @@ class ERainAdProvider(
         listener: AdEventListener?,
     ): Boolean {
         listener?.let { listeners[placement.key] = it }
-        val cached = takeFreshNative(placement) ?: return false
         val frame = container as? FrameLayout ?: return false
-        natives.remove(placement.key)
+        val ad = preload.pollAdNative(placement.key) ?: return false
         val shimmerFrame = shimmer as? ShimmerFrameLayout ?: ShimmerFrameLayout(activity)
-        ERainAd.getInstance().populateNativeAdView(activity, cached.ad, frame, shimmerFrame)
+        ERainAd.getInstance().populateNativeAdView(activity, ad, frame, shimmerFrame)
+        boundNatives.put(placement.key, ad)?.let { previous ->
+            if (previous !== ad) destroyNative(previous)
+        }
         // GMA counts the impression once the view tree is bound and visible
         notifyListener(placement.key) { it.onImpression() }
         return true
@@ -151,8 +119,9 @@ class ERainAdProvider(
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
-        natives.remove(key)?.let { destroyNative(it.ad) }
-        nativeInFlight.remove(key)
+        nativeBridges.remove(key)
+        preload.release(key)
+        boundNatives.remove(key)?.let(::destroyNative)
         listeners.remove(key)
     }
 
@@ -164,128 +133,68 @@ class ERainAdProvider(
     ) {
         val key = placement.key
         listener?.let { listeners[key] = it }
-        // Report the buffered ad instead of staying silent: a caller waiting on onLoaded would
-        // otherwise hang until its own budget expired.
-        if (isInterstitialReady(placement)) {
-            notifyListener(key) { it.onLoaded() }
-            return
-        }
-        val ids = unit.loadOrder
-        if (ids.isEmpty()) {
-            ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
-            notifyListener(key) { it.onFailedToLoad() }
-            return
-        }
-        ids.forEach { PlacementRegistry.register(it, key) }
-        // A load is already running; its completion notifies the listener registered above.
-        if (!interInFlight.add(key)) return
-        ObLog.d(ObLog.Section.LOAD, "$key inter waterfall tiers=${ids.size} top=${shortId(ids.first())}")
-        AdWaterfall.loadInterstitial(
+        interKeys.add(key)
+        InterstitialAdManager.load(
             context,
-            ids,
-            tierTimeoutMs,
+            key,
+            unit.loadOrder,
+            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = false),
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
-                    if (apInterstitialAd == null) {
-                        failInterstitial(key, "waterfall returned no ad")
-                        return
-                    }
-                    publishInterstitial(key, apInterstitialAd)
+                    ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
+                    notifyListener(key) { it.onLoaded() }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
-                    failInterstitial(key, "all ${ids.size} tier(s) failed")
+                    ObLog.w(ObLog.Section.LOAD, "$key inter UNFILLED")
+                    notifyListener(key) { it.onFailedToLoad() }
                 }
+                // No onAdClicked here: the show path already forwards clicks, and the manager
+                // pings this same bridge — overriding both would deliver every click twice
             },
         )
     }
 
-    private fun publishInterstitial(key: String, ad: ApInterstitialAd) {
-        ObLog.d(ObLog.Section.LOAD, "$key inter FILLED id=${shortId(ad.interstitialAd?.adUnitId)}")
-        interstitials[key] = CachedAd(ad)
-        interInFlight.remove(key)
-        notifyListener(key) { it.onLoaded() }
-    }
-
-    private fun failInterstitial(key: String, reason: String) {
-        ObLog.w(ObLog.Section.LOAD, "$key inter UNFILLED — $reason")
-        interInFlight.remove(key)
-        notifyListener(key) { it.onFailedToLoad() }
-    }
-
     override fun isInterstitialReady(placement: AdPlacement): Boolean =
-        takeFreshInterstitial(placement) != null
-
-    private fun takeFreshInterstitial(placement: AdPlacement): ApInterstitialAd? {
-        val cached = interstitials[placement.key] ?: return null
-        if (!cached.isFresh) {
-            ObLog.w(ObLog.Section.LOAD, "${placement.key} inter EXPIRED — dropping buffer")
-            interstitials.remove(placement.key)
-            return null
-        }
-        return cached.ad.takeIf { it.isReady }
-    }
+        InterstitialAdManager.isReady(placement.key)
 
     /**
-     * Maps the module's show callbacks onto the two moments the flow cares about.
-     *
-     * | module | mapped to |
-     * |---|---|
-     * | `onInterstitialShow` | commit marker only — tells the two `onNextAction` cases apart |
-     * | `onNextAction` after commit | [ObInterstitialCallback.onNextAction] — ad is on screen |
-     * | `onNextAction` without commit | terminal: the interval / click-cap short circuit |
-     * | `onAdClosed` | terminal: dismissed |
-     * | `onAdFailedToShow` | terminal: failed |
-     *
-     * `onInterstitialShow` is deliberately not the prewarm point: it lands 800 ms before the
-     * module re-checks that the Activity is still RESUMED, so starting the next screen on it makes
-     * that check fail and the ad is dropped. See [ERainTuning].
+     * Maps the store's show contract onto the flow's two moments: `onComplete` without a
+     * preceding skip is the commit — the ad is on screen and the next screen may start
+     * underneath it — while a skip suppresses `onNextAction` entirely.
      */
     override fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,
         callback: ObInterstitialCallback,
     ) {
-        val ad = takeFreshInterstitial(placement)
-        if (ad == null) {
-            callback.onAdSkipped(AdSkipReason.NOT_READY)
-            return
-        }
-        // Full-screen ads are single use; drop the buffer before showing so it can never show twice
-        interstitials.remove(placement.key)
-        val committed = AtomicBoolean(false)
-        ERainAd.getInstance().forceShowInterstitial(
+        val key = placement.key
+        interKeys.add(key)
+        InterstitialAdManager.show(
             activity,
-            ad,
-            object : AdCallback() {
-                override fun onInterstitialShow() {
-                    committed.set(true)
+            key,
+            object : InterShowCallback() {
+                private val skipped = AtomicBoolean(false)
+
+                override fun onSkipped(reason: SdkAdSkipReason) {
+                    skipped.set(true)
+                    ObLog.w(ObLog.Section.SHOW, "$key skipped: ${reason.key}")
+                    callback.onAdSkipped(mapReason(reason))
                 }
 
-                override fun onNextAction() {
-                    if (committed.get()) {
-                        callback.onNextAction()
-                    } else {
-                        // No commit marker means the module short circuited before showing
-                        ObLog.w(ObLog.Section.SHOW, "${placement.key} declined by the ads module")
-                        callback.onAdSkipped(AdSkipReason.CAPPED_BY_ADS_MODULE)
-                    }
+                override fun onComplete() {
+                    if (!skipped.get()) callback.onNextAction()
                 }
 
-                override fun onAdClosed() {
+                override fun onClosed() {
                     callback.onAdClosed()
                 }
 
-                override fun onAdFailedToShow(adError: AdError?) {
-                    ObLog.w(ObLog.Section.SHOW, "${placement.key} onAdFailedToShow: ${adError?.message}")
-                    callback.onAdSkipped(AdSkipReason.FAILED_TO_SHOW)
-                }
-
-                override fun onAdClicked() {
-                    notifyListener(placement.key) { it.onClicked() }
+                override fun onClicked() {
+                    notifyListener(key) { it.onClicked() }
                 }
             },
-            false,
+            reportTelemetry = false,
         )
     }
 
@@ -321,42 +230,57 @@ class ERainAdProvider(
     }
 
     override fun releaseAll() {
-        natives.values.forEach { destroyNative(it.ad) }
-        natives.clear()
-        nativeInFlight.clear()
-        interstitials.clear()
-        interInFlight.clear()
+        // Per-key release: the stores are process-wide and the host app owns keys of its own
+        nativeBridges.keys.forEach { preload.release(it) }
+        nativeBridges.clear()
+        boundNatives.values.forEach(::destroyNative)
+        boundNatives.clear()
+        interKeys.forEach { InterstitialAdManager.release(it) }
+        interKeys.clear()
         listeners.clear()
+    }
+
+    private fun nativeConfig(ids: List<String>, layoutRes: Int): NativeAdConfig =
+        NativeAdConfig(ids, true, false, layoutRes).also {
+            it.tierTimeoutMs = tierTimeoutMs
+        }
+
+    private fun ensureNativeBridge(key: String) {
+        nativeBridges.computeIfAbsent(key) {
+            object : AdCallback() {
+                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                    ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
+                    notifyListener(key) { it.onLoaded() }
+                }
+
+                override fun onAdFailedToLoad(error: LoadAdError?) {
+                    ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — no fill")
+                    notifyListener(key) { it.onFailedToLoad() }
+                }
+
+                override fun onAdClicked() {
+                    notifyListener(key) { it.onClicked() }
+                }
+            }.also { preload.registerAdCallback(key, it) }
+        }
+    }
+
+    // Exhaustive so adding a store reason forces a mapping decision here
+    private fun mapReason(reason: SdkAdSkipReason): AdSkipReason = when (reason) {
+        SdkAdSkipReason.NOT_READY -> AdSkipReason.NOT_READY
+        SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE
+        SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW
+        SdkAdSkipReason.PURCHASED -> AdSkipReason.PREMIUM
+        SdkAdSkipReason.DISABLED_CONFIG -> AdSkipReason.NO_AD_UNIT
+        SdkAdSkipReason.OFFLINE -> AdSkipReason.NOT_READY
+        SdkAdSkipReason.UA_GATE -> AdSkipReason.NOT_READY
+    }
+
+    private fun destroyNative(ad: ApNativeAd) {
+        runCatching { ad.admobNativeAd?.destroy() }
     }
 
     private fun notifyListener(key: String, block: (AdEventListener) -> Unit) {
         listeners[key]?.let { runCatching { block(it) } }
-    }
-
-    /** Ad unit ids are long and share a prefix; the tail is what identifies them in a log. */
-    private fun shortId(id: String?): String =
-        id?.takeIf { it.isNotBlank() }?.takeLast(ID_TAIL_LENGTH) ?: "-"
-
-    private companion object {
-        const val ID_TAIL_LENGTH = 10
-
-    }
-}
-
-/**
- * A buffered ad and when it arrived.
- *
- * GMA discards an unshown interstitial or native after about an hour, and the wrapper keeps
- * reporting itself ready afterwards — the expiry has to be tracked here.
- */
-internal class CachedAd<T : Any>(
-    val ad: T,
-    private val loadedAtMs: Long = System.currentTimeMillis(),
-) {
-    val isFresh: Boolean get() = System.currentTimeMillis() - loadedAtMs < MAX_AGE_MS
-
-    private companion object {
-        /** GMA discards an unshown interstitial or native after one hour. */
-        const val MAX_AGE_MS = 60 * 60 * 1_000L
     }
 }

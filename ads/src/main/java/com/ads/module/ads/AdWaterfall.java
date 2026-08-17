@@ -13,6 +13,7 @@ import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.funtion.AdCallback;
 import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.rewarded.RewardedAd;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -109,6 +110,12 @@ public final class AdWaterfall {
                     public void onAdClicked() {
                         callback.onAdClicked();
                     }
+
+                    @Override
+                    public void onAdImpression() {
+                        // Only the winning tier's view can render, so no settle() gate needed
+                        callback.onAdImpression();
+                    }
                 });
     }
 
@@ -171,6 +178,69 @@ public final class AdWaterfall {
                 Log.w(TAG, "loadInterstitial tier " + (index + 1) + "/" + tiers.size()
                         + " failed: " + (error == null ? "null" : error.getMessage()));
                 loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback);
+            }
+        });
+    }
+
+    /**
+     * Walks {@code adUnitIds} until one rewarded ad fills.
+     *
+     * @param callback {@code onRewardAdLoaded} on the first fill, {@code onAdFailedToLoad}
+     *                 once every tier has failed.
+     */
+    public static void loadReward(
+            @NonNull Context context,
+            @Nullable List<String> adUnitIds,
+            @NonNull AdCallback callback) {
+        loadReward(context, adUnitIds, DEFAULT_TIER_TIMEOUT_MS, callback);
+    }
+
+    public static void loadReward(
+            @NonNull Context context,
+            @Nullable List<String> adUnitIds,
+            long tierTimeoutMs,
+            @NonNull AdCallback callback) {
+        List<String> tiers = usableIds(adUnitIds);
+        if (tiers.isEmpty()) {
+            Log.w(TAG, "loadReward: no usable ad unit id");
+            callback.onAdFailedToLoad(null);
+            return;
+        }
+        loadRewardTier(context, tiers, tierTimeoutMs, 0, callback);
+    }
+
+    private static void loadRewardTier(
+            Context context,
+            List<String> tiers,
+            long tierTimeoutMs,
+            int index,
+            AdCallback callback) {
+        if (index >= tiers.size()) {
+            Log.w(TAG, "loadReward: all " + tiers.size() + " tier(s) failed");
+            callback.onAdFailedToLoad(null);
+            return;
+        }
+        final Tier tier = new Tier(tierTimeoutMs, () ->
+                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback));
+        ERainAd.getInstance().initRewardAds(context, tiers.get(index), new AdCallback() {
+            @Override
+            public void onRewardAdLoaded(RewardedAd rewardedAd) {
+                if (!tier.settle()) return;
+                // The module answers a purchased user with silence, not null — the tier
+                // timeout covers that; a null here is still a decline, not a fill.
+                if (rewardedAd == null) {
+                    loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback);
+                    return;
+                }
+                callback.onRewardAdLoaded(rewardedAd);
+            }
+
+            @Override
+            public void onAdFailedToLoad(@Nullable LoadAdError error) {
+                if (!tier.settle()) return;
+                Log.w(TAG, "loadReward tier " + (index + 1) + "/" + tiers.size()
+                        + " failed: " + (error == null ? "null" : error.getMessage()));
+                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback);
             }
         });
     }
