@@ -175,16 +175,12 @@ class BannerAdHelper(
             return
         }
         flagActive.set(true)
-        // A collapsible AdView must never be reused in place. Other types keep the live view
-        // until the replacement fills, so a failed reload never blanks the slot
-        val oldViews: List<AdView> = if (config.bannerType is BannerType.Collapsible) {
-            detachAdView()
-            emptyList()
-        } else {
-            bannerContainer()?.let { container ->
-                (0 until container.childCount).mapNotNull { container.getChildAt(it) as? AdView }
-            } ?: emptyList()
-        }
+        // Every type keeps its live view until the replacement fills — collapsible included,
+        // which is retired at populate time, never at request time. Tearing it down here is
+        // what made a reload read as ad → shimmer → ad, and a failed reload blank the slot
+        val oldViews: List<AdView> = bannerContainer()?.let { container ->
+            (0 until container.childCount).mapNotNull { container.getChildAt(it) as? AdView }
+        } ?: emptyList()
         setState(AdBannerState.Loading)
         // Request-time anchor; the impression callback re-stamps when it lands
         if (config.enableAutoReload) {
