@@ -33,6 +33,21 @@ data class LanguageConfig(
      * entry. Same screen, second impression — no duplicated Activity, no lost scroll position.
      */
     val secondNativeOnSelectEnabled: Boolean = true,
+    /**
+     * Animated hand pointing at the row that matches the device language (English when the
+     * device language is not on the list), shown only until the user picks something.
+     * AND-ed with the `ob_show_language_tap_hint` remote flag.
+     */
+    val tapHintEnabled: Boolean = true,
+    /**
+     * Whether the confirm button is on screen before the user has picked anything.
+     *
+     * `true` (default) keeps it visible but dimmed, so the way out of the screen is obvious from
+     * the start. `false` hides it until the first tap, which makes selecting a language the only
+     * thing the screen offers. AND-ed with the `ob_show_language_confirm_before_select` remote
+     * flag; either side turning it off hides the button.
+     */
+    val confirmVisibleBeforeSelect: Boolean = true,
     @LayoutRes val layoutRes: Int = 0,
     @LayoutRes val itemLayoutRes: Int = 0,
 )

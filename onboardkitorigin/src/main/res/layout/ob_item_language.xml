@@ -11,36 +11,64 @@
         android:layout_height="@dimen/ob_language_row_height"
         android:background="@drawable/ob_bg_language_row"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/ob_screen_padding">
+        android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/ob_language_flag"
-            android:layout_width="@dimen/ob_flag_size"
-            android:layout_height="@dimen/ob_flag_size"
-            android:importantForAccessibility="no"
-            android:adjustViewBounds="true"
-            tools:src="@drawable/ob_flag_en_us" />
-
-        <TextView
-            android:id="@+id/ob_language_name"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:fontFamily="@font/ob_poppins_regular"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="@color/ob_text_primary"
-            android:textSize="@dimen/ob_text_language"
-            tools:text="English" />
+            android:padding="@dimen/ob_screen_padding"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ImageView
+                android:id="@+id/ob_language_flag"
+                android:layout_width="@dimen/ob_flag_size"
+                android:layout_height="@dimen/ob_flag_size"
+                android:importantForAccessibility="no"
+                android:adjustViewBounds="true"
+                tools:src="@drawable/ob_flag_en_us" />
 
-        <ImageView
-            android:id="@+id/ob_language_radio"
-            android:layout_width="@dimen/ob_radio_size"
-            android:layout_height="@dimen/ob_radio_size"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ob_radio_selector" />
+            <TextView
+                android:id="@+id/ob_language_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/ob_text_primary"
+                android:textSize="@dimen/ob_text_language"
+                tools:text="English" />
+        </LinearLayout>
+
+        <!-- Radio slot doubles as the anchor for the "tap here" hint, which is centred on the
+             radio and allowed to overflow it (clipChildren=false). -->
+        <FrameLayout
+            android:layout_width="@dimen/ob_ratio_anim_area"
+            android:layout_height="@dimen/ob_ratio_anim_area"
+            android:clipChildren="false">
+
+            <ImageView
+                android:id="@+id/ob_language_radio"
+                android:layout_width="@dimen/ob_radio_size"
+                android:layout_height="@dimen/ob_radio_size"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ob_radio_selector"
+                android:layout_margin="@dimen/ob_screen_padding"/>
+
+            <ImageView
+                android:id="@+id/ob_language_hint"
+                android:layout_width="@dimen/ob_language_hint_size"
+                android:layout_height="@dimen/ob_language_hint_size"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                tools:visibility="visible"
+                android:layout_marginTop="9.5dp"
+                android:layout_marginStart="8.2dp"/>
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

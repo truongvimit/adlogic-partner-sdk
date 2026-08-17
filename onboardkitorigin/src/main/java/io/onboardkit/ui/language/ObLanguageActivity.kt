@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.onboardkit.OnboardingSdk
@@ -64,11 +65,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
         adapter = LanguageAdapter(::onLanguageTapped)
         adapter.selectedCode = selectedCode
+        adapter.hintCode = resolveHintCode()
         binding.obLanguageList.layoutManager = LinearLayoutManager(this)
         binding.obLanguageList.adapter = adapter
         adapter.submitList(languages)
 
-        binding.obLanguageConfirm.alpha = if (selectedCode == null) 0.5f else 1f
+        bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
 
         if (mode == LanguageScreenMode.SETTINGS) {
@@ -89,6 +91,36 @@ class ObLanguageActivity : BaseOnboardActivity() {
     /** The remote template bucket this screen's native was built with. */
     private fun adVariant(): String = sdk.flags().templateLanguage
 
+    /**
+     * Row that gets the animated tap hint, or null for no hint at all.
+     *
+     * Three ways to end up with no hint: the partner switched it off at build time
+     * (`language.tapHintEnabled`), remote switched it off (`ob_show_language_tap_hint`), or there
+     * is already a selection — a preselected `defaultCode`, or the SETTINGS screen, where the user
+     * came to change a language they have already chosen once.
+     */
+    private fun resolveHintCode(): String? {
+        if (selectedCode != null) return null
+        if (!sdk.requireConfig().language.tapHintEnabled) return null
+        if (!sdk.flags().showLanguageTapHint) return null
+        return DeviceLanguageHint.resolve(languages)
+    }
+
+    /**
+     * Confirm button state for the current selection.
+     *
+     * With a selection the button is always solid — whatever the flags say, the screen keeps a way
+     * out. Before the first tap it is either dimmed (default) or hidden, per
+     * `language.confirmVisibleBeforeSelect` AND `ob_show_language_confirm_before_select`.
+     */
+    private fun bindConfirmVisibility() {
+        val selected = selectedCode != null
+        val showBeforeSelect = sdk.requireConfig().language.confirmVisibleBeforeSelect &&
+            sdk.flags().showLanguageConfirmBeforeSelect
+        binding.obLanguageConfirm.isVisible = selected || showBeforeSelect
+        binding.obLanguageConfirm.alpha = if (selected) 1f else 0.5f
+    }
+
     /** Remote CSV filtered against the app's catalog; empty result falls back to the catalog. */
     private fun resolveLanguages(): List<ObLanguage> {
         val configured = sdk.requireConfig().language.languages
@@ -102,7 +134,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private fun onLanguageTapped(language: ObLanguage) {
         selectedCode = language.code
         adapter.selectedCode = language.code
-        binding.obLanguageConfirm.alpha = 1f
+        bindConfirmVisibility()
         OnboardingSdk.emitEvent(OnboardingEvent.LanguageSelected(language.code))
 
         if (mode != LanguageScreenMode.FIRST_OPEN) return

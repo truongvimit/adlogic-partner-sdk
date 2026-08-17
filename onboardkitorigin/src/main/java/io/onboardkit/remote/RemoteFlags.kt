@@ -24,6 +24,9 @@ data class RemoteFlags(
     val enableQuestionOldUser: Boolean = ObRemoteKeys.ENABLE_QUESTION_OLD_USER.default,
     val enableLanguageNative2: Boolean = ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2.default,
     val passLfoIfCompleted: Boolean = ObRemoteKeys.PASS_LFO_IF_COMPLETED.default,
+    val showLanguageTapHint: Boolean = ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.default,
+    val showLanguageConfirmBeforeSelect: Boolean =
+        ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT.default,
     val languageSupportedCodes: String = ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
     val reuseSplashInter: Boolean = ObRemoteKeys.REUSE_SPLASH_INTER.default,
     val adsSplashBanner: Boolean = ObRemoteKeys.ADS_SPLASH_BANNER.default,
@@ -110,6 +113,9 @@ data class RemoteFlags(
                 enableQuestionOldUser = bool(ObRemoteKeys.ENABLE_QUESTION_OLD_USER),
                 enableLanguageNative2 = bool(ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2),
                 passLfoIfCompleted = bool(ObRemoteKeys.PASS_LFO_IF_COMPLETED),
+                showLanguageTapHint = bool(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT),
+                showLanguageConfirmBeforeSelect =
+                    bool(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT),
                 languageSupportedCodes = reader.string(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key)
                     ?: ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
                 reuseSplashInter = bool(ObRemoteKeys.REUSE_SPLASH_INTER),

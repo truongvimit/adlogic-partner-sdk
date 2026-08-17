@@ -18,7 +18,25 @@ class RemoteFlagsTest {
         assertEquals(RemoteFlags(), flags)
         assertTrue(flags.enableAllAds)
         assertTrue(flags.enableLanguageNative2)
+        assertTrue(flags.showLanguageTapHint)
+        assertTrue(flags.showLanguageConfirmBeforeSelect)
         assertEquals(3L, flags.skipButtonDelaySec)
+    }
+
+    @Test
+    fun `language tap hint can be switched off remotely`() {
+        val flags = RemoteFlags.from(
+            reader(mapOf(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.key to "false")),
+        )
+        assertFalse(flags.showLanguageTapHint)
+    }
+
+    @Test
+    fun `language confirm can be hidden before the first selection`() {
+        val flags = RemoteFlags.from(
+            reader(mapOf(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT.key to "false")),
+        )
+        assertFalse(flags.showLanguageConfirmBeforeSelect)
     }
 
     @Test

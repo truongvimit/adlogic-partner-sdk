@@ -30,6 +30,20 @@ object ObRemoteKeys {
     /** Second native shown in-place on the LFO after the first language tap. */
     val ENABLE_LANGUAGE_NATIVE_2 = RemoteKey.BoolKey("ob_enable_language_native_2", true)
     val PASS_LFO_IF_COMPLETED = RemoteKey.BoolKey("ob_pass_lfo_if_completed", true)
+
+    /**
+     * Animated hand nudging the row the device locale points at, while nothing is selected yet.
+     * Purely a UX nudge, so it is safe to switch off remotely without touching the flow.
+     */
+    val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", true)
+
+    /**
+     * Whether the LFO confirm button is on screen before a language is picked. Off hides it until
+     * the first tap; the button always comes back once there is a selection, so the screen can
+     * never be left without a way out.
+     */
+    val SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT =
+        RemoteKey.BoolKey("ob_show_language_confirm_before_select", true)
     val LANGUAGE_SUPPORTED_CODES = RemoteKey.StringKey("ob_language_supported_codes", "")
 
     // Per-placement switches. One key per placement, all AND-ed with ENABLE_ALL_ADS by

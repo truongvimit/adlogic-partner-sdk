@@ -88,6 +88,11 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.ENABLE_QUESTION_OLD_USER.key, snapshot.enableQuestionOldUser.toString())
         put(ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2.key, snapshot.enableLanguageNative2.toString())
         put(ObRemoteKeys.PASS_LFO_IF_COMPLETED.key, snapshot.passLfoIfCompleted.toString())
+        put(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.key, snapshot.showLanguageTapHint.toString())
+        put(
+            ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT.key,
+            snapshot.showLanguageConfirmBeforeSelect.toString(),
+        )
         put(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key, snapshot.languageSupportedCodes)
         put(ObRemoteKeys.REUSE_SPLASH_INTER.key, snapshot.reuseSplashInter.toString())
         put(ObRemoteKeys.ADS_LANGUAGE_NATIVE.key, snapshot.adsLanguageNative.toString())

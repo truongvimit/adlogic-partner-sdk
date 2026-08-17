@@ -9,6 +9,7 @@ import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.SplashConfig
 import io.onboardkit.config.onboardKitConfig
@@ -52,6 +53,11 @@ object OnboardKitSetup {
                 logoRes = R.mipmap.ic_launcher,
                 appNameRes = R.string.app_name,
             )
+            language = LanguageConfig(
+                tapHintEnabled = true,
+                confirmVisibleBeforeSelect = false,
+            )
+
             // Same shape as the removed handwritten flow: 4 content pages,
             // full-screen native between pages 3 and 4 (remote-gated via ob_enable_step_ob3)
             steps(

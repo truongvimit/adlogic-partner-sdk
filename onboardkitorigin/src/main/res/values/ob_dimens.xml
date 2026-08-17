@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="ob_screen_padding">16dp</dimen>
+    <dimen name="ob_screen_padding">8dp</dimen>
     <dimen name="ob_block_padding_v">12dp</dimen>
     <dimen name="ob_block_gap">16dp</dimen>
     <dimen name="ob_radius_small">8dp</dimen>
@@ -16,7 +16,10 @@
     <dimen name="ob_language_list_top">16dp</dimen>
     <dimen name="ob_flag_size">28dp</dimen>
     <dimen name="ob_radio_size">20dp</dimen>
+    <!-- "Tap here" hand hint, centred on the radio and allowed to overflow it. -->
+    <dimen name="ob_language_hint_size">44dp</dimen>
     <dimen name="ob_header_height">62dp</dimen>
+    <dimen name="ob_ratio_anim_area">55dp</dimen>
 
     <dimen name="ob_ad_attribution_height">20dp</dimen>
     <dimen name="ob_ad_badge_width">19dp</dimen>
