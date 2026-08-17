@@ -6,6 +6,19 @@
 
 Tài liệu này là **chuẩn tham chiếu bắt buộc** dành cho đối tác phát triển khi tích hợp quảng cáo trên các sản phẩm của Infinity. Mọi thay đổi liên quan Ads phải tuân thủ kiến trúc, luồng load/show và các rule gating được mô tả trong project base này.
 
+### Nâng cấp lên 2.0.0
+
+- Mười một method `ERainAd.getShouldDisplay*` đã bị **xóa**. Thay mọi call site bằng
+  `AdGate.passesUaGate(config.enableUaCheck)` — hoặc `ERainAd.getInstance().shouldDisplayForUa(...)`,
+  cùng một check nhưng không còn wrapper đặt tên theo placement. Thêm placement không còn cần release SDK.
+- Package mới `com.ads.module.helper`: `AdGate` (gate duy nhất trước khi load), các store theo
+  placement `InterstitialAdManager` / `RewardAdManager`, `NativeAdPreload`, và các helper mức view
+  `NativeAdHelper` / `BannerAdHelper` — xem mục 2.6.
+- Waterfall giờ phủ đủ bốn định dạng: `AdWaterfall.loadReward` đứng cạnh native/interstitial,
+  và `BannerAdHelper` đi qua các tầng banner mà view không hề chớp giữa các tầng.
+- `ERainAdProvider` của OnboardKit giờ là một adapter mỏng trên cùng các store đó — hành vi,
+  placement key và telemetry không đổi.
+
 ---
 
 ## Mục đích và phạm vi áp dụng
@@ -23,7 +36,7 @@ Mục tiêu: giảm sai lệch giữa các app, dễ bảo trì, dễ audit và 
 
 ### 2. Logic và flow load/show Ads là chuẩn tối ưu
 
-Luồng hiện tại trong base — khởi tạo sớm tại `GlobalApp`, đồng bộ config tại `Splash`, preload theo màn kế tiếp, gate tập trung trong `AdsManager`, organic qua `ERainAd.getShouldDisplay*(enableUaCheck)` — đã được chuẩn hóa sau nhiều vòng tối ưu về **thời điểm load**, **tránh jank UI**, **fallback khi mất mạng/mua hàng**, và **điều kiện hiển thị theo cohort**.
+Luồng hiện tại trong base — khởi tạo sớm tại `GlobalApp`, đồng bộ config tại `Splash`, preload theo màn kế tiếp, gate tập trung trong `AdsManager`, organic qua `AdGate.passesUaGate(enableUaCheck)` — đã được chuẩn hóa sau nhiều vòng tối ưu về **thời điểm load**, **tránh jank UI**, **fallback khi mất mạng/mua hàng**, và **điều kiện hiển thị theo cohort**.
 
 **Đối tác không tự ý thay đổi flow cốt lõi** (ví dụ: gọi trực tiếp SDK bỏ qua `AdsManager`, bỏ gate organic, hoặc load/show không đúng thứ tự màn) trừ khi có phê duyệt kỹ thuật từ Infinity.
 
@@ -39,16 +52,16 @@ Các màn sau đã được implement đầy đủ; đối tác **phải giữ n
 | Welcome / Resume | `native_welcome`, `inter_welcome`, rule `ResumeAdsEntryRule` |
 | Banner (Home và màn extend `BaseActivityWithBanner`) | Banner thường / collapsible, reload theo config |
 
-Khi customize UI, chỉ được thay layout/container; **không được bỏ** các điều kiện `isEnable`, purchase, network và `getShouldDisplay*(config.enableUaCheck)` đã gắn sẵn.
+Khi customize UI, chỉ được thay layout/container; **không được bỏ** chuỗi `AdGate` — `AdGate.skipReason(...)` sở hữu các check `isEnable`, purchase, network, UA cùng telemetry skip của chúng.
 
 ### 4. Màn custom của app — follow theo rule load & show
 
 Với màn hình **do app tự thêm** (không có sẵn trong base), đối tác vẫn phải tuân thủ **cùng bộ rule**:
 
 1. Khai báo placement trong `ad_config.json` / `ad_config_debug.json` và property tương ứng trong `AdRemoteConfig`.
-2. Thêm method load trong `AdsManager` (native qua `loadNativeInternal`, inter qua pattern `load` + `show`).
+2. Thêm method load trong `AdsManager` (native qua `loadNativeInternal`, inter qua `InterstitialAdManager.load` + `show` — xem mục 2.6).
 3. Activity/Fragment: gọi load ở `initViews` (có thể `postDelayed` ngắn), observe LiveData, `populateNativeAdView` khi có ad; ẩn container khi `null`.
-4. Nếu placement thuộc nhóm nhạy cảm (onboarding-like, welcome, home, permission, widget…): **bắt buộc 100%** gắn `ERainAd.getInstance().getShouldDisplay*(config.enableUaCheck)` đúng mapping mục 4.
+4. Nếu placement thuộc nhóm nhạy cảm (onboarding-like, welcome, home, permission, widget…): **bắt buộc 100%** gate bằng `AdGate.passesUaGate(config.enableUaCheck)` — xem mục 4.
 5. Banner: extend `BaseActivityWithBanner`, cấu hình `BannerConfig`, không tự load banner ngoài `AdsManager.loadBanner`.
 
 Tài liệu UI/Ads chi tiết (kích thước CTA, delay nút Done, vị trí native theo page): [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/).
@@ -228,7 +241,12 @@ sau khi tầng trên nó đã fail.
 ```kotlin
 AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
 AdWaterfall.loadInterstitial(context, adUnitIds, callback)
+AdWaterfall.loadReward(context, adUnitIds, callback)
 ```
+
+Banner cũng rơi qua các tầng của nó: `BannerAdHelper` đi qua `BannerAdConfig(tiers, …)` từng id
+một, và slot không bao giờ chớp giữa các tầng — banner đang sống vẫn nằm trên màn hình trong lúc
+các tầng thấp hơn được thử.
 
 Truyền một id thì nó chạy y như load thường. Id rỗng và id trùng bị loại, nên payload remote điền
 thiếu không tạo lỗ hổng trong thứ tự. Mỗi bước bị chặn bởi `REQUEST_AD_TIMEOUT` (30 s): một tầng
@@ -286,10 +304,10 @@ danh sách đó được lấy làm waterfall nguyên văn:
 
 ### 2.4 Welcome / Resume
 - Native welcome:
-  - `AdsManager.loadNativeWelcome(...)`, gate `getShouldDisplayNativeWelcomeBack(config.enableUaCheck)`.
+  - `AdsManager.loadNativeWelcome(...)`, gate `AdGate.passesUaGate(config.enableUaCheck)`.
 - Inter welcome:
   - `AdsManager.loadInterWelcome(...)`, `AdsManager.showInterWelcome(...)`.
-  - Flow welcome được kích hoạt bởi `AppLifecycleObserver` nếu `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` và `getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)` cho phép.
+  - Flow welcome được kích hoạt bởi `AppLifecycleObserver` nếu `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` và `shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck)` cho phép.
 
 ### 2.5 Banner (normal / collapsible)
 - Dùng `BaseActivityWithBanner`.
@@ -297,16 +315,70 @@ danh sách đó được lấy làm waterfall nguyên văn:
 - `AdsManager.loadBanner(..., isCollapse = true)` => collapsible banner (expand/collapse theo SDK).
 - Reload theo `reloadIntervalSeconds`.
 
+### 2.6 Lớp helper của SDK — store theo placement & helper cho view (từ 2.0.0)
+
+Toàn bộ *cơ chế* ads — cache, hết hạn, dedup request đang bay, gating, contract show — nằm trong
+`com.ads.module.helper`. App chỉ giữ lại policy theo placement: key nào, preload lúc nào, show ở
+đâu. `AdsManager` bên trong delegate xuống lớp này, và `ERainAdProvider` của OnboardKit là một
+adapter mỏng trên cùng các store đó, nên mọi consumer dùng chung một cache với một bộ rule.
+
+**Định dạng full-screen** là các store theo placement key. Mỗi placement buffer một ad, hết hạn GMA
+1 giờ, show dùng một lần, và `onComplete` bắn **đúng một lần** trong mọi kết cục — một lần show
+fail hoặc bị skip không bao giờ kẹt được màn hình:
+
+```kotlin
+// Preload where you know the screen is coming; show at the navigation edge
+InterstitialAdManager.load(
+    context, "inter_back", config.waterfallIds,
+    InterLoadOptions(
+        enabled = config.isUsable,
+        passesUaGate = AdGate.passesUaGate(config.enableUaCheck),
+    ),
+)
+InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() {
+    override fun onComplete() = goNextScreen()
+})
+
+// Rewarded: the classic gate → load → show chain in one call
+RewardAdManager.loadAndShow(
+    activity, "reward_example", config.waterfallIds,
+    enabled = config.isEnable,
+    onSuccess = { grantReward() }, onFailed = { showTryAgain() },
+)
+```
+
+**Định dạng view** giao view của mình đúng một lần; sau đó helper sở hữu tất cả — shimmer, reload
+khi resume, ẩn khi đã purchase, teardown:
+
+```kotlin
+NativeAdHelper(activity, this, NativeAdConfig(config.waterfallIds, true, true, R.layout.native_home))
+    .setNativeContentView(binding.frAds)
+    .setShimmerLayoutView(binding.shimmer)
+    .setEnablePreload(true, "native_home")
+    .also { it.placement = "native_home" }
+    .requestAds(NativeAdParam.Request)
+
+BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
+    .attachInto(binding.frAds)
+    .also { it.placement = "banner_home" }
+    .requestAds(BannerAdParam.Request)
+```
+
+`NativeAdPreload` là buffer preload theo key đứng sau native helper (`preloadWithKey`,
+`pollAdNative`, hỗ trợ buffer > 1). Set `placement` là helper tự báo telemetry `ad_request` / skip
+với đúng bộ reason key chuẩn.
+
 ## 3. Điều kiện chung để Ads được load
 
-Trong `AdsManager`, một ad chỉ load khi thỏa đủ:
+Một ad chỉ load khi thỏa đủ các điều kiện, đánh giá tại đúng một chỗ — `AdGate.skipReason(...)`:
 - `adUnitConfig.isUsable` — bật **và** có ít nhất một id khác rỗng.
 - `!AppPurchase.getInstance().isPurchased(...)`.
 - Có mạng.
-- Với các vị trí bắt buộc gate organic: `getShouldDisplay*(config.enableUaCheck) == true`.
+- Với các vị trí bắt buộc gate organic: `AdGate.passesUaGate(config.enableUaCheck) == true`.
 
 Nếu fail 1 điều kiện, native LiveData trả `null` để UI ẩn ad container, và lý do được báo đúng một
-lần qua `AdTracking.skipped(...)`.
+lần qua `AdTracking.skipped(...)` với bộ reason key không đổi
+(`disabled_config`, `purchased`, `offline`, `ua_gate`).
 
 ### 3.1 Consent chặn mọi request
 
@@ -331,25 +403,32 @@ caller không phân biệt được với một lần user đóng ad — nên t�
 `ob_ads_interstitial_interval_sec` sở hữu: chỉnh được từ remote và báo `interval_not_elapsed` khi
 chặn. Hai cap cho một luật là loại bug không ai tìm ra trong một quý.
 
-## 4. Chuẩn `getShouldDisplay*` theo từng vị trí (bắt buộc 100%)
+## 4. Chuẩn gate UA/organic theo từng vị trí (bắt buộc 100%)
 
-> **Bắt buộc:** 100% các vị trí dưới đây **phải** check thêm biến `getShouldDisplay*` của SDK.  
+> **Bắt buộc:** 100% các vị trí dưới đây **phải** đi qua gate UA/organic.  
+> Từ 2.0.0 chỉ còn đúng **một** call gate — `AdGate.passesUaGate(config.enableUaCheck)` — thay cho
+> các method `getShouldDisplay*` theo từng placement trước đây (đã xóa: chúng là mười một delegate
+> một dòng giống hệt nhau, thêm placement là phải release SDK; call site thậm chí còn trượt sang
+> nhầm tên).  
 > Param truyền vào là `enableUaCheck` lấy từ config placement trong `ad_config.json` / `ad_config_debug.json` (map sang `AdUnitConfig.enableUaCheck`).  
 > Đây là cờ organic/UA check (force organic theo config ads) — **không được hard-code `true/false`**, phải lấy từ config của đúng placement đang load/show.
 
 ### 4.1 Mapping chuẩn (theo `AdsManager`)
 
-| Vị trí Ads | Method SDK bắt buộc | Default `enable_ua_check` trong ad_config.json | Param từ ad_config | Method / chỗ dùng trong code |
-|------------|---------------------|:----------------------------------------------:|--------------------|------------------------------|
-| **NativeOnboardingFull1** | `getShouldDisplayNativeOnboardingFull1(...)` |                     `true`                     | `config.enableUaCheck` | `AdsManager.loadNativeOnboardingFull` (+ chèn page full ở `OnBoardingActivity`) |
-| **NativeOnboardingFull2** | `getShouldDisplayNativeOnboardingFull2(...)` |                     `true`                     | `config.enableUaCheck` | `AdsManager.loadNativeOnboardingFull2` (+ chèn page full ở `OnBoardingActivity`) |
-| **NativeOnboardingNormal2** | `getShouldDisplayNativeOnboardingNormal2(...)` |                    `false`                     | `config.enableUaCheck` | `AdsManager.loadNativeOnboarding4` |
-| **NativeHome** | `getShouldDisplayNativeHome(...)` |                    `false`                     | `config.enableUaCheck` | `AdsManager.loadNativeHome` |
-| **NativePermission** | `getShouldDisplayNativePermission(...)` |                    `false`                     | `config.enableUaCheck` | `AdsManager.loadNativePermission` |
-| **InterOnboarding** | `getShouldDisplayInterOnboarding(...)` |                     `true`                     | `config.enableUaCheck` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
-| **NativeWelcomeBack** | `getShouldDisplayNativeWelcomeBack(...)` |                    `false`                     | `config.enableUaCheck` | `AdsManager.loadNativeWelcome` |
-| **InterWelcomeBack** | `getShouldDisplayInterWelcomeBack(...)` |                    `false`                     | `config.enableUaCheck` | `AppLifecycleObserver` (chuyển hướng màn Welcome) |
-| **WidgetUninstall** | `getShouldDisplayWidgetUninstall(...)` |                    `false`                     | `config.enableUaCheck` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
+Mọi hàng đều là cùng một call — `AdGate.passesUaGate(config.enableUaCheck)`; chỉ khác cờ config
+theo từng placement:
+
+| Vị trí Ads | Default `enable_ua_check` trong ad_config.json | Method / chỗ dùng trong code |
+|------------|:----------------------------------------------:|------------------------------|
+| **NativeOnboardingFull1** | `true` | `AdsManager.loadNativeOnboardingFull` (+ chèn page full ở `OnBoardingActivity`) |
+| **NativeOnboardingFull2** | `true` | `AdsManager.loadNativeOnboardingFull2` (+ chèn page full ở `OnBoardingActivity`) |
+| **NativeOnboardingNormal2** | `false` | `AdsManager.loadNativeOnboarding4` |
+| **NativeHome** | `false` | `AdsManager.loadNativeHome` |
+| **NativePermission** | `false` | `AdsManager.loadNativePermission` |
+| **InterOnboarding** | `true` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
+| **NativeWelcomeBack** | `false` | `AdsManager.loadNativeWelcome` |
+| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (chuyển hướng màn Welcome, qua `shouldDisplayForUa`) |
+| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
 
 > **Default trong `ad_config`:** khi khai báo JSON, các placement trên phải set `enable_ua_check` đúng default cột trên trừ khi Infinity chỉ định khác. Ví dụ Full1/Full2/`inter_onboarding` mặc định `true`; các vị trí còn lại mặc định `false`.
 
@@ -369,29 +448,30 @@ Trong code:
 
 ```kotlin
 val config = AdRemoteConfig.native_onboarding_fullscreen_1_3
-ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)
+AdGate.passesUaGate(config.enableUaCheck)
 ```
 
 | JSON key | Field Kotlin | Ý nghĩa |
 |----------|--------------|---------|
-| `enable_ua_check` | `AdUnitConfig.enableUaCheck` | Bật/tắt organic (UA) check cho **đúng** placement đó khi gọi `getShouldDisplay*` |
+| `enable_ua_check` | `AdUnitConfig.enableUaCheck` | Bật/tắt organic (UA) check cho **đúng** placement đó khi gọi gate |
 
 ### 4.4 Pattern bắt buộc khi load
 
 ```kotlin
 loadNativeInternal(
     activity,
+    "native_onboarding_fullscreen_1_3",
     config,
     layoutRes,
     liveData,
-    ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)
+    AdGate.passesUaGate(config.enableUaCheck)
 )
 ```
 
 **Không đạt chuẩn nếu:**
-- Bỏ qua `getShouldDisplay*` ở các vị trí bảng trên.
-- Gọi `getShouldDisplay*(true/false)` hard-code thay vì `config.enableUaCheck`.
-- Dùng nhầm method gate giữa các vị trí (ví dụ Full1 dùng Normal2).
+- Bỏ qua gate ở bất kỳ vị trí nào trong bảng trên.
+- Truyền `true/false` hard-code thay vì `config.enableUaCheck`.
+- Tự implement lại check organic thay vì gọi `AdGate` — một gate, một sự thật.
 
 ## 5. Cơ chế Organic
 
@@ -402,8 +482,8 @@ Organic là cơ chế phân loại user từ Ads SDK / logic tăng trưởng đ�
 
 Cách hoạt động trong app:
 - App **không** tự tính organic bằng local rule.
-- App gọi `ERainAd.getInstance().getShouldDisplay*(enableUaCheck)` với `enableUaCheck` lấy từ `ad_config`.
-- Khi organic/cohort rule đổi, kết quả các method này đổi theo và ảnh hưởng trực tiếp load/show từng slot.
+- App gọi `AdGate.passesUaGate(enableUaCheck)` — phía sau là `ERainAd.shouldDisplayForUa` — với `enableUaCheck` lấy từ `ad_config`.
+- Khi organic/cohort rule đổi, câu trả lời của gate đổi theo và ảnh hưởng trực tiếp load/show từng slot.
 - DevSetting / Unlimited Ads + `reset organic` giúp QA verify lại toàn bộ vị trí ads + widget uninstall.
 
 ## 6. Ví dụ load/show (tham khảo)

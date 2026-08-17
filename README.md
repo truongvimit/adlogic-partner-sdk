@@ -68,6 +68,19 @@ Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT
 
 Requires JDK 17 and `minSdk` 24 or higher.
 
+### Migrating to 2.0.0
+
+- The eleven `ERainAd.getShouldDisplay*` methods are **removed**. Replace every call with
+  `AdGate.passesUaGate(config.enableUaCheck)` — or `ERainAd.getInstance().shouldDisplayForUa(...)`,
+  the same check without placement-named wrappers. Adding a placement no longer needs an SDK release.
+- New package `com.ads.module.helper`: `AdGate` (the one pre-load gate), placement-keyed
+  `InterstitialAdManager` / `RewardAdManager` stores, `NativeAdPreload`, and view-level
+  `NativeAdHelper` / `BannerAdHelper` — see §2.6.
+- The waterfall now covers all four formats: `AdWaterfall.loadReward` joins native/interstitial,
+  and `BannerAdHelper` walks banner floors with no view flicker between tiers.
+- OnboardKit's `ERainAdProvider` is now a thin adapter over the same stores — behavior, placement
+  keys, and telemetry are unchanged.
+
 ---
 
 ## Building the sample app
@@ -96,7 +109,7 @@ Goal: reduce app-to-app drift, improve maintainability, simplify audits, and cen
 
 ### 2. Load/show logic is the optimized baseline
 
-The current base flow — early init in `GlobalApp`, config sync in `Splash`, next-screen preload, centralized gating in `AdsManager`, and organic handling via `ERainAd.getShouldDisplay*(enableUaCheck)` — is the result of iterative optimization for:
+The current base flow — early init in `GlobalApp`, config sync in `Splash`, next-screen preload, centralized gating in `AdsManager`, and organic handling via `AdGate.passesUaGate(enableUaCheck)` — is the result of iterative optimization for:
 
 - Correct load timing
 - Reduced UI jank
@@ -117,16 +130,16 @@ The following screens are already implemented and must preserve load/show behavi
 | Welcome / Resume | `native_welcome`, `inter_welcome`, `ResumeAdsEntryRule` |
 | Banner (Home + screens extending `BaseActivityWithBanner`) | Normal / collapsible banner, reload by config |
 
-When customizing UI, only adjust layout/container. Do **not** remove `isEnable`, purchase, network, or `getShouldDisplay*(config.enableUaCheck)` checks.
+When customizing UI, only adjust layout/container. Do **not** remove the `AdGate` chain — `AdGate.skipReason(...)` owns the `isEnable`, purchase, network, and UA checks plus their skip telemetry.
 
 ### 4. Custom app screens must follow load/show rules
 
 For any **new custom screen** (not already present in base), partners must follow the same rule set:
 
 1. Add placement keys to `ad_config.json` / `ad_config_debug.json` and add matching properties in `AdRemoteConfig`.
-2. Add load methods in `AdsManager` (native via `loadNativeInternal`, interstitial via `load` + `show` pattern).
+2. Add load methods in `AdsManager` (native via `loadNativeInternal`, interstitial via `InterstitialAdManager.load` + `show` — see §2.6).
 3. In Activity/Fragment: load in `initViews` (optional short `postDelayed`), observe LiveData, call `populateNativeAdView` when ad exists, hide container on `null`.
-4. For sensitive placements (onboarding-like, welcome, home, permission, widget...): **100% mandatory** to attach `ERainAd.getInstance().getShouldDisplay*(config.enableUaCheck)` using the mapping in section 4.
+4. For sensitive placements (onboarding-like, welcome, home, permission, widget...): **100% mandatory** to gate with `AdGate.passesUaGate(config.enableUaCheck)` — see section 4.
 5. For banners: extend `BaseActivityWithBanner`, configure `BannerConfig`, do not load banner outside `AdsManager.loadBanner`.
 
 Detailed UI/Ads reference (CTA size, Done button delay, native placement by page):
@@ -307,7 +320,12 @@ ever asked for after the one above it has failed.
 ```kotlin
 AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
 AdWaterfall.loadInterstitial(context, adUnitIds, callback)
+AdWaterfall.loadReward(context, adUnitIds, callback)
 ```
+
+Banners fall through their floors too: `BannerAdHelper` walks `BannerAdConfig(tiers, …)` one id at
+a time, and the slot never blinks between floors — a surviving banner stays on screen while lower
+floors are tried.
 
 Pass one id and it behaves exactly like a plain load. Blank and repeated ids are dropped, so a
 half-filled remote payload cannot open a hole in the order. Every step is bounded by
@@ -365,10 +383,10 @@ Need more than ten floors, or an order that is not high→low? Put the ids strai
 
 ### 2.4 Welcome / Resume
 - Native welcome:
-  - `AdsManager.loadNativeWelcome(...)`, gated by `getShouldDisplayNativeWelcomeBack(config.enableUaCheck)`.
+  - `AdsManager.loadNativeWelcome(...)`, gated by `AdGate.passesUaGate(config.enableUaCheck)`.
 - Inter welcome:
   - `AdsManager.loadInterWelcome(...)`, `AdsManager.showInterWelcome(...)`.
-  - Welcome flow is triggered by `AppLifecycleObserver` when `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` and `getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)` allow it.
+  - Welcome flow is triggered by `AppLifecycleObserver` when `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` and `shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck)` allow it.
 
 ### 2.5 Banner (normal / collapsible)
 - Use `BaseActivityWithBanner`.
@@ -376,16 +394,70 @@ Need more than ten floors, or an order that is not high→low? Put the ids strai
 - `AdsManager.loadBanner(..., isCollapse = true)` => collapsible banner (SDK expand/collapse behavior).
 - Reload interval follows `reloadIntervalSeconds`.
 
+### 2.6 SDK helper layer — placement stores & view helpers (since 2.0.0)
+
+All ad *mechanism* — cache, expiry, in-flight dedup, gating, the show contract — lives in
+`com.ads.module.helper`. The app keeps only placement policy: which key, when to preload, where to
+show. `AdsManager` delegates to this layer internally, and OnboardKit's `ERainAdProvider` is a thin
+adapter over the same stores, so every consumer shares one cache with one rule set.
+
+**Full-screen formats** are placement-keyed stores. One buffered ad per placement, 1-hour GMA
+expiry, single-use show, and `onComplete` fires **exactly once** on every outcome — a failed or
+skipped show can never strand a screen:
+
+```kotlin
+// Preload where you know the screen is coming; show at the navigation edge
+InterstitialAdManager.load(
+    context, "inter_back", config.waterfallIds,
+    InterLoadOptions(
+        enabled = config.isUsable,
+        passesUaGate = AdGate.passesUaGate(config.enableUaCheck),
+    ),
+)
+InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() {
+    override fun onComplete() = goNextScreen()
+})
+
+// Rewarded: the classic gate → load → show chain in one call
+RewardAdManager.loadAndShow(
+    activity, "reward_example", config.waterfallIds,
+    enabled = config.isEnable,
+    onSuccess = { grantReward() }, onFailed = { showTryAgain() },
+)
+```
+
+**View formats** hand their views over once; the helper owns everything after that — shimmer,
+reload-on-resume, hide-when-purchased, teardown:
+
+```kotlin
+NativeAdHelper(activity, this, NativeAdConfig(config.waterfallIds, true, true, R.layout.native_home))
+    .setNativeContentView(binding.frAds)
+    .setShimmerLayoutView(binding.shimmer)
+    .setEnablePreload(true, "native_home")
+    .also { it.placement = "native_home" }
+    .requestAds(NativeAdParam.Request)
+
+BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
+    .attachInto(binding.frAds)
+    .also { it.placement = "banner_home" }
+    .requestAds(BannerAdParam.Request)
+```
+
+`NativeAdPreload` is the keyed preload buffer behind the native helper (`preloadWithKey`,
+`pollAdNative`, buffer > 1 supported). Setting `placement` makes the helper report
+`ad_request` / skip telemetry itself with the standard reason keys.
+
 ## 3. Global conditions for loading ads
 
-In `AdsManager`, an ad loads only when all conditions pass:
+An ad loads only when all conditions pass, evaluated in one place — `AdGate.skipReason(...)`:
 - `adUnitConfig.isUsable` — enabled **and** has at least one non-blank id
 - `!AppPurchase.getInstance().isPurchased(...)`
 - Network available
-- For mandatory organic-gated placements: `getShouldDisplay*(config.enableUaCheck) == true`
+- For mandatory organic-gated placements: `AdGate.passesUaGate(config.enableUaCheck) == true`
 
 If any condition fails, native LiveData emits `null` so UI hides the ad container, and the reason
-is reported once through `AdTracking.skipped(...)`.
+is reported once through `AdTracking.skipped(...)` with the unchanged keys
+(`disabled_config`, `purchased`, `offline`, `ua_gate`).
 
 ### 3.1 Consent gates every request
 
@@ -410,24 +482,32 @@ silently — the caller cannot tell it apart from a dismissal — so frequency i
 `ob_ads_interstitial_interval_sec`, which is remote-tunable and reports `interval_not_elapsed` when
 it blocks. Two caps for one rule is a bug nobody finds for a quarter.
 
-## 4. `getShouldDisplay*` standard per placement (100% mandatory)
+## 4. UA/organic gate standard per placement (100% mandatory)
 
-> **Mandatory:** 100% of the placements below **must** also check the SDK `getShouldDisplay*` method.  
+> **Mandatory:** 100% of the placements below **must** pass through the UA/organic gate.  
+> Since 2.0.0 there is exactly **one** gate call — `AdGate.passesUaGate(config.enableUaCheck)` —
+> replacing the old per-placement `getShouldDisplay*` methods (removed: they were eleven identical
+> one-line delegates, and adding a placement needed an SDK release; call sites even drifted onto
+> wrong names).  
 > The parameter is `enableUaCheck` from the placement config in `ad_config.json` / `ad_config_debug.json` (mapped to `AdUnitConfig.enableUaCheck`).  
 > This is the organic/UA check flag (force organic via ads config) — **do not hard-code `true/false`**; always take it from the config of the placement being loaded/shown.
+
 ### 4.1 Standard mapping (from `AdsManager`)
 
-| Ad placement | Required SDK method | Default `enable_ua_check` in ad_config.json | Param from ad_config | Code usage |
-|--------------|---------------------|:-------------------------------------------:|----------------------|------------|
-| **NativeOnboardingFull1** | `getShouldDisplayNativeOnboardingFull1(...)` |                   `true`                    | `config.enableUaCheck` | `AdsManager.loadNativeOnboardingFull` (+ full page insert in `OnBoardingActivity`) |
-| **NativeOnboardingFull2** | `getShouldDisplayNativeOnboardingFull2(...)` |                   `true`                    | `config.enableUaCheck` | `AdsManager.loadNativeOnboardingFull2` (+ full page insert in `OnBoardingActivity`) |
-| **NativeOnboardingNormal2** | `getShouldDisplayNativeOnboardingNormal2(...)` |                   `false`                   | `config.enableUaCheck` | `AdsManager.loadNativeOnboarding4` |
-| **NativeHome** | `getShouldDisplayNativeHome(...)` |                   `false`                   | `config.enableUaCheck` | `AdsManager.loadNativeHome` |
-| **NativePermission** | `getShouldDisplayNativePermission(...)` |                   `false`                   | `config.enableUaCheck` | `AdsManager.loadNativePermission` |
-| **InterOnboarding** | `getShouldDisplayInterOnboarding(...)` |                   `true`                    | `config.enableUaCheck` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
-| **NativeWelcomeBack** | `getShouldDisplayNativeWelcomeBack(...)` |                   `false`                   | `config.enableUaCheck` | `AdsManager.loadNativeWelcome` |
-| **InterWelcomeBack** | `getShouldDisplayInterWelcomeBack(...)` |                   `false`                   | `config.enableUaCheck` | `AppLifecycleObserver` (welcome screen redirect) |
-| **WidgetUninstall** | `getShouldDisplayWidgetUninstall(...)` |                   `false`                   | `config.enableUaCheck` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
+Every row is the same call — `AdGate.passesUaGate(config.enableUaCheck)`; only the config flag
+differs per placement:
+
+| Ad placement | Default `enable_ua_check` in ad_config.json | Code usage |
+|--------------|:-------------------------------------------:|------------|
+| **NativeOnboardingFull1** | `true` | `AdsManager.loadNativeOnboardingFull` (+ full page insert in `OnBoardingActivity`) |
+| **NativeOnboardingFull2** | `true` | `AdsManager.loadNativeOnboardingFull2` (+ full page insert in `OnBoardingActivity`) |
+| **NativeOnboardingNormal2** | `false` | `AdsManager.loadNativeOnboarding4` |
+| **NativeHome** | `false` | `AdsManager.loadNativeHome` |
+| **NativePermission** | `false` | `AdsManager.loadNativePermission` |
+| **InterOnboarding** | `true` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
+| **NativeWelcomeBack** | `false` | `AdsManager.loadNativeWelcome` |
+| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (welcome screen redirect, via `shouldDisplayForUa`) |
+| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `loadNativeSurvey` / `loadNativeConfirmUninstall` |
 
 > **ad_config defaults:** when declaring JSON, set `enable_ua_check` to the default in the column above unless Infinity specifies otherwise. Example: Full1/Full2/`inter_onboarding` default `true`; remaining placements default `false`.
 
@@ -447,29 +527,30 @@ In code:
 
 ```kotlin
 val config = AdRemoteConfig.native_onboarding_fullscreen_1_3
-ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)
+AdGate.passesUaGate(config.enableUaCheck)
 ```
 
 | JSON key | Kotlin field | Meaning |
 |----------|--------------|---------|
-| `enable_ua_check` | `AdUnitConfig.enableUaCheck` | Enable/disable organic (UA) check for **that** placement when calling `getShouldDisplay*` |
+| `enable_ua_check` | `AdUnitConfig.enableUaCheck` | Enable/disable organic (UA) check for **that** placement when calling the gate |
 
 ### 4.4 Mandatory load pattern
 
 ```kotlin
 loadNativeInternal(
     activity,
+    "native_onboarding_fullscreen_1_3",
     config,
     layoutRes,
     liveData,
-    ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)
+    AdGate.passesUaGate(config.enableUaCheck)
 )
 ```
 
 **Not compliant if:**
-- Skipping `getShouldDisplay*` for any placement in the table above.
-- Calling `getShouldDisplay*(true/false)` with a hard-coded value instead of `config.enableUaCheck`.
-- Using the wrong gate method for a placement (e.g. Full1 using Normal2).
+- Skipping the gate for any placement in the table above.
+- Passing a hard-coded `true/false` instead of `config.enableUaCheck`.
+- Re-implementing the organic check locally instead of calling `AdGate` — one gate, one truth.
 
 ## 5. Organic mechanism
 
@@ -480,8 +561,9 @@ Organic is user classification from Ads SDK / growth logic used to:
 
 How it works in this app:
 - The app does **not** compute organic with local rules.
-- The app calls `ERainAd.getInstance().getShouldDisplay*(enableUaCheck)` with `enableUaCheck` from `ad_config`.
-- When organic/cohort rules change, these method results change and directly affect load/show per slot.
+- The app calls `AdGate.passesUaGate(enableUaCheck)` — backed by `ERainAd.shouldDisplayForUa` —
+  with `enableUaCheck` from `ad_config`.
+- When organic/cohort rules change, the gate's answer changes and directly affects load/show per slot.
 - DevSetting / Unlimited Ads + `reset organic` help QA re-verify all ad placements + uninstall widget.
 
 ## 6. Load/show examples (quick reference)

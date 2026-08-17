@@ -74,57 +74,13 @@ public class ERainAd {
     }
 
     /**
-     * The single UA gate every placement-specific accessor delegates to: when a placement is
-     * marked force-organic, it shows only to paid (non-organic) installs; otherwise always.
-     * The per-placement methods below carry no logic of their own — they exist so partner call
-     * sites read as the placement they gate.
+     * The single UA gate: when a placement is marked force-organic, it shows only to paid
+     * (non-organic) installs; otherwise always. Placements are named by the caller (see
+     * {@code com.ads.module.helper.AdGate#passesUaGate}) — the SDK deliberately has no
+     * per-placement variants, so adding a placement never needs an SDK release.
      */
     public Boolean shouldDisplayForUa(boolean isForceOrganic) {
         return !isForceOrganic || !getOrganic();
-    }
-
-    public Boolean getShouldDisplayNativeOnboardingNormal1(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativeOnboardingFull1(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativeOnboardingFull2(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativeOnboardingNormal2(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativeHome(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativePermission(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayInterOnboarding(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayNativeWelcomeBack(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayInterWelcomeBack(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayWidgetUninstall(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
-    }
-
-    public Boolean getShouldDisplayHighCTA(boolean isForceOrganic) {
-        return shouldDisplayForUa(isForceOrganic);
     }
 
     public void setCountClickToShowAds(int countClickToShowAds) {
@@ -492,6 +448,12 @@ public class ERainAd {
             public void onAdClicked() {
                 super.onAdClicked();
                 callback.onAdClicked();
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                callback.onAdImpression();
             }
         }));
     }

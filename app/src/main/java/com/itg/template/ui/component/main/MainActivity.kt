@@ -413,15 +413,16 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
     private data class FlagInfo(val name: String, val getter: () -> Boolean)
 
+    // One UA gate for every placement; each row is the same check under that placement's flag
     private val flags = listOf(
-        FlagInfo("shouldDisplayNativeOnboardingFull1") { ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(AdRemoteConfig.native_onboarding_fullscreen_1_3.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeOnboardingFull2") { ERainAd.getInstance().getShouldDisplayNativeOnboardingFull2(AdRemoteConfig.native_onboarding_fullscreen_1_4.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeOnboardingNormal2") { ERainAd.getInstance().getShouldDisplayNativeOnboardingNormal2(AdRemoteConfig.native_onboarding_1_4.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeHome") { ERainAd.getInstance().getShouldDisplayNativeHome(AdRemoteConfig.native_home.enableUaCheck) },
-        FlagInfo("shouldDisplayNativePermission") { ERainAd.getInstance().getShouldDisplayNativePermission(AdRemoteConfig.native_permission.enableUaCheck) },
-        FlagInfo("shouldDisplayInterOnboarding") { ERainAd.getInstance().getShouldDisplayInterOnboarding(AdRemoteConfig.inter_onboarding.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeWelcomeBack") { ERainAd.getInstance().getShouldDisplayInterWelcomeBack(AdRemoteConfig.native_welcome.enableUaCheck) },
-        FlagInfo("shouldDisplayWidgetUninstall") { ERainAd.getInstance().getShouldDisplayWidgetUninstall(RemoteConfigUtils.getOnEnableUninstallWidget()) },
+        FlagInfo("shouldDisplayNativeOnboardingFull1") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_fullscreen_1_3.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeOnboardingFull2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_fullscreen_1_4.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeOnboardingNormal2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_1_4.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeHome") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_home.enableUaCheck) },
+        FlagInfo("shouldDisplayNativePermission") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_permission.enableUaCheck) },
+        FlagInfo("shouldDisplayInterOnboarding") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.inter_onboarding.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeWelcomeBack") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_welcome.enableUaCheck) },
+        FlagInfo("shouldDisplayWidgetUninstall") { ERainAd.getInstance().shouldDisplayForUa(RemoteConfigUtils.getOnEnableUninstallWidget()) },
     )
 
     private fun buildFlagRows() {

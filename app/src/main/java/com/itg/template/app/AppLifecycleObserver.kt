@@ -42,7 +42,7 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
             !ResumeAdsEntryRule.shouldShowWelcomeOnResume() -> "mode_not_welcome"
             AppOpenManager.getInstance().isInterstitialShowing -> "interstitial_showing"
             AppPurchase.getInstance().isPurchased(currentActivity.applicationContext) -> "purchased"
-            !ERainAd.getInstance().getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck) -> "ua_gate"
+            !ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck) -> "ua_gate"
             else -> null
         }
         if (blockReason == null) {
