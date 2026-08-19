@@ -258,6 +258,9 @@ object OnboardingSdk {
         decision: StartDecision,
         options: StartOptions = StartOptions(),
     ) {
+        // Splash reaches this without going through start(), so the carrier has to be seeded here
+        // too — otherwise completeFlow() reads back a null passthrough on that path.
+        session.passthrough = options.passthrough
         ObLog.d(ObLog.Section.NAV, "startResolved decision=$decision")
         eventBus.emit(OnboardingEvent.FlowStarted)
         // Before the skip/start branch on purpose: it is the denominator of every `fo_` rate,
