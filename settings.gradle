@@ -10,3 +10,18 @@ include ':adtracer'
 // Firebase is the only analytics destination for now; add a sink module per vendor as needed.
 include ':trackkit'
 include ':trackkit-firebase'
+
+// Billing: the Play Billing engine, split out of :ads so an IAA-only partner ships no billing
+// classes and an IAP-only partner ships no GMA. Same com.ads.module.billing FQNs as before —
+// existing imports keep compiling; IAP partners just add this one module.
+include ':billingkit'
+
+// Paywall: same port/adapter split as analytics. :paykit owns the UI and reads its remote config
+// through the vendor-free PaywallConfigSource; the billing engine lives in :billingkit.
+// Firebase Remote Config is the only config vendor for now; add a source module per vendor.
+include ':paykit'
+include ':paykit-firebase'
+
+// Scenario proof, never published: :billingkit + :paykit with no :ads on the classpath must
+// compile and package. If this module breaks, the billing split has regressed.
+include ':sample-paywall-only'

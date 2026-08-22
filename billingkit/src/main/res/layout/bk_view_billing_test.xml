@@ -5,7 +5,7 @@
     android:layout_height="wrap_content">
 
     <TextView
-        android:id="@+id/textView4"
+        android:id="@+id/bk_txt_header"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="28dp"
@@ -18,7 +18,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/txtTitle"
+        android:id="@+id/bk_txt_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="32dp"
@@ -28,10 +28,10 @@
         android:textSize="16sp"
         android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textView4" />
+        app:layout_constraintTop_toBottomOf="@+id/bk_txt_header" />
 
     <TextView
-        android:id="@+id/txtDescription"
+        android:id="@+id/bk_txt_description"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
@@ -40,11 +40,11 @@
         android:textColor="#000000"
         android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="@+id/txtTitle"
-        app:layout_constraintTop_toBottomOf="@+id/txtTitle" />
+        app:layout_constraintStart_toStartOf="@+id/bk_txt_title"
+        app:layout_constraintTop_toBottomOf="@+id/bk_txt_title" />
 
     <TextView
-        android:id="@+id/txtId"
+        android:id="@+id/bk_txt_id"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="32dp"
@@ -53,10 +53,10 @@
         android:textColor="#000000"
         android:textSize="16sp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/txtDescription" />
+        app:layout_constraintTop_toBottomOf="@+id/bk_txt_description" />
 
     <TextView
-        android:id="@+id/txtPrice"
+        android:id="@+id/bk_txt_price"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
@@ -65,21 +65,21 @@
         android:textColor="#000000"
         android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="@+id/txtId"
-        app:layout_constraintTop_toBottomOf="@+id/txtId" />
+        app:layout_constraintStart_toStartOf="@+id/bk_txt_id"
+        app:layout_constraintTop_toBottomOf="@+id/bk_txt_id" />
 
     <TextView
-        android:id="@+id/txtContinuePurchase"
+        android:id="@+id/bk_txt_continue_purchase"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
-        android:background="@color/text_exit"
+        android:background="#2152FF"
         android:paddingVertical="16dp"
         android:text="Purchase"
         android:textAlignment="center"
-        android:textColor="@color/colorWhite"
+        android:textColor="#FFFFFF"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/txtPrice" />
+        app:layout_constraintTop_toBottomOf="@+id/bk_txt_price" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

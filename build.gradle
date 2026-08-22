@@ -26,7 +26,8 @@ buildscript {
 apply from: 'versions.gradle'
 
 allprojects {
-    // Maven coordinates for the publishable library modules (:ads, :adtracer, :onboardkitorigin).
+    // Maven coordinates for the publishable library modules — the eight listed in jitpack.yml
+    // (:trackkit*, :ads, :billingkit, :adtracer, :onboardkitorigin, :paykit*).
     //
     // JitPack exports VERSION as the tag/branch it is building, so reading the env var keeps the
     // published version in lockstep with the git tag without touching this file on every release.

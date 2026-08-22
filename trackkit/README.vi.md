@@ -130,7 +130,7 @@ riêng của từng event.
 | `fo_flow_complete` | toàn bộ luồng first-open xong | `steps_shown`, `dwell_ms` | `:onboardkitorigin` |
 | `iap_paywall_view` | paywall hiện | `source` | `:app`, `:onboardkitorigin` |
 | `iap_paywall_result` | paywall đóng, dù kết quả gì | `source`, `status` (`purchased` / `dismissed` / `continue_with_ads`) | `:onboardkitorigin` |
-| `iap_success` | purchase được xác nhận | `product_id`, `value`, `currency`, `source` | `:ads` |
+| `iap_success` | purchase được xác nhận | `product_id`, `value`, `currency`, `source` | `:billingkit` |
 | `app_install_referrer` | Play install referrer, đọc một lần mỗi install qua MMP | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant` | `:ads` |
 | `consent_request` / `consent_shown` | form UMP được yêu cầu / thực sự hiện (một lần mỗi session) | — | `:app` |
 | `consent_result` | UMP có kết quả | `status` (`granted`/`denied`/`not_required`/`error`), `error_code` | `:app` |

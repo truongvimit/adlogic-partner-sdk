@@ -6,7 +6,6 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 
 import com.ads.module.admob.Admob;
-import com.ads.module.billing.AppPurchase;
 import com.ads.module.funtion.AdType;
 import com.ads.module.tracking.AdFormatRegistry;
 import com.google.android.gms.ads.AdValue;
@@ -20,9 +19,9 @@ import io.trackkit.TrackkitEvents;
 /**
  * The bridge from AdMob's vendor callbacks into {@code Tracker}.
  *
- * <p>Impressions, clicks and purchase revenue enter here and leave through Trackkit; the vendor
- * fan-out lives in the sinks. Adjust is the exception — it is an MMP, not a sink, so the two
- * revenue calls below hand off to {@link ERainAdjust} directly.
+ * <p>Impressions and clicks enter here and leave through Trackkit; the vendor fan-out lives in
+ * the sinks. Adjust is an MMP, not a sink, so revenue reaches it through the MmpTracking seam,
+ * whose Adjust relay is the single writer of every {@code Adjust.*} call.
  */
 public class ERainLogEventManager {
 
@@ -33,9 +32,11 @@ public class ERainLogEventManager {
      */
     private static final String DEFAULT_CURRENCY = "USD";
 
-    // -----------------------------------------------------------------------
-    // Paid impressions
-    // -----------------------------------------------------------------------
+    /**
+     * Mirrors {@code AppPurchase.TYPE_IAP.SUBSCRIPTION}; the billing engine lives in
+     * {@code :billingkit} now, so its constants cannot be referenced from here.
+     */
+    private static final int TYPE_IAP_SUBSCRIPTION = 2;
 
     /**
      * AdMob paid impression. Currency and precision come from the SDK — never hardcoded — and the
@@ -62,10 +63,6 @@ public class ERainLogEventManager {
         ERainAdjust.pushTrackEventAdmob(adValue, unitId, mediationAdapterClassName, placement);
     }
 
-    // -----------------------------------------------------------------------
-    // Ad interaction
-    // -----------------------------------------------------------------------
-
     /**
      * Sole emitter of {@code ad_click}. It sits on the vendor callback, so it fires once per real
      * click on every path — including the AppOpenManager resume/splash flows, which have no
@@ -81,28 +78,47 @@ public class ERainLogEventManager {
         Admob.getInstance().recordAdClick(context, unitId);
     }
 
-    // -----------------------------------------------------------------------
-    // Purchase revenue
-    // -----------------------------------------------------------------------
-
     /**
      * @param revenueMicros price in micros — that is what Billing's
-     *                      {@code getPriceAmountMicros()} returns and what {@code AppPurchase.handlePurchase}
-     *                      forwards. Converted to currency units here so the taxonomy stays in real money.
+     *                      {@code getPriceAmountMicros()} returns. Converted to currency units
+     *                      here so the taxonomy stays in real money.
+     * @deprecated the billing engine in {@code :billingkit} reports its own purchases through
+     * {@code Tracker} and {@code io.trackkit.mmp.MmpTracking}; call those directly instead.
      */
-    public static void onTrackRevenuePurchase(float revenueMicros, String currency, String idPurchase, int typeIAP) {
+    @Deprecated
+    public static void onTrackRevenuePurchase(double revenueMicros, String currency, String idPurchase, int typeIAP) {
         Tracker.track(new TrackkitEvents.Iap.Success(
                 orEmpty(idPurchase),
                 revenueMicros / 1_000_000d,
                 orDefault(currency, DEFAULT_CURRENCY),
-                typeIAP == AppPurchase.TYPE_IAP.SUBSCRIPTION ? "subscription" : "purchase"));
-        // Adjust takes micros and converts internally, next to the javadoc that documents the unit.
-        ERainAdjust.onTrackRevenuePurchase(revenueMicros, currency);
+                typeIAP == TYPE_IAP_SUBSCRIPTION ? "subscription" : "purchase"));
+        // The seam converts nothing: Adjust takes micros and divides internally.
+        MmpTracking.ensureInstalled();
+        io.trackkit.mmp.MmpTracking.trackPurchaseRevenue(revenueMicros, currency);
     }
 
-    // -----------------------------------------------------------------------
-    // Adjust impression token
-    // -----------------------------------------------------------------------
+    /**
+     * @param revenueMicros price in micros
+     * @deprecated a float carries ~7 significant digits, so a VND/IDR/KRW price in micros loses
+     * precision. Use {@link #onTrackRevenuePurchase(double, String, String, int)}.
+     */
+    @Deprecated
+    public static void onTrackRevenuePurchase(float revenueMicros, String currency, String idPurchase, int typeIAP) {
+        onTrackRevenuePurchase((double) revenueMicros, currency, idPurchase, typeIAP);
+    }
+
+    /**
+     * A purchase flow that ended in a Billing error, so paywall views can be reconciled against
+     * something other than successes alone.
+     *
+     * @param responseCode Play Billing's {@code BillingResponseCode}
+     * @deprecated the billing engine in {@code :billingkit} reports its own failures; track
+     * {@code TrackkitEvents.Iap.Fail} directly instead.
+     */
+    @Deprecated
+    public static void onTrackPurchaseFail(String productId, int responseCode) {
+        Tracker.track(new TrackkitEvents.Iap.Fail(productId, responseCode));
+    }
 
     /**
      * Optional token-keyed impression event, on top of {@code Adjust.trackAdRevenue}. Networks that
@@ -117,16 +133,11 @@ public class ERainLogEventManager {
         if (adValue == null) {
             return;
         }
-        // No ERainAdjust.isEnabled() pre-gate here: MmpTracking exists so a partner can swap
-        // Adjust for another MMP, and gating the seam on Adjust's own switch silenced every other
-        // relay. The Adjust relay re-checks isEnabled() itself, so nothing leaks when it is off.
+        // No isEnabled() pre-gate: MmpTracking exists so a partner can swap Adjust out, and the
+        // Adjust relay re-checks the switch itself, so nothing leaks when it is off.
         MmpTracking.trackRevenue(ERainAdjust.adImpressionToken(),
                 adValue.getValueMicros() / 1_000_000d, adValue.getCurrencyCode());
     }
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     /**
      * Maps the wrapper's {@link AdType} onto the Trackkit taxonomy.

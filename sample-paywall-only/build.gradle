@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Scenario-2 proof: IAP + prebuilt paywall, zero ads. :ads must never appear on any classpath
+// here — if this module stops building, the billing split has regressed.
+android {
+    namespace 'com.sample.paywallonly'
+    compileSdk compile_sdk_version
+
+    defaultConfig {
+        applicationId "com.sample.paywallonly"
+        minSdk min_sdk_version
+        targetSdk target_sdk_version
+        versionCode 1
+        versionName "1.0"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation project(':billingkit')
+    implementation project(':paykit')
+}

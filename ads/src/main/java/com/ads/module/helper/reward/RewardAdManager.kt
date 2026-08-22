@@ -190,6 +190,13 @@ object RewardAdManager {
         listeners.remove(placement)
     }
 
+    @JvmStatic
+    fun releaseAll() {
+        cache.clear()
+        inFlight.clear()
+        listeners.clear()
+    }
+
     private fun showInternal(activity: Activity, ad: RewardedAd?, callback: RewardShowCallback) {
         // The module answers purchased users with a lone onUserEarnedReward(null) and no
         // terminal callback; map that to a completed earn so the caller is never stranded

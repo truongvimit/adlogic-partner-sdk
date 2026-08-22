@@ -31,6 +31,12 @@ import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.ConfirmUninstallActivity
 import dagger.hilt.android.HiltAndroidApp
 import io.onboardkit.OnboardingSdk
+import io.paykit.PayKit
+import io.paykit.PayKitLogLevel
+import io.paykit.PaywallPlacement
+import io.paykit.firebase.FirebaseConfigSource
+import io.paykit.integration.OnboardKitPaywallGate
+import io.paykit.payKitConfig
 import io.trackkit.Tracker
 import io.trackkit.TrackerConfig
 import io.trackkit.TrackkitEvents
@@ -79,6 +85,8 @@ class GlobalApp : AdsMultiDexApplication() {
         // the placement back from the registry, and an unregistered unit reports as "unknown"
         AdsManager.registerAdPlacements()
         initAds()
+        // Before OnboardKit: its paywall gate calls straight into PayKit at the first checkpoint.
+        initPayKit()
         initOnboardKit()
 
         // Unconditionally register lifecycle observer and callbacks so dynamic welcome/resume toggling works during testing
@@ -150,9 +158,36 @@ class GlobalApp : AdsMultiDexApplication() {
         AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
     }
 
+    private fun initPayKit() {
+        payKitConfig {
+            termsUrl = getString(R.string.paywall_terms_url)
+            privacyUrl = getString(R.string.paywall_privacy_url)
+            // Fail-closed by design: a placement missing here shows nothing until remote config
+            // names it. SPLASH stays out — the splash interstitial already owns that slot.
+            defaultPlacements = setOf(
+                PaywallPlacement.AFTER_ONBOARDING,
+                PaywallPlacement.SETTING,
+            )
+            exitButtonDelayMs = 3_000
+            logLevel = if (BuildConfig.DEBUG) PayKitLogLevel.DEBUG else PayKitLogLevel.WARN
+            // This app's own catalogue, used until a remote fetch lands; it names no placements,
+            // so defaultPlacements above stays in charge.
+            fallbackConfigRes = R.raw.paywall_config
+        }.onSuccess { config ->
+            PayKit.install(this, config)
+            // Vendor adapter, kept out of :paykit itself. SplashActivity does the actual fetch.
+            PayKit.configSource(FirebaseConfigSource())
+        }.onFailure {
+            Timber.e(it, "PayKit config rejected — the paywall stays off")
+        }
+    }
+
     private fun initOnboardKit() {
         OnboardingSdk.install(this) {
             adProvider = ERainAdProvider()
+            // Wired after initPayKit(): the gate answers from PayKit's state, so onboarding would
+            // see "not ready" at every checkpoint if the paywall were installed later.
+            paywallGate = OnboardKitPaywallGate()
             listener = OnboardingListener { context, outcome ->
                 if (outcome is OnboardingOutcome.Completed) {
                     outcome.selectedLanguage?.let {

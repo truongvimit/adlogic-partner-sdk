@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Splash template. The app's launcher activity extends this and overrides the hooks it needs.
  *
- * The screen runs one linear sequence — consent, remote, ad requests, billing, minimum display —
+ * The screen runs one linear sequence — consent, billing, remote, ad requests, minimum display —
  * and hands off exactly once at the end. Every step is bounded by its own timeout, so no stalled
  * hook can hold the app here, and nothing runs in parallel that could move the flow on while the
  * ad is still arriving.
@@ -102,6 +102,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
             if (!granted) {
                 ObLog.w(ObLog.Section.SPLASH, "consent unresolved — running the flow without ads")
             }
+            // Before any request: entitlement decides whether one is legitimate at all, and a
+            // request made while it is still unknown reaches a paying user. Billing was started in
+            // Application.onCreate, so this usually returns having waited on nothing.
+            step("billing", cfg.splash.billingTimeoutMs) { onInitBilling() }
             // SAME_TIME spends what is left of the fetch window loading with the compiled ad ids;
             // ALTERNATE waits so that a remote id override can still apply.
             if (cfg.splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) requestSplashAds()
@@ -119,8 +123,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
 
         requestSplashAds()
-
-        step("billing", cfg.splash.billingTimeoutMs) { onInitBilling() }
 
         awaitBanner()
         awaitInterstitial()
@@ -360,7 +362,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
      */
     protected open suspend fun onConsentRequired(): Boolean = true
 
-    /** Init billing/purchases; return when done. 5s hard timeout by default. */
+    /**
+     * Resolve the purchase entitlement; return as soon as it is known. 5s hard timeout by default.
+     *
+     * Runs before the first ad request, because [io.onboardkit.ads.AdsGuard] reads the entitlement
+     * to decide whether a request may go out at all. Do only that here — anything slower belongs in
+     * [onRemoteFetched] or a background coroutine, or it delays every ad on the splash.
+     */
     protected open suspend fun onInitBilling() {}
 
     /** Remote config has been fetched and synced — sync the app's own keys here. */

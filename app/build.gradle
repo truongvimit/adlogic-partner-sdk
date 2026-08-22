@@ -165,12 +165,20 @@ dependencies {
     // Ads (local module thay cho com.github.trongluan99:ERain-Studio)
     implementation project(':ads')
 
+    // Billing engine — split out of :ads; this app sells IAP, so it declares the module itself
+    implementation project(':billingkit')
+
     // OnboardKit — first-open flow (splash, language, onboarding, question)
     implementation project(':onboardkitorigin')
 
     // Trackkit — single analytics fan-out. The core is vendor-free; each sink brings its own SDK.
     implementation project(':trackkit')
     implementation project(':trackkit-firebase')
+
+    // PayKit — paywall UI over the billing engine in :billingkit. Same port/adapter split as
+    // Trackkit: the core reads a vendor-free PaywallConfigSource, -firebase is the only adapter.
+    implementation project(':paykit')
+    implementation project(':paykit-firebase')
 
     // Debug-only ad lifecycle tracker + embedded dashboard; absent from release builds
     debugImplementation project(':adtracer')
@@ -184,9 +192,6 @@ dependencies {
     implementation "com.google.android.play:review-ktx:$play_review_ktx_version"
     implementation "com.facebook.shimmer:shimmer:$shimmer_version"
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
-
-    // Billing
-    implementation "com.android.billingclient:billing:$billing_version"
 
     // Lifecycle
     implementation "androidx.lifecycle:lifecycle-livedata-ktx:$androidx_lifecycle_version"

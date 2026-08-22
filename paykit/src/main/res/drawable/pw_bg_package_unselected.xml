@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/pw_surface" />
+    <stroke
+        android:width="@dimen/pw_stroke_unselected"
+        android:color="@color/pw_stroke" />
+    <corners android:radius="@dimen/pw_radius_package" />
+</shape>

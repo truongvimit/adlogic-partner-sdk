@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import android.widget.Toast
+import androidx.core.view.isVisible
 import com.ads.module.admob.AppOpenManager
 import com.itg.template.BuildConfig
 import com.itg.template.R
@@ -20,6 +21,8 @@ import com.itg.template.utils.Routes
 import dagger.hilt.android.AndroidEntryPoint
 import io.onboardkit.ui.language.LanguageScreenMode
 import io.onboardkit.ui.language.ObLanguageActivity
+import io.paykit.PayKit
+import io.paykit.PaywallPlacement
 
 @AndroidEntryPoint
 class SettingActivity : BaseActivity<ActivitySettingBinding>() {
@@ -41,6 +44,9 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
         super.onClickViews()
         mBinding.apply {
             imvBack.click { finish() }
+            rltPremium.click {
+                PayKit.launch(this@SettingActivity, PaywallPlacement.SETTING)
+            }
             rltLanguage.click {
                 languagePicker.launch(
                     ObLanguageActivity.intentFor(this@SettingActivity, LanguageScreenMode.SETTINGS),
@@ -123,6 +129,10 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
 
     override fun onResume() {
         super.onResume()
+        // Re-read on every resume: this screen stays alive under the paywall, so a purchase made
+        // there has to remove the row on the way back. Remote config can retire it too.
+        mBinding.rltPremium.isVisible =
+            !PayKit.isPremium() && PayKit.isEnabled(PaywallPlacement.SETTING)
 
         enableAdsResume()
     }

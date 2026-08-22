@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="pw_screen_padding">20dp</dimen>
+    <dimen name="pw_block_gap">16dp</dimen>
+    <dimen name="pw_header_height">220dp</dimen>
+    <dimen name="pw_close_size">32dp</dimen>
+    <dimen name="pw_close_margin">12dp</dimen>
+
+    <dimen name="pw_radius_package">16dp</dimen>
+    <dimen name="pw_radius_cta">28dp</dimen>
+    <dimen name="pw_stroke_selected">2dp</dimen>
+    <dimen name="pw_stroke_unselected">1dp</dimen>
+
+    <dimen name="pw_cta_height">54dp</dimen>
+    <dimen name="pw_package_gap">10dp</dimen>
+    <dimen name="pw_package_padding">14dp</dimen>
+    <dimen name="pw_package_check">22dp</dimen>
+    <dimen name="pw_benefit_gap">10dp</dimen>
+    <dimen name="pw_benefit_icon">18dp</dimen>
+    <dimen name="pw_badge_padding_h">8dp</dimen>
+    <dimen name="pw_badge_padding_v">2dp</dimen>
+    <dimen name="pw_touch_padding">8dp</dimen>
+
+    <dimen name="pw_text_headline">24sp</dimen>
+    <dimen name="pw_text_benefit">14sp</dimen>
+    <dimen name="pw_text_package_title">16sp</dimen>
+    <dimen name="pw_text_package_subtitle">12sp</dimen>
+    <dimen name="pw_text_price">16sp</dimen>
+    <dimen name="pw_text_old_price">12sp</dimen>
+    <dimen name="pw_text_badge">10sp</dimen>
+    <dimen name="pw_text_cta">17sp</dimen>
+    <dimen name="pw_text_note">12sp</dimen>
+    <dimen name="pw_text_secondary_action">14sp</dimen>
+    <dimen name="pw_text_footer">11sp</dimen>
+</resources>

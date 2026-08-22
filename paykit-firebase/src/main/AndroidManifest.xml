@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  No permissions and no Remote Config meta-data on purpose: declaring defaults here would
+  silently override the host app's own through manifest merging.
+-->
+<manifest />

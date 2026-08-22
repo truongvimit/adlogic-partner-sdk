@@ -10,9 +10,9 @@ import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.billing.AppPurchase
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.AdmobHelper
+import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdPreload
@@ -69,8 +69,8 @@ class ERainAdProvider(
     // GMA requires destroy() on every consumed NativeAd; the buffer only owns unpolled ones
     private val boundNatives = ConcurrentHashMap<String, ApNativeAd>()
 
-    override fun isPremium(context: Context): Boolean =
-        runCatching { AppPurchase.getInstance().isPurchased(context) }.getOrDefault(false)
+    // AdGate reads the Entitlement port, so this stays correct whether or not :billingkit ships.
+    override fun isPremium(context: Context): Boolean = AdGate.isPurchased(context)
 
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key

@@ -173,8 +173,11 @@ own, so arriving there without a filled ad leaves the user on a spinner.
 
 ### 2.3 Splash — subclass, do not copy
 
-Your launcher activity extends `ObSplashActivity`. The sequence — consent, remote fetch, ad
-requests, billing, minimum display — is already inside; you fill in the hooks you need.
+Your launcher activity extends `ObSplashActivity`. The sequence — consent, billing, remote fetch,
+ad requests, minimum display — is already inside; you fill in the hooks you need.
+
+Billing runs **before** the first ad request on purpose: the gate reads the purchase entitlement to
+decide whether a request may go out at all, so asking earlier would reach a paying user.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
@@ -185,7 +188,8 @@ class SplashActivity : ObSplashActivity() {
         return userGrantedConsent
     }
 
-    override suspend fun onInitBilling() { /* AppPurchase init */ }
+    /** Resolve the entitlement and return as soon as it is known — this gates every ad below. */
+    override suspend fun onInitBilling() { Billing.awaitReady(timeoutMs = 5_000) }
 
     override fun onRemoteFetched() { /* your own remote keys are ready */ }
 }

@@ -1,0 +1,48 @@
+{
+  "config_version": 1,
+  "packages": [
+    {
+      "id": "sub.weekly",
+      "type": "subs",
+      "base_plan_id": "weekly",
+      "title_key": "pw_plan_weekly",
+      "subtitle_key": "pw_plan_weekly_sub",
+      "preselected": false
+    },
+    {
+      "id": "sub.yearly",
+      "type": "subs",
+      "base_plan_id": "yearly",
+      "offer_id": "freetrial",
+      "title_key": "pw_plan_yearly",
+      "subtitle_key": "pw_plan_yearly_sub",
+      "badge": "BEST VALUE",
+      "discount_percent": 40,
+      "preselected": true
+    },
+    {
+      "id": "iap.lifetime",
+      "type": "inapp",
+      "title_key": "pw_plan_lifetime",
+      "subtitle_key": "pw_plan_lifetime_sub",
+      "preselected": false
+    }
+  ],
+  "copy": {
+    "headline_key": "pw_headline",
+    "benefit_keys": ["pw_benefit_1", "pw_benefit_2", "pw_benefit_3"],
+    "cta_key": "pw_cta_continue"
+  },
+  "tokens": {
+    "text_primary": "#111827",
+    "text_secondary": "#6B7280",
+    "accent": "#2152FA",
+    "background": "#FFFFFF",
+    "surface": "#F3F4F6",
+    "on_accent": "#FFFFFF",
+    "cta_gradient": ["#2152FA", "#839DFF"]
+  },
+  "exit_button": { "enabled": true, "delay_ms": 3000 },
+  "continue_with_ads": { "enabled": true },
+  "restore": { "enabled": true }
+}

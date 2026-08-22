@@ -51,6 +51,11 @@
     <string name="privacy_policy">Privacy Policy</string>
     <string name="let_me_recommend">Let me recommend</string>
     <string name="share_to">Share to</string>
+    <string name="go_premium">Go Premium</string>
+    <!-- Replace both with the app's own pages before release: PayKit rejects a blank or
+         non-http(s) value, and the paywall's legal links are a store requirement. -->
+    <string name="paywall_terms_url" translatable="false">https://example.com/terms</string>
+    <string name="paywall_privacy_url" translatable="false">https://example.com/privacy</string>
     <string name="we_re_better_than_ever">We’re better than ever</string>
     <string name="well_comeback">Welcome back!</string>
     <string name="start">Start</string>

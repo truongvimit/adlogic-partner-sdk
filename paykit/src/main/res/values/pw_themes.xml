@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Both bars transparent: the paywall pads itself for the insets and paints that strip with
+         the resolved background token, which XML cannot know. Icon appearance is set to match at
+         runtime; the values here only cover the frames before the theme resolves. -->
+    <style name="pw_Theme_PayKit" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/pw_background</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
