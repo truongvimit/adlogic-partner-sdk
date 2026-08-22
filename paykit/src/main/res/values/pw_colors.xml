@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bundled fallback palette. TokenResolver overwrites these at runtime; a remote token that is
+     missing or fails the #RRGGBB(AA) check falls back to the matching colour here. -->
+<resources>
+    <color name="pw_text_primary">#111827</color>
+    <color name="pw_text_secondary">#6B7280</color>
+    <color name="pw_accent">#2152FA</color>
+    <color name="pw_background">#FFFFFF</color>
+    <color name="pw_surface">#F3F4F6</color>
+    <color name="pw_on_accent">#FFFFFF</color>
+    <color name="pw_cta_gradient_start">#2152FA</color>
+    <color name="pw_cta_gradient_end">#839DFF</color>
+
+    <color name="pw_stroke">#E5E7EB</color>
+    <color name="pw_scrim">#99000000</color>
+</resources>

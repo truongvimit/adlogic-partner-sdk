@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every user-visible default. Remote config carries *_key names that resolve against these,
+     so copy stays localisable; an unknown key falls back to the bundled string below. -->
+<resources>
+    <string name="pw_headline">Unlock everything</string>
+    <string name="pw_benefit_1">No ads, anywhere</string>
+    <string name="pw_benefit_2">Unlimited access to every feature</string>
+    <string name="pw_benefit_3">Priority support</string>
+    <string name="pw_benefit_4">New content first</string>
+
+    <string name="pw_cta_continue">Continue</string>
+    <string name="pw_continue_with_ads">Continue with ads</string>
+    <string name="pw_restore">Restore purchase</string>
+    <string name="pw_cancel_anytime">Cancel anytime</string>
+    <string name="pw_close_content_description">Close</string>
+
+    <string name="pw_terms">Terms of Service</string>
+    <string name="pw_privacy">Privacy Policy</string>
+    <string name="pw_footer_legal">By continuing you agree to our %1$s and %2$s.</string>
+
+    <string name="pw_plan_default">Premium</string>
+    <string name="pw_plan_weekly">Weekly</string>
+    <string name="pw_plan_monthly">Monthly</string>
+    <string name="pw_plan_quarterly">Quarterly</string>
+    <string name="pw_plan_yearly">Yearly</string>
+    <string name="pw_plan_lifetime">Lifetime</string>
+
+    <string name="pw_plan_weekly_sub">Billed every week</string>
+    <string name="pw_plan_monthly_sub">Billed every month</string>
+    <string name="pw_plan_quarterly_sub">Billed every 3 months</string>
+    <string name="pw_plan_yearly_sub">Billed once a year</string>
+    <string name="pw_plan_lifetime_sub">One payment, yours forever</string>
+
+    <string name="pw_error_generic">Something went wrong. Please try again.</string>
+    <string name="pw_restore_none">There is no purchase to restore.</string>
+    <string name="pw_restore_done">Your purchase has been restored.</string>
+
+    <plurals name="pw_trial_days">
+        <item quantity="one">%d day free</item>
+        <item quantity="other">%d days free</item>
+    </plurals>
+    <plurals name="pw_trial_weeks">
+        <item quantity="one">%d week free</item>
+        <item quantity="other">%d weeks free</item>
+    </plurals>
+    <plurals name="pw_trial_months">
+        <item quantity="one">%d month free</item>
+        <item quantity="other">%d months free</item>
+    </plurals>
+    <plurals name="pw_trial_years">
+        <item quantity="one">%d year free</item>
+        <item quantity="other">%d years free</item>
+    </plurals>
+</resources>

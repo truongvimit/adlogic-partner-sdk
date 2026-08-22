@@ -1,7 +1,9 @@
 package com.itg.template.ui.component.splash
 
+import androidx.lifecycle.lifecycleScope
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
+import com.ads.module.billing.Billing
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
@@ -11,6 +13,8 @@ import com.itg.template.data.pref.AppSharedPreferencesApp
 import com.itg.template.ui.bases.ConsentHandler
 import com.itg.template.ui.bases.ext.isNetwork
 import io.onboardkit.ui.splash.ObSplashActivity
+import io.paykit.PayKit
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -43,6 +47,17 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
             )
             consentHandler?.requestConsent()
         }
+    }
+
+    /**
+     * Waits for Play to say whether this user is premium, since every ad request below is gated on
+     * the answer. Verification started in `Application.onCreate`, so this normally returns at once.
+     */
+    override suspend fun onInitBilling() {
+        // Fire-and-forget: the paywall document is not needed until the SPLASH_INTER checkpoint,
+        // and awaiting it here would hold every splash ad behind a remote fetch.
+        lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
+        Billing.awaitReady(timeoutMs = 5_000)
     }
 
     override fun onRemoteFetched() {

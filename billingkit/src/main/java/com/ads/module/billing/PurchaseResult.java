@@ -1,5 +1,7 @@
 package com.ads.module.billing;
 
+import com.android.billingclient.api.Purchase;
+
 import java.util.List;
 
 public class PurchaseResult {
@@ -65,4 +67,39 @@ public class PurchaseResult {
         this.autoRenewing = autoRenewing;
     }
 
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public long getPurchaseTime() {
+        return purchaseTime;
+    }
+
+    public String getPurchaseToken() {
+        return purchaseToken;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public boolean isAcknowledged() {
+        return acknowledged;
+    }
+
+    /**
+     * Full receipt, so callers get the order id and token instead of the four-field summary.
+     */
+    public static PurchaseResult from(Purchase purchase) {
+        return new PurchaseResult(
+                purchase.getOrderId(),
+                purchase.getPackageName(),
+                purchase.getProducts(),
+                purchase.getPurchaseTime(),
+                purchase.getPurchaseState(),
+                purchase.getPurchaseToken(),
+                purchase.getQuantity(),
+                purchase.isAutoRenewing(),
+                purchase.isAcknowledged());
+    }
 }

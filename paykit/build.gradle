@@ -1,0 +1,95 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.paykit'
+    compileSdk compile_sdk_version
+
+    // AGP fails the build on any resource missing this prefix — collision guard for library consumers
+    resourcePrefix 'pw_'
+
+    defaultConfig {
+        minSdk min_sdk_version
+
+        buildConfigField "String", "SDK_VERSION", "\"1.0.0\""
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += ["-Xskip-metadata-version-check"]
+    }
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:$androidx_core_ktx_version"
+    implementation "androidx.appcompat:appcompat:$androidx_appcompat_version"
+    implementation "com.google.android.material:material:$androidx_material_version"
+    implementation "androidx.recyclerview:recyclerview:$androidx_recyclerview_version"
+    implementation "androidx.constraintlayout:constraintlayout:2.2.1"
+    implementation "androidx.fragment:fragment-ktx:$androidx_fragment_ktx_version"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:$androidx_lifecycle_version"
+    implementation "androidx.activity:activity-ktx:1.10.1"
+
+    // api, not implementation: PayKit.state is a StateFlow and PaywallConfigSource.fetch is
+    // suspend, so every consumer compiles against coroutines. Same call as :ads makes.
+    api "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+
+    // api: TokenResolver.resolve takes Map<String, JsonElement> on the public boundary
+    api "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
+
+    // api, not implementation: partner code reads TrackkitEvents.Iap to route paywall analytics
+    api project(':trackkit')
+
+    // The billing engine, reached through one internal bridge file, so the paywall never leaks
+    // com.ads.module types to consumers.
+    implementation project(':billingkit')
+
+    // compileOnly: BillingBridge flips one app-resume switch when the ads SDK is present, but a
+    // paywall-without-ads host must not inherit the GMA stack. Guarded at runtime by try/catch.
+    compileOnly project(':ads')
+
+    // compileOnly: OnboardKitPaywallGate implements an :onboardkitorigin SPI, but a host that
+    // ships the paywall without onboarding must not pull that module in.
+    compileOnly project(':onboardkitorigin')
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
+}
+
+// AGP creates the 'release' software component late, so the publication must be configured
+// inside afterEvaluate. groupId and version are inherited from the root project, which means the
+// project(':billingkit') dependency resolves to com.github.truongvimit:billingkit:<same version>
+// in the POM. :ads is compileOnly and deliberately absent from the POM.
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from(components["release"])
+                artifactId = "paykit"
+            }
+        }
+    }
+}

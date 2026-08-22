@@ -2,7 +2,7 @@
 
 # Ads Integration Guide — Base Project (EN)
 
-> Module guides: **[trackkit](trackkit/README.md)** · **[OnboardKit](onboardkitorigin/README.md)**
+> Module guides: **[trackkit](trackkit/README.md)** · **[OnboardKit](onboardkitorigin/README.md)** · **[PayKit](paykit/README.md)** · **[BillingKit](billingkit/README.md)**
 
 This document is the **mandatory reference standard** for partner teams integrating ads into Infinity products. Any ad-related change must follow the architecture, load/show flow, and gating rules defined in this base project.
 
@@ -10,15 +10,27 @@ This document is the **mandatory reference standard** for partner teams integrat
 
 ## Consuming the SDKs via JitPack
 
-Five modules are published as libraries:
+Eight modules are published as libraries:
 
 | Module | Role |
 |---|---|
-| `ads` | Ad loading and showing |
+| `ads` | Ad loading and showing; premium gating through the `Entitlement` port |
+| `billingkit` | The Play billing engine — same `com.ads.module.billing` classes as before the split |
 | `onboardkitorigin` | First-open flow: splash, language, onboarding |
+| `paykit` | Paywall UI over the billing engine in `billingkit` |
+| `paykit-firebase` | Firebase Remote Config source for `paykit` |
 | `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`, taxonomy) |
 | `trackkit-firebase` | Firebase/GA4 sink for `trackkit` |
 | `adtracer` | Debug-only ad lifecycle dashboard |
+
+Declare only what your app monetizes with — the four partner scenarios:
+
+| # | Partner | Declares | What the APK provably lacks |
+|---|---|---|---|
+| 1 | Ads only, no IAP | `ads` (+ `trackkit-firebase`) | No Play Billing class at all |
+| 2 | IAP + prebuilt paywall, no ads | `billingkit` + `paykit` | No GMA/AdMob class at all |
+| 3 | IAP with your own paywall UI | `billingkit` | Neither `paykit` nor `ads` |
+| 4 | Ads and IAP | `ads` + `billingkit` (+ `paykit`) | — premium gating works as before |
 
 Add the JitPack repository:
 
@@ -41,6 +53,13 @@ dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
 
+    // Billing engine. Only if the app sells IAP/subscriptions — see the scenario table above.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
+
+    // Paywall. Add paykit-firebase only if the paywall document comes from Remote Config.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit-firebase:$sdkVersion"
+
     // Pick the sinks you actually want. Without a sink, Tracker validates and drops events.
     implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
 
@@ -53,9 +72,9 @@ Keep every module on the same tag. They are published together from one reposito
 tested against each other across versions. Note the double quotes: Groovy only interpolates
 `$sdkVersion` in double-quoted strings.
 
-You do not need to declare `trackkit` yourself: `ads` and `onboardkitorigin` expose it as an `api`
-dependency, and `trackkit-firebase` pulls it in too. Declare it explicitly only if you write your
-own `TrackSink` in a module that depends on neither.
+You do not need to declare `trackkit` yourself: `ads`, `onboardkitorigin` and `paykit` expose it as
+an `api` dependency, and `trackkit-firebase` pulls it in too. Declare it explicitly only if you write
+your own `TrackSink` in a module that depends on none of them.
 
 Note the group id: because this repository publishes several modules, JitPack namespaces them as
 `com.github.<user>.<repo>` rather than `com.github.<user>`. The repository name is part of the group,
@@ -64,9 +83,16 @@ override. Flattening it to `com.github.truongvimit:ads` would require one reposi
 
 Any tag pushed to this repository is resolvable; a commit hash or `main-SNAPSHOT` also works.
 
-> **Note:** `onboardkitorigin` depends on `ads` at runtime scope, so its ad classes (`com.ads.module.*`) are not on your compile classpath through it. Declare `ads` explicitly, as shown above, if you call those APIs directly.
+> **Note:** `onboardkitorigin` depends on `ads`, and `paykit` on `billingkit`, at runtime scope only — their `com.ads.module.*` classes are not on your compile classpath through either of them. Declare `ads` / `billingkit` explicitly, as shown above, if you call those APIs directly.
 
 Requires JDK 17 and `minSdk` 24 or higher.
+
+### Migrating: the billing engine moved to `billingkit`
+
+The Play billing engine left `ads`. If your app sells IAP, add exactly one Gradle line —
+`implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` — and change
+nothing else: every `com.ads.module.billing.*` class kept its name, package and behavior. Ads-only
+apps do nothing and stop shipping the Play Billing library. Details: **[MIGRATION.md](MIGRATION.md)**.
 
 ### Migrating to 2.0.0
 
@@ -269,8 +295,9 @@ reads that same field.
 
 This is the step partners miss most often, because nothing crashes without it.
 
-`ads` does **not** log analytics itself. Every impression, click and purchase it observes is handed
-to `Tracker` (from `trackkit`), which fans out to whatever sinks you registered. Register none and
+`ads` and `billingkit` do **not** log analytics themselves. Every impression, click and purchase
+they observe is handed to `Tracker` (from `trackkit`), which fans out to whatever sinks you
+registered. Register none and
 `Tracker` validates each event and then hands it to an empty list — the data silently never arrives.
 `Tracker.install` logs a warning when it runs with no sink, but the fix is to wire it:
 
@@ -298,7 +325,7 @@ What you get for free once a sink exists — no call sites of your own:
 |---|---|---|
 | Ad lifecycle | `ads`, per ad unit | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
 | Paid impressions + ad LTV | `ads`, from the AdMob paid-event callback | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
-| Purchases | `ads`, from the billing callback | `iap_success` |
+| Purchases | `billingkit`, from the billing callback | `iap_success` |
 | First-open funnel | `onboardkitorigin` | `fo_*` — see the OnboardKit guide |
 
 Two things stay yours: the UMP outcome (`Tracker.setConsent(analytics, ads)` — call it from your
@@ -457,7 +484,7 @@ so a slot can never go ad → shimmer → ad.
 
 An ad loads only when all conditions pass, evaluated in one place — `AdGate.skipReason(...)`:
 - `adUnitConfig.isUsable` — enabled **and** has at least one non-blank id
-- `!AppPurchase.getInstance().isPurchased(...)`
+- `!AdGate.isPurchased(...)` — the `Entitlement` port's answer; `billingkit` installs the source when present
 - Network available
 - For mandatory organic-gated placements: `AdGate.passesUaGate(config.enableUaCheck) == true`
 
@@ -624,6 +651,63 @@ override val bannerConfig = BannerConfig(
 )
 ```
 
-## 7. Additional reference
+## 7. Purchases and the paywall
+
+Billing lives in `:billingkit` (still `com.ads.module.billing`); the paywall UI lives in `:paykit`.
+The split is deliberate: `:billingkit` owns the Play `BillingClient` and hands the entitlement to
+`:ads` through the `Entitlement` port — `AdGate` skips every placement with `PURCHASED` the moment
+`AppPurchase.isPurchased` turns true. A second module with its own opinion about who is premium
+would break that gate.
+
+Minimum wiring. In `GlobalApp.onCreate()`, after `initAds()`:
+
+```kotlin
+val config = payKitConfig {
+    termsUrl = "https://example.com/terms"
+    privacyUrl = "https://example.com/privacy"
+    defaultPlacements = setOf(PaywallPlacement.AFTER_ONBOARDING, PaywallPlacement.SETTING)
+    exitButtonDelayMs = 3_000
+}.getOrElse { Log.e(TAG, "PayKit config rejected", it); return }
+
+PayKit.install(this, config)
+PayKit.configSource(FirebaseConfigSource())     // optional, from :paykit-firebase
+```
+
+In Splash. `onInitBilling` runs before the first ad request and must return as soon as the
+entitlement is known, so await only that; the paywall document is not needed until a checkpoint:
+
+```kotlin
+override suspend fun onInitBilling() {
+    lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
+    Billing.awaitReady(timeoutMs = 5_000)
+}
+```
+
+Wherever a screen wants it:
+
+```kotlin
+PayKit.launch(activity, PaywallPlacement.SETTING)
+```
+
+Rules that are not optional:
+
+- **Do not call `AppPurchase.initBilling` yourself.** `PayKit.install` registers the catalogue from
+  the paywall document. `initBilling` tears down the live client, so a second caller with a
+  different product list silently wins.
+- **Placements fail closed.** With no `defaultPlacements` and no fetched `placements`, nothing
+  shows; a bundled document is a catalogue and never names placements. `PayKit.launch` also refuses
+  for a premium user and for a disabled placement — it logs, and reports `onFinished(Dismissed)` to
+  the listener that call was given.
+- **`iap_success` is emitted by `:billingkit`**, once, when Play confirms. Do not emit a purchase
+  event from a paywall or a screen of your own; that counts the same revenue twice.
+- **Ad gating stays on `AppPurchase.isPurchased`.** Read `PayKit.isPremium()` / `Billing.isPremium`
+  for your own UI; do not mirror premium into a preference of your own.
+- A `consumable` product is consumed by the billing engine and never sets the entitlement, so it
+  does not remove ads. Use `inapp` for a lifetime unlock.
+
+Full guide — config schema, placements, analytics, theming, the Compose escape hatch, and the
+OnboardKit gate: **[paykit/README.md](paykit/README.md)**.
+
+## 8. Additional reference
 
 - [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/) — UI, Remote Config, and ad-unit display conditions (placement/method names should be cross-checked against this document).

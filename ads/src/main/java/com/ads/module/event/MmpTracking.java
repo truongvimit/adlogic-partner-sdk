@@ -3,19 +3,18 @@ package com.ads.module.event;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The seam other modules use to reach the MMP (Adjust) without importing it.
  *
- * <p>Adjust lives in {@code :ads} because every signal it consumes — ad revenue, purchase revenue,
- * install attribution, session lifecycle — originates from code this module already owns. That
- * placement is deliberate, not accidental. But it left modules like {@code :onboardkitorigin} with
- * no way to report a conversion milestone, because the only route was a static method behind the
- * ads SDK's config object.
- *
- * <p>This class is that route. It is an interface plus a registry, not a Gradle module: partners do
- * not add a dependency, do not edit their {@code Application}, and cannot forget to wire it.
+ * <p>The registry itself now lives in {@code io.trackkit.mmp.MmpTracking}, so modules that ship
+ * without {@code :ads} — {@code :billingkit} above all — can still report purchase revenue. This
+ * class stays as the published door for modules that already depend on {@code :ads}: it delegates
+ * every call to the Trackkit seam and contributes the Adjust relay, which remains the single
+ * writer of every {@code Adjust.*} call in the codebase.
  *
  * <p>Usage from a sibling module (which already depends on {@code :ads}):
  * <pre>
@@ -29,8 +28,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class MmpTracking {
 
     /**
-     * A destination for MMP-worthy signals. {@link AdjustRelay} is registered by default; add your
+     * A destination for MMP-worthy signals. The Adjust relay is registered by default; add your
      * own to fan out to a second MMP without touching any call site.
+     *
+     * <p>New code should implement {@code io.trackkit.mmp.MmpTracking.Relay} instead — it also
+     * carries purchase revenue, which this frozen interface never received.
      */
     public interface Relay {
 
@@ -50,62 +52,71 @@ public final class MmpTracking {
         void onConsent(boolean analyticsGranted, boolean adsGranted);
     }
 
-    private static final CopyOnWriteArrayList<Relay> RELAYS = new CopyOnWriteArrayList<>();
+    private static final AtomicBoolean ADJUST_INSTALLED = new AtomicBoolean(false);
+
+    /**
+     * Legacy relay -> Trackkit wrapper, so removeRelay can find the wrapper addRelay registered.
+     */
+    private static final Map<Relay, io.trackkit.mmp.MmpTracking.Relay> WRAPPED =
+            new ConcurrentHashMap<>();
 
     static {
-        RELAYS.add(new AdjustRelay());
+        ensureInstalled();
     }
 
     private MmpTracking() {
     }
 
+    /**
+     * Arms the Adjust relay on the Trackkit seam. Idempotent, and once only: after
+     * {@link #clearRelays()} the relay stays gone, exactly as it always has.
+     */
+    public static void ensureInstalled() {
+        if (ADJUST_INSTALLED.compareAndSet(false, true)) {
+            io.trackkit.mmp.MmpTracking.addRelay(new AdjustRelay());
+        }
+    }
+
     public static void addRelay(@NonNull Relay relay) {
-        RELAYS.addIfAbsent(relay);
+        io.trackkit.mmp.MmpTracking.addRelay(
+                WRAPPED.computeIfAbsent(relay, LegacyRelayAdapter::new));
     }
 
     public static void removeRelay(@NonNull Relay relay) {
-        RELAYS.remove(relay);
+        io.trackkit.mmp.MmpTracking.Relay wrapper = WRAPPED.remove(relay);
+        if (wrapper != null) {
+            io.trackkit.mmp.MmpTracking.removeRelay(wrapper);
+        }
     }
 
     /**
-     * Drops the built-in Adjust relay — for partners who ship a different MMP.
+     * Drops every relay, the built-in Adjust one included — for partners who ship a different MMP.
      */
     public static void clearRelays() {
-        RELAYS.clear();
+        WRAPPED.clear();
+        io.trackkit.mmp.MmpTracking.clearRelays();
     }
 
     public static void trackEvent(@Nullable String token) {
-        trackEvent(token, null);
+        io.trackkit.mmp.MmpTracking.trackEvent(token);
     }
 
     public static void trackEvent(@Nullable String token, @Nullable String callbackId) {
-        if (token == null || token.isEmpty()) {
-            return;
-        }
-        for (Relay relay : RELAYS) {
-            relay.onEvent(token, callbackId);
-        }
+        io.trackkit.mmp.MmpTracking.trackEvent(token, callbackId);
     }
 
     public static void trackRevenue(@Nullable String token, double value, @Nullable String currency) {
-        if (token == null || token.isEmpty()) {
-            return;
-        }
-        for (Relay relay : RELAYS) {
-            relay.onRevenue(token, value, currency);
-        }
+        io.trackkit.mmp.MmpTracking.trackRevenue(token, value, currency);
     }
 
     public static void setConsent(boolean analyticsGranted, boolean adsGranted) {
-        for (Relay relay : RELAYS) {
-            relay.onConsent(analyticsGranted, adsGranted);
-        }
+        io.trackkit.mmp.MmpTracking.setConsent(analyticsGranted, adsGranted);
     }
 
     /**
-     * Default relay: the Adjust integration that already lives in this module.
+     * The Adjust integration that lives in this module, spoken to through the Trackkit seam.
      */
-    static final class AdjustRelay implements Relay {
+    static final class AdjustRelay implements io.trackkit.mmp.MmpTracking.Relay {
 
         @Override
         public void onEvent(@NonNull String token, @Nullable String callbackId) {
@@ -122,8 +133,41 @@ public final class MmpTracking {
         }
 
         @Override
+        public void onPurchaseRevenue(double revenueMicros, @Nullable String currency) {
+            ERainAdjust.onTrackRevenuePurchase(revenueMicros, currency);
+        }
+
+        @Override
         public void onConsent(boolean analyticsGranted, boolean adsGranted) {
             ERainAdjust.setConsent(analyticsGranted, adsGranted);
+        }
+    }
+
+    /**
+     * Presents a legacy {@link Relay} to the Trackkit seam. Purchase revenue is deliberately not
+     * forwarded: the frozen interface never carried it, so legacy relays never saw it.
+     */
+    private static final class LegacyRelayAdapter implements io.trackkit.mmp.MmpTracking.Relay {
+
+        private final Relay delegate;
+
+        LegacyRelayAdapter(Relay delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void onEvent(@NonNull String token, @Nullable String callbackId) {
+            delegate.onEvent(token, callbackId);
+        }
+
+        @Override
+        public void onRevenue(@NonNull String token, double value, @Nullable String currency) {
+            delegate.onRevenue(token, value, currency);
+        }
+
+        @Override
+        public void onConsent(boolean analyticsGranted, boolean adsGranted) {
+            delegate.onConsent(analyticsGranted, adsGranted);
         }
     }
 }

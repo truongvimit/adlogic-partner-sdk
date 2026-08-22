@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every view carries an id: DefaultPaywallRenderer binds this file through viewBinding and a
+     custom PaywallRenderer replaces the whole tree instead. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/pw_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pw_background">
+
+    <ImageView
+        android:id="@+id/pw_header_image"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/pw_header_height"
+        android:adjustViewBounds="true"
+        android:background="@color/pw_surface"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- GONE until exit_button.delay_ms elapses; back stays enabled the whole time. -->
+    <ImageButton
+        android:id="@+id/pw_close"
+        android:layout_width="@dimen/pw_close_size"
+        android:layout_height="@dimen/pw_close_size"
+        android:layout_margin="@dimen/pw_close_margin"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/pw_close_content_description"
+        android:padding="@dimen/pw_touch_padding"
+        android:scaleType="fitCenter"
+        android:src="@drawable/pw_ic_close"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
+
+    <ScrollView
+        android:id="@+id/pw_body_scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingHorizontal="@dimen/pw_screen_padding"
+        app:layout_constraintBottom_toTopOf="@id/pw_bottom_bar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/pw_header_image">
+
+        <LinearLayout
+            android:id="@+id/pw_body_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/pw_block_gap"
+            android:paddingBottom="@dimen/pw_block_gap">
+
+            <TextView
+                android:id="@+id/pw_headline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:text="@string/pw_headline"
+                android:textColor="@color/pw_text_primary"
+                android:textSize="@dimen/pw_text_headline"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/pw_benefits"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/pw_block_gap"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/pw_packages"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/pw_block_gap"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/pw_bottom_bar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/pw_screen_padding"
+        android:paddingBottom="@dimen/pw_block_gap"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- backgroundTint null so pw_bg_cta survives; MaterialButton tints its background away. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/pw_cta"
+            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/pw_cta_height"
+            android:background="@drawable/pw_bg_cta"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/pw_cta_continue"
+            android:textAllCaps="false"
+            android:textColor="@color/pw_on_accent"
+            android:textSize="@dimen/pw_text_cta"
+            app:backgroundTint="@null" />
+
+        <TextView
+            android:id="@+id/pw_cta_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="@string/pw_cancel_anytime"
+            android:textColor="@color/pw_text_secondary"
+            android:textSize="@dimen/pw_text_note" />
+
+        <LinearLayout
+            android:id="@+id/pw_secondary_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pw_continue_with_ads"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:padding="@dimen/pw_touch_padding"
+                android:text="@string/pw_continue_with_ads"
+                android:textColor="@color/pw_text_secondary"
+                android:textSize="@dimen/pw_text_secondary_action" />
+
+            <TextView
+                android:id="@+id/pw_restore"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/pw_block_gap"
+                android:background="?attr/selectableItemBackground"
+                android:padding="@dimen/pw_touch_padding"
+                android:text="@string/pw_restore"
+                android:textColor="@color/pw_accent"
+                android:textSize="@dimen/pw_text_secondary_action" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/pw_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="@color/pw_text_secondary"
+            android:textSize="@dimen/pw_text_footer"
+            tools:text="@string/pw_footer_legal" />
+    </LinearLayout>
+
+    <!-- clickable, so it swallows taps on the packages underneath while Purchasing/Restoring. -->
+    <FrameLayout
+        android:id="@+id/pw_progress_overlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/pw_scrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/pw_progress"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminate="true" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

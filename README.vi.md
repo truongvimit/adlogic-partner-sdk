@@ -2,9 +2,72 @@
 
 # Hướng dẫn tích hợp Ads — Base Project (VI)
 
-> Tài liệu module: **[trackkit](trackkit/README.vi.md)** · **[OnboardKit](onboardkitorigin/README.vi.md)**
+> Tài liệu module: **[trackkit](trackkit/README.vi.md)** · **[OnboardKit](onboardkitorigin/README.vi.md)** · **[PayKit](paykit/README.md)** · **[BillingKit](billingkit/README.md)**
 
 Tài liệu này là **chuẩn tham chiếu bắt buộc** dành cho đối tác phát triển khi tích hợp quảng cáo trên các sản phẩm của Infinity. Mọi thay đổi liên quan Ads phải tuân thủ kiến trúc, luồng load/show và các rule gating được mô tả trong project base này.
+
+## Dùng SDK qua JitPack
+
+Tám module được publish dưới dạng thư viện:
+
+| Module | Vai trò |
+|---|---|
+| `ads` | Load và show quảng cáo; gate premium qua port `Entitlement` |
+| `billingkit` | Engine Play Billing — vẫn đúng các class `com.ads.module.billing` như trước khi tách |
+| `onboardkitorigin` | Luồng first-open: splash, language, onboarding |
+| `paykit` | UI paywall trên engine billing trong `billingkit` |
+| `paykit-firebase` | Nguồn Firebase Remote Config cho `paykit` |
+| `trackkit` | Contract analytics không dính vendor (`Tracker`, `TrackSink`, taxonomy) |
+| `trackkit-firebase` | Sink Firebase/GA4 cho `trackkit` |
+| `adtracer` | Dashboard vòng đời ads, chỉ cho debug |
+
+Chỉ khai đúng những gì app kiếm tiền bằng — bốn kịch bản partner:
+
+| # | Partner | Khai báo | APK chắc chắn không chứa |
+|---|---|---|---|
+| 1 | Chỉ ads, không IAP | `ads` (+ `trackkit-firebase`) | Không một class Play Billing nào |
+| 2 | IAP + paywall dựng sẵn, không ads | `billingkit` + `paykit` | Không một class GMA/AdMob nào |
+| 3 | IAP nhưng tự viết UI paywall | `billingkit` | Không cần `paykit` lẫn `ads` |
+| 4 | Cả ads lẫn IAP | `ads` + `billingkit` (+ `paykit`) | — gate premium hoạt động y như trước |
+
+Khai dependency:
+
+```groovy
+// Thay <tag> bằng một tag từ https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+
+dependencies {
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
+
+    // Engine billing. Chỉ khi app bán IAP/subscription — xem bảng kịch bản ở trên.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
+
+    // Paywall. Thêm paykit-firebase chỉ khi document paywall lấy từ Remote Config.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit-firebase:$sdkVersion"
+
+    // Chọn sink bạn thật sự dùng. Không có sink, Tracker validate xong rồi bỏ event.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
+
+    // adtracer chỉ ship trong bản debug — giữ nó ngoài release
+    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
+}
+```
+
+Giữ mọi module trên cùng một tag — chúng được publish cùng nhau từ một repository và không được
+test chéo giữa các version.
+
+> **Lưu ý:** `onboardkitorigin` phụ thuộc `ads`, còn `paykit` phụ thuộc `billingkit`, nhưng chỉ ở
+> scope runtime — các class `com.ads.module.*` không vào compile classpath của bạn qua hai module
+> đó. Khai `ads` / `billingkit` tường minh như trên nếu bạn gọi trực tiếp các API này.
+
+### Nâng cấp: engine billing chuyển sang `billingkit`
+
+Engine Play Billing đã rời `ads`. Nếu app bán IAP, thêm đúng một dòng Gradle —
+`implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` — và không đổi
+gì khác: mọi class `com.ads.module.billing.*` giữ nguyên tên, package và hành vi. App chỉ chạy ads
+không phải làm gì, và APK không còn thư viện Play Billing. Chi tiết: **[MIGRATION.md](MIGRATION.md)**.
 
 ### Nâng cấp lên 2.0.0
 
@@ -189,8 +252,8 @@ Mọi định dạng ads (interstitial, native, banner, rewarded, app-open) đ�
 
 Đây là bước partner hay bỏ sót nhất, vì thiếu nó không có gì crash cả.
 
-`ads` **không** tự ghi analytics. Mọi impression, click và purchase nó quan sát được đều đẩy sang
-`Tracker` (của `trackkit`), rồi `Tracker` fan-out tới các sink bạn đăng ký. Không đăng ký sink nào
+`ads` và `billingkit` **không** tự ghi analytics. Mọi impression, click và purchase chúng quan sát
+được đều đẩy sang `Tracker` (của `trackkit`), rồi `Tracker` fan-out tới các sink bạn đăng ký. Không đăng ký sink nào
 thì `Tracker` validate từng event xong đưa vào một danh sách rỗng — dữ liệu im lặng không bao giờ
 tới đâu. `Tracker.install` có log cảnh báo khi chạy mà không có sink nào, nhưng cách sửa là nối dây
 cho đúng:
@@ -219,7 +282,7 @@ Những gì tự có sẵn khi đã có sink — không cần một call site n�
 |---|---|---|
 | Vòng đời ads | `ads`, theo từng ad unit | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
 | Paid impression + ad LTV | `ads`, từ callback paid-event của AdMob | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
-| Purchase | `ads`, từ callback billing | `iap_success` |
+| Purchase | `billingkit`, từ callback billing | `iap_success` |
 | Phễu first-open | `onboardkitorigin` | `fo_*` — xem tài liệu OnboardKit |
 
 Hai thứ vẫn thuộc về bạn: kết quả UMP (`Tracker.setConsent(analytics, ads)` — gọi từ callback consent,
@@ -378,7 +441,7 @@ bao giờ có thể đi ad → shimmer → ad.
 
 Một ad chỉ load khi thỏa đủ các điều kiện, đánh giá tại đúng một chỗ — `AdGate.skipReason(...)`:
 - `adUnitConfig.isUsable` — bật **và** có ít nhất một id khác rỗng.
-- `!AppPurchase.getInstance().isPurchased(...)`.
+- `!AdGate.isPurchased(...)` — câu trả lời từ port `Entitlement`; khi có mặt, `billingkit` tự cắm source.
 - Có mạng.
 - Với các vị trí bắt buộc gate organic: `AdGate.passesUaGate(config.enableUaCheck) == true`.
 
@@ -544,6 +607,62 @@ override val bannerConfig = BannerConfig(
 )
 ```
 
-## 7. Tài liệu tham chiếu bổ sung
+## 7. Mua hàng và paywall
+
+Billing nằm trong `:billingkit` (vẫn là `com.ads.module.billing`); UI paywall nằm trong `:paykit`.
+Việc tách làm hai là có chủ đích: `:billingkit` sở hữu `BillingClient` của Play và trao entitlement
+cho `:ads` qua port `Entitlement` — `AdGate` bỏ qua mọi placement với lý do `PURCHASED` ngay khi
+`AppPurchase.isPurchased` thành true. Một module thứ hai cũng tự quyết ai là premium sẽ phá gate đó.
+
+Wiring tối thiểu. Trong `GlobalApp.onCreate()`, sau `initAds()`:
+
+```kotlin
+val config = payKitConfig {
+    termsUrl = "https://example.com/terms"
+    privacyUrl = "https://example.com/privacy"
+    defaultPlacements = setOf(PaywallPlacement.AFTER_ONBOARDING, PaywallPlacement.SETTING)
+    exitButtonDelayMs = 3_000
+}.getOrElse { Log.e(TAG, "PayKit config rejected", it); return }
+
+PayKit.install(this, config)
+PayKit.configSource(FirebaseConfigSource())     // tuỳ chọn, từ :paykit-firebase
+```
+
+Trong Splash. `onInitBilling` chạy trước request ads đầu tiên và phải trả về ngay khi biết
+entitlement, nên chỉ await đúng cái đó; document paywall tới checkpoint mới cần:
+
+```kotlin
+override suspend fun onInitBilling() {
+    lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
+    Billing.awaitReady(timeoutMs = 5_000)
+}
+```
+
+Ở màn hình nào cần hiện paywall:
+
+```kotlin
+PayKit.launch(activity, PaywallPlacement.SETTING)
+```
+
+Các rule bắt buộc:
+
+- **Không tự gọi `AppPurchase.initBilling`.** `PayKit.install` đã đăng ký catalogue lấy từ document
+  paywall. `initBilling` huỷ client đang chạy, nên người gọi sau với danh sách sản phẩm khác sẽ âm
+  thầm ghi đè.
+- **Placement fail-closed.** Không có `defaultPlacements` và cũng không có `placements` từ document
+  đã fetch thì không có gì hiện lên; document bundled chỉ là catalogue, không đặt placement.
+  `PayKit.launch` cũng từ chối với user đã premium hoặc placement đang tắt — nó ghi log và báo
+  `onFinished(Dismissed)` cho listener của lần gọi đó.
+- **`iap_success` do `:billingkit` bắn**, đúng một lần, khi Play xác nhận. Đừng bắn event mua hàng
+  từ paywall hay từ màn hình của bạn; như vậy là đếm doanh thu hai lần.
+- **Gate ads vẫn dựa trên `AppPurchase.isPurchased`.** UI của bạn hãy đọc `PayKit.isPremium()` /
+  `Billing.isPremium`; đừng nhân bản trạng thái premium vào preference riêng.
+- Sản phẩm `consumable` bị engine billing consume và không bao giờ set entitlement, nên nó
+  **không** tắt ads. Dùng `inapp` cho gói lifetime.
+
+Tài liệu đầy đủ — schema config, placement, analytics, theming, escape hatch cho Compose và gate
+OnboardKit: **[paykit/README.md](paykit/README.md)**.
+
+## 8. Tài liệu tham chiếu bổ sung
 
 - [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/) — UI, Remote Config và điều kiện hiển thị từng ad unit (đối chiếu tên method/placement với tài liệu này).

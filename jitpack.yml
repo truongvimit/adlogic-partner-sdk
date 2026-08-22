@@ -13,5 +13,11 @@ jdk:
 # :onboardkitorigin declare `api project(':trackkit')`, so their POMs carry a hard dependency on
 # it. Leaving it out of this list would publish two SDKs that point at an artifact that does not
 # exist, and both would fail to resolve.
+#
+# :paykit carries the same trap one level further out: :paykit-firebase declares
+# `api project(':paykit')`, so publishing the adapter without the port would resolve to nothing.
+#
+# :billingkit joined the list when the billing engine left :ads: :paykit declares
+# `implementation project(':billingkit')`, so its POM points at the billingkit artifact.
 install:
-  - ./gradlew :trackkit:publishToMavenLocal :trackkit-firebase:publishToMavenLocal :ads:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal -x test --no-daemon --stacktrace
+  - ./gradlew :trackkit:publishToMavenLocal :trackkit-firebase:publishToMavenLocal :ads:publishToMavenLocal :billingkit:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal :paykit:publishToMavenLocal :paykit-firebase:publishToMavenLocal -x test --no-daemon --stacktrace

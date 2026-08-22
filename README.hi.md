@@ -2,13 +2,76 @@
 
 # Ads Integration Guide — Base Project (HI)
 
-> Module दस्तावेज़: **[trackkit](trackkit/README.hi.md)** · **[OnboardKit](onboardkitorigin/README.hi.md)**
+> Module दस्तावेज़: **[trackkit](trackkit/README.hi.md)** · **[OnboardKit](onboardkitorigin/README.hi.md)** · **[PayKit](paykit/README.md)** · **[BillingKit](billingkit/README.md)**
 
 यह दस्तावेज़ Infinity products में ads integration के लिए partner teams का **mandatory reference standard** है। Ads से जुड़ा कोई भी बदलाव इसी base project में defined architecture, load/show flow, और gating rules के अनुसार होना चाहिए।
 
 ---
 
-## 2.0.0 में migrate करना
+## JitPack से SDK consume करना
+
+आठ modules libraries के रूप में publish होते हैं:
+
+| Module | भूमिका |
+|---|---|
+| `ads` | Ad load और show; `Entitlement` port के ज़रिए premium gating |
+| `billingkit` | Play billing engine — split से पहले वाले ही `com.ads.module.billing` classes |
+| `onboardkitorigin` | First-open flow: splash, language, onboarding |
+| `paykit` | `billingkit` के billing engine पर paywall UI |
+| `paykit-firebase` | `paykit` के लिए Firebase Remote Config source |
+| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`, taxonomy) |
+| `trackkit-firebase` | `trackkit` के लिए Firebase/GA4 sink |
+| `adtracer` | Debug-only ad lifecycle dashboard |
+
+सिर्फ़ वही declare करें जिससे app कमाता है — चार partner scenarios:
+
+| # | Partner | Declare करें | APK में पक्का क्या नहीं होगा |
+|---|---|---|---|
+| 1 | सिर्फ़ ads, IAP नहीं | `ads` (+ `trackkit-firebase`) | एक भी Play Billing class नहीं |
+| 2 | IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | एक भी GMA/AdMob class नहीं |
+| 3 | IAP, paywall UI आपकी अपनी | `billingkit` | न `paykit` चाहिए, न `ads` |
+| 4 | Ads और IAP दोनों | `ads` + `billingkit` (+ `paykit`) | — premium gating पहले जैसी चलती है |
+
+Dependencies declare करें:
+
+```groovy
+// <tag> को https://github.com/truongvimit/adlogic-partner-sdk/tags के किसी tag से बदलें
+def sdkVersion = '<tag>'
+
+dependencies {
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
+
+    // Billing engine। सिर्फ़ तब जब app IAP/subscription बेचता है — ऊपर की scenario table देखें।
+    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
+
+    // Paywall। paykit-firebase तभी जोड़ें जब paywall document Remote Config से आता हो।
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit-firebase:$sdkVersion"
+
+    // वही sinks चुनें जो सच में चाहिए। sink के बिना Tracker events validate करके गिरा देता है।
+    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
+
+    // adtracer सिर्फ़ debug builds में ship होता है — release से बाहर रखें
+    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
+}
+```
+
+हर module एक ही tag पर रखें — सब एक repository से साथ publish होते हैं और अलग-अलग versions में
+आपस में test नहीं किए जाते।
+
+> **नोट:** `onboardkitorigin` `ads` पर और `paykit` `billingkit` पर निर्भर हैं, पर सिर्फ़ runtime
+> scope में — उनके ज़रिए `com.ads.module.*` classes आपके compile classpath पर नहीं आतीं। इन APIs
+> को सीधे call करते हों तो `ads` / `billingkit` ऊपर की तरह explicit declare करें।
+
+### Migrate करना: billing engine `billingkit` में चला गया
+
+Play billing engine ने `ads` छोड़ दिया है। अगर app IAP बेचता है तो ठीक एक Gradle line जोड़ें —
+`implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` — और कुछ भी न
+बदलें: हर `com.ads.module.billing.*` class का नाम, package और behavior वही है। Ads-only apps को कुछ
+नहीं करना, और उनके APK से Play Billing library हट जाती है। विवरण: **[MIGRATION.md](MIGRATION.md)**।
+
+### 2.0.0 में migrate करना
 
 - ग्यारह `ERainAd.getShouldDisplay*` methods **हटा दिए गए हैं**। हर call को
   `AdGate.passesUaGate(config.enableUaCheck)` से बदलें — या `ERainAd.getInstance().shouldDisplayForUa(...)`,
@@ -199,8 +262,9 @@ private fun initAds() {
 
 यह वह step है जो partners सबसे ज़्यादा छोड़ देते हैं, क्योंकि इसके बिना कुछ crash नहीं होता।
 
-`ads` खुद analytics log **नहीं** करता। जो भी impression, click और purchase वह देखता है, सब
-`Tracker` (`trackkit` से) को सौंप देता है, और `Tracker` उसे आपके registered sinks तक पहुँचाता है।
+`ads` और `billingkit` खुद analytics log **नहीं** करते। जो भी impression, click और purchase वे देखते
+हैं, सब `Tracker` (`trackkit` से) को सौंप देते हैं, और `Tracker` उसे आपके registered sinks तक
+पहुँचाता है।
 एक भी sink register न हो तो `Tracker` हर event validate करके एक खाली list को थमा देता है — डेटा
 चुपचाप कहीं नहीं पहुँचता। `Tracker.install` बिना किसी sink के चलने पर warning log करता है, पर असली
 समाधान सही wiring है:
@@ -229,7 +293,7 @@ sink मौजूद होते ही ये सब अपने आप म�
 |---|---|---|
 | Ad lifecycle | `ads`, हर ad unit के लिए | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
 | Paid impressions + ad LTV | `ads`, AdMob के paid-event callback से | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
-| Purchases | `ads`, billing callback से | `iap_success` |
+| Purchases | `billingkit`, billing callback से | `iap_success` |
 | First-open funnel | `onboardkitorigin` | `fo_*` — OnboardKit दस्तावेज़ देखें |
 
 दो चीज़ें आपकी ही रहती हैं: UMP का नतीजा (`Tracker.setConsent(analytics, ads)` — अपने consent
@@ -389,7 +453,7 @@ waterfall floor के ज़रिए — उसके नीचे चुप�
 
 Ad तभी load होगा जब सभी conditions pass हों — जाँच एक ही जगह होती है, `AdGate.skipReason(...)` में:
 - `adUnitConfig.isUsable` — enabled **और** कम से कम एक ग़ैर-खाली id हो
-- `!AppPurchase.getInstance().isPurchased(...)`
+- `!AdGate.isPurchased(...)` — `Entitlement` port का जवाब; मौजूद होने पर source `billingkit` खुद install करता है
 - Network available
 - mandatory organic-gated placements के लिए: `AdGate.passesUaGate(config.enableUaCheck) == true`
 
@@ -555,6 +619,63 @@ override val bannerConfig = BannerConfig(
 )
 ```
 
-## 7. Additional reference
+## 7. Purchases और paywall
+
+Billing `:billingkit` में रहता है (अब भी `com.ads.module.billing`); paywall UI `:paykit` में। यह
+बँटवारा जानबूझकर है: Play का `BillingClient` `:billingkit` के पास है, और वह entitlement को
+`Entitlement` port के ज़रिए `:ads` को सौंपता है — `AppPurchase.isPurchased` true होते ही `AdGate`
+हर placement को `PURCHASED` के साथ skip कर देता है। premium कौन है, इस पर दूसरा module भी राय रखने
+लगे तो वह gate टूट जाता है।
+
+न्यूनतम wiring। `GlobalApp.onCreate()` में, `initAds()` के बाद:
+
+```kotlin
+val config = payKitConfig {
+    termsUrl = "https://example.com/terms"
+    privacyUrl = "https://example.com/privacy"
+    defaultPlacements = setOf(PaywallPlacement.AFTER_ONBOARDING, PaywallPlacement.SETTING)
+    exitButtonDelayMs = 3_000
+}.getOrElse { Log.e(TAG, "PayKit config rejected", it); return }
+
+PayKit.install(this, config)
+PayKit.configSource(FirebaseConfigSource())     // optional, :paykit-firebase से
+```
+
+Splash में। `onInitBilling` पहले ad request से पहले चलता है और entitlement पता चलते ही लौटना चाहिए,
+इसलिए सिर्फ़ उसी का await कीजिए; paywall document checkpoint तक ज़रूरी नहीं:
+
+```kotlin
+override suspend fun onInitBilling() {
+    lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
+    Billing.awaitReady(timeoutMs = 5_000)
+}
+```
+
+जिस screen को चाहिए, वहाँ:
+
+```kotlin
+PayKit.launch(activity, PaywallPlacement.SETTING)
+```
+
+ये rules optional नहीं हैं:
+
+- **`AppPurchase.initBilling` खुद मत call करें।** `PayKit.install` paywall document से catalogue
+  register कर देता है। `initBilling` चालू client को गिरा देता है, इसलिए दूसरी product list वाला
+  दूसरा caller चुपचाप जीत जाता है।
+- **Placements fail-closed हैं।** न `defaultPlacements` हो और न fetch किए document के `placements`,
+  तो कुछ नहीं दिखता; bundled document सिर्फ catalogue है, placement तय नहीं करता। premium user और बंद
+  placement पर भी `PayKit.launch` मना करता है — वह log करता है और उसी call के listener को
+  `onFinished(Dismissed)` देता है।
+- **`iap_success` `:billingkit` भेजता है**, एक ही बार, जब Play confirm करता है। अपने paywall या
+  अपनी screen से purchase event मत भेजें; उससे वही revenue दो बार गिनी जाती है।
+- **Ad gating `AppPurchase.isPurchased` पर ही रहती है।** अपनी UI के लिए `PayKit.isPremium()` /
+  `Billing.isPremium` पढ़ें; premium को अपनी preference में copy मत करें।
+- `consumable` product को billing engine consume कर देता है और वह entitlement कभी set नहीं करता,
+  इसलिए ads बंद **नहीं** होते। lifetime unlock के लिए `inapp` इस्तेमाल करें।
+
+पूरी guide — config schema, placements, analytics, theming, Compose escape hatch, और OnboardKit
+gate: **[paykit/README.md](paykit/README.md)**।
+
+## 8. Additional reference
 
 - [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/) — UI, Remote Config, और ad-unit display conditions (placement/method names को इस document से cross-check करना चाहिए)।

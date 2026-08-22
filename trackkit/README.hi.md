@@ -131,7 +131,7 @@ event के अपने params दिए हैं।
 | `fo_flow_complete` | पूरा first-open flow ख़त्म | `steps_shown`, `dwell_ms` | `:onboardkitorigin` |
 | `iap_paywall_view` | paywall दिखा | `source` | `:app`, `:onboardkitorigin` |
 | `iap_paywall_result` | paywall बंद हुआ, नतीजा जो भी हो | `source`, `status` (`purchased` / `dismissed` / `continue_with_ads`) | `:onboardkitorigin` |
-| `iap_success` | purchase acknowledge हुआ | `product_id`, `value`, `currency`, `source` | `:ads` |
+| `iap_success` | purchase acknowledge हुआ | `product_id`, `value`, `currency`, `source` | `:billingkit` |
 | `app_install_referrer` | Play install referrer, MMP से प्रति install एक बार पढ़ा गया | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant` | `:ads` |
 | `consent_request` / `consent_shown` | UMP form माँगा गया / वाकई दिखा (प्रति session एक बार) | — | `:app` |
 | `consent_result` | UMP का नतीजा आया | `status` (`granted`/`denied`/`not_required`/`error`), `error_code` | `:app` |

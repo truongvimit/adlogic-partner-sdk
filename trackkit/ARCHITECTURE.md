@@ -10,28 +10,41 @@ Read this before you add an SDK, add a module, or "just import Adjust here for a
 ## 1. The module map
 
 ```
-                        ┌──────────────────────────────────────────┐
-                        │  :app                       ASSEMBLER    │
-                        │  GlobalApp.initTracking()                │
-                        └──┬────────┬──────────┬──────────────┬────┘
-                impl       │        │ impl     │ impl (×3)    │ debugImplementation
-        ┌──────────────────┘        │          │              └────────────┐
-        ▼                           ▼          ▼                           ▼
-┌───────────────────┐   ┌──────────────────┐  ┌───────────────────────┐  ┌────────────┐
-│ :onboardkitorigin │   │ :ads             │  │ :trackkit-firebase    │  │ :adtracer  │
-└─────────┬─────────┘   └────────┬─────────┘  │       ADAPTERS        │  └────────────┘
-          │ api                  │ api        └───────────┬───────────┘
-          │                      │                        │ api
-          └──────────────┬───────┴────────────────────────┘
-                         ▼
+                ┌────────────────────────────────────────────────────────────┐
+                │  :app                                         ASSEMBLER    │
+                │  GlobalApp.initTracking()                                  │
+                └──┬────────┬───────────┬─────────┬─────────┬─────────────┬──┘
+              impl │   impl │      impl │    impl │    impl │       debug │
+       ┌───────────┘        │           │         │         │             └──────────┐
+       ▼                    ▼           ▼         ▼         ▼                        ▼
+┌───────────────────┐  ┌────────┐ ┌─────────────┐ ┌─────────┐ ┌────────────────────┐ ┌───────────┐
+│ :onboardkitorigin │  │ :ads   │ │ :billingkit │ │ :paykit │ │ :trackkit-firebase │ │ :adtracer │
+└─────────┬─────────┘  └───┬────┘ └──────┬──────┘ └────┬────┘ │      ADAPTERS      │ └───────────┘
+          │ api        api │         api │         api │      └─────────┬──────────┘
+          │                │             │             │                │ api
+          └────────────────┴──────┬──────┴─────────────┴────────────────┘
+                                  ▼
       ┌──────────────────────────────────────────────────────────┐
       │ :trackkit                                        PORT    │
       │ Tracker · TrackSink · AdImpression · TrackkitEvents      │
-      │ PlacementRegistry           — zero vendor dependencies   │
+      │ PlacementRegistry · mmp.MmpTracking  — zero vendor deps  │
       └──────────────────────────────────────────────────────────┘
+
+      Cross edges the boxes cannot show:
+          :onboardkitorigin ──impl────────▶ :ads         (ERainAdProvider bridges internally)
+          :paykit           ──impl────────▶ :billingkit  (BillingBridge, the one door)
+          :paykit           ──compileOnly─▶ :ads         (one app-resume switch, try/catch'd)
+          :paykit           ──compileOnly─▶ :onboardkitorigin (PaywallGate SPI, optional at runtime)
+          :billingkit       ──compileOnly─▶ :ads         (entitlement hand-off, try/catch'd)
 
       FORBIDDEN, and the whole point of the layout:
           :onboardkitorigin ──✗──▶ any :trackkit-<vendor>
+          :paykit           ──✗──▶ any :trackkit-<vendor>
+          :ads              ──✗──▶ :billingkit    (an IAA-only APK ships zero billing classes)
+          :billingkit       ──✗──▶ :ads at runtime (an IAP-only APK ships zero GMA classes)
+
+      The same shape, one level out: :paykit reads its paywall document through the
+      vendor-free PaywallConfigSource, and :paykit-firebase is its only adapter (§9).
 ```
 
 Every edge, with its Gradle configuration:
@@ -41,9 +54,17 @@ Every edge, with its Gradle configuration:
 | `:ads`               | `:trackkit`                                             | `api`                             | `ERainLogEventManager` returns and accepts Trackkit types (`AdFormat`, `AdImpression`), so they leak into the ads API surface and must be on the consumer's compile classpath. |
 | `:onboardkitorigin`  | `:trackkit`                                             | `api`                             | Same reason: `TrackkitPlugin` and `ERainAdProvider` are part of its public wiring.                                                                                             |
 | `:onboardkitorigin`  | `:ads`                                                  | `implementation`                  | `ERainAdProvider` bridges to `ERainAd`/`Admob` internally; a partner injecting its own `OnboardingAdProvider` never sees `:ads`.                                               |
+| `:paykit`            | `:trackkit`                                             | `api`                             | Same reason again: the paywall reports its funnel through `Tracker`, and a host that routes those events needs `TrackkitEvents.Iap` on its compile classpath.                  |
+| `:billingkit`        | `:trackkit`                                             | `api`                             | The billing engine reports `iap_success`/`iap_fail` through `Tracker` and purchase revenue through `io.trackkit.mmp.MmpTracking`; hosts route `TrackkitEvents.Iap` in their own code. |
+| `:billingkit`        | `:ads`                                                  | `compileOnly`                     | The entitlement hand-off (`Entitlement.install`) compiles against `:ads` but must never drag GMA into an IAP-only APK. Guarded by try/catch; absent at runtime is a supported state. |
+| `:paykit`            | `:billingkit`                                           | `implementation`                  | The billing engine, reached through `io.paykit.billing.BillingBridge` — the one file that imports `com.ads.module`. No `com.ads` type reaches a consumer.                      |
+| `:paykit`            | `:ads`                                                  | `compileOnly`                     | One call — `AppOpenManager.disableAppResumeWithActivity` — so a paywall-without-ads host does not inherit the GMA stack. Guarded by try/catch.                                 |
+| `:paykit`            | `:onboardkitorigin`                                     | `compileOnly`                     | `OnboardKitPaywallGate` implements OnboardKit's `PaywallGate` SPI, but a host that ships a paywall without onboarding must not inherit four activities it never opens.         |
+| `:paykit-firebase`   | `:paykit`                                               | `api`                             | A config source is useless without `PaywallConfigSource`; the app must see both.                                                                                              |
+| `:paykit-firebase`   | `firebase-config`                                       | `api`                             | Same deliberate exception as the Firebase sink: the BOM is exported so the host's other Firebase artifacts stay on one version train.                                          |
 | `:trackkit-firebase` | `:trackkit`                                             | `api`                             | A sink is useless without `TrackSink`; the app must see both.                                                                                                                  |
 | `:trackkit-firebase` | `firebase-analytics`                                    | `api`                             | Deliberate exception: the app almost always uses Firebase directly too, so the BOM is exported to keep one version train.                                                      |
-| `:app`               | `:ads`, `:onboardkitorigin`, `:trackkit`, `:trackkit-*` | `implementation`                  | Nothing consumes `:app`.                                                                                                                                                       |
+| `:app`               | `:ads`, `:billingkit`, `:onboardkitorigin`, `:paykit*`, `:trackkit*` | `implementation`      | Nothing consumes `:app`.                                                                                                                                                       |
 | `:app`               | `:adtracer`                                             | `debugImplementation`             | The dashboard must not exist in a release APK at all — not stripped, not present.                                                                                              |
 | `:trackkit`          | —                                                       | `compileOnly androidx.annotation` | The port has no runtime dependency on anything. That is what makes it a port.                                                                                                  |
 
@@ -54,17 +75,18 @@ Every edge, with its Gradle configuration:
 ### PORT — `:trackkit`
 
 `:trackkit` is a vocabulary and nothing else: `Tracker`, `TrackSink`, `TrackEvent`,
-`TrackkitEvents`, `AdImpression`, `AdFormat`, `Consent`, `PlacementRegistry`. It defines what an
-impression *is* — a placement, a format, an ad unit, a value in a currency — without knowing that
-AdMob, Adjust or Firebase exist. Its `build.gradle` has one `compileOnly` annotation dependency and
+`TrackkitEvents`, `AdImpression`, `AdFormat`, `Consent`, `PlacementRegistry`, and the MMP seam
+`mmp.MmpTracking` (an interface plus a registry — the Adjust relay behind it lives in `:ads`, §4).
+It defines what an impression *is* — a placement, a format, an ad unit, a value in a currency —
+without knowing that AdMob, Adjust or Firebase exist. Its `build.gradle` has one `compileOnly` annotation dependency and
 no vendor at all, and that is checked simply by reading it.
 
 **Forbidden:** naming a vendor. No `com.adjust`, `com.google.firebase` or `com.facebook` import may
 ever appear under `trackkit/src/main`. The moment one does, every partner that consumes `:ads`
 inherits that SDK, and the module stops being a port. The port is frozen — changes to it are
-breaking changes for four modules and every partner build at once.
+breaking changes for five modules and every partner build at once.
 
-### REPORTER — `:ads`, `:onboardkitorigin`
+### REPORTER — `:ads`, `:billingkit`, `:onboardkitorigin`, `:paykit`
 
 A reporter owns real objects with a lifecycle and describes what happens to them. `:ads` owns the
 AdMob and AppLovin ad objects: it creates them, loads them, shows them, and therefore it is the only
@@ -73,6 +95,13 @@ those into an `AdImpression` and hand it to `Tracker.adRevenue()` — see
 `ERainLogEventManager.logPaidAdImpression`. `:onboardkitorigin` owns the first-open flow and bridges
 its internal `AnalyticsEvent` catalog to the canonical taxonomy through
 `io.onboardkit.core.analytics.TrackkitPlugin`, registered automatically by `OnboardingSdk.install`.
+`:paykit` owns the paywall presentation and reports the `iap_` funnel from one file,
+`io.paykit.analytics.PaywallTracking`.
+
+`:billingkit` owns the Play `BillingClient` and the purchase object, so it is the sole reporter of
+`iap_success` — the paywall in `:paykit` reports the view, the click, the failure and the terminal
+result, and stops. Two reporters emitting one purchase put the same money on two different clocks,
+which is a figure nobody can reconcile a quarter later.
 
 **Forbidden:** knowing where the data goes. A reporter calls `Tracker` and stops. It owns zero
 vendor reporting code — no `Adjust.trackEvent`, no `logPurchase`, no `FirebaseAnalytics.logEvent`.
@@ -145,21 +174,29 @@ Adjust is not a pure sink here; it is an input to ad policy, and a sink cannot e
 and one `addSink(...)` line in `Application`. Forgetting that line loses all ad revenue in Adjust —
 silently, with a green dashboard. In the current design that failure is impossible.
 
-**So how does a module outside `:ads` send a conversion event?** Through
-`com.ads.module.event.MmpTracking` — an interface plus registry inside `:ads`, not a Gradle module.
-`:onboardkitorigin` already depends on `:ads`, so it calls it directly with no configuration:
+**So how does a module outside `:ads` send a conversion event?** Through the `MmpTracking` seam.
+The registry lives in the port as `io.trackkit.mmp.MmpTracking` — the "a module ships without
+`:ads`" trigger fired when the billing engine moved to `:billingkit` and had to report purchase
+revenue with no `:ads` on its classpath. `:ads` still owns the Adjust relay and registers it (from `ERainAd.init` and from the
+`com.ads.module.event.MmpTracking` facade, which stays as the published door for modules that
+depend on `:ads`):
 
 ```java
 MmpTracking.trackEvent(config.getAdjustTokenOnboardingComplete());
 ```
 
-For a second MMP, implement `MmpTracking.Relay` and call `addRelay(...)`. No call site changes.
+For a second MMP, implement `io.trackkit.mmp.MmpTracking.Relay` and call `addRelay(...)`. No call
+site changes. Purchase revenue arrives through the relay's `onPurchaseRevenue`, which is how
+`:billingkit` reports money without learning any vendor's name.
 
-**When to revisit.** Only on a real trigger, never on a schedule: (a) a partner wants a different
-MMP
-instead of Adjust; (b) a partner ships **without** `:ads`; (c) two or more apps have a revenue path
-that bypasses `:ads` (RevenueCat, StoreKit). `MmpTracking` is already the seam, so promoting it to a
-module would then be mechanical.
+**What did not move.** Adjust itself — init, attribution, session tracking, every `Adjust.*` call —
+stays in `:ads`, single writer intact. The port gained an interface and a registry, zero vendor
+code, so it is still a port.
+
+**When to revisit further.** Triggers (a) and (c) remain: (a) a partner wants a different MMP
+instead of Adjust; (c) two or more apps have a revenue path that bypasses this SDK entirely
+(RevenueCat, StoreKit). The seam is already in the port, so either is now a relay registration,
+not a refactor.
 
 **Firebase and Meta stay in Trackkit**, because those destinations receive signal from all three
 modules and carry no reverse dependency.
@@ -177,14 +214,14 @@ permissions and network calls merged into their manifest, and another release tr
 a vendor they do not use and cannot remove without forking `:ads`. Turning it "off" at runtime does
 not help: an unconfigured SDK is still shipped, still declared, and still audited.
 
-The same argument applies in reverse to `:onboardkitorigin`, and it is why `:trackkit` itself is
-kept ruthlessly free of vendors: it sits underneath both reporters, so anything added there is added
-to everything.
+The same argument applies in reverse to `:onboardkitorigin` and to `:paykit`, and it is why
+`:trackkit` itself is kept ruthlessly free of vendors: it sits underneath all three reporters, so
+anything added there is added to everything.
 
 Sanity check, and it should stay empty:
 
 ```bash
-grep -rn "io.trackkit.firebase" ads/src onboardkitorigin/src
+grep -rn "io.trackkit.firebase" ads/src onboardkitorigin/src paykit/src
 ```
 
 ---
@@ -290,10 +327,41 @@ class VendorSink(private val config: VendorConfig) : TrackSink {
 **2. Register it in `:app`.** Add the Gradle line and one constructor call in
 `GlobalApp.initTracking()`.
 
-**3. Touch nothing else.** Not `:ads`, not `:onboardkitorigin`, not a single call site. Every event
-in the catalog reaches the new sink the moment it is registered, including events written before the
-vendor existed.
+**3. Touch nothing else.** Not `:ads`, not `:onboardkitorigin`, not `:paykit`, not a single call
+site. Every event in the catalog reaches the new sink the moment it is registered, including events
+written before the vendor existed.
 
 If step 3 turns out to be impossible — if the new vendor needs something no `TrackSink` callback
 carries — that is a signal to extend the port, once, for every sink, rather than to reach into a
 reporter. Adding a vendor should never require a reporter to learn a vendor's name.
+
+---
+
+## 9. The same shape, for paywall config
+
+`:paykit` copies this layout one level out, for a different vendor surface: where analytics fan out
+to a `TrackSink`, the paywall document fans **in** from a `PaywallConfigSource`.
+
+```
+      :paykit                       PORT + REPORTER
+      PaywallConfigSource · StaticConfigSource · RawResourceConfigSource
+              ▲
+              │ api
+      :paykit-firebase              ADAPTER
+      FirebaseConfigSource — the only vendor this repo ships
+```
+
+Same rules, and for the same reason:
+
+- `:paykit` names no config vendor. `grep -rn "com.google.firebase" paykit/src` stays empty, so a
+  partner who feeds the paywall from its own back end compiles no Firebase at all.
+- `:paykit-firebase` depends on `:paykit`, never the reverse. A source module is depended on by the
+  assembler and by nobody else — `PayKit.configSource(FirebaseConfigSource())` is one line in
+  `Application.onCreate`, and it is the only line that names the vendor.
+- Adding a config vendor is a new module and that one line. Nothing in `:paykit` changes, because
+  `fetch(timeoutMs): String?` is the whole contract.
+
+The one asymmetry worth knowing: a `TrackSink` is a destination, so a missing one loses data
+silently. A `PaywallConfigSource` is a source, so a missing one is visible — `PayKit.sync()` returns
+`false` and the paywall falls back to the cached document and then to the JSON bundled in the AAR.
+That fallback chain is why the paywall has no "config not loaded" failure mode to design around.

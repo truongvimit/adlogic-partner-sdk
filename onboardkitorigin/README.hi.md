@@ -174,8 +174,11 @@ Preload chain एक screen आगे चलती है, और ad-only page �
 
 ### 2.3 Splash — subclass कीजिए, copy नहीं
 
-आपकी launcher activity `ObSplashActivity` को extend करती है। पूरा क्रम — consent, remote fetch, ad
-requests, billing, minimum display — पहले से अंदर है; आप बस ज़रूरी hooks भरते हैं।
+आपकी launcher activity `ObSplashActivity` को extend करती है। पूरा क्रम — consent, billing, remote
+fetch, ad requests, minimum display — पहले से अंदर है; आप बस ज़रूरी hooks भरते हैं।
+
+Billing पहले ad request से **पहले** चलता है, जानबूझकर: gate purchase entitlement पढ़कर तय करता है कि
+request जाने दिया जाए या नहीं, इसलिए पहले पूछने पर वह भुगतान कर चुके user तक पहुँच जाता।
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
@@ -186,7 +189,8 @@ class SplashActivity : ObSplashActivity() {
         return userGrantedConsent
     }
 
-    override suspend fun onInitBilling() { /* AppPurchase init */ }
+    /** Entitlement तय कीजिए और पता चलते ही लौटिए — यह नीचे के हर ad को gate करता है। */
+    override suspend fun onInitBilling() { Billing.awaitReady(timeoutMs = 5_000) }
 
     override fun onRemoteFetched() { /* आपकी अपनी remote keys तैयार हैं */ }
 }

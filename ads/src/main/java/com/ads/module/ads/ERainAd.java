@@ -25,6 +25,7 @@ import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.event.AdjustInstallReferrer;
 import com.ads.module.event.ERainAdjust;
+import com.ads.module.event.MmpTracking;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.RewardCallback;
 import com.ads.module.tracking.TrackingAdCallback;
@@ -108,6 +109,9 @@ public class ERainAd {
         }
         this.adConfig = adConfig;
         AppUtil.VARIANT_DEV = adConfig.isVariantDev();
+        // Arm the Adjust relay before any purchase can fire: :billingkit reports revenue through
+        // the Trackkit seam and never touches this module's classes itself.
+        MmpTracking.ensureInstalled();
         if (adConfig.isEnableAdjust()) {
             setupAdjust(adConfig.isVariantDev(), adConfig.getAdjustConfig());
         }

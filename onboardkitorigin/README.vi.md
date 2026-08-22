@@ -173,8 +173,11 @@ riêng nó, nên tới nơi mà ad chưa fill là user ngồi nhìn spinner.
 
 ### 2.3 Splash — kế thừa, đừng chép
 
-Activity launcher của bạn kế thừa `ObSplashActivity`. Chuỗi xử lý — consent, fetch remote, request
-ads, billing, thời gian hiện tối thiểu — đã nằm sẵn bên trong; bạn chỉ điền các hook cần dùng.
+Activity launcher của bạn kế thừa `ObSplashActivity`. Chuỗi xử lý — consent, billing, fetch remote,
+request ads, thời gian hiện tối thiểu — đã nằm sẵn bên trong; bạn chỉ điền các hook cần dùng.
+
+Billing chạy **trước** request ads đầu tiên là có chủ đích: gate đọc trạng thái đã mua để quyết định
+có được request hay không, nên hỏi sớm hơn sẽ chạm vào người đã trả tiền.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
@@ -185,7 +188,8 @@ class SplashActivity : ObSplashActivity() {
         return userGrantedConsent
     }
 
-    override suspend fun onInitBilling() { /* khởi tạo AppPurchase */ }
+    /** Xác định entitlement, có kết quả là trả về ngay — hook này chặn mọi ad phía dưới. */
+    override suspend fun onInitBilling() { Billing.awaitReady(timeoutMs = 5_000) }
 
     override fun onRemoteFetched() { /* remote key riêng của bạn đã sẵn sàng */ }
 }

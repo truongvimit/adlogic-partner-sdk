@@ -1,0 +1,73 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.ads.module.billingkit'
+    compileSdk compile_sdk_version
+
+    // AGP fails the build on any resource missing this prefix — collision guard for library consumers
+    resourcePrefix 'bk_'
+
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    // 1.8 on purpose: AppPurchase is Java 8 and raising this forces every partner onto 17.
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+        freeCompilerArgs += ["-Xskip-metadata-version-check"]
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+dependencies {
+    // api, not implementation: purchase telemetry leaves through Tracker, and hosts route
+    // TrackkitEvents.Iap in their own code.
+    api project(':trackkit')
+
+    // compileOnly, never implementation: the entitlement hand-off into :ads compiles here, but a
+    // paywall-only APK must not inherit the whole GMA stack. Guarded at runtime by try/catch.
+    compileOnly project(':ads')
+
+    implementation "com.android.billingclient:billing:$billing_version"
+
+    implementation "androidx.core:core-ktx:$androidx_core_ktx_version"
+    implementation "androidx.appcompat:appcompat:$androidx_appcompat_version"
+    implementation "androidx.constraintlayout:constraintlayout:2.2.1"
+    implementation "com.google.android.material:material:$androidx_material_version"
+
+    // api, not implementation: Billing.isPremium / purchaseEvents are StateFlow/SharedFlow public API
+    api "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// AGP creates the 'release' software component late, so the publication must be configured
+// inside afterEvaluate. groupId and version are inherited from the root project.
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from(components["release"])
+                artifactId = "billingkit"
+            }
+        }
+    }
+}

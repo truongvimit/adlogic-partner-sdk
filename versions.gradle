@@ -70,7 +70,7 @@ ext {
     module_update_gdpr_version = '2.0.2'
     play_review_ktx_version = '2.0.2'
     play_services_ads_version = '24.7.0'
-    billing_version = '7.0.0'
+    billing_version = '9.0.0'
     
     // Media
     media3_exoplayer_version = '1.8.0'

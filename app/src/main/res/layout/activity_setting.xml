@@ -38,10 +38,35 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/imv_back">
 
+            <!-- Hidden once the user owns the entitlement; SettingActivity flips it in onResume. -->
+            <RelativeLayout
+                android:id="@+id/rlt_premium"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="@dimen/_12sdp">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/imv_premium"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_premium" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    style="@style/text_regular_12"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/_12sdp"
+                    android:layout_toEndOf="@id/imv_premium"
+                    android:text="@string/go_premium"
+                    android:textColor="@color/black"
+                    android:textSize="@dimen/_12ssp" />
+            </RelativeLayout>
+
             <RelativeLayout
                 android:id="@+id/rlt_language"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_below="@id/rlt_premium"
                 android:paddingVertical="@dimen/_12sdp">
 
                 <androidx.appcompat.widget.AppCompatImageView

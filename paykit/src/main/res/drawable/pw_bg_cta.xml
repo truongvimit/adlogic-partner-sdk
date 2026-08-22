@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid accent by default; the renderer swaps in a GradientDrawable when tokens.cta_gradient
+     is present, so the two states share this radius. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/pw_accent" />
+    <corners android:radius="@dimen/pw_radius_cta" />
+</shape>

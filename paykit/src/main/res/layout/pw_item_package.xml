@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Root is the click target and the selection surface: the renderer swaps its background
+     between pw_bg_package_selected and pw_bg_package_unselected. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="@dimen/pw_package_gap">
+
+    <LinearLayout
+        android:id="@+id/pw_package_root"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/pw_bg_package_unselected"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/pw_package_padding">
+
+        <ImageView
+            android:id="@+id/pw_package_check"
+            android:layout_width="@dimen/pw_package_check"
+            android:layout_height="@dimen/pw_package_check"
+            android:importantForAccessibility="no"
+            android:src="@drawable/pw_ic_check"
+            android:visibility="invisible"
+            tools:visibility="visible" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/pw_package_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="@color/pw_text_primary"
+                    android:textSize="@dimen/pw_text_package_title"
+                    android:textStyle="bold"
+                    tools:text="@string/pw_plan_yearly" />
+
+                <TextView
+                    android:id="@+id/pw_package_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/pw_bg_cta"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:paddingHorizontal="@dimen/pw_badge_padding_h"
+                    android:paddingVertical="@dimen/pw_badge_padding_v"
+                    android:textColor="@color/pw_on_accent"
+                    android:textSize="@dimen/pw_text_badge"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="BEST VALUE"
+                    tools:visibility="visible" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/pw_package_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/pw_text_secondary"
+                android:textSize="@dimen/pw_text_package_subtitle"
+                android:visibility="gone"
+                tools:text="@string/pw_plan_yearly_sub"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/pw_package_price"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/pw_text_primary"
+                android:textSize="@dimen/pw_text_price"
+                android:textStyle="bold"
+                tools:text="$39.99" />
+
+            <!-- Strikethrough is applied through paint flags at runtime, not in XML. -->
+            <TextView
+                android:id="@+id/pw_package_old_price"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textColor="@color/pw_text_secondary"
+                android:textSize="@dimen/pw_text_old_price"
+                android:visibility="gone"
+                tools:text="$66.65"
+                tools:visibility="visible" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
