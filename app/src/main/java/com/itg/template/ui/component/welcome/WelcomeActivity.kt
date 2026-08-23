@@ -18,13 +18,13 @@ class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
 
     override fun initViews() {
         super.initViews()
-        // The helper owns the native from here: gate, load, bind, hide on skip/fail/offline
+        // The helper owns the native from here: gate, load, bind, hide on skip/fail/offline.
+        // Loading skeleton is auto-derived from the ad layout (config.autoShimmer)
         AdsManager.nativeHelper(
             this, this, "native_welcome", AdRemoteConfig.native_welcome,
             R.layout.layout_native_welcome,
         )
             .setNativeContentView(mBinding.frAds)
-            .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
             .requestAds(NativeAdParam.Request)
         AdsManager.loadInterWelcome(this)
     }

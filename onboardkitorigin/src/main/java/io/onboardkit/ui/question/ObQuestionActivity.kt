@@ -117,7 +117,6 @@ class ObQuestionActivity : BaseOnboardActivity() {
             placement = AdPlacement.QuestionNative,
             unit = sdk.requireConfig().ads.questionNative,
             container = binding.obNativeContainer,
-            shimmer = binding.obNativeShimmer.root,
             onUnavailable = { binding.obAdBlock.visibility = View.GONE },
         )
     }

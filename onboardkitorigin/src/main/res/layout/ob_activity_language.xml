@@ -58,10 +58,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone" />
-
-        <include
-            android:id="@+id/ob_native_shimmer"
-            layout="@layout/ob_shimmer_native_cta_bottom" />
     </FrameLayout>
 
     <!-- Slot 2: native preloaded on LFO entry, swapped in on the first language tap. -->
@@ -78,9 +74,5 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone" />
-
-        <include
-            android:id="@+id/ob_native_shimmer_2"
-            layout="@layout/ob_shimmer_native_cta_bottom" />
     </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

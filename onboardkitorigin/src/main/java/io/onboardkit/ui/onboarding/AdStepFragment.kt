@@ -82,7 +82,6 @@ class AdStepFragment : LazyStepFragment() {
             placement = AdPlacement.StepFullScreen(stepId),
             unit = OnboardingSdk.configOrNull()?.ads?.fullScreenStepNative,
             container = b.obNativeContainer,
-            shimmer = b.obNativeShimmer.root,
             onBound = { adBound = true },
             onShown = { onAdImpression() },
             onUnavailable = { onAdFailed() },
@@ -116,7 +115,7 @@ class AdStepFragment : LazyStepFragment() {
 
     private fun showFallback() {
         val b = binding ?: return
-        b.obNativeShimmer.root.visibility = View.GONE
+        b.obNativeContainer.visibility = View.GONE
         b.obFullscreenFallback.visibility = View.VISIBLE
         b.obSkipButton.visibility = View.VISIBLE
         skipJob?.cancel()

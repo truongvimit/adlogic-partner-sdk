@@ -2,7 +2,6 @@ package com.itg.template.ui.component.uninstall
 
 import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdParam
-import com.facebook.shimmer.ShimmerFrameLayout
 import com.itg.template.R
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.AdsManager
@@ -23,16 +22,16 @@ class ConfirmUninstallActivity : BaseActivity<ActivityConfirmUninstallBinding>()
         setupNativeAd()
     }
 
-    // The helper owns the ad from here: gate, load, bind, and hiding the slot on skip/fail
+    // The helper owns the ad from here: gate, load, bind, and hiding the slot on skip/fail.
+    // Loading skeleton is auto-derived from the ad layout (config.autoShimmer)
     private fun setupNativeAd() {
         val frAds = mBinding.root.findViewById<FrameLayout>(R.id.fr_ads) ?: return
-        val helper = AdsManager.nativeHelper(
+        AdsManager.nativeHelper(
             this, this, "native_confirm_uninstall", AdRemoteConfig.native_confirm_uninstall,
             R.layout.layout_native_ad_medium,
-        ).setNativeContentView(frAds)
-        mBinding.root.findViewById<ShimmerFrameLayout>(R.id.shimmer_ads)
-            ?.let { helper.setShimmerLayoutView(it) }
-        helper.requestAds(NativeAdParam.Request)
+        )
+            .setNativeContentView(frAds)
+            .requestAds(NativeAdParam.Request)
     }
 
     override fun onClickViews() {

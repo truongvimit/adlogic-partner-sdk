@@ -182,19 +182,11 @@ class ObLanguageActivity : BaseOnboardActivity() {
             binding.obNativeContainer
         }
 
-    private fun shimmerFor(placement: AdPlacement): View =
-        if (placement == AdPlacement.Language2) {
-            binding.obNativeShimmer2.root
-        } else {
-            binding.obNativeShimmer.root
-        }
-
     private fun setupNativeAd(placement: AdPlacement) {
         showNativeAd(
             placement = placement,
             unit = sdk.requireConfig().ads.nativeUnitFor(placement),
             container = containerFor(placement),
-            shimmer = shimmerFor(placement),
             onUnavailable = { adBlockFor(placement).visibility = View.GONE },
         )
     }

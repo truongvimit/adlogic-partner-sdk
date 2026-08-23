@@ -148,7 +148,6 @@ class ContentStepFragment : LazyStepFragment() {
             placement = AdPlacement.StepNative(stepId),
             unit = OnboardingSdk.configOrNull()?.ads?.contentStepNative,
             container = b.obNativeContainer,
-            shimmer = b.obNativeShimmer.root,
             onBound = { adBound = true },
             onUnavailable = { if (!adBound) binding?.obAdBlock?.visibility = View.GONE },
         )

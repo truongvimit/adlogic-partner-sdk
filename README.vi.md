@@ -82,6 +82,20 @@ không phải làm gì, và APK không còn thư viện Play Billing. Chi tiết
 - `ERainAdProvider` của OnboardKit giờ là một adapter mỏng trên cùng các store đó — hành vi,
   placement key và telemetry không đổi.
 
+### Nâng cấp lên 3.0.0
+
+Không có API nào bị xóa trong `:ads`, và từng call site không phải làm gì để giữ hành vi cũ —
+shimmer khai tường minh vẫn thắng. Nhưng `autoShimmer` mặc định **bật**: vị trí trước đây để
+trống trong lúc load giờ hiện skeleton tự suy từ chính layout ad — xem mục 2.7.
+
+- Màn hình có view shimmer riêng nằm trong ad container mà **không** truyền qua
+  `setShimmerLayoutView` sẽ hiện hai skeleton: hoặc truyền nó vào `setShimmerLayoutView`,
+  hoặc tắt theo placement bằng `nativeConfig.autoShimmer = false`.
+- Dọn dẹp khuyến nghị: xóa các XML shimmer theo placement cùng các `<include>` và call
+  `setShimmerLayoutView` — call site chỉ còn `setNativeContentView(...).requestAds(...)`.
+  Tuỳ chọn: dùng `setNativeStyle` cho styling native theo remote config.
+- Nội bộ OnboardKit: các layout `ob_shimmer_native_*` không còn tồn tại.
+
 ---
 
 ## Mục đích và phạm vi áp dụng
@@ -123,7 +137,7 @@ Với màn hình **do app tự thêm** (không có sẵn trong base), đối tá
 
 1. Khai báo placement trong `ad_config.json` / `ad_config_debug.json` và property tương ứng trong `AdRemoteConfig`.
 2. Native: tạo helper cho placement qua `AdsManager.nativeHelper(...)`; inter qua `InterstitialAdManager.load` + `show` — xem mục 2.6.
-3. Activity/Fragment: giao container + shimmer cho helper ở `initViews` và gọi `requestAds(NativeAdParam.Request)` — ẩn slot khi skip/fail là việc của helper, không phải của màn hình.
+3. Activity/Fragment: giao container cho helper ở `initViews` và gọi `requestAds(NativeAdParam.Request)` — skeleton loading do SDK tự suy từ chính layout ad (xem mục 2.7), còn ẩn slot khi skip/fail là việc của helper, không phải của màn hình.
 4. Nếu placement thuộc nhóm nhạy cảm (onboarding-like, welcome, home, permission, widget…): **bắt buộc 100%** gate bằng `AdGate.passesUaGate(config.enableUaCheck)` — factory `nativeHelper` tự nối gate từ `config.enableUaCheck`; xem mục 4.
 5. Banner: extend `BaseActivityWithBanner` và khai báo `BannerConfig` — base chạy trên `BannerAdHelper`; không tự load banner bằng tay.
 
@@ -416,7 +430,7 @@ khi resume, ẩn khi đã purchase, teardown:
 ```kotlin
 NativeAdHelper(activity, this, NativeAdConfig(config.waterfallIds, true, true, R.layout.native_home))
     .setNativeContentView(binding.frAds)
-    .setShimmerLayoutView(binding.shimmer)
+    // No shimmer handed over: the loading skeleton is derived from R.layout.native_home (§2.7)
     .setEnablePreload(true, "native_home")
     .also { it.placement = "native_home" }
     .requestAds(NativeAdParam.Request)
@@ -436,6 +450,65 @@ khi ad đã nằm trên màn hình, việc reload — theo timer, lúc resume, h
 thấp hơn — chạy im lặng bên dưới nó; ad đang sống vẫn giữ nguyên chỗ và creative mới chỉ thay thế
 nó đúng khoảnh khắc fill được. Một lần reload không có fill thì chẳng đổi gì cả, nên một slot không
 bao giờ có thể đi ad → shimmer → ad.
+
+### 2.7 Auto-shimmer & style native do SDK sở hữu (từ 3.0.0)
+
+**Skeleton loading tự suy từ chính layout ad.** `NativeAdHelper` inflate một bản copy tách rời
+của layout placement, sơn mọi view thành khối xám (text chuyển transparent nên độ rộng giữ
+nguyên; media có sàn 160dp; badge "Ad" và các view gắn tag `shimmer_keep` không bị đụng tới),
+rồi bọc trong `ShimmerFrameLayout`. Skeleton chỉ được sinh **lazy** tại lần Loading đầu tiên
+mà không có gì khác để hiện — user đã purchase, preload trúng ngay, hay call site tự cấp
+shimmer đều không tốn một chi phí nào. Thứ tự ưu tiên:
+
+1. `setShimmerLayoutView(view)` — shimmer app tự cấp; SDK không bao giờ đụng vào view này.
+2. `setShimmerLayout(@LayoutRes)` — **mới trong 3.0.0**, inflate skeleton từ một layout resource.
+3. `NativeAdConfig.autoShimmer` (mặc định `true`) — skeleton tự sinh như trên.
+4. Không gì cả — slot để trống như trước 3.0.0.
+
+API public: `NativeAdShimmer.from(context, layoutId)`, `NativeAdShimmer.prewarm(context, layoutId)`
+— gọi ở splash để trả trước chi phí inflate lạnh một lần — và `NativeAdShimmer.TAG_SHIMMER_KEEP`.
+Skeleton tự sinh tắt `autoStart` của shimmer (không animation nào chạy sau lưng một view GONE —
+helper sở hữu start/stop), được sinh lại sau khi Fragment recreate view hay đổi container, và
+`setShimmerLayoutView` / `setShimmerLayout` / `setNativeContentView` gọi giữa lúc load sẽ hiện
+**và** animate bản thay thế.
+
+> **Thay đổi hành vi:** các vị trí trước đây để trống trong lúc load giờ hiện skeleton.
+> Opt-out theo placement: `nativeConfig.autoShimmer = false`.
+
+**Style do SDK apply.** `NativeAdStyle(components, ctaHeightDp, ctaBackgroundColor,
+ctaCornerRadiusDp = 20)` cùng enum `NativeComponent { ICON_HEADLINE, BODY, MEDIA, CTA }`
+(map từ remote qua `fromKey(String)`). `NativeAdHelper.setNativeStyle(style)` apply nó lên
+**cả** ad đã load (binder mặc định) lẫn skeleton tự sinh — parity hình học theo cấu trúc,
+nên cú swap skeleton → ad không bao giờ xê dịch. Style land **sau** bind của Admob nên các
+exclusion giữ nguyên. Không set style thì layout render đúng như XML của nó — không có gì
+ngầm định.
+
+Contract layout để reorder được: một `LinearLayout` dọc `@id/ad_container` chứa
+`@id/block_icon_headline`, `@id/ad_body`, `@id/ad_media`, `@id/ad_call_to_action`. Layout
+không có `ad_container` chỉ được toggle visibility tại chỗ (layout phẳng thì các view
+icon/headline/advertiser được xử lý từng cái; badge "Ad" — `ad_icon` — không bao giờ bị ẩn).
+`NativeAdStyler.applyLayout` / `applyAppearance` / `populate` là public — binder mặc định giờ
+đi qua `NativeAdStyler.populate`, hành vi y hệt `ERainAd.populateNativeAdView` khi style là
+null (method đó của `ERainAd` vẫn còn). `setAutoShimmerDecorator {}` là escape hatch để hậu
+xử lý skeleton tự sinh vượt ngoài những gì `NativeAdStyle` diễn tả được.
+
+Trong app tham chiếu, policy style — clamp CTA 36–52dp, parse chuỗi màu, map key remote —
+nằm ở `AdUnitConfig.toNativeStyle()`, và factory duy nhất cho mọi placement native là
+`AdsManager.nativeHelper(activity, lifecycleOwner, placement, config, layoutRes, bypassUaGate = false)`
+— truyền `placement = null` cho slot dashboard/preview để lần load preview không làm bẩn
+revenue attribution (`nativeDashboardHelper` đã bị xóa). Call site chỉ còn:
+
+```kotlin
+AdsManager.nativeHelper(this, this, "native_home", AdRemoteConfig.native_home, R.layout.native_home)
+    .setNativeContentView(binding.frAds)
+    .requestAds(NativeAdParam.Request)
+// No shimmer <include>, no setShimmerLayoutView: the skeleton comes from R.layout.native_home
+```
+
+OnboardKit dùng cùng cơ chế: slot native lấy skeleton tự suy từ template layout đã resolve —
+bốn layout `ob_shimmer_native_*` đã bị xóa và các màn không còn `<include>` shimmer nào.
+Signature `OnboardingAdProvider.bindNative` không đổi: skeleton tự sinh tới đúng argument
+shimmer của nó.
 
 ## 3. Điều kiện chung để Ads được load
 
@@ -534,7 +607,6 @@ AdsManager.nativeHelper(
     layoutRes,
 )
     .setNativeContentView(binding.frAds)
-    .setShimmerLayoutView(binding.shimmer)
     .requestAds(NativeAdParam.Request)
 ```
 
@@ -578,9 +650,9 @@ AdsManager.nativeHelper(
     this, this, "native_welcome", AdRemoteConfig.native_welcome, R.layout.layout_native_welcome,
 )
     .setNativeContentView(mBinding.frAds)
-    .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
     .requestAds(NativeAdParam.Request)
-// No observe/hide code: the helper binds on fill and hides the slot on skip/fail
+// No observe/hide code, no shimmer <include>: the helper binds on fill, hides the slot on
+// skip/fail, and derives the loading skeleton from the ad layout itself (see §2.7)
 ```
 
 ### 6.3 Inter (Onboarding)

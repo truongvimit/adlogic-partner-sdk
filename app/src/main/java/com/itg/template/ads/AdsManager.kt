@@ -5,10 +5,6 @@ import android.app.Activity
 import android.content.Context
 import androidx.annotation.LayoutRes
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.MutableLiveData
-import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
@@ -18,11 +14,6 @@ import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
 import com.ads.module.tracking.AdTracking
-import com.facebook.shimmer.ShimmerFrameLayout
-import com.google.android.gms.ads.LoadAdError
-import io.trackkit.AdFormat
-import java.util.Collections
-import java.util.WeakHashMap
 import timber.log.Timber
 
 /**
@@ -32,13 +23,6 @@ import timber.log.Timber
  */
 @SuppressLint("StaticFieldLeak")
 object AdsManager {
-
-    // Auto-resolve config for each loaded native ad. Weak keys: a native ad holds an inflated
-    // view tree, so strong references here would pin view hierarchies for the process lifetime
-    private val adConfigMap: MutableMap<ApNativeAd, AdUnitConfig> =
-        Collections.synchronizedMap(WeakHashMap())
-
-    fun getAdConfig(ad: ApNativeAd): AdUnitConfig? = adConfigMap[ad]
 
     /**
      * Binds every configured ad unit to its placement, once, before the ads SDK starts.
@@ -64,83 +48,38 @@ object AdsManager {
     }
 
     /**
-     * The standard native integration for one placement: waterfall + UA gate from
-     * [AdRemoteConfig], the app's CTA/component styling as the binder, telemetry keyed by
-     * the placement. A screen hands its views over and calls `requestAds` once:
+     * The one native integration for every placement: waterfall + UA gate from
+     * [AdRemoteConfig], remote-config styling applied by the SDK to both the loaded ad and
+     * its auto-derived loading skeleton, telemetry keyed by the placement. A screen hands
+     * its container over and calls `requestAds` once:
      *
      * ```
      * AdsManager.nativeHelper(this, this, "native_welcome", AdRemoteConfig.native_welcome, layout)
      *     .setNativeContentView(binding.frAds)
-     *     .setShimmerLayoutView(binding.shimmer)
      *     .requestAds(NativeAdParam.Request)
      * ```
+     *
+     * [bypassUaGate] is for dashboard/test slots that must load on any install. Pass a
+     * null [placement] for such slots: it skips placement registration, so preview loads
+     * never re-map the real ad units' revenue attribution. Chain `setShimmerLayoutView`/
+     * `setShimmerLayout` for a hand-made skeleton; call `setNativeStyle` again before a
+     * reload to restyle the next fill.
      */
     fun nativeHelper(
         activity: Activity,
         lifecycleOwner: LifecycleOwner,
-        placement: String,
+        placement: String?,
         config: AdUnitConfig,
         @LayoutRes layoutRes: Int,
+        bypassUaGate: Boolean = false,
     ): NativeAdHelper {
         val nativeConfig =
             NativeAdConfig(config.waterfallIds, config.isUsable, false, layoutRes).also {
-                it.forceUaCheck = config.enableUaCheck
+                it.forceUaCheck = !bypassUaGate && config.enableUaCheck
             }
         return NativeAdHelper(activity, lifecycleOwner, nativeConfig)
-            .setNativeAdBinder { act, ad, container, shimmer ->
-                populateNativeAdView(
-                    act, ad, config, container, shimmer ?: ShimmerFrameLayout(act),
-                )
-            }
+            .setNativeStyle(config.toNativeStyle())
             .also { it.placement = placement }
-    }
-
-    // ── Dashboard / Test helpers (ignore shouldDisplay) ──
-
-    /** Dedicated LiveData for customization preview – won't collide with real flows */
-    val nativeDashboardPreviewLive = MutableLiveData<ApNativeAd?>()
-
-    /**
-     * Load a native ad for dashboard preview purposes.
-     * Bypasses all shouldDisplay checks so it always loads.
-     */
-    fun loadNativeForDashboard(activity: Activity, configKey: String, layoutRes: Int) {
-        val config = try {
-            AdRemoteConfig.getInstance().ads[configKey]
-                ?: AdUnitConfig(id = "", isEnable = false)
-        } catch (_: Exception) {
-            AdUnitConfig(id = "", isEnable = false)
-        }
-        val skipReason = AdGate.skipReason(activity, config.isUsable)
-        if (skipReason != null) {
-            AdTracking.skipped("preview_$configKey", AdFormat.NATIVE, skipReason.key)
-            nativeDashboardPreviewLive.postValue(null)
-            return
-        }
-        AdTracking.request("preview_$configKey", AdFormat.NATIVE, config.waterfallIds.first())
-        AdWaterfall.loadNative(
-            activity, config.waterfallIds, layoutRes,
-            object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    adConfigMap[nativeAd] = config
-                    nativeDashboardPreviewLive.postValue(nativeAd)
-                }
-
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    nativeDashboardPreviewLive.postValue(null)
-                }
-            },
-        )
-    }
-
-    /** Load native language ad for dashboard – ignores shouldDisplay */
-    fun loadNativeLanguageForDashboard(activity: Activity, layoutRes: Int) {
-        loadNativeForDashboard(activity, "native_language_1", layoutRes)
-    }
-
-    /** Load native onboarding full for dashboard – ignores shouldDisplay */
-    fun loadNativeFullForDashboard(activity: Activity, layoutRes: Int) {
-        loadNativeForDashboard(activity, "native_onboarding_fullscreen_1_3", layoutRes)
     }
 
     fun loadInterOnboarding(context: Context, ignoreLimit: Boolean = false) {
@@ -205,7 +144,6 @@ object AdsManager {
     }
 
     fun clearAll() {
-        nativeDashboardPreviewLive.postValue(null)
         // Per-key: the store is process-wide and OnboardKit owns placements of its own
         InterstitialAdManager.release("inter_onboarding")
         InterstitialAdManager.release("inter_welcome")
