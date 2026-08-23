@@ -77,7 +77,6 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
             placement = AdPlacement.Ob5,
             unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.Ob5),
             container = binding.obNativeContainer,
-            shimmer = binding.obNativeShimmer.root,
             onBound = {
                 adBound = true
                 OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.Ob5.key))

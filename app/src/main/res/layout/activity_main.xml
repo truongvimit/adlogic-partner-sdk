@@ -405,15 +405,6 @@
                         android:layout_height="wrap_content"
                         android:visibility="gone" />
 
-                    <com.facebook.shimmer.ShimmerFrameLayout
-                        android:id="@+id/shimmer_native_small"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone">
-
-                        <include layout="@layout/layout_shimmer_native_small" />
-                    </com.facebook.shimmer.ShimmerFrameLayout>
-
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
@@ -448,15 +439,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:visibility="gone" />
-
-                    <com.facebook.shimmer.ShimmerFrameLayout
-                        android:id="@+id/shimmer_native_full"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone">
-
-                        <include layout="@layout/layout_shimmer_native_full" />
-                    </com.facebook.shimmer.ShimmerFrameLayout>
                 </LinearLayout>
 
                 <!-- ═══════════════════════════════════════ -->
@@ -777,16 +759,6 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:visibility="gone" />
-
-                    <com.facebook.shimmer.ShimmerFrameLayout
-                        android:id="@+id/shimmer_customization_preview"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:visibility="gone">
-
-                        <include layout="@layout/layout_shimmer_native_small" />
-                    </com.facebook.shimmer.ShimmerFrameLayout>
                 </LinearLayout>
 
                 <!-- ═══════════════════════════════════════ -->

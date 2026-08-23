@@ -16,6 +16,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdPreload
+import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
@@ -107,8 +108,7 @@ class ERainAdProvider(
         listener?.let { listeners[placement.key] = it }
         val frame = container as? FrameLayout ?: return false
         val ad = preload.pollAdNative(placement.key) ?: return false
-        val shimmerFrame = shimmer as? ShimmerFrameLayout ?: ShimmerFrameLayout(activity)
-        ERainAd.getInstance().populateNativeAdView(activity, ad, frame, shimmerFrame)
+        NativeAdStyler.populate(activity, ad, null, frame, shimmer as? ShimmerFrameLayout)
         boundNatives.put(placement.key, ad)?.let { previous ->
             if (previous !== ad) destroyNative(previous)
         }

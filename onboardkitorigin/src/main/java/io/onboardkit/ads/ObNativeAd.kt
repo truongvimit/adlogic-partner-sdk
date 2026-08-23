@@ -3,6 +3,8 @@ package io.onboardkit.ads
 import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
+import com.ads.module.helper.adnative.NativeAdShimmer
+import com.facebook.shimmer.ShimmerFrameLayout
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.core.ObLog
@@ -17,7 +19,11 @@ import io.onboardkit.core.ObLog
  *
  * Exactly one of [onBound] / [onUnavailable] runs for a given attempt, always on the main thread.
  *
- * @param onBound the ad is in [container]; the shimmer has been swapped out.
+ * While the request is in flight the slot shows a skeleton auto-derived from the
+ * placement's resolved template layout ([NativeAdShimmer]) — no per-template shimmer XML,
+ * and the skeleton's geometry always matches the ad that replaces it.
+ *
+ * @param onBound the ad is in [container]; the skeleton has been swapped out.
  * @param onShown GMA counted the impression. Use it to start dwell timers, not to navigate.
  * @param onUnavailable nothing can be shown here — hide the slot, show a fallback, or move on.
  */
@@ -25,7 +31,6 @@ internal fun Activity.showNativeAd(
     placement: AdPlacement,
     unit: NativeAdUnit?,
     container: ViewGroup,
-    shimmer: View?,
     onBound: () -> Unit = {},
     onShown: () -> Unit = {},
     onUnavailable: (AdSkipReason) -> Unit = {},
@@ -40,13 +45,15 @@ internal fun Activity.showNativeAd(
         return
     }
 
+    var skeleton: ShimmerFrameLayout? = null
     val listener = placement.tracked(
         object : AdEventListener {
             override fun onLoaded() = onMainThread {
-                if (bindBuffered(provider, placement, container, shimmer)) onBound()
+                if (bindBuffered(provider, placement, container, skeleton)) onBound()
             }
 
             override fun onFailedToLoad() = onMainThread {
+                skeleton?.stopShimmer()
                 ObLog.w(ObLog.Section.LOAD, "${placement.key} native unavailable — no fill")
                 onUnavailable(AdSkipReason.NO_FILL)
             }
@@ -57,9 +64,16 @@ internal fun Activity.showNativeAd(
 
     placement.trackRequest()
     // Buffered by the preload chain on the common path, so the slot paints without a round trip
-    if (bindBuffered(provider, placement, container, shimmer, listener)) {
+    if (bindBuffered(provider, placement, container, shimmer = null, listener)) {
         onBound()
         return
+    }
+    // Occupy the slot for the whole load window; the bind's removeAllViews swaps it out
+    skeleton = NativeAdShimmer.from(this, NativeTemplates.layoutForPlacement(placement)).also {
+        container.removeAllViews()
+        container.addView(it)
+        container.visibility = View.VISIBLE
+        it.startShimmer()
     }
     provider.preloadNative(
         this,

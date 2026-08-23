@@ -29,6 +29,12 @@ open class NativeAdConfig(
 
     override val idAds: String get() = adUnitIds.firstOrNull().orEmpty()
 
+    /**
+     * Derive the loading skeleton from [layoutId] automatically when the helper was given
+     * no explicit shimmer ([NativeAdHelper.setShimmerLayoutView] / [NativeAdHelper.setShimmerLayout]).
+     */
+    var autoShimmer: Boolean = true
+
     /** Trailing debounce for the reload-on-resume trigger. */
     var timeDebounceResume: Long = DEFAULT_TIME_DEBOUNCE_RESUME_MS
 

@@ -11,10 +11,6 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
-    <include
-        android:id="@+id/ob_native_shimmer"
-        layout="@layout/ob_shimmer_native_fullscreen" />
-
     <LinearLayout
         android:id="@+id/ob_fullscreen_fallback"
         android:layout_width="match_parent"

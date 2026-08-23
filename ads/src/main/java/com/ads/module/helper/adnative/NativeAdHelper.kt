@@ -1,18 +1,21 @@
 package com.ads.module.helper.adnative
 
 import android.app.Activity
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.annotation.LayoutRes
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
 import com.ads.module.tracking.AdTracking
+import com.facebook.shimmer.Shimmer
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
@@ -30,11 +33,17 @@ import kotlinx.coroutines.flow.asStateFlow
  * hiding the slot for purchased users and keeping the old ad on a failed reload — is owned
  * here.
  *
+ * While loading, the slot shows a shimmer skeleton. By default it is derived from the ad
+ * layout itself ([NativeAdConfig.autoShimmer]); an explicit skeleton via [setShimmerLayoutView]
+ * or [setShimmerLayout] takes precedence.
+ *
  * ```
+ * // Auto shimmer — skeleton derived from R.layout.native_home:
  * val helper = NativeAdHelper(
  *     activity, this, NativeAdConfig(ids, true, true, R.layout.native_home))
  *     .setNativeContentView(binding.frAds)
- *     .setShimmerLayoutView(binding.shimmer)
+ *     .setNativeStyle(NativeAdStyle(ctaHeightDp = 44))   // optional; styles ad + skeleton
+ * // Hand-made skeleton instead: .setShimmerLayoutView(binding.shimmer)
  * helper.placement = "native_home"
  * helper.requestAds(NativeAdParam.Request)
  * ```
@@ -84,9 +93,17 @@ class NativeAdHelper(
 
     private var contentView: FrameLayout? = null
     private var shimmerView: ShimmerFrameLayout? = null
+    private var nativeStyle: NativeAdStyle? = null
+
+    /** Skeleton the helper itself created and inserted; app-supplied views never land here. */
+    private var generatedShimmer: ShimmerFrameLayout? = null
+
+    @LayoutRes
+    private var shimmerLayoutId: Int? = null
+
+    private var autoShimmerDecorator: ((ShimmerFrameLayout) -> Unit)? = null
     private var binder = NativeAdBinder { act, ad, container, shimmer ->
-        ERainAd.getInstance()
-            .populateNativeAdView(act, ad, container, shimmer ?: ShimmerFrameLayout(act))
+        NativeAdStyler.populate(act, ad, nativeStyle, container, shimmer)
     }
 
     private val listeners = CopyOnWriteArrayList<AdCallback>()
@@ -121,14 +138,58 @@ class NativeAdHelper(
     fun setNativeContentView(container: FrameLayout): NativeAdHelper {
         contentView = container
         applyDefaultVisibility()
+        // A container handed over mid-load gets its skeleton created, shown, AND animated
+        // now — applyState also applies Loading visibility, which applyDefaultVisibility
+        // would get wrong offline
+        if (_nativeAdState.value is AdNativeState.Loading) applyState(AdNativeState.Loading)
         // A view attached after the fill would otherwise stay blank until the next reload
         (nativeAdState.value as? AdNativeState.Loaded)?.let { bindLoadedAd(it.nativeAd) }
         return this
     }
 
     fun setShimmerLayoutView(shimmer: ShimmerFrameLayout): NativeAdHelper {
+        dropGeneratedShimmer()
         shimmerView = shimmer
         applyDefaultVisibility()
+        // Swapped in mid-load: show and animate the replacement now
+        if (_nativeAdState.value is AdNativeState.Loading) applyState(AdNativeState.Loading)
+        return this
+    }
+
+    /**
+     * Presentation for this placement, applied by the SDK to BOTH the loaded ad (default
+     * binder) and the auto-derived skeleton — the two always share geometry, so the
+     * skeleton→ad swap never shifts. Null (default) leaves the layout exactly as its XML
+     * declares. Call again before [requestAds] to restyle the next load; a custom
+     * [setNativeAdBinder] takes over ad-side styling itself (the skeleton still follows
+     * this style).
+     */
+    fun setNativeStyle(style: NativeAdStyle?): NativeAdHelper {
+        nativeStyle = style
+        return this
+    }
+
+    /**
+     * Escape hatch for styling the auto-generated skeleton beyond what [NativeAdStyle]
+     * expresses — runs after the internal [setNativeStyle] pass. Never invoked for
+     * explicit shimmers: those are already the app's own design. View ids survive the
+     * skeleton transform, so findViewById-based code works on it directly.
+     */
+    fun setAutoShimmerDecorator(decorator: (ShimmerFrameLayout) -> Unit): NativeAdHelper {
+        autoShimmerDecorator = decorator
+        return this
+    }
+
+    /**
+     * Explicit skeleton layout, inflated into the content view at first Loading. Beats
+     * [NativeAdConfig.autoShimmer]; a [setShimmerLayoutView] view beats both. A root that
+     * is not a ShimmerFrameLayout is wrapped, never class-cast.
+     */
+    fun setShimmerLayout(@LayoutRes layoutId: Int): NativeAdHelper {
+        dropGeneratedShimmer()
+        shimmerLayoutId = layoutId
+        // Swapped in mid-load: inflate and animate the replacement now
+        if (_nativeAdState.value is AdNativeState.Loading) applyState(AdNativeState.Loading)
         return this
     }
 
@@ -248,6 +309,7 @@ class NativeAdHelper(
                 listeners.clear()
                 nativeAd?.let { destroyNative(it) }
                 nativeAd = null
+                dropGeneratedShimmer()
                 contentView = null
                 shimmerView = null
             }
@@ -358,6 +420,7 @@ class NativeAdHelper(
     }
 
     private fun applyState(state: AdNativeState) {
+        if (state is AdNativeState.Loading) ensureShimmer()
         val showContent = state !is AdNativeState.Cancel && state !is AdNativeState.Fail &&
             canShowAds()
         contentView?.let { checkAdVisibility(it, showContent) }
@@ -377,9 +440,72 @@ class NativeAdHelper(
     private fun bindLoadedAd(ad: ApNativeAd) {
         val container = contentView ?: return
         runCatching { binder.bind(activity, ad, container, shimmerView) }
+        // The binder's removeAllViews detached a generated skeleton (or it serves a
+        // replaced container); drop the refs so the next Loading regenerates a fresh one
+        if (generatedShimmer != null && generatedShimmer?.parent !== contentView) dropGeneratedShimmer()
         // Bind is the baseline anchor; the impression callback re-anchors when it lands
         onAdImpressionInternal()
         refillAfterShow()
+    }
+
+    /**
+     * Auto-shimmer runs at the exact seam that decides shimmer visibility, so every path
+     * that can show Loading is covered — and nothing is built when it would never be shown
+     * (instant preload hit, purchased user, explicit shimmer already provided).
+     */
+    private fun ensureShimmer() {
+        val container = contentView ?: return
+        // A skeleton left behind by a container handoff or a destroyed view tree (Fragment
+        // recreate) would keep the live slot empty for the whole load window. Parent
+        // identity is exact for the helper's own skeleton — it is always a direct child of
+        // the container it serves. App-supplied views are never second-guessed: their
+        // lifecycle belongs to the app, exactly as before this feature.
+        generatedShimmer?.let { generated ->
+            if (shimmerView === generated && generated.parent !== container) {
+                dropGeneratedShimmer()
+            }
+        }
+        // canShowAds, not canRequestAds: Loading only starts with a request or an in-flight
+        // preload behind it, so the skeleton must show even if the network dropped since
+        if (shimmerView != null || nativeAd != null || !canShowAds()) return
+        val shimmer = shimmerLayoutId?.let { inflateShimmerLayout(it, container) }
+            ?: if (config.autoShimmer) {
+                NativeAdShimmer.from(activity, config.layoutId).also { skeleton ->
+                    nativeStyle?.let { runCatching { NativeAdStyler.applyLayout(skeleton, it) } }
+                    autoShimmerDecorator?.let { runCatching { it(skeleton) } }
+                }
+            } else {
+                return
+            }
+        container.addView(shimmer)
+        generatedShimmer = shimmer
+        shimmerView = shimmer
+    }
+
+    private fun inflateShimmerLayout(@LayoutRes layoutId: Int, parent: ViewGroup): ShimmerFrameLayout? =
+        runCatching {
+            val view = LayoutInflater.from(activity).inflate(layoutId, parent, false)
+            view as? ShimmerFrameLayout ?: ShimmerFrameLayout(activity).apply {
+                // Root margins stay on the wrapper; the child gets fresh params — sharing
+                // one instance would apply the margins twice
+                layoutParams = view.layoutParams
+                setShimmer(Shimmer.AlphaHighlightBuilder().setAutoStart(false).build())
+                addView(
+                    view,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        }.getOrNull()
+
+    private fun dropGeneratedShimmer() {
+        generatedShimmer?.let { generated ->
+            if (shimmerView === generated) shimmerView = null
+            (generated.parent as? ViewGroup)?.removeView(generated)
+        }
+        generatedShimmer = null
     }
 
     private fun refillAfterShow() {

@@ -84,6 +84,23 @@ Play billing engine ने `ads` छोड़ दिया है। अगर a
 - OnboardKit का `ERainAdProvider` अब उन्हीं stores के ऊपर एक thin adapter है — behavior, placement
   keys, और telemetry unchanged हैं।
 
+### 3.0.0 में migrate करना
+
+`:ads` से कोई API हटाया नहीं गया है, और पुराना behavior per call site बनाए रखने के लिए कुछ नहीं
+करना: explicit shimmer अब भी जीतता है। व्यवहार में एक बदलाव ज़रूर है — **`autoShimmer` default में
+ON है**, इसलिए जो placements पहले load के दौरान ख़ाली बैठते थे, वे अब loading skeleton दिखाते हैं
+(§2.7 देखें)। Per-placement opt-out: `nativeConfig.autoShimmer = false`।
+
+- जिस screen का अपना shimmer view ad container के अंदर बैठा है पर `setShimmerLayoutView` से pass
+  नहीं होता, वहाँ अब दो skeletons दिखेंगे — या तो उसे `setShimmerLayoutView` को सौंप दें, या उस
+  placement पर `autoShimmer = false` कर दें।
+- Recommended cleanup: per-placement shimmer XMLs, उनके `<include>` और `setShimmerLayoutView`
+  calls हटा दें — auto-derived skeleton यह काम ख़ुद करता है। चाहें तो remote-config styling के लिए
+  `setNativeStyle` भी अपना लें — §2.7 देखें।
+- OnboardKit internals: चारों `ob_shimmer_native_*` layouts अब मौजूद नहीं — native slots अपना
+  skeleton resolved template layout से ख़ुद derive करते हैं। `OnboardingAdProvider.bindNative` का
+  signature unchanged है (generated skeleton उसी के shimmer argument में आता है)।
+
 ---
 
 ## उद्देश्य और दायरा
@@ -130,7 +147,7 @@ UI customization के समय केवल layout/container बदलें�
 
 1. `ad_config.json` / `ad_config_debug.json` में placement keys जोड़ें और `AdRemoteConfig` में matching properties जोड़ें।
 2. Native: placement का helper `AdsManager.nativeHelper(...)` से बनाएं; interstitial के लिए `InterstitialAdManager.load` + `show` — §2.6 देखें।
-3. Activity/Fragment में: `initViews` पर container + shimmer helper को hand over करें और `requestAds(NativeAdParam.Request)` call करें — skip/fail पर slot hide करना helper का काम है, screen का नहीं।
+3. Activity/Fragment में: `initViews` पर container helper को hand over करें और `requestAds(NativeAdParam.Request)` call करें — loading skeleton helper ख़ुद derive कर लेता है (§2.7), और skip/fail पर slot hide करना भी helper का काम है, screen का नहीं।
 4. sensitive placements (onboarding-like, welcome, home, permission, widget...) के लिए **100% mandatory**: `AdGate.passesUaGate(config.enableUaCheck)` से gate करें — `nativeHelper` factory इसे `config.enableUaCheck` से automatically wire कर देती है; section 4 देखें।
 5. banner के लिए `BaseActivityWithBanner` extend करें और `BannerConfig` declare करें — base `BannerAdHelper` पर चलता है; banner हाथ से load न करें।
 
@@ -428,7 +445,6 @@ reload-on-resume, hide-when-purchased, teardown:
 ```kotlin
 NativeAdHelper(activity, this, NativeAdConfig(config.waterfallIds, true, true, R.layout.native_home))
     .setNativeContentView(binding.frAds)
-    .setShimmerLayoutView(binding.shimmer)
     .setEnablePreload(true, "native_home")
     .also { it.placement = "native_home" }
     .requestAds(NativeAdParam.Request)
@@ -448,6 +464,57 @@ BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
 waterfall floor के ज़रिए — उसके नीचे चुपचाप चलता है; live ad अपनी जगह बनाए रखता है और नया creative
 उसे ठीक उसी पल replace करता है जिस पल वह fill होता है। जिस reload को fill नहीं मिलता वह कुछ भी नहीं
 बदलता, इसलिए कोई slot कभी ad → shimmer → ad नहीं जा सकता।
+
+### 2.7 Auto-shimmer और SDK-owned native styling (3.0.0 से)
+
+**Loading skeleton अब SDK ख़ुद बनाता है।** `NativeAdHelper` skeleton को placement के अपने ad layout
+से derive करता है — एक detached copy inflate होती है, हर view grey block में रंग दिया जाता है (text
+transparent, ताकि width वही रहे; media का floor 160dp), और पूरा `ShimmerFrameLayout` में wrap हो
+जाता है। "Ad" badge और `NativeAdShimmer.TAG_SHIMMER_KEEP` (`"shimmer_keep"`) tag वाले views छुए
+नहीं जाते। Generation lazy है — पहली Loading पर, और सिर्फ़ तब जब दिखाने को और कुछ न हो; purchased
+users, instant preload hits, या अपना shimmer देने वाले call sites के लिए लागत शून्य है।
+
+Precedence साफ़ है: `setShimmerLayoutView(view)` > `setShimmerLayout(@LayoutRes)` [नया] >
+`NativeAdConfig.autoShimmer` (default `true`) > कुछ नहीं। App का दिया shimmer view SDK कभी touch
+नहीं करता। Public surface: `NativeAdShimmer.from(context, layoutId)`,
+`NativeAdShimmer.prewarm(context, layoutId)` (splash पर call करके one-time cold inflate की क़ीमत
+पहले ही चुका दें), और `NativeAdShimmer.TAG_SHIMMER_KEEP`।
+
+**Styling भी SDK के पास है।** `NativeAdHelper.setNativeStyle(style)` style को loaded ad (default
+binder) **और** auto skeleton — दोनों पर लागू करता है: geometry parity by construction, इसलिए swap
+कभी layout नहीं हिलाता। `NativeAdStyle(components, ctaHeightDp, ctaBackgroundColor,
+ctaCornerRadiusDp = 20)` और `enum NativeComponent { ICON_HEADLINE, BODY, MEDIA, CTA }`
+(`fromKey(String)` के साथ)। Reordering का layout contract: एक vertical LinearLayout
+`@id/ad_container`, जिसमें `@id/block_icon_headline`, `@id/ad_body`, `@id/ad_media`,
+`@id/ad_call_to_action` हों; जिस layout में `ad_container` नहीं है, वहाँ in-place visibility
+toggles लगते हैं (flat icon/headline/advertiser views अलग-अलग handle होते हैं; `ad_icon` का "Ad"
+badge कभी hide नहीं होता)। Style Admob bind के **बाद** लगता है, इसलिए exclusions टिके रहते हैं।
+कोई style set न हो तो layout ठीक वैसा ही render होता है जैसा उसका XML कहता है — implicit कुछ नहीं।
+
+```kotlin
+AdsManager.nativeHelper(this, this, "native_home", AdRemoteConfig.native_home, R.layout.native_home)
+    .setNativeContentView(binding.frAds)
+    .requestAds(NativeAdParam.Request)
+// No shimmer wiring: the skeleton is auto-derived from the ad layout, and the
+// AdsManager factory already applied the remote-config style (config.toNativeStyle())
+```
+
+Example app में हर native placement इसी एक factory से बनता है —
+`AdsManager.nativeHelper(activity, owner, placement, config, layoutRes, bypassUaGate = false)`।
+Dashboard/preview slots के लिए `placement = null` दें: placement registration skip हो जाती है,
+इसलिए preview loads कभी revenue attribution को गंदा नहीं करते (`nativeDashboardHelper` हट गया है)।
+App की styling policy — CTA clamp 36–52dp, color-string parsing, remote-key mapping — app-side
+`AdUnitConfig.toNativeStyle()` में रहती है; SDK सिर्फ़ `NativeAdStyle` लागू करता है।
+
+`NativeAdStyler.applyLayout` / `applyAppearance` / `populate` public हैं; default binder अब
+`NativeAdStyler.populate` से जाता है (style null होने पर व्यवहार `ERainAd.populateNativeAdView`
+जैसा ही — वह method अब भी मौजूद है)। Generated skeleton को `NativeAdStyle` से आगे बदलना हो तो
+escape hatch है `setAutoShimmerDecorator {}`।
+
+भरोसे के छोटे-छोटे details: Fragment का view दोबारा बनने / container handoff के बाद skeleton
+regenerate होता है; mid-load `setShimmerLayoutView` / `setShimmerLayout` / `setNativeContentView`
+replacement को दिखाते **और** animate करते हैं; generated skeletons में shimmer का autoStart बंद है
+— GONE के पीछे कोई animation नहीं चलता, start/stop helper के हाथ में है।
 
 ## 3. Global conditions for loading ads
 
@@ -546,7 +613,6 @@ AdsManager.nativeHelper(
     layoutRes,
 )
     .setNativeContentView(binding.frAds)
-    .setShimmerLayoutView(binding.shimmer)
     .requestAds(NativeAdParam.Request)
 ```
 
@@ -590,9 +656,9 @@ AdsManager.nativeHelper(
     this, this, "native_welcome", AdRemoteConfig.native_welcome, R.layout.layout_native_welcome,
 )
     .setNativeContentView(mBinding.frAds)
-    .setShimmerLayoutView(mBinding.shimmerAds.shimmerNativeLarge)
     .requestAds(NativeAdParam.Request)
 // No observe/hide code: the helper binds on fill and hides the slot on skip/fail
+// No shimmer wiring either: the loading skeleton is auto-derived from the layout (see 2.7)
 ```
 
 ### 6.3 Inter (Onboarding)

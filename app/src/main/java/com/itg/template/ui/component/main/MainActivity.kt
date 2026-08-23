@@ -11,8 +11,9 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.helper.adnative.NativeAdHelper
+import com.ads.module.helper.adnative.NativeAdParam
 import com.itg.devconfig.dialog.DialogAdminOrganicAds
 import com.hjq.permissions.dsl.xxPermissions
 import com.hjq.permissions.permission.PermissionLists
@@ -20,6 +21,7 @@ import com.itg.template.BuildConfig
 import com.itg.template.R
 import com.itg.template.ads.AdRemoteConfig
 import com.itg.template.ads.AdUnitConfig
+import com.itg.template.ads.toNativeStyle
 import com.itg.template.ads.AdsManager
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.banner_home
@@ -32,15 +34,12 @@ import com.itg.template.ads.native_onboarding_1_4
 import com.itg.template.ads.native_onboarding_fullscreen_1_3
 import com.itg.template.ads.native_onboarding_fullscreen_1_4
 import com.itg.template.ads.native_permission
-import com.itg.template.ads.populateNativeAdView
 import com.itg.template.data.model.ForceUpdateConfig
 import com.itg.template.databinding.ActivityMainBinding
 import com.itg.template.ui.bases.BannerConfig
 import com.itg.template.ui.bases.BaseActivityWithBanner
 import com.itg.template.ui.bases.ConsentHandler
 import com.itg.template.ui.bases.ext.click
-import com.itg.template.ui.bases.ext.goneView
-import com.itg.template.ui.bases.ext.visibleView
 import com.itg.template.ui.component.main.dialog.ForceUpdateDialog
 import com.itg.template.ui.component.main.dialog.NoInternetDialog
 import com.itg.template.utils.ConnectionLiveData
@@ -68,8 +67,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     private var currentCtaColor: String = "default"
     private var currentComponents: List<String> = listOf("icon_headline", "body", "media", "cta")
 
-    // Native ad LiveData for dashboard preview
-    private val nativeDashboardLive = AdsManager.nativeDashboardPreviewLive
+    // Dashboard native previews — one NativeAdHelper per slot, created on first load
+    private var nativeSmallHelper: NativeAdHelper? = null
+    private var nativeFullHelper: NativeAdHelper? = null
+    private var customizationHelper: NativeAdHelper? = null
 
     override fun getLayoutActivity(): Int = R.layout.activity_main
 
@@ -280,78 +281,45 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     }
 
     // ─── Native Ad Preview ────────────────────────────────────
+    // Each slot is a NativeAdHelper with the auto-derived skeleton: requestAds() shows the
+    // shimmer, binds the fill, and hides the slot on fail. Style is re-read per click so
+    // the customization overrides apply to the next load's ad AND skeleton.
 
-    private var currentPreviewLayout = R.layout.layout_native_ad_small
-    private var currentPreviewTarget = "small" // "small" or "full"
+    private fun adConfig(key: String): AdUnitConfig =
+        runCatching { AdRemoteConfig.getInstance().ads[key] }.getOrNull()
+            ?: AdUnitConfig(id = "", isEnable = false)
 
     private fun loadNativeSmallPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        mBinding.shimmerNativeSmall.visibleView()
-        mBinding.shimmerNativeSmall.startShimmer()
-        mBinding.flNativeSmall.goneView()
-        currentPreviewTarget = "small"
-        currentPreviewLayout = R.layout.layout_native_ad_small
-        AdsManager.loadNativeLanguageForDashboard(this, R.layout.layout_native_ad_small)
+        val helper = nativeSmallHelper ?: AdsManager.nativeHelper(
+            this, this, placement = null, adConfig("native_language_1"),
+            R.layout.layout_native_ad_small, bypassUaGate = true,
+        ).setNativeContentView(mBinding.flNativeSmall).also { nativeSmallHelper = it }
+        helper.setNativeStyle(adConfig("native_language_1").toNativeStyle())
+        helper.requestAds(NativeAdParam.Request)
     }
 
     private fun loadNativeFullPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        mBinding.shimmerNativeFull.visibleView()
-        mBinding.shimmerNativeFull.startShimmer()
-        mBinding.flNativeFull.goneView()
-        currentPreviewTarget = "full"
-        currentPreviewLayout = R.layout.layout_native_ad_full
-        AdsManager.loadNativeFullForDashboard(this, R.layout.layout_native_ad_full)
+        val helper = nativeFullHelper ?: AdsManager.nativeHelper(
+            this, this, placement = null, adConfig("native_onboarding_fullscreen_1_3"),
+            R.layout.layout_native_ad_full, bypassUaGate = true,
+        ).setNativeContentView(mBinding.flNativeFull).also { nativeFullHelper = it }
+        helper.setNativeStyle(adConfig("native_onboarding_fullscreen_1_3").toNativeStyle())
+        helper.requestAds(NativeAdParam.Request)
     }
 
     private fun loadCustomizationPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        mBinding.shimmerCustomizationPreview.visibleView()
-        mBinding.shimmerCustomizationPreview.startShimmer()
-        mBinding.flCustomizationPreview.goneView()
-        // Always use small layout for customization preview
-        AdsManager.loadNativeLanguageForDashboard(this, R.layout.layout_native_ad_small)
-    }
-
-    override fun observerData() {
-        super.observerData()
-
-        nativeDashboardLive.observe(this) { ad ->
-            if (ad != null) {
-                when (currentPreviewTarget) {
-                    "small" -> showNativePreview(ad, mBinding.flNativeSmall, mBinding.shimmerNativeSmall)
-                    "full" -> showNativePreview(ad, mBinding.flNativeFull, mBinding.shimmerNativeFull)
-                }
-                // Also update customization preview if shimmer is visible
-                if (mBinding.shimmerCustomizationPreview.visibility == View.VISIBLE
-                    || mBinding.flCustomizationPreview.visibility == View.VISIBLE
-                ) {
-                    showNativePreview(ad, mBinding.flCustomizationPreview, mBinding.shimmerCustomizationPreview)
-                }
-            } else {
-                mBinding.shimmerNativeSmall.stopShimmer()
-                mBinding.shimmerNativeSmall.goneView()
-                mBinding.flNativeSmall.goneView()
-                mBinding.shimmerNativeFull.stopShimmer()
-                mBinding.shimmerNativeFull.goneView()
-                mBinding.flNativeFull.goneView()
-                mBinding.shimmerCustomizationPreview.stopShimmer()
-                mBinding.shimmerCustomizationPreview.goneView()
-                mBinding.flCustomizationPreview.goneView()
-            }
-        }
-    }
-
-    private fun showNativePreview(
-        ad: ApNativeAd,
-        placeholder: android.widget.FrameLayout,
-        shimmer: com.facebook.shimmer.ShimmerFrameLayout
-    ) {
-        placeholder.visibleView()
-        populateNativeAdView(this, ad, placeholder, shimmer)
+        val helper = customizationHelper ?: AdsManager.nativeHelper(
+            this, this, placement = null, adConfig("native_language_1"),
+            R.layout.layout_native_ad_small, bypassUaGate = true,
+        ).setNativeContentView(mBinding.flCustomizationPreview).also { customizationHelper = it }
+        helper.setNativeStyle(adConfig("native_language_1").toNativeStyle())
+        helper.requestAds(NativeAdParam.Request)
     }
 
     // ─── CTA Color Customization ──────────────────────────────
