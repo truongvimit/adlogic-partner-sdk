@@ -108,7 +108,10 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
             val browserIntent = Intent(Intent.ACTION_VIEW, uri)
             if (browserIntent.resolveActivity(packageManager) != null) {
                 startActivity(browserIntent)
-                disableAdsResume()
+                // One trip out, one resume skipped. The durable switch used to be used here, and
+                // its counterpart in onResume then turned app-resume back ON for the whole
+                // session — overwriting whatever the entry mode had decided.
+                AppOpenManager.getInstance().disableAdResumeByClickAction()
             } else {
                 Toast.makeText(this, "No app available to open this link", Toast.LENGTH_SHORT).show()
             }
@@ -133,17 +136,5 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
         // there has to remove the row on the way back. Remote config can retire it too.
         mBinding.rltPremium.isVisible =
             !PayKit.isPremium() && PayKit.isEnabled(PaywallPlacement.SETTING)
-
-        enableAdsResume()
-    }
-
-    private fun disableAdsResume() {
-        AppOpenManager.getInstance().disableAppResume()
-        Log.d("hello", "Disable Ads Resume Setting")
-    }
-
-    private fun enableAdsResume() {
-        AppOpenManager.getInstance().enableAppResume()
-        Log.d("hello", "Enable Ads Resume Setting")
     }
 }

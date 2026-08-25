@@ -1,11 +1,12 @@
 package com.itg.template.app
 
 import com.itg.template.R
-import com.itg.template.ads.AdRemoteConfig
-import com.itg.template.ads.AdUnitConfig
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.AdUnitConfig
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
+import io.onboardkit.config.NativeTemplate
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
@@ -65,20 +66,20 @@ object OnboardKitSetup {
                     Page.CONTENT_1,
                     titleRes = R.string.onboarding_title_1,
                     subtitleRes = R.string.onboarding_des_1,
-                    imageRes = io.onboardkit.R.drawable.ob_img_onboard_sample_1,
+                    imageRes = R.drawable.img_onboard_sample_1,
                 ),
                 ContentStepDefinition(
                     Page.CONTENT_2,
                     titleRes = R.string.onboarding_title_2,
                     subtitleRes = R.string.onboarding_des_2,
-                    imageRes = io.onboardkit.R.drawable.ob_img_onboard_sample_2,
+                    imageRes = R.drawable.img_onboard_sample_2,
                 ),
                 AdFullScreenStepDefinition(Page.AD_FULL_SCREEN, autoNextEnabled = true),
                 ContentStepDefinition(
                     Page.CONTENT_3,
                     titleRes = R.string.onboarding_title_3,
                     subtitleRes = R.string.onboarding_des_3,
-                    imageRes = io.onboardkit.R.drawable.ob_img_onboard_sample_4,
+                    imageRes = R.drawable.img_onboard_sample_4,
                 ),
             )
             // ── Which screen spends which remote key ─────────────────────────────────────────
@@ -89,8 +90,11 @@ object OnboardKitSetup {
             // `<key>` — resolved in that order by AdRemoteConfig.tiersFor. Giving a placement one
             // more floor is a remote-config change, never a code change.
             this.ads = AdsConfig(
-                splashBanner = ads?.banner_splash.toBanner(),
+                splashBanner = ads?.unit("banner_splash").toBanner(),
                 splashInterstitial = ads.interstitial("inter_splash"),
+                // Optional: declare this key to bid a different floor for returning users. Absent
+                // from remote config, the splash falls back to `inter_splash` for everyone.
+                splashInterstitialOldUser = ads.interstitial("inter_splash_old_user"),
                 languageNative = ads.native("native_lang"),
                 languageDupNative = ads.native("native_lang_alt"),
                 stepNatives = listOfNotNull(
@@ -102,10 +106,18 @@ object OnboardKitSetup {
                 // Used by any page with no key of its own in the map above
                 contentStepNative = ads.native("native_ob1"),
                 fullScreenStepNative = ads.native("native_fs"),
-                ob5Native = ads?.native_onboarding_fullscreen_1_4.toNative(),
+                ob5Native = ads?.unit("native_onboarding_fullscreen_1_4").toNative(),
+                // No template is set here: `components` in ad_config.json decides block order and
+                // visibility, so one edit there moves onboarding along with every other slot.
+
+                // The onboarding screens ship one layout per CTA position, so the position from
+                // ad_config picks the layout. Blocks are not reordered there — `components` only
+                // shows or hides them.
+                languageTemplate = ads.templateOf("native_lang"),
+                contentStepTemplate = ads.templateOf("native_ob1", default = NativeTemplate.CTA_TOP),
                 // Declared so app-resume is judged by the same gate as every other placement;
                 // leaving it null makes the gate report no_ad_unit instead of staying silent.
-                appResume = ads?.open_resume.toInterstitial(),
+                appResume = ads?.unit("open_resume").toInterstitial(),
             )
         }
             .onSuccess { config ->
@@ -113,6 +125,22 @@ object OnboardKitSetup {
                     .onFailure { Timber.e(it, "OnboardKit rejected the config") }
             }
             .onFailure { Timber.e(it, "OnboardKit config invalid") }
+    }
+
+    /**
+     * The onboarding layout for a placement, from its `positionCTA` in ad_config.
+     *
+     * `TOP` puts the call-to-action above the media, `BOTTOM` below it. Anything else — including
+     * the `null` every non-onboarding placement carries — keeps [default]; those screens order
+     * their blocks through `components` instead.
+     */
+    private fun AdRemoteConfig?.templateOf(
+        key: String,
+        default: NativeTemplate = NativeTemplate.CTA_BOTTOM,
+    ): NativeTemplate = when (this?.unit(key)?.positionCTA) {
+        "TOP" -> NativeTemplate.CTA_TOP
+        "BOTTOM" -> NativeTemplate.CTA_BOTTOM
+        else -> default
     }
 
     /** `<baseKey>_high` then `<baseKey>`; null when neither floor is configured or enabled. */

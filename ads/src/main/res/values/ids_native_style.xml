@@ -11,4 +11,6 @@
     <item name="ad_app_icon" type="id" />
     <item name="ad_icon" type="id" />
     <item name="ad_call_to_action" type="id" />
+    <item name="ad_price" type="id" />
+    <item name="ad_stars" type="id" />
 </resources>

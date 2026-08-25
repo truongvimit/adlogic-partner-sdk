@@ -53,6 +53,16 @@ object ObLog {
         Log.w(TAG, "${elapsed()} $section | $message")
     }
 
+    /**
+     * An integration mistake, not flow tracing — so this one ignores [enabled].
+     *
+     * `setFlowLogging(false)` is the recommended release setting, and a partner who has taken the
+     * trace off is exactly the one who most needs to be told their config does not work.
+     */
+    fun e(section: Section, message: String) {
+        Log.e(TAG, "${elapsed()} $section | $message")
+    }
+
     private fun elapsed(): String {
         if (originMs == 0L) return "[    ----]"
         val ms = System.currentTimeMillis() - originMs

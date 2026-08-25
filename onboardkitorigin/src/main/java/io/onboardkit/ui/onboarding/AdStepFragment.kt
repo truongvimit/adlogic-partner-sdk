@@ -37,9 +37,6 @@ class AdStepFragment : LazyStepFragment() {
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
 
-    private val position: Int
-        get() = requireArguments().getInt(ARG_POSITION)
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -78,9 +75,13 @@ class AdStepFragment : LazyStepFragment() {
     private fun requestAd() {
         val b = binding ?: return
         val activity = activity ?: return
+        val placement = AdPlacement.StepFullScreen(stepId)
         activity.showNativeAd(
-            placement = AdPlacement.StepFullScreen(stepId),
-            unit = OnboardingSdk.configOrNull()?.ads?.fullScreenStepNative,
+            placement = placement,
+            // nativeUnitFor, not fullScreenStepNative: a host that gave this page its own entry in
+            // `stepNatives` is what the guard and the preload chain both read, and asking for the
+            // shared slot instead reported no_ad_unit for a page that had one.
+            unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
             onBound = { adBound = true },
             onShown = { onAdImpression() },
@@ -102,15 +103,11 @@ class AdStepFragment : LazyStepFragment() {
     private fun onAdFailed() {
         adFailed = true
         showFallback()
-        val definition = definition()
-        if (definition?.autoNextEnabled == true &&
-            stepHost?.currentIndex?.value == position
-        ) {
-            // Failed ad page has nothing to show — advance immediately. Gated on still being the
-            // selected page: the failure callback outlives selection, and next() acts on whatever
-            // page is CURRENT, so a late failure used to advance a step the user was reading.
-            stepHost?.next(StepExit.AD_FAILED)
-        }
+        // Not gated on autoNextEnabled any more. That flag decides how long a page waits with an
+        // ad on it; a page with no ad has nothing to wait for, and leaving it up meant an empty
+        // screen mid-flow until the user found Skip. The host handles the case where this answer
+        // arrives while the pager is still settling onto the page.
+        requireStepHost().skipAdStep(stepId)
     }
 
     private fun showFallback() {

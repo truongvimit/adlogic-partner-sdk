@@ -16,15 +16,6 @@ object NativeTemplates {
         NativeTemplate.FULL_SCREEN -> R.layout.ob_layout_native_fullscreen
     }
 
-    /** Remote value → template; unknown values keep the compile-time default. */
-    fun fromRemote(value: String, fallback: NativeTemplate): NativeTemplate = when (value) {
-        "cta_bottom" -> NativeTemplate.CTA_BOTTOM
-        "cta_top" -> NativeTemplate.CTA_TOP
-        "compact" -> NativeTemplate.COMPACT
-        "fullscreen" -> NativeTemplate.FULL_SCREEN
-        else -> fallback
-    }
-
     /**
      * The layout a placement's native is inflated with — the single answer for both the preload
      * and the screen that binds it.
@@ -33,18 +24,26 @@ object NativeTemplates {
      * the preload chain silently re-requests instead of using what is already buffered.
      */
     @LayoutRes
-    internal fun layoutForPlacement(placement: AdPlacement): Int {
+    internal fun layoutForPlacement(placement: AdPlacement): Int =
+        layoutFor(templateForPlacement(placement))
+
+    /**
+     * The template a placement renders with, from [io.onboardkit.config.AdsConfig].
+     *
+     * The template only picks the layout frame. Which blocks show and in what order is `components`
+     * in the ad config, applied at bind time — so one edit there moves every slot, onboarding
+     * included. There is no remote override for the template: a second source for the same decision
+     * let a global change land everywhere except here.
+     */
+    internal fun templateForPlacement(placement: AdPlacement): NativeTemplate {
         val ads = OnboardingSdk.configOrNull()?.ads
-        val flags = OnboardingSdk.flags()
-        val template = when (placement) {
+        return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->
-                fromRemote(flags.templateLanguage, ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM)
+                ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
 
-            is AdPlacement.StepNative ->
-                fromRemote(flags.templateContent, ads?.contentStepTemplate ?: NativeTemplate.CTA_TOP)
+            is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
 
-            AdPlacement.QuestionNative ->
-                fromRemote(flags.templateQuestion, ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM)
+            AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
 
             is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> NativeTemplate.FULL_SCREEN
 
@@ -54,6 +53,5 @@ object NativeTemplates {
             AdPlacement.AppResume,
             -> NativeTemplate.CTA_BOTTOM
         }
-        return layoutFor(template)
     }
 }

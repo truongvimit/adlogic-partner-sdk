@@ -19,26 +19,8 @@ import io.trackkit.Tracker
  */
 @Deprecated("Use io.trackkit.Tracker directly.")
 object ITGTrackingHelper {
-    const val CONSENT_ERROR_1: String = "consent_error_1"
-    const val CONSENT_ERROR_2: String = "consent_error_2"
-    const val LOAD_CONSENT_1 = "new_load_consent_1"
-    const val DISPLAY_CONSENT_1 = "new_display_consent_1"
-    const val NOT_REQUIRE_DISPLAY_CONSENT_1 = "new_not_require_consent_1"
-    const val NOT_USING_DISPLAY_CONSENT_1 = "new_not_using_display_consent_1"
-    const val AGREE_CONSENT_1 = "new_agree_consent_1"
-    const val REFUSE_CONSENT_1 = "new_refuse_consent_1"
-
-    const val LOAD_CONSENT_2 = "load_consent_2"
-    const val DISPLAY_CONSENT_2 = "display_consent_2"
-    const val NOT_USING_DISPLAY_CONSENT_2 = "not_using_display_consent_2"
-
-    const val AGREE_CONSENT_2 = "agree_consent_2"
-    const val REFUSE_CONSENT_2 = "refuse_consent_2"
-
-    const val LOAD_CONSENT_3 = "load_consent_3"
-    const val DISPLAY_CONSENT_3 = "display_consent_3"
-    const val AGREE_CONSENT_3 = "agree_consent_3"
-    const val REFUSE_CONSENT_3 = "refuse_consent_3"
+    // The per-screen consent names that used to live here reported the same steps as
+    // TrackkitEvents.ConsentEvents, which now carries the screen in its `source` param.
 
     /** Fixed replacements for the two concatenated names. */
     const val EVENT_UI_CLICK = "app_ui_click"

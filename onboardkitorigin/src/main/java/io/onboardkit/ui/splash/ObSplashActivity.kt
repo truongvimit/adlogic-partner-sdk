@@ -9,6 +9,8 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
+import com.ads.module.config.AdConfig
+import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.StartOptions
@@ -35,7 +37,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -94,13 +98,17 @@ open class ObSplashActivity : BaseOnboardActivity() {
             val remote = async {
                 step("remote_fetch", cfg.splash.remoteFetchTimeoutMs) {
                     sdk.remoteOrNull()?.sync(cfg.splash.remoteFetchTimeoutMs)
+                    // Refresh the ad units in the same step. No-op unless the host installed an
+                    // AdConfigSource, so an app that ships only assets/ad_config.json pays nothing.
+                    AdConfig.refresh(cfg.splash.remoteFetchTimeoutMs)
                 }
             }
-            // A timeout leaves the form on screen unanswered, which is not consent
-            val granted = consent.await() ?: false
-            OnboardingSdk.setCanRequestAds(granted)
-            if (!granted) {
-                ObLog.w(ObLog.Section.SPLASH, "consent unresolved — running the flow without ads")
+            // A timeout leaves the form on screen unanswered — the one case where no ad may go out.
+            // A refusal is not that case: it finishes the step and the ads run non-personalized.
+            val mayRequestAds = consent.await() ?: false
+            OnboardingSdk.setCanRequestAds(mayRequestAds)
+            if (!mayRequestAds) {
+                ObLog.w(ObLog.Section.SPLASH, "consent unanswered — running the flow without ads")
             }
             // Before any request: entitlement decides whether one is legitimate at all, and a
             // request made while it is still unknown reaches a paying user. Billing was started in
@@ -268,15 +276,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * than the old-user one, because guessing the segment would spend the wrong floor.
      */
     private fun resolveSplashInterUnit(): InterstitialAdUnit? {
-        val flags = sdk.flags()
-        val override = if (isReturningUser()) {
-            flags.adsSplashInterIdOldUser.ifBlank { flags.adsSplashInterId }
+        val ads = sdk.requireConfig().ads
+        return if (isReturningUser()) {
+            ads.splashInterstitialOldUser ?: ads.splashInterstitial
         } else {
-            flags.adsSplashInterId
+            ads.splashInterstitial
         }
-        return override.takeIf { it.isNotBlank() }
-            ?.let { InterstitialAdUnit(it) }
-            ?: sdk.requireConfig().ads.splashInterstitial
     }
 
     private fun isReturningUser(): Boolean = when (val decision = startDecision) {
@@ -350,17 +355,27 @@ open class ObSplashActivity : BaseOnboardActivity() {
     override fun onDestroy() {
         progressAnimator?.cancel()
         progressAnimator = null
+        // The consent timeout holds this screen's completion callback for its whole window; the
+        // flow it guards died with the screen.
+        ConsentCenter.detach(this)
         super.onDestroy()
     }
 
     /**
-     * Run UMP/GDPR consent here and return whether ads may now be requested.
+     * Whether ads may now be requested. Runs the SDK's own UMP flow by default, so an app that
+     * wants standard GDPR behaviour writes nothing.
      *
-     * Returning `false` — or not returning before `consentTimeoutMs` — runs the whole flow with
-     * ads disabled rather than requesting them without an answer. Return `true` from apps that
-     * have no consent step.
+     * This is "has the consent step finished", not "did the user agree". A refusal returns `true`:
+     * the user still gets ads, non-personalized. `false` means the form is still unanswered on
+     * screen, so the flow runs without ads rather than placing one underneath it. Override and
+     * return `true` for an app that has no consent step at all.
      */
-    protected open suspend fun onConsentRequired(): Boolean = true
+    protected open suspend fun onConsentRequired(): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            ConsentCenter.request(this, screen = "splash") { granted ->
+                if (continuation.isActive) continuation.resume(granted)
+            }
+        }
 
     /**
      * Resolve the purchase entitlement; return as soon as it is known. 5s hard timeout by default.

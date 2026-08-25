@@ -88,7 +88,7 @@ class AdsGuardTest {
 
     @Test
     fun `explicit unit overrides the compiled slot`() {
-        // The splash resolves a remote id override the compiled config knows nothing about
+        // The splash resolves the returning-user slot, which the caller passes explicitly
         assertNull(
             guard().skipReason(
                 context,
@@ -96,54 +96,6 @@ class AdsGuardTest {
                 InterstitialAdUnit("remote-override"),
             ),
         )
-    }
-
-    @Test
-    fun `interstitial interval blocks only inside the window`() {
-        val provider = FakeAdProvider(lastInterstitialShownAtMs = 1_000L)
-        val flags = RemoteFlags(interstitialIntervalSec = 30)
-
-        val tooSoon = guard(provider = provider, flags = flags, nowMs = 10_000L)
-        assertEquals(
-            AdSkipReason.INTERVAL_NOT_ELAPSED,
-            tooSoon.skipReason(context, AdPlacement.SplashInterstitial),
-        )
-
-        val elapsed = guard(provider = provider, flags = flags, nowMs = 40_000L)
-        assertNull(elapsed.skipReason(context, AdPlacement.SplashInterstitial))
-    }
-
-    @Test
-    fun `interval rule ignores non-interstitial formats`() {
-        val guard = guard(
-            provider = FakeAdProvider(lastInterstitialShownAtMs = 1_000L),
-            flags = RemoteFlags(interstitialIntervalSec = 30),
-            nowMs = 10_000L,
-        )
-        assertNull(guard.skipReason(context, AdPlacement.Language1))
-    }
-
-    @Test
-    fun `interval of zero disables the rule`() {
-        val guard = guard(
-            provider = FakeAdProvider(lastInterstitialShownAtMs = 1_000L),
-            flags = RemoteFlags(interstitialIntervalSec = 0),
-            nowMs = 1_001L,
-        )
-        assertNull(guard.skipReason(context, AdPlacement.SplashInterstitial))
-    }
-
-    @Test
-    fun `click cap blocks at the cap and is disabled at zero`() {
-        val provider = FakeAdProvider(clicksToday = 3)
-        val capped = guard(provider = provider, flags = RemoteFlags(clickCapPerDay = 3))
-        assertEquals(
-            AdSkipReason.CLICK_CAP_REACHED,
-            capped.skipReason(context, AdPlacement.Language1),
-        )
-
-        val off = guard(provider = provider, flags = RemoteFlags(clickCapPerDay = 0))
-        assertNull(off.skipReason(context, AdPlacement.Language1))
     }
 
     private fun guard(

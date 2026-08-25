@@ -66,8 +66,6 @@ dependencies {
     implementation "androidx.media3:media3-ui:$media3_ui_version"
     implementation "androidx.media3:media3-datasource:$media3_exoplayer_version"
 
-    implementation "com.facebook.shimmer:shimmer:$shimmer_version"
-
     // api, not implementation: partner AnalyticsPlugins and sinks talk to Tracker/TrackkitEvents
     api project(':trackkit')
 

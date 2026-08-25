@@ -40,17 +40,22 @@ enum class AdSkipReason(val key: String) {
     /** Nothing is buffered at the moment the flow needs to show. */
     NOT_READY("not_ready"),
 
-    /** Too soon after the previous interstitial impression, per `ob_ads_interstitial_interval_sec`. */
-    INTERVAL_NOT_ELAPSED("interval_not_elapsed"),
+    /**
+     * No usable network. Same wire key as the ads module's own reason, so the two report as one.
+     */
+    OFFLINE("offline"),
 
-    /** This ad unit hit `ob_ads_click_cap_per_day`. */
-    CLICK_CAP_REACHED("click_cap"),
+    /**
+     * The placement's user-acquisition gate declined the request. Same wire key as the ads module.
+     */
+    UA_GATE("ua_gate"),
 
     /**
      * The `:ads` module declined by one of its own frequency rules.
      *
      * It answers all of them the same way — `onNextAction` with no other callback — so the exact
-     * one (its interval, its click cap) is not knowable from here. Tune them on `ERainAdConfig`.
+     * one (its interval, its click cap) is not knowable from here. Both are remote-tunable through
+     * `interstitial_interval_sec` and `max_click_ads_per_day`.
      */
     CAPPED_BY_ADS_MODULE("capped_by_module"),
 

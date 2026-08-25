@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.LayoutRes
 import androidx.core.os.bundleOf
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -14,6 +15,7 @@ import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.ContentStepDefinition
+import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.databinding.ObFragmentContentStepBinding
@@ -43,14 +45,47 @@ class ContentStepFragment : LazyStepFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        val definition = definition()
-        return if (definition?.layoutRes != null && definition.layoutRes != 0) {
-            inflater.inflate(definition.layoutRes, container, false)
-        } else {
-            ObFragmentContentStepBinding.inflate(inflater, container, false)
-                .also { binding = it }
-                .root
+        val custom = definition()?.layoutRes ?: 0
+        if (custom != 0) {
+            bindCustomLayout(inflater, container, custom)?.let { return it }
         }
+        return ObFragmentContentStepBinding.inflate(inflater, container, false)
+            .also { binding = it }
+            .root
+    }
+
+    /**
+     * Inflates an app-supplied layout and binds it through the SDK's own view binding.
+     *
+     * The binding step is what makes [ContentStepDefinition.layoutRes] mean anything. Inflating
+     * alone left [binding] null, and every method here opens with `binding ?: return` — so the
+     * page rendered the app's layout and then bound no title, no image, no indicator, no ad, and
+     * no click listener on the CTA. With swipe locked by default that is a page the user cannot
+     * leave.
+     *
+     * Returns null when the layout does not honour the id contract, so the caller falls back to
+     * the SDK layout: a page that looks wrong still beats a page that traps the user.
+     */
+    private fun bindCustomLayout(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        @LayoutRes layoutRes: Int,
+    ): View? {
+        val view = inflater.inflate(layoutRes, container, false)
+        return runCatching { ObFragmentContentStepBinding.bind(view) }
+            .onSuccess { binding = it }
+            .onFailure {
+                ObLog.e(
+                    ObLog.Section.SCREEN,
+                    "ContentStepDefinition(${stepId.value}).layoutRes does not honour the id " +
+                        "contract — falling back to the SDK layout. Required: ob_step_image, " +
+                        "ob_step_player, ob_step_card, ob_step_title, ob_step_subtitle, " +
+                        "ob_step_indicator, ob_primary_cta, ob_ad_block, ob_native_container. " +
+                        "Missing: ${it.message}",
+                )
+            }
+            .map { view }
+            .getOrNull()
     }
 
     override fun onViewReady(view: View) {
@@ -92,12 +127,9 @@ class ContentStepFragment : LazyStepFragment() {
         )
     }
 
-    private fun defaultSampleImage(): Int = when (position) {
-        0 -> R.drawable.ob_img_onboard_sample_1
-        1 -> R.drawable.ob_img_onboard_sample_2
-        2 -> R.drawable.ob_img_onboard_sample_3
-        else -> R.drawable.ob_img_onboard_sample_4
-    }
+    // Host apps supply their own art through ContentStepDefinition.imageRes; this only covers a
+    // step that declared none.
+    private fun defaultSampleImage(): Int = R.drawable.ob_img_onboard_placeholder
 
     private fun remoteStyleIfReady(): UiStepStyle? {
         val remote = OnboardingSdk.remoteOrNull() ?: return null
@@ -144,9 +176,13 @@ class ContentStepFragment : LazyStepFragment() {
         val b = binding ?: return
         val activity = activity ?: return
         if (adBound) return
+        val placement = AdPlacement.StepNative(stepId)
         activity.showNativeAd(
-            placement = AdPlacement.StepNative(stepId),
-            unit = OnboardingSdk.configOrNull()?.ads?.contentStepNative,
+            placement = placement,
+            // nativeUnitFor, not contentStepNative: a page with its own entry in `stepNatives` is
+            // what the guard and the preload chain both resolve, so asking for the shared pool
+            // here requested a different unit than the one that was warmed.
+            unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
             onBound = { adBound = true },
             onUnavailable = { if (!adBound) binding?.obAdBlock?.visibility = View.GONE },

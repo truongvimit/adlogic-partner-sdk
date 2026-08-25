@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="start|center_vertical"
             android:layout_marginStart="21dp"
-            android:fontFamily="@font/ob_outfit_semibold"
+            android:fontFamily="@font/ob_poppins_semibold"
             android:text="@string/ob_choose_language"
             android:textColor="@color/ob_text_header"
             android:textSize="@dimen/ob_text_header" />

@@ -7,6 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.core.FinishReason
 import io.onboardkit.core.ObLog
@@ -57,7 +58,12 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         setContentView(binding.root)
 
         val config = sdk.requireConfig()
-        enabledStepIds = FlowNavigator.enabledSteps(config, sdk.flags(), sdk.guard().isPremium(this))
+        enabledStepIds = FlowNavigator.enabledSteps(
+            config,
+            sdk.flags(),
+            sdk.guard().isPremium(this),
+            OnboardingSdk::canFillAdOnlyStep,
+        )
         ObLog.d(ObLog.Section.SCREEN, "ob_onboarding steps=${enabledStepIds.map { it.value }}")
         if (enabledStepIds.isEmpty()) {
             finishFlow(FinishReason.EMPTY_FLOW)
@@ -91,7 +97,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     private fun buildPages(): List<StepPage> {
         val config = sdk.requireConfig()
-        val contentVariant = sdk.flags().templateContent
+        val contentVariant = NativeTemplates.templateForPlacement(
+            AdPlacement.StepNative(enabledStepIds.first()),
+        ).name
         return enabledStepIds.mapNotNull { id ->
             config.stepById(id)?.let { def ->
                 val variant = when (def.type) {
@@ -118,8 +126,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val stepId = enabledStepIds.getOrNull(position) ?: return
         OnboardingSdk.session.recordStepShown(stepId)
         OnboardingSdk.emitEvent(OnboardingEvent.StepViewed(stepId, position))
-        // variantKey is the remote template bucket the page was built with — without it a funnel
-        // difference between two remote buckets is unattributable
+        // variantKey is the native template the page was built with — without it a funnel
+        // difference between two template buckets is unattributable
         OnboardingSdk.track(
             AnalyticsEvent.StepViewed(stepId, position, pagerAdapter.pageAt(position)?.variantKey),
         )
@@ -162,6 +170,33 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         } else {
             resolveExit()
         }
+    }
+
+    /**
+     * Leaves an ad-only page that has nothing to show, whatever the pager is doing at the time.
+     *
+     * `showNativeAd` can answer "unavailable" synchronously, one frame after `onPageSelected` and
+     * well inside the settle animation — the window in which [next] deliberately drops calls. The
+     * page then stayed on screen, empty, until the user found Skip. Waiting for idle and leaving
+     * then is the whole fix.
+     */
+    override fun skipAdStep(stepId: StepId) {
+        val position = enabledStepIds.indexOf(stepId)
+        if (position < 0) return
+        if (binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE) {
+            if (binding.obStepPager.currentItem == position) next(StepExit.AD_FAILED)
+            return
+        }
+        binding.obStepPager.registerOnPageChangeCallback(
+            object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageScrollStateChanged(state: Int) {
+                    if (state != ViewPager2.SCROLL_STATE_IDLE) return
+                    binding.obStepPager.unregisterOnPageChangeCallback(this)
+                    // The user may have swiped on in the meantime; only leave the page that failed.
+                    if (binding.obStepPager.currentItem == position) next(StepExit.AD_FAILED)
+                }
+            },
+        )
     }
 
     override fun back(): Boolean {

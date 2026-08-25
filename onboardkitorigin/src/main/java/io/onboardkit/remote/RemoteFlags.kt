@@ -37,10 +37,6 @@ data class RemoteFlags(
     val adsQuestionNative: Boolean = ObRemoteKeys.ADS_QUESTION_NATIVE.default,
     val adsQuestionInter: Boolean = ObRemoteKeys.ADS_QUESTION_INTER.default,
     val adsAppResume: Boolean = ObRemoteKeys.ADS_APP_RESUME.default,
-    val adsSplashInterId: String = ObRemoteKeys.ADS_SPLASH_INTER_ID.default,
-    val adsSplashInterIdOldUser: String = ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.default,
-    val interstitialIntervalSec: Long = ObRemoteKeys.INTERSTITIAL_INTERVAL_SEC.default,
-    val clickCapPerDay: Int = ObRemoteKeys.CLICK_CAP_PER_DAY.default.toInt(),
     val splashMinDisplayMs: Long = ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.default,
     val splashAdBudgetMs: Long = ObRemoteKeys.SPLASH_AD_BUDGET_MS.default,
     val splashBannerWaitMs: Long = ObRemoteKeys.SPLASH_BANNER_WAIT_MS.default,
@@ -48,9 +44,6 @@ data class RemoteFlags(
     val fullScreenAutoDismissSec: Long = ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC.default,
     val showSkipOb3: Boolean = ObRemoteKeys.SHOW_SKIP_OB3.default,
     val showSkipOb5: Boolean = ObRemoteKeys.SHOW_SKIP_OB5.default,
-    val templateContent: String = ObRemoteKeys.TEMPLATE_CONTENT.default,
-    val templateLanguage: String = ObRemoteKeys.TEMPLATE_LANGUAGE.default,
-    val templateQuestion: String = ObRemoteKeys.TEMPLATE_QUESTION.default,
     val uiContentJson: String = ObRemoteKeys.UI_CONTENT_JSON.default,
     val uiDesignTokensJson: String = ObRemoteKeys.UI_DESIGN_TOKENS_JSON.default,
     val questionConfigJson: String = ObRemoteKeys.QUESTION_CONFIG_JSON.default,
@@ -77,11 +70,8 @@ data class RemoteFlags(
         "splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
         "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
-        "reuseSplashInter=$reuseSplashInter intervalSec=$interstitialIntervalSec " +
-        "clickCap=$clickCapPerDay minDisplayMs=$splashMinDisplayMs " +
-        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs " +
-        "interIdOverride=${adsSplashInterId.isNotBlank()} " +
-        "interIdOldOverride=${adsSplashInterIdOldUser.isNotBlank()}"
+        "reuseSplashInter=$reuseSplashInter minDisplayMs=$splashMinDisplayMs " +
+        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs"
 
     /** Any tutorial page enabled → the pager flow can show. */
     val anyTutorialStepEnabled: Boolean
@@ -127,12 +117,6 @@ data class RemoteFlags(
                 adsQuestionNative = bool(ObRemoteKeys.ADS_QUESTION_NATIVE),
                 adsQuestionInter = bool(ObRemoteKeys.ADS_QUESTION_INTER),
                 adsAppResume = bool(ObRemoteKeys.ADS_APP_RESUME),
-                adsSplashInterId = reader.string(ObRemoteKeys.ADS_SPLASH_INTER_ID.key)
-                    ?: ObRemoteKeys.ADS_SPLASH_INTER_ID.default,
-                adsSplashInterIdOldUser = reader.string(ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.key)
-                    ?: ObRemoteKeys.ADS_SPLASH_INTER_ID_OLD_USER.default,
-                interstitialIntervalSec = long(ObRemoteKeys.INTERSTITIAL_INTERVAL_SEC),
-                clickCapPerDay = long(ObRemoteKeys.CLICK_CAP_PER_DAY).toInt(),
                 splashMinDisplayMs = long(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS),
                 splashAdBudgetMs = long(ObRemoteKeys.SPLASH_AD_BUDGET_MS),
                 splashBannerWaitMs = long(ObRemoteKeys.SPLASH_BANNER_WAIT_MS),
@@ -140,9 +124,6 @@ data class RemoteFlags(
                 fullScreenAutoDismissSec = long(ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC),
                 showSkipOb3 = bool(ObRemoteKeys.SHOW_SKIP_OB3),
                 showSkipOb5 = bool(ObRemoteKeys.SHOW_SKIP_OB5),
-                templateContent = str(ObRemoteKeys.TEMPLATE_CONTENT),
-                templateLanguage = str(ObRemoteKeys.TEMPLATE_LANGUAGE),
-                templateQuestion = str(ObRemoteKeys.TEMPLATE_QUESTION),
                 uiContentJson = reader.string(ObRemoteKeys.UI_CONTENT_JSON.key)
                     ?: ObRemoteKeys.UI_CONTENT_JSON.default,
                 uiDesignTokensJson = reader.string(ObRemoteKeys.UI_DESIGN_TOKENS_JSON.key)

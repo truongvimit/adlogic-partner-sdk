@@ -100,7 +100,6 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.ADS_FULLSCREEN_NATIVE.key, snapshot.adsFullScreenNative.toString())
         put(ObRemoteKeys.ADS_QUESTION_NATIVE.key, snapshot.adsQuestionNative.toString())
         put(ObRemoteKeys.ADS_QUESTION_INTER.key, snapshot.adsQuestionInter.toString())
-        put(ObRemoteKeys.ADS_SPLASH_INTER_ID.key, snapshot.adsSplashInterId)
         put(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.key, snapshot.splashMinDisplayMs.toString())
         put(ObRemoteKeys.SKIP_BUTTON_DELAY_SEC.key, snapshot.skipButtonDelaySec.toString())
         put(
@@ -109,9 +108,6 @@ class RemoteConfigSyncer internal constructor(
         )
         put(ObRemoteKeys.SHOW_SKIP_OB3.key, snapshot.showSkipOb3.toString())
         put(ObRemoteKeys.SHOW_SKIP_OB5.key, snapshot.showSkipOb5.toString())
-        put(ObRemoteKeys.TEMPLATE_CONTENT.key, snapshot.templateContent)
-        put(ObRemoteKeys.TEMPLATE_LANGUAGE.key, snapshot.templateLanguage)
-        put(ObRemoteKeys.TEMPLATE_QUESTION.key, snapshot.templateQuestion)
         put(ObRemoteKeys.UI_CONTENT_JSON.key, snapshot.uiContentJson)
         put(ObRemoteKeys.UI_DESIGN_TOKENS_JSON.key, snapshot.uiDesignTokensJson)
         put(ObRemoteKeys.QUESTION_CONFIG_JSON.key, snapshot.questionConfigJson)

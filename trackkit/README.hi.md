@@ -1,191 +1,153 @@
-# Trackkit (HI)
+**Language / Ngôn ngữ / भाषा:** [English](README.md) | [Tiếng Việt](README.vi.md) | [हिन्दी](README.hi.md)
 
-> English: **[README.md](README.md)** · Tiếng Việt: **[README.vi.md](README.vi.md)** · Architecture: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+# Trackkit
 
-Trackkit इस project में analytics का एकमात्र fan-out point है। app, `:ads` और `:onboardkitorigin`
-जो भी event बनाते हैं, सब एक ही facade से गुज़रते हैं — इसलिए consent gating, default params, name
-validation, dedupe और ad-revenue accumulation **एक ही बार** लिखे जाते हैं, हर partner build में
-copy नहीं होते। इसने चार hand-rolled wrappers की जगह ली जो currency, revenue units और यहाँ तक कि
-"Adjust चालू है या नहीं" पर भी आपस में असहमत थे; उनमें से कोई अब मौजूद नहीं।
+> एक ही analytics facade जिससे हर module report करता है, और हर vendor के लिए एक sink।
 
-Core module में **कोई vendor dependency नहीं** है — इसका पूरा dependency block एक `compileOnly`
-annotation artifact भर है — इसलिए `:trackkit` जोड़ने से आपकी APK में कुछ नहीं बढ़ता। Vendors अलग sink
-modules में रहते हैं: जिस partner को सिर्फ़ Firebase चाहिए, वह कभी कोई दूसरा analytics SDK compile
-नहीं करता।
+app, `:ads`, `:onboardkitorigin`, `:paykit` और `:billingkit` जो कुछ भी emit करते हैं, सब
+`io.trackkit.Tracker` से होकर जाता है — इसलिए consent gating, default params, GA4 name validation,
+dedupe और cumulative ad revenue एक ही बार लागू होते हैं। Core vendor-free है: vendors अलग sink
+modules के रूप में आते हैं।
 
----
+Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · English: [README.md](README.md) · Tiếng Việt: [README.vi.md](README.vi.md)
 
-## Gradle setup
+## आवश्यकताएँ
 
-```groovy
-repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
-}
-```
+| | |
+|---|---|
+| minSdk / compileSdk | 24 / 36 |
+| JDK | 17 |
+| आपकी build में क्या जुड़ता है | कोई vendor dependency नहीं — एक `compileOnly` annotation artifact भर, कोई permission नहीं, कोई R8 rule नहीं; `consumer-rules.pro` AAR के साथ ही आता है |
+
+## Installation
 
 ```groovy
-// <tag> की जगह https://github.com/truongvimit/adlogic-partner-sdk/tags से कोई tag डालें
-def sdkVersion = '<tag>'
-
+repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } }
+def sdkVersion = '<tag>' // https://github.com/truongvimit/adlogic-partner-sdk/tags
 dependencies {
-    // Contract. जो भी module event भेजता है, वह इस पर depend करे।
     implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
-
-    // Sinks — सिर्फ़ वही vendors लें जो आप वाकई ship करते हैं।
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
+    // FirebaseSink lives here.
+    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-चूँकि यह repository कई modules publish करती है, JitPack इनका group `com.github.<user>.<repo>` रखता
-है — repository का नाम group id का हिस्सा है। सभी modules को एक ही tag पर रखें — ये साथ publish होते
-हैं और versions के बीच cross-tested नहीं हैं। JDK 17 और `minSdk` 24 चाहिए।
+`:ads`, `:onboardkitorigin`, `:paykit`, `:billingkit` और `:suite-firebase` — हर एक
+`api project(':trackkit')` declare करता है, इसलिए इनमें से कोई भी हो तो `Tracker` पहले से classpath
+पर है; खुद declare तभी कीजिए जब सिर्फ़ एक standalone `TrackSink` लिखना हो। सभी modules को एक ही tag
+पर रखिए।
 
-इसी repository के अंदर modules project के रूप में जुड़ते हैं:
+## Quick start
 
-```groovy
-implementation project(':trackkit')
-implementation project(':trackkit-firebase')
-```
-
----
-
-## Quickstart
-
-`Application.onCreate()` में तीन lines, बाकी हर SDK से **पहले** — पूरे app में यही एकमात्र जगह है
-जहाँ किसी vendor का नाम आता है:
+`Tracker.install` को `Application.onCreate()` की पहली line पर बुलाइए, फिर अपने sinks register कीजिए।
 
 ```kotlin
-Tracker.install(
-    this,
-    TrackerConfig(
+override fun onCreate() {
+    super.onCreate()
+    Tracker.install(this, TrackerConfig(
         appVersionCode = BuildConfig.VERSION_CODE.toLong(),
         strictValidation = BuildConfig.DEBUG,
-    ),
-)
-Tracker.addSink(FirebaseSink())
-if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+        logLevel = if (BuildConfig.DEBUG) 2 else 1,
+    ))
+    Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
+    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+}
 ```
 
-**एक भी sink register न हो तो हर event validate होकर फेंक दिया जाता है।** `install()` उस स्थिति के
-लिए warning log करता है, पर असली समाधान `addSink` बुलाना है।
+`install()` से पहले emit हुए events buffer होते हैं — 128 items, उसके बाद सबसे पुराने warning के साथ
+drop हो जाते हैं। दूसरा `install()` अनदेखा कर दिया जाता है। कोई sink न हो तो हर event validate होकर
+फेंक दिया जाता है।
 
-इसके बाद अपने placements का नाम दें, एक बार, वहीं जहाँ ad units configure होते हैं:
+पूरा integration इतना ही है। आप ad callbacks wrap नहीं करते और ad units को placements से map नहीं
+करते: ad objects `:ads` बनाता है, इसलिए ad lifecycle और paid impressions भी `:ads` ही report करता है।
 
-```kotlin
-// Ad unit id -> वह screen जो उसे माँगती है। AdMob का paid-event callback सिर्फ़ ad unit id जानता है,
-// इसलिए यही वह चीज़ है जो ad_impression को बताती है कि पैसा किस screen ने कमाया।
-PlacementRegistry.register(interSplashConfig.id, "inter_splash")
-PlacementRegistry.register(nativeLanguageConfig.id, "native_language")
-```
+`Tracker` पर बाकी: `track(name, params)`, `track(TrackEvent)`, `screen(name, screenClass)`,
+`adRevenue(impression)`, `setDefault`, `setDefaults`, `setUserProperty`, `setUserId`, `removeSink`,
+`flushPending()`, `sinkIds()`, और `isInstalled` / `currentConsent` properties.
 
-waterfall की **हर** id register करें, सिर्फ़ top tier नहीं। जो modules अपनी ad request खुद बनाते हैं
-वे खुद register करते हैं — `:onboardkitorigin` का `ERainAdProvider` load से पहले हर onboarding unit
-register कर देता है।
+## Configuration
 
-आख़िर में, जहाँ UMP का नतीजा आता है — **पूरे app में ठीक एक जगह**:
+`TrackerConfig` — हर field optional है।
 
-```kotlin
-Tracker.setConsent(analytics = granted, ads = granted)
-```
+| Field | Type | Default | क्या करता है |
+|---|---|---|---|
+| `appVersionCode` | `Long` | `0L` | हर event के साथ `app_vc` के रूप में जुड़ता है |
+| `sdkVersion` | `String` | `"1.0.0"` | `sdk_ver` के रूप में जुड़ता है |
+| `reportingCurrency` | `String` | `"USD"` | जिस currency में cumulative-revenue events जोड़े जाते हैं; दूसरी currency वाले impressions sinks तक पहुँचते तो हैं पर total से बाहर रहते हैं |
+| `consentPolicy` | `ConsentPolicy` | `SEND_ALWAYS` | consent `UNKNOWN` रहने तक क्या होता है |
+| `strictValidation` | `Boolean` | `false` | गलत name या param key को sanitise करने के बजाय throw करता है |
+| `logLevel` | `Int` | `1` | `0` बंद, `1` warnings, `2` verbose |
+| `enableRevenueAccumulator` | `Boolean` | `true` | चार cumulative `ad_revenue_*` events emit करता है |
+| `defaultParams` | `Map<String, Any?>` | `emptyMap()` | हर event में merge होता है, वही असर जो `Tracker.setDefaults` का है |
 
-बस इतना ही integration है। आपको ad callbacks **wrap नहीं करने** — AdMob के ad objects `:ads` बनाता
-है, इसलिए paid-event listener भी `:ads` ही लगाता है और ad lifecycle भी वही report करता है। अपना
-`AdCallback` हमेशा की तरह पास कीजिए, वह ज्यों-का-त्यों वापस आता है।
+| `ConsentPolicy` | consent `UNKNOWN` रहते समय व्यवहार |
+|---|---|
+| `SEND_ALWAYS` | तुरंत dispatch; consent बाद में सिर्फ़ vendor flags बदलता है |
+| `QUEUE_UNTIL_RESOLVED` | buffer करता है, consent किसी भी तरह तय होते ही flush |
+| `DROP_UNTIL_GRANTED` | drop; बाद में consent मिलने पर कुछ replay नहीं होता |
 
-`install()` से पहले track किए गए events buffer होते हैं, खोते नहीं — इसलिए order की गलती कुछ नहीं
-बिगाड़ती। Reference wiring: `:app` में `GlobalApp.initTracking()` और `ConsentHandler.resolveConsent()`।
+## Consent
 
----
+जब `:ads` classpath पर हो तो `Tracker.setConsent` मत बुलाइए।
+`com.ads.module.consent.ConsentCenter` इसका इकलौता caller है, पूरे process के लिए UMP resolve करता
+है, और `Tracker.setConsent(analytics = true, ads = personalized)` pass करता है।
+
+analytics axis हमेशा `true` रहता है: UMP सिर्फ़ ads के बारे में पूछता है, इसलिए इनकार से `first_open`,
+retention और funnel भी नहीं मिटने चाहिए। इसे खुद तभी बुलाइए जब app में `:ads` न हो — और एक ही जगह से।
 
 ## Event catalog
 
-हर event के साथ default params भी जाते हैं — `app_vc`, `sdk_ver`, `session_no`, `install_day` और
-`consent_ads` — ताकि किसी भी funnel को बिना join किए cohort से slice किया जा सके। नीचे सिर्फ़ हर
-event के अपने params दिए हैं।
+`io.trackkit.TrackkitEvents` में 37 नाम हैं; `TrackkitEvents.all()` पूरा set लौटाता है। हर event के
+साथ `app_vc`, `sdk_ver`, `session_no`, `install_day` भी जाते हैं, और UMP तय होने के बाद `consent_ads`।
 
-| Event | कब fire होता है | Params | किसने भेजा |
-|---|---|---|---|
-| `ad_request` | load सचमुच network को भेजा गया | `placement`, `ad_format`, `ad_unit_id` | `:ads` |
-| `ad_loaded` | network ने fill लौटाया | + `latency_ms` | `:ads` |
-| `ad_load_failed` | no-fill या load error | + `error_code` | `:ads` |
-| `ad_show` | ad वाकई दिखा | `placement`, `ad_format`, `ad_unit_id` | `:ads`, `:onboardkitorigin` |
-| `ad_show_failed` | show call अस्वीकार हुई | + `error_code` | `:ads` |
-| `ad_click` | user ने ad पर tap किया | `placement`, `ad_format`, `ad_unit_id` | `:ads` |
-| `ad_closed` | full-screen ad बंद हुआ | `placement`, `ad_format`, `ad_unit_id` | `:ads` |
-| `ad_skipped` | request से पहले ही policy ने मना किया (remote flag off, purchased user, unit नहीं) | `placement`, `ad_format`, `reason` | `:ads`, `:onboardkitorigin` |
-| `ad_impression` | एक **paid** impression, `Tracker.adRevenue()` से | `placement`, `ad_format`, `ad_unit_id`, `ad_platform`, `ad_network`, `value`, `currency`, `precision` | `:trackkit` |
-| `ad_revenue_total` | हर paid impression — संचयी ad LTV | `value`, `currency` | `:trackkit` |
-| `ad_revenue_micro_flush` | बिना-flush हुआ हिस्सा reporting currency के 0.01 को पार करता है | `value`, `currency` | `:trackkit` |
-| `ad_revenue_d3` / `d7` | install के 3 / 7 दिन बाद का पहला paid impression (एक बार) | `value`, `currency` | `:trackkit` |
-| `fo_flow_start` | first-open flow में प्रवेश (denominator; skip होने पर भी fire) | — | `:onboardkitorigin` |
-| `fo_splash_view` / `fo_splash_complete` | splash दिखा / पूरा हुआ | — / `dwell_ms` | `:onboardkitorigin` |
-| `fo_language_view` | कोई language screen दिखी | `screen_index`, `variant` | `:onboardkitorigin` |
-| `fo_language_select` | किसी language row पर tap | `screen_index`, `language` | `:onboardkitorigin` |
-| `fo_language_complete` | language पक्की हुई | `screen_index`, `language`, `dwell_ms` | `:onboardkitorigin` |
-| `fo_language_flow_complete` | पूरा language flow पूरा हुआ | `language` | `:onboardkitorigin` |
-| `fo_step_view` | कोई onboarding step दिखा | `step`, `index`, `variant` | `:onboardkitorigin` |
-| `fo_step_complete` | कोई onboarding step छोड़ा गया | `step`, `index`, `dwell_ms`, `exit_reason` | `:onboardkitorigin` |
-| `fo_question_view` / `_answer` / `_complete` | question screen | `source` / `option_id`+`selected` / `count` | `:onboardkitorigin` |
-| `fo_flow_complete` | पूरा first-open flow ख़त्म | `steps_shown`, `dwell_ms` | `:onboardkitorigin` |
-| `iap_paywall_view` | paywall दिखा | `source` | `:app`, `:onboardkitorigin` |
-| `iap_paywall_result` | paywall बंद हुआ, नतीजा जो भी हो | `source`, `status` (`purchased` / `dismissed` / `continue_with_ads`) | `:onboardkitorigin` |
-| `iap_success` | purchase acknowledge हुआ | `product_id`, `value`, `currency`, `source` | `:billingkit` |
-| `app_install_referrer` | Play install referrer, MMP से प्रति install एक बार पढ़ा गया | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant` | `:ads` |
-| `consent_request` / `consent_shown` | UMP form माँगा गया / वाकई दिखा (प्रति session एक बार) | — | `:app` |
-| `consent_result` | UMP का नतीजा आया | `status` (`granted`/`denied`/`not_required`/`error`), `error_code` | `:app` |
+| समूह | Events | Event-specific params |
+|---|---|---|
+| Ads | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed`, `ad_reward_earned`, `ad_skipped` | `placement`, `ad_format`, `ad_unit_id`, साथ में `latency_ms`, `error_code` या `reason` |
+| Ads | `ad_impression` — एक paid impression, `Tracker.adRevenue` के ज़रिए | `placement`, `ad_format`, `ad_unit_id`, `ad_platform`, `ad_network`, `value`, `currency`, `precision` |
+| Revenue | `ad_revenue_total`, `ad_revenue_micro_flush` (हर बार reporting currency का 0.01), `ad_revenue_d3`, `ad_revenue_d7` | `value`, `currency` |
+| First open | `fo_flow_start`, `fo_splash_view`, `fo_splash_complete`, `fo_language_view`, `fo_language_select`, `fo_language_complete`, `fo_language_flow_complete`, `fo_step_view`, `fo_step_complete`, `fo_question_view`, `fo_question_answer`, `fo_question_complete`, `fo_flow_complete` | `step`, `index`, `screen_index`, `language`, `variant`, `dwell_ms`, `exit_reason`, `source`, `count`, `steps_shown`, `option_id`, `selected` |
+| IAP | `iap_paywall_view`, `iap_paywall_result`, `iap_click`, `iap_success`, `iap_fail`, `iap_dismiss` | `source`, `status`, `product_id`, `value`, `currency`, `error_code`, `reason` |
+| Consent | `consent_request`, `consent_shown`, `consent_result` | `status`, `error_code`, `source` |
+| अन्य | `app_install_referrer` | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant` |
 
-Screen views **event नहीं हैं**: `Tracker.screen(name, screenClass)` हर sink को अपना native
-screen-view भेजने देता है (Firebase पर `screen_view`), reporting UI यही अपेक्षा करता है।
+Screen views events नहीं हैं — `Tracker.screen()` से हर sink अपना screen view खुद emit करता है। ऊपर
+के params को GA4 custom dimensions के रूप में register कीजिए, वरना वे सिर्फ़ DebugView और BigQuery
+में ही रह जाएँगे।
 
-दो नियम, जिनके लिए यह catalog बना है:
-
-1. **Event नाम में कभी variable मत डालिए।** एक `fo_step_complete` जिसमें `step` param हो — न कि
-   `ob1_complete`, `ob2_complete`, `ob3_complete`।
-2. **हर ad event अपना placement साथ रखता है।** AdMob का paid-event callback सिर्फ़ ad unit जानता है,
-   इसलिए `PlacementRegistry` के बिना revenue को किसी screen से नहीं जोड़ा जा सकता।
-
----
-
-## अपना event जोड़ना
-
-किसी ऐसी app-विशिष्ट चीज़ के लिए जिसे कोई और app कभी report नहीं करेगा, escape hatch इस्तेमाल करें:
+## Custom events
 
 ```kotlin
 Tracker.track(SimpleEvent("app_widget_pinned", mapOf("source" to "home")))
 ```
 
-इनमें से **कोई भी** सच हो तो `TrackkitEvents` में catalog entry बनाइए:
+इसके बजाय `TrackkitEvents` में एक class तब जोड़िए जब एक से ज़्यादा module वह event emit करते हों, कोई
+dashboard या Adjust token उस पर निर्भर हो, या उसके param की spelling releases के बीच स्थिर रहनी हो।
 
-- एक से ज़्यादा module इसे भेजते हों,
-- कोई dashboard, Adjust token या Meta custom conversion इस पर निर्भर हो,
-- इसके params की spelling releases के बीच स्थिर रहनी ज़रूरी हो।
+| हर name और param key पर नियम | सीमा | उल्लंघन पर |
+|---|---|---|
+| Grammar | `[a-zA-Z][a-zA-Z0-9_]{0,39}` | event अस्वीकृत, param key हटा दी जाती है |
+| प्रति event params | 25 | अतिरिक्त keys हट जाती हैं |
+| String param value / user property value | 100 / 36 अक्षर | काट दिया जाता है |
+| आरक्षित prefixes | `firebase_`, `google_`, `ga_` | अस्वीकृत |
+| PII / secret keys | `purchase_token`, `purchase_token_part_1`, `purchase_token_part_2`, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | अस्वीकृत |
 
-Catalog entry एक class होती है, इसलिए उसके params compiler-जाँचे signature बन जाते हैं और
-`TaxonomyTest` उसका नाम अपने-आप validate करता है। `SimpleEvent` की string सिर्फ़ runtime पर जाँची
-जाती है।
+Validator के ऊपर convention: `<domain>_<object>_<action>`, lowercase `snake_case`, domain इनमें से एक
+— `ad_`, `fo_`, `iap_`, `consent_`, `app_`। नाम में कभी variable मत भरिए — एक ही `fo_step_complete`
+जो `step` param रखता हो, न कि `ob1_complete` और `ob2_complete` अलग-अलग।
 
----
+## अपना custom sink लिखना
 
-## अपना sink लिखना
-
-`TrackSink` implement करके register कीजिए। सिर्फ़ `id` और `onEvent` अनिवार्य हैं; बाकी सबका default
-no-op है।
+सिर्फ़ `id` और `onEvent` ज़रूरी हैं — `onInstall`, `onScreen`, `onUserProperty`, `onUserId`,
+`onConsent` और `onAdRevenue` के no-op defaults हैं, Java में भी।
 
 ```kotlin
 class MyBackendSink(private val api: MyApi) : TrackSink {
-
     override val id: String = "my_backend"
 
-    override fun onInstall(context: Context) = api.warmUp(context)
-
-    override fun onEvent(name: String, params: Map<String, Any?>) = api.enqueue(name, params)
-
-    override fun onConsent(consent: Consent) = api.setCollectionEnabled(consent.analyticsGranted)
-
+    override fun onEvent(name: String, params: Map<String, Any?>) {
+        api.enqueue(name, params)
+    }
+    // impression.value is already in impression.currency — do not convert.
     override fun onAdRevenue(impression: AdImpression) {
-        // impression.value पहले से impression.currency में है — convert मत कीजिए।
         api.enqueueRevenue(impression.value, impression.currency)
     }
 }
@@ -193,104 +155,23 @@ class MyBackendSink(private val api: MyApi) : TrackSink {
 Tracker.addSink(MyBackendSink(api))
 ```
 
-Contract:
+हर callback caller के thread पर चलता है और block नहीं करना चाहिए। throw करने वाला sink पकड़ लिया
+जाता है और उसके `id` के साथ log होता है; बाकी sinks को event फिर भी मिलता है। `addSink` पहले से
+registered `id` को अनदेखा कर देता है। Params sanitised आते हैं: कोई null नहीं, strings 100 अक्षरों
+तक सीमित, ज़्यादा से ज़्यादा 25 keys। Debug builds के लिए
+`io.trackkit.sink.ConsoleSink(tag = "Trackkit/Console", ringSize = 100)` वही payload log करता है।
 
-- हर callback caller के thread पर चलता है। **Block मत कीजिए** — अपनी queue को सौंप दीजिए।
-- Trackkit हर call को `runCatching` में लपेटता है, इसलिए exception फेंकने वाला sink बाकियों को नहीं
-  गिरा सकता। फिर भी आपकी `id` के साथ warning log होगी।
-- `id` स्थिर और अद्वितीय होनी चाहिए; पहले से registered id वाले दूसरे sink को `addSink` अनदेखा करता है।
-- Params साफ़ होकर आते हैं: कोई null नहीं, strings 100 अक्षरों पर कटे, अधिकतम 25 keys।
+## Troubleshooting
 
----
-
-## Adjust
-
-Adjust, Trackkit का sink **नहीं** है। वह `:ads` में रहता है, क्योंकि जो भी signal वह लेता है वह वहीं
-पैदा होता है, और क्योंकि `:ads` ads दिखाने का फ़ैसला करने के लिए Adjust का attribution नतीजा वापस
-पढ़ता है। पूरा तर्क और इसे दोबारा देखने की शर्तें: [ARCHITECTURE.md](ARCHITECTURE.md)।
-
-`:ads` के बाहर के किसी module से conversion milestone भेजने के लिए:
-
-```java
-MmpTracking.trackEvent(adjustTokenForThisMilestone);
-```
-
-पहले Adjust dashboard पर token बनाइए — खाली token warning के साथ छोड़ दिया जाता है, कभी
-`AdjustEvent("")` के रूप में नहीं भेजा जाता।
-
----
-
-## Sink options
-
-हर sink अपने constructor से configure होता है; कोई global settings object नहीं है।
-
-| Sink | Parameter | Default | क्या करता है |
-|---|---|---|---|
-| `FirebaseSink` | `collectionFollowsConsent` | `true` | `setAnalyticsCollectionEnabled(analyticsGranted)` बुलाता है। अगर UMP form सिर्फ़ ads के बारे में पूछता है तो **`false` दीजिए** — collection का hard switch उन users के लिए `first_open`, retention और पूरा funnel भी मार देता है जो personalisation से मना करते हैं, जबकि अकेला Consent Mode कानूनी ज़रूरत पहले ही पूरी कर देता है। |
-
----
-
-## Consent Mode defaults
-
-UMP का नतीजा आते ही Trackkit consent सेट कर देता है, पर उससे *पहले* की स्थिति manifest का विषय है।
-app manifest में चारों defaults घोषित कीजिए, वरना consent से पहले का traffic आपके नहीं, Firebase के
-अपने defaults इस्तेमाल करेगा:
-
-```xml
-<meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="true" />
-<meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
-<meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
-<meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
-```
-
-Library manifest इन्हें जानबूझकर merge **नहीं** करता — हर partner की कानूनी स्थिति अलग होती है।
-
----
-
-## Naming rules और GA4 limits
-
-`EventValidator` हर event नाम और हर param key पर नीचे के नियम लागू करता है, और `TaxonomyTest`
-build समय पर पूरे catalog पर इनकी जाँच करता है।
-
-| नियम | सीमा | उल्लंघन पर |
+| लक्षण | कारण | समाधान |
 |---|---|---|
-| Event नाम grammar | `[a-zA-Z][a-zA-Z0-9_]*` | अस्वीकृत |
-| Event नाम लंबाई | 40 अक्षर | अस्वीकृत |
-| Param key grammar | event नाम जैसा ही | key हटा दी जाती है |
-| प्रति event params | 25 | अतिरिक्त keys हटती हैं |
-| String param value | 100 अक्षर | काट दिया जाता है |
-| आरक्षित prefixes | `firebase_`, `google_`, `ga_` | अस्वीकृत |
-| PII / secret keys | `purchase_token*`, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | अस्वीकृत |
+| किसी vendor तक कुछ नहीं पहुँचता; logcat में `install() ran with no sink` | कोई sink register नहीं हुआ | `Tracker.addSink(FirebaseSink())` या अपना `TrackSink` जोड़िए |
+| `N events were dropped before install (buffer overflow)` | `install()` से पहले 128 से ज़्यादा events emit हुए | `Tracker.install` को `onCreate()` की पहली line पर ले जाइए |
+| `install() called twice` या `sink 'x' already registered` | दोहरा `install()`, या दो sinks का एक ही `id` | एक ही `install()` रखिए; हर sink को अलग `id` दीजिए |
+| launch के बाद हर event रुक जाता है | `consentPolicy = DROP_UNTIL_GRANTED` और analytics consent नहीं मिला | `:ads` के साथ analytics axis हमेशा granted रहता है; जाँचिए कि `ConsentCenter.request` चला या नहीं |
+| `ad_impression` आते रहते हैं पर `ad_revenue_total` 0 पर अटका है | impressions `reportingCurrency` से अलग currency में हैं | `TrackerConfig.reportingCurrency` को account currency पर सेट कीजिए |
+| production में `IllegalArgumentException: Trackkit: …` | release में `strictValidation` `true` छूट गया | इसे `BuildConfig.DEBUG` से wire कीजिए |
 
-Validator के ऊपर, catalog की परंपरा है `<domain>_<object>_<action>`, lowercase `snake_case` में,
-जहाँ `domain` इनमें से एक हो: `ad_`, `fo_`, `iap_`, `consent_`, `app_`।
+## License
 
-`strictValidation = true` हर उल्लंघन को exception बना देता है। इसे `BuildConfig.DEBUG` से जोड़िए
-ताकि taxonomy की गलती QA में फेल हो; release builds में यह घटकर एक log line और एक साफ़ किया हुआ
-event रह जाता है।
-
----
-
-## जो design निर्णय आपको विरासत में मिलते हैं
-
-ये सब जानबूझकर हैं, और हर एक इस pipeline की पिछली पीढ़ी के audit में मिली किसी ठोस खामी को ठीक करता
-है। अगर कोई आँकड़ा पुराने dashboard के मुकाबले "ग़लत" लगे, तो कारण यही है।
-
-- **Currency conversion कभी नहीं।** पुराना रास्ता AdMob revenue को `26000` और MAX revenue को `25000`
-  से गुणा करता था — एक ही file में दो अलग hardcoded दरें — और नतीजा Meta को VND बताकर भेजता था। अब
-  `AdImpression.currency` ठीक वही रहता है जो ad SDK ने दिया, और reporting currency से भिन्न मुद्रा
-  वाले impressions संचयी योग से बाहर रखे जाते हैं, न कि एक निरर्थक आँकड़े में जोड़ दिए जाते हैं।
-- **प्रति impression कोई purchase event नहीं।** Meta `logPurchase` हर एक ad impression पर fire होता
-  था। अब ऐसा कुछ नहीं होता।
-- **Purchase revenue को 1,000,000 से भाग नहीं दिया जाता।** पुराना helper बिना शर्त भाग देता था,
-  इसलिए IAP revenue — जो पहले से मुद्रा इकाइयों में था — लगभग दस लाख गुना कम report होता था।
-- **Adjust के लिए सत्य का एक ही स्रोत।** दो स्वतंत्र flags आपस में असहमत हो सकते थे, इसलिए "Adjust
-  बंद" होने पर भी events रिसते थे। अब एक ही जाँच config switch और `Adjust.initSdk` की सफलता, दोनों
-  को कवर करती है।
-- **हर ad event placement साथ रखता है**, और `ad_show` / `ad_show_failed` अस्तित्व में ही हैं, इसलिए
-  show rate और show failures अनुमान नहीं, दिखने वाले आँकड़े हैं।
-- **Event नाम में कोई variable नहीं।** audit किए गए SDK ने `ob1_complete`, `ob2_complete`, … *और*
-  साथ में एक समानांतर `complete_ob1`, `complete_ob2`, … परिवार भेजा, जो एक ही transition को दो अलग
-  घड़ियों पर दो बार गिनता था। यहाँ सिर्फ़ एक `fo_step_complete` है जिसमें `step` param है।
-- **खाली Adjust token भेजा नहीं जाता, छोड़ा जाता है।** `AdjustEvent("")` client पर स्वीकार होकर
-  server पर drop हो जाता है, यानी खाली token बिना किसी संकेत के revenue खो देता है।
+MIT — देखिए [LICENSE](../LICENSE)।

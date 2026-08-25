@@ -21,6 +21,8 @@
     <dimen name="ob_header_height">62dp</dimen>
     <dimen name="ob_ratio_anim_area">55dp</dimen>
 
+    <!-- Native ad container: outer frame on all four sides, and the gap between visible blocks. -->
+
     <dimen name="ob_ad_attribution_height">20dp</dimen>
     <dimen name="ob_ad_badge_width">19dp</dimen>
     <dimen name="ob_ad_badge_height">14dp</dimen>

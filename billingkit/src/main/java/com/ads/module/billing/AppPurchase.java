@@ -535,8 +535,18 @@ public class AppPurchase {
         }
     }
 
+    /**
+     * Forces the entitlement, for a host that grants premium from its own backend.
+     * <p>
+     * Goes through the same plumbing a real purchase does: writing only the field left the cached
+     * entitlement stale across cold starts, and left every listener — including the facade that
+     * publishes {@code Billing.isPremium} — reporting the previous value for the rest of the
+     * session, so the ad layer went ad-free while the paywall kept selling.
+     */
     public void setPurchase(boolean purchase) {
         isPurchase = purchase;
+        PurchasePrefs.write(appContext, purchase, "manual");
+        notifyVerifyCompletion(BillingClient.BillingResponseCode.OK);
     }
 
     public boolean isPurchased() {

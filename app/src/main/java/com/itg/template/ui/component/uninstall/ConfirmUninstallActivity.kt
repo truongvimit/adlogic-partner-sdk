@@ -3,7 +3,7 @@ package com.itg.template.ui.component.uninstall
 import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdParam
 import com.itg.template.R
-import com.itg.template.ads.AdRemoteConfig
+import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.AdsManager
 import com.itg.template.ads.native_confirm_uninstall
 import com.itg.template.databinding.ActivityConfirmUninstallBinding

@@ -14,12 +14,12 @@ ext {
     // AndroidX Core
     androidx_core_ktx_version = '1.17.0'
     androidx_appcompat_version = '1.7.1'
-    androidx_material_version = '1.13.0'
+    androidx_material_version = '1.14.0'
     androidx_recyclerview_version = '1.4.0'
     androidx_multidex_version = '2.0.1'
     
     // AndroidX Lifecycle
-    androidx_lifecycle_version = '2.6.1'
+    androidx_lifecycle_version = '2.10.0'
     androidx_fragment_ktx_version = '1.6.1'
     
     // Hilt
@@ -69,7 +69,8 @@ ext {
     erain_studio_version = '2.0'
     module_update_gdpr_version = '2.0.2'
     play_review_ktx_version = '2.0.2'
-    play_services_ads_version = '24.7.0'
+    // Must match what :ads compiles against — :onboardkitorigin runs on whatever :ads resolves.
+    play_services_ads_version = '25.3.0'
     billing_version = '9.0.0'
     
     // Media

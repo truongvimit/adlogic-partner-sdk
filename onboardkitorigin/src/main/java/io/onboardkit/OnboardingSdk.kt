@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdsGuard
 import io.onboardkit.ads.ObAppResume
 import io.onboardkit.ads.OnboardingAdProvider
@@ -16,6 +17,7 @@ import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.core.QuestionAnswer
 import io.onboardkit.core.SkipReason
+import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.AnalyticsHub
 import io.onboardkit.core.analytics.AnalyticsPlugin
@@ -38,6 +40,8 @@ import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
+import com.ads.module.consent.ConsentCenter
+import io.trackkit.ConsentState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -129,7 +133,8 @@ object OnboardingSdk {
         remote = ObRemote(app)
         adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
         appResumeGuard = ObAppResume(adsGuard, adProvider)
-        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags)
+        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
+        observeConsent()
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }
 
@@ -181,6 +186,25 @@ object OnboardingSdk {
 
     fun canRequestAds(): Boolean = adsAllowed
 
+    /**
+     * Opens the ad gate as soon as the consent flow resolves, from wherever it resolves.
+     *
+     * The splash also reports the answer, but it does so through a step with its own timeout: a
+     * user who takes longer than that to read the form had their acceptance dropped, and the gate
+     * stayed shut for the rest of the process with nothing left to reopen it. Watching the state
+     * directly means a late answer still counts.
+     *
+     * Anything other than UNKNOWN means the step finished — a refusal included, since a refusal
+     * downgrades ads to non-personalized rather than stopping them.
+     */
+    private fun observeConsent() {
+        sdkScope.launch {
+            ConsentCenter.state.collect { state ->
+                if (state != ConsentState.UNKNOWN) setCanRequestAds(true)
+            }
+        }
+    }
+
     fun addAnalyticsPlugin(plugin: AnalyticsPlugin) = AnalyticsHub.addPlugin(plugin)
 
     val events: Flow<OnboardingEvent> get() = eventBus.events
@@ -212,7 +236,29 @@ object OnboardingSdk {
     suspend fun shouldStart(): StartDecision {
         val cfg = config ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         val store = stateStore ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
-        return FlowNavigator.decideStart(store.current(), flags(), cfg)
+        // Same pair the pager host will apply. The resume index is an index into that list, so a
+        // decision taken over a longer one lands the user on the wrong page.
+        return FlowNavigator.decideStart(
+            store.current(),
+            flags(),
+            cfg,
+            isPremium = application?.let { adsGuard.isPremium(it) } == true,
+            canShowAdStep = ::canFillAdOnlyStep,
+        )
+    }
+
+    /**
+     * Whether the ad-only page [stepId] has an ad to show.
+     *
+     * `false` takes the page out of the flow rather than putting an empty screen in front of the
+     * user. Every place that builds the step list asks this one function, so the pager, the resume
+     * index and the preload chain cannot disagree about how many pages there are.
+     */
+    fun canFillAdOnlyStep(stepId: StepId): Boolean {
+        val app = application ?: return true
+        val cfg = config ?: return true
+        val placement = AdPlacement.StepFullScreen(stepId)
+        return adsGuard.canFillAdOnlyStep(app, placement, cfg.ads.unitFor(placement))
     }
 
     /**

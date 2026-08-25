@@ -140,6 +140,40 @@ class OnboardKitConfigTest {
     }
 
     @Test
+    fun `minSelection is still read by a screen, not just validated`() {
+        // The knob is only meaningful if something consumes it. It lost its last read site once
+        // and nothing failed, because validation alone kept looking like coverage.
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/question/ObQuestionActivity.kt",
+        ).readText()
+        assertTrue(
+            "ObQuestionActivity must gate the CTA on QuestionConfig.minSelection",
+            source.contains("minSelection"),
+        )
+    }
+
+    @Test
+    fun `a layoutRes no screen reads is rejected instead of shipping a page that ignores it`() {
+        val result = onboardKitConfig {
+            defaultSteps()
+            language = LanguageConfig(layoutRes = 123)
+        }
+        val error = result.exceptionOrNull() as? ObConfigException
+        assertTrue(
+            error != null && error.errors.any { it.contains("LanguageConfig.layoutRes") },
+        )
+    }
+
+    @Test
+    fun `the two layoutRes knobs that are wired stay accepted`() {
+        val result = onboardKitConfig {
+            splash = SplashConfig(layoutRes = 123)
+            steps(ContentStepDefinition(StepId.OB1, layoutRes = 456))
+        }
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
     fun `language base key groups regional variants`() {
         assertEquals("en", ObLanguage("en-US", "English", 0).baseKey)
         assertEquals("hi", ObLanguage("hi", "Hindi", 0).baseKey)

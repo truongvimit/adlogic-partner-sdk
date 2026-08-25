@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.ads.module.ads.ERainAd
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdParam
 import com.itg.devconfig.dialog.DialogAdminOrganicAds
@@ -19,9 +20,9 @@ import com.hjq.permissions.dsl.xxPermissions
 import com.hjq.permissions.permission.PermissionLists
 import com.itg.template.BuildConfig
 import com.itg.template.R
-import com.itg.template.ads.AdRemoteConfig
-import com.itg.template.ads.AdUnitConfig
-import com.itg.template.ads.toNativeStyle
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.AdUnitConfig
+import com.ads.module.config.toNativeStyle
 import com.itg.template.ads.AdsManager
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.banner_home
@@ -38,7 +39,6 @@ import com.itg.template.data.model.ForceUpdateConfig
 import com.itg.template.databinding.ActivityMainBinding
 import com.itg.template.ui.bases.BannerConfig
 import com.itg.template.ui.bases.BaseActivityWithBanner
-import com.itg.template.ui.bases.ConsentHandler
 import com.itg.template.ui.bases.ext.click
 import com.itg.template.ui.component.main.dialog.ForceUpdateDialog
 import com.itg.template.ui.component.main.dialog.NoInternetDialog
@@ -55,7 +55,6 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
     override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, true)
 
-    private lateinit var consentHandler: ConsentHandler
     private val delayHandler = Handler(Looper.getMainLooper())
     private var delayRunnable: Runnable? = null
     private lateinit var noInternetDialog: NoInternetDialog
@@ -79,7 +78,6 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         noInternetDialog = NoInternetDialog(this)
         forceUpdateDialog = ForceUpdateDialog(this)
         checkInternet()
-        initConsentHandler()
         checkConsentStatus()
         maybeShowForceUpdateDialog()
         showSdkVersionInfo()
@@ -97,36 +95,32 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
     // ─── Consent ──────────────────────────────────────────────
 
-    private fun initConsentHandler() {
-        consentHandler = ConsentHandler(
-            activity = this,
-            appSharedPref = appSharedPref,
-            trackingSuffix = 2,
-            onConsentFlowCompleted = { Timber.d("Consent flow completed") },
-            onConsentSuccess = { canPersonalized ->
-                if (canPersonalized) {
-                    Routes.startSplashActivity(this)
-                    finish()
-                }
-            },
-            onNotUsingAdConsent = {
-                appSharedPref.isUserGlobal = true
-            }
-        )
-    }
-
+    /**
+     * Second chance at the consent form for a user the splash could not ask — offline then, or the
+     * form never answered. [ConsentCenter] owns the once-per-process guard, so this is a no-op when
+     * the splash already got an answer.
+     */
     private fun checkConsentStatus() {
-        if (appSharedPref.isConfirmConsent.not() && appSharedPref.isUserGlobal.not()) {
-            delayShowConsentDialog()
-        }
-    }
-
-    private fun delayShowConsentDialog() {
-        if (!RemoteConfigUtils.getOnShowDialogConsent()) {
-            return
-        }
+        if (ConsentCenter.isAlreadyResolved(this)) return
+        if (!RemoteConfigUtils.getOnShowDialogConsent()) return
         delayRunnable = Runnable {
-            consentHandler.requestConsent()
+            ConsentCenter.request(
+                this,
+                screen = "main",
+                // The restart hangs off onFormAnswered, never off completion. Completion also
+                // answers `true` for a call that merely inherited the splash's outcome — a
+                // refusal, an error, a timeout — none of which persist a flag, so Main asked
+                // again five seconds after every restart and the app never reached a stable
+                // screen. Only a form this call showed and the user accepted restarts anything.
+                onFormAnswered = { personalized ->
+                    if (personalized) {
+                        // Ads were blocked for the whole session; restart the flow so the screens
+                        // that gave up on a request can ask again.
+                        Routes.startSplashActivity(this)
+                        finish()
+                    }
+                },
+            ) { /* Completion alone changes nothing here; the splash already ran the flow. */ }
         }
         delayHandler.postDelayed(delayRunnable!!, 5000L)
     }
@@ -371,7 +365,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
                     components = currentComponents
                 )
             }
-            AdRemoteConfig.updateInstance(instance.copy(ads = updatedAds))
+            AdRemoteConfig.update(instance.copy(ads = updatedAds))
         } catch (e: Exception) {
             Timber.w(e, "Failed to override ad config")
         }
@@ -441,7 +435,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
                 updatedAds["inter_welcome"] = interWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
             }
 
-            AdRemoteConfig.updateInstance(instance.copy(ads = updatedAds))
+            AdRemoteConfig.update(instance.copy(ads = updatedAds))
 
             // Dynamically enable/disable AppOpenManager based on mode
             if (mode == ResumeAdsEntryMode.OPEN_RESUME) {
@@ -560,10 +554,8 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     // ─── Lifecycle ────────────────────────────────────────────
 
     override fun onDestroy() {
+        ConsentCenter.detach(this)
         super.onDestroy()
-        if (::consentHandler.isInitialized) {
-            consentHandler.clear()
-        }
         delayRunnable?.let {
             delayHandler.removeCallbacks(it)
         }
