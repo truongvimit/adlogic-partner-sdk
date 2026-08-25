@@ -23,6 +23,7 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.ads.module.helper.interstitial.InterstitialAutoBuffer
 import com.ads.module.util.SharePreferenceUtils
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
@@ -57,6 +58,16 @@ class ERainAdProvider(
      */
     private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
 ) : OnboardingAdProvider {
+
+    init {
+        // The flow reuses its splash interstitial at the language and pager exits, and decides
+        // which screens to show from a bare "is one buffered" probe. A background top-up would
+        // both add an impression and delete the screens the flow would otherwise have shown.
+        InterstitialAutoBuffer.reserve(
+            AdPlacement.SplashInterstitial.key,
+            AdPlacement.QuestionInterstitial.key,
+        )
+    }
 
     private val preload = NativeAdPreload.getInstance()
 

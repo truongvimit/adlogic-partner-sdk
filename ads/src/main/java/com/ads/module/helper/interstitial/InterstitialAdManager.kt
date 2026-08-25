@@ -95,8 +95,11 @@ object InterstitialAdManager {
             notifyListener(placement) { it.onAdFailedToLoad(null) }
             return
         }
-        ids.forEach { AdTracking.registerPlacement(it, placement) }
         if (!inFlight.add(placement)) return
+        // After the guard, not before: a de-duplicated no-op load used to re-point the registry,
+        // so a shared ad unit id was attributed to whichever placement called load() last rather
+        // than to the one that actually requested it.
+        ids.forEach { AdTracking.registerPlacement(it, placement) }
         if (options.reportTelemetry) {
             AdTracking.request(placement, AdFormat.INTERSTITIAL, ids.first())
         }
@@ -131,6 +134,25 @@ object InterstitialAdManager {
     fun isLoading(placement: String): Boolean = placement in inFlight
 
     /**
+     * Why [show] would decline right now, or null when it would go ahead.
+     *
+     * Read-only: unlike [show] it never touches the buffer, so a caller can branch on the answer
+     * — hide a loading dialog, take a different route — without spending the ad it asked about.
+     */
+    @JvmStatic
+    fun showSkipReason(context: Context, placement: String): AdSkipReason? = when {
+        AdGate.isPurchased(context) -> AdSkipReason.PURCHASED
+        !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
+        !isReady(placement) -> AdSkipReason.NOT_READY
+        else -> null
+    }
+
+    /** True when [show] would put an ad on screen. See [showSkipReason] for the reason it would not. */
+    @JvmStatic
+    fun canShow(context: Context, placement: String): Boolean =
+        showSkipReason(context, placement) == null
+
+    /**
      * Shows the buffered ad for [placement].
      *
      * Single-use: the buffer is dropped before `show()` so one fill can never show twice.
@@ -145,24 +167,34 @@ object InterstitialAdManager {
         callback: InterShowCallback,
         reportTelemetry: Boolean = true,
     ) {
-        val ad = takeFresh(placement)
-        // Every show call consumes the buffer, blocked ones included — a skip must force the
-        // next load through the gate again instead of resurrecting a pre-skip fill
-        cache.remove(placement)
-        val blockReason = when {
-            ad == null -> AdSkipReason.NOT_READY
-            AdGate.isPurchased(context) -> AdSkipReason.PURCHASED
-            else -> null
-        }
-        if (blockReason != null || ad == null) {
-            val reason = blockReason ?: AdSkipReason.NOT_READY
+        // Decided BEFORE the buffer is touched. The interval rule lives downstream in
+        // ERainAd.forceShowInterstitial, which answers a blocked show with a bare onNextAction —
+        // so a tap one second inside the interval used to reach this method, drop a perfectly
+        // good fill, and only then be refused. A withheld ad is not a spent ad.
+        val blockReason = showSkipReason(context, placement)
+        if (blockReason != null) {
+            // PURCHASED still drops it: a bought entitlement must not leave a showable ad behind.
+            // CAPPED_BY_MODULE and NOT_READY do not — the first still has an ad worth keeping,
+            // the second has nothing to drop.
+            if (blockReason == AdSkipReason.PURCHASED) cache.remove(placement)
             if (reportTelemetry) {
-                AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key)
+                AdTracking.skipped(placement, AdFormat.INTERSTITIAL, blockReason.key)
             }
-            callback.onSkipped(reason)
+            callback.onSkipped(blockReason)
             callback.onComplete()
             return
         }
+        // Committed to showing: single-use, so the buffer is dropped before show() to make one
+        // fill impossible to show twice.
+        val ad = takeFresh(placement) ?: run {
+            if (reportTelemetry) {
+                AdTracking.skipped(placement, AdFormat.INTERSTITIAL, AdSkipReason.NOT_READY.key)
+            }
+            callback.onSkipped(AdSkipReason.NOT_READY)
+            callback.onComplete()
+            return
+        }
+        cache.remove(placement)
         val committed = AtomicBoolean(false)
         val completed = AtomicBoolean(false)
         val complete = { if (completed.compareAndSet(false, true)) callback.onComplete() }
@@ -173,6 +205,9 @@ object InterstitialAdManager {
                 override fun onInterstitialShow() {
                     committed.set(true)
                     callback.onShowed()
+                    // Refill now rather than on the next tick, so the ad for the cycle after this
+                    // one is ready before the interval expires. No-op unless a partner opted in.
+                    InterstitialAutoBuffer.topUpNow()
                 }
 
                 override fun onNextAction() {
@@ -218,7 +253,10 @@ object InterstitialAdManager {
     @JvmStatic
     fun release(placement: String) {
         cache.remove(placement)
-        inFlight.remove(placement)
+        // inFlight is deliberately left alone: the walk it marks is not cancellable, and clearing
+        // it here let the very next load() start a second concurrent request for the same
+        // placement — the duplicate the guard exists to prevent. The in-flight fill still lands
+        // and repopulates the cache.
         listeners.remove(placement)
     }
 

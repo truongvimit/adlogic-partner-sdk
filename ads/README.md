@@ -184,6 +184,41 @@ InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() 
 })
 ```
 
+A show the interval rule declines **keeps its buffer** — the ad is withheld, not spent, and the next
+eligible tap uses it. Ask before showing when you want to branch without consuming:
+
+```kotlin
+if (InterstitialAdManager.canShow(context, "inter_back")) showLoadingDialog()
+// or, for the reason: InterstitialAdManager.showSkipReason(context, "inter_back")
+```
+
+### Interstitial auto-buffer
+
+Opt-in. Keeps one ad buffered per placement on the frequency clock, so a screen no longer pays for
+a load it may never spend, and a placement the user reaches by an unexpected route is still filled.
+
+```kotlin
+InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf("inter_all", "inter_back")))
+InterstitialAutoBuffer.start(this)   // after AdRemoteConfig.initializeFromAssets and ERainAd.init
+```
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `placements` | `List<String>` | `[]` | Placement keys to keep buffered. Empty = the buffer does nothing |
+| `tickMs` | `Long` | `0` | Check period. `0` follows `intervalInterstitialAd` |
+| `idleTickMs` | `Long` | `30_000` | Period used when the interval rule is off |
+| `minTickMs` | `Long` | `5_000` | Floor on the period |
+| `backoffMs` | `Long` | `30_000` | First wait after a placement fails to fill; doubles |
+| `maxBackoffMs` | `Long` | `300_000` | Ceiling on that wait |
+
+It shares one store with explicit `load` calls and never doubles them: a load a screen starts itself
+runs normally, a tick that finds it still in flight starts nothing, and the ad it produces *is* the
+buffer. Ad unit ids come from `AdRemoteConfig.tiersFor`, so adding a `_high` floor needs no code
+change. It waits for the UMP answer, skips premium users, and pauses a placement that will not fill.
+
+`InterstitialAutoBuffer.reserve(...)` marks placements it must never touch; `:onboardkitorigin`
+reserves its own splash and question interstitials, which the flow reuses on its own schedule.
+
 **Rewarded** (`com.ads.module.helper.reward`) — `loadAndShow` runs gate → load → show in one call; `onSuccess`
 fires only when the user earned the reward and the ad closed. `load` / `isReady` / `show` buffer ahead instead.
 
