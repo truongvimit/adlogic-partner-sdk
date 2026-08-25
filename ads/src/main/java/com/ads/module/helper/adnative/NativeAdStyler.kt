@@ -41,20 +41,34 @@ object NativeAdStyler {
         root.findViewById<View>(R.id.ad_media)?.let { blocks[NativeComponent.MEDIA] = it }
         root.findViewById<View>(R.id.ad_call_to_action)?.let { blocks[NativeComponent.CTA] = it }
 
-        val container = root.findViewById<View>(R.id.ad_container) as? LinearLayout
+        // A placement that names a CTA position has already had its order decided: the screen
+        // picks one layout per position rather than moving blocks about. Reordering on top of that
+        // would fight the layout it just chose, so `components` is read for visibility only.
+        val container = root.findViewById<View>(R.id.ad_container)
+            .takeIf { style.ctaPosition == null } as? LinearLayout
         if (container != null) {
+            // Only blocks the container already holds may be reordered. A layout is free to keep
+            // one somewhere else — a full-bleed media sitting behind an overlay column is still
+            // `ad_media` — and pulling that into the stack would tear the design apart. Those stay
+            // where the layout put them and answer to visibility alone.
+            val ordered = blocks.filterValues { it.parent === container }
+            val anchored = blocks.filterKeys { it !in ordered.keys }
+
             // Physical reorder: LinearLayout draws children in add order. removeView keeps
             // each block's LayoutParams, so margins and heights survive the move
-            blocks.values.forEach { block ->
-                (block.parent as? ViewGroup)?.removeView(block)
+            ordered.values.forEach { block ->
+                container.removeView(block)
                 block.visibility = View.GONE
             }
             // distinct: a malformed remote list ("cta","cta") must not crash the re-add
             order.distinct().forEach { component ->
-                blocks[component]?.let { block ->
+                ordered[component]?.let { block ->
                     container.addView(block)
                     block.visibility = View.VISIBLE
                 }
+            }
+            anchored.forEach { (component, block) ->
+                block.visibility = if (component in order) View.VISIBLE else View.GONE
             }
         } else {
             // No reorderable container — fall back to visibility toggles in place

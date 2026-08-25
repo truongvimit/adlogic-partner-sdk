@@ -109,6 +109,11 @@ data class AdsConfig(
     val enabled: Boolean = true,
     val splashBanner: BannerAdUnit? = null,
     val splashInterstitial: InterstitialAdUnit? = null,
+    /**
+     * Splash interstitial for a returning user, who is worth a different floor than a first-open
+     * one. Unset falls back to [splashInterstitial], so segmenting is opt-in.
+     */
+    val splashInterstitialOldUser: InterstitialAdUnit? = null,
     val languageNative: NativeAdUnit? = null,
     /**
      * Separate pool for the second native on the language screen: tapping a language swaps the

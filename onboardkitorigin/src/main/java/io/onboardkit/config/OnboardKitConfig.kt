@@ -133,6 +133,7 @@ class OnboardKitConfigBuilder internal constructor() {
             errors += "[language] Language list must not be empty"
         }
         validateAdIds(errors)
+        validateCustomLayouts(errors)
 
         return if (errors.isEmpty()) {
             Result.success(
@@ -148,6 +149,32 @@ class OnboardKitConfigBuilder internal constructor() {
             )
         } else {
             Result.failure(ObConfigException(errors))
+        }
+    }
+
+    /**
+     * Rejects the `layoutRes` knobs no screen reads yet.
+     *
+     * Only [SplashConfig.layoutRes] and [ContentStepDefinition.layoutRes] are wired to a screen.
+     * The rest were declared ahead of the screens that would honour them, so setting one used to
+     * do nothing at all — the app shipped its own design, saw the SDK's, and had no way to tell
+     * why. Failing here says so at `configure()`, which is the only moment the answer is cheap.
+     */
+    private fun validateCustomLayouts(errors: MutableList<String>) {
+        fun reject(name: String, value: Int) {
+            if (value == 0) return
+            errors += "[layout] $name is not honoured by any screen yet — remove it. " +
+                "Custom layouts are supported on SplashConfig.layoutRes and " +
+                "ContentStepDefinition.layoutRes only."
+        }
+        reject("LanguageConfig.layoutRes", language.layoutRes)
+        reject("LanguageConfig.itemLayoutRes", language.itemLayoutRes)
+        question?.let {
+            reject("QuestionConfig.layoutRes", it.layoutRes)
+            reject("QuestionConfig.optionLayoutRes", it.optionLayoutRes)
+        }
+        stepList.filterIsInstance<AdFullScreenStepDefinition>().forEach { step ->
+            reject("AdFullScreenStepDefinition(${step.id.value}).layoutRes", step.layoutRes)
         }
     }
 

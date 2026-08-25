@@ -9,7 +9,6 @@ import com.google.firebase.remoteconfig.remoteConfigSettings
 import com.itg.template.BuildConfig
 import com.itg.template.app.AppConstants
 import com.itg.template.app.AppConstants.DEFAULT_CTA_HEIGHT
-import com.itg.template.app.AppConstants.DEFAULT_TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON
 import com.itg.template.app.GlobalApp
 import com.itg.template.data.model.ForceUpdateConfig
 import com.squareup.moshi.Moshi
@@ -25,10 +24,7 @@ object RemoteConfigUtils {
     var completed = false
         private set
 
-    private const val ON_SHOW_NAVIGATION_BUTTON = "on_show_navigation_button"
     private const val ON_SHOW_DIALOG_CONSENT = "on_show_dialog_consent"
-    private const val DELAY_SHOW_LANGUAGE_DONE_BUTTON = "delay_button_done_language"
-    private const val TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON = "time_delay_show_language_done_button"
     private const val AD_REMOTE_CONFIG = "ad_remote_config"
     private const val FORCE_UPDATE_CONFIG = "force_update_config"
 
@@ -39,29 +35,29 @@ object RemoteConfigUtils {
      * and the default, so the feature stays dormant until someone deliberately turns it on.
      */
     private const val MAX_CLICK_ADS_PER_DAY = "max_click_ads_per_day"
+    private const val INTERSTITIAL_INTERVAL_SEC = "interstitial_interval_sec"
 
     private val mapConditionForAd: HashMap<String, Any> = hashMapOf(
         ON_SHOW_DIALOG_CONSENT to true,
-        ON_SHOW_NAVIGATION_BUTTON to false,
-        DELAY_SHOW_LANGUAGE_DONE_BUTTON to true,
         ON_ENABLE_UNINSTALL_WIDGET to false,
-        TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON to DEFAULT_TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON,
         MAX_CLICK_ADS_PER_DAY to 0L,
+        INTERSTITIAL_INTERVAL_SEC to 0L,
     )
     
-    //Default layout
-    private const val AD_LANGUAGE_LAYOUT_FILE = "ad_language_layout.json"
     private const val AD_REMOTE_CONFIG_FILE_DEBUG = "ad_config_debug.json"
     private const val AD_REMOTE_CONFIG_FILE_RELEASE = "ad_config.json"
     private const val FORCE_UPDATE_CONFIG_FILE = "force_update_config.json"
 
-    fun getOnShowNavigationButton(): Boolean = getBoolean(ON_SHOW_NAVIGATION_BUTTON)
     fun getOnShowDialogConsent(): Boolean = getBoolean(ON_SHOW_DIALOG_CONSENT)
     fun getOnEnableUninstallWidget(): Boolean = getBoolean(ON_ENABLE_UNINSTALL_WIDGET, false)
 
     /** `0` = cap off. Coerced so a negative remote value cannot mean anything other than off. */
     fun getMaxClickAdsPerDay(): Int =
         getLong(MAX_CLICK_ADS_PER_DAY, 0).coerceAtLeast(0).toInt()
+
+    /** Seconds between two interstitials. `0` = rule off. Enforced by :ads, which owns the clock. */
+    fun getInterstitialIntervalSec(): Int =
+        getLong(INTERSTITIAL_INTERVAL_SEC, 0).coerceAtLeast(0).toInt()
 
     interface Listener {
         fun loadSuccess()
@@ -81,7 +77,6 @@ object RemoteConfigUtils {
     private val remoteConfig: FirebaseRemoteConfig by lazy { Firebase.remoteConfig }
 
     private val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
-    private val adUnitConfigAdapter = moshi.adapter(AdUnitConfig::class.java)
     private val forceUpdateAdapter = moshi.adapter(ForceUpdateConfig::class.java)
 
     fun init(context: Context, mListener: Listener) {
@@ -94,23 +89,6 @@ object RemoteConfigUtils {
         if (listener === mListener) listener = null
     }
 
-    private fun getDefaultsFromAdConfig(context: Context): Map<String, Any> {
-        val defaults = mutableMapOf<String, Any>()
-        try {
-            if (!AdRemoteConfig.isInitialized()) {
-                AdRemoteConfig.initializeFromAssets(context)
-            }
-            val adConfig = AdRemoteConfig.getInstance()
-            adConfig.ads.forEach { (key, adUnitConfig) ->
-                val jsonString = adUnitConfigAdapter.toJson(adUnitConfig)
-                defaults[key] = jsonString
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return defaults
-    }
-
     private fun startFetch(context: Context) {
         val configSettings = remoteConfigSettings {
             minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) {
@@ -119,7 +97,10 @@ object RemoteConfigUtils {
                 60 * 60
             }
         }
-        val defaults = getDefaultsFromAdConfig(context).toMutableMap()
+        // Only the keys something actually reads. Seeding one default per ad unit used to run on
+        // every launch and nothing ever read them back — the ad units arrive as one
+        // `ad_remote_config` document, and the shipped asset is already the fallback.
+        val defaults = mutableMapOf<String, Any>()
         remoteConfig.apply {
             setConfigSettingsAsync(configSettings)
             mapConditionForAd.forEach { (key, value) ->
@@ -188,16 +169,6 @@ object RemoteConfigUtils {
         }
     }
 
-    private fun loadDefaultAdLanguageLayout(): String {
-        return try {
-            GlobalApp.instance.assets.open(AD_LANGUAGE_LAYOUT_FILE).bufferedReader().use { reader ->
-                reader.readText()
-            }
-        } catch (ex: Exception) {
-            "{}"
-        }
-    }
-
     private fun loadDefaultForceUpdateConfig(): String {
         return try {
             GlobalApp.instance.assets.open(FORCE_UPDATE_CONFIG_FILE).bufferedReader().use { reader ->
@@ -223,10 +194,4 @@ object RemoteConfigUtils {
         }
     }
 
-
-    fun shouldDelayLanguageDoneButton(): Boolean = getBoolean(DELAY_SHOW_LANGUAGE_DONE_BUTTON, true)
-    fun getTimeDelayButtonDoneLanguage(): Long = getLong(
-        TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON,
-        AppConstants.DEFAULT_TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON
-    )
 }

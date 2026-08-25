@@ -1,6 +1,6 @@
 package com.ads.module.application;
 
-import androidx.multidex.MultiDexApplication;
+import android.app.Application;
 
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.util.SharePreferenceUtils;
@@ -8,7 +8,9 @@ import com.ads.module.util.SharePreferenceUtils;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class AdsMultiDexApplication extends MultiDexApplication {
+// Name kept for source compatibility. minSdk 24 has native multidex, so the androidx
+// MultiDexApplication superclass was a no-op.
+public abstract class AdsMultiDexApplication extends Application {
 
     protected ERainAdConfig mERainAdConfig;
     protected List<String> listTestDevice;

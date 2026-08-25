@@ -1,6 +1,6 @@
 package com.itg.template.app
 
-import com.itg.template.ads.AdRemoteConfig
+import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.inter_welcome
 import com.itg.template.ads.native_welcome
 import com.itg.template.ads.open_resume

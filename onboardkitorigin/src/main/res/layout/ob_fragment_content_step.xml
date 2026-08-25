@@ -16,7 +16,7 @@
         android:scaleType="centerCrop"
         app:layout_constraintBottom_toTopOf="@id/ob_ad_block"
         app:layout_constraintTop_toTopOf="parent"
-        tools:src="@drawable/ob_img_onboard_sample_1" />
+        tools:src="@drawable/ob_img_onboard_placeholder" />
 
     <androidx.media3.ui.PlayerView
         android:id="@+id/ob_step_player"

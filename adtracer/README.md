@@ -1,63 +1,161 @@
-# AdTracer — SDK theo dõi vòng đời quảng cáo (debug-only)
+# AdTracer
 
-SDK độc lập (0 dependency, **không đụng vào `:ads` / `:onboardkitorigin`**) ghi lại ads đi đâu về đâu: request → loaded → shown / bỏ phí / bỏ lỡ, show rate theo từng placement.
+> Debug-only ad lifecycle tracker with an embedded dashboard.
 
-Module này là **nguồn dữ liệu**: thu sự kiện, ghi journal, và phục vụ dashboard qua HTTP + SSE trên loopback.
+AdTracer records what happens to every ad opportunity — requested, skipped, filled, shown, clicked,
+dismissed — journals it to disk and serves a live dashboard over loopback HTTP. Zero dependencies,
+and `debugImplementation` keeps every byte of it out of release builds.
 
-> **Giao diện dashboard KHÔNG được sửa ở đây.** Source của nó nằm ở project riêng
-> `CLUA/TestAds`; file `src/main/assets/adtracer/index.html` là **artifact sinh ra**
-> bởi `npm run ship` bên đó. Sửa trực tiếp file này sẽ bị ghi đè ở lần ship kế tiếp.
+## Requirements
 
-## Cách dùng
+| | |
+|---|---|
+| minSdk | 24 |
+| compileSdk | 36 |
+| JDK | 17 |
+| Permission | `INTERNET`, declared by the module — merges only into builds that include it |
 
-1. Build & cài bản **debug** lên device (release hoàn toàn không chứa tracker).
-2. Nối cổng rồi mở trình duyệt:
+## Installation
+
+```groovy
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
+def sdkVersion = '<tag>'
+dependencies {
+    // Debug builds only — never `implementation`
+    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
+}
+```
+
+## Quick start
+
+`io.adtracer` can only be imported from `src/debug`, so put the wiring behind one function whose
+release twin does nothing.
+
+1. Bridge Trackkit into AdTracer in `app/src/debug/java/.../tracking/AdTracerSink.kt` — every ad
+   event `:ads` and `:onboardkitorigin` emit already goes through `Tracker`, so no call site needs
+   wrapping. Same file as
+   [`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt).
+
+```kotlin
+import android.content.Context
+import io.adtracer.AdTracer
+import io.trackkit.AdFormat
+import io.trackkit.TrackSink
+import io.trackkit.TrackkitEvents
+import io.adtracer.AdFormat as TracerFormat
+
+class AdTracerSink : TrackSink {
+    override val id: String = "adtracer"
+    override fun onInstall(context: Context) = AdTracer.start(context)
+
+    override fun onEvent(name: String, params: Map<String, Any?>) {
+        val placement = params[TrackkitEvents.PARAM_PLACEMENT] as? String
+        if (placement == null) {
+            // Funnel / IAP / consent events: on the timeline, out of every ad aggregate
+            AdTracer.event(name, "_tracer", TracerFormat.OTHER)
+            return
+        }
+        val format = formatOf(params[TrackkitEvents.PARAM_AD_FORMAT] as? String)
+        val adUnitId = params[TrackkitEvents.PARAM_AD_UNIT_ID] as? String
+        val code = (params[TrackkitEvents.PARAM_ERROR_CODE] as? Number)?.toInt()
+        val reason = params[TrackkitEvents.PARAM_REASON] as? String
+        when (name) {
+            TrackkitEvents.AD_REQUEST -> AdTracer.loadRequested(placement, format, adUnitId)
+            TrackkitEvents.AD_LOADED -> AdTracer.loaded(placement, format)
+            TrackkitEvents.AD_LOAD_FAILED -> AdTracer.loadFailed(placement, format, code)
+            TrackkitEvents.AD_SHOW -> AdTracer.shown(placement, format)
+            TrackkitEvents.AD_SHOW_FAILED -> AdTracer.showFailed(placement, format, code)
+            TrackkitEvents.AD_IMPRESSION -> AdTracer.impression(placement, format)
+            TrackkitEvents.AD_CLICK -> AdTracer.clicked(placement, format)
+            TrackkitEvents.AD_CLOSED -> AdTracer.dismissed(placement, format)
+            TrackkitEvents.AD_REWARD_EARNED -> AdTracer.event("reward_earned", placement, format)
+            TrackkitEvents.AD_SKIPPED ->
+                AdTracer.loadSkipped(placement, format, reason ?: "unknown")
+
+            else -> AdTracer.event(name, placement, format, adUnitId, reason, code)
+        }
+    }
+
+    private fun formatOf(key: String?): TracerFormat = when (AdFormat.fromKey(key)) {
+        AdFormat.BANNER, AdFormat.COLLAPSIBLE_BANNER -> TracerFormat.BANNER
+        AdFormat.INTERSTITIAL -> TracerFormat.INTERSTITIAL
+        AdFormat.REWARDED, AdFormat.REWARDED_INTERSTITIAL -> TracerFormat.REWARDED
+        AdFormat.NATIVE, AdFormat.NATIVE_FULL_SCREEN -> TracerFormat.NATIVE
+        AdFormat.APP_OPEN -> TracerFormat.APP_OPEN
+        AdFormat.UNKNOWN -> TracerFormat.OTHER
+    }
+}
+```
+
+Keep every branch. An ad event that lands in `else` is journalled under its raw Trackkit name, and
+the dashboard counts only the canonical AdTracer types.
+
+2. Register it from a variant seam — `app/src/debug/java/.../tracking/DebugSinks.kt`:
+
+```kotlin
+fun installDebugSinks() { Tracker.addSink(AdTracerSink()) }
+```
+
+`app/src/release/java/.../tracking/DebugSinks.kt`, same package and signature:
+
+```kotlin
+fun installDebugSinks() = Unit
+```
+
+3. Call `installDebugSinks()` in `Application.onCreate()`, after `Tracker.install(...)`.
+
+Not using Trackkit? Call `AdTracer.start(context)` once, then these from your own ad callbacks —
+each is a no-op until `start` runs, and none of them throw.
+
+| Function | Meaning |
+|---|---|
+| `loadRequested(placement, format, adUnitId?)` / `loadSkipped(…, reason)` | Asked for an ad / decided not to |
+| `loaded(placement, format, approx?)` / `loadFailed(…, code?, message?)` | Fill / no fill |
+| `showRequested` / `showStarted` / `shown(placement, format)` | Show attempt, start, display |
+| `showBlocked(…, reason)` / `showFailed(…, code?, message?, synthetic?)` | Show suppressed / failed |
+| `impression` / `clicked` / `dismissed(placement, format)` | SDK impression, click, close |
+| `rendered(placement)` / `reRendered(placement)` / `discarded(…, reason)` | Native bound, rebound, fill dropped |
+| `event(type, placement, format, …)` | Escape hatch for custom types |
+
+`format` is `io.adtracer.AdFormat`: `NATIVE`, `INTERSTITIAL`, `BANNER`, `REWARDED`, `APP_OPEN`,
+`OTHER`. `approx = true` marks an inferred value (`≈`), `synthetic = true` an SDK-fabricated event.
+
+## Viewing the dashboard
+
+Install the **debug** build, forward the port, open it in a browser:
 
 ```bash
 adb forward tcp:8686 tcp:8686
 ```
 
-3. Mở **http://localhost:8686**.
+Open **http://localhost:8686**. If 8686 is taken the server tries 8687–8695 and logs the bound port
+(`adb logcat -s AdTracer`); `AdTracer.dashboardPort` holds it, or `-1` when none was free. The server
+binds `127.0.0.1` only, so it is never reachable from the LAN.
 
-Cổng 8686 bận thì SDK tự thử 8687–8695 — xem logcat để biết cổng thật:
+## What it records
 
-```bash
-adb logcat -s AdTracer
-```
+One event per observation: `seq`, `sessionId`, wall-clock and `elapsedRealtime` timestamps, type,
+placement, format, plus optional ad unit id, reason, error code and message.
 
-Muốn sửa/nâng cấp giao diện thì làm ở `CLUA/TestAds` (có dev server, mock data, test, và `npm run ship` để đẩy bản build vào đây).
+- `(sessionId, seq)` is gapless per session, so a browser reconnect never duplicates or drops.
+- Events reach `filesDir/adtracer/s-<sessionId>.ndjson` **before** the browser, so killing the app
+  keeps the history; the 10 newest sessions are kept and browsable.
+- Emitting is a bounded, non-blocking hand-off; under overload it drops events and reports how many
+  as a `tracer_overflow` event rather than growing the queue.
+- Placements starting with `preview_` stay hidden until the `Ads test (preview_*)` toggle is on.
+- `/api/sessions` lists the journals as JSON, `/api/session/<file>` returns one as raw NDJSON, and
+  `GET /events` streams the same records live as SSE frames.
 
-## API mà module này phục vụ
+## Troubleshooting
 
-| Endpoint | Trả về |
-|---|---|
-| `GET /` | dashboard (một file HTML tự chứa, lấy từ assets) |
-| `GET /events?after=N` | SSE, frame `id: <sessionId>:<seq>` + `data: <json>`, heartbeat `: ping` mỗi 15s |
-| `GET /api/sessions` | `[{file, sizeBytes, modifiedMs, current}]`, mới nhất trước |
-| `GET /api/session/<file>` | NDJSON thô của một session |
-
-`Last-Event-ID` được ưu tiên hơn `?after=`, và chỉ có tác dụng khi phần sessionId khớp phiên hiện tại — nhờ vậy trình duyệt reconnect sau khi app restart không bị bỏ sót sự kiện đầu phiên mới.
-
-## Phạm vi đo (quan trọng — đọc để hiểu số liệu)
-
-Tracker bám ở **tầng app** (callback của `AdsManager`, decorator quanh `OnboardingAdProvider`, callback công khai của `AppOpenManager`), vì vậy:
-
-| Nhóm | Đo được | Ghi chú |
+| Symptom | Cause | Fix |
 |---|---|---|
-| Native app-side (permission, home, survey, confirm_uninstall, welcome, preview_*) | request, loaded, fail, skip + lý do, **shown = lúc render thật**, re-render, click | chính xác theo từng instance ad |
-| Interstitial (inter_onboarding, inter_welcome) | request, loaded (đã lọc "phantom null" khi purchased/click-cap), fail, show attempt, **shown = đóng ad xong**, blocked + lý do, show-fail (tách synthetic), click, auto-reload fill | |
-| OnboardKit (splash_inter, language1/2, step_*, fullscreen_*, ob5, question_*, splash_banner) | request, loaded/fail (qua polling — badge `≈`, đúng kết cục nhưng latency xấp xỉ), **shown native = bindNative thành công** (né bug double-fire OB3), shown inter = onFinished từ onAdClosed, discarded khi releaseAll/releaseNative | không sửa module onboardkit |
-| Banner (banner_home) | request, loaded, fail, **impression** (dùng làm "hiển thị"), refresh của GMA, click | banner thường: impression thật; collapsible: impression suy từ loaded (badge `≈`) vì SDK không forward |
-| Rewarded (reward_example) | request, loaded, fail, shown, earned, show-fail, click | |
-| App-open resume (open_resume) | **chỉ đếm lượt hiển thị** + impression/dismiss/click/show-fail | SDK không lộ sự kiện load ra ngoài → không có mẫu số |
-| Welcome-resume rule | mỗi lần app foreground: lý do chặn hoặc `welcome_launched` | |
+| `Unresolved reference: io.adtracer` | Imported from `src/main` | Import only from `src/debug`, behind a variant seam |
+| Release build fails to compile | The two `DebugSinks.kt` twins drifted | Same package, same signature in both |
+| Dashboard does not open | `adb forward` not run, or another port | Run the forward; check `adb logcat -s AdTracer` |
+| Dashboard opens but stays empty | Sink never registered | Confirm `installDebugSinks()` runs after `Tracker.install` |
+| Every placement reads `unknown` | Ad unit ids not mapped | `io.trackkit.PlacementRegistry.register(adUnitId, placement)` — see [`../trackkit/README.md`](../trackkit/README.md) |
 
-Không đo được ở tầng này (cần sửa `:ads` — xem `ADTRACER_PLAN.md` ở gốc project nếu muốn nâng cấp): impression GMA của native/interstitial, paid event (doanh thu), click của app-open splash flows.
+## License
 
-## Đảm bảo số liệu
-
-- Sự kiện đánh số thứ tự liền mạch theo session `(sessionId, seq)` — client dedupe nên reconnect/replay không bao giờ đếm trùng.
-- Journal ghi đĩa trước khi đẩy và **là nguồn replay** — kill app không mất lịch sử (giữ 10 session gần nhất).
-- Fill "ma" bị loại: khi user đã mua hoặc dính cap click, SDK trả wrapper rỗng — tracker kiểm tra `isReady` nên không tính là loaded.
-- Load skip / show blocked luôn kèm lý do máy đọc được; "không có sự kiện" luôn nghĩa là "không có gì xảy ra", không phải "xảy ra âm thầm".
-- Bản release: module không được đóng gói (`debugImplementation`), mọi call site còn lại là hàm no-op rỗng bị R8 loại bỏ.
+MIT — see [LICENSE](../LICENSE).

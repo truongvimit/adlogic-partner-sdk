@@ -5,6 +5,9 @@ import android.app.Activity
 import android.content.Context
 import androidx.annotation.LayoutRes
 import androidx.lifecycle.LifecycleOwner
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.AdUnitConfig
+import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
@@ -13,7 +16,6 @@ import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
-import com.ads.module.tracking.AdTracking
 import timber.log.Timber
 
 /**
@@ -23,29 +25,6 @@ import timber.log.Timber
  */
 @SuppressLint("StaticFieldLeak")
 object AdsManager {
-
-    /**
-     * Binds every configured ad unit to its placement, once, before the ads SDK starts.
-     *
-     * AdMob's paid-event callback only knows the ad unit, so :ads reads the placement back from
-     * [io.trackkit.PlacementRegistry] — same shape as ironSource's register-once
-     * addImpressionDataListener, where per-impression context the SDK cannot know is supplied
-     * out-of-band instead of by wrapping call sites.
-     *
-     * The config key *is* the placement name, so the mapping cannot drift from AdRemoteConfig.
-     * OnboardKit re-registers its own units under its placement keys when it loads them.
-     */
-    fun registerAdPlacements() {
-        val config = runCatching { AdRemoteConfig.getInstance() }.getOrNull() ?: return
-        config.ads.forEach { (placement, unit) ->
-            unit.waterfallIds.forEach { adUnitId ->
-                AdTracking.registerPlacement(
-                    adUnitId,
-                    placement
-                )
-            }
-        }
-    }
 
     /**
      * The one native integration for every placement: waterfall + UA gate from

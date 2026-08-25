@@ -9,6 +9,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.onboardkit.OnboardingSdk
+import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.showInterstitial
@@ -88,8 +89,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
         }
     }
 
-    /** The remote template bucket this screen's native was built with. */
-    private fun adVariant(): String = sdk.flags().templateLanguage
+    /** The template this screen's native was built with — reported so a funnel can slice by it. */
+    private fun adVariant(): String =
+        NativeTemplates.templateForPlacement(AdPlacement.Language1).name
 
     /**
      * Row that gets the animated tap hint, or null for no hint at all.
@@ -211,7 +213,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     private fun leaveLanguage() {
         val config = sdk.requireConfig()
-        val enabled = FlowNavigator.enabledSteps(config, sdk.flags(), sdk.guard().isPremium(this))
+        val enabled = FlowNavigator.enabledSteps(
+            config,
+            sdk.flags(),
+            sdk.guard().isPremium(this),
+            OnboardingSdk::canFillAdOnlyStep,
+        )
         ObLog.d(ObLog.Section.NAV, "ob_language enabledSteps=${enabled.map { it.value }}")
         if (enabled.isNotEmpty()) {
             reuseInterstitialThenLeave { ObOnboardingHostActivity.start(this, resumeIndex = 0) }

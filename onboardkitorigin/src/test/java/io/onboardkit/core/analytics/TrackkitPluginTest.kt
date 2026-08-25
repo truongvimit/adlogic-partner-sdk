@@ -183,13 +183,13 @@ class TrackkitPluginTest {
 
     @Test
     fun `step view carries the step id, index and winning variant`() {
-        TrackkitPlugin.execute(AnalyticsEvent.StepViewed(StepId.OB1, 0, "cta_top"))
+        TrackkitPlugin.execute(AnalyticsEvent.StepViewed(StepId.OB1, 0, "cta_bottom"))
 
         assertEquals(listOf("fo_step_view"), sink.names())
         val params = sink.paramsOf("fo_step_view")
         assertEquals("ob1", params["step"])
         assertEquals(0, params["index"])
-        assertEquals("cta_top", params["variant"])
+        assertEquals("cta_bottom", params["variant"])
     }
 
     @Test
@@ -251,11 +251,11 @@ class TrackkitPluginTest {
             AnalyticsEvent.FlowStarted(),
             AnalyticsEvent.SplashViewed(),
             AnalyticsEvent.SplashCompleted(1),
-            AnalyticsEvent.LanguageViewed(1, "cta_top"),
+            AnalyticsEvent.LanguageViewed(1, "cta_bottom"),
             AnalyticsEvent.LanguageSelected(1, "en"),
             AnalyticsEvent.LanguageCompleted(1, "en"),
             AnalyticsEvent.LanguageFlowCompleted("en"),
-            AnalyticsEvent.StepViewed(StepId.OB1, 0, "cta_top"),
+            AnalyticsEvent.StepViewed(StepId.OB1, 0, "cta_bottom"),
             AnalyticsEvent.StepCompleted(StepId.OB1, 0, 10),
             AnalyticsEvent.QuestionViewed("old_user"),
             AnalyticsEvent.QuestionOptionSelected("opt_a", false),

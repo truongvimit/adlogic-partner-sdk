@@ -18,7 +18,7 @@ Read this before you add an SDK, add a module, or "just import Adjust here for a
        ┌───────────┘        │           │         │         │             └──────────┐
        ▼                    ▼           ▼         ▼         ▼                        ▼
 ┌───────────────────┐  ┌────────┐ ┌─────────────┐ ┌─────────┐ ┌────────────────────┐ ┌───────────┐
-│ :onboardkitorigin │  │ :ads   │ │ :billingkit │ │ :paykit │ │ :trackkit-firebase │ │ :adtracer │
+│ :onboardkitorigin │  │ :ads   │ │ :billingkit │ │ :paykit │ │   :suite-firebase  │ │ :adtracer │
 └─────────┬─────────┘  └───┬────┘ └──────┬──────┘ └────┬────┘ │      ADAPTERS      │ └───────────┘
           │ api        api │         api │         api │      └─────────┬──────────┘
           │                │             │             │                │ api
@@ -38,13 +38,13 @@ Read this before you add an SDK, add a module, or "just import Adjust here for a
           :billingkit       ──compileOnly─▶ :ads         (entitlement hand-off, try/catch'd)
 
       FORBIDDEN, and the whole point of the layout:
-          :onboardkitorigin ──✗──▶ any :trackkit-<vendor>
-          :paykit           ──✗──▶ any :trackkit-<vendor>
+          :onboardkitorigin ──✗──▶ any vendor adapter (today :suite-firebase)
+          :paykit           ──✗──▶ any vendor adapter (today :suite-firebase)
           :ads              ──✗──▶ :billingkit    (an IAA-only APK ships zero billing classes)
           :billingkit       ──✗──▶ :ads at runtime (an IAP-only APK ships zero GMA classes)
 
       The same shape, one level out: :paykit reads its paywall document through the
-      vendor-free PaywallConfigSource, and :paykit-firebase is its only adapter (§9).
+      vendor-free PaywallConfigSource, and :suite-firebase is its only adapter (§9).
 ```
 
 Every edge, with its Gradle configuration:
@@ -60,10 +60,11 @@ Every edge, with its Gradle configuration:
 | `:paykit`            | `:billingkit`                                           | `implementation`                  | The billing engine, reached through `io.paykit.billing.BillingBridge` — the one file that imports `com.ads.module`. No `com.ads` type reaches a consumer.                      |
 | `:paykit`            | `:ads`                                                  | `compileOnly`                     | One call — `AppOpenManager.disableAppResumeWithActivity` — so a paywall-without-ads host does not inherit the GMA stack. Guarded by try/catch.                                 |
 | `:paykit`            | `:onboardkitorigin`                                     | `compileOnly`                     | `OnboardKitPaywallGate` implements OnboardKit's `PaywallGate` SPI, but a host that ships a paywall without onboarding must not inherit four activities it never opens.         |
-| `:paykit-firebase`   | `:paykit`                                               | `api`                             | A config source is useless without `PaywallConfigSource`; the app must see both.                                                                                              |
-| `:paykit-firebase`   | `firebase-config`                                       | `api`                             | Same deliberate exception as the Firebase sink: the BOM is exported so the host's other Firebase artifacts stay on one version train.                                          |
-| `:trackkit-firebase` | `:trackkit`                                             | `api`                             | A sink is useless without `TrackSink`; the app must see both.                                                                                                                  |
-| `:trackkit-firebase` | `firebase-analytics`                                    | `api`                             | Deliberate exception: the app almost always uses Firebase directly too, so the BOM is exported to keep one version train.                                                      |
+| `:suite-firebase`   | `:paykit`                                               | `compileOnly`                     | `FirebaseConfigSource` implements `PaywallConfigSource`, but a partner who wants only the analytics sink or the ad-config source must not inherit the paywall UI. The class is unreachable exactly when it is unloadable, so no runtime guard is needed — same idiom as `OnboardKitPaywallGate`. |
+| `:suite-firebase`   | `firebase-config`                                       | `api`                             | Same deliberate exception as the Firebase sink: the BOM is exported so the host's other Firebase artifacts stay on one version train.                                          |
+| `:suite-firebase` | `:trackkit`                                             | `api`                             | A sink is useless without `TrackSink`; the app must see both.                                                                                                                  |
+| `:suite-firebase`   | `:ads`                                                  | `compileOnly`                     | `FirebaseAdConfigSource` implements `AdConfigSource`. Same reasoning as `:paykit` above.                                                                                       |
+| `:suite-firebase` | `firebase-analytics`                                    | `api`                             | Deliberate exception: the app almost always uses Firebase directly too, so the BOM is exported to keep one version train.                                                      |
 | `:app`               | `:ads`, `:billingkit`, `:onboardkitorigin`, `:paykit*`, `:trackkit*` | `implementation`      | Nothing consumes `:app`.                                                                                                                                                       |
 | `:app`               | `:adtracer`                                             | `debugImplementation`             | The dashboard must not exist in a release APK at all — not stripped, not present.                                                                                              |
 | `:trackkit`          | —                                                       | `compileOnly androidx.annotation` | The port has no runtime dependency on anything. That is what makes it a port.                                                                                                  |
@@ -105,10 +106,10 @@ which is a figure nobody can reconcile a quarter later.
 
 **Forbidden:** knowing where the data goes. A reporter calls `Tracker` and stops. It owns zero
 vendor reporting code — no `Adjust.trackEvent`, no `logPurchase`, no `FirebaseAnalytics.logEvent`.
-It must never depend on a `:trackkit-<vendor>` module (§5). It must not decide whether an event is
+It must never depend on a vendor adapter module — today that is `:suite-firebase` (§5). It must not decide whether an event is
 "worth" sending; that is the assembler's call, expressed by which sinks it registers.
 
-### ADAPTER — `:trackkit-firebase`
+### ADAPTER — `:suite-firebase`
 
 An adapter implements `TrackSink` and translates the vendor-free vocabulary into one vendor's API.
 Because one class owns a whole vendor surface, vendor-specific rules live in one readable place —
@@ -205,7 +206,7 @@ modules and carry no reverse dependency.
 
 > **A REPORTER may depend on the PORT. A REPORTER may never depend on an ADAPTER.**
 
-`:trackkit-firebase` — not as `api`, not as `implementation`, not "temporarily".
+`:suite-firebase` — not as `api`, not as `implementation`, not "temporarily".
 
 What breaks if you violate it: Gradle dependencies are transitive, so
 **every partner app that consumes `:ads`**, including the ones with no Adjust account. They get a
@@ -292,12 +293,13 @@ attribution.
 
 The whole layout exists so that this is a three-step change touching two files.
 
-**1. Create `:trackkit-<vendor>`.** One module, one class implementing `TrackSink`. Depend on the
+**1. Add the sink.** One class implementing `TrackSink`, in `:suite-firebase` if the vendor is
+already Firebase-adjacent, otherwise in a new `:suite-<vendor>` module. Depend on the
 port with `api`, on the vendor SDK with `implementation` — the vendor's types must not appear in
 your public signature.
 
 ```groovy
-// trackkit-<vendor>/build.gradle
+// suite-<vendor>/build.gradle
 dependencies {
     api project(':trackkit')
     implementation 'com.vendor:vendor-sdk:1.2.3'
@@ -347,7 +349,7 @@ to a `TrackSink`, the paywall document fans **in** from a `PaywallConfigSource`.
       PaywallConfigSource · StaticConfigSource · RawResourceConfigSource
               ▲
               │ api
-      :paykit-firebase              ADAPTER
+      :suite-firebase              ADAPTER
       FirebaseConfigSource — the only vendor this repo ships
 ```
 
@@ -355,8 +357,9 @@ Same rules, and for the same reason:
 
 - `:paykit` names no config vendor. `grep -rn "com.google.firebase" paykit/src` stays empty, so a
   partner who feeds the paywall from its own back end compiles no Firebase at all.
-- `:paykit-firebase` depends on `:paykit`, never the reverse. A source module is depended on by the
-  assembler and by nobody else — `PayKit.configSource(FirebaseConfigSource())` is one line in
+- `:suite-firebase` depends on `:paykit` — `compileOnly`, so it is a compile-time contract and not
+  something an ads-only partner inherits — and never the reverse. A source module is depended on by
+  the assembler and by nobody else: `PayKit.configSource(FirebaseConfigSource())` is one line in
   `Application.onCreate`, and it is the only line that names the vendor.
 - Adding a config vendor is a new module and that one line. Nothing in `:paykit` changes, because
   `fetch(timeoutMs): String?` is the whole contract.

@@ -4,50 +4,21 @@ import androidx.lifecycle.lifecycleScope
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.billing.Billing
-import com.itg.template.ads.AdRemoteConfig
+import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
 import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
-import com.itg.template.data.pref.AppSharedPreferencesApp
-import com.itg.template.ui.bases.ConsentHandler
-import com.itg.template.ui.bases.ext.isNetwork
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.paykit.PayKit
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
 /**
- * Launcher splash. All flow logic (timers, barrier, interstitial, navigation to
- * language/onboarding/main) lives in OnboardKit — this class only plugs in the app's
- * consent dialog and remote-config bootstrap.
+ * Launcher splash. The whole flow — consent, timers, barrier, interstitial, navigation — lives in
+ * OnboardKit; the ad config refreshes itself through the installed [com.ads.module.config.AdConfigSource].
+ * What remains here is this app's own product wiring.
  */
 class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
-
-    private val appSharedPref by lazy { AppSharedPreferencesApp(this) }
-    private var consentHandler: ConsentHandler? = null
-
-    /**
-     * Returns whether ads may be requested. Anything other than a completed consent flow answers
-     * `false`, so no ad request goes out while the form is still on screen.
-     */
-    override suspend fun onConsentRequired(): Boolean {
-        // Already answered in a previous session, or a region where UMP does not apply
-        if (appSharedPref.isConfirmConsent || appSharedPref.isUserGlobal) return true
-        if (!isNetwork()) return false
-        return suspendCancellableCoroutine { continuation ->
-            consentHandler = ConsentHandler(
-                activity = this,
-                appSharedPref = appSharedPref,
-                trackingSuffix = 1,
-                onConsentFlowCompleted = { canPersonalized ->
-                    if (continuation.isActive) continuation.resume(canPersonalized)
-                },
-            )
-            consentHandler?.requestConsent()
-        }
-    }
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on
@@ -61,8 +32,9 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
     }
 
     override fun onRemoteFetched() {
+        // The ad units already refreshed inside the SDK's remote step. This fetch is for the app's
+        // own flags — force update, the uninstall widget — which the SDK knows nothing about.
         RemoteConfigUtils.init(this, this)
-        AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())
         // Ad unit ids may have changed remotely — rebuild the OnboardKit config with fresh ids
         OnboardKitSetup.configure()
 
@@ -79,11 +51,12 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
         // clicks per 24h. Applied on every fetch so a mid-session activation takes effect without
         // a relaunch; until the fetch lands the SDK default (off) stands.
         ERainAd.getInstance().setMaxClickAdsPerDay(RemoteConfigUtils.getMaxClickAdsPerDay())
+        // Same story for the interval: one owner (:ads, which holds the impression timestamp), one
+        // remote key, applied to every placement rather than only the onboarding ones.
+        ERainAd.getInstance().setIntervalInterstitialAd(RemoteConfigUtils.getInterstitialIntervalSec())
     }
 
     override fun onDestroy() {
-        consentHandler?.clear()
-        consentHandler = null
         // The fetch may still be in flight; without this the process-wide RemoteConfigUtils holds
         // this Activity until it returns.
         RemoteConfigUtils.detach(this)

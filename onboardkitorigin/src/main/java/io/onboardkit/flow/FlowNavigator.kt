@@ -30,10 +30,17 @@ sealed interface ExitDecision {
  */
 object FlowNavigator {
 
+    /**
+     * @param isPremium and [canShowAdStep] must be the same pair the pager host will use. The
+     *   resume index is an index into [enabledSteps]; computing it from a longer list than the one
+     *   the pager builds lands the user on the wrong page.
+     */
     fun decideStart(
         state: OnboardingState,
         flags: RemoteFlags,
         config: OnboardKitConfig,
+        isPremium: Boolean = false,
+        canShowAdStep: (StepId) -> Boolean = { true },
     ): StartDecision {
         if (state.isFlowCompleted) {
             return if (flags.enableQuestionOldUser) {
@@ -52,9 +59,9 @@ object FlowNavigator {
             return StartDecision.Start(FlowDestination.LANGUAGE, 0)
         }
 
-        val enabled = enabledSteps(config, flags)
+        val enabled = enabledSteps(config, flags, isPremium, canShowAdStep)
         if (enabled.isNotEmpty()) {
-            val resume = resumeIndex(state, enabled)
+            val resume = resumeIndex(state, enabled, config.steps.map { it.id })
             if (resume < enabled.size) {
                 return StartDecision.Start(FlowDestination.ONBOARDING, resume)
             }
@@ -73,24 +80,55 @@ object FlowNavigator {
      * @param isPremium drops the pages whose only content is an ad, honouring
      *   [io.onboardkit.config.AdsConfig.skipAdOnlyStepsWhenPremium]. A paying user staring at an
      *   empty ad slot is the worst version of both.
+     * @param canShowAdStep answers whether an ad-only page has an ad to show at all. `false` drops
+     *   it: with no ad the page is an empty screen, and an empty screen in the middle of the flow
+     *   is worse than one page fewer. Ask [io.onboardkit.ads.AdsGuard.canFillAdOnlyStep] rather
+     *   than re-deriving the rule, and pass the same predicate to [decideStart] — the resume index
+     *   is an index into this list.
      */
     fun enabledSteps(
         config: OnboardKitConfig,
         flags: RemoteFlags,
         isPremium: Boolean = false,
+        canShowAdStep: (StepId) -> Boolean = { true },
     ): List<StepId> {
         val dropAdOnly = isPremium && config.ads.skipAdOnlyStepsWhenPremium
         return config.steps
             .filter { flags.isStepEnabled(it.id) }
-            .filterNot { dropAdOnly && it.type == StepType.AD_FULL_SCREEN }
+            .filterNot {
+                it.type == StepType.AD_FULL_SCREEN && (dropAdOnly || !canShowAdStep(it.id))
+            }
             .map { it.id }
     }
 
-    /** Checkpoint: resume right after the last completed step. */
-    fun resumeIndex(state: OnboardingState, enabledSteps: List<StepId>): Int {
+    /**
+     * Checkpoint: resume right after the last completed step.
+     *
+     * @param configuredOrder every step the config declares, enabled or not. It is what rescues a
+     *   checkpoint whose step has since left the flow — remote turned it off, or its ad-only page
+     *   had no ad to show. Looking only at [enabledSteps] found nothing and resumed at 0, replaying
+     *   the whole onboarding for a user who had almost finished it.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun resumeIndex(
+        state: OnboardingState,
+        enabledSteps: List<StepId>,
+        configuredOrder: List<StepId> = enabledSteps,
+    ): Int {
         val last = state.lastCompletedStep ?: return 0
         val index = enabledSteps.indexOfFirst { it.value == last }
-        return if (index < 0) 0 else index + 1
+        if (index >= 0) return index + 1
+
+        val positionInOrder = configuredOrder.indexOfFirst { it.value == last }
+        // A checkpoint naming a step this build no longer declares at all: nothing to anchor to.
+        if (positionInOrder < 0) return 0
+        val nextStillEnabled = configuredOrder
+            .drop(positionInOrder + 1)
+            .firstOrNull { it in enabledSteps }
+        // Nothing enabled follows it — the user is past the pager, not back at its start.
+        return if (nextStillEnabled == null) enabledSteps.size
+        else enabledSteps.indexOf(nextStillEnabled)
     }
 
     /**

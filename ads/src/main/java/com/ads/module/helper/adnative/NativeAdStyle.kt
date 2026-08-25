@@ -20,6 +20,14 @@ data class NativeAdStyle(
      */
     val components: List<NativeComponent>? = null,
 
+    /**
+     * Where the CTA sits, when the screen ships one layout per position instead of reordering.
+     *
+     * Non-null pins the order to whatever the chosen layout declares, so [components] is read for
+     * visibility only. Null hands the order to [components].
+     */
+    val ctaPosition: String? = null,
+
     /** Height for `@id/ad_call_to_action` in dp. Null keeps the XML height. */
     val ctaHeightDp: Int? = null,
 

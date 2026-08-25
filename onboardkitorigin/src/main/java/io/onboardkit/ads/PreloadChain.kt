@@ -24,6 +24,7 @@ class PreloadChain internal constructor(
     private val guard: AdsGuard,
     private val config: () -> OnboardKitConfig?,
     private val flags: () -> RemoteFlags,
+    private val canShowAdStep: (StepId) -> Boolean = { true },
 ) {
 
     /**
@@ -133,9 +134,12 @@ class PreloadChain internal constructor(
     /**
      * Premium is not applied here: the guard already declines every preload for those users, and
      * a second copy of the step-filter rule is a second place for it to drift.
+     *
+     * [canShowAdStep] is applied though — the resume index arrives as an index into the list the
+     * pager will build, so preloading against an unfiltered one warms the ad of the wrong page.
      */
     private fun enabledSteps(): List<StepId> {
         val cfg = config() ?: return emptyList()
-        return FlowNavigator.enabledSteps(cfg, flags())
+        return FlowNavigator.enabledSteps(cfg, flags(), canShowAdStep = canShowAdStep)
     }
 }

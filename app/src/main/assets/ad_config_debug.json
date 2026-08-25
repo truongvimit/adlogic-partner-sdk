@@ -20,7 +20,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -34,7 +34,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -48,7 +48,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -62,7 +62,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -76,7 +76,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -90,7 +90,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -104,7 +104,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -118,7 +118,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -132,7 +132,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -146,7 +146,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -174,7 +174,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -188,7 +188,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -202,7 +202,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -227,7 +227,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -241,7 +241,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -255,7 +255,7 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -462,7 +462,7 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
+    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",

@@ -1,0 +1,75 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.suite.firebase'
+    compileSdk compile_sdk_version
+
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// The suite's one Firebase adapter.
+//
+// Why one module and not one per consuming kit: the two config sources genuinely share code — both
+// call RemoteConfigClient.fetchOnce and then read through the same VALUE_SOURCE_REMOTE rule — and
+// they change together, for Remote Config reasons. Merging removed one duplicated fetch (paykit's
+// own awaitFetch) and prevented a second the ad source would otherwise have written.
+//
+// FirebaseSink is the honest exception: it shares no code with them and depends on a different
+// Firebase artifact. It lives here because every partner of this suite ships analytics anyway, so
+// splitting it would cost a declared line and buy nobody a smaller APK. If a partner ever wants
+// GA4 without Remote Config, this is the seam to cut first.
+dependencies {
+    // api: FirebaseSink implements TrackSink, which every kit already depends on.
+    api project(':trackkit')
+
+    // compileOnly: a partner who only wants the analytics sink must not inherit the paywall UI or
+    // the ad stack. Each source class is only loaded by a host that declared the kit it serves —
+    // the same pattern :billingkit uses for :ads.
+    compileOnly project(':paykit')
+    compileOnly project(':ads')
+
+    // The BOM is exported so a consumer gets its other Firebase artifacts aligned to one train.
+    api platform("com.google.firebase:firebase-bom:$firebase_bom_version")
+    api 'com.google.firebase:firebase-analytics'
+    api 'com.google.firebase:firebase-config'
+
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.13'
+    testImplementation 'androidx.test:core:1.6.1'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from(components["release"])
+                artifactId = "suite-firebase"
+            }
+        }
+    }
+}

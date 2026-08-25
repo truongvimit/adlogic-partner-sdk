@@ -4,6 +4,10 @@
     <dimen name="height_native_small_ads">130dip</dimen>
     <dimen name="height_full_ads">300dip</dimen>
 
+    <!-- Native ad container: outer frame on all four sides, and the gap between visible blocks. -->
+    <dimen name="ad_block_padding">8dp</dimen>
+    <dimen name="ad_block_gap">12dp</dimen>
+
     <item name="gnt_medium_template_bottom_weight" format="float" type="dimen">0.4</item>
     <item name="gnt_text_row_weight" format="float" type="dimen">0.25</item>
     <item name="gnt_media_view_weight" format="float" type="dimen">1.0</item>

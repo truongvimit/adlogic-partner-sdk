@@ -58,18 +58,10 @@ object ObRemoteKeys {
     val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
     val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
 
-    // Splash interstitial id override, split by user segment. Blank falls back to the compiled
-    // id, so a partner who never sets these keeps exactly the build-time waterfall.
-    val ADS_SPLASH_INTER_ID = RemoteKey.StringKey("ob_ads_splash_inter_id", "")
-    val ADS_SPLASH_INTER_ID_OLD_USER = RemoteKey.StringKey("ob_ads_splash_inter_id_old_user", "")
-
-    // Frequency. Both default to off: the ads module applies its own caps, and a second cap
-    // silently subtracting impressions is the kind of thing nobody finds for a quarter.
-    /** Minimum gap between two interstitial impressions. `0` disables the rule. */
-    val INTERSTITIAL_INTERVAL_SEC = RemoteKey.LongKey("ob_ads_interstitial_interval_sec", 0)
-
-    /** Clicks per ad unit per 24 h before the placement is skipped. `0` disables the rule. */
-    val CLICK_CAP_PER_DAY = RemoteKey.LongKey("ob_ads_click_cap_per_day", 0)
+    // Splash interstitial ids, including the returning-user segment, come from the ads config
+    // (`inter_splash` / `inter_splash_old_user`) so both keep their full waterfall.
+    // Interstitial interval and click cap belong to the ads module, which owns the counters they
+    // read; a second cap over the same store silently subtracted impressions nobody could attribute.
 
     // Timing
     val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", 3_000)
@@ -96,11 +88,6 @@ object ObRemoteKeys {
     val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", true)
     val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", true)
 
-    // Native templates per placement: cta_top | cta_bottom | compact
-    val TEMPLATE_CONTENT = RemoteKey.StringKey("ob_native_template_content", "cta_top")
-    val TEMPLATE_LANGUAGE = RemoteKey.StringKey("ob_native_template_language", "cta_bottom")
-    val TEMPLATE_QUESTION = RemoteKey.StringKey("ob_native_template_question", "cta_bottom")
-
     // Server-driven UI payloads
     val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")
     val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "")
@@ -114,14 +101,13 @@ object ObRemoteKeys {
         ENABLE_STEP_OB1, ENABLE_STEP_OB2, ENABLE_STEP_OB3, ENABLE_STEP_OB4, ENABLE_STEP_OB5,
         ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
+        SHOW_LANGUAGE_TAP_HINT, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
         REUSE_SPLASH_INTER, ADS_SPLASH_BANNER, ADS_SPLASH_INTER, ADS_LANGUAGE_NATIVE,
         ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
-        ADS_APP_RESUME, ADS_SPLASH_INTER_ID, ADS_SPLASH_INTER_ID_OLD_USER,
-        INTERSTITIAL_INTERVAL_SEC, CLICK_CAP_PER_DAY,
+        ADS_APP_RESUME,
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_BANNER_WAIT_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,
-        TEMPLATE_CONTENT, TEMPLATE_LANGUAGE, TEMPLATE_QUESTION,
         UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, QUESTION_CONFIG_JSON, CONFIG_VERSION,
     )
 }
