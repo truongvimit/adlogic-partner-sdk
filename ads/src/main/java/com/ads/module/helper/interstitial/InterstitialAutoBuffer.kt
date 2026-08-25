@@ -132,6 +132,21 @@ object InterstitialAutoBuffer {
         reserved += placements
     }
 
+    /**
+     * Buys the replacement now instead of waiting for the interval to expire.
+     *
+     * Nothing inside the SDK calls this. The buffer's own schedule deliberately waits — an ad
+     * bought at the moment of an impression sits idle for a whole interval and ages against
+     * [com.ads.module.helper.CachedAd.MAX_AGE_MS] while it waits. This is here for the caller who
+     * knows the next showable moment arrives the instant the interval does, and is the same kind
+     * of explicit request as calling [InterstitialAdManager.load] directly.
+     */
+    @JvmStatic
+    fun topUpNow() {
+        if (!running) return
+        handler.post { topUp(ignoreInterval = true) }
+    }
+
     /** Clears the failure backoff, e.g. when connectivity returns. */
     @JvmStatic
     fun resetBackoff() {
@@ -189,7 +204,7 @@ object InterstitialAutoBuffer {
     /**
      * @return the delay to use before looking again, or `0` for the configured period.
      */
-    private fun topUp(): Long {
+    private fun topUp(ignoreInterval: Boolean = false): Long {
         val context = appContext ?: return options.minTickMs
         // Never request before the UMP answer. AdGate does not cover consent, and this runs on a
         // timer rather than behind the flow's consent step.
@@ -201,7 +216,8 @@ object InterstitialAutoBuffer {
         // One clock for the whole app, stamped when an interstitial is dismissed. While it is
         // running there is nothing to show and therefore nothing to buy — so the next look is
         // timed to the moment it expires rather than to the tick period.
-        val intervalRemaining = InterstitialFrequency.remainingMs(context)
+        val intervalRemaining =
+            if (ignoreInterval) 0L else InterstitialFrequency.remainingMs(context)
         options.placements.forEach { placement ->
             val wasRequested = requested.remove(placement)
             val ready = InterstitialAdManager.isReady(placement)
