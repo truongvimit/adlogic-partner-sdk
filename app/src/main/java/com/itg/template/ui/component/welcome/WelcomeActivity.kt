@@ -1,6 +1,7 @@
 package com.itg.template.ui.component.welcome
 
 import com.ads.module.helper.adnative.NativeAdParam
+import com.ads.module.helper.interstitial.InterNextAction
 import com.itg.template.R
 import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.AdsManager
@@ -32,7 +33,10 @@ class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
     override fun onClickViews() {
         super.onClickViews()
         mBinding.btnStart.click {
-            AdsManager.showInterWelcome(this) {
+            // AfterDismiss because the only thing this screen does afterwards is finish itself:
+            // under the default UnderAd timing that finish would land while the ad is still on
+            // screen, tearing the host out from under it.
+            AdsManager.showInterWelcome(this, nextAction = InterNextAction.AfterDismiss) {
                 finish()
             }
         }

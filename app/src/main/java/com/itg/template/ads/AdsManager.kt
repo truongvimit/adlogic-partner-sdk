@@ -13,6 +13,7 @@ import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.interstitial.InterLoadOptions
+import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
@@ -74,8 +75,25 @@ object AdsManager {
         )
     }
 
-    fun showInterOnboarding(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        InterstitialAdManager.show(context, "inter_onboarding", onCompleteOnce(onAction))
+    /**
+     * [nextAction] decides *when* [onAction] runs. [InterNextAction.UnderAd] — the app-wide
+     * default, set by `ERainTuning.install()` in `GlobalApp` — starts the next screen while the ad
+     * is still up, so it is already painted when the ad closes. Pass
+     * [InterNextAction.AfterDismiss] when the callback must not run behind the ad: a destination
+     * that opens the camera, starts audio or plays video — or a screen that only finishes itself.
+     */
+    fun showInterOnboarding(
+        context: Context,
+        ignoreLimit: Boolean = false,
+        nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
+        onAction: () -> Unit,
+    ) {
+        InterstitialAdManager.show(
+            context,
+            "inter_onboarding",
+            onCompleteOnce(onAction),
+            nextAction = nextAction,
+        )
     }
 
     fun loadInterWelcome(context: Context, ignoreLimit: Boolean = false) {
@@ -91,11 +109,27 @@ object AdsManager {
         )
     }
 
-    fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {
-        InterstitialAdManager.show(context, "inter_welcome", onCompleteOnce(onAction))
+    /** See [showInterOnboarding] for what [nextAction] changes. */
+    fun showInterWelcome(
+        context: Context,
+        ignoreLimit: Boolean = false,
+        nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
+        onAction: () -> Unit,
+    ) {
+        InterstitialAdManager.show(
+            context,
+            "inter_welcome",
+            onCompleteOnce(onAction),
+            nextAction = nextAction,
+        )
     }
 
-    /** The store fires onComplete exactly once, whatever the module reports. */
+    /**
+     * The store fires onComplete exactly once, whatever the module reports — the only thing the
+     * timing changes is when. Navigation goes here and nowhere else: `onClosed` runs on one side
+     * of it or the other depending on [InterNextAction], so a screen wired to both would move
+     * twice under one timing and not at all under the other.
+     */
     private fun onCompleteOnce(onAction: () -> Unit) = object : InterShowCallback() {
         override fun onSkipped(reason: AdSkipReason) {
             if (reason == AdSkipReason.FAILED_TO_SHOW) {

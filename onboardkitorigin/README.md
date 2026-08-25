@@ -137,6 +137,18 @@ skipButtonDelaySec = 3, autoNextEnabled = false, autoNextDelayMs = 15_000, layou
 | `questionInterstitial`, `appResume` | `InterstitialAdUnit?` | `null` |
 | `contentStepTemplate` / `languageTemplate` / `questionTemplate` | `NativeTemplate` | `CTA_TOP` / `CTA_BOTTOM` / `CTA_BOTTOM` |
 
+**Interstitials start the next screen underneath the ad.** `onNext` runs on the same tick as the
+vendor's `show()`, so the destination is created below the ad rather than on top of it; `onFinished`
+runs when the ad is gone. This is not configurable — see `InterNextAction.UnderAd` in
+[../ads/README.md](../ads/README.md) for why the ordering is fixed.
+
+One consequence is worth knowing about: the ad's window is translucent while the creative animates
+in, so a destination started this way plays its entry transition in full view through the ad. The
+flow does **not** suppress that transition for you. If it is visible in your app, suppress it on the
+destination itself — `overridePendingTransition(0, 0)` right after starting it, or
+`Intent.FLAG_ACTIVITY_NO_ANIMATION` — rather than delaying the start, which would break the launch
+order the ad depends on.
+
 **Native templates.** These screens ship one layout per CTA position rather than moving blocks about, so
 the template picks the layout and `components` is read for **visibility only** — it never reorders here.
 

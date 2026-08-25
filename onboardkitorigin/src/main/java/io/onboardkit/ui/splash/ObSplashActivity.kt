@@ -260,7 +260,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
      */
     private suspend fun awaitInterstitial() {
         val budgetMs = sdk.flags().splashAdBudgetMs
-        val settled = withTimeoutOrNull(budgetMs) { interstitialSettled.await() } != null
+        val settled = withTimeoutOrNull(budgetMs.milliseconds) { interstitialSettled.await() } != null
         val ready = sdk.provider()?.isInterstitialReady(AdPlacement.SplashInterstitial) == true
         if (!settled) {
             ObLog.w(ObLog.Section.LOAD, "splash_inter BUDGET_EXPIRED budgetMs=$budgetMs ready=$ready")

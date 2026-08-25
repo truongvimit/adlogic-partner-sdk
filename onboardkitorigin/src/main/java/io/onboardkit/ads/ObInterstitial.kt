@@ -48,6 +48,10 @@ internal object ObInterstitial {
     /**
      * The module's own show window: it holds a loading dialog for 800 ms, then dismisses it
      * 1500 ms later. Anything still silent past that never started.
+     *
+     * Giving up finishes the host, so this must never expire while an ad is on screen. It is safe
+     * because a provider hands back on the same tick as `show()` — that ordering is fixed in
+     * `InterNextAction.UnderAd` for exactly this kind of reason.
      */
     private const val HANDSHAKE_TIMEOUT_MS = 800L + 1_500L
 

@@ -184,6 +184,41 @@ InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() 
 })
 ```
 
+`onComplete` fires once either way; `InterNextAction` decides *when*, and with it whether the next
+screen starts under the ad or after it:
+
+| Value | `onComplete` fires | Use it for |
+|---|---|---|
+| `AfterDismiss` | after the ad is gone, just after `onClosed` | a destination that must not exist behind the ad — camera, audio, video |
+| `UnderAd` | on the same tick as `show()`, before `onClosed` | everything else: the screen inflates and binds under the ad and is painted when it closes |
+
+`AfterDismiss` is the SDK default and matches Apero's `openActivityAfterShowInterAds = false`;
+`UnderAd` is `= true`. Set the app-wide default once, from `Application.onCreate`, and override it
+per presentation where a placement needs the other one:
+
+```kotlin
+InterstitialAdManager.defaultNextAction = InterNextAction.UnderAd    // once, after ERainAd.init
+InterstitialAdManager.show(activity, "inter_camera", callback,
+    nextAction = InterNextAction.AfterDismiss)                       // this show only
+```
+
+`ERainTuning.install()` sets the default to `UnderAd`, so an app using `:onboardkitorigin` already
+has it; the onboarding flow pins the *mode* per show regardless, so changing the default never
+changes what an onboarding callback means. Start the next screen from `onComplete` and nothing else — calling `finish()` there under `UnderAd` tears the
+host out from under the ad and the module drops the impression.
+
+**Why `UnderAd` fires before `show()` and not after.** The module holds a loading dialog for 800 ms,
+then calls `onNextAction` and `show()` on the same tick. Both Activities are queued together, so the
+ad lands on top of the next screen. Delaying the hand-back is not an option: GMA's `AdActivity` is
+declared with no `taskAffinity` and the default launch mode, so it lives in the host's own task —
+a `startActivity` issued once it is on top is stacked *above* the ad, covering the impression, and
+GMA then reports the dismissal the caller was waiting for.
+
+`AdActivity` is also `@android:style/Theme.Translucent`, so until the creative has animated in the
+user is looking through it at the next screen playing its entry transition. Suppress that transition
+— `overridePendingTransition(0, 0)` right after starting it, or `Intent.FLAG_ACTIVITY_NO_ANIMATION`
+— rather than delaying the start; only the first leaves the launch order intact.
+
 A show the interval rule declines **keeps its buffer** — the ad is withheld, not spent, and the next
 eligible tap uses it. Ask before showing when you want to branch without consuming:
 

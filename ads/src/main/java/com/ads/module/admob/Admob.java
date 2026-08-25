@@ -102,7 +102,16 @@ public class Admob {
     private boolean disableAdResumeWhenClickAds = false;
     private boolean isShowLoadingSplash = false;
     boolean isTimeDelay = false;
-    private boolean openActivityAfterShowInterAds = false;
+    /**
+     * Process-wide default for when an interstitial's {@code onNextAction} fires: {@code false}
+     * (the default) on dismissal, {@code true} as the ad goes to the screen so the caller can
+     * start its next screen underneath it.
+     * <p>
+     * Only a <em>default</em> — the interstitial show path takes the value as a parameter, so one
+     * presentation's choice can no longer be changed by another's while it is on screen. The
+     * splash paths, which have no per-show surface, read it directly.
+     */
+    private volatile boolean openActivityAfterShowInterAds = false;
     private Context context;
 
     public static final String BANNER_INLINE_SMALL_STYLE = "BANNER_INLINE_SMALL_STYLE";
@@ -227,6 +236,10 @@ public class Admob {
 
     public void setOpenActivityAfterShowInterAds(boolean openActivityAfterShowInterAds) {
         this.openActivityAfterShowInterAds = openActivityAfterShowInterAds;
+    }
+
+    public boolean isOpenActivityAfterShowInterAds() {
+        return openActivityAfterShowInterAds;
     }
 
     @SuppressLint("VisibleForTests")
@@ -787,6 +800,20 @@ public class Admob {
      * can gate ads on "every Nth action" rather than on every action.
      */
     public void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback) {
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, openActivityAfterShowInterAds);
+    }
+
+    /**
+     * The click-counter show, with the next-action timing fixed for this one presentation.
+     *
+     * @param openNextUnderAd {@code true} fires {@code onNextAction} as the ad goes to the screen,
+     *                        so the caller's next screen starts underneath it; {@code false} fires
+     *                        it on dismissal instead. Taken as a parameter, not read from
+     *                        {@link #openActivityAfterShowInterAds}, because the field is read
+     *                        800 ms after the show begins — long enough for another placement to
+     *                        have changed what this presentation's callbacks mean.
+     */
+    private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
         // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
         // so it can no longer be skipped by the load-time gate that never called it.
         if (AdGate.isPurchased(context)) {
@@ -808,7 +835,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 SharePreferenceUtils.setLastImpressionInterstitialTime(context);
                 if (callback != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         callback.onNextAction();
                     }
                     callback.onAdClosed();
@@ -823,7 +850,7 @@ public class Admob {
                 super.onAdFailedToShowFullScreenContent(adError);
                 if (callback != null) {
                     callback.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         callback.onNextAction();
                     }
 
@@ -852,7 +879,7 @@ public class Admob {
         });
 
         if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
-            showInterstitialAd(context, mInterstitialAd, callback);
+            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd);
             return;
         }
         if (callback != null) {
@@ -865,14 +892,23 @@ public class Admob {
      * Shows the interstitial now, ignoring the click counter.
      */
     public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback) {
+        forceShowInterstitial(context, mInterstitialAd, callback, openActivityAfterShowInterAds);
+    }
+
+    /**
+     * Shows the interstitial now, ignoring the click counter, with the next-action timing chosen
+     * for this one presentation instead of taken from
+     * {@link #setOpenActivityAfterShowInterAds(boolean)}.
+     */
+    public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback, boolean openNextUnderAd) {
         currentClicked = numShowAds;
-        showInterstitialAdByTimes(context, mInterstitialAd, callback);
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd);
     }
 
     /**
      * Shows the ad when the click counter has reached the threshold, otherwise runs the next action.
      */
-    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback) {
+    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback, boolean openNextUnderAd) {
         currentClicked++;
         if (currentClicked < numShowAds || mInterstitialAd == null) {
             if (dialog != null) {
@@ -889,14 +925,14 @@ public class Admob {
         // Every exit below reports something. This branch used to return in silence when the
         // process was not resumed, leaving the caller waiting on a callback that never came.
         if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-            notifyShowFailed(callback, "Show fail: process is not resumed");
+            notifyShowFailed(callback, "Show fail: process is not resumed", openNextUnderAd);
             return;
         }
 
         // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
         // turns what was a ClassCastException on a background thread into a normal skip.
         if (!(context instanceof AppCompatActivity)) {
-            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity");
+            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
             return;
         }
 
@@ -921,7 +957,9 @@ public class Admob {
 
         new Handler().postDelayed(() -> {
             if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                if (openActivityAfterShowInterAds && callback != null) {
+                if (openNextUnderAd && callback != null) {
+                    // Same tick as show() below, deliberately: the next Activity has to be queued
+                    // before the ad's, or it is stacked on top of it instead of underneath.
                     callback.onNextAction();
                     new Handler().postDelayed(() -> {
                         if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
@@ -932,7 +970,7 @@ public class Admob {
             } else {
                 if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
                     dialog.dismiss();
-                notifyShowFailed(callback, "Show fail in background after show loading ad");
+                notifyShowFailed(callback, "Show fail in background after show loading ad", openNextUnderAd);
             }
         }, 800);
     }
@@ -940,10 +978,10 @@ public class Admob {
     /**
      * Reports a presentation that never reached the screen.
      * <p>
-     * onNextAction is still fired when openActivityAfterShowInterAds is off, because that is the
-     * signal legacy call sites advance their flow on.
+     * onNextAction is still fired when the next screen was not opened under the ad, because that
+     * is the signal legacy call sites advance their flow on.
      */
-    private void notifyShowFailed(AdCallback callback, String message) {
+    private void notifyShowFailed(AdCallback callback, String message, boolean openNextUnderAd) {
         // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
         // a presentation that dies here must lower it whether or not anyone is listening. Leaving
         // it raised suppressed every app-resume ad for the rest of the process.
@@ -953,7 +991,7 @@ public class Admob {
         }
         Log.e(TAG, "showInterstitialAd: " + message);
         callback.onAdFailedToShow(new AdError(0, message, TAG));
-        if (!openActivityAfterShowInterAds) {
+        if (!openNextUnderAd) {
             callback.onNextAction();
         }
     }

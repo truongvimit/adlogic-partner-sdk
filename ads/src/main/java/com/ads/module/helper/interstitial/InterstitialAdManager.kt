@@ -31,13 +31,21 @@ class InterLoadOptions @JvmOverloads constructor(
  * The moments of one interstitial presentation. [onComplete] fires exactly once on every
  * path — wire navigation there and nothing else, so a failed or skipped show can never
  * strand the screen.
+ *
+ * *When* it fires is [InterNextAction]: after the ad is gone by default, or while the ad is on
+ * screen when the caller asked for [InterNextAction.UnderAd]. Only the timing changes — the
+ * once-on-every-path guarantee holds either way.
  */
 open class InterShowCallback {
 
     /** The ad is committed to the screen. */
     open fun onShowed() {}
 
-    /** The ad was displayed and dismissed. */
+    /**
+     * The ad was displayed and dismissed. Runs before [onComplete] under
+     * [InterNextAction.AfterDismiss] and after it under [InterNextAction.UnderAd], because
+     * that is precisely what the two modes mean — never put navigation here.
+     */
     open fun onClosed() {}
 
     /** The ad never reached the screen; [reason] says why. */
@@ -60,6 +68,28 @@ open class InterShowCallback {
  * Main-thread only — the legacy GMA SDK requires load/show calls there.
  */
 object InterstitialAdManager {
+
+    /**
+     * Timing used by every [show] that does not name one. [InterNextAction.AfterDismiss] out of
+     * the box.
+     *
+     * Backed by the module's own `openActivityAfterShowInterAds` — the same switch the legacy
+     * splash paths read and the one `ERainAd.setOpenActivityAfterShowInterAds` writes — so this is
+     * a view onto one value, never a second copy that can drift.
+     *
+     * Set it once from `Application.onCreate`.
+     */
+    @JvmStatic
+    var defaultNextAction: InterNextAction
+        get() = if (ERainAd.getInstance().isOpenActivityAfterShowInterAds) {
+            InterNextAction.UnderAd
+        } else {
+            InterNextAction.AfterDismiss
+        }
+        set(value) {
+            ERainAd.getInstance()
+                .setOpenActivityAfterShowInterAds(value == InterNextAction.UnderAd)
+        }
 
     private val cache = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -158,6 +188,10 @@ object InterstitialAdManager {
      * Single-use: the buffer is dropped before `show()` so one fill can never show twice.
      * The module's interval/counter caps surface as [AdSkipReason.CAPPED_BY_MODULE] — it
      * answers those with a bare `onNextAction`, told apart by the commit marker.
+     *
+     * [nextAction] decides when `onComplete` fires; it defaults to [defaultNextAction] and is
+     * read per call, so one placement can open its next screen under the ad while another waits
+     * for the dismissal.
      */
     @JvmStatic
     @JvmOverloads
@@ -166,6 +200,7 @@ object InterstitialAdManager {
         placement: String,
         callback: InterShowCallback,
         reportTelemetry: Boolean = true,
+        nextAction: InterNextAction = defaultNextAction,
     ) {
         // Decided BEFORE the buffer is touched. The interval rule lives downstream in
         // ERainAd.forceShowInterstitial, which answers a blocked show with a bare onNextAction —
@@ -208,18 +243,23 @@ object InterstitialAdManager {
                 }
 
                 override fun onNextAction() {
-                    // completed-guard: onAdFailedToShow is chased by a bare onNextAction when
-                    // openActivityAfterShowInterAds is off — that pair is one failure, not a cap
-                    if (!committed.get() && !completed.get()) {
-                        // No commit marker: the module short-circuited before showing
-                        if (reportTelemetry) {
-                            AdTracking.skipped(
-                                placement, AdFormat.INTERSTITIAL, AdSkipReason.CAPPED_BY_MODULE.key,
-                            )
+                    when (meaningOfNextAction(nextAction, committed.get(), completed.get())) {
+                        NextActionMeaning.MODULE_CAP -> {
+                            if (reportTelemetry) {
+                                AdTracking.skipped(
+                                    placement,
+                                    AdFormat.INTERSTITIAL,
+                                    AdSkipReason.CAPPED_BY_MODULE.key,
+                                )
+                            }
+                            callback.onSkipped(AdSkipReason.CAPPED_BY_MODULE)
+                            complete()
                         }
-                        callback.onSkipped(AdSkipReason.CAPPED_BY_MODULE)
+                        // The ad is on screen; the next screen starts underneath it.
+                        NextActionMeaning.NEXT_SCREEN -> complete()
+                        // onAdClosed / onAdFailedToShow owns the outcome in this mode.
+                        NextActionMeaning.IGNORED -> Unit
                     }
-                    complete()
                 }
 
                 override fun onAdClosed() {
@@ -244,6 +284,7 @@ object InterstitialAdManager {
             },
             // Reloading is the caller's decision; the module doing it too double-requests
             false,
+            nextAction == InterNextAction.UnderAd,
         )
     }
 

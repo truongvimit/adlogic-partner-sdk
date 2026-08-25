@@ -165,6 +165,14 @@ class GlobalApp : AdsMultiDexApplication() {
 
         // Process-wide ad-module switches live in one place and are set once. Screen-by-screen
         // toggling is what let a splash finish itself before its own interstitial could show.
+        //
+        // Among them: `InterstitialAdManager.defaultNextAction`, which install() sets to
+        // `InterNextAction.UnderAd` — every interstitial hands control back on the same tick as
+        // show(), so the next screen starts underneath the ad and is painted before it closes
+        // (Apero's `openActivityAfterShowInterAds = true`). Assign it here to change the app-wide
+        // default; one placement that needs the other timing passes `InterNextAction.AfterDismiss`
+        // to its own show call instead — see WelcomeActivity. An app without OnboardKit gets the
+        // SDK default, AfterDismiss, until it sets one.
         ERainTuning.install()
 
         // OnboardKit excludes its own screens from app-resume when they start, so only the

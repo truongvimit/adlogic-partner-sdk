@@ -116,6 +116,26 @@ public class ERainAd {
         }
     }
 
+    /**
+     * Process-wide default for when an interstitial's {@code onNextAction} fires.
+     *
+     * <p>{@code false} — the default — fires it on dismissal: the next screen starts on an empty
+     * stage. {@code true} fires it as the ad reaches the screen, so the next screen inflates and
+     * binds underneath it and is already painted when the ad closes.
+     *
+     * <p>Set it once, from {@code Application.onCreate}: it changes what a callback <em>means</em>,
+     * and a screen that toggles it leaves the process in whatever state it died in. A single
+     * presentation that needs the other timing asks for it by name instead — see
+     * {@code InterstitialAdManager.show(..., InterNextAction)}, which this is only the default for.
+     */
+    public void setOpenActivityAfterShowInterAds(boolean openActivityAfterShowInterAds) {
+        Admob.getInstance().setOpenActivityAfterShowInterAds(openActivityAfterShowInterAds);
+    }
+
+    public boolean isOpenActivityAfterShowInterAds() {
+        return Admob.getInstance().isOpenActivityAfterShowInterAds();
+    }
+
     public void init(Application context, ERainAdConfig adConfig) {
         if (adConfig == null) {
             throw new RuntimeException("Cant not set ERainAdConfig null");
@@ -340,6 +360,21 @@ public class ERainAd {
 
     public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
                                       @NonNull final AdCallback callback, boolean shouldReloadAds) {
+        forceShowInterstitial(context, mInterstitialAd, callback, shouldReloadAds,
+                Admob.getInstance().isOpenActivityAfterShowInterAds());
+    }
+
+    /**
+     * Shows the ad with the next-action timing chosen for this one presentation.
+     *
+     * @param openNextUnderAd {@code true} fires {@code onNextAction} on the same tick as
+     *                        {@code show()}, so the caller's next screen starts underneath the ad;
+     *                        {@code false} fires it on dismissal. Overrides
+     *                        {@link #setOpenActivityAfterShowInterAds(boolean)} for this call only.
+     */
+    public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
+                                      @NonNull final AdCallback callback, boolean shouldReloadAds,
+                                      boolean openNextUnderAd) {
         if (System.currentTimeMillis() - SharePreferenceUtils.getLastImpressionInterstitialTime(context)
                 < ERainAd.getInstance().adConfig.getIntervalInterstitialAd() * 1000L
         ) {
@@ -437,7 +472,7 @@ public class ERainAd {
             }
         };
         Admob.getInstance().forceShowInterstitial(context, shownAd,
-                instrument(adUnitId, AdFormat.INTERSTITIAL, adCallback));
+                instrument(adUnitId, AdFormat.INTERSTITIAL, adCallback), openNextUnderAd);
     }
 
     public void loadNativeAdResultCallback(final Activity activity, String id,

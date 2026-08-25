@@ -21,6 +21,7 @@ import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.adnative.NativeAdStyle
 import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
+import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
@@ -195,6 +196,11 @@ class ERainAdProvider(
      * Maps the store's show contract onto the flow's two moments: `onComplete` without a
      * preceding skip is the commit — the ad is on screen and the next screen may start
      * underneath it — while a skip suppresses `onNextAction` entirely.
+     *
+     * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]:
+     * the flow is written against `UnderAd` — its handshake watchdog expires 2.3 s after the call,
+     * long before a dismissal would arrive — so an app that prefers `AfterDismiss` for its own
+     * placements must not be able to change what the flow's callbacks mean.
      */
     override fun showInterstitial(
         activity: Activity,
@@ -228,6 +234,7 @@ class ERainAdProvider(
                 }
             },
             reportTelemetry = false,
+            nextAction = InterNextAction.UnderAd,
         )
     }
 
