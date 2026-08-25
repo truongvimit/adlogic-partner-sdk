@@ -211,10 +211,16 @@ InterstitialAutoBuffer.start(this)   // after AdRemoteConfig.initializeFromAsset
 | `backoffMs` | `Long` | `30_000` | First wait after a placement fails to fill; doubles |
 | `maxBackoffMs` | `Long` | `300_000` | Ceiling on that wait |
 
+It buys **when the interval expires, not when an ad is shown** — an ad bought at the moment of an
+impression would sit idle for a whole interval and age against the buffer's own expiry. Show at
+t=0 with a 30s interval and the replacement is requested at t=30, so a tap at t=31 shows and a tap
+at t=30 does not. Want it sooner? That is what `InterstitialAdManager.load` is for.
+
 It shares one store with explicit `load` calls and never doubles them: a load a screen starts itself
-runs normally, a tick that finds it still in flight starts nothing, and the ad it produces *is* the
-buffer. Ad unit ids come from `AdRemoteConfig.tiersFor`, so adding a `_high` floor needs no code
-change. It waits for the UMP answer, skips premium users, and pauses a placement that will not fill.
+runs normally *even mid-interval*, a tick that finds it still in flight starts nothing, and the ad it
+produces *is* the buffer. Ad unit ids come from `AdRemoteConfig.tiersFor`, so adding a `_high` floor
+needs no code change. It waits for the UMP answer, skips premium users, and pauses a placement that
+will not fill.
 
 `InterstitialAutoBuffer.reserve(...)` marks placements it must never touch; `:onboardkitorigin`
 reserves its own splash and question interstitials, which the flow reuses on its own schedule.

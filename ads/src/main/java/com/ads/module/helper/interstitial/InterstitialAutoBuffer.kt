@@ -85,8 +85,7 @@ object InterstitialAutoBuffer {
     private var running = false
 
     private val tick = Runnable {
-        val progressed = topUp()
-        schedule(soon = !progressed)
+        schedule(topUp())
     }
 
     /** Replaces the configuration. Safe before or after [start]; takes effect on the next tick. */
@@ -133,14 +132,6 @@ object InterstitialAutoBuffer {
         reserved += placements
     }
 
-    /** Tops up now — called by the store once an ad is committed to the screen. */
-    @JvmStatic
-    fun topUpNow() {
-        if (!running) return
-        handler.post { topUp() }
-        schedule()
-    }
-
     /** Clears the failure backoff, e.g. when connectivity returns. */
     @JvmStatic
     fun resetBackoff() {
@@ -149,12 +140,15 @@ object InterstitialAutoBuffer {
     }
 
     /** The decision for one placement on one tick. Separated out so the rules are testable. */
-    internal enum class Decision { LOAD, SKIP_READY, SKIP_IN_FLIGHT, SKIP_BACKOFF, SKIP_NO_IDS, SKIP_RESERVED }
+    internal enum class Decision {
+        LOAD, SKIP_READY, SKIP_IN_FLIGHT, SKIP_INTERVAL, SKIP_BACKOFF, SKIP_NO_IDS, SKIP_RESERVED
+    }
 
     internal fun decide(
         nowMs: Long,
         isReady: Boolean,
         isLoading: Boolean,
+        intervalRemainingMs: Long,
         backoffUntilMs: Long,
         hasIds: Boolean,
         isReserved: Boolean,
@@ -165,6 +159,11 @@ object InterstitialAutoBuffer {
         // A request is already walking the waterfall; a second would be the duplicate this exists
         // to avoid. The fill it produces becomes the buffer.
         isLoading -> Decision.SKIP_IN_FLIGHT
+        // Nothing may be shown for another `intervalRemainingMs`, so nothing needs buying yet.
+        // Buying at the moment of the last impression would hold a paid fill idle for a whole
+        // interval and age it against CachedAd.MAX_AGE_MS for no reason. A caller that wants the
+        // ad immediately asks for it — InterstitialAdManager.load — rather than expecting this.
+        intervalRemainingMs > 0L -> Decision.SKIP_INTERVAL
         nowMs < backoffUntilMs -> Decision.SKIP_BACKOFF
         !hasIds -> Decision.SKIP_NO_IDS
         else -> Decision.LOAD
@@ -187,16 +186,22 @@ object InterstitialAutoBuffer {
         return base.coerceIn(minTickMs, MAX_PERIOD_MS)
     }
 
-    /** @return false when the pass was blocked by something worth re-checking sooner. */
-    private fun topUp(): Boolean {
-        val context = appContext ?: return false
+    /**
+     * @return the delay to use before looking again, or `0` for the configured period.
+     */
+    private fun topUp(): Long {
+        val context = appContext ?: return options.minTickMs
         // Never request before the UMP answer. AdGate does not cover consent, and this runs on a
         // timer rather than behind the flow's consent step.
-        if (ConsentCenter.state.value == ConsentState.UNKNOWN) return false
-        // A paying user has nothing to wait for, so this is not a "retry sooner" case.
-        if (AdGate.isPurchased(context)) return true
+        if (ConsentCenter.state.value == ConsentState.UNKNOWN) return options.minTickMs
+        // A paying user has nothing to wait for.
+        if (AdGate.isPurchased(context)) return 0L
 
         val now = System.currentTimeMillis()
+        // One clock for the whole app, stamped when an interstitial is dismissed. While it is
+        // running there is nothing to show and therefore nothing to buy — so the next look is
+        // timed to the moment it expires rather than to the tick period.
+        val intervalRemaining = InterstitialFrequency.remainingMs(context)
         options.placements.forEach { placement ->
             val wasRequested = requested.remove(placement)
             val ready = InterstitialAdManager.isReady(placement)
@@ -212,6 +217,7 @@ object InterstitialAutoBuffer {
                 nowMs = now,
                 isReady = ready,
                 isLoading = loading,
+                intervalRemainingMs = intervalRemaining,
                 backoffUntilMs = backoffUntil[placement] ?: 0L,
                 hasIds = ids.isNotEmpty(),
                 isReserved = placement in reserved,
@@ -228,7 +234,7 @@ object InterstitialAutoBuffer {
                 InterLoadOptions(enabled = true, passesUaGate = AdGate.passesUaGate(false)),
             )
         }
-        return true
+        return if (intervalRemaining > 0L) intervalRemaining else 0L
     }
 
     private fun noteFailure(placement: String, nowMs: Long) {
@@ -240,11 +246,12 @@ object InterstitialAutoBuffer {
         Log.d(TAG, "'$placement' did not fill; backing off ${step}ms")
     }
 
-    private fun schedule(soon: Boolean = false) {
+    /** [delayMs] `0` uses the configured period; anything else is an exact wake-up. */
+    private fun schedule(delayMs: Long = 0L) {
         if (!running) return
         handler.removeCallbacks(tick)
         val period =
-            if (soon) options.minTickMs
+            if (delayMs > 0L) delayMs.coerceAtLeast(MIN_WAKE_MS)
             else periodMs(
                 options.tickMs,
                 InterstitialFrequency.intervalSeconds(),
@@ -256,4 +263,7 @@ object InterstitialAutoBuffer {
 
     /** Half of [com.ads.module.helper.CachedAd.MAX_AGE_MS] — a buffer must never expire unchecked. */
     private const val MAX_PERIOD_MS = 30 * 60 * 1_000L
+
+    /** Floor on an exact wake-up, so a nearly-expired interval cannot spin the looper. */
+    private const val MIN_WAKE_MS = 1_000L
 }

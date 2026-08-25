@@ -205,9 +205,6 @@ object InterstitialAdManager {
                 override fun onInterstitialShow() {
                     committed.set(true)
                     callback.onShowed()
-                    // Refill now rather than on the next tick, so the ad for the cycle after this
-                    // one is ready before the interval expires. No-op unless a partner opted in.
-                    InterstitialAutoBuffer.topUpNow()
                 }
 
                 override fun onNextAction() {

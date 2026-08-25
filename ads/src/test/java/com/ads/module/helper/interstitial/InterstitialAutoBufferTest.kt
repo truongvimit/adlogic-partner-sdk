@@ -9,11 +9,14 @@ class InterstitialAutoBufferTest {
     private fun decide(
         ready: Boolean = false,
         loading: Boolean = false,
+        intervalRemaining: Long = 0L,
         backoffUntil: Long = 0L,
         hasIds: Boolean = true,
         reserved: Boolean = false,
         now: Long = 1_000L,
-    ) = InterstitialAutoBuffer.decide(now, ready, loading, backoffUntil, hasIds, reserved)
+    ) = InterstitialAutoBuffer.decide(
+        now, ready, loading, intervalRemaining, backoffUntil, hasIds, reserved,
+    )
 
     @Test
     fun `loads when the placement is empty`() {
@@ -30,6 +33,22 @@ class InterstitialAutoBufferTest {
     fun `a load already in flight is never doubled`() {
         // The "screen preloaded at t=20s, tick fires at t=25s" case.
         assertEquals(Decision.SKIP_IN_FLIGHT, decide(ready = false, loading = true))
+    }
+
+    @Test
+    fun `nothing is bought while the interval is still running`() {
+        // The ad just shown reset the clock; the replacement is bought when the clock expires,
+        // not at the moment of the impression.
+        assertEquals(Decision.SKIP_INTERVAL, decide(intervalRemaining = 20_000L))
+        assertEquals(Decision.LOAD, decide(intervalRemaining = 0L))
+    }
+
+    @Test
+    fun `a buffer already filled is left alone even mid-interval`() {
+        // SKIP_READY wins over SKIP_INTERVAL — an explicit load() during the interval is honoured
+        // and its fill is the buffer.
+        assertEquals(Decision.SKIP_READY, decide(ready = true, intervalRemaining = 20_000L))
+        assertEquals(Decision.SKIP_IN_FLIGHT, decide(loading = true, intervalRemaining = 20_000L))
     }
 
     @Test
