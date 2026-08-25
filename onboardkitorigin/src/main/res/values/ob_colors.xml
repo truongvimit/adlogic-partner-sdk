@@ -13,6 +13,9 @@
     <color name="ob_text_splash_loading">#646C79</color>
     <color name="ob_icon_gray">#949494</color>
 
+    <color name="ob_placeholder_bg">#F0F1F5</color>
+    <color name="ob_placeholder_fg">#C4C8D4</color>
+
     <color name="ob_row_bg">#F5F5F5</color>
     <color name="ob_ad_block_bg">#F5F7FF</color>
     <color name="ob_ad_compact_bg">#F5F5F5</color>
@@ -27,7 +30,6 @@
 
     <color name="ob_progress_track">#DEDEDE</color>
     <color name="ob_radio_stroke">#757575</color>
-    <color name="ob_shimmer_bone">#EDEFF5</color>
     <color name="ob_scrim_black_50">#80000000</color>
     <color name="ob_scrim_black_70">#B3000000</color>
     <color name="ob_skip_bg">#66000000</color>

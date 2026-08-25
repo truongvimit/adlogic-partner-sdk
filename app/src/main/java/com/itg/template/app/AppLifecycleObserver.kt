@@ -5,35 +5,21 @@ import androidx.lifecycle.LifecycleOwner
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.helper.AdGate
 import com.ads.module.tracking.AdTracking
-import com.itg.template.ads.AdRemoteConfig
+import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.inter_welcome
-import com.itg.template.ui.component.splash.SplashActivity
 import io.trackkit.AdFormat
-import com.itg.template.ui.component.uninstall.SurveyActivity
-import com.itg.template.ui.component.welcome.WelcomeActivity
 import com.itg.template.utils.Routes
-import io.onboardkit.ui.language.ObLanguageActivity
-import io.onboardkit.ui.ob5.ObFullScreenAdActivity
-import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
-import io.onboardkit.ui.question.ObQuestionActivity
 
 class AppLifecycleObserver : DefaultLifecycleObserver {
 
-    private val listActivityDisableResume = arrayListOf(
-        SplashActivity::class.java,
-        ObLanguageActivity::class.java,
-        ObOnboardingHostActivity::class.java,
-        ObFullScreenAdActivity::class.java,
-        ObQuestionActivity::class.java,
-        WelcomeActivity::class.java,
-        SurveyActivity::class.java,
-    )
-
     override fun onStart(owner: LifecycleOwner) {
-        val currentActivity = GlobalApp.currentActivity ?: return
-        val isDisable = listActivityDisableResume.any { clazz ->
-            clazz.isInstance(currentActivity)
-        }
+        // From the SDK's tracker, which is populated in onActivityStarted. The app's own copy is
+        // set in onActivityResumed — after this callback — so on the first foreground of every
+        // process it was still null and the welcome screen was silently skipped.
+        val currentActivity = AppOpenManager.getInstance().currentActivity ?: return
+        // One exclusion list for both resume paths, owned by AppOpenManager: SDK screens register
+        // themselves there, and the app registers its own in GlobalApp.
+        val isDisable = AppOpenManager.getInstance().isResumeSuppressedFor(currentActivity)
         // Same gate chain and order as before; the reason is captured so a welcome-resume the app
         // declined is still reported — the ads SDK is never called and cannot know it happened
         val blockReason = when {

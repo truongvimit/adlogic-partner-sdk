@@ -171,14 +171,14 @@ dependencies {
     // OnboardKit — first-open flow (splash, language, onboarding, question)
     implementation project(':onboardkitorigin')
 
-    // Trackkit — single analytics fan-out. The core is vendor-free; each sink brings its own SDK.
+    // Trackkit — single analytics fan-out. The core is vendor-free; the Firebase adapter lives in
+    // :suite-firebase and serves analytics, the paywall document and the ad config alike.
     implementation project(':trackkit')
-    implementation project(':trackkit-firebase')
+    implementation project(':suite-firebase')
 
-    // PayKit — paywall UI over the billing engine in :billingkit. Same port/adapter split as
-    // Trackkit: the core reads a vendor-free PaywallConfigSource, -firebase is the only adapter.
+    // PayKit — paywall UI over the billing engine in :billingkit. Reads a vendor-free
+    // PaywallConfigSource; the Firebase implementation comes from :suite-firebase.
     implementation project(':paykit')
-    implementation project(':paykit-firebase')
 
     // Debug-only ad lifecycle tracker + embedded dashboard; absent from release builds
     debugImplementation project(':adtracer')
@@ -188,9 +188,7 @@ dependencies {
     implementation('com.github.Infinity-Technologies-Global:DevConfig:1.0.7-partner') {
         exclude group: 'com.github.trongluan99', module: 'ERain-Studio'
     }
-    implementation "com.github.Infinity-Technologies-Global:Module-Update-GDPR:$module_update_gdpr_version"
     implementation "com.google.android.play:review-ktx:$play_review_ktx_version"
-    implementation "com.facebook.shimmer:shimmer:$shimmer_version"
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
 
     // Lifecycle

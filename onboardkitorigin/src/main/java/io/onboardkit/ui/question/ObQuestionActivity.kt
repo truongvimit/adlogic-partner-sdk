@@ -91,16 +91,29 @@ class ObQuestionActivity : BaseOnboardActivity() {
         if (question.selectionMode == SelectionMode.SINGLE) {
             selectedIds.clear()
             if (selected) selectedIds.add(optionId)
-            adapter.selectedIds = selectedIds.toSet()
         } else {
             if (selected) selectedIds.add(optionId) else selectedIds.remove(optionId)
         }
+        // Always mirrored back, both modes: the adapter renders ticks purely from this set, so a
+        // multi-select deselect must be published too or the row would stay ticked.
+        adapter.selectedIds = selectedIds.toSet()
         OnboardingSdk.track(AnalyticsEvent.QuestionOptionSelected(optionId, selected))
 
-        val enough = selectedIds.size >= question.minSelection
-        binding.obQuestionCta.visibility = if (enough) View.VISIBLE else View.INVISIBLE
+        bindCtaVisibility()
 
         if (question.refreshAdOnSelect) refreshAdThrottled()
+    }
+
+    /**
+     * Visible once the selection reaches [QuestionConfig.minSelection].
+     *
+     * Read from the live selection rather than from the toggle that triggered it: the adapter used
+     * to mirror its own per-row flag, so deselecting one of several answers reported the wrong set.
+     */
+    private fun bindCtaVisibility() {
+        val required = activeQuestion?.minSelection ?: 1
+        binding.obQuestionCta.visibility =
+            if (selectedIds.size >= required) View.VISIBLE else View.INVISIBLE
     }
 
     /** At most one native refresh per 2s regardless of tap rate. */

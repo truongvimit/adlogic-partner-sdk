@@ -1,375 +1,263 @@
-# OnboardKit (VI)
+**Language / Ngôn ngữ / भाषा:** [English](README.md) | [Tiếng Việt](README.vi.md) | [हिन्दी](README.hi.md)
 
-> English: **[README.md](README.md)** · हिन्दी: **[README.hi.md](README.hi.md)**
+# OnboardKit
 
-Luồng first-open đóng gói thành thư viện: splash → language → các step onboarding → màn ads
-full-screen tuỳ chọn → màn câu hỏi tuỳ chọn → vào app của bạn. Ads, remote config, lưu trạng thái,
-phễu analytics và mọi bảo đảm kiểu "user không được kẹt ở đây" đều nằm bên trong. Bạn chỉ cung cấp ad
-unit id, nội dung, và điểm đến khi luồng kết thúc.
+> Toàn bộ luồng mở app lần đầu, đóng gói thành thư viện: splash → chọn ngôn ngữ → các bước onboarding → quảng cáo full-screen tuỳ chọn → câu hỏi tuỳ chọn → app của bạn.
 
-- Namespace `io.onboardkit` · tiền tố resource `ob_` · entry point `OnboardingSdk`
-- Ads đi qua interface `OnboardingAdProvider`. `ERainAdProvider` là cầu nối sang `:ads`
-  (ERainAd/AdMob); bạn có thể truyền implementation của mình, hoặc `null` để chạy luồng không ads.
-- Analytics đi qua `Tracker` của `:trackkit`. Nối một sink là cả phễu tự báo cáo.
+Quảng cáo, remote config, lưu trạng thái và funnel analytics đã nằm sẵn bên trong. Bạn chỉ cung cấp
+ad unit id, nội dung hiển thị, và điểm đến khi luồng kết thúc.
 
-**Đọc cả [`../trackkit/README.vi.md`](../trackkit/README.vi.md).** Không có `Tracker.install()` kèm
-một sink thì mọi event SDK này phát ra đều bị validate rồi vứt đi.
+## Requirements
 
----
+| | |
+|---|---|
+| minSdk / compileSdk / JDK | 24 / 36 / 17 |
+| Namespace, tiền tố resource, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
+| Firebase | `google-services.json` + `com.google.gms.google-services`; thiếu thì mọi key `ob_*` giữ nguyên giá trị mặc định |
+| Ad unit id | `assets/ad_config.json` qua `AdRemoteConfig`, hoặc ghi thẳng trong `AdsConfig` |
 
-## 1. Cài đặt Gradle
+## Installation
 
 ```groovy
-// Thay <tag> bằng một tag tại https://github.com/truongvimit/adlogic-partner-sdk/tags
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
 def sdkVersion = '<tag>'
 
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"          // cho ERainAdProvider
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-Giữ mọi module trên cùng một tag — chúng publish cùng nhau và không được test chéo giữa các version.
+Phải khai báo `:ads` tường minh — bên trong module này nó là dependency `implementation`, nên nếu không
+khai báo thì `com.ads.module.*` không có trên compile classpath của bạn. `:trackkit` đã export bằng `api`,
+`consumer-rules.pro` đi kèm module, và bốn activity của SDK đã nằm trong manifest thư viện — đừng khai báo lại.
 
-`onboardkitorigin` phụ thuộc `ads` ở runtime scope, nên `com.ads.module.*` **không** nằm trên compile
-classpath của bạn qua nó — phải khai `ads` tường minh nếu bạn khởi tạo `ERainAdProvider` hoặc gọi API
-ads trực tiếp.
+## Quick start
 
-Yêu cầu JDK 17, `minSdk` 24. Bốn activity của luồng đã khai trong manifest của thư viện và tự merge;
-bạn **không** cần thêm vào manifest của mình.
+### 1. `Application.onCreate()`
 
----
-
-## 2. Tích hợp qua bốn bước
-
-### 2.1 `Application.onCreate()` — install
-
-Thứ tự quan trọng. `Tracker.install()` phải trước: event phát trước nó được buffer chứ không mất,
-nhưng sẽ được gán vào session đang chạy tại thời điểm install thực sự xảy ra.
+`Tracker.install()` trước tiên — event phát sớm hơn chỉ được buffer. `OnboardingSdk.install()` trước
+`configure()` — config truyền vào trước khi install sẽ bị bỏ, và cả luồng sau đó sẽ skip.
 
 ```kotlin
 override fun onCreate() {
     super.onCreate()
+    initTracking()                                    // Tracker.install + Tracker.addSink
+    AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
+    AdConfig.install(FirebaseAdConfigSource())        // optional: remote ad config
+    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000, testDeviceHashedId = "…"))
+    val adConfig = ERainAdConfig(this)                // fill its fields: see ../ads/README.md
+    ERainAd.getInstance().init(this, adConfig)
+    ERainTuning.install()                             // once, after ERainAd.init
 
-    initTracking()        // Tracker.install + addSink — xem trackkit/README.vi.md
-    initAds()             // ERainAd.getInstance().init(this, config)
-    initOnboardKit()      // bên dưới
-}
-
-private fun initOnboardKit() {
     OnboardingSdk.install(this) {
-        adProvider = ERainAdProvider()        // hoặc null nếu không dùng ads
-        paywallGate = MyPaywallGate()         // tuỳ chọn, xem mục 6
-        listener = OnboardingListener { ctx, outcome ->
-            if (outcome is OnboardingOutcome.Completed) {
-                outcome.selectedLanguage?.let { AppPrefs(ctx).languageCode = it }
-            }
-            ctx.startActivity(
-                Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }
+        adProvider = ERainAdProvider()                // null for an ad-free flow
+        paywallGate = MyPaywallGate()                 // optional
+        listener = OnboardingListener { ctx, outcome -> goToMain(ctx, outcome) }
     }
-    OnboardingSdk.configure(buildConfig()).onFailure { Log.e(TAG, "OnboardKit config bị từ chối", it) }
+    OnboardingSdk.configure(buildConfig()).onFailure { Log.e("OnboardKit", "rejected", it) }
+    OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)   // OB_FLOW logcat; on by default
 }
 ```
 
-`install()` đồng bộ và nhẹ. `configure()` trả về `Result` — **phải kiểm tra**. Config bị từ chối sẽ
-không được áp dụng, và luồng sau đó tự báo là đã skip mà không có triệu chứng nào khác.
+Listener phải điều hướng cho cả `OnboardingOutcome.Completed`, `Skipped` **và** `Aborted` — không đăng ký listener thì outcome bị bỏ. `Completed.selectedLanguage` mang ngôn ngữ đã chọn; `OnboardingSdk.selectedLanguage()` đọc lại giá trị đó về sau.
 
-### 2.2 Config
+### 2. Config
 
 ```kotlin
 private fun buildConfig() = onboardKitConfig {
-    splash = SplashConfig(
-        logoRes = R.drawable.ic_logo,
-        minDisplayTimeMs = 3_000,
-    )
+    splash = SplashConfig(logoRes = R.drawable.ic_logo, minDisplayTimeMs = 3_000)
     language = LanguageConfig(defaultCode = "en")
-
-    defaultSteps()                            // OB1, OB2, OB3 (ads full-screen), OB4
-
-    question = QuestionConfig(
-        options = listOf(
-            QuestionOption("romance", "Romance", imageRes = R.drawable.opt_romance),
-            QuestionOption("scifi", "Sci-Fi", imageRes = R.drawable.opt_scifi),
-        ),
-    )
-
+    defaultSteps()                                    // OB1, OB2, OB3 (ad-only), OB4
+    question = QuestionConfig(options = listOf(QuestionOption("romance", "Romance")))
     ads = AdsConfig(
-        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/1111"),
-        splashBanner         = BannerAdUnit("ca-app-pub-…/2222"),
+        splashBanner         = BannerAdUnit("ca-app-pub-…/1111"),
+        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/2222"),
         languageNative       = NativeAdUnit.waterfall(highFloor = "…/3333", allPrice = "…/4444"),
-        languageDupNative    = NativeAdUnit("ca-app-pub-…/5555"),
-        contentStepNative    = NativeAdUnit("ca-app-pub-…/6666"),
-        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/7777"),
-        ob5Native            = NativeAdUnit("ca-app-pub-…/8888"),
-        questionNative       = NativeAdUnit("ca-app-pub-…/9999"),
-        questionInterstitial = InterstitialAdUnit("ca-app-pub-…/0000"),
+        contentStepNative    = NativeAdUnit("ca-app-pub-…/5555"),
+        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/6666"),
     )
 }.getOrThrow()
 ```
 
-`defaultSteps()` là template OB1–OB4. Muốn tự chọn:
+Thay vì `defaultSteps()`, bạn liệt kê bước của mình bằng `steps(vararg StepDefinition)` hoặc `step(…)`.
+Thứ tự trong danh sách là thứ tự hiển thị; remote config chỉ tắt được một bước, không sắp xếp lại.
 
-```kotlin
-steps(
-    ContentStepDefinition(StepId.OB1, titleRes = R.string.ob1_title, imageRes = R.drawable.ob1),
-    AdFullScreenStepDefinition(StepId.OB3, showSkipButton = true, skipButtonDelaySec = 3),
-    ContentStepDefinition(StepId.OB4, layoutRes = R.layout.my_ob4),   // layout của bạn, xem mục 4
-)
-```
+### 3. Splash
 
-**Thứ tự step cố định trong code**; remote config chỉ có thể tắt một step, không bao giờ đổi thứ tự.
-Đây là chủ đích — một danh sách sắp xếp được từ remote chính là cách SDK bị audit bắn nhầm event
-hoàn thành của step khác khi có step bị tắt. Một step được bật/tắt theo `StepId` của nó:
-`StepId.OB1` đọc `ob_enable_step_ob1`, tương tự tới OB5.
-
-#### Ad unit riêng từng trang, và cái bẫy đánh số
-
-`contentStepNative` là pool dùng chung cho các trang content. Muốn bán riêng từng trang thì khai
-entry riêng cho trang đó — trang nào không khai sẽ rơi về pool chung, nên khai một trang không bắt
-bạn phải khai hết:
-
-```kotlin
-ads = AdsConfig(
-    contentStepNative = NativeAdUnit("…/shared"),      // dùng cho trang không có entry dưới đây
-    stepNatives = mapOf(
-        StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
-        StepId.OB2 to NativeAdUnit("…/3333"),
-    ),
-)
-```
-
-Chú ý cách đánh số. `StepId` đếm **vị trí trong flow**, và trang ad-only chiếm một vị trí — nên với
-bố cục mặc định OB1, OB2, **OB3 = trang ad full-screen**, OB4, thì trang *content* thứ ba là
-`StepId.OB4`. Nếu remote key của bạn đếm theo trang content (`native_ob1..3`) thì hai bên không
-khớp, và `StepId.OB3 to native("native_fs")` đọc lên y như gõ nhầm. Đặt tên vai trò một lần, ngay
-chỗ khai flow, thì phần còn lại của file hết nói dối:
-
-```kotlin
-private object Page {
-    val CONTENT_1      = StepId.OB1
-    val CONTENT_2      = StepId.OB2
-    val AD_FULL_SCREEN = StepId.OB3
-    val CONTENT_3      = StepId.OB4
-}
-```
-
-Mọi unit ở trên đều là **waterfall**: danh sách xếp tầng cao trước, provider đi từng id một, 30 s mỗi
-tầng, dừng ở tầng đầu tiên fill được. `NativeAdUnit("id")` chỉ là waterfall một tầng.
-
-#### Ad được request lúc nào
-
-Chuỗi preload chạy trước một màn, riêng trang ad-only chạy trước hai: nó không có nội dung nào của
-riêng nó, nên tới nơi mà ad chưa fill là user ngồi nhìn spinner.
-
-| Khi user đang ở | SDK request |
-|---|---|
-| Splash (sau remote) | native language, native step đầu, banner + interstitial splash |
-| Language | native language thứ hai, native step đầu |
-| Step *n* | step *n+1*, cộng thêm step ad-only kế tiếp dù nó ở đâu |
-| Step cuối | OB5 và question |
-
-### 2.3 Splash — kế thừa, đừng chép
-
-Activity launcher của bạn kế thừa `ObSplashActivity`. Chuỗi xử lý — consent, billing, fetch remote,
-request ads, thời gian hiện tối thiểu — đã nằm sẵn bên trong; bạn chỉ điền các hook cần dùng.
-
-Billing chạy **trước** request ads đầu tiên là có chủ đích: gate đọc trạng thái đã mua để quyết định
-có được request hay không, nên hỏi sớm hơn sẽ chạm vào người đã trả tiền.
+Launcher activity của bạn kế thừa `ObSplashActivity`. Consent, billing, remote fetch, request quảng cáo,
+thời gian hiển thị tối thiểu, interstitial và điều hướng đều nằm bên trong; bạn chỉ điền vào các hook.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
+    override suspend fun onInitBilling() { myEntitlement.awaitReady() }  // resolve premium first
 
-    /** Trả về "ads đã được phép request chưa". Hiện UMP ở đây. */
-    override suspend fun onConsentRequired(): Boolean {
-        // Gọi Tracker.setConsent(analytics, ads) đúng một lần từ callback consent.
-        return userGrantedConsent
+    override fun onRemoteFetched() {
+        // fetch your app's own remote keys here
+        OnboardingSdk.configure(buildConfig())   // rebuild: remote may have changed ad unit ids
     }
-
-    /** Xác định entitlement, có kết quả là trả về ngay — hook này chặn mọi ad phía dưới. */
-    override suspend fun onInitBilling() { Billing.awaitReady(timeoutMs = 5_000) }
-
-    override fun onRemoteFetched() { /* remote key riêng của bạn đã sẵn sàng */ }
 }
 ```
 
-`onConsentRequired` là cổng chặn cho **mọi** ad trong flow, không riêng cái ở splash. Trả `false` —
-hoặc không trả lời trong `consentTimeoutMs` — sẽ chạy cả onboarding không ad thay vì request khi
-chưa có câu trả lời; mỗi vị trí báo `consent_not_granted` nên việc bỏ qua là thấy được chứ không im
-lặng. Fetch remote chạy song song với consent (nó không request ad nào); còn load ad thì không.
+Khai báo nó với `android:exported="true"`, một filter MAIN/LAUNCHER và theme AppCompat/MaterialComponents.
+Đừng override `onConsentRequired()` — mặc định của nó chạy luồng UMP qua `ConsentCenter` trong `:ads`;
+chỉ override để `return true` khi app không có bước consent. Đừng gọi `OnboardingSdk.start()` ở đây, nó
+tự chạy khi pipeline hoàn tất. Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` —
+`ConsentCenter.detach(this)` nằm ở đó. Về sau: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
 
-Khai nó là launcher trong manifest như bình thường. **Không** tự gọi `OnboardingSdk.start()` —
-`ObSplashActivity` gọi khi pipeline của nó xong.
+## Configuration
 
-### 2.4 Vào lại từ Settings
+| Config | Trường | Kiểu | Mặc định |
+|---|---|---|---|
+| `SplashConfig` | `layoutRes` / `logoRes` / `appNameRes` | `@LayoutRes` / `@DrawableRes` / `@StringRes Int` | `0` = layout của SDK / icon app / tên app |
+| | `minDisplayTimeMs` / `remoteFetchTimeoutMs` / `consentTimeoutMs` / `billingTimeoutMs` | `Long` | `3_000` / `10_000` / `15_000` / `5_000` |
+| | `adLoadStrategy` | `AdLoadStrategy` | `ALTERNATE`; `SAME_TIME` load quảng cáo ngay trong lúc fetch |
+| `LanguageConfig` | `languages` / `defaultCode` | `List<ObLanguage>` / `String?` | `ObLanguages.ALL` (21 ngôn ngữ, kèm cờ) / `null` |
+| | `secondNativeOnSelectEnabled` / `tapHintEnabled` / `confirmVisibleBeforeSelect` | `Boolean` | `true` |
+| `BehaviorConfig` | `lockPagerSwipe` / `backNavigatesBack` / `reloadAdOnStepReturn` | `Boolean` | `true` / `true` / `false` |
+| `SystemBarConfig` | `showStatusBar` / `showNavigationBar` | `Boolean` | `true` |
+| `QuestionConfig` | `titleRes` / `ctaTextRes` / `title` | `@StringRes Int` / `CharSequence?` | `0` / `0` / `null` |
+| (`null` là bỏ màn này) | `options` — `QuestionOption(id, title, titleRes, imageRes, imageUrl)` | `List<QuestionOption>` | `emptyList()`; rỗng cũng bỏ luôn màn hình |
+| | `selectionMode` / `minSelection` / `refreshAdOnSelect` | `SelectionMode` / `Int` / `Boolean` | `MULTIPLE` / `1` (≥ 1) / `false` |
 
-```kotlin
-OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)
-```
+**Steps.** `ContentStepDefinition(id, titleRes = 0, subtitleRes = 0, title = null, subtitle = null, imageRes = 0,
+layoutRes = 0, showsProgressIndicator = true)` và `AdFullScreenStepDefinition(id, showSkipButton = true,
+skipButtonDelaySec = 3, autoNextEnabled = false, autoNextDelayMs = 15_000, layoutRes = 0)`. `id` là một `StepId`:
+`OB1`…`OB5` — đây là vị trí trong luồng, không phải trang nội dung: OB3 là trang chỉ có quảng cáo của template mặc định, nên trang *nội dung* thứ ba là `StepId.OB4`.
 
-Chế độ `SETTINGS` không hiện ads, có nút back thật, và bị loại khỏi phễu first-open nên không thể
-thổi phồng tỷ lệ chuyển đổi LFO.
+**AdsConfig.** Slot để `null` thì không hiện quảng cáo. Mọi slot native/interstitial đều là waterfall: id xếp theo floor cao trước, request lần lượt từng id, dừng ở lần fill đầu tiên.
 
----
+| Trường | Kiểu | Mặc định |
+|---|---|---|
+| `enabled` / `skipAdOnlyStepsWhenPremium` | `Boolean` | `true` — công tắc tổng / premium bỏ qua các bước chỉ có quảng cáo |
+| `splashBanner` | `BannerAdUnit?` | `null` |
+| `splashInterstitial` / `splashInterstitialOldUser` | `InterstitialAdUnit?` | `null`; old-user fallback về cái còn lại |
+| `languageNative` / `languageDupNative` | `NativeAdUnit?` | `null`; dup fallback về `languageNative` |
+| `contentStepNative`, `fullScreenStepNative`, `ob5Native`, `questionNative` | `NativeAdUnit?` | `null` |
+| `stepNatives` | `Map<StepId, NativeAdUnit>` | `emptyMap()` — override theo từng trang cho `contentStepNative` / `fullScreenStepNative`; `stepNatives[OB5]` cũng đứng sau `ob5Native` |
+| `questionInterstitial`, `appResume` | `InterstitialAdUnit?` | `null` |
+| `contentStepTemplate` / `languageTemplate` / `questionTemplate` | `NativeTemplate` | `CTA_BOTTOM` |
 
-## 3. Những gì tự có sẵn
+**Native template.** Template chọn layout; `components` trong `ad_config.json` của app chọn khối nào hiện và
+theo thứ tự nào.
 
-Không mục nào dưới đây cần call site của bạn. Chỉ cần đã đăng ký một `TrackSink`.
+| `NativeTemplate` | Layout | `components` điều khiển |
+|---|---|---|
+| `CTA_BOTTOM` | `ob_layout_native_cta_bottom` | thứ tự + ẩn/hiện |
+| `COMPACT` | `ob_layout_native_compact` | chỉ ẩn/hiện — bố cục 2 hàng ngang, không phải stack dọc |
+| `FULL_SCREEN` | `ob_layout_native_fullscreen` | chỉ ẩn/hiện — text đè lên media, không phải stack dọc |
+
+`onboardKitConfig { }` trả về `Result.failure(ObConfigException)` khi: trùng `StepId`; `minSelection < 1`;
+trùng id của question option; danh sách ngôn ngữ rỗng; một tier list toàn giá trị rỗng, chứa id rỗng hoặc lặp id; `splashBanner.id` rỗng; hoặc set bất kỳ knob nào trong năm knob `layoutRes` bị từ chối.
+
+**Bước chỉ có quảng cáo.** Một trang `AdFullScreenStepDefinition` bị loại khỏi luồng khi placement của nó
+chắc chắn không thể fill: không có ad unit, `enabled = false`, cờ remote tổng hoặc cờ remote của placement đang tắt,
+không có provider, hoặc consent chưa được trả lời. Số bước, progress indicator và chỉ số resume đều co lại theo.
+Premium không phải lý do loại bỏ — nó đi theo `skipAdOnlyStepsWhenPremium`. Một trang đã vào luồng rồi mới
+fail fill thì thoát qua `StepHost.skipAdStep(stepId)`.
+
+## Custom layouts
+
+Chỉ `SplashConfig.layoutRes` và `ContentStepDefinition.layoutRes` được màn hình đọc. Năm knob `layoutRes`
+còn lại bị từ chối — hãy để `0` và override layout cùng tên của SDK, giữ nguyên mọi id mà nó khai báo.
+
+| Knob bị từ chối | Override layout này thay thế |
+|---|---|
+| `LanguageConfig.layoutRes` / `.itemLayoutRes` | `ob_activity_language.xml` / `ob_item_language.xml` |
+| `QuestionConfig.layoutRes` / `.optionLayoutRes` | `ob_activity_question.xml` / `ob_item_question_option.xml` |
+| `AdFullScreenStepDefinition.layoutRes` | `ob_fragment_ad_step.xml` |
+
+- Splash bind từng id theo kiểu null-safe, nên id nào bạn bỏ đi thì nó bỏ qua id đó.
+- Layout của content step phải có **đủ** mọi id, nếu không trang đó rơi về layout của SDK kèm một dòng log.
+- Native template (`ob_layout_native_*`) dùng id chuẩn của AdMob; giữ đúng những id mà template bạn override đã khai báo.
+
+| Màn hình | Id | Kiểu |
+|---|---|---|
+| Splash | `ob_splash_logo` / `ob_splash_app_name` / `ob_splash_progress` | `ImageView` / `TextView` / `ProgressBar` |
+| | `ob_splash_ad_container` | `FrameLayout`; đặt `<include layout="@layout/layout_banner_control" />` bên trong, nếu không banner splash không có chỗ để gắn |
+| Content step | `ob_step_image` / `ob_step_player` / `ob_step_card` | `ImageView` / `androidx.media3.ui.PlayerView` / `LinearLayout` |
+| | `ob_step_title` / `ob_step_subtitle` / `ob_step_indicator` / `ob_primary_cta` | `TextView` / `TextView` / `ObStepIndicator` / `ObPrimaryButton` |
+| | `ob_ad_block` / `ob_native_container` | `FrameLayout` (block bị ẩn khi slot bị từ chối) / `FrameLayout` |
+
+Với màn hình của riêng bạn nằm trong luồng, `showInterstitial(placement, onNext, onFinished)` là extension
+public trên `AppCompatActivity`: mở màn đích trong `onNext` (nằm dưới quảng cáo), đóng màn hiện tại trong
+`onFinished`. Cả hai chạy tối đa một lần, `onNext` luôn chạy trước, trên mọi nhánh; đừng bao giờ gọi
+`finish()` từ `onNext`. Không có API native tương đương công khai — hãy tự render native bằng
+`NativeAdHelper` trong `:ads`.
+
+## Remote config keys
+
+Giá trị mặc định nằm trong `ObRemoteKeys`; không publish gì thì giữ nguyên các mặc định dưới đây.
+
+| Key | Kiểu | Mặc định | Tác dụng |
+|---|---|---|---|
+| `ob_enable_all_ads` / `ob_enable_ui_content` | Boolean | `true` | Công tắc tắt toàn bộ quảng cáo / bật tắt UI điều khiển từ server |
+| `ob_enable_step_ob1` … `ob_enable_step_ob4` | Boolean | `true` | Bật tắt một bước |
+| `ob_enable_step_ob5` | Boolean | `false` | Màn quảng cáo full-screen độc lập sau pager |
+| `ob_enable_question` / `ob_enable_question_old_user` | Boolean | `true` / `false` | Khảo sát cho user mới / cho user đã hoàn thành luồng |
+| `ob_enable_language_native_2` / `ob_pass_lfo_if_completed` | Boolean | `true` | Native thứ hai khi chạm ngôn ngữ lần đầu / bỏ màn ngôn ngữ khi đã chọn ngôn ngữ |
+| `ob_show_language_tap_hint` / `ob_show_language_confirm_before_select` | Boolean | `true` | Gợi ý bàn tay / nút xác nhận trước khi chọn; mỗi cái AND với trường tương ứng trong `LanguageConfig` |
+| `ob_language_supported_codes` | String | `""` | Lọc và sắp thứ tự bằng CSV; rỗng = toàn bộ danh mục |
+| `ob_reuse_splash_inter` | Boolean | `true` | Dùng lại interstitial splash còn trong buffer ở cuối pager |
+| `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_language_native_enabled`, `ob_ads_content_native_enabled`, `ob_ads_fullscreen_native_enabled`, `ob_ads_question_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled` | Boolean | `true` | Mỗi placement một công tắc, đều AND với `ob_enable_all_ads` |
+| `ob_splash_min_display_ms` / `ob_splash_ad_budget_ms` / `ob_splash_banner_wait_ms` | Long | `3000` / `60000` / `0` | Ghi đè `SplashConfig.minDisplayTimeMs` khi > 0 / ngân sách cho cả waterfall của interstitial splash (30 s mỗi tầng) / splash chờ banner bao lâu trước tiên |
+| `ob_skip_button_delay_sec` / `ob_fullscreen_auto_dismiss_sec` | Long | `3` / `15` | Ghi đè `AdFullScreenStepDefinition.skipButtonDelaySec` / auto-dismiss của OB5, chặn sàn ở 5 (trang trong pager dùng `autoNextDelayMs`) |
+| `ob_show_skip_ob3` / `ob_show_skip_ob5` | Boolean | `true` | Nút skip trên trang pager chỉ có quảng cáo / trên OB5 |
+| `ob_ui_content` / `ob_ui_design_tokens` | String | `""` | JSON theo từng bước (title, subtitle, màu, ảnh hoặc video) và token màu/typography của nó |
+| `ob_question_config` / `ob_config_version` | String / Long | `""` / `0` | JSON thay toàn bộ danh sách option biên dịch sẵn / đổi giá trị để xoá cache cục bộ |
+
+`ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_app_resume_enabled`, `ob_splash_ad_budget_ms`
+và `ob_splash_banner_wait_ms` không được cache cục bộ: ở cold start trước khi fetch về, chúng đọc ra giá trị mặc định.
+
+## Analytics events
+
+Tự động phát khi đã nối `Tracker.install()` và một `Tracker.addSink(...)`. Định danh event là `StepId`,
+không bao giờ là chỉ số trang trong pager.
 
 | Giai đoạn | Event |
 |---|---|
-| Vào luồng | `fo_flow_start` — mẫu số, bắn cả khi luồng quyết định skip |
-| Splash | `fo_splash_view`, `fo_splash_complete` (`dwell_ms`) |
-| Language | `fo_language_view`, `fo_language_select`, `fo_language_complete` (đều có `screen_index`), `fo_language_flow_complete` |
-| Steps | `fo_step_view`, `fo_step_complete` — kèm `step`, `index`, `dwell_ms`, `exit_reason` (`cta` / `skip` / `auto_next` / `ad_failed` / `auto_dismiss`) |
-| Câu hỏi | `fo_question_view`, `fo_question_answer`, `fo_question_complete` |
-| Kết thúc luồng | `fo_flow_complete` (`steps_shown`, `dwell_ms`) |
-| Slot ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason` = `policy` / `no_ad_unit` / `not_ready`) |
-| Paywall | `iap_paywall_view`, `iap_paywall_result` (`status`) |
-| Màn hình | `screen_view` cho mỗi màn của luồng |
+| Flow | `fo_flow_start` (phát cả khi luồng bị skip), `fo_flow_complete` |
+| Splash | `fo_splash_view`, `fo_splash_complete` |
+| Language | `fo_language_view`, `fo_language_select`, `fo_language_complete`, `fo_language_flow_complete` |
+| Steps | `fo_step_view`, `fo_step_complete` (`step`, `index`, `exit_reason` = `cta` / `skip` / `auto_next` / `ad_failed` / `auto_dismiss`) |
+| Question | `fo_question_view`, `fo_question_answer`, `fo_question_complete` |
+| Ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason`) |
+| Paywall, screens | `iap_paywall_view`, `iap_paywall_result`; mỗi màn hình SDK một `Tracker.screen(...)` |
 
-Danh tính event là **step id**, không bao giờ là pager index, nên tắt một step không thể đẩy step khác
-sang nhầm tên event.
+Các lý do của `ad_skipped`: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`, `no_handshake`.
 
-Muốn nhận thêm trong code của bạn thì thêm plugin:
+Muốn tự nhận event thì thêm `analyticsPlugin { event -> log(event.name, event.params) }` bên trong `install`,
+hoặc collect `OnboardingSdk.events` / `.state`. Plugin thấy tên event `ob_*` của chính SDK, không phải taxonomy
+`fo_*` ở trên — taxonomy đó chỉ tồn tại ở phía `Tracker`. `isCompleted()`, `selectedLanguage()`, `answers()`,
+`markCompleted()` và `reset()` đọc và xoá tiến độ đã lưu.
 
-```kotlin
-OnboardingSdk.install(this) {
-    analyticsPlugin { event -> myOwnLogger.log(event.name, event.params) }
-}
-```
-
-Bạn cũng có thể quan sát luồng dưới dạng `Flow<OnboardingEvent>` qua `OnboardingSdk.events`, hoặc đọc
-trạng thái bằng `isCompleted()`, `selectedLanguage()`, `answers()`.
-
----
-
-## 4. Tự cấp layout — hợp đồng về id
-
-Truyền `layoutRes` ở step, `LanguageConfig.layoutRes`, hoặc `SplashConfig.layoutRes`. SDK bind theo
-id, nên các id sau **phải tồn tại**, không thì slot bị bỏ qua:
-
-| Id | Kiểu | Ở đâu |
-|---|---|---|
-| `ob_native_container` | `FrameLayout` | mọi màn có native |
-| `ob_native_shimmer` | include shimmer | cạnh container |
-| `ob_ad_block` | `ViewGroup` | vùng bọc, bị ẩn khi slot bị từ chối |
-| `ob_primary_cta` | `ObPrimaryButton` | content step |
-| `ob_step_indicator` | `ObStepIndicator` | content step |
-| `ob_skip_button` | `View` | màn ads full-screen |
-| `ob_ad_block_2`, `ob_native_container_2`, `ob_native_shimmer_2` | như trên | **chỉ màn language** — slot native thứ hai |
-| `ob_splash_logo`, `ob_splash_app_name`, `ob_splash_progress`, `ob_splash_ad_container` | | splash |
-
-Template native dùng id chuẩn của AdMob (`ad_headline`, `ad_media`, `ad_call_to_action`, …) để
-`Admob.populateUnifiedNativeAdView` bind được.
-
----
-
-## 4.1 Show ad từ màn của riêng bạn
-
-Bạn không cần phần này cho flow có sẵn — các màn của SDK tự load và show ad của chúng. Phần này dành
-cho màn bạn tự thêm vào flow. Có đúng hai entry point, không có gì khác:
-
-```kotlin
-// Full-screen ad. Hai mốc, vì chúng không phải cùng một mốc.
-showInterstitial(
-    AdPlacement.SplashInterstitial,
-    onNext = { startNextScreen() },   // ad đã lên: start đích DƯỚI nó
-    onFinished = { finish() },        // ad đã đóng: lúc này mới finish màn hiện tại
-)
-
-// Native slot
-showNativeAd(
-    placement = AdPlacement.QuestionNative,
-    unit = config.ads.questionNative,
-    container = binding.nativeContainer,
-    shimmer = binding.nativeShimmer.root,
-    onUnavailable = { binding.adBlock.isVisible = false },
-)
-```
-
-Start đích ở `onNext` cho nó trọn thời gian ad hiển thị để inflate và bind, nên khi ad đóng là nó đã
-vẽ xong. Cả hai callback chạy **tối đa một lần**, `onNext` luôn trước `onFinished`, trên mọi đường —
-kể cả đường không có ad nào. Màn của bạn không cần cờ chống gọi hai lần.
-
-Nếu bước kế chỉ quyết định được sau ad — ví dụ nhánh paywall — thì bỏ `onNext`, làm hết trong
-`onFinished`. Cái giá là user thấy khựng một nhịp; cái được là không start một đích có thể không dùng.
-
-Tuyệt đối không gọi `finish()` trong `onNext`: Activity truyền vào `show()` phải sống lâu hơn ad,
-finish ở đó là giết đúng cái impression bạn vừa tốn tiền load.
-
-Muốn hỏi trước khi làm: `OnboardingSdk.guard().skipReason(context, placement)` trả `null` khi được
-show, hoặc trả đúng lý do khi không.
-
----
-
-## 5. Remote config key
-
-Tất cả đều có tiền tố `ob_` nên không đụng namespace remote của app bạn. Giá trị mặc định nằm trong
-code (`ObRemoteKeys`) — không có file defaults XML nào phải đồng bộ.
-
-**Kill switch** `ob_enable_all_ads`, `ob_enable_ui_content`
-**Steps** `ob_enable_step_ob1`…`ob5`, `ob_enable_question`, `ob_enable_question_old_user`
-**Language** `ob_enable_language_native_2`, `ob_pass_lfo_if_completed`, `ob_language_supported_codes` (CSV)
-**Bật/tắt ads** `ob_reuse_splash_inter`, `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled`
-**Override ad unit** `ob_ads_splash_inter_id`, `ob_ads_splash_inter_id_old_user` (rỗng = dùng id compile-time)
-**Tần suất** `ob_ads_interstitial_interval_sec`, `ob_ads_click_cap_per_day` — cả hai mặc định `0`, nghĩa là tắt
-**Thời gian** `ob_splash_min_display_ms` (3000), `ob_splash_ad_budget_ms` (60000), `ob_splash_banner_wait_ms` (0), `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
-**Nút skip** `ob_show_skip_ob3`, `ob_show_skip_ob5`
-**Template** `ob_native_template_{content,language,question}` = `cta_top` | `cta_bottom` | `compact`
-**UI điều khiển từ server** `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`
-**Dấu phiên bản cache** `ob_config_version` — đổi giá trị để xoá cache UI cục bộ
-
-`ob_enable_step_ob5` mặc định **false**: OB5 là màn ads full-screen độc lập, tắt trừ khi bạn chủ động
-bật.
-
----
-
-## 6. Paywall (tuỳ chọn)
+## Paywall gate
 
 ```kotlin
 class MyPaywallGate : PaywallGate {
     override suspend fun shouldShow(placement: PaywallPlacement) =
-        placement == PaywallPlacement.AFTER_ONBOARDING && !AppPurchase.getInstance().isPurchased
-    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome {
-        return PaywallOutcome.Dismissed
-    }
+        placement == PaywallPlacement.AFTER_ONBOARDING && !myEntitlement.isPremium
+
+    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome =
+        PaywallOutcome.Dismissed   // or Purchased / ContinueWithAds
 }
 ```
 
-Placement: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`. Mỗi lần hiện đều báo
-`iap_paywall_view` + `iap_paywall_result`; bản thân giao dịch do lớp billing báo là `iap_success`, nên
-doanh thu không bao giờ bị đếm hai lần.
+Các placement: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`. Để `paywallGate` trống thì
+mọi checkpoint đi thẳng qua.
 
----
+## Troubleshooting
 
-## 7. Checklist tích hợp
+| Triệu chứng | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| Luồng không bao giờ chạy | `configure()` fail, hoặc chạy trước `install()` | Log cái `Result`; gọi `install()` trước |
+| User không bao giờ thoát khỏi luồng | Thiếu `OnboardingListener`, hoặc listener bỏ qua `Skipped` | Xử lý cả ba outcome |
+| Mọi placement báo `no_provider` | `adProvider` để null | `adProvider = ERainAdProvider()` |
+| Mọi placement báo `consent_not_granted` | Form UMP chưa được trả lời trong `consentTimeoutMs` | Set `ConsentOptions(testDeviceHashedId = …)` |
+| Trang chỉ có quảng cáo không bao giờ hiện | Không có unit dùng được cho `fullScreenStepNative` / `stepNatives[OB3]` | Cấu hình một cái; chỉ mình `ob_enable_step_ob3` là không đủ |
+| Banner splash không bao giờ hiện | Thiếu `ob_splash_ad_container` hoặc thiếu include `layout_banner_control` | Thêm cả hai vào layout splash của bạn |
 
-- [ ] `Tracker.install()` **và** ít nhất một `Tracker.addSink(...)` — thiếu là không event nào tới nơi
-- [ ] `Tracker.setConsent(analytics, ads)` gọi đúng một lần, từ callback UMP
-- [ ] `OnboardingSdk.install()` trước `configure()`, cả hai trong `Application.onCreate()`
-- [ ] Kết quả `configure()` được kiểm tra, không bỏ qua
-- [ ] Activity launcher kế thừa `ObSplashActivity`
-- [ ] Có ad unit id cho mọi placement bạn bật — id rỗng sẽ báo `ad_skipped/no_ad_unit`
-- [ ] Remote key đã publish với đúng mặc định ở mục 5, hoặc bỏ hẳn (code tự dùng mặc định)
-- [ ] `OnboardingListener` điều hướng đi đâu đó ở **cả** `Completed` lẫn `Skipped`
-- [ ] Layout tự cấp có đủ id ở mục 4
-- [ ] Kiểm chứng trên bản debug: `ConsoleSink` in ra mọi event rời khỏi SDK
+## License
 
----
-
-## 8. Khác biệt chủ đích so với SDK mà nó thay thế
-
-- Checkpoint `lastCompletedStep`: kill app giữa luồng thì mở lại đúng step đang dở, không quay về màn
-  language từ đầu.
-- LFO2 (impression native thứ hai trên cùng một màn) và refresh-ads-khi-chạm-đáp-án **mặc định tắt** —
-  bật qua config kèm remote.
-- Premium ẩn ads ở mọi màn kể cả OB5, và có thể bỏ hẳn các step chỉ có ads.
-- Màn ads full-screen luôn có lối ra: Skip bị ép hiện khi auto-next tắt, cộng auto-dismiss cấu hình
-  từ remote.
-- Đáp án câu hỏi được lưu vào DataStore và báo cáo lên analytics — bản gốc không lưu, cũng không log.
-- Một step hoặc đáp án lỗi từ remote chỉ bị bỏ riêng phần tử đó, không làm hỏng cả màn.
-- `fo_flow_complete` bắn ở **mọi** lối thoát. Ở SDK bị audit, event tương đương bị bỏ qua ở hai trong
-  ba lối ra, nên phần lớn user không bao giờ sinh ra nó.
+MIT — xem [`../LICENSE`](../LICENSE).

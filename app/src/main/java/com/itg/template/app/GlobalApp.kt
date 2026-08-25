@@ -22,25 +22,30 @@ import com.ads.module.config.ERainAdConfig
 import com.itg.devconfig.DevConfig
 import com.itg.template.BuildConfig
 import com.itg.template.R
-import com.itg.template.ads.AdRemoteConfig
-import com.itg.template.ads.AdsManager
+import com.ads.module.config.AdConfig
+import com.ads.module.config.AdRemoteConfig
 import com.itg.template.data.pref.AppSharedPreferencesApp
 import com.itg.template.tracking.installDebugSinks
 import com.itg.template.ui.component.main.MainActivity
 import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.ConfirmUninstallActivity
+import com.itg.template.ui.component.uninstall.SurveyActivity
+import com.itg.template.ui.component.welcome.WelcomeActivity
 import dagger.hilt.android.HiltAndroidApp
 import io.onboardkit.OnboardingSdk
 import io.paykit.PayKit
 import io.paykit.PayKitLogLevel
 import io.paykit.PaywallPlacement
-import io.paykit.firebase.FirebaseConfigSource
+import io.suite.firebase.FirebaseConfigSource
+import com.ads.module.consent.ConsentCenter
+import com.ads.module.consent.ConsentOptions
+import io.suite.firebase.FirebaseAdConfigSource
 import io.paykit.integration.OnboardKitPaywallGate
 import io.paykit.payKitConfig
 import io.trackkit.Tracker
 import io.trackkit.TrackerConfig
 import io.trackkit.TrackkitEvents
-import io.trackkit.firebase.FirebaseSink
+import io.suite.firebase.FirebaseSink
 import io.trackkit.sink.ConsoleSink
 import io.onboardkit.ads.erain.ERainAdProvider
 import io.onboardkit.ads.erain.ERainTuning
@@ -57,8 +62,8 @@ class GlobalApp : AdsMultiDexApplication() {
         @SuppressLint("StaticFieldLeak")
         lateinit var instance: GlobalApp
 
-        @SuppressLint("StaticFieldLeak")
-        var currentActivity: Activity? = null
+        /** UMP logs this id on the first debug run; it is what forces the EEA form on that device. */
+        private const val CONSENT_TEST_DEVICE_HASHED_ID = "ED3576D8FCF2F8C52AD8E98B4CFA4005"
     }
 
     override fun onCreate() {
@@ -80,18 +85,21 @@ class GlobalApp : AdsMultiDexApplication() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        initAdRemoteConfig()
-        // Bind ad units to placements before any ad can load: the paid-event bridge in :ads reads
-        // the placement back from the registry, and an unregistered unit reports as "unknown"
-        AdsManager.registerAdPlacements()
+        // Loads assets/ad_config.json and binds every id to its placement; the SDK re-binds on
+        // each remote refresh, so there is nothing to call again later.
+        AdRemoteConfig.initializeFromAssets(this)
+        // Where fresher ad units come from. Installed here, applied by the SDK — no call site has
+        // to bridge remote config into the ad layer by hand.
+        AdConfig.install(FirebaseAdConfigSource())
         initAds()
         // Before OnboardKit: its paywall gate calls straight into PayKit at the first checkpoint.
         initPayKit()
         initOnboardKit()
 
-        // Unconditionally register lifecycle observer and callbacks so dynamic welcome/resume toggling works during testing
+        // The welcome-resume observer. The activity it acts on comes from AppOpenManager, which
+        // already tracks it from onActivityStarted — a second app-side tracker was a third copy of
+        // the same state, and the one that updated too late to be useful here.
         ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())
-        registerActivityLifecycleCallbacks(AppActivityLifecycleCallbacks())
     }
 
     private fun initTracking() {
@@ -115,11 +123,18 @@ class GlobalApp : AdsMultiDexApplication() {
     }
 
 
-    private fun initAdRemoteConfig() {
-        AdRemoteConfig.initializeFromAssets(this)
-    }
-
     private fun initAds() {
+        // The UMP knobs the removed GDPR module took from its callback: the same 20s budget for
+        // the round trip, and the hashed id that makes a debug build see the EEA form wherever it
+        // is actually running. Without the id, ConsentDebugSettings has no test device to force
+        // and a debug run outside the EEA never gets a form to look at.
+        ConsentCenter.configure(
+            ConsentOptions(
+                timeoutMs = AppConstants.DEFAULT_TIME_OUT_GDPR,
+                testDeviceHashedId = CONSENT_TEST_DEVICE_HASHED_ID,
+            ),
+        )
+
         val environment =
             if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
         mERainAdConfig = ERainAdConfig(this, environment)
@@ -137,10 +152,10 @@ class GlobalApp : AdsMultiDexApplication() {
         mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
         // No adjustTokenTiktok here: every impression path falls back to
         // adjustConfig.eventAdImpression (set above) — one token, one door.
-        // 0 = the ads module enforces no interval of its own. Frequency is owned by OnboardKit's
-        // ob_ads_interstitial_interval_sec, which is remote-tunable and reports why an ad was
-        // skipped. With 35 here the module silently swallowed the splash interstitial on any
-        // relaunch inside 35s, and nothing downstream could tell that apart from a dismissal.
+        // 0 = no interval until remote config says otherwise; SplashActivity applies
+        // `interstitial_interval_sec` on every fetch. With 35 baked in here the module silently
+        // swallowed the splash interstitial on any relaunch inside 35s, and nothing downstream
+        // could tell that apart from a dismissal.
         mERainAdConfig.intervalInterstitialAd = 0
 
         mERainAdConfig.idAdResume = ""
@@ -154,8 +169,12 @@ class GlobalApp : AdsMultiDexApplication() {
 
         // OnboardKit excludes its own screens from app-resume when they start, so only the
         // app's own screens are listed here.
+        // Both resume paths read this one list, so a screen listed here is off-limits to the
+        // app-open ad and to the welcome-back screen alike.
         AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
         AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
+        AppOpenManager.getInstance().disableAppResumeWithActivity(WelcomeActivity::class.java)
+        AppOpenManager.getInstance().disableAppResumeWithActivity(SurveyActivity::class.java)
     }
 
     private fun initPayKit() {

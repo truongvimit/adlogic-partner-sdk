@@ -366,11 +366,18 @@ object TrackkitEvents {
 
         class Shown : SimpleEvent(CONSENT_SHOWN, oncePerSession = true)
 
-        /** [status] is one of `granted`, `denied`, `not_required`, `error`. */
-        class Result(status: String, errorCode: Int? = null) :
+        /**
+         * [status] is one of `granted`, `denied`, `not_required`, `error`. [source] names the
+         * screen that asked, so a funnel can tell the splash prompt from a later one.
+         */
+        class Result(status: String, errorCode: Int? = null, source: String? = null) :
             SimpleEvent(
                 CONSENT_RESULT,
-                mapOf(PARAM_STATUS to status, PARAM_ERROR_CODE to errorCode),
+                mapOf(
+                    PARAM_STATUS to status,
+                    PARAM_ERROR_CODE to errorCode,
+                    PARAM_SOURCE to source,
+                ),
             )
     }
 }

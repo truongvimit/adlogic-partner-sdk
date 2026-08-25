@@ -1,23 +1,20 @@
 # OnboardKit
 
-> Tiếng Việt: **[README.vi.md](README.vi.md)** · हिन्दी: **[README.hi.md](README.hi.md)**
+> The first-open flow as a library: splash → language → onboarding steps → optional full-screen ad → optional question → your app.
 
-The first-open flow as a library: splash → language → onboarding steps → optional full-screen ad →
-optional question → your app. Ads, remote config, state persistence, the analytics funnel and every
-"user must not get stuck here" guarantee are inside. You supply ad unit ids, copy, and where to go
-when it finishes.
+Ads, remote config, state persistence and the analytics funnel are inside. You supply ad unit ids,
+copy, and where to go when the flow finishes. Tiếng Việt: **[README.vi.md](README.vi.md)** · हिन्दी: **[README.hi.md](README.hi.md)**
 
-- Namespace `io.onboardkit` · resource prefix `ob_` · entry point `OnboardingSdk`
-- Ads go through the `OnboardingAdProvider` interface. `ERainAdProvider` bridges to `:ads`
-  (ERainAd/AdMob); pass your own implementation, or `null` for an ad-free flow.
-- Analytics go through `Tracker` from `:trackkit`. Wire one sink and the whole funnel reports itself.
+## Requirements
 
-**Read [`../trackkit/README.md`](../trackkit/README.md) too.** Without `Tracker.install()` plus a
-sink, every event this SDK emits is validated and then discarded.
+| | |
+|---|---|
+| minSdk / compileSdk / JDK | 24 / 36 / 17 |
+| Namespace, resource prefix, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
+| Firebase | `google-services.json` + `com.google.gms.google-services`; without it every `ob_*` key stays at its default |
+| Ad unit ids | `assets/ad_config.json` via `AdRemoteConfig`, or literals in `AdsConfig` |
 
----
-
-## 1. Gradle setup
+## Installation
 
 ```groovy
 // Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
@@ -25,361 +22,248 @@ def sdkVersion = '<tag>'
 
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"          // for ERainAdProvider
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-Keep every module on the same tag — they are published together and are not tested across versions.
+Declare `:ads` explicitly — inside this module it is an `implementation` dependency, so `com.ads.module.*` is otherwise
+off your compile classpath. `:trackkit` is exported with `api`, `consumer-rules.pro` ships with the module, and the four
+SDK activities are in the library manifest — do not redeclare them.
 
-`onboardkitorigin` depends on `ads` at runtime scope, so `com.ads.module.*` is not on your compile
-classpath through it — declare `ads` explicitly if you construct `ERainAdProvider` or touch ad APIs.
+## Quick start
 
-Requires JDK 17, `minSdk` 24. The four flow activities are declared in the library manifest and
-merge automatically; you do **not** add them to yours.
+### 1. `Application.onCreate()`
 
----
-
-## 2. Integration in four steps
-
-### 2.1 `Application.onCreate()` — install
-
-Order matters. `Tracker.install()` comes first: events emitted before it are buffered, not lost, but
-they are attributed to whichever session is current when install finally runs.
+`Tracker.install()` first — earlier events are only buffered. `OnboardingSdk.install()` before `configure()`
+— a config passed before install is dropped and the whole flow then skips.
 
 ```kotlin
 override fun onCreate() {
     super.onCreate()
+    initTracking()                                    // Tracker.install + Tracker.addSink
+    AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
+    AdConfig.install(FirebaseAdConfigSource())        // optional: remote ad config
+    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000, testDeviceHashedId = "…"))
+    val adConfig = ERainAdConfig(this)                // fill its fields: see ../ads/README.md
+    ERainAd.getInstance().init(this, adConfig)
+    ERainTuning.install()                             // once, after ERainAd.init
 
-    initTracking()        // Tracker.install + addSink — see trackkit/README.md
-    initAds()             // ERainAd.getInstance().init(this, config)
-    initOnboardKit()      // below
-}
-
-private fun initOnboardKit() {
     OnboardingSdk.install(this) {
-        adProvider = ERainAdProvider()        // or null for no ads
-        paywallGate = MyPaywallGate()         // optional, see §6
-        listener = OnboardingListener { ctx, outcome ->
-            if (outcome is OnboardingOutcome.Completed) {
-                outcome.selectedLanguage?.let { AppPrefs(ctx).languageCode = it }
-            }
-            ctx.startActivity(
-                Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }
+        adProvider = ERainAdProvider()                // null for an ad-free flow
+        paywallGate = MyPaywallGate()                 // optional
+        listener = OnboardingListener { ctx, outcome -> goToMain(ctx, outcome) }
     }
-    OnboardingSdk.configure(buildConfig()).onFailure { Log.e(TAG, "OnboardKit config rejected", it) }
+    OnboardingSdk.configure(buildConfig()).onFailure { Log.e("OnboardKit", "rejected", it) }
+    OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)   // OB_FLOW logcat; on by default
 }
 ```
 
-`install()` is synchronous and cheap. `configure()` returns a `Result` — **check it.** A rejected
-config is not applied, and the flow then reports itself as skipped with no other symptom.
+The listener must navigate on `OnboardingOutcome.Completed`, `Skipped` **and** `Aborted` — with none registered the outcome is dropped. `Completed.selectedLanguage` carries the chosen language; `OnboardingSdk.selectedLanguage()` reads it back later.
 
-### 2.2 The config
+### 2. The config
 
 ```kotlin
 private fun buildConfig() = onboardKitConfig {
-    splash = SplashConfig(
-        logoRes = R.drawable.ic_logo,
-        minDisplayTimeMs = 3_000,
-    )
+    splash = SplashConfig(logoRes = R.drawable.ic_logo, minDisplayTimeMs = 3_000)
     language = LanguageConfig(defaultCode = "en")
-
-    defaultSteps()                            // OB1, OB2, OB3 (full-screen ad), OB4
-
-    question = QuestionConfig(
-        options = listOf(
-            QuestionOption("romance", "Romance", imageRes = R.drawable.opt_romance),
-            QuestionOption("scifi", "Sci-Fi", imageRes = R.drawable.opt_scifi),
-        ),
-    )
-
+    defaultSteps()                                    // OB1, OB2, OB3 (ad-only), OB4
+    question = QuestionConfig(options = listOf(QuestionOption("romance", "Romance")))
     ads = AdsConfig(
-        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/1111"),
-        splashBanner         = BannerAdUnit("ca-app-pub-…/2222"),
+        splashBanner         = BannerAdUnit("ca-app-pub-…/1111"),
+        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/2222"),
         languageNative       = NativeAdUnit.waterfall(highFloor = "…/3333", allPrice = "…/4444"),
-        languageDupNative    = NativeAdUnit("ca-app-pub-…/5555"),
-        contentStepNative    = NativeAdUnit("ca-app-pub-…/6666"),
-        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/7777"),
-        ob5Native            = NativeAdUnit("ca-app-pub-…/8888"),
-        questionNative       = NativeAdUnit("ca-app-pub-…/9999"),
-        questionInterstitial = InterstitialAdUnit("ca-app-pub-…/0000"),
+        contentStepNative    = NativeAdUnit("ca-app-pub-…/5555"),
+        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/6666"),
     )
 }.getOrThrow()
 ```
 
-`defaultSteps()` is the OB1–OB4 template. To choose your own:
+Instead of `defaultSteps()`, list your own with `steps(vararg StepDefinition)` or `step(…)`. List order is
+display order; remote config can only toggle a step off.
 
-```kotlin
-steps(
-    ContentStepDefinition(StepId.OB1, titleRes = R.string.ob1_title, imageRes = R.drawable.ob1),
-    AdFullScreenStepDefinition(StepId.OB3, showSkipButton = true, skipButtonDelaySec = 3),
-    ContentStepDefinition(StepId.OB4, layoutRes = R.layout.my_ob4),   // your own layout, see §4
-)
-```
+### 3. Splash
 
-Step **order is fixed in code**; remote config can only toggle a step off, never reorder. That is
-deliberate — a reorderable remote list is how the audited SDK ended up firing the wrong step's
-completion event when a step was disabled. A step is toggled by its `StepId`: `StepId.OB1` reads
-`ob_enable_step_ob1`, and so on through OB5.
-
-#### Per-page ad units, and the numbering trap
-
-`contentStepNative` is the shared pool for content pages. To sell pages separately, give a page its
-own entry — anything not listed falls back to the shared pool, so declaring one page does not force
-you to declare them all:
-
-```kotlin
-ads = AdsConfig(
-    contentStepNative = NativeAdUnit("…/shared"),      // used by pages with no entry below
-    stepNatives = mapOf(
-        StepId.OB1 to NativeAdUnit.waterfall(highFloor = "…/1111", allPrice = "…/2222"),
-        StepId.OB2 to NativeAdUnit("…/3333"),
-    ),
-)
-```
-
-Watch the numbering. `StepId` counts **positions in the flow**, and the ad-only page occupies one of
-them — so in the default OB1, OB2, **OB3 = full-screen ad**, OB4 layout, the third *content* page is
-`StepId.OB4`. If your remote keys count content pages (`native_ob1..3`) they will not line up, and
-`StepId.OB3 to native("native_fs")` reads like a typo. Name the roles once, where the flow is
-declared, and the rest of the file stops lying:
-
-```kotlin
-private object Page {
-    val CONTENT_1      = StepId.OB1
-    val CONTENT_2      = StepId.OB2
-    val AD_FULL_SCREEN = StepId.OB3
-    val CONTENT_3      = StepId.OB4
-}
-```
-
-Every unit above is a **waterfall**: the list is ordered highest floor first, and the provider walks
-it one id at a time, 30 s per floor, stopping at the first fill. `NativeAdUnit("id")` is simply a
-one-floor waterfall.
-
-#### Where ads are requested
-
-The preload chain runs one screen ahead, and the ad-only page runs two: it has no content of its
-own, so arriving there without a filled ad leaves the user on a spinner.
-
-| While the user is on | The SDK requests |
-|---|---|
-| Splash (after remote) | language native, first step native, splash banner + interstitial |
-| Language | second language native, first step native |
-| Step *n* | step *n+1*, plus the next ad-only step wherever it is |
-| Last step | OB5 and question |
-
-### 2.3 Splash — subclass, do not copy
-
-Your launcher activity extends `ObSplashActivity`. The sequence — consent, billing, remote fetch,
-ad requests, minimum display — is already inside; you fill in the hooks you need.
-
-Billing runs **before** the first ad request on purpose: the gate reads the purchase entitlement to
-decide whether a request may go out at all, so asking earlier would reach a paying user.
+Your launcher activity extends `ObSplashActivity`. Consent, billing, remote fetch, ad requests, minimum
+display, interstitial and navigation are inside; you fill in hooks.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
+    override suspend fun onInitBilling() { myEntitlement.awaitReady() }  // resolve premium first
 
-    /** Return whether ads may now be requested. Show UMP here. */
-    override suspend fun onConsentRequired(): Boolean {
-        // Call Tracker.setConsent(analytics, ads) exactly once from your consent callback.
-        return userGrantedConsent
+    override fun onRemoteFetched() {
+        // fetch your app's own remote keys here
+        OnboardingSdk.configure(buildConfig())   // rebuild: remote may have changed ad unit ids
     }
-
-    /** Resolve the entitlement and return as soon as it is known — this gates every ad below. */
-    override suspend fun onInitBilling() { Billing.awaitReady(timeoutMs = 5_000) }
-
-    override fun onRemoteFetched() { /* your own remote keys are ready */ }
 }
 ```
 
-`onConsentRequired` is the gate for **every** ad in the flow, not just the splash one. Returning
-`false` — or not returning inside `consentTimeoutMs` — runs the whole onboarding without ads rather
-than requesting them unanswered; each placement reports `consent_not_granted` so the skip is
-visible instead of silent. The remote fetch overlaps consent (it requests no ads); ad loads do not.
+Declare it with `android:exported="true"`, a MAIN/LAUNCHER filter and an AppCompat/MaterialComponents theme.
+Do not override `onConsentRequired()` — its default runs the UMP flow through `ConsentCenter` in `:ads`;
+override only to `return true` for an app with no consent step. Do not call `OnboardingSdk.start()` here, it
+runs once the pipeline resolves. If you override `onDestroy()`, call `super.onDestroy()` —
+`ConsentCenter.detach(this)` lives there. Later: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
 
-Declare it as the launcher in your manifest as usual. Do not call `OnboardingSdk.start()` yourself —
-`ObSplashActivity` does it once its pipeline resolves.
+## Configuration
 
-### 2.4 Re-entry from Settings
+| Config | Field | Type | Default |
+|---|---|---|---|
+| `SplashConfig` | `layoutRes` / `logoRes` / `appNameRes` | `@LayoutRes` / `@DrawableRes` / `@StringRes Int` | `0` = SDK layout / app icon / app label |
+| | `minDisplayTimeMs` / `remoteFetchTimeoutMs` / `consentTimeoutMs` / `billingTimeoutMs` | `Long` | `3_000` / `10_000` / `15_000` / `5_000` |
+| | `adLoadStrategy` | `AdLoadStrategy` | `ALTERNATE`; `SAME_TIME` loads ads during the fetch |
+| `LanguageConfig` | `languages` / `defaultCode` | `List<ObLanguage>` / `String?` | `ObLanguages.ALL` (21 languages, flags shipped) / `null` |
+| | `secondNativeOnSelectEnabled` / `tapHintEnabled` / `confirmVisibleBeforeSelect` | `Boolean` | `true` |
+| `BehaviorConfig` | `lockPagerSwipe` / `backNavigatesBack` / `reloadAdOnStepReturn` | `Boolean` | `true` / `true` / `false` |
+| `SystemBarConfig` | `showStatusBar` / `showNavigationBar` | `Boolean` | `true` |
+| `QuestionConfig` | `titleRes` / `ctaTextRes` / `title` | `@StringRes Int` / `CharSequence?` | `0` / `0` / `null` |
+| (`null` skips it) | `options` — `QuestionOption(id, title, titleRes, imageRes, imageUrl)` | `List<QuestionOption>` | `emptyList()`; empty also skips the screen |
+| | `selectionMode` / `minSelection` / `refreshAdOnSelect` | `SelectionMode` / `Int` / `Boolean` | `MULTIPLE` / `1` (≥ 1) / `false` |
+
+**Steps.** `ContentStepDefinition(id, titleRes = 0, subtitleRes = 0, title = null, subtitle = null, imageRes = 0,
+layoutRes = 0, showsProgressIndicator = true)` and `AdFullScreenStepDefinition(id, showSkipButton = true,
+skipButtonDelaySec = 3, autoNextEnabled = false, autoNextDelayMs = 15_000, layoutRes = 0)`. `id` is a `StepId`:
+`OB1`…`OB5` — positions in the flow, not content pages: OB3 is the ad-only page of the default template, so the third *content* page is `StepId.OB4`.
+
+**AdsConfig.** A `null` slot shows no ad. Every native/interstitial slot is a waterfall: ids ordered highest floor first, one request at a time, stopping at the first fill.
+
+| Field | Type | Default |
+|---|---|---|
+| `enabled` / `skipAdOnlyStepsWhenPremium` | `Boolean` | `true` — master switch / premium skips ad-only steps |
+| `splashBanner` | `BannerAdUnit?` | `null` |
+| `splashInterstitial` / `splashInterstitialOldUser` | `InterstitialAdUnit?` | `null`; old-user falls back to the other |
+| `languageNative` / `languageDupNative` | `NativeAdUnit?` | `null`; dup falls back to `languageNative` |
+| `contentStepNative`, `fullScreenStepNative`, `ob5Native`, `questionNative` | `NativeAdUnit?` | `null` |
+| `stepNatives` | `Map<StepId, NativeAdUnit>` | `emptyMap()` — per-page override of `contentStepNative` / `fullScreenStepNative`; `stepNatives[OB5]` also backs `ob5Native` |
+| `questionInterstitial`, `appResume` | `InterstitialAdUnit?` | `null` |
+| `contentStepTemplate` / `languageTemplate` / `questionTemplate` | `NativeTemplate` | `CTA_TOP` / `CTA_BOTTOM` / `CTA_BOTTOM` |
+
+**Native templates.** These screens ship one layout per CTA position rather than moving blocks about, so
+the template picks the layout and `components` is read for **visibility only** — it never reorders here.
+
+| `NativeTemplate` | Layout |
+|---|---|
+| `CTA_TOP` | `ob_layout_native_cta_top` — CTA above the media |
+| `CTA_BOTTOM` | `ob_layout_native_cta_bottom` — CTA below the media |
+| `COMPACT` | `ob_layout_native_compact` — two rows, no media |
+| `FULL_SCREEN` | `ob_layout_native_fullscreen` — media full-bleed, text overlaid |
+
+Derive the template from the placement's `positionCTA` so one document drives both:
 
 ```kotlin
-OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)
+languageTemplate = ads.templateOf("native_lang")                                  // "BOTTOM" -> CTA_BOTTOM
+contentStepTemplate = ads.templateOf("native_ob1", default = NativeTemplate.CTA_TOP)
 ```
 
-`SETTINGS` mode shows no ads, has a real back button, and is excluded from the first-open funnel so
-it cannot inflate your LFO conversion.
+Placements outside this flow leave `positionCTA` unset; there `components` orders the blocks. See
+[../ads/README.md](../ads/README.md).
 
----
+`onboardKitConfig { }` returns `Result.failure(ObConfigException)` on: duplicated `StepId`; `minSelection < 1`;
+duplicated question option ids; an empty language list; a tier list that is all-blank, holds a blank id or repeats an id; a blank `splashBanner.id`; any of the five rejected `layoutRes` knobs set.
 
-## 3. What you get automatically
+**Ad-only steps.** An `AdFullScreenStepDefinition` page is dropped from the flow when its placement can never fill:
+no ad unit, `enabled = false`, master or per-placement remote flag down, no provider, or consent unanswered. Step
+count, progress indicator and resume index shrink with it. Premium is not a removal reason — it follows
+`skipAdOnlyStepsWhenPremium`. A page already in the flow that then fails to fill leaves through `StepHost.skipAdStep(stepId)`.
 
-Nothing below needs a call site of yours. It requires only that a `TrackSink` is registered.
+## Custom layouts
+
+Only `SplashConfig.layoutRes` and `ContentStepDefinition.layoutRes` are read by a screen. The other five `layoutRes`
+knobs are rejected — leave them at `0` and override the SDK layout of the same name instead, keeping every id it declares.
+
+| Rejected knob | Override this layout instead |
+|---|---|
+| `LanguageConfig.layoutRes` / `.itemLayoutRes` | `ob_activity_language.xml` / `ob_item_language.xml` |
+| `QuestionConfig.layoutRes` / `.optionLayoutRes` | `ob_activity_question.xml` / `ob_item_question_option.xml` |
+| `AdFullScreenStepDefinition.layoutRes` | `ob_fragment_ad_step.xml` |
+
+- Splash binds each id null-safely, so one you leave out is skipped.
+- A content-step layout must carry **all** of its ids, or that page falls back to the SDK layout with a log.
+- Native templates (`ob_layout_native_*`) use the standard AdMob ids; keep whichever ids the template you override already declares.
+
+| Screen | Id | Type |
+|---|---|---|
+| Splash | `ob_splash_logo` / `ob_splash_app_name` / `ob_splash_progress` | `ImageView` / `TextView` / `ProgressBar` |
+| | `ob_splash_ad_container` | `FrameLayout`; put `<include layout="@layout/layout_banner_control" />` inside it or the splash banner has nowhere to attach |
+| Content step | `ob_step_image` / `ob_step_player` / `ob_step_card` | `ImageView` / `androidx.media3.ui.PlayerView` / `LinearLayout` |
+| | `ob_step_title` / `ob_step_subtitle` / `ob_step_indicator` / `ob_primary_cta` | `TextView` / `TextView` / `ObStepIndicator` / `ObPrimaryButton` |
+| | `ob_ad_block` / `ob_native_container` | `FrameLayout` (the block is hidden when the slot is declined) / `FrameLayout` |
+
+For a screen of your own inside the flow, `showInterstitial(placement, onNext, onFinished)` is a public extension on
+`AppCompatActivity`: start the destination in `onNext` (under the ad), finish the current screen in `onFinished`. Both
+run at most once, `onNext` always first, on every path; never call `finish()` from `onNext`. No public native
+equivalent — render your own natives through `NativeAdHelper` in `:ads`.
+
+## Remote config keys
+
+Defaults live in `ObRemoteKeys`; publishing nothing keeps the defaults below.
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `ob_enable_all_ads` / `ob_enable_ui_content` | Boolean | `true` | Master ad kill switch / server-driven UI on/off |
+| `ob_enable_step_ob1` … `ob_enable_step_ob4` | Boolean | `true` | Toggle one step |
+| `ob_enable_step_ob5` | Boolean | `false` | The standalone full-screen ad screen after the pager |
+| `ob_enable_question` / `ob_enable_question_old_user` | Boolean | `true` / `false` | Survey for new users / for users who already finished |
+| `ob_enable_language_native_2` / `ob_pass_lfo_if_completed` | Boolean | `true` | Second native on the first language tap / skip the language screen once a language is chosen |
+| `ob_show_language_tap_hint` / `ob_show_language_confirm_before_select` | Boolean | `true` | Hand hint / confirm button before a pick; each AND-ed with its `LanguageConfig` field |
+| `ob_language_supported_codes` | String | `""` | CSV filter and order; empty = full catalog |
+| `ob_reuse_splash_inter` | Boolean | `true` | Reuse a buffered splash interstitial at the end of the pager |
+| `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_language_native_enabled`, `ob_ads_content_native_enabled`, `ob_ads_fullscreen_native_enabled`, `ob_ads_question_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled` | Boolean | `true` | One switch per placement, each AND-ed with `ob_enable_all_ads` |
+| `ob_splash_min_display_ms` / `ob_splash_ad_budget_ms` / `ob_splash_banner_wait_ms` | Long | `3000` / `60000` / `0` | Overrides `SplashConfig.minDisplayTimeMs` when > 0 / whole-waterfall budget for the splash interstitial (30 s per floor) / how long the splash holds for the banner first |
+| `ob_skip_button_delay_sec` / `ob_fullscreen_auto_dismiss_sec` | Long | `3` / `15` | Overrides `AdFullScreenStepDefinition.skipButtonDelaySec` / OB5 auto-dismiss, floored at 5 (pager pages use `autoNextDelayMs`) |
+| `ob_show_skip_ob3` / `ob_show_skip_ob5` | Boolean | `true` | Skip button on the ad-only pager page / on OB5 |
+| `ob_ui_content` / `ob_ui_design_tokens` | String | `""` | Per-step JSON (title, subtitle, colors, image or video) and its color/typography tokens |
+| `ob_question_config` / `ob_config_version` | String / Long | `""` / `0` | JSON replacing the whole compile-time option list / change the value to clear the local cache |
+
+`ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_app_resume_enabled`, `ob_splash_ad_budget_ms`
+and `ob_splash_banner_wait_ms` are not cached locally: on a cold start before the fetch lands they read as their defaults.
+
+## Analytics events
+
+Emitted automatically once `Tracker.install()` and one `Tracker.addSink(...)` are wired. Event identity is
+the `StepId`, never the pager index.
 
 | Stage | Events |
 |---|---|
-| Flow entered | `fo_flow_start` — the denominator, emitted even when the flow decides to skip |
-| Splash | `fo_splash_view`, `fo_splash_complete` (`dwell_ms`) |
-| Language | `fo_language_view`, `fo_language_select`, `fo_language_complete` (all with `screen_index`), `fo_language_flow_complete` |
-| Steps | `fo_step_view`, `fo_step_complete` — with `step`, `index`, `dwell_ms`, `exit_reason` (`cta` / `skip` / `auto_next` / `ad_failed` / `auto_dismiss`) |
+| Flow | `fo_flow_start` (emitted even when the flow skips), `fo_flow_complete` |
+| Splash | `fo_splash_view`, `fo_splash_complete` |
+| Language | `fo_language_view`, `fo_language_select`, `fo_language_complete`, `fo_language_flow_complete` |
+| Steps | `fo_step_view`, `fo_step_complete` (`step`, `index`, `exit_reason` = `cta` / `skip` / `auto_next` / `ad_failed` / `auto_dismiss`) |
 | Question | `fo_question_view`, `fo_question_answer`, `fo_question_complete` |
-| Flow finished | `fo_flow_complete` (`steps_shown`, `dwell_ms`) |
-| Ad slots | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason` = `policy` / `no_ad_unit` / `not_ready`) |
-| Paywall | `iap_paywall_view`, `iap_paywall_result` (`status`) |
-| Screens | `screen_view` per flow screen |
+| Ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason`) |
+| Paywall, screens | `iap_paywall_view`, `iap_paywall_result`; one `Tracker.screen(...)` per SDK screen |
 
-The step id — never the pager index — is the event identity, so disabling a step cannot shift another
-step onto the wrong name.
+`ad_skipped` reasons: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`, `no_handshake`.
 
-To also receive them in your own code, add a plugin:
+To receive them yourself add `analyticsPlugin { event -> log(event.name, event.params) }` inside `install`, or collect
+`OnboardingSdk.events` / `.state`. A plugin sees the SDK's own `ob_*` event names, not the `fo_*` taxonomy above —
+those exist only on the `Tracker` side. `isCompleted()`, `selectedLanguage()`, `answers()`, `markCompleted()` and `reset()` read and clear persisted progress.
 
-```kotlin
-OnboardingSdk.install(this) {
-    analyticsPlugin { event -> myOwnLogger.log(event.name, event.params) }
-}
-```
-
-You can also observe the flow as a `Flow<OnboardingEvent>` via `OnboardingSdk.events`, or read state
-with `isCompleted()`, `selectedLanguage()`, `answers()`.
-
----
-
-## 4. Supplying your own layouts — the id contract
-
-Pass `layoutRes` on a step, `LanguageConfig.layoutRes`, or `SplashConfig.layoutRes`. The SDK binds by
-id, so these ids must exist or the slot is skipped:
-
-| Id | Type | Where |
-|---|---|---|
-| `ob_native_container` | `FrameLayout` | any screen with a native |
-| `ob_native_shimmer` | shimmer include | next to the container |
-| `ob_ad_block` | `ViewGroup` | wrapper hidden when the slot is declined |
-| `ob_primary_cta` | `ObPrimaryButton` | content steps |
-| `ob_step_indicator` | `ObStepIndicator` | content steps |
-| `ob_skip_button` | `View` | full-screen ad screens |
-| `ob_ad_block_2`, `ob_native_container_2`, `ob_native_shimmer_2` | as above | **language screen only** — the second native slot |
-| `ob_splash_logo`, `ob_splash_app_name`, `ob_splash_progress`, `ob_splash_ad_container` | | splash |
-
-Native templates use the standard AdMob ids (`ad_headline`, `ad_media`, `ad_call_to_action`, …) so
-`Admob.populateUnifiedNativeAdView` can bind them.
-
----
-
-## 4.1 Showing an ad from a screen of your own
-
-You do not need this for the built-in flow — the SDK's screens already load and show their own ads.
-It is for a screen you add inside the flow. There are two entry points and nothing else:
-
-```kotlin
-// Full-screen ad. Two moments, because they are not the same moment.
-showInterstitial(
-    AdPlacement.SplashInterstitial,
-    onNext = { startNextScreen() },   // the ad is up: start the destination UNDER it
-    onFinished = { finish() },        // the ad is gone: only now finish this screen
-)
-
-// Native slot
-showNativeAd(
-    placement = AdPlacement.QuestionNative,
-    unit = config.ads.questionNative,
-    container = binding.nativeContainer,
-    shimmer = binding.nativeShimmer.root,
-    onUnavailable = { binding.adBlock.isVisible = false },
-)
-```
-
-Starting the destination at `onNext` gives it the whole display time of the ad to inflate and bind,
-so it is already painted when the ad closes. Both callbacks run **at most once**, `onNext` always
-before `onFinished`, on every path — including the ones where no ad appears at all. Your screen
-needs no guard of its own.
-
-If the next move is only decided after the ad — a paywall branch, say — leave `onNext` out and do
-the work in `onFinished`. The cost is one visible stall; the benefit is not starting a destination
-you might not want.
-
-Never call `finish()` from `onNext`: the Activity handed to `show()` must outlive the ad, and
-finishing it there kills the impression you just paid to load.
-
-To ask before acting, `OnboardingSdk.guard().skipReason(context, placement)` returns `null` when the
-ad may show, or the precise reason it may not.
-
----
-
-## 5. Remote config keys
-
-All prefixed `ob_` so they cannot collide with your app's own namespace. Defaults live in code
-(`ObRemoteKeys`) — there is no defaults XML to keep in sync.
-
-**Kill switches** `ob_enable_all_ads`, `ob_enable_ui_content`
-**Steps** `ob_enable_step_ob1`…`ob5`, `ob_enable_question`, `ob_enable_question_old_user`
-**Language** `ob_enable_language_native_2`, `ob_pass_lfo_if_completed`, `ob_language_supported_codes` (CSV)
-**Ads on/off** `ob_reuse_splash_inter`, `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_{language,content,fullscreen,question}_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled`
-**Ad unit override** `ob_ads_splash_inter_id`, `ob_ads_splash_inter_id_old_user` (blank = use the compiled ids)
-**Frequency** `ob_ads_interstitial_interval_sec`, `ob_ads_click_cap_per_day` — both default `0`, meaning off
-**Timing** `ob_splash_min_display_ms` (3000), `ob_splash_ad_budget_ms` (60000), `ob_splash_banner_wait_ms` (0), `ob_skip_button_delay_sec`, `ob_fullscreen_auto_dismiss_sec`
-**Skip buttons** `ob_show_skip_ob3`, `ob_show_skip_ob5`
-**Templates** `ob_native_template_{content,language,question}` = `cta_top` | `cta_bottom` | `compact`
-**Server-driven UI** `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`
-**Cache stamp** `ob_config_version` — change the value to clear the local UI cache
-
-`ob_enable_step_ob5` defaults to **false**: OB5 is a standalone full-screen ad screen, off unless you
-ask for it.
-
-The two frequency keys default to `0` on purpose. The `:ads` module already has its own click cap,
-and a second cap quietly subtracting impressions is not something anyone finds in a quarter. Turn
-one on and the block is reported as `interval_not_elapsed` / `click_cap`, never as silence.
-
-> Every reason an ad did not show, the order the rules run in, and how to read the `OB_FLOW` logcat
-> trace: **[ADS_GATING.md](ADS_GATING.md)**.
-
----
-
-## 6. Paywall (optional)
+## Paywall gate
 
 ```kotlin
 class MyPaywallGate : PaywallGate {
     override suspend fun shouldShow(placement: PaywallPlacement) =
-        placement == PaywallPlacement.AFTER_ONBOARDING && !AppPurchase.getInstance().isPurchased
-    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome {
-        return PaywallOutcome.Dismissed
-    }
+        placement == PaywallPlacement.AFTER_ONBOARDING && !myEntitlement.isPremium
+
+    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome =
+        PaywallOutcome.Dismissed   // or Purchased / ContinueWithAds
 }
 ```
 
-Placements: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`. Every presentation
-reports `iap_paywall_view` + `iap_paywall_result`; the purchase itself is reported by the billing
-layer as `iap_success`, so revenue is never counted twice.
+Placements: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`. Leave `paywallGate` unset and
+every checkpoint passes straight through.
 
----
+## Troubleshooting
 
-## 7. Integration checklist
+| Symptom | Cause | Fix |
+|---|---|---|
+| Flow never runs | `configure()` failed, or ran before `install()` | Log the `Result`; call `install()` first |
+| User never leaves the flow | No `OnboardingListener`, or it ignores `Skipped` | Handle all three outcomes |
+| Every placement says `no_provider` | `adProvider` left null | `adProvider = ERainAdProvider()` |
+| Every placement says `consent_not_granted` | UMP form unanswered within `consentTimeoutMs` | Set `ConsentOptions(testDeviceHashedId = …)` |
+| Ad-only page never appears | No usable unit for `fullScreenStepNative` / `stepNatives[OB3]` | Configure one; `ob_enable_step_ob3` alone is not enough |
+| Splash banner never shows | `ob_splash_ad_container` or the `layout_banner_control` include is missing | Add both to your splash layout |
 
-- [ ] `Tracker.install()` **and** at least one `Tracker.addSink(...)` — otherwise no event arrives
-- [ ] `Tracker.setConsent(analytics, ads)` called exactly once, from the UMP callback
-- [ ] `OnboardingSdk.install()` before `configure()`, both in `Application.onCreate()`
-- [ ] `configure()` result checked, not discarded
-- [ ] Launcher activity extends `ObSplashActivity`
-- [ ] An ad unit id for every placement you enabled — a blank id reports `ad_skipped/no_ad_unit`
-- [ ] Remote keys published with the defaults above, or omitted entirely (code defaults apply)
-- [ ] `OnboardingListener` navigates somewhere on **both** `Completed` and `Skipped`
-- [ ] Custom layouts carry the ids in §4
-- [ ] Verify in a debug build: `ConsoleSink` prints every event that leaves the SDK
+## License
 
----
-
-## 8. Deliberate differences from the SDK this replaces
-
-- Checkpoint `lastCompletedStep`: killing the app mid-flow resumes at the right step instead of
-  restarting from the language screen.
-- LFO2 (a second native impression on the same screen) and refresh-ad-on-answer-tap are **off by
-  default** — enable via config plus remote.
-- Premium hides ads on every screen including OB5, and can drop ad-only steps entirely.
-- A full-screen ad screen always has an exit: Skip is forced visible when auto-next is off, plus a
-  remote-configured auto-dismiss.
-- Question answers are persisted to DataStore and reported to analytics — the original stored and
-  logged neither.
-- A malformed remote step or answer drops that one element instead of failing the whole screen.
-- `fo_flow_complete` fires on **every** exit path. In the audited SDK the equivalent event was
-  bypassed on two of three exits, so most users never produced one.
+MIT — see [`../LICENSE`](../LICENSE).

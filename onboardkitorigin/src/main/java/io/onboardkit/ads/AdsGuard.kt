@@ -44,6 +44,31 @@ class AdsGuard internal constructor(
         return reason
     }
 
+    /**
+     * Whether an ad-only page is worth putting in the flow at all.
+     *
+     * A page whose whole content is an ad has nothing to fall back on: when the placement is off
+     * — no ad unit configured, the remote flag down, ads compiled off — the page renders as an
+     * empty screen with a Skip button. `false` here takes it out of the step list instead.
+     *
+     * [AdSkipReason.PREMIUM] deliberately answers `true`: a paying user's ad-only pages are
+     * governed by [io.onboardkit.config.AdsConfig.skipAdOnlyStepsWhenPremium], which a host may
+     * leave off on purpose, and answering `false` here would silently override that choice.
+     *
+     * Only the permanent reasons are known this early. A configured placement that later fails to
+     * fill is a runtime answer, handled by the page itself.
+     */
+    fun canFillAdOnlyStep(
+        context: Context,
+        placement: AdPlacement,
+        unit: AdUnitTiers? = null,
+    ): Boolean {
+        val reason = evaluate(context, placement, unit)
+        if (reason == null || reason == AdSkipReason.PREMIUM) return true
+        ObLog.w(ObLog.Section.GATE, "${placement.key} step removed reason=${reason.key}")
+        return false
+    }
+
     private fun evaluate(
         context: Context,
         placement: AdPlacement,
@@ -64,27 +89,10 @@ class AdsGuard internal constructor(
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT
 
-        // Both counters live in the ads module's SharedPreferences. Reading them on every call
-        // would put disk I/O on the main thread for rules that ship disabled, so they are only
-        // touched once a partner turns the rule on.
-        if (placement.format == AdFormat.INTERSTITIAL && remote.interstitialIntervalSec > 0) {
-            val lastShownAtMs = provider.lastInterstitialShownAtMs(context)
-            val elapsed = clock() - lastShownAtMs
-            val intervalMs = remote.interstitialIntervalSec * MILLIS_PER_SECOND
-            if (lastShownAtMs > 0L && elapsed in 0 until intervalMs) {
-                return AdSkipReason.INTERVAL_NOT_ELAPSED
-            }
-        }
-
-        if (remote.clickCapPerDay > 0) {
-            val topTierId = slot.topTierId
-            if (topTierId.isNotBlank() &&
-                provider.clicksToday(context, topTierId) >= remote.clickCapPerDay
-            ) {
-                return AdSkipReason.CLICK_CAP_REACHED
-            }
-        }
-
+        // Interstitial interval and click cap are enforced by the ads module, which owns the
+        // counters both rules read. Enforcing them here as well meant one impression could be
+        // subtracted by either layer under a different remote key, and no dashboard could tell
+        // which. The skip still surfaces here, reported by the module as `capped_by_module`.
         return null
     }
 

@@ -1,747 +1,171 @@
 **Language / Ngôn ngữ / भाषा:** [English](README.md) | [Tiếng Việt](README.vi.md) | [हिन्दी](README.hi.md)
 
-# Ads Integration Guide — Base Project (HI)
+# adlogic-partner-sdk
 
-> Module दस्तावेज़: **[trackkit](trackkit/README.hi.md)** · **[OnboardKit](onboardkitorigin/README.hi.md)** · **[PayKit](paykit/README.md)** · **[BillingKit](billingkit/README.md)**
+> Ads, onboarding, analytics, billing और paywalls के लिए सात Android libraries — एक ही repository से एक साथ publish होती हैं।
 
-यह दस्तावेज़ Infinity products में ads integration के लिए partner teams का **mandatory reference standard** है। Ads से जुड़ा कोई भी बदलाव इसी base project में defined architecture, load/show flow, और gating rules के अनुसार होना चाहिए।
+## Modules
 
----
+| Module | यह क्या करता है | Guide |
+|---|---|---|
+| `ads` | AdMob load/show, ad config, UMP consent, premium gating | [ads/README.md](ads/README.md) |
+| `onboardkitorigin` | First-open flow: splash, language, onboarding pager, survey | [onboardkitorigin/README.md](onboardkitorigin/README.md) |
+| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`, taxonomy) | [trackkit/README.md](trackkit/README.md) |
+| `suite-firebase` | एकमात्र Firebase adapter: GA4 sink, ad config source, paywall config source | [suite-firebase/README.md](suite-firebase/README.md) |
+| `billingkit` | Play Billing engine (`com.ads.module.billing`) | [billingkit/README.md](billingkit/README.md) |
+| `paykit` | `billingkit` engine के ऊपर paywall UI | [paykit/README.md](paykit/README.md) |
+| `adtracer` | Debug-only ad lifecycle dashboard | [adtracer/README.md](adtracer/README.md) |
 
-## JitPack से SDK consume करना
+## कौन-से modules declare करें
 
-आठ modules libraries के रूप में publish होते हैं:
+| Partner | क्या declare करें | APK में निश्चित रूप से क्या नहीं होगा |
+|---|---|---|
+| सिर्फ ads, IAP नहीं | `ads` (+ `suite-firebase`) | एक भी Play Billing class नहीं |
+| IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | एक भी GMA/AdMob class नहीं |
+| IAP, paywall UI अपनी | `billingkit` | न `paykit`, न `ads` |
+| Ads और IAP दोनों | `ads` + `billingkit` (+ `paykit`) | — |
 
-| Module | भूमिका |
+`onboardkitorigin`, `ads` पर निर्भर है और `paykit`, `billingkit` पर — सिर्फ runtime scope में। अगर आप उनकी
+APIs call करते हैं तो उन्हें अलग से declare करें। `trackkit` कभी declare न करें: उसे इस्तेमाल करने वाला हर module उसे `api` से export करता है।
+
+## Requirements
+
+| | |
 |---|---|
-| `ads` | Ad load और show; `Entitlement` port के ज़रिए premium gating |
-| `billingkit` | Play billing engine — split से पहले वाले ही `com.ads.module.billing` classes |
-| `onboardkitorigin` | First-open flow: splash, language, onboarding |
-| `paykit` | `billingkit` के billing engine पर paywall UI |
-| `paykit-firebase` | `paykit` के लिए Firebase Remote Config source |
-| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`, taxonomy) |
-| `trackkit-firebase` | `trackkit` के लिए Firebase/GA4 sink |
-| `adtracer` | Debug-only ad lifecycle dashboard |
+| JDK / Kotlin `jvmTarget` | 17 |
+| `minSdk` | 24 |
+| `compileSdk` / `targetSdk` | 36 |
+| AGP / Gradle | 8.12.0 / 8.13 |
 
-सिर्फ़ वही declare करें जिससे app कमाता है — चार partner scenarios:
+## Installation
 
-| # | Partner | Declare करें | APK में पक्का क्या नहीं होगा |
-|---|---|---|---|
-| 1 | सिर्फ़ ads, IAP नहीं | `ads` (+ `trackkit-firebase`) | एक भी Play Billing class नहीं |
-| 2 | IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | एक भी GMA/AdMob class नहीं |
-| 3 | IAP, paywall UI आपकी अपनी | `billingkit` | न `paykit` चाहिए, न `ads` |
-| 4 | Ads और IAP दोनों | `ads` + `billingkit` (+ `paykit`) | — premium gating पहले जैसी चलती है |
-
-Dependencies declare करें:
+`ads` जो mediation adapters bundle करता है वे Maven Central पर नहीं हैं — आखिरी तीन repositories के बिना
+build, Pangle, ironSource और Mintegral को resolve नहीं कर पाएगा:
 
 ```groovy
-// <tag> को https://github.com/truongvimit/adlogic-partner-sdk/tags के किसी tag से बदलें
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+    maven { url 'https://artifact.bytedance.com/repository/pangle/' }
+    maven { url 'https://android-sdk.is.com/' }
+    maven { url 'https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea' }
+}
+
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
 def sdkVersion = '<tag>'
 
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
-
-    // Billing engine। सिर्फ़ तब जब app IAP/subscription बेचता है — ऊपर की scenario table देखें।
+    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
-
-    // Paywall। paykit-firebase तभी जोड़ें जब paywall document Remote Config से आता हो।
     implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit-firebase:$sdkVersion"
-
-    // वही sinks चुनें जो सच में चाहिए। sink के बिना Tracker events validate करके गिरा देता है।
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit-firebase:$sdkVersion"
-
-    // adtracer सिर्फ़ debug builds में ship होता है — release से बाहर रखें
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
 ```
 
-हर module एक ही tag पर रखें — सब एक repository से साथ publish होते हैं और अलग-अलग versions में
-आपस में test नहीं किए जाते।
+Group id `com.github.truongvimit.adlogic-partner-sdk` है — JitPack एक multi-module repo को
+`com.github.<user>.<repo>` के रूप में namespace करता है। हर module को एक ही tag पर रखें; अलग-अलग versions के
+combination test नहीं किए गए हैं।
 
-> **नोट:** `onboardkitorigin` `ads` पर और `paykit` `billingkit` पर निर्भर हैं, पर सिर्फ़ runtime
-> scope में — उनके ज़रिए `com.ads.module.*` classes आपके compile classpath पर नहीं आतीं। इन APIs
-> को सीधे call करते हों तो `ads` / `billingkit` ऊपर की तरह explicit declare करें।
+## Quick start
 
-### Migrate करना: billing engine `billingkit` में चला गया
-
-Play billing engine ने `ads` छोड़ दिया है। अगर app IAP बेचता है तो ठीक एक Gradle line जोड़ें —
-`implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` — और कुछ भी न
-बदलें: हर `com.ads.module.billing.*` class का नाम, package और behavior वही है। Ads-only apps को कुछ
-नहीं करना, और उनके APK से Play Billing library हट जाती है। विवरण: **[MIGRATION.md](MIGRATION.md)**।
-
-### 2.0.0 में migrate करना
-
-- ग्यारह `ERainAd.getShouldDisplay*` methods **हटा दिए गए हैं**। हर call को
-  `AdGate.passesUaGate(config.enableUaCheck)` से बदलें — या `ERainAd.getInstance().shouldDisplayForUa(...)`,
-  वही check बिना placement-named wrappers के। placement जोड़ने के लिए अब SDK release नहीं चाहिए।
-- नया package `com.ads.module.helper`: `AdGate` (एकमात्र pre-load gate), placement-keyed
-  `InterstitialAdManager` / `RewardAdManager` stores, `NativeAdPreload`, और view-level
-  `NativeAdHelper` / `BannerAdHelper` — §2.6 देखें।
-- waterfall अब चारों formats cover करता है: native/interstitial के साथ `AdWaterfall.loadReward` जुड़
-  गया है, और `BannerAdHelper` banner floors पर उतरता है — floors के बीच कोई view flicker नहीं।
-- OnboardKit का `ERainAdProvider` अब उन्हीं stores के ऊपर एक thin adapter है — behavior, placement
-  keys, और telemetry unchanged हैं।
-
-### 3.0.0 में migrate करना
-
-`:ads` से कोई API हटाया नहीं गया है, और पुराना behavior per call site बनाए रखने के लिए कुछ नहीं
-करना: explicit shimmer अब भी जीतता है। व्यवहार में एक बदलाव ज़रूर है — **`autoShimmer` default में
-ON है**, इसलिए जो placements पहले load के दौरान ख़ाली बैठते थे, वे अब loading skeleton दिखाते हैं
-(§2.7 देखें)। Per-placement opt-out: `nativeConfig.autoShimmer = false`।
-
-- जिस screen का अपना shimmer view ad container के अंदर बैठा है पर `setShimmerLayoutView` से pass
-  नहीं होता, वहाँ अब दो skeletons दिखेंगे — या तो उसे `setShimmerLayoutView` को सौंप दें, या उस
-  placement पर `autoShimmer = false` कर दें।
-- Recommended cleanup: per-placement shimmer XMLs, उनके `<include>` और `setShimmerLayoutView`
-  calls हटा दें — auto-derived skeleton यह काम ख़ुद करता है। चाहें तो remote-config styling के लिए
-  `setNativeStyle` भी अपना लें — §2.7 देखें।
-- OnboardKit internals: चारों `ob_shimmer_native_*` layouts अब मौजूद नहीं — native slots अपना
-  skeleton resolved template layout से ख़ुद derive करते हैं। `OnboardingAdProvider.bindNative` का
-  signature unchanged है (generated skeleton उसी के shimmer argument में आता है)।
-
----
-
-## उद्देश्य और दायरा
-
-### 1. सभी apps के लिए shared base
-
-`adlogic-partner-sdk` ecosystem के सभी Android apps के लिए **template/base** के रूप में design किया गया है। Partners को इस base को fork/clone करके यह सुनिश्चित करना चाहिए:
-
-- वही Ads package structure (`AdRemoteConfig`, `RemoteConfigUtils`, `AdsManager`, `AdExtension`)
-- वही config source flow (assets + Firebase Remote Config)
-- native/banner rendering के लिए वही view-handover pattern (`AdsManager.nativeHelper`, `BaseActivityWithBanner` — §2.6 देखें)
-- Language screen पर DevSetting के जरिए वही QA entry
-
-लक्ष्य: app-to-app drift कम करना, maintainability बेहतर करना, audit आसान बनाना, और technical support को centralized रखना।
-
-### 2. load/show logic optimized baseline है
-
-वर्तमान base flow — `GlobalApp` में early init, `Splash` में config sync, next-screen preload, `AdsManager` में centralized gating, और `AdGate.passesUaGate(enableUaCheck)` से organic handling — iterative optimization का परिणाम है:
-
-- सही load timing
-- UI jank कम
-- offline / purchased स्थिति में safe fallback
-- cohort-based display control
-
-**Partners core flow को modify नहीं करेंगे** (जैसे `AdsManager` bypass करके SDK direct call करना, organic gating हटाना, या load/show order बदलना), जब तक Infinity technical team approval न दे।
-
-### 3. existing ad-enabled screens को current implementation follow करना अनिवार्य है
-
-नीचे दिए गए screens पहले से implement हैं और इनके load/show behavior, preload points, और gating conditions को preserve करना जरूरी है:
-
-| Screen | Placements / behavior |
-| --- | --- |
-| Splash | `inter_splash`, preload `native_language`, `open_resume` config |
-| Language | Native language/click, preload onboarding page 1, DevSetting (`tvTitle`) |
-| Onboarding | Native page 1 & 4, native full, `inter_onboarding`, uninstall widget |
-| Welcome / Resume | `native_welcome`, `inter_welcome`, `ResumeAdsEntryRule` |
-| Banner (Home + screens extending `BaseActivityWithBanner`) | Normal / collapsible banner, reload by config |
-
-UI customization के समय केवल layout/container बदलें। `AdGate` chain **remove न करें** — `isEnable`, purchase, network, और UA checks और उनकी skip telemetry, सबका मालिक `AdGate.skipReason(...)` है।
-
-### 4. custom app screens को load/show rules follow करना होगा
-
-किसी भी **new custom screen** (जो base में पहले से नहीं है) के लिए वही rule set लागू होगा:
-
-1. `ad_config.json` / `ad_config_debug.json` में placement keys जोड़ें और `AdRemoteConfig` में matching properties जोड़ें।
-2. Native: placement का helper `AdsManager.nativeHelper(...)` से बनाएं; interstitial के लिए `InterstitialAdManager.load` + `show` — §2.6 देखें।
-3. Activity/Fragment में: `initViews` पर container helper को hand over करें और `requestAds(NativeAdParam.Request)` call करें — loading skeleton helper ख़ुद derive कर लेता है (§2.7), और skip/fail पर slot hide करना भी helper का काम है, screen का नहीं।
-4. sensitive placements (onboarding-like, welcome, home, permission, widget...) के लिए **100% mandatory**: `AdGate.passesUaGate(config.enableUaCheck)` से gate करें — `nativeHelper` factory इसे `config.enableUaCheck` से automatically wire कर देती है; section 4 देखें।
-5. banner के लिए `BaseActivityWithBanner` extend करें और `BannerConfig` declare करें — base `BannerAdHelper` पर चलता है; banner हाथ से load न करें।
-
-Detailed UI/Ads reference (CTA size, Done button delay, native placement by page):  
-[Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/).
-
----
-
-## 1. Ads Initialization and Config
-
-### 1.1 Config sources
-- Debug: `ad_config_debug.json` read करें।
-- Release: `ad_config.json` read करें, फिर optional override Firebase Remote Config (`ad_remote_config`) से लें।
-
-### 1.2 Initialization points
-
-`GlobalApp.onCreate()` में order (mandatory):
-
-| Step | Call | Purpose |
-|:---:|------|---------|
-| 1 | `initTracking()` | `Tracker.install(...)` + `Tracker.addSink(...)` — **सबसे पहले अनिवार्य**, §1.6 देखें |
-| 2 | `DevConfig.init(...)` | DevConfig UI — ads lib versions (§1.3 देखें) |
-| 3 | `initAdRemoteConfig()` | `AdRemoteConfig.initializeFromAssets(this)` |
-| 4 | `initAds()` | `ERainAd` + resume/inter rules (§1.5 देखें) |
-| 5 | `initOnboardKit()` | `OnboardingSdk.install(...)` — OnboardKit दस्तावेज़ देखें |
-| 6 | `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` | welcome flow हो तो `AppLifecycleObserver` register |
-
-`MobileAds.initialize()` **खुद मत बुलाइए**: `ERainAd.init()` → `Admob.init()` पहले ही यह कर देता है,
-साथ में हर adapter का status भी log करता है। दूसरी बार बुलाने से सिर्फ़ पहली call के साथ बेकार की
-race लगती है।
-
-- `SplashActivity.checkRemoteConfigResult()`:
-  - latest remote config apply: `AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())`
-
-### 1.3 `GlobalApp` में `DevConfig.init()` integration
-
-`onCreate()` में **जल्दी** call करें — `initAdRemoteConfig()` और `initAds()` से पहले। Version parameters `BuildConfig` से आते हैं (`app/build.gradle` में declare अनिवार्य — §1.4):
+**1. आपका `Application`.** यह क्रम मायने रखता है — देखें [ads/README.md](ads/README.md).
 
 ```kotlin
-DevConfig.init(
-    context = this,
-    nkhStudioVersion = BuildConfig.ERAIN_STUDIO_VERSION,
-    playServicesAdsVersion = BuildConfig.PLAY_SERVICES_ADS_VERSION,
-    gdprModuleVersion = BuildConfig.GDPR_MODULE_VERSION
-)
-```
-
-| Parameter | `BuildConfig` field | DevConfig UI पर |
-|-----------|---------------------|------------------|
-| `nkhStudioVersion` | `ERAIN_STUDIO_VERSION` | ERain Studio / ads module version |
-| `playServicesAdsVersion` | `PLAY_SERVICES_ADS_VERSION` | Google Play Services Ads version |
-| `gdprModuleVersion` | `GDPR_MODULE_VERSION` | GDPR module version |
-
-### 1.4 Ads QA के लिए DevSetting entry
-- `LanguageActivity`: `mBinding.tvTitle.setOnAdminAdToggleListener()`
-- QA यहां check कर सकता है: sdk versions, mediation, config id, ad id, reset organic।
-
-> **`app/build.gradle` में mandatory:** DevConfig UI में version info सही दिखाने के लिए नीचे दिए गए 3 `buildConfigField` lines (दोनों `debug` और `release` में) घोषित करना अनिवार्य है:
->
-> ```gradle
-> buildConfigField "String", "ERAIN_STUDIO_VERSION", "\"$erain_studio_version\""
-> buildConfigField "String", "PLAY_SERVICES_ADS_VERSION", "\"$play_services_ads_version\""
-> buildConfigField "String", "GDPR_MODULE_VERSION", "\"$module_update_gdpr_version\""
-> ```
-
-**DevConfig testing guide (PO / Tester):** [DevConfig Testing Guide](https://share.jotbird.com/breezy-soaring-high-desert)
-
-### 1.5 `GlobalApp` में `initAds()` integration (recommended standard)
-
-वर्तमान base में core integration `GlobalApp.initAds()` में implement है। नया app बनाते समय partners को यही pattern follow करना चाहिए:
-
-1. build type के अनुसार `environment` चुनें (`ERainAdConfig.ENVIRONMENT_DEVELOP` / `ERainAdConfig.ENVIRONMENT_PRODUCTION`)।
-2. `mERainAdConfig = ERainAdConfig(this, environment)` बनाएं।
-3. `ERainAd.init(...)` call से पहले required fields set करें:
-   - `adjustConfig` — app token और event tokens (§1.5.1 की तालिका देखें)
-   - `facebookClientToken`
-   - `intervalInterstitialAd`
-   - `idAdResume`
-4. `ERainAd.getInstance().init(this, mERainAdConfig)` call करें।
-5. `ERainTuning.install()` call करें — **एक बार**, `ERainAd.init` के तुरंत बाद।
-   यह module के process-wide switches (`openActivityAfterShowInterAds`,
-   `disableAdResumeWhenClickAds`) को pin करता है। इन्हें ख़ुद मत set कीजिए: ये बदलते हैं कि एक
-   *callback का मतलब क्या है*, इसलिए हर screen पर toggle करने से process उसी हालत में छूट जाता है
-   जिसमें आख़िरी screen मरी थी — और दो toggle के बीच मरी screen उसे हमेशा के लिए ग़लत छोड़ देती है।
-6. `AppOpenManager.getInstance().disableAppResumeWithActivity(...)` सिर्फ़ अपनी **app की** screens
-   के लिए। OnboardKit अपनी screens ख़ुद exclude कर लेता है।
-
-Reference snippet:
-```kotlin
-private fun initAds() {
-    val environment =
-        if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
-    mERainAdConfig = ERainAdConfig(this, environment)
-
-    val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
-    adjustConfig.eventAdImpression = getString(R.string.event_token)
-    adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
-    adjustConfig.fbAppId = getString(R.string.facebook_app_id)
-
-    mERainAdConfig.adjustConfig = adjustConfig
-    mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-    // 0 = module apna interval lagu nahi karta; §3.2 dekhein
-    mERainAdConfig.intervalInterstitialAd = 0
-    // Khali id app-resume band kar deta hai — khali ad unit se request nahi jata
-    mERainAdConfig.idAdResume = ""
-
-    ERainAd.getInstance().init(this, mERainAdConfig)
-}
-```
-
-> Note: `initAdRemoteConfig()` को `initAds()` से पहले call करना चाहिए, और remote config sync फिर भी `SplashActivity` में `RemoteConfigUtils.init(...)` + `AdRemoteConfig.initialize(...)` से होता है।
-
-### 1.5.1 Adjust tokens — एक token, एक दरवाज़ा
-
-| Field | यह क्या है | खाली होने पर |
-|---|---|---|
-| `adjustToken` | Adjust dashboard से लिया गया app token | Adjust कभी initialize नहीं होता; error log होता है |
-| `eventAdImpression` | **हर** paid impression पर fire होने वाला event token, `Adjust.trackAdRevenue` के ऊपर | event skip हो जाता है — यही सामान्य स्थिति है |
-| `eventNamePurchase` | purchase पूरा होने पर fire होने वाला event token | purchase revenue skip, warning के साथ |
-| `fbAppId` | Meta app id, ताकि Adjust डेटा Meta को भेज सके | Adjust dashboard में Meta-attributed campaigns खाली रहेंगे |
-
-हर token, Adjust dashboard पर बनाया गया छह-अक्षर का id है — event **नाम नहीं**। खाली token
-जानबूझकर skip किया जाता है: `AdjustEvent("")` client पर स्वीकार होता है, server पर drop हो जाता है,
-और revenue बिना किसी संकेत के गायब हो जाता है। impression token सेट करने की जगह ठीक **एक** है —
-`adjustConfig.eventAdImpression`। हर ad format (interstitial, native, banner, rewarded, app-open)
-उसी एक field को पढ़ता है।
-
-### 1.6 Tracking — `Tracker.install()` अनिवार्य है
-
-यह वह step है जो partners सबसे ज़्यादा छोड़ देते हैं, क्योंकि इसके बिना कुछ crash नहीं होता।
-
-`ads` और `billingkit` खुद analytics log **नहीं** करते। जो भी impression, click और purchase वे देखते
-हैं, सब `Tracker` (`trackkit` से) को सौंप देते हैं, और `Tracker` उसे आपके registered sinks तक
-पहुँचाता है।
-एक भी sink register न हो तो `Tracker` हर event validate करके एक खाली list को थमा देता है — डेटा
-चुपचाप कहीं नहीं पहुँचता। `Tracker.install` बिना किसी sink के चलने पर warning log करता है, पर असली
-समाधान सही wiring है:
-
-```kotlin
-private fun initTracking() {
-    Tracker.install(
-        this,
-        TrackerConfig(
-            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
-            strictValidation = BuildConfig.DEBUG,   // taxonomy की गलती QA में फेल हो, production में नहीं
-            logLevel = if (BuildConfig.DEBUG) 2 else 1,
-        ),
-    )
-    Tracker.addSink(FirebaseSink())                 // trackkit-firebase से
-    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
-}
-```
-
-इसे `onCreate()` में **सबसे पहले** बुलाइए। `install()` से पहले track किए गए events buffer होते हैं,
-खोते नहीं — पर वे उसी session के डेटा के साथ flush होंगे जो install के समय चल रहा हो।
-
-sink मौजूद होते ही ये सब अपने आप मिलता है — आपकी तरफ़ से एक भी call site नहीं चाहिए:
-
-| Signal | किसने भेजा | Event names |
-|---|---|---|
-| Ad lifecycle | `ads`, हर ad unit के लिए | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed` |
-| Paid impressions + ad LTV | `ads`, AdMob के paid-event callback से | `ad_impression`, `ad_revenue_total`, `ad_revenue_micro_flush`, `ad_revenue_d3`, `ad_revenue_d7` |
-| Purchases | `billingkit`, billing callback से | `iap_success` |
-| First-open funnel | `onboardkitorigin` | `fo_*` — OnboardKit दस्तावेज़ देखें |
-
-दो चीज़ें आपकी ही रहती हैं: UMP का नतीजा (`Tracker.setConsent(analytics, ads)` — अपने consent
-callback से, ठीक एक बार) और अपने product events (`Tracker.track("...")`)।
-
-Adjust **sink नहीं है** और यहाँ किसी wiring की ज़रूरत नहीं। वह एक MMP है, `ads` के अंदर रहता है,
-और §1.5 के `adjustConfig` से configure होता है। यह विभाजन क्यों है, इसके लिए
-`trackkit/ARCHITECTURE.md` देखें।
-
----
-
-## 2. Load/Show Ads by placement
-
-### 2.0 एक placement, कई ad unit id — waterfall
-
-एक placement एक ad unit id नहीं है, वह एक **क्रमबद्ध list** है: सबसे ऊँचा floor पहले, all-price
-आख़िर में। `AdWaterfall` एक बार में एक id request करता है और पहले fill पर रुक जाता है, इसलिए नीचे का
-floor तभी माँगा जाता है जब उसके ऊपर वाला fail हो चुका हो।
-
-```kotlin
-AdWaterfall.loadNative(activity, adUnitIds, layoutRes, callback)
-AdWaterfall.loadInterstitial(context, adUnitIds, callback)
-AdWaterfall.loadReward(context, adUnitIds, callback)
-```
-
-Banner भी अपने floors से उतरता है: `BannerAdHelper` `BannerAdConfig(tiers, …)` को एक बार में एक id
-के हिसाब से चलता है, और slot floors के बीच कभी झपकता नहीं — जो banner screen पर टिका है वह टिका
-रहता है जब तक नीचे के floors आज़माए जा रहे हों।
-
-एक ही id दें तो यह सामान्य load जैसा ही चलता है। खाली और दोहराए गए id हटा दिए जाते हैं, इसलिए अधूरा
-remote payload क्रम में छेद नहीं बना सकता। हर step `REQUEST_AD_TIMEOUT` (30 s) से बँधा है: जो floor
-कभी जवाब न दे, वह नीचे के floors को रोक नहीं सकता।
-
-यही **एकमात्र load path** है। `AdsManager` और OnboardKit दोनों इसी से जाते हैं, इसलिए वे अलग नहीं हो
-सकते। `ERainAd.loadNativeAdResultCallback` / `getInterstitialAds` को अकेले `config.id` के साथ मत
-बुलाइए — वह all-price floor खर्च करता है और ऊँचे floor को कभी छूता ही नहीं।
-
-#### Remote config में floors के नाम
-
-हर floor अपनी अलग key है। Suffix ही सीढ़ी का पायदान है:
-
-| Key | पायदान |
-|---|---|
-| `native_lang_high` | सबसे ऊँचा floor, पहले request |
-| `native_lang_high1` … `native_lang_high9` | आगे के floors, संख्या के क्रम में |
-| `native_lang` | all-price, हमेशा आख़िर में |
-
-`AdRemoteConfig.tiersFor("native_lang")` उस सीढ़ी को request order में बदल देता है। किसी placement
-में floor जोड़ना **remote-config change है, code change नहीं** — key declare कीजिए, वह waterfall
-में शामिल हो जाएगा। `_medium` जान‑बूझकर नहीं रखा गया: वह दूसरे नाम से `_high1` ही होता, और एक floor
-के दो नाम होने पर payload दोनों declare कर बैठता है।
-
-दस से ज़्यादा floors चाहिए, या क्रम high→low नहीं है? Id सीधे किसी एक key के `ids` array में डाल
-दीजिए — वह list ज्यों की त्यों waterfall मानी जाती है:
-
-```json
-"inter_splash": { "id": "…/allprice", "ids": ["…/high", "…/high1"], "isEnable": true }
-```
-
-> हर placement को उसके अपने ad unit id दीजिए। दो placements एक ही id साझा करें तो revenue reporting
-> में उन्हें अलग नहीं किया जा सकता: AdMob का paid-event callback सिर्फ़ ad unit जानता है, और
-> `PlacementRegistry` उसे उस placement से जोड़ता है जिसने **सबसे बाद में** request किया था।
-
-### 2.1 Splash
-- Inter Splash:
-  - Condition: `AdRemoteConfig.tiersFor("inter_splash")` ख़ाली न हो (कम से कम एक enabled floor) और network available
-  - API: `ERainAd.getInstance().loadSplashInterstitialAds(...)`
-  - successful load (`onAdLoaded`) के बाद `native_language` preload
-- Open Resume:
-  - `ResumeAdsEntryRule.shouldEnableOpenResume()` से enable/disable
-
-### 2.2 Language
-- Native language:
-  - Splash से preload: `AdsManager.loadNativeLanguage(...)`
-  - Click variant: `AdsManager.loadNativeLanguageClick(...)`
-- onboarding page 1 के लिए early preload:
-  - `AdsManager.loadNativeOnboarding1(...)`
-
-### 2.3 Onboarding
-- `AdsManager.loadNativeOnboarding4(...)`
-- `AdsManager.loadNativeOnboardingFull(...)`
-- `AdsManager.loadInterOnboarding(...)`, और onboarding completion पर `AdsManager.showInterOnboarding(...)`
-
-### 2.4 Welcome / Resume
-- Native welcome:
-  - `AdsManager.nativeHelper(activity, owner, "native_welcome", AdRemoteConfig.native_welcome, layout)`, `config.enableUaCheck` से UA-gated
-- Inter welcome:
-  - `AdsManager.loadInterWelcome(...)`, `AdsManager.showInterWelcome(...)`
-  - Welcome flow `AppLifecycleObserver` द्वारा trigger होता है जब `ResumeAdsEntryRule.shouldShowWelcomeOnResume()` और `shouldDisplayForUa(AdRemoteConfig.inter_welcome.enableUaCheck)` allow करते हैं।
-
-### 2.5 Banner (normal / collapsible)
-- `BaseActivityWithBanner` use करें।
-- `AdsManager.loadBanner(..., isCollapse = false)` => normal banner
-- `AdsManager.loadBanner(..., isCollapse = true)` => collapsible banner (SDK expand/collapse behavior)
-- Reload interval: `reloadIntervalSeconds`
-
-### 2.6 SDK helper layer — placement stores और view helpers (2.0.0 से)
-
-सारा ad *mechanism* — cache, expiry, in-flight dedup, gating, show contract — `com.ads.module.helper`
-में रहता है। App के पास सिर्फ़ placement policy रहती है: कौन सी key, preload कब, show कहाँ।
-`AdsManager` internally इसी layer को delegate करता है, और OnboardKit का `ERainAdProvider` उन्हीं
-stores के ऊपर एक thin adapter है, इसलिए हर consumer एक ही cache और एक ही rule set साझा करता है।
-
-**Full-screen formats** placement-keyed stores हैं। हर placement पर एक buffered ad, 1 घंटे की GMA
-expiry, single-use show, और `onComplete` हर outcome पर **ठीक एक बार** fire होता है — failed या
-skipped show किसी screen को कभी अटका नहीं सकता:
-
-```kotlin
-// Preload where you know the screen is coming; show at the navigation edge
-InterstitialAdManager.load(
-    context, "inter_back", config.waterfallIds,
-    InterLoadOptions(
-        enabled = config.isUsable,
-        passesUaGate = AdGate.passesUaGate(config.enableUaCheck),
-    ),
-)
-InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() {
-    override fun onComplete() = goNextScreen()
-})
-
-// Rewarded: the classic gate → load → show chain in one call
-RewardAdManager.loadAndShow(
-    activity, "reward_example", config.waterfallIds,
-    enabled = config.isEnable,
-    onSuccess = { grantReward() }, onFailed = { showTryAgain() },
-)
-```
-
-**View formats** अपने views एक बार सौंप देते हैं; उसके बाद सब कुछ helper का है — shimmer,
-reload-on-resume, hide-when-purchased, teardown:
-
-```kotlin
-NativeAdHelper(activity, this, NativeAdConfig(config.waterfallIds, true, true, R.layout.native_home))
-    .setNativeContentView(binding.frAds)
-    .setEnablePreload(true, "native_home")
-    .also { it.placement = "native_home" }
-    .requestAds(NativeAdParam.Request)
-
-BannerAdHelper(activity, this, BannerAdConfig(config.waterfallIds, true, false))
-    .attachInto(binding.frAds)
-    .also { it.placement = "banner_home" }
-    .requestAds(BannerAdParam.Request)
-```
-
-`NativeAdPreload` native helper के पीछे का keyed preload buffer है (`preloadWithKey`,
-`pollAdNative`, buffer > 1 supported)। `placement` set करने पर helper खुद standard reason keys के
-साथ `ad_request` / skip telemetry report करता है।
-
-**Reload कभी blink नहीं करता।** Shimmer *खाली* slot का है: वह सिर्फ़ तब तक दिखता है जब तक placement
-के पास कोई ad नहीं है। एक बार ad screen पर आ गया, तो reload — timer से, resume पर, या किसी नीचे वाले
-waterfall floor के ज़रिए — उसके नीचे चुपचाप चलता है; live ad अपनी जगह बनाए रखता है और नया creative
-उसे ठीक उसी पल replace करता है जिस पल वह fill होता है। जिस reload को fill नहीं मिलता वह कुछ भी नहीं
-बदलता, इसलिए कोई slot कभी ad → shimmer → ad नहीं जा सकता।
-
-### 2.7 Auto-shimmer और SDK-owned native styling (3.0.0 से)
-
-**Loading skeleton अब SDK ख़ुद बनाता है।** `NativeAdHelper` skeleton को placement के अपने ad layout
-से derive करता है — एक detached copy inflate होती है, हर view grey block में रंग दिया जाता है (text
-transparent, ताकि width वही रहे; media का floor 160dp), और पूरा `ShimmerFrameLayout` में wrap हो
-जाता है। "Ad" badge और `NativeAdShimmer.TAG_SHIMMER_KEEP` (`"shimmer_keep"`) tag वाले views छुए
-नहीं जाते। Generation lazy है — पहली Loading पर, और सिर्फ़ तब जब दिखाने को और कुछ न हो; purchased
-users, instant preload hits, या अपना shimmer देने वाले call sites के लिए लागत शून्य है।
-
-Precedence साफ़ है: `setShimmerLayoutView(view)` > `setShimmerLayout(@LayoutRes)` [नया] >
-`NativeAdConfig.autoShimmer` (default `true`) > कुछ नहीं। App का दिया shimmer view SDK कभी touch
-नहीं करता। Public surface: `NativeAdShimmer.from(context, layoutId)`,
-`NativeAdShimmer.prewarm(context, layoutId)` (splash पर call करके one-time cold inflate की क़ीमत
-पहले ही चुका दें), और `NativeAdShimmer.TAG_SHIMMER_KEEP`।
-
-**Styling भी SDK के पास है।** `NativeAdHelper.setNativeStyle(style)` style को loaded ad (default
-binder) **और** auto skeleton — दोनों पर लागू करता है: geometry parity by construction, इसलिए swap
-कभी layout नहीं हिलाता। `NativeAdStyle(components, ctaHeightDp, ctaBackgroundColor,
-ctaCornerRadiusDp = 20)` और `enum NativeComponent { ICON_HEADLINE, BODY, MEDIA, CTA }`
-(`fromKey(String)` के साथ)। Reordering का layout contract: एक vertical LinearLayout
-`@id/ad_container`, जिसमें `@id/block_icon_headline`, `@id/ad_body`, `@id/ad_media`,
-`@id/ad_call_to_action` हों; जिस layout में `ad_container` नहीं है, वहाँ in-place visibility
-toggles लगते हैं (flat icon/headline/advertiser views अलग-अलग handle होते हैं; `ad_icon` का "Ad"
-badge कभी hide नहीं होता)। Style Admob bind के **बाद** लगता है, इसलिए exclusions टिके रहते हैं।
-कोई style set न हो तो layout ठीक वैसा ही render होता है जैसा उसका XML कहता है — implicit कुछ नहीं।
-
-```kotlin
-AdsManager.nativeHelper(this, this, "native_home", AdRemoteConfig.native_home, R.layout.native_home)
-    .setNativeContentView(binding.frAds)
-    .requestAds(NativeAdParam.Request)
-// No shimmer wiring: the skeleton is auto-derived from the ad layout, and the
-// AdsManager factory already applied the remote-config style (config.toNativeStyle())
-```
-
-Example app में हर native placement इसी एक factory से बनता है —
-`AdsManager.nativeHelper(activity, owner, placement, config, layoutRes, bypassUaGate = false)`।
-Dashboard/preview slots के लिए `placement = null` दें: placement registration skip हो जाती है,
-इसलिए preview loads कभी revenue attribution को गंदा नहीं करते (`nativeDashboardHelper` हट गया है)।
-App की styling policy — CTA clamp 36–52dp, color-string parsing, remote-key mapping — app-side
-`AdUnitConfig.toNativeStyle()` में रहती है; SDK सिर्फ़ `NativeAdStyle` लागू करता है।
-
-`NativeAdStyler.applyLayout` / `applyAppearance` / `populate` public हैं; default binder अब
-`NativeAdStyler.populate` से जाता है (style null होने पर व्यवहार `ERainAd.populateNativeAdView`
-जैसा ही — वह method अब भी मौजूद है)। Generated skeleton को `NativeAdStyle` से आगे बदलना हो तो
-escape hatch है `setAutoShimmerDecorator {}`।
-
-भरोसे के छोटे-छोटे details: Fragment का view दोबारा बनने / container handoff के बाद skeleton
-regenerate होता है; mid-load `setShimmerLayoutView` / `setShimmerLayout` / `setNativeContentView`
-replacement को दिखाते **और** animate करते हैं; generated skeletons में shimmer का autoStart बंद है
-— GONE के पीछे कोई animation नहीं चलता, start/stop helper के हाथ में है।
-
-## 3. Global conditions for loading ads
-
-Ad तभी load होगा जब सभी conditions pass हों — जाँच एक ही जगह होती है, `AdGate.skipReason(...)` में:
-- `adUnitConfig.isUsable` — enabled **और** कम से कम एक ग़ैर-खाली id हो
-- `!AdGate.isPurchased(...)` — `Entitlement` port का जवाब; मौजूद होने पर source `billingkit` खुद install करता है
-- Network available
-- mandatory organic-gated placements के लिए: `AdGate.passesUaGate(config.enableUaCheck) == true`
-
-कोई भी condition fail होने पर native LiveData `null` emit करेगा, इसलिए UI ad container hide करेगा,
-और कारण एक बार `AdTracking.skipped(...)` से report होता है — reason keys unchanged हैं
-(`disabled_config`, `purchased`, `offline`, `ua_gate`)।
-
-### 3.1 Consent हर request को gate करता है
-
-Consent flow के जवाब देने से पहले कोई ad request नहीं जा सकता — यह policy का नियम है, जीतने की दौड़
-नहीं। Splash इसे हल करके जवाब एक ही बार प्रकाशित करता है:
-
-```kotlin
-class SplashActivity : ObSplashActivity() {
-    override suspend fun onConsentRequired(): Boolean = /* true जब ads request किए जा सकें */
-}
-```
-
-`false` जवाब — या `consentTimeoutMs` के भीतर कोई जवाब न आना — `OnboardingSdk.setCanRequestAds(false)`
-बुलाता है, और तब हर placement load करने की जगह `consent_not_granted` report करता है। Flow फिर भी
-चलता है, बस बिना ads के। `ConsentHandler` UMP form **प्रति process एक बार** दिखाता है, इसलिए splash
-और बाद की स्क्रीन एक ही जवाब साझा करती हैं, दो बार नहीं पूछतीं।
-
-### 3.2 Interstitial frequency सिर्फ़ एक जगह
-
-`ERainAdConfig.intervalInterstitialAd = 0` ही रखिए। Module का अपना interval interstitial को चुपचाप
-निगल जाता है — caller उसे dismissal से अलग नहीं कर पाता — इसलिए frequency का मालिक
-`ob_ads_interstitial_interval_sec` है: remote से बदलने योग्य, और block करने पर
-`interval_not_elapsed` report करता है। एक नियम के लिए दो cap वह bug है जो एक तिमाही तक किसी को नहीं
-मिलता।
-
-## 4. UA/organic gate standard per placement (100% mandatory)
-
-> **Mandatory:** नीचे दिए गए placements में से 100% को UA/organic gate से गुज़रना **जरूरी** है।  
-> 2.0.0 से gate call ठीक **एक** है — `AdGate.passesUaGate(config.enableUaCheck)` — जो पुराने
-> per-placement `getShouldDisplay*` methods की जगह लेती है (हटाए गए: वे ग्यारह एक जैसे one-line
-> delegates थे, placement जोड़ने पर SDK release लगती थी; call sites तक गलत नामों पर खिसक जाते थे)।  
-> Parameter `enableUaCheck` है — `ad_config.json` / `ad_config_debug.json` के placement config से आता है (`AdUnitConfig.enableUaCheck` में map)।  
-> यह organic/UA check flag है (ads config से force organic) — **`true/false` hard-code न करें**; हमेशा उसी placement के config से लें जो load/show हो रहा है।
-
-### 4.1 Standard mapping (`AdsManager` के अनुसार)
-
-हर row वही एक call है — `AdGate.passesUaGate(config.enableUaCheck)`; placement-दर-placement सिर्फ़
-config flag बदलता है:
-
-| Ad placement | Default `enable_ua_check` in ad_config.json | Code usage |
-|--------------|:-------------------------------------------:|------------|
-| **NativeOnboardingFull1** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_3", ...)` (+ `OnBoardingActivity` में full page insert) |
-| **NativeOnboardingFull2** | `true` | `AdsManager.nativeHelper(..., "native_onboarding_fullscreen_1_4", ...)` (+ `OnBoardingActivity` में full page insert) |
-| **NativeOnboardingNormal2** | `false` | `AdsManager.nativeHelper(..., "native_onboarding_1_4", ...)` |
-| **NativeHome** | `false` | `AdsManager.nativeHelper(..., "native_home", ...)` |
-| **NativePermission** | `false` | `AdsManager.nativeHelper(..., "native_permission", ...)` |
-| **InterOnboarding** | `true` | `AdsManager.loadInterOnboarding` / `showInterOnboarding` |
-| **NativeWelcomeBack** | `false` | `WelcomeActivity` में `AdsManager.nativeHelper(..., "native_welcome", ...)` |
-| **InterWelcomeBack** | `false` | `AppLifecycleObserver` (welcome activity redirection, `AdGate.passesUaGate` के जरिए) |
-| **WidgetUninstall** | `false` | `OnBoardingActivity` widget shortcut; `SurveyActivity` / `ConfirmUninstallActivity` में `nativeHelper` |
-
-> **ad_config defaults:** JSON declare करते समय ऊपर वाले column के default `enable_ua_check` set करें, जब तक Infinity अलग value न दे। उदाहरण: Full1/Full2/`inter_onboarding` default `true`; बाकी placements default `false`।
-
-### 4.3 ad_config से param कैसे लें
-
-हर placement के JSON में:
-
-```json
-"native_onboarding_fullscreen_1_3": {
-  "id": "ca-app-pub-xxx/yyy",
-  "isEnable": true,
-  "enable_ua_check": true
-}
-```
-
-Code में:
-
-```kotlin
-val config = AdRemoteConfig.native_onboarding_fullscreen_1_3
-AdGate.passesUaGate(config.enableUaCheck)
-```
-
-| JSON key | Kotlin field | Meaning |
-|----------|--------------|---------|
-| `enable_ua_check` | `AdUnitConfig.enableUaCheck` | उस placement के लिए organic (UA) check on/off जब gate call हो |
-
-### 4.4 Mandatory load pattern
-
-```kotlin
-AdsManager.nativeHelper(
-    activity, lifecycleOwner,
-    "native_onboarding_fullscreen_1_3",
-    AdRemoteConfig.native_onboarding_fullscreen_1_3,
-    layoutRes,
-)
-    .setNativeContentView(binding.frAds)
-    .requestAds(NativeAdParam.Request)
-```
-
-Factory `config.enableUaCheck` को helper के UA gate में feed कर देती है, इसलिए कोई screen
-इसे न भूल सकती है, न hard-code कर सकती है।
-
-**Compliant नहीं अगर:**
-- ऊपर की table में किसी placement पर gate skip करें।
-- `config.enableUaCheck` की जगह hard-coded `true/false` pass करें।
-- `AdGate` call करने के बजाय organic check local re-implement करें — एक gate, एक सच।
-
-## 5. Organic mechanism
-
-Organic Ads SDK / growth logic से user classification है, जिसके लिए:
-- कुछ users पर sensitive ad slots की frequency कम करना या disable करना
-- retention, UX, और revenue का balance रखना
-- हर screen rewrite किए बिना cohort rules लागू करना
-
-इस app में कैसे काम करता है:
-- app local rules से organic compute **नहीं** करता।
-- app `AdGate.passesUaGate(enableUaCheck)` call करता है — पीछे `ERainAd.shouldDisplayForUa` है — और `enableUaCheck` `ad_config` से आता है।
-- organic/cohort rules बदलने पर gate का जवाब बदलता है और हर slot के load/show को सीधे affect करता है।
-- DevSetting / Unlimited Ads + `reset organic` QA को सभी ad placements + uninstall widget re-verify करने में मदद करते हैं।
-
-## 6. Load/show examples (quick reference)
-
-### 6.1 Inter Splash
-```kotlin
-if (AdRemoteConfig.inter_splash.isEnable && isNetwork(this)) {
-    ERainAd.getInstance().loadSplashInterstitialAds(
-        this, AdRemoteConfig.inter_splash.id, 30000, 5000, object : AdCallback() {
-            override fun onNextAction() { moveActivity() }
+class App : AdsMultiDexApplication() {
+    override fun onCreate() {
+        super.onCreate()
+
+        Tracker.install(this, TrackerConfig(appVersionCode = BuildConfig.VERSION_CODE.toLong()))
+        Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
+        AdRemoteConfig.initializeFromAssets(this)
+        AdConfig.install(FirebaseAdConfigSource())
+        ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000L))
+
+        mERainAdConfig = ERainAdConfig(this, ERainAdConfig.ENVIRONMENT_PRODUCTION)
+        mERainAdConfig.adjustConfig = AdjustConfig(true, getString(R.string.adjust_token)).apply {
+            eventAdImpression = getString(R.string.event_token)
+            fbAppId = getString(R.string.facebook_app_id)
         }
-    )
-} else moveActivity()
-```
+        mERainAdConfig.facebookClientToken = getString(R.string.facebook_client_token)
+        ERainAd.getInstance().init(this, mERainAdConfig)
+        ERainTuning.install()
+        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
 
-### 6.2 Native (via AdsManager.nativeHelper)
-```kotlin
-AdsManager.nativeHelper(
-    this, this, "native_welcome", AdRemoteConfig.native_welcome, R.layout.layout_native_welcome,
-)
-    .setNativeContentView(mBinding.frAds)
-    .requestAds(NativeAdParam.Request)
-// No observe/hide code: the helper binds on fill and hides the slot on skip/fail
-// No shimmer wiring either: the loading skeleton is auto-derived from the layout (see 2.7)
-```
-
-### 6.3 Inter (Onboarding)
-```kotlin
-AdsManager.loadInterOnboarding(this)
-AdsManager.showInterOnboarding(this) {
-    goNextScreen()
+        OnboardingSdk.install(this) {
+            adProvider = ERainAdProvider()
+            listener = OnboardingListener { context, _ ->
+                context.startActivity(Intent(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
 }
 ```
 
-### 6.4 Normal banner
-```kotlin
-override val bannerConfig = BannerConfig(
-    adUnitConfig = AdRemoteConfig.banner_home,
-    isCollapse = false
-)
+**2. आपका splash.** `class SplashActivity : ObSplashActivity()`, जिसे AppCompat theme के साथ `MAIN`/`LAUNCHER`
+activity के रूप में declare करें। Consent, remote fetch, splash ads, minimum display time और उसके बाद का
+navigation — सब उसी के अंदर चलता है; यहाँ से `OnboardingSdk.start()` कभी call न करें।
+
+**3. Flow configure करें.** `install(...)` के बाद `onboardKitConfig { ... }.onSuccess { OnboardingSdk.configure(it) }`
+call करें — builder एक `Result` लौटाता है। Config के बिना flow skip हो जाता है। देखें [onboardkitorigin/README.md](onboardkitorigin/README.md).
+
+## आपकी app को क्या declare करना है
+
+**`AndroidManifest.xml`** — `<application>` के अंदर। पहली entry के बिना GMA init पर throw करता है; दोनों
+Facebook entries इसलिए ज़रूरी हैं क्योंकि `ERainAd.init` बिना शर्त `FacebookSdk` initialize करता है:
+
+```xml
+<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${app_id}" />
+<meta-data android:name="com.facebook.sdk.ApplicationId"  android:value="@string/facebook_app_id" />
+<meta-data android:name="com.facebook.sdk.ClientToken"    android:value="@string/facebook_client_token" />
 ```
 
-### 6.5 Collapsible banner (expand/collapse)
-```kotlin
-override val bannerConfig = BannerConfig(
-    adUnitConfig = AdRemoteConfig.banner_home,
-    isCollapse = true
-)
-```
+हर build type पर `manifestPlaceholders = [app_id: "ca-app-pub-XXXX~YYYY"]` set करें, और `<application>` tag के
+`android:name` में अपनी `Application` class डालें।
 
-## 7. Purchases और paywall
+**String resources** — `translatable="false"`:
 
-Billing `:billingkit` में रहता है (अब भी `com.ads.module.billing`); paywall UI `:paykit` में। यह
-बँटवारा जानबूझकर है: Play का `BillingClient` `:billingkit` के पास है, और वह entitlement को
-`Entitlement` port के ज़रिए `:ads` को सौंपता है — `AppPurchase.isPurchased` true होते ही `AdGate`
-हर placement को `PURCHASED` के साथ skip कर देता है। premium कौन है, इस पर दूसरा module भी राय रखने
-लगे तो वह gate टूट जाता है।
+| Name | कौन इस्तेमाल करता है | खाली छोड़ने पर |
+|---|---|---|
+| `adjust_token` | Adjust app token | Adjust बंद रहता है, error के रूप में log होता है |
+| `event_token` | Adjust ad-impression event | Impressions warning के साथ skip होती हैं |
+| `adjust_event_token_purchase` | Adjust purchase event | Purchases warning के साथ skip होती हैं |
+| `facebook_app_id` | Meta adapter + Adjust `fbAppId` | `Application.onCreate` में `FacebookSdk.sdkInitialize` throw करता है |
+| `facebook_client_token` | Meta adapter | Facebook requests server-side fail होती हैं |
 
-न्यूनतम wiring। `GlobalApp.onCreate()` में, `initAds()` के बाद:
+**जो files आप बनाते हैं** — SDKs इनमें से कोई भी ship नहीं करतीं:
 
-```kotlin
-val config = payKitConfig {
-    termsUrl = "https://example.com/terms"
-    privacyUrl = "https://example.com/privacy"
-    defaultPlacements = setOf(PaywallPlacement.AFTER_ONBOARDING, PaywallPlacement.SETTING)
-    exitButtonDelayMs = 3_000
-}.getOrElse { Log.e(TAG, "PayKit config rejected", it); return }
+| Path | ज़रूरी | न होने पर |
+|---|:---:|---|
+| `src/main/assets/ad_config.json` | हाँ | हर placement चुपचाप disable, कोई crash नहीं |
+| `src/main/assets/ad_config_debug.json` | ज़ोरदार सलाह | Debug run आपके **live** ad units खर्च करता है |
+| `google-services.json` | `suite-firebase` के साथ (और `com.google.gms.google-services` plugin) | न GA4 sink, न remote ad config, न paywall document |
 
-PayKit.install(this, config)
-PayKit.configSource(FirebaseConfigSource())     // optional, :paykit-firebase से
-```
+## APK size घटाना
 
-Splash में। `onInitBilling` पहले ad request से पहले चलता है और entitlement पता चलते ही लौटना चाहिए,
-इसलिए सिर्फ़ उसी का await कीजिए; paywall document checkpoint तक ज़रूरी नहीं:
+`ads` सात AdMob mediation adapters bundle करता है — APK की सबसे बड़ी चीज़। जिन networks को आपका AdMob account
+mediate नहीं करता, उन्हें हटा दें — `configurations` पर, `ads` dependency पर नहीं, क्योंकि `onboardkitorigin`
+भी `ads` पर निर्भर है और per-dependency exclude उस दूसरे रास्ते को खुला छोड़ देगा:
 
-```kotlin
-override suspend fun onInitBilling() {
-    lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
-    Billing.awaitReady(timeoutMs = 5_000)
+```groovy
+configurations.configureEach {
+    exclude group: 'com.google.ads.mediation', module: 'pangle'
+    exclude group: 'com.pangle.global'
 }
 ```
 
-जिस screen को चाहिए, वहाँ:
+हर network एक adapter है और साथ में वह SDK जिसे वह खींचता है; सिर्फ adapter हटाने पर SDK पीछे रह जाता है। जोड़े:
+`applovin`→`com.applovin`, `vungle`→`com.vungle`, `pangle`→`com.pangle.global`, `unity`→`com.unity3d.ads`,
+`mintegral`→`com.mbridge.msdk.oversea`, `ironsource`→`com.unity3d.ads-mediation`. `facebook` अपवाद है — module
+exclude करें, group कभी नहीं: `exclude group: 'com.facebook.android', module: 'audience-network-sdk'`. उसी group
+में `facebook-core` भी है, जिसकी ज़रूरत `ERainAd.init` को पड़ती है।
 
-```kotlin
-PayKit.launch(activity, PaywallPlacement.SETTING)
-```
+अगर R8 किसी हटाए गए network के लिए `Missing class` बताए, तो `proguard-rules.pro` में `-dontwarn com.pangle.global.**`
+(और उसी तरह बाकी) जोड़ें। Gradle exclusions से पहले अपने AdMob mediation groups बदलें।
 
-ये rules optional नहीं हैं:
+## License
 
-- **`AppPurchase.initBilling` खुद मत call करें।** `PayKit.install` paywall document से catalogue
-  register कर देता है। `initBilling` चालू client को गिरा देता है, इसलिए दूसरी product list वाला
-  दूसरा caller चुपचाप जीत जाता है।
-- **Placements fail-closed हैं।** न `defaultPlacements` हो और न fetch किए document के `placements`,
-  तो कुछ नहीं दिखता; bundled document सिर्फ catalogue है, placement तय नहीं करता। premium user और बंद
-  placement पर भी `PayKit.launch` मना करता है — वह log करता है और उसी call के listener को
-  `onFinished(Dismissed)` देता है।
-- **`iap_success` `:billingkit` भेजता है**, एक ही बार, जब Play confirm करता है। अपने paywall या
-  अपनी screen से purchase event मत भेजें; उससे वही revenue दो बार गिनी जाती है।
-- **Ad gating `AppPurchase.isPurchased` पर ही रहती है।** अपनी UI के लिए `PayKit.isPremium()` /
-  `Billing.isPremium` पढ़ें; premium को अपनी preference में copy मत करें।
-- `consumable` product को billing engine consume कर देता है और वह entitlement कभी set नहीं करता,
-  इसलिए ads बंद **नहीं** होते। lifetime unlock के लिए `inapp` इस्तेमाल करें।
-
-पूरी guide — config schema, placements, analytics, theming, Compose escape hatch, और OnboardKit
-gate: **[paykit/README.md](paykit/README.md)**।
-
-## 8. Additional reference
-
-- [Infinity UI Documentation — Language & Onboarding](https://interim-pink-4gmxxkfh.edgeone.app/) — UI, Remote Config, और ad-unit display conditions (placement/method names को इस document से cross-check करना चाहिए)।
+MIT — देखें [LICENSE](LICENSE).

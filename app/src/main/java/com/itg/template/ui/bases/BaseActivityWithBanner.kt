@@ -9,7 +9,7 @@ import com.ads.module.helper.banner.BannerAdHelper
 import com.ads.module.helper.banner.BannerAdParam
 import com.ads.module.helper.banner.BannerType
 import com.itg.template.R
-import com.itg.template.ads.AdUnitConfig
+import com.ads.module.config.AdUnitConfig
 import com.itg.template.ui.bases.ext.goneView
 import com.itg.template.ui.bases.ext.visibleView
 

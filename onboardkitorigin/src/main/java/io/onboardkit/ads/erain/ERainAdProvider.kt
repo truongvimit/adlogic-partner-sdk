@@ -16,6 +16,9 @@ import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdPreload
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.toNativeStyle
+import com.ads.module.helper.adnative.NativeAdStyle
 import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterShowCallback
@@ -70,6 +73,16 @@ class ERainAdProvider(
     // GMA requires destroy() on every consumed NativeAd; the buffer only owns unpolled ones
     private val boundNatives = ConcurrentHashMap<String, ApNativeAd>()
 
+    /**
+     * Presentation style per placement, resolved from the ad config at request time.
+     *
+     * The flow hands this provider ad unit ids, not config keys, so the style is captured while the
+     * ids are still in hand and read back at bind. Binding with no style ignored `components`,
+     * `colorCTA` and `heightCTA` for every onboarding native — one edit to the ad config moved
+     * every other slot in the app and left these behind.
+     */
+    private val nativeStyles = ConcurrentHashMap<String, NativeAdStyle>()
+
     // AdGate reads the Entitlement port, so this stays correct whether or not :billingkit ships.
     override fun isPremium(context: Context): Boolean = AdGate.isPurchased(context)
 
@@ -83,6 +96,8 @@ class ERainAdProvider(
         // GMA's paid-event callback only knows the ad unit id; this is the only place that knows
         // which onboarding screen asked for it.
         ids.forEach { PlacementRegistry.register(it, key) }
+        ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
+            ?.let { nativeStyles[key] = it.toNativeStyle() }
         ensureNativeBridge(key)
         val covered =
             preload.preloadWithKeyIfEmpty(key, activity, nativeConfig(ids, request.layoutRes))
@@ -108,7 +123,13 @@ class ERainAdProvider(
         listener?.let { listeners[placement.key] = it }
         val frame = container as? FrameLayout ?: return false
         val ad = preload.pollAdNative(placement.key) ?: return false
-        NativeAdStyler.populate(activity, ad, null, frame, shimmer as? ShimmerFrameLayout)
+        NativeAdStyler.populate(
+            activity,
+            ad,
+            nativeStyles[placement.key],
+            frame,
+            shimmer as? ShimmerFrameLayout,
+        )
         boundNatives.put(placement.key, ad)?.let { previous ->
             if (previous !== ad) destroyNative(previous)
         }
@@ -120,6 +141,7 @@ class ERainAdProvider(
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
         nativeBridges.remove(key)
+        nativeStyles.remove(key)
         preload.release(key)
         boundNatives.remove(key)?.let(::destroyNative)
         listeners.remove(key)
@@ -272,8 +294,10 @@ class ERainAdProvider(
         SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW
         SdkAdSkipReason.PURCHASED -> AdSkipReason.PREMIUM
         SdkAdSkipReason.DISABLED_CONFIG -> AdSkipReason.NO_AD_UNIT
-        SdkAdSkipReason.OFFLINE -> AdSkipReason.NOT_READY
-        SdkAdSkipReason.UA_GATE -> AdSkipReason.NOT_READY
+        // 1:1 rather than collapsed into NOT_READY: reporting an offline or gated request as
+        // "nothing buffered" hid the two causes a funnel actually needs to tell apart.
+        SdkAdSkipReason.OFFLINE -> AdSkipReason.OFFLINE
+        SdkAdSkipReason.UA_GATE -> AdSkipReason.UA_GATE
     }
 
     private fun destroyNative(ad: ApNativeAd) {

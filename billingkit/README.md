@@ -1,42 +1,30 @@
 # BillingKit
 
-> Architecture: **[../trackkit/ARCHITECTURE.md](../trackkit/ARCHITECTURE.md)** · Paywall:
-> **[../paykit/README.md](../paykit/README.md)** · Analytics:
-> **[../trackkit/README.md](../trackkit/README.md)**
+> The Play Billing engine as a library: connection, catalogue, purchase and subscription flows,
+> acknowledge/consume, cached entitlement, purchase telemetry.
 
-The Play Billing engine as a library: the `BillingClient` connection with reconnect backoff, the
-product catalogue, the purchase and subscription flows, acknowledge/consume with retries, the
-optional server-side verifier, the cached entitlement, and purchase telemetry. It used to live
-inside `:ads`; it moved out so a partner that runs ads sells nothing extra, and a partner that
-sells needs no ads.
+Java package `com.ads.module.billing`, resource prefix `bk_`. Two entry points: `AppPurchase` (the
+Java-friendly singleton) and `Billing` (coroutines and Flow over it). No ad code ships here.
 
-- Java package `com.ads.module.billing` — **unchanged on purpose**, so pre-split imports keep
-  compiling · resource prefix `bk_` · entry points `AppPurchase` (Java) and `Billing` (Kotlin)
-- Ads are **not** in this module. When `:ads` is on the classpath, BillingKit plugs its premium
-  answer into the `Entitlement` port automatically; without `:ads` nothing ad-related exists.
-- Purchase events leave through `Tracker` (`iap_success`, `iap_fail`) and purchase revenue through
-  the vendor-free `io.trackkit.mmp.MmpTracking` seam — this module never learns which MMP you ship.
+## Requirements
 
-**Read [`../trackkit/README.md`](../trackkit/README.md) too.** Without `Tracker.install()` plus a
-sink, every event this SDK emits is validated and then discarded.
+| | |
+|---|---|
+| minSdk | 24 |
+| Module bytecode | Java 8 / Kotlin `jvmTarget` 1.8 (the host app may be higher) |
+| Play Billing Library | 9.0.0 |
+| Arrives transitively (`api`) | `trackkit`, `kotlinx-coroutines-android` |
 
----
-
-## 1. Which partners need this module
-
-| Scenario | Declare | Notes |
-|---|---|---|
-| Ads only, no IAP | — | Skip this module; the APK ships no Play Billing class |
-| IAP + prebuilt paywall, no ads | `billingkit` + `paykit` | No GMA/AdMob in the APK |
-| IAP with your own paywall UI | `billingkit` | Neither `paykit` nor `ads` required |
-| Ads and IAP | `ads` + `billingkit` (+ `paykit`) | Premium gating works exactly as before the split |
-
-Upgrading an existing IAP app across the split is **one Gradle line** — see
-[`../MIGRATION.md`](../MIGRATION.md).
-
-## 2. Gradle setup
+## Installation
 
 ```groovy
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
 def sdkVersion = '<tag>'
 
 dependencies {
@@ -44,12 +32,11 @@ dependencies {
 }
 ```
 
-`trackkit` and coroutines arrive transitively (`api`). Keep every module of the SDK on one tag.
+## Quick start
 
-## 3. Quick start
+**1. Register the catalogue in `Application.onCreate`.** `Billing.install` is idempotent.
 
 ```kotlin
-// Application.onCreate — early, so the cached entitlement gates ads from the first frame
 AppPurchase.getInstance().initBilling(
     this,
     listOf(
@@ -60,62 +47,95 @@ AppPurchase.getInstance().initBilling(
 Billing.install(this)
 ```
 
-Then, from a screen:
+`PurchaseItem(itemId, type)` is enough for a one-time product. For a subscription the
+four-argument form records `basePlanId` and `offerId`; the flow only honours them once you pass
+them through `resolveOfferToken` and hand the token to `subscribeProduct`. `type` is
+`TYPE_IAP.PURCHASE`, `TYPE_IAP.SUBSCRIPTION` or `TYPE_IAP.CONSUMABLE`. With PayKit, skip this
+step — `PayKit.install` does both calls.
+
+**2. Wait for Play, then read prices.** All price getters return `""` until details are loaded.
 
 ```kotlin
-val result = AppPurchase.getInstance().subscribeProduct(activity, "premium_monthly", null)
-// LaunchResult tells launch failures apart; the outcome arrives via Billing.purchaseEvents
+lifecycleScope.launch {
+    val ready = Billing.awaitReady(timeoutMs = 5_000)     // Ready / Timeout / Error(code)
+    val monthly = AppPurchase.getInstance().getPriceSub("premium_monthly")   // renewal price
+    val lifetime = AppPurchase.getInstance().getPrice("premium_lifetime")    // one-time price
+}
+```
+
+**3. Launch a flow and collect the outcome.** A null offer token makes the SDK pick the first
+offer that has a zero-price phase, else the first offer — resolve the token to charge the plan you
+registered.
+
+```kotlin
+val token = AppPurchase.getInstance().resolveOfferToken("premium_monthly", "monthly-base", "")
+val result = AppPurchase.getInstance().subscribeProduct(activity, "premium_monthly", token)
+// one-time products: AppPurchase.getInstance().purchaseProduct(activity, "premium_lifetime")
 
 lifecycleScope.launch {
-    Billing.isPremium.collect { premium -> render(premium) }
+    Billing.purchaseEvents.collect { /* Purchased, Pending, AlreadyOwned, Error, Canceled */ }
 }
+lifecycleScope.launch { Billing.isPremium.collect { premium -> render(premium) } }
 ```
 
-Java hosts use the same `AppPurchase` singleton and register a `PurchaseCallback`; the listener
-interfaces (`PurchaseListener`, `BillingListener`, `UpdatePurchaseListener` in
-`com.ads.module.funtion`) are unchanged from the pre-split SDK.
+`result` is a `LaunchResult`: `LAUNCHED`, `BILLING_NOT_READY`, `PRODUCT_NOT_FOUND`, `NO_OFFER`, `OFFER_TOKEN_REQUIRED`, `ITEM_ALREADY_OWNED`, `NETWORK_ERROR`, `USER_CANCELED`, `DEV_MODE`, `ERROR`.
 
-If you use PayKit, skip `initBilling`: `PayKit.install` registers the catalogue from the paywall
-document and calls `Billing.install` itself.
+**4. Restore.** From a coroutine, `Billing.restore()` returns `Restored(productIds)`,
+`NothingToRestore` or `Error(code, message)`. Java hosts call `verifyPurchased(true)`, wait for
+`BillingListener.onInitBillingFinished`, then read `getOwnedInAppPurchases()` / `getOwnerIdSubs()`.
 
-## 4. How it cooperates with `:ads`
+## Configuration
 
-`:ads` gates every load and show on `AdGate.isPurchased`, which reads an `Entitlement` port with no
-billing knowledge behind it. The first touch of `AppPurchase` (or `Billing.install`) installs this
-engine as the port's source — when `:ads` is present on the classpath, and silently skipped when it
-is not. There is nothing to wire and nothing to configure; the hand-off is also why premium users
-stop seeing ads the moment a purchase completes, exactly as before the split.
+| Call on `AppPurchase.getInstance()` | Default | What it does |
+|---|---|---|
+| `setConsumePurchase(boolean)` | `false` | Consumes one-time purchases instead of acknowledging them |
+| `setPurchaseVerifier(PurchaseVerifier)` | unset | Server-side receipt check; unset treats every purchase as verified |
+| `setObfuscatedAccountId(String)` / `setObfuscatedProfileId(String)` | unset | Fraud signals sent with each billing flow |
+| `setBillingListener(BillingListener, int)` | — | Init callback, forced to fire after the timeout in ms |
+| `addPurchaseCallback(PurchaseCallback)` | — | Extra listener; never displaces `setPurchaseListener` |
+| `refreshProductDetails()` | — | Re-queries Play for the registered catalogue |
 
-The dependency is one-way: this module `compileOnly`-references `:ads`; `:ads` knows nothing about
-this module.
-
-## 5. Dev mode
-
-`BillingKit.setDevMode(true)` simulates purchases without Play — the dev bottom sheet grants a
-process-local entitlement that the next real verification takes away. It is fail-closed: off by
-default. When `:ads` is present, `ERainAdConfig.variantDev` keeps driving it exactly as before the
-split; an explicit `setDevMode` call wins over the config flag.
-
-## 6. Server-side verification
+The verifier runs on purchases arriving from a billing flow, not on restores:
 
 ```kotlin
-AppPurchase.getInstance().setPurchaseVerifier { productId, token, json, callback ->
-    // your backend call; invoke exactly once
-    callback.onResult(verified, reason)
+AppPurchase.getInstance().setPurchaseVerifier { productId, token, originalJson, callback ->
+    callback.onResult(verified, reason)   // exactly once, any thread
 }
 ```
 
-Applied to purchases arriving from a billing flow, not to restores. Unset means every purchase is
-treated as verified.
+Purchases reach `Tracker` as `iap_success` / `iap_fail`; events tracked before `Tracker.install`
+are buffered, and discarded only when no sink is registered
+([`../trackkit/README.md`](../trackkit/README.md)). Revenue also goes to the vendor-free
+`io.trackkit.mmp.MmpTracking.trackPurchaseRevenue` seam, which is a no-op until an
+`MmpTracking.Relay` is registered — `:ads` registers the Adjust one during `ERainAd.init`.
 
-## 7. Telemetry
+## Premium gating
 
-| Signal | Leaves through | Notes |
+`:ads` gates every load and show on `AdGate.isPurchased(context)`, which reads the `Entitlement`
+port. BillingKit installs itself as that port's source on the first `AppPurchase.getInstance()`
+call, or from `Billing.install` — whichever runs first. The hand-off runs once and is skipped when
+`:ads` is absent. For purchases that land mid-session, drop what is already preloaded with
+`AdGate.installPremiumObserver(scope, Billing.isPremium)`.
+
+## Dev mode
+
+`BillingKit.setDevMode(true)` simulates purchases in a bottom sheet instead of Play and adds
+`AppPurchase.PRODUCT_ID_TEST` (`android.test.purchased`) to the catalogue. With no explicit call,
+`BillingKit.isDevMode()` falls back to `:ads`: `ERainAd.init` writes `AppUtil.VARIANT_DEV` from
+`ERainAdConfig`, and it reads `true` until that call runs. An explicit `setDevMode` wins.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `iap_success` / `iap_fail` | `Tracker` | This engine is the only emitter — the paywall reports views and clicks, never revenue |
-| Purchase revenue for the MMP | `io.trackkit.mmp.MmpTracking.trackPurchaseRevenue` | `:ads` registers the Adjust relay; a host with a different MMP registers its own `Relay` |
+| `purchaseProduct` returns `BILLING_NOT_READY` | Called before Play connected | Gate the button on `Billing.awaitReady()` or `BillingListener.onInitBillingFinished` |
+| `subscribeProduct` returns `NO_OFFER` | Play returned no offer for this product — no active base plan, or the user's region excludes every offer | Inspect `getSubscriptionOffers(productId)` |
+| The wrong plan is charged | `subscribeProduct` was given a null offer token, so the SDK picked the first free-trial offer, else the first offer | Resolve the token with `resolveOfferToken(productId, basePlanId, offerId)` and pass it in |
+| Prices come back `""` | Details not fetched, or the id is not in the catalogue | Re-check `initBilling`, then `refreshProductDetails()` |
+| A premium user still sees ads | `Billing.install` never ran before the first ad request | Call it in `Application.onCreate` |
+| Ads keep showing right after a purchase | Preloaded ads are still buffered | `AdGate.installPremiumObserver(scope, Billing.isPremium)` |
+| A release build grants premium for free | Dev mode is on; `initBilling` logs this at ERROR | `BillingKit.setDevMode(false)`, or `ERainAdConfig.setEnvironment(ERainAdConfig.ENVIRONMENT_PRODUCTION)` |
 
-## 8. R8 / ProGuard
+## License
 
-Consumer rules ship in the AAR: the public API is kept, and the `compileOnly` references into
-`:ads` are `-dontwarn`-ed so an adsless host shrinks cleanly. Nothing to add on your side.
+MIT — see [`../LICENSE`](../LICENSE).

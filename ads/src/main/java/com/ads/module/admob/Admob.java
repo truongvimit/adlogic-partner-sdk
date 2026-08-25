@@ -40,6 +40,7 @@ import com.ads.module.helper.AdSkipReason;
 import com.ads.module.tracking.AdTracking;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
+import com.ads.module.consent.ConsentCenter;
 import com.google.ads.mediation.admob.AdMobAdapter;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdListener;
@@ -231,7 +232,25 @@ public class Admob {
     @SuppressLint("VisibleForTests")
     public AdRequest getAdRequest() {
         AdRequest.Builder builder = new AdRequest.Builder();
+        applyPersonalization(builder);
         return builder.build();
+    }
+
+    /**
+     * Marks the request non-personalized when the user refused personalization.
+     * <p>
+     * The request still goes out — AdMob serves that user contextual (non-personalized) ads, and
+     * declining to request at all would forfeit the fill for no compliance gain. Google also
+     * enforces this server-side from the TC string; sending the extra states the same intent
+     * explicitly rather than relying on that alone.
+     */
+    static void applyPersonalization(AdRequest.Builder builder) {
+        if (ConsentCenter.canPersonalize()) {
+            return;
+        }
+        Bundle extras = new Bundle();
+        extras.putString("npa", "1");
+        builder.addNetworkExtrasBundle(AdMobAdapter.class, extras);
     }
 
     public boolean interstitialSplashLoaded() {
@@ -925,6 +944,10 @@ public class Admob {
      * signal legacy call sites advance their flow on.
      */
     private void notifyShowFailed(AdCallback callback, String message) {
+        // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
+        // a presentation that dies here must lower it whether or not anyone is listening. Leaving
+        // it raised suppressed every app-resume ad for the rest of the process.
+        AppOpenManager.getInstance().setInterstitialShowing(false);
         if (callback == null) {
             return;
         }
@@ -1341,6 +1364,11 @@ public class Admob {
         Bundle admobExtras = new Bundle();
         admobExtras.putString("collapsible", gravity);
         admobExtras.putString("collapsible_request_id", UUID.randomUUID().toString());
+        // One bundle per adapter class — a second addNetworkExtrasBundle would replace this one,
+        // so the personalization flag goes in here rather than through applyPersonalization.
+        if (!ConsentCenter.canPersonalize()) {
+            admobExtras.putString("npa", "1");
+        }
         builder.addNetworkExtrasBundle(AdMobAdapter.class, admobExtras);
         return builder.build();
     }
@@ -2756,7 +2784,10 @@ public class Admob {
                 super.onAdShowedFullScreenContent();
                 isShowInterstitialSplashSuccess = true;
                 AppOpenManager.getInstance().setInterstitialShowing(true);
-                AppOpenManager.getInstance().disableAppResume();
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = true;
                 mInterSplashHigh1 = null;
             }
@@ -2765,7 +2796,6 @@ public class Admob {
             public void onAdDismissedFullScreenContent() {
                 super.onAdDismissedFullScreenContent();
                 AppOpenManager.getInstance().setInterstitialShowing(false);
-                AppOpenManager.getInstance().enableAppResume();
                 mInterSplashHigh1 = null;
                 if (adListener != null) {
                     if (!openActivityAfterShowInterAds) {
@@ -2988,7 +3018,10 @@ public class Admob {
                 super.onAdShowedFullScreenContent();
                 isShowInterstitialSplashSuccess = true;
                 AppOpenManager.getInstance().setInterstitialShowing(true);
-                AppOpenManager.getInstance().disableAppResume();
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = false;
                 mInterSplashHigh2 = null;
             }
@@ -2998,7 +3031,6 @@ public class Admob {
                 super.onAdDismissedFullScreenContent();
                 Log.d(TAG, " Splash:onAdDismissedFullScreenContent ");
                 AppOpenManager.getInstance().setInterstitialShowing(false);
-                AppOpenManager.getInstance().enableAppResume();
                 mInterSplashHigh2 = null;
                 if (adListener != null) {
                     if (!openActivityAfterShowInterAds) {
@@ -3221,7 +3253,10 @@ public class Admob {
                 super.onAdShowedFullScreenContent();
                 isShowInterstitialSplashSuccess = true;
                 AppOpenManager.getInstance().setInterstitialShowing(true);
-                AppOpenManager.getInstance().disableAppResume();
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = false;
                 mInterSplashHigh3 = null;
             }
@@ -3231,7 +3266,6 @@ public class Admob {
                 super.onAdDismissedFullScreenContent();
                 Log.d(TAG, " Splash:onAdDismissedFullScreenContent ");
                 AppOpenManager.getInstance().setInterstitialShowing(false);
-                AppOpenManager.getInstance().enableAppResume();
                 mInterSplashHigh3 = null;
                 if (adListener != null) {
                     if (!openActivityAfterShowInterAds) {

@@ -68,7 +68,7 @@
             android:layout_marginBottom="@dimen/ob_block_padding_v"
             android:background="@drawable/ob_bg_cta_pill"
             android:ellipsize="end"
-            android:fontFamily="@font/ob_urbanist_bold"
+            android:fontFamily="@font/ob_poppins_bold"
             android:gravity="center"
             android:maxLines="1"
             android:textColor="@color/ob_white"

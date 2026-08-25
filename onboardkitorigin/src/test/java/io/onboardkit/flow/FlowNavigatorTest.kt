@@ -152,6 +152,63 @@ class FlowNavigatorTest {
     }
 
     @Test
+    fun `an ad-only page with no ad to show is dropped, not left blank`() {
+        assertEquals(
+            listOf(StepId.OB1, StepId.OB2, StepId.OB4),
+            FlowNavigator.enabledSteps(config, flags, canShowAdStep = { false }),
+        )
+    }
+
+    @Test
+    fun `dropping an ad-only page moves the resume target with it`() {
+        // The resume index is an index into the list the pager builds, so both must be computed
+        // with the same filter. OB2 is done; the page after it is OB3, the ad page. With no ad to
+        // show, resuming has to land on OB4 — reading the index against the unfiltered list is how
+        // a resuming user lands one page off.
+        val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = StepId.OB2.value)
+        val noAdStep = { _: StepId -> false }
+
+        val pages = FlowNavigator.enabledSteps(config, flags, canShowAdStep = noAdStep)
+        val decision =
+            FlowNavigator.decideStart(state, flags, config, canShowAdStep = noAdStep)
+                as StartDecision.Start
+
+        assertEquals(StepId.OB4, pages[decision.resumeStepIndex])
+        // Unfiltered, the very same index names the ad page instead
+        assertEquals(
+            StepId.OB3,
+            FlowNavigator.enabledSteps(config, flags)[decision.resumeStepIndex],
+        )
+    }
+
+    @Test
+    fun `a checkpoint whose step left the flow resumes after it, not from zero`() {
+        // OB3 done, then its ad-only page drops out because there is no ad. The user is one page
+        // from the end — resuming at 0 would replay the whole onboarding.
+        val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = StepId.OB3.value)
+        val noAdStep = { _: StepId -> false }
+        val pages = FlowNavigator.enabledSteps(config, flags, canShowAdStep = noAdStep)
+
+        val decision =
+            FlowNavigator.decideStart(state, flags, config, canShowAdStep = noAdStep)
+                as StartDecision.Start
+
+        assertEquals(listOf(StepId.OB1, StepId.OB2, StepId.OB4), pages)
+        assertEquals(StepId.OB4, pages[decision.resumeStepIndex])
+    }
+
+    @Test
+    fun `a checkpoint on the last remaining step lands past the pager`() {
+        val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = StepId.OB4.value)
+        val enabled = listOf(StepId.OB1, StepId.OB2)
+        // OB4 is configured but no longer enabled; nothing enabled follows it.
+        assertEquals(
+            enabled.size,
+            FlowNavigator.resumeIndex(state, enabled, listOf(StepId.OB1, StepId.OB2, StepId.OB4)),
+        )
+    }
+
+    @Test
     fun `unknown checkpoint restarts from zero`() {
         val state = OnboardingState(lastCompletedStep = "deleted_step")
         assertEquals(0, FlowNavigator.resumeIndex(state, listOf(StepId.OB1, StepId.OB2)))

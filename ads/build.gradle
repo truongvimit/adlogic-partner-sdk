@@ -8,6 +8,7 @@ android {
     defaultConfig {
         minSdk min_sdk_version
         targetSdk target_sdk_version
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     publishing {
@@ -15,6 +16,13 @@ android {
             withSourcesJar()
             withJavadocJar()
         }
+    }
+
+    testOptions {
+        // AdConfigParser reads through android.util.JsonReader, so the parser tests need a real
+        // framework class rather than a stub that returns defaults.
+        unitTests.returnDefaultValues = true
+        unitTests.includeAndroidResources = true
     }
 
     buildTypes {
@@ -48,21 +56,19 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-    implementation 'com.google.android.material:material:1.14.0'
+    implementation "com.google.android.material:material:$androidx_material_version"
 
-    implementation 'com.facebook.shimmer:shimmer:0.5.0'
-    implementation "androidx.lifecycle:lifecycle-extensions:2.2.0"
-    implementation "androidx.lifecycle:lifecycle-runtime:2.10.0"
+    // api, not implementation: ShimmerFrameLayout is exposed through NativeAdShimmer.from().
+    api "com.facebook.shimmer:shimmer:$shimmer_version"
+    implementation "androidx.lifecycle:lifecycle-runtime:$androidx_lifecycle_version"
+    implementation "androidx.lifecycle:lifecycle-process:$androidx_lifecycle_version"
 
     // api, not implementation: StateFlow<AdNativeState/AdBannerState> is helper public API
     api "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
 
     // Admob
-    implementation 'androidx.multidex:multidex:2.0.1'
-    implementation 'com.google.android.gms:play-services-ads:25.3.0'
+    implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
     implementation 'com.google.android.gms:play-services-ads-identifier:18.3.0'
-
-    implementation 'com.google.firebase:firebase-analytics:23.2.0'
 
     // Mediation
     implementation 'com.google.ads.mediation:facebook:6.21.0.3'
@@ -74,25 +80,25 @@ dependencies {
     implementation 'com.google.ads.mediation:unity:4.18.0.0'
     implementation 'com.google.ads.mediation:ironsource:9.4.2.0'
 
-    // Facebook SDK
-    implementation 'com.facebook.android:facebook-android-sdk:18.2.3'
+    // Facebook SDK: only FacebookSdk.setClientToken/sdkInitialize are used, so core is enough —
+    // the umbrella artifact also pulls login/share/messenger.
+    implementation 'com.facebook.android:facebook-core:18.2.3'
 
     // Adjust
     implementation 'com.adjust.sdk:adjust-android:5.7.0'
     implementation 'com.android.installreferrer:installreferrer:2.2'
 
-    // Lottie
-    implementation 'com.airbnb.android:lottie:6.7.1'
-
     // Sdp & Ssp
     implementation 'com.intuit.sdp:sdp-android:1.1.1'
     implementation 'com.intuit.ssp:ssp-android:1.1.1'
 
-    implementation 'com.google.android.play:app-update:2.1.0'
-    implementation 'com.google.android.play:app-update-ktx:2.1.0'
+    // TODO(consent): no UMP code lives in :ads — this api export only exists so the template's
+    // ConsentHandler compiles. Drops together with the UMP flow move into :onboardkitorigin.
     api 'com.google.android.ump:user-messaging-platform:4.0.0'
 
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.13'
+    testImplementation 'androidx.test:core:1.6.1'
 }
 
 // AGP creates the 'release' software component late, so the publication must be configured

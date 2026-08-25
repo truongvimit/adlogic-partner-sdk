@@ -103,6 +103,19 @@ public class ERainAd {
         Admob.getInstance().setMaxClickAdsPerDay(maxClickAdsPerDay);
     }
 
+    /**
+     * Minimum gap, in seconds, between two interstitial impressions. {@code 0} — the default —
+     * disables the rule.
+     *
+     * <p>Read on every show, so remote config can retune it mid-session. This module owns the rule
+     * because it owns the impression timestamp both it and any caller would have to read.
+     */
+    public void setIntervalInterstitialAd(int intervalSeconds) {
+        if (adConfig != null) {
+            adConfig.setIntervalInterstitialAd(intervalSeconds);
+        }
+    }
+
     public void init(Application context, ERainAdConfig adConfig) {
         if (adConfig == null) {
             throw new RuntimeException("Cant not set ERainAdConfig null");
@@ -117,9 +130,9 @@ public class ERainAd {
         }
 
         Admob.getInstance().init(context, adConfig.getListDeviceTest());
-        if (adConfig.isEnableAdResume()) {
-            AppOpenManager.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
-        }
+        // Always attach the lifecycle hooks — the resume unit usually arrives later from remote
+        // config. AppOpenManager skips requests until it has an id.
+        AppOpenManager.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
         // The placeholder keeps FacebookSdk.sdkInitialize from crashing on a missing token, but
         // every Graph/App Events request made with it fails server-side — say so once, loudly.
         if (ERainAdConfig.DEFAULT_TOKEN_FACEBOOK_SDK.equals(adConfig.getFacebookClientToken())) {

@@ -5,22 +5,23 @@ include ':ads'
 include ':onboardkitorigin'
 include ':adtracer'
 
-// Analytics: vendor-free contract + one module per vendor, so a partner build only pulls the
-// sinks it actually uses. Adjust is deliberately absent — the MMP lives in :ads.
-// Firebase is the only analytics destination for now; add a sink module per vendor as needed.
+// Analytics: vendor-free contract. Adjust is deliberately absent — the MMP lives in :ads.
 include ':trackkit'
-include ':trackkit-firebase'
+
+// The suite's single Firebase adapter: analytics sink, paywall config source, ad config source,
+// and the one Remote Config client all three fetch through. :paykit and :ads are compileOnly, so
+// a partner who wants only the analytics sink does not inherit the paywall UI or the ad stack.
+include ':suite-firebase'
 
 // Billing: the Play Billing engine, split out of :ads so an IAA-only partner ships no billing
 // classes and an IAP-only partner ships no GMA. Same com.ads.module.billing FQNs as before —
 // existing imports keep compiling; IAP partners just add this one module.
 include ':billingkit'
 
-// Paywall: same port/adapter split as analytics. :paykit owns the UI and reads its remote config
-// through the vendor-free PaywallConfigSource; the billing engine lives in :billingkit.
-// Firebase Remote Config is the only config vendor for now; add a source module per vendor.
+// Paywall: :paykit owns the UI and reads its remote config through the vendor-free
+// PaywallConfigSource; the billing engine lives in :billingkit, the Firebase source in
+// :suite-firebase.
 include ':paykit'
-include ':paykit-firebase'
 
 // Scenario proof, never published: :billingkit + :paykit with no :ads on the classpath must
 // compile and package. If this module breaks, the billing split has regressed.
