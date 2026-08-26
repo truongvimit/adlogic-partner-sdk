@@ -100,21 +100,101 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-Một entry mở thẳng vào feature — tap notification hay widget — phải giữ màn đích lại tới khi ad splash đóng,
-nếu không màn mở feature sẽ chồng lên ad và che mất impression. Quyết định thuộc về lần khởi chạy, nên đây là
-hook chứ không phải field config:
-
-```kotlin
-override fun nextScreenTiming(): NextScreenTiming =
-    if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
-    else NextScreenTiming.UNDER_AD
-```
-
 Khai báo nó với `android:exported="true"`, một filter MAIN/LAUNCHER và theme AppCompat/MaterialComponents.
 Đừng override `onConsentRequired()` — mặc định của nó chạy luồng UMP qua `ConsentCenter` trong `:ads`;
 chỉ override để `return true` khi app không có bước consent. Đừng gọi `OnboardingSdk.start()` ở đây, nó
 tự chạy khi pipeline hoàn tất. Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` —
 `ConsentCenter.detach(this)` nằm ở đó. Về sau: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
+Nếu launcher này còn nhận cả tap từ notification, widget hay shortcut, xem [Vào app từ notification hoặc widget](#vào-app-từ-notification-hoặc-widget).
+
+## Vào app từ notification hoặc widget
+
+Một cú tap có kèm tên feature phải sống sót qua trọn luồng first-open, rồi mở feature đó mà không che mất cái ad
+vừa trả tiền để hiện. Bốn phần, phần cuối là quyết định chỉ bạn mới trả lời được.
+
+**1. Trỏ entry vào splash, không phải màn chính.** Cú tap là khởi đầu một session, nên nó đi đúng đường mà tap từ
+launcher đi — consent, remote, inter splash, rồi language / onboarding hoặc đi thẳng. Mang feature theo dưới dạng
+intent extra.
+
+```kotlin
+// notification trampoline, widget PendingIntent, shortcut …
+Intent(context, SplashActivity::class.java).apply {
+    putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
+    // CLEAR_TASK chứ không chỉ NEW_TASK: thiếu nó thì task còn lại từ session trước bị kéo lên
+    // trước, và splash — kèm theo ad lẫn phần định tuyến — không bao giờ chạy.
+    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+}
+```
+
+**2. Đám extras đi xuyên suốt dưới dạng passthrough.** `ObSplashActivity` lấy nó từ chính `intent.extras` của mình;
+SDK mang qua language, onboarding và màn question, rồi trả lại ở outcome cuối. Không chỗ nào trong luồng đọc nó —
+với SDK nó là dữ liệu mờ.
+
+| Outcome | Có mang passthrough |
+|---|---|
+| `Completed` | có |
+| `Skipped` | có — luồng bị tắt bằng config, đã chạy xong trước đó, hoặc không có gì để hiện |
+| `Aborted` | không |
+
+**3. Listener gắn nó trở lại vào intent của màn chính.**
+
+```kotlin
+listener = OnboardingListener { context, outcome ->
+    val extras = when (outcome) {
+        is OnboardingOutcome.Completed -> outcome.passthrough
+        is OnboardingOutcome.Skipped -> outcome.passthrough
+        is OnboardingOutcome.Aborted -> null
+    }
+    context.startActivity(
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .apply { extras?.let(::putExtras) },
+    )
+}
+```
+
+Chỉ `NEW_TASK`, tuyệt đối không `CLEAR_TASK`: dưới `UNDER_AD` đoạn này chạy lúc ad đang trên màn hình, clear task
+là finish luôn Activity đang chứa nó. Mỗi màn của SDK tự finish sau khi đã start màn kế, nên stack cũng chẳng còn
+gì để dọn.
+
+Đọc extra ở **cả** `onCreate` lẫn `onNewIntent` — tap nguội vào cái đầu, tap nóng vào cái sau — và đọc tới đâu
+tiêu thụ tới đó, nếu không intent khởi chạy sẽ mở lại feature ở lần configuration change kế tiếp.
+
+**4. Chọn thời điểm màn đích khởi động.**
+
+```kotlin
+class SplashActivity : ObSplashActivity() {
+    override fun nextScreenTiming(): NextScreenTiming =
+        if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
+        else NextScreenTiming.UNDER_AD
+}
+```
+
+| | `UNDER_AD` (mặc định) | `AFTER_AD` |
+|---|---|---|
+| Màn đích start | cùng tick với `show()`, nằm sau ad | sau khi ad đã biến mất |
+| Người dùng thấy | màn hình đã vẽ xong ngay khi ad đóng | khựng một nhịp, rồi mới thấy màn hình |
+| Dùng khi | màn đích là nơi người dùng dừng lại | màn đích tự mở tiếp thứ gì đó ngay khi vào |
+
+`AFTER_AD` luôn an toàn; nó chỉ từ bỏ phần lợi thế chạy trước. `UNDER_AD` là tối ưu hoá, và nó sai đúng một
+trường hợp: màn đích bắn thêm một `startActivity` ngay khi vào. Ad Activity của GMA nằm trong chính task của bạn,
+nên cú start đó xếp *lên trên* ad và che mất impression trước khi nó được tính.
+
+| Màn đích mở gì ngay khi vào | Timing |
+|---|---|
+| Không gì cả — người dùng vào rồi ở lại | `UNDER_AD` |
+| `Dialog`, bottom sheet hay fragment transaction | `UNDER_AD` — là window trên token của chính màn đích, nằm yên sau ad |
+| Một Activity khác | `AFTER_AD` |
+| Camera, phát audio hoặc video | `AFTER_AD` |
+
+Quyết định theo từng lần khởi chạy, không phải theo app: tap từ launcher và tap từ widget cùng vào một splash mà
+cần hai đáp án khác nhau — đó là lý do nó là hook trên Activity chứ không phải field trong `SplashConfig`. Khi một
+notification có nhiều action mà chỉ vài cái mở feature, trả `AFTER_AD` cho tất cả là đúng — cái giá chỉ là mấy
+entry đó mất phần lợi thế chạy trước, không mất gì khác.
+
+Quyết định y hệt cũng tồn tại ở tầng dưới, cho những interstitial bạn tự show: một màn mà callback của nó start
+một màn trung gian rồi màn đó mới mở feature thì cần
+`InterstitialAdManager.show(…, nextAction = InterNextAction.AfterDismiss)`. Xem [`../ads/README.md`](../ads/README.md).
 
 ## Configuration
 
