@@ -72,11 +72,12 @@ enum class AdSkipReason(val key: String) {
     FAILED_TO_SHOW("failed_to_show"),
 
     /**
-     * The ads module accepted `show()` and then said nothing at all.
+     * No longer raised. It stood for a module branch that accepted `show()` and then reported
+     * nothing; every path through the module answers with an outcome of its own now.
      *
-     * It returns without firing any callback when the process is not resumed; a watchdog turns
-     * that silence into this reason so the flow still moves on.
+     * Kept because [key] is a wire format and historic analytics still carry it.
      */
+    @Deprecated("Nothing produces this any more; the ads module reports on every show path.")
     NO_HANDSHAKE("no_handshake"),
     ;
 

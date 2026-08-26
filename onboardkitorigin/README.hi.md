@@ -99,6 +99,16 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
+जो entry सीधे किसी feature को खोलती है — notification या widget tap — उसे destination को splash ad बंद होने तक
+रोकना चाहिए, वरना feature खोलने वाली screen ad के ऊपर आकर impression ढक देती है। यह फ़ैसला launch का है, इसलिए
+यह config field नहीं बल्कि एक hook है:
+
+```kotlin
+override fun nextScreenTiming(): NextScreenTiming =
+    if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
+    else NextScreenTiming.UNDER_AD
+```
+
 इसे `android:exported="true"`, एक MAIN/LAUNCHER filter और AppCompat/MaterialComponents theme के साथ declare करें।
 `onConsentRequired()` को override न करें — इसका default `:ads` के `ConsentCenter` से UMP flow चलाता है;
 override सिर्फ़ तब करें जब app में consent step ही न हो और आपको `return true` करना हो। `OnboardingSdk.start()` यहाँ न बुलाएँ, pipeline resolve होते ही वह ख़ुद चलता है। अगर आप `onDestroy()` override करें तो `super.onDestroy()` ज़रूर बुलाएँ —
@@ -221,7 +231,7 @@ Defaults `ObRemoteKeys` में हैं; कुछ भी publish न कर
 | Ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason`) |
 | Paywall, screens | `iap_paywall_view`, `iap_paywall_result`; हर SDK screen पर एक `Tracker.screen(...)` |
 
-`ad_skipped` के reasons: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`, `no_handshake`।
+`ad_skipped` के reasons: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`। (`no_handshake` अब नहीं आता।)
 
 इन्हें ख़ुद पाने के लिए `install` के अंदर `analyticsPlugin { event -> log(event.name, event.params) }` जोड़ें, या
 `OnboardingSdk.events` / `.state` collect करें। Plugin को SDK के अपने `ob_*` event names दिखते हैं, ऊपर वाली `fo_*`

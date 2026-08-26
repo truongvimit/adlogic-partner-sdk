@@ -17,6 +17,7 @@ import io.onboardkit.StartOptions
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.ads.tracked
 import io.onboardkit.ads.trackRequest
@@ -301,14 +302,34 @@ open class ObSplashActivity : BaseOnboardActivity() {
             finish()
             return
         }
-        // The destination starts while the ad is on screen; this activity is finished only once
-        // the ad is gone, which is what keeps the ad alive long enough to be seen.
+        // This activity is finished only once the ad is gone, whichever timing started the flow —
+        // that is what keeps the ad alive long enough to be seen.
+        val timing = nextScreenTiming()
+        ObLog.d(ObLog.Section.SPLASH, "next screen timing=$timing")
         showInterstitial(
             AdPlacement.SplashInterstitial,
-            onNext = { startFlow() },
-            onFinished = { finish() },
+            onNext = { if (timing == NextScreenTiming.UNDER_AD) startFlow() },
+            onFinished = {
+                if (timing == NextScreenTiming.AFTER_AD) startFlow()
+                finish()
+            },
         )
     }
+
+    /**
+     * Whether the destination this launch hands off to may exist behind the splash interstitial.
+     *
+     * Asked once per launch, immediately before the ad is shown, so it can read `intent` — which
+     * is the point: the answer belongs to the entry that chose the destination, never to the app
+     * as a whole, which is why it is a hook here rather than a field on `SplashConfig`.
+     *
+     * ```
+     * override fun nextScreenTiming(): NextScreenTiming =
+     *     if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
+     *     else NextScreenTiming.UNDER_AD
+     * ```
+     */
+    protected open fun nextScreenTiming(): NextScreenTiming = NextScreenTiming.UNDER_AD
 
     private fun startFlow() {
         val decision = startDecision ?: StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)

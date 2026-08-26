@@ -197,10 +197,12 @@ class ERainAdProvider(
      * preceding skip is the commit — the ad is on screen and the next screen may start
      * underneath it — while a skip suppresses `onNextAction` entirely.
      *
-     * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]:
-     * the flow is written against `UnderAd` — its handshake watchdog expires 2.3 s after the call,
-     * long before a dismissal would arrive — so an app that prefers `AfterDismiss` for its own
-     * placements must not be able to change what the flow's callbacks mean.
+     * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]
+     * because it is what [ObInterstitialCallback.onNextAction] *means*: `UnderAd` is the only mode
+     * under which `onComplete` says "the ad is on screen". An app that prefers `AfterDismiss` for
+     * its own placements must not be able to redefine that. A flow screen whose destination has to
+     * wait for the dismissal leaves `onNext` unused instead — see
+     * [io.onboardkit.ads.NextScreenTiming].
      */
     override fun showInterstitial(
         activity: Activity,

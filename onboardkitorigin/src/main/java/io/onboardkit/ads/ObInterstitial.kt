@@ -1,7 +1,5 @@
 package io.onboardkit.ads
 
-import android.os.Handler
-import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -24,7 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Starting the next screen at [onNext] lets it inflate and bind *underneath* the ad, so it is
  * already painted when the ad closes. Doing it in [onFinished] instead costs the user a visible
  * stall — but that is the right choice for a destination that must not exist behind the ad (one
- * that opens a camera or plays audio), so simply leave [onNext] out for those.
+ * that opens a camera, plays audio, or starts a screen of its own), so simply leave [onNext] out
+ * for those. [NextScreenTiming] names the two answers.
  *
  * Both run at most once, [onNext] always before [onFinished], on every path — including the ones
  * where no ad appears at all. Callers need no guard of their own.
@@ -44,18 +43,6 @@ fun AppCompatActivity.showInterstitial(
  * which is what keeps a failed presentation from leaving anything behind to clean up.
  */
 internal object ObInterstitial {
-
-    /**
-     * The module's own show window: it holds a loading dialog for 800 ms, then dismisses it
-     * 1500 ms later. Anything still silent past that never started.
-     *
-     * Giving up finishes the host, so this must never expire while an ad is on screen. It is safe
-     * because a provider hands back on the same tick as `show()` — that ordering is fixed in
-     * `InterNextAction.UnderAd` for exactly this kind of reason.
-     */
-    private const val HANDSHAKE_TIMEOUT_MS = 800L + 1_500L
-
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var isShowing = false
@@ -98,8 +85,8 @@ internal object ObInterstitial {
         OnboardingSdk.appResume().suppress()
         suppressedAppResume = true
 
-        // The ads module drops show() without any callback when the process is not resumed, so
-        // the call has to be gated rather than corrected afterwards.
+        // Showing from a non-resumed host spends a fill and 800 ms of loading dialog before the
+        // module refuses it, so the call waits for RESUMED instead of being corrected afterwards.
         activity.whenResumed(
             // Without this the presentation would never end and the process-wide latch above
             // would block every later interstitial.
@@ -131,29 +118,21 @@ internal object ObInterstitial {
             finish.run(AdSkipReason.NO_PROVIDER)
             return
         }
-        // The module has a branch that accepts show() and then reports nothing; without this the
-        // flow would sit on this screen forever.
-        val watchdog = Runnable { finish.run(AdSkipReason.NO_HANDSHAKE) }
-        mainHandler.postDelayed(watchdog, HANDSHAKE_TIMEOUT_MS)
-
         ObLog.d(ObLog.Section.SHOW, "${placement.key} vendor_show")
         provider.showInterstitial(
             activity,
             placement,
             object : ObInterstitialCallback() {
                 override fun onNextAction() {
-                    mainHandler.removeCallbacks(watchdog)
                     ObLog.d(ObLog.Section.SHOW, "${placement.key} visible -> next")
                     next.run()
                 }
 
                 override fun onAdClosed() {
-                    mainHandler.removeCallbacks(watchdog)
                     finish.run(null)
                 }
 
                 override fun onAdSkipped(reason: AdSkipReason) {
-                    mainHandler.removeCallbacks(watchdog)
                     finish.run(reason)
                 }
             },

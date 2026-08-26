@@ -100,6 +100,16 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
+Một entry mở thẳng vào feature — tap notification hay widget — phải giữ màn đích lại tới khi ad splash đóng,
+nếu không màn mở feature sẽ chồng lên ad và che mất impression. Quyết định thuộc về lần khởi chạy, nên đây là
+hook chứ không phải field config:
+
+```kotlin
+override fun nextScreenTiming(): NextScreenTiming =
+    if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
+    else NextScreenTiming.UNDER_AD
+```
+
 Khai báo nó với `android:exported="true"`, một filter MAIN/LAUNCHER và theme AppCompat/MaterialComponents.
 Đừng override `onConsentRequired()` — mặc định của nó chạy luồng UMP qua `ConsentCenter` trong `:ads`;
 chỉ override để `return true` khi app không có bước consent. Đừng gọi `OnboardingSdk.start()` ở đây, nó
@@ -225,7 +235,7 @@ không bao giờ là chỉ số trang trong pager.
 | Ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason`) |
 | Paywall, screens | `iap_paywall_view`, `iap_paywall_result`; mỗi màn hình SDK một `Tracker.screen(...)` |
 
-Các lý do của `ad_skipped`: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`, `no_handshake`.
+Các lý do của `ad_skipped`: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`. (`no_handshake` đã ngừng phát sinh.)
 
 Muốn tự nhận event thì thêm `analyticsPlugin { event -> log(event.name, event.params) }` bên trong `install`,
 hoặc collect `OnboardingSdk.events` / `.state`. Plugin thấy tên event `ob_*` của chính SDK, không phải taxonomy

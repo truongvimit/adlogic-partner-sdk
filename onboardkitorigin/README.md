@@ -98,6 +98,16 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
+An entry that names a feature to open — a notification or widget tap — must hold its destination until the
+splash ad is gone, or the screen that opens the feature stacks on top of the ad and covers the impression.
+The launch decides, so it is a hook rather than a config field:
+
+```kotlin
+override fun nextScreenTiming(): NextScreenTiming =
+    if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
+    else NextScreenTiming.UNDER_AD
+```
+
 Declare it with `android:exported="true"`, a MAIN/LAUNCHER filter and an AppCompat/MaterialComponents theme.
 Do not override `onConsentRequired()` — its default runs the UMP flow through `ConsentCenter` in `:ads`;
 override only to `return true` for an app with no consent step. Do not call `OnboardingSdk.start()` here, it
@@ -244,7 +254,7 @@ the `StepId`, never the pager index.
 | Ads | `ad_request`, `ad_show`, `ad_load_failed`, `ad_skipped` (`reason`) |
 | Paywall, screens | `iap_paywall_view`, `iap_paywall_result`; one `Tracker.screen(...)` per SDK screen |
 
-`ad_skipped` reasons: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`, `no_handshake`.
+`ad_skipped` reasons: `premium`, `consent_not_granted`, `ads_off_config`, `no_provider`, `no_ad_unit`, `ads_off_remote`, `placement_off_remote`, `no_fill`, `not_ready`, `offline`, `ua_gate`, `capped_by_module`, `purchased_at_paywall`, `suppressed_by_flow`, `returning_from_ad_click`, `failed_to_show`. (`no_handshake` is retired — nothing raises it any more.)
 
 To receive them yourself add `analyticsPlugin { event -> log(event.name, event.params) }` inside `install`, or collect
 `OnboardingSdk.events` / `.state`. A plugin sees the SDK's own `ob_*` event names, not the `fo_*` taxonomy above —
