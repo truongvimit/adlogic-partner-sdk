@@ -23,8 +23,8 @@ enum class NextScreenTiming {
      * while the ad is up is stacked on top of it and covers the impression. A notification or
      * widget tap that names a feature to open is exactly that case.
      *
-     * It also gives up the head start the other mode buys: nothing is running to fall back on if
-     * the vendor accepts `show()` and then reports neither a dismissal nor a failure.
+     * It also gives up the head start the other mode buys: if the vendor accepts `show()`, never
+     * takes the screen, and reports nothing, no destination is already running to fall back on.
      */
     AFTER_AD,
 }

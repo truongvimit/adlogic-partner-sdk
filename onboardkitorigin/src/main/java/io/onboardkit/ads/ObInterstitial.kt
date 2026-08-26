@@ -55,11 +55,15 @@ internal object ObInterstitial {
     ) {
         ObLog.d(ObLog.Section.SHOW, "${placement.key} begin host=${activity.javaClass.simpleName}")
         val startedAtMs = System.currentTimeMillis()
-        var suppressedAppResume = false
+        var ownsPresentation = false
         val next = RunOnce<Unit> { onNext() }
         val finish = RunOnce<AdSkipReason?> { reason ->
-            isShowing = false
-            if (suppressedAppResume) OnboardingSdk.appResume().release()
+            // Only the call that raised them may lower them: a second show is refused below and
+            // runs its own finish, which would otherwise release the presentation it lost to.
+            if (ownsPresentation) {
+                isShowing = false
+                OnboardingSdk.appResume().release()
+            }
             val elapsed = System.currentTimeMillis() - startedAtMs
             if (reason == null) {
                 ObLog.d(ObLog.Section.SHOW, "${placement.key} end shown ms=$elapsed")
@@ -83,7 +87,7 @@ internal object ObInterstitial {
         // An app-resume ad landing on top of our own full-screen ad is two stacked ads, which is
         // both unwatchable and a policy problem.
         OnboardingSdk.appResume().suppress()
-        suppressedAppResume = true
+        ownsPresentation = true
 
         // Showing from a non-resumed host spends a fill and 800 ms of loading dialog before the
         // module refuses it, so the call waits for RESUMED instead of being corrected afterwards.
@@ -125,6 +129,7 @@ internal object ObInterstitial {
             object : ObInterstitialCallback() {
                 override fun onNextAction() {
                     ObLog.d(ObLog.Section.SHOW, "${placement.key} visible -> next")
+                    activity.endWhenBackInFront(placement, finish)
                     next.run()
                 }
 
@@ -138,6 +143,47 @@ internal object ObInterstitial {
             },
         )
     }
+}
+
+/**
+ * Ends the presentation once this Activity is back in front, for a vendor that took the screen and
+ * then reported nothing.
+ *
+ * A full-screen ad necessarily pauses its host, so the host being resumed *after* a pause is
+ * first-party evidence that whatever took the screen has gone — evidence the flow owns, unlike
+ * the callback it stands in for. Registered only once the module has committed, so an unrelated
+ * pause before the ad cannot be mistaken for one.
+ *
+ * It is a second source of the same fact, never a different one: [finish] runs once, so a vendor
+ * that does report still owns the outcome, and the reason is `null` either way. Inert for a caller
+ * that started its destination under the ad — that Activity is in front when the ad closes, and
+ * this host is finished without ever coming back.
+ */
+private fun AppCompatActivity.endWhenBackInFront(
+    placement: AdPlacement,
+    finish: RunOnce<AdSkipReason?>,
+) {
+    lifecycle.addObserver(
+        object : LifecycleEventObserver {
+            private var paused = false
+
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                when (event) {
+                    Lifecycle.Event.ON_PAUSE -> paused = true
+
+                    Lifecycle.Event.ON_RESUME -> if (paused) {
+                        source.lifecycle.removeObserver(this)
+                        ObLog.d(ObLog.Section.SHOW, "${placement.key} host back in front -> end")
+                        finish.run(null)
+                    }
+
+                    Lifecycle.Event.ON_DESTROY -> source.lifecycle.removeObserver(this)
+
+                    else -> Unit
+                }
+            }
+        },
+    )
 }
 
 /**

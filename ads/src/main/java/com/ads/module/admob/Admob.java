@@ -848,14 +848,18 @@ public class Admob {
             @Override
             public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
                 super.onAdFailedToShowFullScreenContent(adError);
+                // Before the null check, and for the same reason as notifyShowFailed: the show
+                // path raised both, so a failure has to lower them whether or not anyone is
+                // listening. Leaving the flag up suppressed every app-resume ad until the
+                // AppOpenManager watchdog cleared it 90 s later.
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                if (dialog != null) {
+                    dialog.dismiss();
+                }
                 if (callback != null) {
                     callback.onAdFailedToShow(adError);
                     if (!openNextUnderAd) {
                         callback.onNextAction();
-                    }
-
-                    if (dialog != null) {
-                        dialog.dismiss();
                     }
                 }
             }
