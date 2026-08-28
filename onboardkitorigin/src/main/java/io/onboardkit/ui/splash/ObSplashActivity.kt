@@ -10,6 +10,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.ads.module.config.AdConfig
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -270,13 +271,18 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     /**
-     * A remote id override beats the compiled id, split by user segment.
+     * The entry's own unit beats everything; below that, a remote id override beats the compiled
+     * id, split by user segment.
      *
      * A returning user is worth a different floor than a first-open one. When the segment is not
      * resolved yet — `SAME_TIME` loads before the fetch lands — the shared override applies rather
      * than the old-user one, because guessing the segment would spend the wrong floor.
      */
     private fun resolveSplashInterUnit(): InterstitialAdUnit? {
+        splashInterstitialOverride()?.let {
+            ObLog.d(ObLog.Section.LOAD, "splash_inter unit chosen by the entry tiers=${it.tierCount}")
+            return it
+        }
         val ads = sdk.requireConfig().ads
         return if (isReturningUser()) {
             ads.splashInterstitialOldUser ?: ads.splashInterstitial
@@ -284,6 +290,28 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ads.splashInterstitial
         }
     }
+
+    /**
+     * The interstitial ad unit this launch spends, or `null` to keep the configured splash units.
+     *
+     * The default resolves [SplashEntry]: a launch that came through one spends its entry's key —
+     * `inter_noti`, `inter_widget`, `inter_uninstall` — full `_high…` waterfall included, and a
+     * key that is missing or disabled falls back to the regular resolution rather than silencing
+     * the ad. The standard entries therefore need no code in the app at all; override only for an
+     * app that diverges — different keys, or its own per-entry segmentation.
+     *
+     * Asked once per launch, when the request is about to go out, so it can read `intent` — the
+     * same contract as [nextScreenTiming]. Only the ids change: the guard, the budget, the paywall
+     * checkpoint and the telemetry keep judging the same `splash_inter` placement. Returning
+     * non-null replaces the whole resolution, including the returning-user split — an entry
+     * specific enough to carry its own id owns its own segmentation.
+     */
+    protected open fun splashInterstitialOverride(): InterstitialAdUnit? =
+        SplashEntry.from(intent)?.let { entry ->
+            AdRemoteConfig.getInstance().tiersFor(entry.interKey)
+                .takeIf { it.isNotEmpty() }
+                ?.let { InterstitialAdUnit(tiers = it) }
+        }
 
     private fun isReturningUser(): Boolean = when (val decision = startDecision) {
         null -> false
@@ -323,13 +351,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * is the point: the answer belongs to the entry that chose the destination, never to the app
      * as a whole, which is why it is a hook here rather than a field on `SplashConfig`.
      *
-     * ```
-     * override fun nextScreenTiming(): NextScreenTiming =
-     *     if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
-     *     else NextScreenTiming.UNDER_AD
-     * ```
+     * The default answers it from [SplashEntry]: a launch that came through one names a feature
+     * or screen to open, and `AFTER_AD` is always safe there — it only gives up the head start.
+     * A launcher tap keeps `UNDER_AD`. Override for a finer split, e.g. a notification action
+     * whose destination is where the user stays.
      */
-    protected open fun nextScreenTiming(): NextScreenTiming = NextScreenTiming.UNDER_AD
+    protected open fun nextScreenTiming(): NextScreenTiming =
+        if (SplashEntry.from(intent) != null) NextScreenTiming.AFTER_AD else NextScreenTiming.UNDER_AD
 
     private fun startFlow() {
         val decision = startDecision ?: StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)

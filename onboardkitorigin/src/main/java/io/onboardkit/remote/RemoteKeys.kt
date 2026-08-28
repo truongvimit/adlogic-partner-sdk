@@ -58,8 +58,9 @@ object ObRemoteKeys {
     val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
     val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
 
-    // Splash interstitial ids, including the returning-user segment, come from the ads config
-    // (`inter_splash` / `inter_splash_old_user`) so both keep their full waterfall.
+    // Splash interstitial ids — the returning-user segment and the SplashEntry keys
+    // (`inter_noti` / `inter_widget` / `inter_uninstall`) included — come from the ads config
+    // (`inter_splash` / `inter_splash_old_user` / the entry keys) so each keeps its full waterfall.
     // Interstitial interval and click cap belong to the ads module, which owns the counters they
     // read; a second cap over the same store silently subtracted impressions nobody could attribute.
 

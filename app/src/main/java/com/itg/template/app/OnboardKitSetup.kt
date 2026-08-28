@@ -83,7 +83,9 @@ object OnboardKitSetup {
                 ),
             )
             // ── Which screen spends which remote key ─────────────────────────────────────────
-            // This block is the whole mapping; there is no other place a screen picks an ad unit.
+            // This block is the whole app-side mapping. The one exception lives in the SDK: a
+            // launch tagged with a SplashEntry spends its entry's own key (inter_noti /
+            // inter_widget / inter_uninstall) and falls back to splashInterstitial below.
             //
             // Each name below is a *base* key. How many ids it actually spends is decided by how
             // many floors exist in remote config for that name — `<key>_high`, `<key>_high1`, …,

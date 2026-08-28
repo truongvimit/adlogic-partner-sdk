@@ -105,30 +105,30 @@ Khai báo nó với `android:exported="true"`, một filter MAIN/LAUNCHER và th
 chỉ override để `return true` khi app không có bước consent. Đừng gọi `OnboardingSdk.start()` ở đây, nó
 tự chạy khi pipeline hoàn tất. Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` —
 `ConsentCenter.detach(this)` nằm ở đó. Về sau: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
-Nếu launcher này còn nhận cả tap từ notification, widget hay shortcut, xem [Vào app từ notification hoặc widget](#vào-app-từ-notification-hoặc-widget).
+Nếu launcher này còn nhận cả tap từ notification, widget hay shortcut uninstall, xem [Vào app từ notification, widget hoặc uninstall](#vào-app-từ-notification-widget-hoặc-uninstall).
 
-## Vào app từ notification hoặc widget
+## Vào app từ notification, widget hoặc uninstall
 
 Một cú tap có kèm tên feature phải sống sót qua trọn luồng first-open, rồi mở feature đó mà không che mất cái ad
-vừa trả tiền để hiện. Bốn phần, phần cuối là quyết định chỉ bạn mới trả lời được.
+vừa trả tiền để hiện. Phần wiring app nào cũng giống nhau, nên nó nằm sẵn trong SDK dưới dạng `SplashEntry`
+(`NOTIFICATION`, `WIDGET`, `UNINSTALL`) — intent của entry, ad unit nó tiêu và timing đều được trả lời sẵn. Phần
+còn lại của bạn là đúng những gì khác nhau giữa các app: extras đặt tên feature, và màn mà mỗi entry đáp xuống.
 
-**1. Trỏ entry vào splash, không phải màn chính.** Cú tap là khởi đầu một session, nên nó đi đúng đường mà tap từ
-launcher đi — consent, remote, inter splash, rồi language / onboarding hoặc đi thẳng. Mang feature theo dưới dạng
-intent extra.
+**1. Bắn intent của entry vào splash, không phải màn chính.** Cú tap là khởi đầu một session, nên nó đi đúng
+đường mà tap từ launcher đi — consent, remote, inter splash, rồi language / onboarding hoặc đi thẳng.
+`SplashEntry.intent` gắn tag cho lần khởi chạy và đã set sẵn `NEW_TASK or CLEAR_TASK` (thiếu `CLEAR_TASK` thì
+task còn lại từ session trước bị kéo lên trước, và splash — kèm theo ad lẫn phần định tuyến — không bao giờ
+chạy). Extras của feature gắn thêm lên trên.
 
 ```kotlin
-// notification trampoline, widget PendingIntent, shortcut …
-Intent(context, SplashActivity::class.java).apply {
-    putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
-    // CLEAR_TASK chứ không chỉ NEW_TASK: thiếu nó thì task còn lại từ session trước bị kéo lên
-    // trước, và splash — kèm theo ad lẫn phần định tuyến — không bao giờ chạy.
-    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-}
+// notification trampoline, widget PendingIntent, shortcut uninstall …
+SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
+    .putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
 ```
 
 **2. Đám extras đi xuyên suốt dưới dạng passthrough.** `ObSplashActivity` lấy nó từ chính `intent.extras` của mình;
-SDK mang qua language, onboarding và màn question, rồi trả lại ở outcome cuối. Không chỗ nào trong luồng đọc nó —
-với SDK nó là dữ liệu mờ.
+SDK mang qua language, onboarding và màn question, rồi trả lại ở outcome cuối. Extras feature của bạn là dữ liệu
+mờ với SDK; còn cái tag entry đi cùng bundle đó là của chính SDK.
 
 | Outcome | Có mang passthrough |
 |---|---|
@@ -136,7 +136,8 @@ với SDK nó là dữ liệu mờ.
 | `Skipped` | có — luồng bị tắt bằng config, đã chạy xong trước đó, hoặc không có gì để hiện |
 | `Aborted` | không |
 
-**3. Listener gắn nó trở lại vào intent của màn chính.**
+**3. Listener định tuyến outcome — quyết định duy nhất mỗi app tự trả lời.** Entry đáp xuống màn nào là việc của
+bạn: đọc entry ngược từ passthrough, chọn màn đích, rồi gắn extras trở lại vào intent của nó.
 
 ```kotlin
 listener = OnboardingListener { context, outcome ->
@@ -145,8 +146,12 @@ listener = OnboardingListener { context, outcome ->
         is OnboardingOutcome.Skipped -> outcome.passthrough
         is OnboardingOutcome.Aborted -> null
     }
+    val destination = when (SplashEntry.from(extras)) {
+        SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
+        else -> MainActivity::class.java
+    }
     context.startActivity(
-        Intent(context, MainActivity::class.java)
+        Intent(context, destination)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .apply { extras?.let(::putExtras) },
     )
@@ -160,17 +165,19 @@ gì để dọn.
 Đọc extra ở **cả** `onCreate` lẫn `onNewIntent` — tap nguội vào cái đầu, tap nóng vào cái sau — và đọc tới đâu
 tiêu thụ tới đó, nếu không intent khởi chạy sẽ mở lại feature ở lần configuration change kế tiếp.
 
-**4. Chọn thời điểm màn đích khởi động.**
+**4. Timing đã được trả lời sẵn.** Lần khởi chạy đi qua `SplashEntry` nhận `AFTER_AD` — nó có thứ cần mở, và
+`AFTER_AD` ở đó luôn an toàn; tap từ launcher giữ `UNDER_AD`. Chỉ override `nextScreenTiming()` khi cần chia
+nhỏ hơn, ví dụ một action của notification mà màn đích là nơi người dùng ở lại:
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
     override fun nextScreenTiming(): NextScreenTiming =
-        if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
-        else NextScreenTiming.UNDER_AD
+        if (intent.hasExtra(EXTRA_LANDS_AND_STAYS)) NextScreenTiming.UNDER_AD
+        else super.nextScreenTiming()
 }
 ```
 
-| | `UNDER_AD` (mặc định) | `AFTER_AD` |
+| | `UNDER_AD` (mặc định của launcher) | `AFTER_AD` (mặc định của entry) |
 |---|---|---|
 | Màn đích start | cùng tick với `show()`, nằm sau ad | sau khi ad đã biến mất |
 | Người dùng thấy | màn hình đã vẽ xong ngay khi ad đóng | khựng một nhịp, rồi mới thấy màn hình |
@@ -188,9 +195,18 @@ nên cú start đó xếp *lên trên* ad và che mất impression trước khi 
 | Camera, phát audio hoặc video | `AFTER_AD` |
 
 Quyết định theo từng lần khởi chạy, không phải theo app: tap từ launcher và tap từ widget cùng vào một splash mà
-cần hai đáp án khác nhau — đó là lý do nó là hook trên Activity chứ không phải field trong `SplashConfig`. Khi một
-notification có nhiều action mà chỉ vài cái mở feature, trả `AFTER_AD` cho tất cả là đúng — cái giá chỉ là mấy
-entry đó mất phần lợi thế chạy trước, không mất gì khác.
+cần hai đáp án khác nhau — đó là lý do nó là hook trên Activity chứ không phải field trong `SplashConfig`, và cũng
+là lý do mặc định đọc entry chứ không đọc một cờ chung. Khi một notification có nhiều action mà chỉ vài cái mở
+feature, trả `AFTER_AD` cho tất cả là đúng — cái giá chỉ là mấy entry đó mất phần lợi thế chạy trước, không mất
+gì khác.
+
+**5. Ad unit cũng được trả lời sẵn.** Lần khởi chạy qua `SplashEntry` tiêu key của chính entry đó — `inter_noti`,
+`inter_widget`, `inter_uninstall` — kèm trọn waterfall `<key>_high`, `<key>_high1`, …, `<key>`, phân giải từ đúng
+ad config như mọi placement khác. Key thiếu hoặc đang tắt thì rơi về cách phân giải splash thường thay vì tắt
+tiếng quảng cáo, nên các entry không tốn gì cho tới khi id của chúng thật sự được cấu hình. Chỉ app nào đi chệch
+chuẩn — key khác, tự phân khúc theo entry — mới override `splashInterstitialOverride()`; non-null thay thế toàn bộ
+phần phân giải, kể cả nhánh old-user, còn `null` giữ nguyên các unit splash đã cấu hình. Kiểu gì thì cũng chỉ có
+id là đổi: gate, ad budget, checkpoint paywall và telemetry vẫn phán xử đúng một placement `splash_inter`.
 
 Quyết định y hệt cũng tồn tại ở tầng dưới, cho những interstitial bạn tự show: một màn mà callback của nó start
 một màn trung gian rồi màn đó mới mở feature thì cần

@@ -103,30 +103,31 @@ class SplashActivity : ObSplashActivity() {
 `onConsentRequired()` को override न करें — इसका default `:ads` के `ConsentCenter` से UMP flow चलाता है;
 override सिर्फ़ तब करें जब app में consent step ही न हो और आपको `return true` करना हो। `OnboardingSdk.start()` यहाँ न बुलाएँ, pipeline resolve होते ही वह ख़ुद चलता है। अगर आप `onDestroy()` override करें तो `super.onDestroy()` ज़रूर बुलाएँ —
 `ConsentCenter.detach(this)` वहीं रहता है। बाद में: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`।
-अगर यही launcher notification, widget या shortcut tap भी संभालता है, तो देखें [Notification या widget से app में आना](#notification-या-widget-से-app-में-आना)।
+अगर यही launcher notification, widget या uninstall-shortcut tap भी संभालता है, तो देखें [Notification, widget या uninstall shortcut से app में आना](#notification-widget-या-uninstall-shortcut-से-app-में-आना)।
 
-## Notification या widget से app में आना
+## Notification, widget या uninstall shortcut से app में आना
 
 जिस tap के साथ किसी feature का नाम आता है, उसे पूरे first-open flow से बचकर निकलना है और फिर वह feature खोलना है —
-बिना उस ad को ढके जिसके लिए अभी पैसे चुकाए गए। चार हिस्से, जिनमें आख़िरी फ़ैसला सिर्फ़ आप ले सकते हैं।
+बिना उस ad को ढके जिसके लिए अभी पैसे चुकाए गए। यह wiring हर app में एक जैसी है, इसलिए यह SDK में `SplashEntry`
+(`NOTIFICATION`, `WIDGET`, `UNINSTALL`) के रूप में मौजूद है — entry का intent, वह जो ad unit ख़र्च करता है और timing,
+तीनों का जवाब पहले से तैयार है। आपका हिस्सा वही है जो सच में app-दर-app अलग होता है: feature का नाम बताने वाले extras,
+और वह screen जहाँ हर entry उतरती है।
 
-**1. Entry को splash पर भेजें, अपनी main screen पर नहीं.** Tap एक session की शुरुआत है, इसलिए वह वही रास्ता लेता है जो
-launcher tap लेता है — consent, remote, splash interstitial, फिर language / onboarding या सीधे आगे। Feature को intent
-extra के रूप में साथ ले जाएँ।
+**1. Entry का intent splash पर भेजें, अपनी main screen पर नहीं.** Tap एक session की शुरुआत है, इसलिए वह वही रास्ता लेता
+है जो launcher tap लेता है — consent, remote, splash interstitial, फिर language / onboarding या सीधे आगे।
+`SplashEntry.intent` launch को tag करता है और `NEW_TASK or CLEAR_TASK` पहले से set कर देता है (`CLEAR_TASK` के बिना
+पिछले session का बचा हुआ task ही आगे आ जाता है और splash — उसके साथ ad और routing — कभी चलता ही नहीं)। Feature के
+extras ऊपर से जोड़ दें।
 
 ```kotlin
-// notification trampoline, widget PendingIntent, shortcut …
-Intent(context, SplashActivity::class.java).apply {
-    putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
-    // सिर्फ़ NEW_TASK नहीं, CLEAR_TASK भी: इसके बिना पिछले session का बचा हुआ task ही आगे आ जाता है
-    // और splash — उसके साथ ad और routing — कभी चलता ही नहीं।
-    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-}
+// notification trampoline, widget PendingIntent, uninstall shortcut …
+SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
+    .putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
 ```
 
 **2. Extras passthrough बनकर पूरे flow से गुज़रते हैं.** `ObSplashActivity` इसे अपने ही `intent.extras` से लेता है; SDK
-इसे language, onboarding और question screen के पार ले जाता है और terminal outcome पर वापस सौंप देता है। Flow में कोई
-इसे पढ़ता नहीं — SDK के लिए यह अपारदर्शी data है।
+इसे language, onboarding और question screen के पार ले जाता है और terminal outcome पर वापस सौंप देता है। आपके feature
+extras SDK के लिए अपारदर्शी data हैं; उसी bundle में सफ़र करता entry tag SDK का अपना है।
 
 | Outcome | Passthrough साथ लाता है |
 |---|---|
@@ -134,7 +135,8 @@ Intent(context, SplashActivity::class.java).apply {
 | `Skipped` | हाँ — flow config से बंद था, पहले ही पूरा हो चुका था, या दिखाने को कुछ नहीं था |
 | `Aborted` | नहीं |
 
-**3. Listener इसे वापस आपकी main screen के intent पर लगाता है.**
+**3. Listener outcome को route करता है — इकलौता फ़ैसला जो हर app ख़ुद लेता है.** कौन-सी entry किस screen पर उतरे, यह
+आपका है: passthrough से entry वापस पढ़ें, destination चुनें, और extras उसके intent पर वापस लगा दें।
 
 ```kotlin
 listener = OnboardingListener { context, outcome ->
@@ -143,8 +145,12 @@ listener = OnboardingListener { context, outcome ->
         is OnboardingOutcome.Skipped -> outcome.passthrough
         is OnboardingOutcome.Aborted -> null
     }
+    val destination = when (SplashEntry.from(extras)) {
+        SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
+        else -> MainActivity::class.java
+    }
     context.startActivity(
-        Intent(context, MainActivity::class.java)
+        Intent(context, destination)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .apply { extras?.let(::putExtras) },
     )
@@ -158,17 +164,19 @@ listener = OnboardingListener { context, outcome ->
 Extra को `onCreate` **और** `onNewIntent` दोनों में पढ़ें — cold tap पहले में आता है, warm tap दूसरे में — और पढ़ते ही उसे
 consume कर दें, वरना launching intent अगले configuration change पर feature दोबारा खोल देगा।
 
-**4. तय करें कि destination कब शुरू हो.**
+**4. Timing का जवाब पहले से तैयार है.** जो launch किसी `SplashEntry` से आया, उसे `AFTER_AD` मिलता है — उसके पास खोलने
+को कुछ है, और वहाँ `AFTER_AD` हमेशा सुरक्षित है; launcher tap `UNDER_AD` पर रहता है। `nextScreenTiming()` सिर्फ़ तब
+override करें जब और बारीक़ बँटवारा चाहिए, जैसे notification का वह action जिसका destination वही जगह है जहाँ user रुकता है:
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
     override fun nextScreenTiming(): NextScreenTiming =
-        if (intent.hasExtra(EXTRA_WIDGET_ACTION)) NextScreenTiming.AFTER_AD
-        else NextScreenTiming.UNDER_AD
+        if (intent.hasExtra(EXTRA_LANDS_AND_STAYS)) NextScreenTiming.UNDER_AD
+        else super.nextScreenTiming()
 }
 ```
 
-| | `UNDER_AD` (default) | `AFTER_AD` |
+| | `UNDER_AD` (launcher का default) | `AFTER_AD` (entry का default) |
 |---|---|---|
 | Destination शुरू होता है | `show()` के उसी tick पर, ad के पीछे | ad हट जाने के बाद |
 | User को दिखता है | ad बंद होते ही पूरी बनी हुई screen | एक छोटा ठहराव, फिर screen |
@@ -186,9 +194,17 @@ class SplashActivity : ObSplashActivity() {
 | Camera, audio या video playback | `AFTER_AD` |
 
 फ़ैसला हर launch पर लें, पूरे app के लिए नहीं: launcher tap और widget tap एक ही splash पर पहुँचते हैं पर दोनों को अलग जवाब
-चाहिए — इसीलिए यह `SplashConfig` का field नहीं, Activity पर एक hook है। जब किसी notification में कई action हों और उनमें
-से सिर्फ़ कुछ ही feature खोलते हों, तो सबके लिए `AFTER_AD` देना सही है — उन entries को बस शुरुआती बढ़त का नुक़सान होता है,
-और कुछ नहीं।
+चाहिए — इसीलिए यह `SplashConfig` का field नहीं, Activity पर एक hook है, और इसीलिए default किसी साझा flag के बजाय entry
+को पढ़ता है। जब किसी notification में कई action हों और उनमें से सिर्फ़ कुछ ही feature खोलते हों, तो सबके लिए `AFTER_AD`
+देना सही है — उन entries को बस शुरुआती बढ़त का नुक़सान होता है, और कुछ नहीं।
+
+**5. Ad unit का जवाब भी पहले से तैयार है।** `SplashEntry` से आया launch अपनी entry का key ख़र्च करता है — `inter_noti`,
+`inter_widget`, `inter_uninstall` — पूरे `<key>_high`, `<key>_high1`, …, `<key>` waterfall समेत, उसी ad config से
+resolve होकर जिससे बाक़ी हर placement होता है। जो key ग़ायब या बंद है, वह ad को चुप कराने के बजाय सामान्य splash
+resolution पर गिरता है, इसलिए entries तब तक कुछ ख़र्च नहीं करातीं जब तक उनके id सच में configure न हों। सिर्फ़ वही app जो
+मानक से हटता है — अलग keys, अपनी per-entry segmentation — `splashInterstitialOverride()` override करे; non-null पूरा
+resolution बदल देता है, returning-user split समेत, और `null` configured splash units को बनाए रखता है। दोनों सूरतों में
+बदलते सिर्फ़ id हैं: guard, ad budget, paywall checkpoint और telemetry उसी `splash_inter` placement को जज करते रहते हैं।
 
 यही फ़ैसला एक परत नीचे भी है, उन interstitials के लिए जो आप ख़ुद दिखाते हैं: जिस screen का callback एक बीच की screen शुरू
 करता है और फिर वह feature खोलती है, उसे

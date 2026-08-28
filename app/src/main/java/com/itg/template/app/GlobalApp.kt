@@ -4,12 +4,8 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ShortcutInfo
-import android.content.pm.ShortcutManager
 import android.content.res.Configuration
 import android.content.res.Resources
-import android.graphics.drawable.Icon
-import android.os.Build
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -51,6 +47,7 @@ import io.onboardkit.ads.erain.ERainAdProvider
 import io.onboardkit.ads.erain.ERainTuning
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
+import io.onboardkit.ui.splash.SplashEntry
 import timber.log.Timber
 import java.util.Arrays
 import kotlin.jvm.java
@@ -221,9 +218,25 @@ class GlobalApp : AdsMultiDexApplication() {
                         AppSharedPreferencesApp(context).languageCode = it
                     }
                 }
+                // Aborted drops the passthrough on purpose: the user backed out of the flow the
+                // entry started, so its feature must not reopen.
+                val passthrough = when (outcome) {
+                    is OnboardingOutcome.Completed -> outcome.passthrough
+                    is OnboardingOutcome.Skipped -> outcome.passthrough
+                    is OnboardingOutcome.Aborted -> null
+                }
+                // The per-app part of an entry is only this: which screen it lands on. The intent,
+                // the ad key and the timing are the SDK's standard SplashEntry wiring.
+                val destination = when (SplashEntry.from(passthrough)) {
+                    SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
+                    else -> MainActivity::class.java
+                }
                 context.startActivity(
-                    Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    // NEW_TASK only, never CLEAR_TASK — under UNDER_AD this runs while the ad is
+                    // on screen, and clearing the task would finish the Activity hosting it.
+                    Intent(context, destination)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .apply { passthrough?.let(::putExtras) },
                 )
             }
         }
