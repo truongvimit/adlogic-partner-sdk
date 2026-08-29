@@ -162,8 +162,17 @@ NativeAdHelper(activity, lifecycleOwner, cfg)
 ```
 
 **Banner** (`com.ads.module.helper.banner`) — `attachInto(host)` resets an empty `FrameLayout` into the module's
-banner slot, so `banner_container` / `shimmer_container_banner` are never yours to declare. `BannerType` is
-`Normal`, `Collapsible(gravity)` or `Inline(style)`.
+banner slot, so `banner_container` / `shimmer_container_banner` are never yours to declare. `BannerType` picks the
+AdMob request:
+
+| `BannerType` | AdMob request |
+|---|---|
+| `Normal` | anchored adaptive, full window width |
+| `LargeAnchored` | large anchored adaptive — up to 20% of screen height, 50–150dp |
+| `Collapsible(gravity)` | anchored adaptive + collapsible extras; `gravity` must match the slot's screen edge (`"top"`/`"bottom"`) |
+| `Inline(style)` | inline adaptive — `BANNER_INLINE_LARGE_STYLE` grows up to the screen height, `BANNER_INLINE_SMALL_STYLE` caps at 50dp |
+| `InlineMaxHeight(maxHeightDp)` | inline adaptive capped at `maxHeightDp` (min 32) |
+| `Fixed(size)` | one `FixedBannerSize`: `BANNER` 320×50, `LARGE_BANNER` 320×100, `MEDIUM_RECTANGLE` 300×250, `FULL_BANNER` 468×60 (tablet), `LEADERBOARD` 728×90 (tablet) |
 
 ```kotlin
 val cfg = BannerAdConfig(tiers, config.isUsable, true, BannerType.Collapsible())

@@ -1,6 +1,7 @@
 package com.itg.template.ui.component.main
 
 import android.app.Dialog
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,11 +12,15 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.ads.module.ads.ERainAd
+import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdParam
+import com.ads.module.helper.banner.BannerType
+import com.ads.module.helper.banner.FixedBannerSize
 import com.itg.devconfig.dialog.DialogAdminOrganicAds
+import com.google.android.material.button.MaterialButton
 import com.hjq.permissions.dsl.xxPermissions
 import com.hjq.permissions.permission.PermissionLists
 import com.itg.template.BuildConfig
@@ -26,6 +31,7 @@ import com.ads.module.config.toNativeStyle
 import com.itg.template.ads.AdsManager
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.banner_home
+import com.itg.template.ads.banner_home_fixed
 import com.itg.template.ads.inter_onboarding
 import com.itg.template.ads.open_resume
 import com.itg.template.ads.native_welcome
@@ -53,7 +59,7 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
-    override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, true)
+    override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, BannerType.Collapsible())
 
     private val delayHandler = Handler(Looper.getMainLooper())
     private var delayRunnable: Runnable? = null
@@ -65,6 +71,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     // Customization state
     private var currentCtaColor: String = "default"
     private var currentComponents: List<String> = listOf("icon_headline", "body", "media", "cta")
+    private var currentBannerType: BannerType = bannerConfig.bannerType
 
     // Dashboard native previews — one NativeAdHelper per slot, created on first load
     private var nativeSmallHelper: NativeAdHelper? = null
@@ -83,6 +90,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         showSdkVersionInfo()
         buildFlagRows()
         updateResumeModeUI()
+        selectBannerType(bannerConfig.bannerType)
     }
 
     // ─── SDK Version ──────────────────────────────────────────
@@ -270,6 +278,12 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         mBinding.btnModeWelcome.click { setResumeMode(ResumeAdsEntryMode.WELCOME) }
         mBinding.btnModeNone.click { setResumeMode(ResumeAdsEntryMode.NONE) }
 
+        // ── Banner Type Buttons ──
+        bannerTypeOptions.forEach { (button, type) ->
+            button.click { selectBannerType(type) }
+        }
+        mBinding.btnReloadBanner.click { reloadSelectedBanner() }
+
         // ── Refresh Flags ──
         mBinding.btnRefreshFlags.click { refreshFlags() }
     }
@@ -333,20 +347,24 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         overrideAdConfig()
     }
 
-    private fun highlightOrderButton(selected: com.google.android.material.button.MaterialButton) {
+    private fun highlightOrderButton(selected: MaterialButton) {
         val allButtons = listOf(
             mBinding.btnOrderDefault,
             mBinding.btnOrderMediaFirst,
             mBinding.btnOrderCtaTop,
             mBinding.btnOrderNoMedia
         )
-        allButtons.forEach { btn ->
+        highlightSelectedButton(allButtons, selected)
+    }
+
+    private fun highlightSelectedButton(buttons: List<MaterialButton>, selected: MaterialButton?) {
+        buttons.forEach { btn ->
             if (btn == selected) {
                 btn.setTextColor(getColor(R.color.color_main))
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.color_main))
+                btn.strokeColor = ColorStateList.valueOf(getColor(R.color.color_main))
             } else {
                 btn.setTextColor(getColor(R.color.textPrimary))
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.color_divider))
+                btn.strokeColor = ColorStateList.valueOf(getColor(R.color.color_divider))
             }
         }
     }
@@ -473,14 +491,51 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             ResumeAdsEntryMode.NONE -> mBinding.btnModeNone
         }
 
-        allButtons.forEach { btn ->
-            if (btn == selected) {
-                btn.setTextColor(getColor(R.color.color_main))
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.color_main))
-            } else {
-                btn.setTextColor(getColor(R.color.textPrimary))
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.color_divider))
-            }
+        highlightSelectedButton(allButtons, selected)
+    }
+
+    private val bannerTypeOptions: Map<MaterialButton, BannerType> by lazy {
+        mapOf(
+            mBinding.btnBannerAdaptive to BannerType.Normal,
+            mBinding.btnBannerLargeAnchored to BannerType.LargeAnchored,
+            mBinding.btnBannerCollapsible to BannerType.Collapsible(),
+            mBinding.btnBannerInlineSmall to BannerType.Inline(Admob.BANNER_INLINE_SMALL_STYLE),
+            mBinding.btnBannerInlineLarge to BannerType.Inline(Admob.BANNER_INLINE_LARGE_STYLE),
+            mBinding.btnBannerInlineMax100 to BannerType.InlineMaxHeight(100),
+            mBinding.btnBannerFixedBanner to BannerType.Fixed(FixedBannerSize.BANNER),
+            mBinding.btnBannerFixedLarge to BannerType.Fixed(FixedBannerSize.LARGE_BANNER),
+            mBinding.btnBannerFixedMrec to BannerType.Fixed(FixedBannerSize.MEDIUM_RECTANGLE),
+            mBinding.btnBannerFixedFull to BannerType.Fixed(FixedBannerSize.FULL_BANNER),
+            mBinding.btnBannerFixedLeaderboard to BannerType.Fixed(FixedBannerSize.LEADERBOARD),
+        )
+    }
+
+    private fun selectBannerType(type: BannerType) {
+        currentBannerType = type
+        mBinding.tvCurrentBannerType.text = "Current: ${bannerTypeLabel(type)}"
+        val selected = bannerTypeOptions.entries.firstOrNull { it.value == type }?.key
+        highlightSelectedButton(bannerTypeOptions.keys.toList(), selected)
+    }
+
+    private fun bannerTypeLabel(type: BannerType): String = when (type) {
+        BannerType.Normal -> "Anchored Adaptive"
+        BannerType.LargeAnchored -> "Large Anchored Adaptive"
+        is BannerType.Collapsible -> "Collapsible (${type.gravity})"
+        is BannerType.Inline ->
+            if (type.style == Admob.BANNER_INLINE_SMALL_STYLE) "Inline Small (cap 50dp)"
+            else "Inline Large (no cap)"
+
+        is BannerType.InlineMaxHeight -> "Inline (cap ${type.maxHeightDp}dp)"
+        is BannerType.Fixed -> "Fixed ${type.size.adSize.width}×${type.size.adSize.height}"
+    }
+
+    private fun reloadSelectedBanner() {
+        ensureAdRemoteConfig()
+        // Google's demo unit ids are per-family: adaptive/inline/collapsible vs fixed-size
+        if (currentBannerType is BannerType.Fixed) {
+            reloadBanner(currentBannerType, AdRemoteConfig.banner_home_fixed, "banner_home_fixed")
+        } else {
+            reloadBanner(currentBannerType, AdRemoteConfig.banner_home)
         }
     }
 

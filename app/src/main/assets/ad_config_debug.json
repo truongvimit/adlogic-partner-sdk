@@ -222,6 +222,12 @@
     "reloadIntervalSeconds": 30,
     "enable_ua_check": false
   },
+  "banner_home_fixed": {
+    "id": "ca-app-pub-3940256099942544/6300978111",
+    "isEnable": true,
+    "reloadIntervalSeconds": 30,
+    "enable_ua_check": false
+  },
   "native_survey": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,

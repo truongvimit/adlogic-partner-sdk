@@ -321,6 +321,34 @@ public class ERainAd {
                 instrument(idBanner, AdFormat.BANNER, adCallback));
     }
 
+    public void loadInlineBanner(Activity mActivity, String idBanner, int maxHeightDp, AdCallback adCallback) {
+        Admob.getInstance().loadInlineBanner(mActivity, idBanner, maxHeightDp,
+                instrument(idBanner, AdFormat.BANNER, adCallback));
+    }
+
+    public void loadBannerInlineFragment(Activity mActivity, String idBanner, View rootView, int maxHeightDp, AdCallback adCallback) {
+        Admob.getInstance().loadInlineBannerFragment(mActivity, idBanner, rootView, maxHeightDp,
+                instrument(idBanner, AdFormat.BANNER, adCallback));
+    }
+
+    public void loadLargeAnchoredBanner(Activity mActivity, String id, AdCallback adCallback) {
+        Admob.getInstance().loadLargeAnchoredBanner(mActivity, id, instrument(id, AdFormat.BANNER, adCallback));
+    }
+
+    public void loadLargeAnchoredBannerFragment(Activity mActivity, String id, View rootView, AdCallback adCallback) {
+        Admob.getInstance().loadLargeAnchoredBannerFragment(mActivity, id, rootView,
+                instrument(id, AdFormat.BANNER, adCallback));
+    }
+
+    public void loadFixedSizeBanner(Activity mActivity, String id, AdSize adSize, AdCallback adCallback) {
+        Admob.getInstance().loadFixedSizeBanner(mActivity, id, adSize, instrument(id, AdFormat.BANNER, adCallback));
+    }
+
+    public void loadFixedSizeBannerFragment(Activity mActivity, String id, View rootView, AdSize adSize, AdCallback adCallback) {
+        Admob.getInstance().loadFixedSizeBannerFragment(mActivity, id, rootView, adSize,
+                instrument(id, AdFormat.BANNER, adCallback));
+    }
+
     public void loadSplashInterstitialAds(Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         Admob.getInstance().loadSplashInterstitialAds(context, id, timeOut, timeDelay, true,
                 instrument(id, AdFormat.INTERSTITIAL, adListener));

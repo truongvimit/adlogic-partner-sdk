@@ -35,6 +35,8 @@ val AdRemoteConfig.Companion.inter_onboarding: AdUnitConfig get() = unit("inter_
 
 val AdRemoteConfig.Companion.banner_home: AdUnitConfig get() = unit("banner_home")
 
+val AdRemoteConfig.Companion.banner_home_fixed: AdUnitConfig get() = unit("banner_home_fixed")
+
 val AdRemoteConfig.Companion.native_survey: AdUnitConfig get() = unit("native_survey")
 
 val AdRemoteConfig.Companion.native_confirm_uninstall: AdUnitConfig

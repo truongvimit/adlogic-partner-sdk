@@ -19,7 +19,7 @@ data class BannerConfig(
         isEnable = false,
         reloadIntervalSeconds = 0
     ),
-    val isCollapse: Boolean = false
+    val bannerType: BannerType = BannerType.Normal
 )
 
 /**
@@ -31,14 +31,31 @@ abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>()
 
     abstract val bannerConfig: BannerConfig
 
+    private var bannerAdHelper: BannerAdHelper? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setupBanner()
+        setupBanner(bannerConfig.bannerType, bannerConfig.adUnitConfig, DEFAULT_PLACEMENT)
     }
 
-    private fun setupBanner() {
+    /** Rebuilds the slot with [type] — a helper's [BannerType] is fixed, so a switch needs a new one. */
+    protected fun reloadBanner(
+        type: BannerType,
+        adUnitConfig: AdUnitConfig = bannerConfig.adUnitConfig,
+        placement: String = DEFAULT_PLACEMENT,
+    ) {
+        // A dead target must not cost the live banner — validate before retiring
+        if (!adUnitConfig.isEnable || AdGate.isPurchased(this)) return
+        bannerAdHelper?.let {
+            // cancel() alone is not final: an auto-reload config resurrects on the next resume
+            it.flagUserEnableReload = false
+            it.cancel()
+        }
+        setupBanner(type, adUnitConfig, placement)
+    }
+
+    private fun setupBanner(type: BannerType, unit: AdUnitConfig, placement: String) {
         val frAds = findViewById<FrameLayout>(R.id.fr_banner) ?: return
-        val unit = bannerConfig.adUnitConfig
         if (!unit.isEnable || AdGate.isPurchased(this)) {
             frAds.goneView()
             return
@@ -49,16 +66,22 @@ abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>()
             unit.waterfallIds,
             canShowAds = unit.isEnable,
             canReloadAds = reloadSeconds > 0,
-            bannerType = if (bannerConfig.isCollapse) BannerType.Collapsible() else BannerType.Normal,
+            bannerType = type,
         ).also {
             if (reloadSeconds > 0) {
                 it.enableAutoReload = true
                 it.autoReloadTime = reloadSeconds * 1000L
             }
         }
-        BannerAdHelper(this, this, config)
+        bannerAdHelper = BannerAdHelper(this, this, config)
             .attachInto(frAds)
-            .also { it.placement = "banner_home" }
-            .requestAds(BannerAdParam.Request)
+            .also {
+                it.placement = placement
+                it.requestAds(BannerAdParam.Request)
+            }
+    }
+
+    companion object {
+        private const val DEFAULT_PLACEMENT = "banner_home"
     }
 }

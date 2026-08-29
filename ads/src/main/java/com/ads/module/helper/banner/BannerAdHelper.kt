@@ -266,9 +266,31 @@ class BannerAdHelper(
                 if (root == null) erain.loadBanner(activity, adUnitId, callback)
                 else erain.loadBannerFragment(activity, adUnitId, root, callback)
 
+            is BannerType.LargeAnchored ->
+                if (root == null) erain.loadLargeAnchoredBanner(activity, adUnitId, callback)
+                else erain.loadLargeAnchoredBannerFragment(activity, adUnitId, root, callback)
+
             is BannerType.Inline ->
                 if (root == null) erain.loadInlineBanner(activity, adUnitId, type.style, callback)
                 else erain.loadBannerInlineFragment(activity, adUnitId, root, type.style, callback)
+
+            is BannerType.InlineMaxHeight ->
+                if (root == null) {
+                    erain.loadInlineBanner(activity, adUnitId, type.maxHeightDp, callback)
+                } else {
+                    erain.loadBannerInlineFragment(
+                        activity, adUnitId, root, type.maxHeightDp, callback,
+                    )
+                }
+
+            is BannerType.Fixed ->
+                if (root == null) {
+                    erain.loadFixedSizeBanner(activity, adUnitId, type.size.adSize, callback)
+                } else {
+                    erain.loadFixedSizeBannerFragment(
+                        activity, adUnitId, root, type.size.adSize, callback,
+                    )
+                }
 
             is BannerType.Collapsible ->
                 if (root == null) {
