@@ -300,7 +300,7 @@ Defaults `ObRemoteKeys` में हैं; कुछ भी publish न कर
 | `ob_enable_question` / `ob_enable_question_old_user` | Boolean | `true` / `false` | नए users के लिए survey / जो पहले ही flow पूरा कर चुके हैं उनके लिए |
 | `ob_enable_language_native_2` / `ob_pass_lfo_if_completed` | Boolean | `true` | पहले language tap पर दूसरा native / language चुनी जा चुकी हो तो language screen skip |
 | `ob_show_language_tap_hint` / `ob_show_language_confirm_before_select` | Boolean | `true` | Hand hint / चुनने से पहले confirm button; दोनों अपनी-अपनी `LanguageConfig` field के साथ AND होती हैं |
-| `ob_language_supported_codes` | String | `""` | CSV filter और क्रम; खाली = पूरा catalog |
+| `ob_language_supported_codes` | String | `""` | CSV filter और क्रम; खाली = पूरा catalog. Tap hint active होने पर device language वाली row position 2 पर आ जाती है ताकि hint screen पर दिखे |
 | `ob_reuse_splash_inter` | Boolean | `true` | Pager के अंत में buffered splash interstitial दोबारा इस्तेमाल करना |
 | `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_language_native_enabled`, `ob_ads_content_native_enabled`, `ob_ads_fullscreen_native_enabled`, `ob_ads_question_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled` | Boolean | `true` | हर placement के लिए एक switch, हर एक `ob_enable_all_ads` के साथ AND होती है |
 | `ob_splash_min_display_ms` / `ob_splash_ad_budget_ms` / `ob_splash_banner_wait_ms` | Long | `3000` / `60000` / `0` | > 0 होने पर `SplashConfig.minDisplayTimeMs` को override करती है / splash interstitial की पूरी waterfall का budget (हर floor के लिए 30 s) / splash banner के लिए कितनी देर रुके |

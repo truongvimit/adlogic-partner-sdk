@@ -304,7 +304,7 @@ Giá trị mặc định nằm trong `ObRemoteKeys`; không publish gì thì gi�
 | `ob_enable_question` / `ob_enable_question_old_user` | Boolean | `true` / `false` | Khảo sát cho user mới / cho user đã hoàn thành luồng |
 | `ob_enable_language_native_2` / `ob_pass_lfo_if_completed` | Boolean | `true` | Native thứ hai khi chạm ngôn ngữ lần đầu / bỏ màn ngôn ngữ khi đã chọn ngôn ngữ |
 | `ob_show_language_tap_hint` / `ob_show_language_confirm_before_select` | Boolean | `true` | Gợi ý bàn tay / nút xác nhận trước khi chọn; mỗi cái AND với trường tương ứng trong `LanguageConfig` |
-| `ob_language_supported_codes` | String | `""` | Lọc và sắp thứ tự bằng CSV; rỗng = toàn bộ danh mục |
+| `ob_language_supported_codes` | String | `""` | Lọc và sắp thứ tự bằng CSV; rỗng = toàn bộ danh mục. Khi hint chạm đang bật, dòng khớp ngôn ngữ máy được đưa lên vị trí thứ 2 để hint luôn nằm trong màn hình |
 | `ob_reuse_splash_inter` | Boolean | `true` | Dùng lại interstitial splash còn trong buffer ở cuối pager |
 | `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_language_native_enabled`, `ob_ads_content_native_enabled`, `ob_ads_fullscreen_native_enabled`, `ob_ads_question_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled` | Boolean | `true` | Mỗi placement một công tắc, đều AND với `ob_enable_all_ads` |
 | `ob_splash_min_display_ms` / `ob_splash_ad_budget_ms` / `ob_splash_banner_wait_ms` | Long | `3000` / `60000` / `0` | Ghi đè `SplashConfig.minDisplayTimeMs` khi > 0 / ngân sách cho cả waterfall của interstitial splash (30 s mỗi tầng) / splash chờ banner bao lâu trước tiên |

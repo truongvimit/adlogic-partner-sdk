@@ -63,10 +63,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         selectedCode = sdk.configOrNull()?.language?.defaultCode
 
         languages = resolveLanguages()
+        val hintCode = resolveHintCode()
+        if (hintCode != null) languages = DeviceLanguageHint.promote(languages)
 
         adapter = LanguageAdapter(::onLanguageTapped)
         adapter.selectedCode = selectedCode
-        adapter.hintCode = resolveHintCode()
+        adapter.hintCode = hintCode
         binding.obLanguageList.layoutManager = LinearLayoutManager(this)
         binding.obLanguageList.adapter = adapter
         adapter.submitList(languages)
@@ -94,14 +96,16 @@ class ObLanguageActivity : BaseOnboardActivity() {
         NativeTemplates.templateForPlacement(AdPlacement.Language1).name
 
     /**
-     * Row that gets the animated tap hint, or null for no hint at all.
+     * Row that gets the animated tap hint, or null for no hint at all. A non-null result also
+     * promotes the device-language row to position 2 so the hint is visible without scrolling.
      *
-     * Three ways to end up with no hint: the partner switched it off at build time
-     * (`language.tapHintEnabled`), remote switched it off (`ob_show_language_tap_hint`), or there
-     * is already a selection — a preselected `defaultCode`, or the SETTINGS screen, where the user
-     * came to change a language they have already chosen once.
+     * Four ways to end up with no hint: the SETTINGS screen, where the user came to change a
+     * language they have already chosen once; a preselected `defaultCode`; the partner switched
+     * it off at build time (`language.tapHintEnabled`); or remote switched it off
+     * (`ob_show_language_tap_hint`).
      */
     private fun resolveHintCode(): String? {
+        if (mode != LanguageScreenMode.FIRST_OPEN) return null
         if (selectedCode != null) return null
         if (!sdk.requireConfig().language.tapHintEnabled) return null
         if (!sdk.flags().showLanguageTapHint) return null

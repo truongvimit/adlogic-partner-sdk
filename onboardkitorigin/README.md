@@ -327,7 +327,7 @@ Defaults live in `ObRemoteKeys`; publishing nothing keeps the defaults below.
 | `ob_enable_question` / `ob_enable_question_old_user` | Boolean | `true` / `false` | Survey for new users / for users who already finished |
 | `ob_enable_language_native_2` / `ob_pass_lfo_if_completed` | Boolean | `true` | Second native on the first language tap / skip the language screen once a language is chosen |
 | `ob_show_language_tap_hint` / `ob_show_language_confirm_before_select` | Boolean | `true` | Hand hint / confirm button before a pick; each AND-ed with its `LanguageConfig` field |
-| `ob_language_supported_codes` | String | `""` | CSV filter and order; empty = full catalog |
+| `ob_language_supported_codes` | String | `""` | CSV filter and order; empty = full catalog. While the tap hint is active, the row matching the device language moves up to position 2 so the hint stays on screen |
 | `ob_reuse_splash_inter` | Boolean | `true` | Reuse a buffered splash interstitial at the end of the pager |
 | `ob_ads_splash_banner_enabled`, `ob_ads_splash_inter_enabled`, `ob_ads_language_native_enabled`, `ob_ads_content_native_enabled`, `ob_ads_fullscreen_native_enabled`, `ob_ads_question_native_enabled`, `ob_ads_question_inter_enabled`, `ob_ads_app_resume_enabled` | Boolean | `true` | One switch per placement, each AND-ed with `ob_enable_all_ads` |
 | `ob_splash_min_display_ms` / `ob_splash_ad_budget_ms` / `ob_splash_banner_wait_ms` | Long | `3000` / `60000` / `0` | Overrides `SplashConfig.minDisplayTimeMs` when > 0 / whole-waterfall budget for the splash interstitial (30 s per floor) / how long the splash holds for the banner first |
