@@ -226,7 +226,7 @@ class NativeAdPreload private constructor() {
                 if (pending == 0) {
                     while (waiters.isNotEmpty()) {
                         dropStale()
-                        claimed.add(waiters.removeFirst() to queue.removeFirstOrNull()?.ad)
+                        claimed.add(waiters.removeAt(0) to queue.removeFirstOrNull()?.ad)
                     }
                 }
             }
