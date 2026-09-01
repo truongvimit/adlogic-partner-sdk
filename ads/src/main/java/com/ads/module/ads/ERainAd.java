@@ -531,6 +531,12 @@ public class ERainAd {
             }
 
             @Override
+            public void onAdOpened() {
+                super.onAdOpened();
+                callback.onAdOpened();
+            }
+
+            @Override
             public void onAdImpression() {
                 super.onAdImpression();
                 callback.onAdImpression();
@@ -571,6 +577,12 @@ public class ERainAd {
             public void onAdClicked() {
                 super.onAdClicked();
                 callback.onAdClicked();
+            }
+
+            @Override
+            public void onAdOpened() {
+                super.onAdOpened();
+                callback.onAdOpened();
             }
         }));
     }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Native_Ads" (node 3607:20394): tinted panel the ad sits in, 8dp corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_confirm_native_bg" />
+    <corners android:radius="@dimen/ob_confirm_native_radius" />
+</shape>

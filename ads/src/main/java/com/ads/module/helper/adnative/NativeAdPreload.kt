@@ -195,6 +195,10 @@ class NativeAdPreload private constructor() {
                         callbacks.forEach { runCatching { it.onAdClicked() } }
                     }
 
+                    override fun onAdOpened() {
+                        callbacks.forEach { runCatching { it.onAdOpened() } }
+                    }
+
                     override fun onAdImpression() {
                         callbacks.forEach { runCatching { it.onAdImpression() } }
                     }

@@ -10,9 +10,7 @@ and `debugImplementation` keeps every byte of it out of release builds.
 
 | | |
 |---|---|
-| minSdk | 24 |
-| compileSdk | 36 |
-| JDK | 17 |
+| minSdk / compileSdk / JDK | 24 / 36 / 17 |
 | Permission | `INTERNET`, declared by the module — merges only into builds that include it |
 
 ## Installation
@@ -26,24 +24,19 @@ dependencies {
 }
 ```
 
-## Quick start
+## Integration
 
-`io.adtracer` can only be imported from `src/debug`, so put the wiring behind one function whose
-release twin does nothing.
+`io.adtracer` can only be imported from `src/debug`, so put the wiring behind a variant seam: one
+function in `src/debug` that does the work, and a twin in `src/release` — same package, same
+signature — that does nothing.
 
-1. Bridge Trackkit into AdTracer in `app/src/debug/java/.../tracking/AdTracerSink.kt` — every ad
-   event `:ads` and `:onboardkitorigin` emit already goes through `Tracker`, so no call site needs
-   wrapping. Same file as
-   [`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt).
+**1. Bridge Trackkit into AdTracer.** Every ad event `:ads` and `:onboardkitorigin` emit already goes
+through `Tracker`, so no call site needs wrapping. Write this as a `TrackSink` in
+`app/src/debug/java/.../AdTracerSink.kt`; the sample app's copy is
+[`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt) — copy it
+verbatim.
 
 ```kotlin
-import android.content.Context
-import io.adtracer.AdTracer
-import io.trackkit.AdFormat
-import io.trackkit.TrackSink
-import io.trackkit.TrackkitEvents
-import io.adtracer.AdFormat as TracerFormat
-
 class AdTracerSink : TrackSink {
     override val id: String = "adtracer"
     override fun onInstall(context: Context) = AdTracer.start(context)
@@ -69,56 +62,37 @@ class AdTracerSink : TrackSink {
             TrackkitEvents.AD_CLICK -> AdTracer.clicked(placement, format)
             TrackkitEvents.AD_CLOSED -> AdTracer.dismissed(placement, format)
             TrackkitEvents.AD_REWARD_EARNED -> AdTracer.event("reward_earned", placement, format)
-            TrackkitEvents.AD_SKIPPED ->
-                AdTracer.loadSkipped(placement, format, reason ?: "unknown")
-
+            TrackkitEvents.AD_SKIPPED -> AdTracer.loadSkipped(placement, format, reason ?: "unknown")
             else -> AdTracer.event(name, placement, format, adUnitId, reason, code)
         }
     }
-
-    private fun formatOf(key: String?): TracerFormat = when (AdFormat.fromKey(key)) {
-        AdFormat.BANNER, AdFormat.COLLAPSIBLE_BANNER -> TracerFormat.BANNER
-        AdFormat.INTERSTITIAL -> TracerFormat.INTERSTITIAL
-        AdFormat.REWARDED, AdFormat.REWARDED_INTERSTITIAL -> TracerFormat.REWARDED
-        AdFormat.NATIVE, AdFormat.NATIVE_FULL_SCREEN -> TracerFormat.NATIVE
-        AdFormat.APP_OPEN -> TracerFormat.APP_OPEN
-        AdFormat.UNKNOWN -> TracerFormat.OTHER
-    }
+    // formatOf maps io.trackkit.AdFormat to io.adtracer.AdFormat — see the sample file.
 }
 ```
 
 Keep every branch. An ad event that lands in `else` is journalled under its raw Trackkit name, and
 the dashboard counts only the canonical AdTracer types.
 
-2. Register it from a variant seam — `app/src/debug/java/.../tracking/DebugSinks.kt`:
+**2. Register it from the variant seam** — `app/src/debug/java/.../DebugSinks.kt`:
 
 ```kotlin
 fun installDebugSinks() { Tracker.addSink(AdTracerSink()) }
 ```
 
-`app/src/release/java/.../tracking/DebugSinks.kt`, same package and signature:
+`app/src/release/java/.../DebugSinks.kt`, same package and signature:
 
 ```kotlin
 fun installDebugSinks() = Unit
 ```
 
-3. Call `installDebugSinks()` in `Application.onCreate()`, after `Tracker.install(...)`.
+**3. Call `installDebugSinks()`** in `Application.onCreate()`, after `Tracker.install(...)`.
 
-Not using Trackkit? Call `AdTracer.start(context)` once, then these from your own ad callbacks —
-each is a no-op until `start` runs, and none of them throw.
-
-| Function | Meaning |
-|---|---|
-| `loadRequested(placement, format, adUnitId?)` / `loadSkipped(…, reason)` | Asked for an ad / decided not to |
-| `loaded(placement, format, approx?)` / `loadFailed(…, code?, message?)` | Fill / no fill |
-| `showRequested` / `showStarted` / `shown(placement, format)` | Show attempt, start, display |
-| `showBlocked(…, reason)` / `showFailed(…, code?, message?, synthetic?)` | Show suppressed / failed |
-| `impression` / `clicked` / `dismissed(placement, format)` | SDK impression, click, close |
-| `rendered(placement)` / `reRendered(placement)` / `discarded(…, reason)` | Native bound, rebound, fill dropped |
-| `event(type, placement, format, …)` | Escape hatch for custom types |
-
-`format` is `io.adtracer.AdFormat`: `NATIVE`, `INTERSTITIAL`, `BANNER`, `REWARDED`, `APP_OPEN`,
-`OTHER`. `approx = true` marks an inferred value (`≈`), `synthetic = true` an SDK-fabricated event.
+**Not using Trackkit?** Call `AdTracer.start(context)` once, then report from your own ad callbacks.
+`AdTracer` exposes one function per lifecycle moment — `loadRequested` / `loadSkipped`, `loaded` /
+`loadFailed`, `showRequested` / `showStarted` / `shown`, `showBlocked` / `showFailed`, `impression` /
+`clicked` / `dismissed`, `rendered` / `reRendered` / `discarded`, and `event(...)` as the escape
+hatch. Each is a no-op until `start` runs, and none of them throw. `format` is `io.adtracer.AdFormat`:
+`NATIVE`, `INTERSTITIAL`, `BANNER`, `REWARDED`, `APP_OPEN`, `OTHER`.
 
 ## Viewing the dashboard
 
@@ -154,7 +128,7 @@ placement, format, plus optional ad unit id, reason, error code and message.
 | Release build fails to compile | The two `DebugSinks.kt` twins drifted | Same package, same signature in both |
 | Dashboard does not open | `adb forward` not run, or another port | Run the forward; check `adb logcat -s AdTracer` |
 | Dashboard opens but stays empty | Sink never registered | Confirm `installDebugSinks()` runs after `Tracker.install` |
-| Every placement reads `unknown` | Ad unit ids not mapped | `io.trackkit.PlacementRegistry.register(adUnitId, placement)` — see [`../trackkit/README.md`](../trackkit/README.md) |
+| Every placement reads `unknown` | Ad unit ids not mapped | `io.trackkit.PlacementRegistry.register(adUnitId, placement)` |
 
 ## License
 

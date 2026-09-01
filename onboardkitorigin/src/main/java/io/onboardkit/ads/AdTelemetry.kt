@@ -51,6 +51,10 @@ internal class TrackedAdListener(
         OnboardingSdk.appResume().onAdClicked()
         delegate?.onClicked()
     }
+
+    override fun onAdOpened() {
+        delegate?.onAdOpened()
+    }
 }
 
 /** Wraps [listener] so this placement's load outcome and first impression reach analytics. */

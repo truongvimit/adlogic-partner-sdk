@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Button" filled (node 3584:24377): the Confirm action. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_accent" />
+    <corners android:radius="@dimen/ob_confirm_button_radius" />
+</shape>

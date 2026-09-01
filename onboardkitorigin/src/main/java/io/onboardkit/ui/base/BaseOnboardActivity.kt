@@ -2,14 +2,17 @@ package io.onboardkit.ui.base
 
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.ObLog
 import io.trackkit.Tracker
@@ -43,6 +46,7 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
             finish()
             return
         }
+        configureEdgeToEdge()
         applySystemBars()
         // Every SDK screen is off-limits to app-resume ads: they all either show a full-screen ad
         // of their own or are a step the user is mid-way through. Doing it here means a partner
@@ -77,21 +81,51 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
         finishAffinity()
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Consent forms, full-screen ads and dialogs run in windows with their own bar state;
+        // the hide request must be re-asserted every time this window takes focus back.
+        if (hasFocus) applySystemBars()
+    }
+
+    /**
+     * The window is edge-to-edge on every API level; [applySystemBars] then only toggles bar
+     * visibility, and the content root pads itself by the insets of whichever bars stay visible
+     * (hidden bars report zero). Android 15+ enforces this window state anyway.
+     */
+    private fun configureEdgeToEdge() {
+        if (OnboardingSdk.configOrNull() == null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        val content = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.updatePadding(
+                left = bars.left,
+                top = bars.top,
+                right = bars.right,
+                bottom = bars.bottom,
+            )
+            insets
+        }
+    }
+
     private fun applySystemBars() {
         val system = OnboardingSdk.configOrNull()?.system ?: return
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
-        if (!system.showStatusBar) {
-            controller.hide(WindowInsetsCompat.Type.statusBars())
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
-        }
-        if (!system.showNavigationBar) {
-            controller.hide(WindowInsetsCompat.Type.navigationBars())
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        // Transient-by-swipe (sticky immersive below API 30) is the one behavior under which a
+        // swiped-in bar overlays the content and hides again by itself.
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (!system.showStatusBar) controller.hide(WindowInsetsCompat.Type.statusBars())
+        if (!system.showNavigationBar) controller.hide(WindowInsetsCompat.Type.navigationBars())
     }
 
     protected fun hideViewCompletely(view: View) {

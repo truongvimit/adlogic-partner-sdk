@@ -79,6 +79,40 @@ class AdsGuardTest {
     }
 
     @Test
+    fun `the confirm modal answers to its own remote switch, not the language one`() {
+        val ads = AdsConfig(
+            languageNative = NativeAdUnit("language-native"),
+            languageConfirmNative = NativeAdUnit("confirm-native"),
+        )
+        // Turning the LFO natives off must not take the modal's slot with it: they are sold
+        // separately, and one key doing both jobs makes the second unsellable.
+        val langOff = guard(config = config(ads), flags = RemoteFlags(adsLanguageNative = false))
+        assertEquals(
+            AdSkipReason.PLACEMENT_OFF_BY_REMOTE,
+            langOff.skipReason(context, AdPlacement.Language1),
+        )
+        assertNull(langOff.skipReason(context, AdPlacement.LanguageConfirm))
+
+        val confirmOff =
+            guard(config = config(ads), flags = RemoteFlags(adsLanguageConfirmNative = false))
+        assertEquals(
+            AdSkipReason.PLACEMENT_OFF_BY_REMOTE,
+            confirmOff.skipReason(context, AdPlacement.LanguageConfirm),
+        )
+        assertNull(confirmOff.skipReason(context, AdPlacement.Language1))
+    }
+
+    @Test
+    fun `the confirm modal never borrows the language ad unit`() {
+        // languageConfirmNative unset must report NO_AD_UNIT rather than silently spending
+        // `native_lang` — the mistake AdsConfig's doc records OB5 making against OB3.
+        assertEquals(
+            AdSkipReason.NO_AD_UNIT,
+            guard().skipReason(context, AdPlacement.LanguageConfirm),
+        )
+    }
+
+    @Test
     fun `placement without an ad unit`() {
         assertEquals(
             AdSkipReason.NO_AD_UNIT,

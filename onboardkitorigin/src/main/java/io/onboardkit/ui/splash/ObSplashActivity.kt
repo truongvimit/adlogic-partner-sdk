@@ -1,7 +1,10 @@
 package io.onboardkit.ui.splash
 
 import android.animation.ObjectAnimator
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
@@ -27,7 +30,9 @@ import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.SkipReason
+import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.analytics.AnalyticsEvent
+import io.onboardkit.core.net.ObNetwork
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.StartDecision
@@ -40,6 +45,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
@@ -56,8 +63,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     override val screenName: String = "ob_splash"
 
-    private val startedAtMs = System.currentTimeMillis()
+    private var attemptStartedAtMs = System.currentTimeMillis()
     private var progressAnimator: ObjectAnimator? = null
+    private var noInternetDialog: ObNoInternetDialog? = null
+    private val windowFocused = MutableStateFlow(false)
 
     /** Completed when the slot has an answer of any kind: filled, failed, or never requested. */
     private val bannerSettled = CompletableDeferred<Unit>()
@@ -90,8 +99,58 @@ open class ObSplashActivity : BaseOnboardActivity() {
         lifecycleScope.launch { runSplash() }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        windowFocused.value = hasFocus
+    }
+
+    /**
+     * Holds the splash until the device can actually reach the internet, so the flow's first ad
+     * request is not spent on a dead connection.
+     *
+     * Nothing has latched at this point — no ad requested, no consent asked, no decision taken —
+     * so this is a late start rather than a re-run, and everything downstream is untouched.
+     *
+     * The wait ends on window focus, never on resume alone. On Android 13+ the connectivity
+     * panel is a system dialog floating over a splash that stays RESUMED underneath it, so a
+     * lifecycle-only gate would let the interstitial play under that dialog.
+     */
+    private suspend fun awaitNetworkGate(cfg: OnboardKitConfig) {
+        if (!cfg.splash.noInternetPromptEnabled) return
+        if (ObNetwork.isValidated(this)) return
+
+        ObLog.w(ObLog.Section.SPLASH, "no validated internet — holding the splash")
+        val prompt = ObNoInternetDialog(this, onRetry = ::openConnectivitySettings)
+        prompt.show()
+        // The flow cannot run offline, so this waits as long as it takes: consent, the remote
+        // fetch and every ad request are all still ahead of it.
+        ObNetwork.awaitValidated(this)
+        prompt.dismiss()
+        // Not onResume: on Android 13+ the connectivity dialog floats over a splash that stays
+        // RESUMED underneath it, and the interstitial would play under that dialog.
+        windowFocused.first { it }
+        attemptStartedAtMs = System.currentTimeMillis()
+        ObLog.d(ObLog.Section.SPLASH, "network gate released")
+    }
+
+    private fun openConnectivitySettings() {
+        val destinations = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY))
+            }
+            add(Intent(Settings.ACTION_WIFI_SETTINGS))
+            add(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+            add(Intent(Settings.ACTION_SETTINGS))
+        }
+        for (intent in destinations) {
+            if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+        ObLog.w(ObLog.Section.SPLASH, "no connectivity settings destination resolved")
+    }
+
     private suspend fun runSplash() {
         val cfg = sdk.requireConfig()
+        awaitNetworkGate(cfg)
 
         // The remote fetch requests no ads, so it may overlap consent; ad requests may not. A
         // request that goes out before the user has answered is a policy violation, not a race.
@@ -320,7 +379,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private suspend fun proceed() {
-        OnboardingSdk.track(AnalyticsEvent.SplashCompleted(System.currentTimeMillis() - startedAtMs))
+        OnboardingSdk.track(AnalyticsEvent.SplashCompleted(System.currentTimeMillis() - attemptStartedAtMs))
 
         // A purchase here removes the reason to show the interstitial at all
         if (sdk.presentPaywall(this, PaywallPlacement.SPLASH_INTER) == PaywallOutcome.Purchased) {
@@ -372,7 +431,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private fun remainingMinDisplayMs(configured: Long): Long {
         val target = sdk.flags().splashMinDisplayMs.takeIf { it > 0 } ?: configured
-        val elapsed = System.currentTimeMillis() - startedAtMs
+        val elapsed = System.currentTimeMillis() - attemptStartedAtMs
         return (target - elapsed).coerceIn(0, target)
     }
 

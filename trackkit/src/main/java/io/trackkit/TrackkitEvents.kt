@@ -50,6 +50,9 @@ object TrackkitEvents {
      * "answers picked" on `fo_question_complete`, and one GA4 custom dimension that means two
      * different things makes any cross-event aggregation of it meaningless.
      */
+    /** Whether the language confirm prompt opened with an ad already bound. */
+    const val PARAM_HAS_AD = "has_ad"
+
     const val PARAM_STEPS_SHOWN = "steps_shown"
     const val PARAM_EXIT_REASON = "exit_reason"
 
@@ -86,6 +89,15 @@ object TrackkitEvents {
     const val FO_LANGUAGE_SELECT = "fo_language_select"
     const val FO_LANGUAGE_COMPLETE = "fo_language_complete"
     const val FO_LANGUAGE_FLOW_COMPLETE = "fo_language_flow_complete"
+
+    /**
+     * The confirm prompt raised by re-tapping the already-selected language.
+     *
+     * A view/result pair rather than one event per button: the outcome is a [PARAM_REASON] slice
+     * of the same denominator, which is what makes "how many re-tappers backed out" answerable.
+     */
+    const val FO_LANGUAGE_CONFIRM_VIEW = "fo_language_confirm_view"
+    const val FO_LANGUAGE_CONFIRM_RESULT = "fo_language_confirm_result"
     const val FO_STEP_VIEW = "fo_step_view"
     const val FO_STEP_COMPLETE = "fo_step_complete"
     const val FO_QUESTION_VIEW = "fo_question_view"
@@ -122,7 +134,8 @@ object TrackkitEvents {
         AD_IMPRESSION, AD_REWARD_EARNED, AD_SKIPPED,
         AD_REVENUE_TOTAL, AD_REVENUE_MICRO_FLUSH, AD_REVENUE_D3, AD_REVENUE_D7,
         FO_FLOW_START, FO_SPLASH_VIEW, FO_SPLASH_COMPLETE, FO_LANGUAGE_VIEW, FO_LANGUAGE_SELECT,
-        FO_LANGUAGE_COMPLETE, FO_LANGUAGE_FLOW_COMPLETE, FO_STEP_VIEW, FO_STEP_COMPLETE,
+        FO_LANGUAGE_COMPLETE, FO_LANGUAGE_FLOW_COMPLETE,
+        FO_LANGUAGE_CONFIRM_VIEW, FO_LANGUAGE_CONFIRM_RESULT, FO_STEP_VIEW, FO_STEP_COMPLETE,
         FO_QUESTION_VIEW, FO_QUESTION_ANSWER, FO_QUESTION_COMPLETE, FO_FLOW_COMPLETE,
         IAP_PAYWALL_VIEW, IAP_PAYWALL_RESULT, IAP_CLICK, IAP_SUCCESS, IAP_FAIL, IAP_DISMISS,
         CONSENT_REQUEST, CONSENT_SHOWN, CONSENT_RESULT,
@@ -308,6 +321,23 @@ object TrackkitEvents {
          */
         class LanguageFlowComplete(language: String) :
             SimpleEvent(FO_LANGUAGE_FLOW_COMPLETE, mapOf(PARAM_LANGUAGE to language))
+
+        /**
+         * The confirm prompt opened. [hasAd] records whether it opened with an ad in it, so a
+         * drop in confirm rate can be told apart from a drop in fill.
+         */
+        class LanguageConfirmView(language: String, hasAd: Boolean) :
+            SimpleEvent(
+                FO_LANGUAGE_CONFIRM_VIEW,
+                mapOf(PARAM_LANGUAGE to language, PARAM_HAS_AD to hasAd),
+            )
+
+        /** [reason] is `confirm` or one of the ways out — `cancel`, `close`, `dismiss`. */
+        class LanguageConfirmResult(language: String, reason: String) :
+            SimpleEvent(
+                FO_LANGUAGE_CONFIRM_RESULT,
+                mapOf(PARAM_LANGUAGE to language, PARAM_REASON to reason),
+            )
     }
 
     // -----------------------------------------------------------------------

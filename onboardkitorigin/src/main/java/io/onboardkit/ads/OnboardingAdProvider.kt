@@ -15,6 +15,13 @@ interface AdEventListener {
     fun onFailedToLoad() {}
     fun onImpression() {}
     fun onClicked() {}
+
+    /**
+     * The ad's destination took the screen. Reported instead of the click by Meta's native
+     * adapter, and never by Pangle's — a screen that must catch every departure listens to
+     * this and [onClicked] both.
+     */
+    fun onAdOpened() {}
 }
 
 data class NativeAdRequest(

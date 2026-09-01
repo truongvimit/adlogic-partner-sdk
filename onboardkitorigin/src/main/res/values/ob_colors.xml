@@ -33,4 +33,18 @@
     <color name="ob_scrim_black_50">#80000000</color>
     <color name="ob_scrim_black_70">#B3000000</color>
     <color name="ob_skip_bg">#66000000</color>
+    <!-- Figma a027_ReTore "Confirm Language" modal (node 3584:24369). The brand colour is
+         deliberately NOT the design's #3B82F6: the modal opens over the LFO, so it takes the
+         module accent and follows whichever app embeds it. Set ob_accent to #3B82F6 for the
+         exact ReTore look. -->
+    <color name="ob_confirm_title">#030408</color>
+    <color name="ob_confirm_subtitle">#87888D</color>
+    <color name="ob_confirm_close">#B7B7B7</color>
+    <color name="ob_confirm_native_bg">#EAF5FF</color>
+    <color name="ob_confirm_ad_headline">#1F1F1F</color>
+    <color name="ob_confirm_ad_body">#5F5F5F</color>
+    <color name="ob_confirm_ad_rating">#666666</color>
+    <color name="ob_ad_badge_amber">#FDB812</color>
+    <color name="ob_ad_star">#FDB812</color>
+    <color name="ob_scrim_dialog">#66101828</color>
 </resources>

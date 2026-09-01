@@ -17,4 +17,11 @@ public class ResumeLoadingDialog extends Dialog {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.dialog_resume_loading);
     }
+
+    // After attach: hiding bars on a not-yet-attached dialog window is silently dropped.
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        HostWindowBars.mirror(this);
+    }
 }

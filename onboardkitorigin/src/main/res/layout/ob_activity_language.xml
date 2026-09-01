@@ -42,8 +42,27 @@
         android:paddingHorizontal="0dp"
         android:paddingTop="@dimen/ob_language_list_top"
         android:paddingBottom="0dp"
-        app:layout_constraintBottom_toTopOf="@id/ob_ad_block"
-        app:layout_constraintTop_toBottomOf="@id/ob_language_header" />
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/ob_language_save"
+        app:layout_constraintTop_toBottomOf="@id/ob_language_header"
+        app:layout_goneMarginBottom="0dp" />
+
+    <!-- Shown when back is pressed on a screen that already has a selection; anchored above
+         the ad block so it never scrolls away inside the list. -->
+    <TextView
+        android:id="@+id/ob_language_save"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/ob_bg_cta_pill"
+        android:gravity="center"
+        android:text="@string/ob_language_save"
+        android:textColor="@color/ob_white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_block" />
 
     <!-- Slot 1: native preloaded from Splash, visible until the first language tap. -->
     <FrameLayout

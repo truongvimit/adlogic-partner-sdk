@@ -21,6 +21,14 @@ public class AdCallback {
     public void onAdClosed() {
     }
 
+    /**
+     * The ad's destination took the screen. Mediation splits this fact: Meta's native adapter
+     * reports only this and never a click, Pangle's reports only the click — so a caller that
+     * must catch every departure has to listen to both.
+     */
+    public void onAdOpened() {
+    }
+
     public void onAdFailedToLoad(@Nullable LoadAdError i) {
     }
 

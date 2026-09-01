@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "vuesax/linear/add" (node 3584:24420), rotated cross used as the modal dismiss. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M3.334,3.3333L12.6667,12.666"
+        android:strokeColor="@color/ob_confirm_close"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <path
+        android:pathData="M3.3334,12.666L12.6661,3.3333"
+        android:strokeColor="@color/ob_confirm_close"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+</vector>

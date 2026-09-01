@@ -186,6 +186,7 @@ class ContentStepFragment : LazyStepFragment() {
             container = b.obNativeContainer,
             onBound = { adBound = true },
             onUnavailable = { if (!adBound) binding?.obAdBlock?.visibility = View.GONE },
+            onAdEngaged = { onStepAdEngaged() },
         )
     }
 

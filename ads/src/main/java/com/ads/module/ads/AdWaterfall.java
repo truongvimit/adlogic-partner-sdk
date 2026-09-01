@@ -112,6 +112,11 @@ public final class AdWaterfall {
                     }
 
                     @Override
+                    public void onAdOpened() {
+                        callback.onAdOpened();
+                    }
+
+                    @Override
                     public void onAdImpression() {
                         // Only the winning tier's view can render, so no settle() gate needed
                         callback.onAdImpression();

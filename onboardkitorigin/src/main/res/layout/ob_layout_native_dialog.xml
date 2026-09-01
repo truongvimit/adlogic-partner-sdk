@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Figma "Native_Ads" (node 3607:20394): the ad that rides inside the Confirm Language modal.
+
+  A horizontal split — media on the left, headline/body/rating/CTA stacked on the right — so it is
+  deliberately absent from NativeLayoutContractTest's reorderable list: there is no `ad_container`
+  vertical stack here, which makes `components` a visibility switch and never a reorder.
+-->
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/ob_bg_confirm_native"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/ob_confirm_native_padding">
+
+        <!-- Figma "image 20": half the panel, 112dp tall, 4dp corners. clipToOutline rounds the
+             MediaView's own image child, which draws outside the background otherwise. -->
+        <com.google.android.gms.ads.nativead.MediaView
+            android:id="@+id/ad_media"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ob_confirm_media_height"
+            android:layout_weight="1"
+            android:background="@drawable/ob_bg_confirm_media"
+            android:clipToOutline="true" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/ob_confirm_native_gap"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- Two lines, not the design's one: AdMob's native ad validator counts a clipped
+                 asset as an implementation issue, and a real headline rarely fits 144dp on one
+                 line. The Figma sample ("Tiki 11.01 Shopping") still renders as a single line.
+
+                 paddingEnd reserves the panel's top-right corner: the loader never calls
+                 setAdChoicesPlacement, so GMA drops the AdChoices badge there, straight onto the
+                 headline. The badge needs its own clear space to stay tappable. -->
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingEnd="@dimen/ob_confirm_adchoices_clearance"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:textColor="@color/ob_confirm_ad_headline"
+                android:textSize="@dimen/ob_text_confirm_ad_headline"
+                tools:text="Tiki 11.01 Shopping" />
+
+            <TextView
+                android:id="@+id/ad_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:textColor="@color/ob_confirm_ad_body"
+                android:textSize="@dimen/ob_text_confirm_ad_body"
+                tools:text="Festival &amp; shoping online" />
+
+            <!-- Figma node 3607:20405: "Ads" chip, then the numeric rating and its stars. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ob_confirm_ad_text_gap"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="@dimen/ob_confirm_ad_badge_width"
+                    android:layout_height="@dimen/ob_confirm_ad_badge_height"
+                    android:background="@drawable/ob_bg_ad_badge_dialog"
+                    android:fontFamily="@font/ob_poppins_regular"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:text="@string/ob_ad_badge_plural"
+                    android:textColor="@color/ob_white"
+                    android:textSize="@dimen/ob_text_confirm_ad_meta" />
+
+                <!-- Vector stars cannot tile in a progressDrawable (ProgressBar.tileify only
+                     tiles BitmapDrawables), so the platform small bar is tinted to the Figma
+                     amber instead of shipping a stretched custom one. -->
+                <RatingBar
+                    android:id="@+id/ad_stars"
+                    style="?android:attr/ratingBarStyleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/ob_confirm_ad_star_size"
+                    android:layout_marginStart="@dimen/ob_confirm_text_gap"
+                    android:isIndicator="true"
+                    android:numStars="5"
+                    android:progressBackgroundTint="@color/ob_placeholder_fg"
+                    android:progressTint="@color/ob_ad_star"
+                    android:secondaryProgressTint="@color/ob_ad_star"
+                    android:stepSize="0.5"
+                    tools:rating="4.3" />
+            </LinearLayout>
+
+            <!-- Figma node 3607:20433. Height is overridden at bind time by `heightCTA`
+                 (NativeAdStyler.applyLayout), so the XML value is the design's resting state. -->
+            <TextView
+                android:id="@+id/ad_call_to_action"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginTop="@dimen/ob_confirm_ad_column_gap"
+                android:background="@drawable/ob_bg_confirm_ad_cta"
+                android:drawableEnd="@drawable/ob_ic_download"
+                android:drawablePadding="@dimen/ob_confirm_text_gap"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingHorizontal="@dimen/ob_confirm_ad_cta_padding_h"
+                android:textAllCaps="true"
+                android:textColor="@color/ob_white"
+                android:textSize="@dimen/ob_text_confirm_button"
+                tools:text="Install" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

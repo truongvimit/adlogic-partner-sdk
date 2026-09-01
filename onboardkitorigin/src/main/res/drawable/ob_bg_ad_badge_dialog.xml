@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Tag/ads/2" (node 3607:20407): amber "Ads" chip, 2dp corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_ad_badge_amber" />
+    <corners android:radius="2dp" />
+</shape>

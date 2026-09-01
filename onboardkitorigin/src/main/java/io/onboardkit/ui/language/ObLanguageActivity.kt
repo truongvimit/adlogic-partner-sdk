@@ -53,6 +53,26 @@ class ObLanguageActivity : BaseOnboardActivity() {
     /** True once the first tap swapped slot 1 out for slot 2. */
     private var secondAdShown = false
 
+    /**
+     * True once the user has picked a language themselves.
+     *
+     * Distinct from `selectedCode != null`, which is already true at entry when the partner ships
+     * a `LanguageConfig.defaultCode` — without this, that user's genuine first tap would look
+     * like a re-tap and be answered with a confirmation instead of a selection.
+     */
+    private var userHasSelected = false
+
+    private var confirmDialog: ObConfirmLanguageDialog? = null
+
+    /**
+     * The confirm modal's ad, owned here rather than by the dialog so it survives being dismissed.
+     *
+     * Re-tapping is a repeatable gesture: releasing the ad on dismiss meant the second raise had
+     * to load from scratch, and on a slow or empty waterfall the user sat in front of a shimmer
+     * until it timed out. Kept here, the ad the modal already showed is simply re-attached.
+     */
+    private val confirmAdSlot = ConfirmAdSlot()
+
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         binding = ObActivityLanguageBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -75,6 +95,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
+        binding.obLanguageSave.setOnClickListener { onConfirm() }
 
         if (mode == LanguageScreenMode.SETTINGS) {
             binding.obAdBlock.visibility = View.GONE
@@ -138,6 +159,14 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     private fun onLanguageTapped(language: ObLanguage) {
+        // Tapping the row that is already selected is the confirm gesture, not a new selection:
+        // the list does not change, so none of the selection work below runs for it.
+        if (isReselect(language)) {
+            showConfirmDialog(language)
+            return
+        }
+
+        userHasSelected = true
         selectedCode = language.code
         adapter.selectedCode = language.code
         bindConfirmVisibility()
@@ -150,6 +179,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.track(
             AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
         )
+        // From here the next tap on this row can raise the modal, so its native is warmed now
+        // rather than on entry — most users never re-tap, and that request would be wasted.
+        sdk.preload().onLanguageSelected(this)
 
         if (secondAdShown) return
 
@@ -167,6 +199,33 @@ class ObLanguageActivity : BaseOnboardActivity() {
         // two different indexes is two screens, not a double count.
         OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(1, language.code))
         showSecondNativeSlot()
+    }
+
+    /**
+     * Whether this tap re-selects what is already selected — the gesture the confirm modal answers.
+     *
+     * SETTINGS is excluded: there the screen is a plain picker the user opened deliberately, and
+     * a confirmation over an ad would be asking them to pay for a decision they already made.
+     */
+    private fun isReselect(language: ObLanguage): Boolean {
+        if (mode != LanguageScreenMode.FIRST_OPEN) return false
+        if (!userHasSelected || language.code != selectedCode) return false
+        if (!sdk.requireConfig().language.confirmDialogOnReselectEnabled) return false
+        return sdk.flags().showLanguageConfirmDialog
+    }
+
+    /**
+     * Confirm runs the screen's own exit, so the modal can never become a second way to leave the
+     * LFO that drifts from the first.
+     */
+    private fun showConfirmDialog(language: ObLanguage) {
+        confirmDialog?.dismiss()
+        confirmDialog = ObConfirmLanguageDialog(
+            activity = this,
+            language = language,
+            adSlot = confirmAdSlot,
+            onConfirmed = ::onConfirm,
+        ).also { it.show() }
     }
 
     /** First tap: slot 1 goes away, slot 2 takes its place. Same screen, fresh impression. */
@@ -281,18 +340,32 @@ class ObLanguageActivity : BaseOnboardActivity() {
         }
     }
 
+    /**
+     * The first-open screen never leaves the flow on back. With a language already picked it
+     * answers with the Save button instead — the screen's own way out, made obvious at the
+     * moment the user asked for one.
+     */
     override fun handleBack() {
         if (mode == LanguageScreenMode.SETTINGS) {
             finish()
-        } else {
-            finishAffinity()
+            return
         }
+        if (selectedCode == null) return
+        if (!sdk.requireConfig().language.saveButtonOnBackEnabled) return
+        binding.obLanguageSave.isVisible = true
     }
 
     override fun onDestroy() {
+        // Dismissed before super: a modal still attached to a finishing Activity leaks its window,
+        // and dismissing also hands back the native it was holding.
+        confirmDialog?.dismiss()
+        confirmDialog = null
+        // Only now is the kept ad really finished with; the release below destroys it.
+        confirmAdSlot.clear()
         if (mode != LanguageScreenMode.SETTINGS) {
             sdk.provider()?.releaseNative(AdPlacement.Language1)
             sdk.provider()?.releaseNative(AdPlacement.Language2)
+            sdk.provider()?.releaseNative(AdPlacement.LanguageConfirm)
         }
         super.onDestroy()
     }

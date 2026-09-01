@@ -23,6 +23,12 @@ data class SplashConfig(
     val consentTimeoutMs: Long = 15_000,
     val billingTimeoutMs: Long = 5_000,
     val adLoadStrategy: AdLoadStrategy = AdLoadStrategy.ALTERNATE,
+    /**
+     * Hold the splash behind a prompt until the device has validated internet. The flow cannot
+     * run offline — consent, the remote fetch and every ad request need the network — so the
+     * prompt has no way past it other than getting one.
+     */
+    val noInternetPromptEnabled: Boolean = true,
 )
 
 data class LanguageConfig(
@@ -48,6 +54,22 @@ data class LanguageConfig(
      * flag; either side turning it off hides the button.
      */
     val confirmVisibleBeforeSelect: Boolean = true,
+    /**
+     * Back on the first-open language screen never leaves the flow. When a language is already
+     * picked, this also reveals a full-width Save button above the ad — the way out the screen
+     * was not otherwise offering. `false` keeps back inert with no button.
+     */
+    val saveButtonOnBackEnabled: Boolean = true,
+    /**
+     * Tapping the language that is already selected raises a "Confirm Language" modal — a second
+     * ad slot on a gesture that was previously inert, and a genuine confirmation for a user who
+     * re-tapped because they were unsure.
+     *
+     * The modal never blocks the flow: Confirm behaves exactly like the screen's own confirm
+     * button, and Cancel/close/back return to the list with the selection untouched. AND-ed with
+     * the `ob_show_language_confirm_dialog` remote flag.
+     */
+    val confirmDialogOnReselectEnabled: Boolean = true,
     @LayoutRes val layoutRes: Int = 0,
     @LayoutRes val itemLayoutRes: Int = 0,
 )
@@ -64,6 +86,18 @@ data class BehaviorConfig(
     val backNavigatesBack: Boolean = true,
     /** Re-request the native when the user returns to a step. Off: avoids impression farming. */
     val reloadAdOnStepReturn: Boolean = false,
+    /**
+     * A forward swipe on the last step completes it exactly like its CTA. Independent of
+     * [lockPagerSwipe]: the gesture is read off the window, not the pager, so it works while
+     * the pager itself stays locked.
+     */
+    val swipeCompletesLastStep: Boolean = true,
+    /**
+     * Coming back from a step ad's click completes that step exactly like its CTA — the next
+     * step on a middle page, the flow exit on the last one. Only clicks on the pager's own
+     * step ads count; a click on the language or question screen never moves the pager.
+     */
+    val adClickReturnCompletesStep: Boolean = true,
 )
 
 class ObConfigException(val errors: List<String>) :
@@ -200,6 +234,7 @@ class OnboardKitConfigBuilder internal constructor() {
         }
         checkTiers("languageNative", ads.languageNative)
         checkTiers("languageDupNative", ads.languageDupNative)
+        checkTiers("languageConfirmNative", ads.languageConfirmNative)
         checkTiers("contentStepNative", ads.contentStepNative)
         checkTiers("fullScreenStepNative", ads.fullScreenStepNative)
         checkTiers("ob5Native", ads.ob5Native)

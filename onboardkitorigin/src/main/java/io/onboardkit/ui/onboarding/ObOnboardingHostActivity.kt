@@ -3,6 +3,8 @@ package io.onboardkit.ui.onboarding
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.MotionEvent
+import android.view.View
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
@@ -23,8 +25,10 @@ import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import io.onboardkit.ui.pager.AdvanceFlingDetector
 import io.onboardkit.ui.pager.StepPage
 import io.onboardkit.ui.pager.StepPagerAdapter
+import io.onboardkit.ui.pager.pageHasHorizontallyScrollableViewUnder
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +51,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private val _currentIndex = MutableStateFlow(0)
     private val _totalSteps = MutableStateFlow(0)
     private var lastSelectedPosition = -1
+    private var advanceFlingDetector: AdvanceFlingDetector? = null
+    private var gestureBeganOnRestingLastStep = false
+    private var exitResolved = false
 
     override val currentIndex: StateFlow<Int> get() = _currentIndex
     override val totalSteps: StateFlow<Int> get() = _totalSteps
@@ -89,6 +96,14 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             .coerceIn(0, enabledStepIds.size - 1)
         if (resume > 0) binding.obStepPager.setCurrentItem(resume, false)
 
+        if (config.behavior.swipeCompletesLastStep) {
+            advanceFlingDetector = AdvanceFlingDetector(
+                this,
+                rtl = { binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL },
+                onAdvanceFling = ::completeLastStepBySwipe,
+            )
+        }
+
         // Hot-swap: a mid-flow remote change rebuilds only the pages not currently visible
         lifecycleScope.launch {
             sdk.remoteOrNull()?.flags?.drop(1)?.collect { rebuildPendingPages() }
@@ -114,6 +129,53 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     /** Hot-swap entry: rebuilds not-yet-visible pages when a better ad variant is available. */
     internal fun rebuildPendingPages() {
         pagerAdapter.submit(buildPages(), visibleIndex = binding.obStepPager.currentItem)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && ::pagerAdapter.isInitialized) {
+            pagerAdapter.fragmentAt(binding.obStepPager.currentItem)?.onWindowTouched()
+        }
+        val detector = advanceFlingDetector
+        if (detector != null) {
+            // Decided at DOWN, not at fling: a gesture that started while the pager was still
+            // animating into the last step would otherwise complete a page the user never saw.
+            // A horizontally scrollable child under the finger keeps its own gesture.
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                gestureBeganOnRestingLastStep =
+                    binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE &&
+                    binding.obStepPager.currentItem == enabledStepIds.size - 1 &&
+                    !binding.obStepPager.pageHasHorizontallyScrollableViewUnder(ev.x, ev.y)
+            }
+            detector.observe(ev)
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * The swipe counterpart of the last step's CTA. A fling whose own drag left the pager
+     * mid-transition waits for it to settle, because [next] deliberately drops non-idle calls;
+     * [exitResolved] is checked here only to skip dead work — [next] owns setting it.
+     */
+    private fun completeLastStepBySwipe() {
+        if (exitResolved) return
+        if (!gestureBeganOnRestingLastStep) return
+        val last = enabledStepIds.size - 1
+        if (binding.obStepPager.currentItem != last) return
+        if (binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE) {
+            next(StepExit.SWIPE)
+            return
+        }
+        binding.obStepPager.registerOnPageChangeCallback(
+            object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageScrollStateChanged(state: Int) {
+                    if (state != ViewPager2.SCROLL_STATE_IDLE) return
+                    binding.obStepPager.unregisterOnPageChangeCallback(this)
+                    if (exitResolved) return
+                    if (binding.obStepPager.currentItem != last) return
+                    next(StepExit.SWIPE)
+                }
+            },
+        )
     }
 
     private fun dispatchPageChange(position: Int) {
@@ -155,6 +217,13 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         // step with zero dwell and jumped a page.
         if (binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return
         val position = binding.obStepPager.currentItem
+        // The scroll-state guard cannot catch a duplicate on the last step — the exit handoff
+        // never scrolls the pager — so the last completion latches here, whichever of the CTA,
+        // the advance fling, or an ad step's auto-next got in first.
+        if (position >= enabledStepIds.size - 1) {
+            if (exitResolved) return
+            exitResolved = true
+        }
         enabledStepIds.getOrNull(position)?.let { stepId ->
             val dwellMs = pagerAdapter.fragmentAt(position)?.dwellMs() ?: 0L
             // SDK scope, not lifecycleScope: the last step finishes this Activity right away.

@@ -32,6 +32,16 @@ object ObRemoteKeys {
     val PASS_LFO_IF_COMPLETED = RemoteKey.BoolKey("ob_pass_lfo_if_completed", true)
 
     /**
+     * The "Confirm Language" modal, raised when the user taps the language already selected.
+     *
+     * Separate from [ADS_LANGUAGE_CONFIRM_NATIVE]: this one governs the prompt itself, that one
+     * only its ad. Turning the ad off leaves a plain confirmation; turning this off removes the
+     * re-tap behaviour entirely and a second tap goes back to being inert.
+     */
+    val SHOW_LANGUAGE_CONFIRM_DIALOG =
+        RemoteKey.BoolKey("ob_show_language_confirm_dialog", true)
+
+    /**
      * Animated hand nudging the row the device locale points at, while nothing is selected yet.
      * Purely a UX nudge, so it is safe to switch off remotely without touching the flow.
      */
@@ -52,6 +62,8 @@ object ObRemoteKeys {
     val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
     val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
     val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
+    val ADS_LANGUAGE_CONFIRM_NATIVE =
+        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true)
     val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true)
     val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true)
     val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true)
@@ -103,7 +115,9 @@ object ObRemoteKeys {
         ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
         SHOW_LANGUAGE_TAP_HINT, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
+        SHOW_LANGUAGE_CONFIRM_DIALOG,
         REUSE_SPLASH_INTER, ADS_SPLASH_BANNER, ADS_SPLASH_INTER, ADS_LANGUAGE_NATIVE,
+        ADS_LANGUAGE_CONFIRM_NATIVE,
         ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
         ADS_APP_RESUME,
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_BANNER_WAIT_MS,

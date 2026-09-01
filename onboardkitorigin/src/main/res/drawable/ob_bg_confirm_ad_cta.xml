@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma node 3607:20433: the native ad's own INSTALL button, 8dp corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_accent" />
+    <corners android:radius="@dimen/ob_confirm_native_radius" />
+</shape>

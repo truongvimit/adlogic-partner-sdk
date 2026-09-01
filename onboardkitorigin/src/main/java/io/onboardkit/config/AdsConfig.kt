@@ -84,7 +84,7 @@ data class InterstitialAdUnit(override val tiers: List<String>) : AdUnitTiers {
 data class BannerAdUnit(val id: String)
 
 /** Which of the SDK native templates a placement renders with by default. */
-enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN }
+enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
 
 /**
  * Every ad slot the onboarding flow can fill. Leave a field `null` and that slot simply shows
@@ -98,6 +98,7 @@ enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN }
  * | [splashInterstitial] | full-screen ad after the splash, before the flow starts |
  * | [languageNative] | native on the language picker (first open) |
  * | [languageDupNative] | native that replaces it on the first language tap |
+ * | [languageConfirmNative] | native inside the "Confirm Language" modal |
  * | [contentStepNative] | native on each onboarding content page |
  * | [fullScreenStepNative] | the ad-only onboarding page (OB3) |
  * | [ob5Native] | native on the extra onboarding page after OB4 (OB5) |
@@ -120,6 +121,14 @@ data class AdsConfig(
      * first native for this one. Same screen, second impression — give it its own ad unit id.
      */
     val languageDupNative: NativeAdUnit? = null,
+    /**
+     * Native inside the "Confirm Language" modal — the prompt raised when the user taps the
+     * language they already have selected.
+     *
+     * Left `null` the modal still opens, just without an ad; it is a confirmation first and an
+     * ad slot second, so an unfilled placement must never cost the user their way forward.
+     */
+    val languageConfirmNative: NativeAdUnit? = null,
     /** Shared by every content page that has no entry in [stepNatives]. */
     val contentStepNative: NativeAdUnit? = null,
     val fullScreenStepNative: NativeAdUnit? = null,
@@ -164,6 +173,7 @@ data class AdsConfig(
         AdPlacement.SplashInterstitial -> splashInterstitial
         AdPlacement.Language1 -> languageNative
         AdPlacement.Language2 -> languageDupNative ?: languageNative
+        AdPlacement.LanguageConfirm -> languageConfirmNative
         is AdPlacement.StepNative -> stepNatives[placement.stepId] ?: contentStepNative
         is AdPlacement.StepFullScreen -> stepNatives[placement.stepId] ?: fullScreenStepNative
         AdPlacement.Ob5 -> ob5Native ?: stepNatives[StepId.OB5] ?: fullScreenStepNative

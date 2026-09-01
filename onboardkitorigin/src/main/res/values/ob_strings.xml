@@ -15,4 +15,16 @@
 
     <string name="ob_question_title_default">What do you want to explore?</string>
     <string name="ob_question_cta_default">Continue</string>
+    <string name="ob_no_internet_title">No Internet Connection</string>
+    <string name="ob_no_internet_description">It seem you\'re offline. Reconnect to enjoy the full app experience</string>
+    <string name="ob_no_internet_action">Enable Internet</string>
+    <string name="ob_language_save">Save</string>
+    <!-- Confirm Language modal -->
+    <string name="ob_confirm_language_title">Confirm Language</string>
+    <!-- %1$s is the language the user just re-tapped, e.g. "Continue with English?" -->
+    <string name="ob_confirm_language_message">Continue with %1$s?</string>
+    <string name="ob_confirm_language_cancel">Cancel</string>
+    <string name="ob_confirm_language_confirm">Confirm</string>
+    <string name="ob_confirm_language_close">Close</string>
+    <string name="ob_ad_badge_plural" translatable="false">Ads</string>
 </resources>

@@ -572,6 +572,9 @@ public class Admob {
                         }, 1500);
                     }
                     if (mInterstitialSplash != null) {
+                        // The host app keeps its windows immersive; without this the ad activity
+                        // brings the system bars back for the whole impression.
+                        mInterstitialSplash.setImmersiveMode(true);
                         mInterstitialSplash.show(activity);
                         isShowLoadingSplash = false;
                     } else if (adListener != null) {
@@ -705,6 +708,9 @@ public class Admob {
                         }, 1500);
                     }
                     if (mInterstitialSplash != null) {
+                        // The host app keeps its windows immersive; without this the ad activity
+                        // brings the system bars back for the whole impression.
+                        mInterstitialSplash.setImmersiveMode(true);
                         mInterstitialSplash.show(activity);
                         isShowLoadingSplash = false;
                     } else if (adListener != null) {
@@ -971,6 +977,7 @@ public class Admob {
                             dialog.dismiss();
                     }, 1500);
                 }
+                mInterstitialAd.setImmersiveMode(true);
                 mInterstitialAd.show((Activity) context);
             } else {
                 if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
@@ -1532,6 +1539,14 @@ public class Admob {
                         super.onAdImpression();
                         if (callback != null) {
                             callback.onAdImpression();
+                        }
+                    }
+
+                    @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        if (callback != null) {
+                            callback.onAdOpened();
                         }
                     }
 

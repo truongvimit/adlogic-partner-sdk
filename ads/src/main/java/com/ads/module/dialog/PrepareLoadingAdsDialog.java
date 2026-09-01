@@ -19,4 +19,11 @@ public class PrepareLoadingAdsDialog extends Dialog {
         setContentView(R.layout.dialog_prepair_loading_ads);
     }
 
+    // After attach: hiding bars on a not-yet-attached dialog window is silently dropped.
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        HostWindowBars.mirror(this);
+    }
+
 }

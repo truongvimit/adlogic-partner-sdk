@@ -20,6 +20,9 @@ import io.trackkit.TrackkitEvents
  */
 object TrackkitPlugin : AnalyticsPlugin {
 
+    /** The accept branch of `fo_language_confirm_result`; the dismiss reasons come from the UI. */
+    private const val REASON_CONFIRM = "confirm"
+
     override fun execute(event: AnalyticsEvent) {
         when (event) {
             is AnalyticsEvent.FlowStarted ->
@@ -42,6 +45,20 @@ object TrackkitPlugin : AnalyticsPlugin {
 
             is AnalyticsEvent.LanguageFlowCompleted ->
                 Tracker.track(TrackkitEvents.Fo.LanguageFlowComplete(event.code))
+
+            is AnalyticsEvent.LanguageConfirmShown ->
+                Tracker.track(TrackkitEvents.Fo.LanguageConfirmView(event.code, event.hasAd))
+
+            // Accept and dismiss are one canonical event sliced by reason. The accept path also
+            // runs the screen's own confirm, so `fo_language_complete` still arrives from there —
+            // re-reporting completion here would count that exit twice.
+            is AnalyticsEvent.LanguageConfirmAccepted -> Tracker.track(
+                TrackkitEvents.Fo.LanguageConfirmResult(event.code, REASON_CONFIRM),
+            )
+
+            is AnalyticsEvent.LanguageConfirmDismissed -> Tracker.track(
+                TrackkitEvents.Fo.LanguageConfirmResult(event.code, event.reason),
+            )
 
             is AnalyticsEvent.StepViewed -> Tracker.track(
                 TrackkitEvents.Fo.StepView(event.stepId.value, event.index, event.variant),

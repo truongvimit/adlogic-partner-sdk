@@ -84,6 +84,36 @@ class RemoteFlagsTest {
     }
 
     @Test
+    fun `the confirm modal and its ad switch off independently`() {
+        val dialogOff = RemoteFlags.from(
+            reader(mapOf(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_DIALOG.key to "false")),
+        )
+        assertFalse(dialogOff.showLanguageConfirmDialog)
+        // Removing the prompt must not read as removing its ad slot, or a partner who only
+        // wanted the ad gone loses the confirmation as well.
+        assertTrue(dialogOff.adsLanguageConfirmNative)
+
+        val adOff = RemoteFlags.from(
+            reader(mapOf(ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.key to "false")),
+        )
+        assertFalse(adOff.adsLanguageConfirmNative)
+        assertTrue(adOff.showLanguageConfirmDialog)
+    }
+
+    @Test
+    fun `every declared key round-trips through the flags snapshot`() {
+        // ObRemoteKeys.ALL is what RemoteConfigSyncer fetches; a key declared but not read by
+        // RemoteFlags.from is a console switch that silently does nothing.
+        val allTrue = ObRemoteKeys.ALL.filterIsInstance<RemoteKey.BoolKey>()
+            .associate { it.key to (!it.default).toString() }
+        val flipped = RemoteFlags.from(reader(allTrue))
+        assertFalse(flipped.showLanguageConfirmDialog == ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_DIALOG.default)
+        assertFalse(
+            flipped.adsLanguageConfirmNative == ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.default,
+        )
+    }
+
+    @Test
     fun `step gating helper honors flags`() {
         val flags = RemoteFlags(enableStepOb3 = false)
         assertFalse(flags.isStepEnabled(io.onboardkit.core.StepId.OB3))

@@ -34,6 +34,7 @@ internal fun Activity.showNativeAd(
     onBound: () -> Unit = {},
     onShown: () -> Unit = {},
     onUnavailable: (AdSkipReason) -> Unit = {},
+    onAdEngaged: () -> Unit = {},
 ) {
     val provider = OnboardingSdk.provider()
     if (provider == null || unit == null) {
@@ -46,11 +47,17 @@ internal fun Activity.showNativeAd(
     }
 
     var skeleton: ShimmerFrameLayout? = null
+    // Captured: inside the object below, the name resolves to the override, not the parameter.
+    val notifyAdEngaged = onAdEngaged
     val listener = placement.tracked(
         object : AdEventListener {
             override fun onLoaded() = onMainThread {
                 if (bindBuffered(provider, placement, container, skeleton)) onBound()
             }
+
+            override fun onClicked() = onMainThread { notifyAdEngaged() }
+
+            override fun onAdOpened() = onMainThread { notifyAdEngaged() }
 
             override fun onFailedToLoad() = onMainThread {
                 skeleton?.stopShimmer()

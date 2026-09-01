@@ -117,12 +117,26 @@ class NativeAdHelper(
         }
     }
 
-    // Impressions of preload-consumed ads surface through the executor, not the waterfall
+    // Preload-consumed ads report through the executor, not the waterfall, so every moment a
+    // listener can observe has to be forwarded here too — impressions alone left a bound ad
+    // looking as though it were never clicked.
     private val preloadObserver = object : AdCallback() {
         override fun onAdImpression() {
             if (isActiveState() && nativeAd != null) {
                 onAdImpressionInternal()
                 listeners.forEach { it.onAdImpression() }
+            }
+        }
+
+        override fun onAdClicked() {
+            if (isActiveState() && nativeAd != null) {
+                listeners.forEach { it.onAdClicked() }
+            }
+        }
+
+        override fun onAdOpened() {
+            if (isActiveState() && nativeAd != null) {
+                listeners.forEach { it.onAdOpened() }
             }
         }
     }

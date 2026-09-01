@@ -346,6 +346,34 @@
     ],
     "enable_ua_check": false
   },
+  "native_popup_lang_high": {
+    "id": "ca-app-pub-7208941695689653/1611434606",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 36,
+    "positionCTA": null,
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_popup_lang": {
+    "id": "ca-app-pub-7208941695689653/1611434606",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 36,
+    "positionCTA": null,
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
   "native_ob1_high": {
     "id": "ca-app-pub-7208941695689653/5251296713",
     "isEnable": true,

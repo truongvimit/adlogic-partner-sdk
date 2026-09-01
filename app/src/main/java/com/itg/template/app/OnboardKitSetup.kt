@@ -13,6 +13,7 @@ import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.SplashConfig
+import io.onboardkit.config.SystemBarConfig
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
 import timber.log.Timber
@@ -58,6 +59,7 @@ object OnboardKitSetup {
                 tapHintEnabled = true,
                 confirmVisibleBeforeSelect = false,
             )
+            system = SystemBarConfig(showNavigationBar = false)
 
             // Same shape as the removed handwritten flow: 4 content pages,
             // full-screen native between pages 3 and 4 (remote-gated via ob_enable_step_ob3)
@@ -99,6 +101,8 @@ object OnboardKitSetup {
                 splashInterstitialOldUser = ads.interstitial("inter_splash_old_user"),
                 languageNative = ads.native("native_lang"),
                 languageDupNative = ads.native("native_lang_alt"),
+                // The "Confirm Language" modal, raised by re-tapping the selected language.
+                languageConfirmNative = ads.native("native_popup_lang"),
                 stepNatives = listOfNotNull(
                     ads.native("native_ob1")?.let { Page.CONTENT_1 to it },
                     ads.native("native_ob2")?.let { Page.CONTENT_2 to it },

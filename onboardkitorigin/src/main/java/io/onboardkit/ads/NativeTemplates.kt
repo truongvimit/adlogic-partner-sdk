@@ -14,6 +14,7 @@ object NativeTemplates {
         NativeTemplate.CTA_TOP -> R.layout.ob_layout_native_cta_top
         NativeTemplate.COMPACT -> R.layout.ob_layout_native_compact
         NativeTemplate.FULL_SCREEN -> R.layout.ob_layout_native_fullscreen
+        NativeTemplate.DIALOG -> R.layout.ob_layout_native_dialog
     }
 
     /**
@@ -40,6 +41,10 @@ object NativeTemplates {
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->
                 ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+
+            // Fixed, not configurable: the modal is 328dp wide and sized to a horizontal card.
+            // Any other template overflows it, so this is not a slot a partner may re-skin.
+            AdPlacement.LanguageConfirm -> NativeTemplate.DIALOG
 
             is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
 

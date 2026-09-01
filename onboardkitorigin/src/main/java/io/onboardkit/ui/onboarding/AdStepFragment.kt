@@ -5,7 +5,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
@@ -86,6 +88,7 @@ class AdStepFragment : LazyStepFragment() {
             onBound = { adBound = true },
             onShown = { onAdImpression() },
             onUnavailable = { onAdFailed() },
+            onAdEngaged = { onStepAdEngaged() },
         )
     }
 
@@ -135,13 +138,21 @@ class AdStepFragment : LazyStepFragment() {
         }
     }
 
+    /**
+     * The countdown runs only while the page is in front of the user. A plain `delay` kept
+     * counting through an ad click, advancing the pager while the user was still in the
+     * destination — so the page they clicked from was gone before they got back, and it
+     * navigated the host from the background.
+     */
     private fun scheduleAutoNext() {
         val definition = definition() ?: return
         if (!definition.autoNextEnabled) return
         autoNextJob?.cancel()
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(definition.autoNextDelayMs)
-            stepHost?.next(StepExit.AUTO_NEXT)
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                delay(definition.autoNextDelayMs)
+                stepHost?.next(StepExit.AUTO_NEXT)
+            }
         }
     }
 

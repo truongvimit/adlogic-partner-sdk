@@ -34,6 +34,19 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.NATIVE
     }
 
+    /**
+     * Native inside the "Confirm Language" modal, raised when the user taps the language they
+     * have already selected.
+     *
+     * Its own placement rather than a third language slot: the modal can be raised more than once
+     * per screen, so sharing [Language2]'s buffer would have the second raise silently re-bind an
+     * ad that was already counted.
+     */
+    data object LanguageConfirm : AdPlacement {
+        override val key: String = "language_confirm"
+        override val format: AdFormat = AdFormat.NATIVE
+    }
+
     data class StepNative(val stepId: StepId) : AdPlacement {
         override val key: String = "step_${stepId.value}"
         override val format: AdFormat = AdFormat.NATIVE

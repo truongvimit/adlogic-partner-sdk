@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Figma "Modal" (node 3584:24369) — the LFO's Confirm Language prompt.
+
+  Root is a FrameLayout because the close glyph is absolutely placed against the card (x=296,
+  y=8), above the 32dp top padding the rest of the content sits inside.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/ob_bg_confirm_dialog"
+    android:elevation="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/ob_confirm_dialog_padding_h"
+        android:paddingTop="@dimen/ob_confirm_dialog_padding_top"
+        android:paddingEnd="@dimen/ob_confirm_dialog_padding_h"
+        android:paddingBottom="@dimen/ob_confirm_dialog_padding_bottom">
+
+        <TextView
+            android:id="@+id/ob_confirm_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/ob_poppins_semibold"
+            android:gravity="center"
+            android:text="@string/ob_confirm_language_title"
+            android:textColor="@color/ob_confirm_title"
+            android:textSize="@dimen/ob_text_confirm_title" />
+
+        <TextView
+            android:id="@+id/ob_confirm_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ob_confirm_text_gap"
+            android:fontFamily="@font/ob_poppins_regular"
+            android:gravity="center"
+            android:textColor="@color/ob_confirm_subtitle"
+            android:textSize="@dimen/ob_text_confirm_subtitle"
+            tools:text="Continue with English?" />
+
+        <!-- Collapses to nothing when the placement is off or does not fill, which leaves the
+             modal as a plain two-button confirm rather than a card with a hole in it. -->
+        <FrameLayout
+            android:id="@+id/ob_confirm_ad_block"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ob_confirm_block_gap"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <FrameLayout
+                android:id="@+id/ob_confirm_native_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ob_confirm_block_gap"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/ob_confirm_cancel"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/ob_confirm_button_height"
+                android:layout_weight="1"
+                android:background="@drawable/ob_bg_confirm_outlined"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:text="@string/ob_confirm_language_cancel"
+                android:textColor="@color/ob_accent"
+                android:textSize="@dimen/ob_text_confirm_button" />
+
+            <TextView
+                android:id="@+id/ob_confirm_accept"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/ob_confirm_button_height"
+                android:layout_marginStart="@dimen/ob_confirm_button_gap"
+                android:layout_weight="1"
+                android:background="@drawable/ob_bg_confirm_filled"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:text="@string/ob_confirm_language_confirm"
+                android:textColor="@color/ob_white"
+                android:textSize="@dimen/ob_text_confirm_button" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 32dp target with 8dp padding puts the 16dp glyph exactly at Figma's x=296 / y=8. -->
+    <ImageView
+        android:id="@+id/ob_confirm_close"
+        android:layout_width="@dimen/ob_confirm_close_touch"
+        android:layout_height="@dimen/ob_confirm_close_touch"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="0dp"
+        android:layout_marginEnd="@dimen/ob_confirm_close_inset"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/ob_confirm_language_close"
+        android:padding="@dimen/ob_confirm_close_inset"
+        android:src="@drawable/ob_ic_close" />
+</FrameLayout>

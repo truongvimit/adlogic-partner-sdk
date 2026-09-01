@@ -61,6 +61,19 @@ class PreloadChain internal constructor(
         firstEnabledStep()?.let { preloadForStep(activity, it) }
     }
 
+    /**
+     * A language is selected, so the next tap on that same row can raise the confirm modal.
+     *
+     * Requested on selection rather than on LFO entry: before the first tap the modal is
+     * unreachable, and warming it then would spend a request on most users who never re-tap.
+     */
+    fun onLanguageSelected(activity: Activity) {
+        val cfg = config() ?: return
+        if (!cfg.language.confirmDialogOnReselectEnabled) return
+        if (!flags().showLanguageConfirmDialog) return
+        preloadNative(activity, AdPlacement.LanguageConfirm)
+    }
+
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {
         val next = enabledSteps.getOrNull(index + 1)
         if (next != null) preloadForStep(activity, next)

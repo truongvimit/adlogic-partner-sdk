@@ -50,6 +50,27 @@ sealed class AnalyticsEvent(val name: String, val params: Map<String, Any> = emp
     class LanguageFlowCompleted(val code: String) :
         AnalyticsEvent("ob_complete_lfo_flow", mapOf("language" to code))
 
+    /**
+     * The "Confirm Language" modal opened, i.e. the user re-tapped the language already selected.
+     *
+     * [hasAd] rather than a separate ad event: the modal is raised whether or not the placement
+     * filled, so a rate that does not carry it would read an empty slot as a missing prompt.
+     */
+    class LanguageConfirmShown(val code: String, val hasAd: Boolean) :
+        AnalyticsEvent("ob_lfo_confirm_view", mapOf("language" to code, "has_ad" to hasAd))
+
+    /** Confirm was pressed; the flow leaves the language screen exactly as the CTA would. */
+    class LanguageConfirmAccepted(val code: String) :
+        AnalyticsEvent("ob_lfo_confirm_accept", mapOf("language" to code))
+
+    /**
+     * The modal closed without committing. [reason] separates the three ways out — `cancel`,
+     * `close`, `back` — because a user who reaches for the X is not the same as one who
+     * deliberately pressed Cancel, and only one of those is a UX problem worth fixing.
+     */
+    class LanguageConfirmDismissed(val code: String, val reason: String) :
+        AnalyticsEvent("ob_lfo_confirm_dismiss", mapOf("language" to code, "reason" to reason))
+
     /** [variant] is the page's template bucket — the same key the pager hot-swap compares. */
     class StepViewed(val stepId: StepId, val index: Int, val variant: String? = null) :
         AnalyticsEvent(
@@ -156,6 +177,12 @@ internal object StepExit {
 
     /** OB5's hard timeout closed the screen with no interaction at all. */
     const val AUTO_DISMISS = "auto_dismiss"
+
+    /** A forward swipe completed the last step in place of its CTA. */
+    const val SWIPE = "swipe"
+
+    /** The user came back from clicking the step's ad, which completed the step. */
+    const val AD_CLICK_RETURN = "ad_click_return"
 }
 
 /** Drops null entries so an absent variant never lands in a bundle as the string "null". */

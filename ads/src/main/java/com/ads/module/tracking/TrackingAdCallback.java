@@ -247,6 +247,11 @@ public class TrackingAdCallback extends AdCallback {
         if (delegate != null) delegate.onAdClosed();
     }
 
+    @Override
+    public void onAdOpened() {
+        if (delegate != null) delegate.onAdOpened();
+    }
+
     // -----------------------------------------------------------------------
     // Flow control — no lifecycle meaning, delegate only
     // -----------------------------------------------------------------------

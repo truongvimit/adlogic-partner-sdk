@@ -40,4 +40,43 @@
     <dimen name="ob_text_language">24sp</dimen>
     <dimen name="ob_text_header">18sp</dimen>
     <dimen name="ob_text_ad_badge">8sp</dimen>
+    <!-- Confirm Language modal, Figma node 3584:24369. Card is 328dp wide: the close glyph sits
+         at x=296 with a 16dp glyph and a 16dp inset. -->
+    <dimen name="ob_confirm_dialog_width">328dp</dimen>
+    <dimen name="ob_confirm_dialog_radius">16dp</dimen>
+    <dimen name="ob_confirm_dialog_padding_h">16dp</dimen>
+    <dimen name="ob_confirm_dialog_padding_top">32dp</dimen>
+    <dimen name="ob_confirm_dialog_padding_bottom">20dp</dimen>
+    <dimen name="ob_confirm_block_gap">16dp</dimen>
+    <dimen name="ob_confirm_text_gap">4dp</dimen>
+    <dimen name="ob_confirm_button_gap">8dp</dimen>
+    <dimen name="ob_confirm_button_height">48dp</dimen>
+    <dimen name="ob_confirm_button_radius">12dp</dimen>
+    <dimen name="ob_confirm_close_size">16dp</dimen>
+    <dimen name="ob_confirm_close_inset">8dp</dimen>
+    <dimen name="ob_confirm_close_touch">32dp</dimen>
+
+    <!-- Native panel inside the modal (Figma node 3607:20394). -->
+    <dimen name="ob_confirm_native_radius">8dp</dimen>
+    <dimen name="ob_confirm_native_padding">8dp</dimen>
+    <dimen name="ob_confirm_native_gap">8dp</dimen>
+    <dimen name="ob_confirm_media_height">112dp</dimen>
+    <dimen name="ob_confirm_media_radius">4dp</dimen>
+    <dimen name="ob_confirm_ad_column_gap">12dp</dimen>
+    <dimen name="ob_confirm_ad_text_gap">8dp</dimen>
+    <dimen name="ob_confirm_ad_badge_width">30dp</dimen>
+    <dimen name="ob_confirm_ad_badge_height">16dp</dimen>
+    <dimen name="ob_confirm_ad_star_size">12dp</dimen>
+    <dimen name="ob_confirm_ad_cta_icon">20dp</dimen>
+    <dimen name="ob_confirm_ad_cta_padding_h">12dp</dimen>
+    <!-- Clear space kept for GMA's AdChoices badge, which lands top-right by default. -->
+    <dimen name="ob_confirm_adchoices_clearance">20dp</dimen>
+    <dimen name="ob_confirm_ad_cta_padding_v">8dp</dimen>
+
+    <dimen name="ob_text_confirm_title">16sp</dimen>
+    <dimen name="ob_text_confirm_subtitle">14sp</dimen>
+    <dimen name="ob_text_confirm_button">14sp</dimen>
+    <dimen name="ob_text_confirm_ad_headline">14sp</dimen>
+    <dimen name="ob_text_confirm_ad_body">10sp</dimen>
+    <dimen name="ob_text_confirm_ad_meta">10sp</dimen>
 </resources>

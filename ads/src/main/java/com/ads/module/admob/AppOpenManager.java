@@ -643,6 +643,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     }
                                 }
                             });
+                    splashAd.setImmersiveMode(true);
                     splashAd.show(currentActivity);
                 }
             }, 800);
@@ -736,6 +737,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                         }
                     }
                 });
+                appResumeAd.setImmersiveMode(true);
                 appResumeAd.show(currentActivity);
             } else {
                 dismissDialogLoading();
@@ -809,6 +811,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenMedium, timeOutOpen);
 
                                     if (splashAdMedium != null) {
+                                        splashAdMedium.setImmersiveMode(true);
                                         splashAdMedium.show(activity);
                                     }
                                 }
@@ -844,6 +847,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                         });
 
                         if (!isAppOpenShowed) {
+                            splashAdHigh.setImmersiveMode(true);
                             splashAdHigh.show(currentActivity);
                         }
 
@@ -858,6 +862,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                 AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenMedium, timeOutOpen);
 
                                 if (splashAdMedium != null) {
+                                    splashAdMedium.setImmersiveMode(true);
                                     splashAdMedium.show(activity);
                                 }
                             }
@@ -887,6 +892,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenMedium, timeOutOpen);
 
                             if (splashAdMedium != null) {
+                                splashAdMedium.setImmersiveMode(true);
                                 splashAdMedium.show(activity);
                             }
                         }
@@ -922,6 +928,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenAll, timeOutOpen);
 
                                     if (splashAdAll != null && !isAppOpenShowed) {
+                                        splashAdAll.setImmersiveMode(true);
                                         splashAdAll.show(activity);
                                     }
                                 }
@@ -985,6 +992,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenAll, timeOutOpen);
 
                             if (splashAdAll != null) {
+                                splashAdAll.setImmersiveMode(true);
                                 splashAdAll.show(activity);
                             }
                         }
@@ -1390,6 +1398,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 if (statusAll == Type_Load_Success && !isAppOpenShowed && splashAdAll != null) {
                     Log.d("AppOpenSplash", "onAdFailedToLoad: High");
                     AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenAll, timeOutOpen);
+                    splashAdAll.setImmersiveMode(true);
                     splashAdAll.show(activity);
                 }
 
@@ -1423,6 +1432,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 statusHigh = Type_Load_Success;
 
                 if (!isAppOpenShowed) {
+                    splashAdHigh.setImmersiveMode(true);
                     splashAdHigh.show(activity);
                     Log.d("AppOpenSplash", "show High");
                 }
@@ -1451,6 +1461,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                         super.onAdFailedToShowFullScreenContent(adError);
                         if (statusAll == Type_Load_Success && splashAdAll != null && statusHigh != Type_Load_Success) {
                             AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenAll, timeOutOpen);
+                            splashAdAll.setImmersiveMode(true);
                             splashAdAll.show(activity);
                             Log.d("AppOpenSplash", "onAdFailedToShowFullScreenContent show All");
                         }
@@ -1511,6 +1522,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
                         if (!isAppOpenShowed && (statusHigh == Type_Load_Fail || statusHigh == Type_Show_Fail)) {
                             AppOpenManager.getInstance().setSplashActivity(splashActivity, idOpenAll, timeOutOpen);
+                            splashAdAll.setImmersiveMode(true);
                             splashAdAll.show(activity);
                             Log.d("AppOpenSplash", "show All");
                         }
@@ -1630,6 +1642,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             adCallback.onAdClicked();
                         }
                     });
+            splashAd.setImmersiveMode(true);
             splashAd.show(currentActivity);
         }, 800);
     }

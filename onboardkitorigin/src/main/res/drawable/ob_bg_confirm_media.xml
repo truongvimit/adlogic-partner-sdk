@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "image 20" (node 3607:20395): the media well, 4dp corners. Paired with
+     clipToOutline so the MediaView's own child is rounded with it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_placeholder_bg" />
+    <corners android:radius="@dimen/ob_confirm_media_radius" />
+</shape>

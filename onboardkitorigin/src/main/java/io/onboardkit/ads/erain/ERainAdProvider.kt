@@ -303,6 +303,11 @@ class ERainAdProvider(
                 override fun onAdClicked() {
                     notifyListener(key) { it.onClicked() }
                 }
+
+                override fun onAdOpened() {
+                    notifyListener(key) { it.onAdOpened() }
+                }
+
             }.also { preload.registerAdCallback(key, it) }
         }
     }

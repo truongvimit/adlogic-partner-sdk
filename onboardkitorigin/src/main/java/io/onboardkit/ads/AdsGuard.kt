@@ -119,6 +119,7 @@ internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = w
     AdPlacement.SplashBanner -> adsSplashBanner
     AdPlacement.SplashInterstitial -> adsSplashInter
     AdPlacement.Language1, AdPlacement.Language2 -> adsLanguageNative
+    AdPlacement.LanguageConfirm -> adsLanguageConfirmNative
     is AdPlacement.StepNative -> adsContentNative
     is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> adsFullScreenNative
     AdPlacement.QuestionNative -> adsQuestionNative

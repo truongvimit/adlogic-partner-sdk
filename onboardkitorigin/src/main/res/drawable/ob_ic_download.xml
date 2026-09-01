@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "ic:sharp-download" (node 3607:20435), the glyph trailing the native CTA label. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20"
+    android:tint="@color/ob_white">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15.8333,7.5H12.5V2.5H7.5V7.5H4.1667L10,13.3333L15.8333,7.5ZM4.1667,15V16.6667H15.8333V15H4.1667Z" />
+</vector>

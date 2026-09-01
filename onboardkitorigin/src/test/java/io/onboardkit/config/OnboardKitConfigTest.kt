@@ -1,7 +1,10 @@
 package io.onboardkit.config
 
+import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.core.StepId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,6 +37,39 @@ class OnboardKitConfigTest {
         }
         val error = result.exceptionOrNull() as? ObConfigException
         assertTrue(error != null && error.errors.any { it.contains("languageNative") })
+    }
+
+    @Test
+    fun `blank confirm-modal ad unit is validated like every other slot`() {
+        val result = onboardKitConfig {
+            defaultSteps()
+            ads = AdsConfig(languageConfirmNative = NativeAdUnit("  "))
+        }
+        val error = result.exceptionOrNull() as? ObConfigException
+        assertTrue(error != null && error.errors.any { it.contains("languageConfirmNative") })
+    }
+
+    @Test
+    fun `the confirm modal resolves its own unit and falls back to nothing`() {
+        val withUnit = AdsConfig(
+            languageNative = NativeAdUnit("lang"),
+            languageConfirmNative = NativeAdUnit("confirm"),
+        )
+        assertEquals(
+            NativeAdUnit("confirm"),
+            withUnit.nativeUnitFor(AdPlacement.LanguageConfirm),
+        )
+        // Unset stays null: Language2 falls back to languageNative on purpose, this one must not.
+        val withoutUnit = AdsConfig(languageNative = NativeAdUnit("lang"))
+        assertNull(withoutUnit.nativeUnitFor(AdPlacement.LanguageConfirm))
+    }
+
+    @Test
+    fun `the confirm modal is fixed to the dialog template`() {
+        assertEquals(
+            NativeTemplate.DIALOG,
+            NativeTemplates.templateForPlacement(AdPlacement.LanguageConfirm),
+        )
     }
 
     @Test
@@ -149,6 +185,68 @@ class OnboardKitConfigTest {
         assertTrue(
             "ObQuestionActivity must gate the CTA on QuestionConfig.minSelection",
             source.contains("minSelection"),
+        )
+    }
+
+    @Test
+    fun `swipeCompletesLastStep is on out of the box and read by the pager host`() {
+        // Ships enabled — a partner opts out, never in. The source check keeps the knob wired
+        // the same way the minSelection test above keeps its knob wired.
+        assertTrue(BehaviorConfig().swipeCompletesLastStep)
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/onboarding/ObOnboardingHostActivity.kt",
+        ).readText()
+        assertTrue(
+            "ObOnboardingHostActivity must gate the advance-fling detector on " +
+                "BehaviorConfig.swipeCompletesLastStep",
+            source.contains("swipeCompletesLastStep"),
+        )
+    }
+
+    @Test
+    fun `adClickReturnCompletesStep is on out of the box and read by the step pages`() {
+        assertTrue(BehaviorConfig().adClickReturnCompletesStep)
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/pager/LazyStepFragment.kt",
+        ).readText()
+        assertTrue(
+            "LazyStepFragment must gate the ad-click return on " +
+                "BehaviorConfig.adClickReturnCompletesStep",
+            source.contains("adClickReturnCompletesStep"),
+        )
+    }
+
+    @Test
+    fun `the language save-on-back button ships on and is read by the screen`() {
+        assertTrue(LanguageConfig().saveButtonOnBackEnabled)
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/language/ObLanguageActivity.kt",
+        ).readText()
+        assertTrue(
+            "ObLanguageActivity must gate the save button on " +
+                "LanguageConfig.saveButtonOnBackEnabled",
+            source.contains("saveButtonOnBackEnabled"),
+        )
+        assertTrue(
+            "back on the first-open language screen must never leave the flow",
+            !source.contains("finishAffinity()"),
+        )
+    }
+
+    @Test
+    fun `the splash offline gate ships on and is read by the splash`() {
+        assertTrue(SplashConfig().noInternetPromptEnabled)
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/splash/ObSplashActivity.kt",
+        ).readText()
+        assertTrue(
+            "ObSplashActivity must gate on SplashConfig.noInternetPromptEnabled",
+            source.contains("noInternetPromptEnabled"),
+        )
+        assertTrue(
+            "the gate must release on window focus, not on resume: on Android 13+ the splash " +
+                "stays RESUMED under the system connectivity dialog",
+            source.contains("windowFocused"),
         )
     }
 

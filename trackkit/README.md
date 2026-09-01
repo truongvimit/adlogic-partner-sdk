@@ -6,15 +6,15 @@ Everything the app, `:ads`, `:onboardkitorigin`, `:paykit` and `:billingkit` emi
 `io.trackkit.Tracker`, so consent gating, default params, GA4 name validation, dedupe and cumulative
 ad revenue are implemented once. The core is vendor-free: vendors arrive as separate sink modules.
 
-Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · Tiếng Việt: [README.vi.md](README.vi.md) · हिन्दी: [README.hi.md](README.hi.md)
+Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · Tiếng Việt: [README.vi.md](README.vi.md) ·
+हिन्दी: [README.hi.md](README.hi.md)
 
 ## Requirements
 
 | | |
 |---|---|
-| minSdk / compileSdk | 24 / 36 |
-| JDK | 17 |
-| Adds to your build | no vendor dependency — one `compileOnly` annotation artifact, no permission, no R8 rule; `consumer-rules.pro` ships in the AAR |
+| minSdk / compileSdk / JDK | 24 / 36 / 17 |
+| Adds to your build | no vendor dependency, no permission, no R8 rule; `consumer-rules.pro` ships in the AAR |
 
 ## Installation
 
@@ -30,9 +30,9 @@ dependencies {
 
 `:ads`, `:onboardkitorigin`, `:paykit`, `:billingkit` and `:suite-firebase` each declare
 `api project(':trackkit')`, so `Tracker` is already on the classpath with any of them; declare it
-yourself only for a standalone `TrackSink`. Keep every module on the same tag.
+yourself only for a standalone `TrackSink`.
 
-## Quick start
+## Integration
 
 Call `Tracker.install` on the first line of `Application.onCreate()`, then register your sinks.
 
@@ -42,43 +42,24 @@ override fun onCreate() {
     Tracker.install(this, TrackerConfig(
         appVersionCode = BuildConfig.VERSION_CODE.toLong(),
         strictValidation = BuildConfig.DEBUG,
-        logLevel = if (BuildConfig.DEBUG) 2 else 1,
     ))
     Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
     if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
 }
 ```
 
+That is the whole integration. You do not wrap ad callbacks and you do not map ad units to
+placements: `:ads` creates the ad objects, so `:ads` reports the ad lifecycle and paid impressions.
+
 Events emitted before `install()` are buffered — 128 items, then the oldest are dropped with a
 warning. A second `install()` is ignored. With no sink, every event is validated and discarded.
 
-That is the whole integration. You do not wrap ad callbacks and you do not map ad units to
-placements: `:ads` creates the ad objects, so `:ads` reports the ad lifecycle and paid impressions.
+`TrackerConfig` carries the rest — reporting currency, consent policy, log level, the revenue
+accumulator, default params — each documented in KDoc. The defaults work; set only what differs.
 
 Also on `Tracker`: `track(name, params)`, `track(TrackEvent)`, `screen(name, screenClass)`,
 `adRevenue(impression)`, `setDefault`, `setDefaults`, `setUserProperty`, `setUserId`, `removeSink`,
 `flushPending()`, `sinkIds()`, and the `isInstalled` / `currentConsent` properties.
-
-## Configuration
-
-`TrackerConfig` — every field is optional.
-
-| Field | Type | Default | What it does |
-|---|---|---|---|
-| `appVersionCode` | `Long` | `0L` | attached to every event as `app_vc` |
-| `sdkVersion` | `String` | `"1.0.0"` | attached as `sdk_ver` |
-| `reportingCurrency` | `String` | `"USD"` | currency the cumulative-revenue events sum in; impressions in another currency still reach sinks but are excluded from the total |
-| `consentPolicy` | `ConsentPolicy` | `SEND_ALWAYS` | what happens while consent is `UNKNOWN` |
-| `strictValidation` | `Boolean` | `false` | throw on an invalid name or param key instead of sanitising it |
-| `logLevel` | `Int` | `1` | `0` off, `1` warnings, `2` verbose |
-| `enableRevenueAccumulator` | `Boolean` | `true` | emit the four cumulative `ad_revenue_*` events |
-| `defaultParams` | `Map<String, Any?>` | `emptyMap()` | merged into every event, same as `Tracker.setDefaults` |
-
-| `ConsentPolicy` | Behaviour while consent is `UNKNOWN` |
-|---|---|
-| `SEND_ALWAYS` | dispatch immediately; consent only toggles vendor flags afterwards |
-| `QUEUE_UNTIL_RESOLVED` | buffer, then flush once consent resolves either way |
-| `DROP_UNTIL_GRANTED` | drop; nothing is replayed when consent later arrives |
 
 ## Consent
 
@@ -87,25 +68,22 @@ Do not call `Tracker.setConsent` when `:ads` is on the classpath.
 passes `Tracker.setConsent(analytics = true, ads = personalized)`.
 
 The analytics axis is always `true`: UMP asks about ads only, so a refusal must not also erase
-`first_open`, retention and the funnel. Call it yourself only in an app with no `:ads`, from one place.
+`first_open`, retention and the funnel. Call it yourself only in an app with no `:ads`, from one
+place.
 
-## Event catalog
+## Events
 
-`io.trackkit.TrackkitEvents` holds 37 names; `TrackkitEvents.all()` returns the full set. Every event
-also carries `app_vc`, `sdk_ver`, `session_no`, `install_day`, and `consent_ads` once UMP resolves.
+`io.trackkit.TrackkitEvents` holds every name the suite emits, grouped by domain — ads, revenue,
+first-open funnel, IAP, consent — and `TrackkitEvents.all()` returns the full set at runtime. Open
+it in the IDE rather than copying a list that ages; each event class documents what it means.
 
-| Group | Events | Event-specific params |
-|---|---|---|
-| Ads | `ad_request`, `ad_loaded`, `ad_load_failed`, `ad_show`, `ad_show_failed`, `ad_click`, `ad_closed`, `ad_reward_earned`, `ad_skipped` | `placement`, `ad_format`, `ad_unit_id`, plus `latency_ms`, `error_code` or `reason` |
-| Ads | `ad_impression` — a paid impression, via `Tracker.adRevenue` | `placement`, `ad_format`, `ad_unit_id`, `ad_platform`, `ad_network`, `value`, `currency`, `precision` |
-| Revenue | `ad_revenue_total`, `ad_revenue_micro_flush` (each 0.01 of the reporting currency), `ad_revenue_d3`, `ad_revenue_d7` | `value`, `currency` |
-| First open | `fo_flow_start`, `fo_splash_view`, `fo_splash_complete`, `fo_language_view`, `fo_language_select`, `fo_language_complete`, `fo_language_flow_complete`, `fo_step_view`, `fo_step_complete`, `fo_question_view`, `fo_question_answer`, `fo_question_complete`, `fo_flow_complete` | `step`, `index`, `screen_index`, `language`, `variant`, `dwell_ms`, `exit_reason`, `source`, `count`, `steps_shown`, `option_id`, `selected` |
-| IAP | `iap_paywall_view`, `iap_paywall_result`, `iap_click`, `iap_success`, `iap_fail`, `iap_dismiss` | `source`, `status`, `product_id`, `value`, `currency`, `error_code`, `reason` |
-| Consent | `consent_request`, `consent_shown`, `consent_result` | `status`, `error_code`, `source` |
-| Other | `app_install_referrer` | `referrer_source`, `referrer_medium`, `referrer_campaign`, `install_version`, `is_instant` |
+Every event also carries `app_vc`, `sdk_ver`, `session_no`, `install_day`, and `consent_ads` once
+UMP resolves.
 
-Screen views are not events — `Tracker.screen()` lets each sink emit its own. Register the params
-above as GA4 custom dimensions, or they stay in DebugView and BigQuery only.
+**One setup step on your side:** GA4 stores custom parameters but does not report on them until they
+are registered as custom dimensions. Register the params your dashboards need — the constants are on
+`TrackkitEvents` as `PARAM_*` — or they stay in DebugView and BigQuery only. Screen views are not
+events: `Tracker.screen()` lets each sink emit its own.
 
 ## Custom events
 
@@ -122,7 +100,7 @@ Adjust token depends on it, or its param spelling has to hold across releases.
 | Params per event | 25 | extra keys dropped |
 | String param value / user property value | 100 / 36 characters | truncated |
 | Reserved prefixes | `firebase_`, `google_`, `ga_` | rejected |
-| PII / secret keys | `purchase_token`, `purchase_token_part_1`, `purchase_token_part_2`, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | rejected |
+| PII / secret keys | purchase tokens, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | rejected |
 
 Convention on top of the validator: `<domain>_<object>_<action>`, lowercase `snake_case`, domain one
 of `ad_`, `fo_`, `iap_`, `consent_`, `app_`. Never encode a variable in the name — one
@@ -152,7 +130,7 @@ Tracker.addSink(MyBackendSink(api))
 Every callback runs on the caller's thread and must not block. A throwing sink is caught and logged
 by its `id`; the others still get the event. `addSink` ignores an `id` already registered. Params
 arrive sanitised: no nulls, strings capped at 100 characters, at most 25 keys. For debug builds,
-`io.trackkit.sink.ConsoleSink(tag = "Trackkit/Console", ringSize = 100)` logs the same payload.
+`io.trackkit.sink.ConsoleSink` logs the same payload.
 
 ## Troubleshooting
 
