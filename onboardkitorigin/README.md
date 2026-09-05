@@ -155,8 +155,24 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-Declare it with `android:exported="true"`, a MAIN/LAUNCHER filter and an
-AppCompat/MaterialComponents theme.
+Declare it with `android:exported="true"`, a MAIN/LAUNCHER filter, an
+AppCompat/MaterialComponents theme, and the orientation pair — `screenOrientation` plus
+`configChanges` — that every SDK screen already declares:
+
+```xml
+<activity
+    android:name=".SplashActivity"
+    android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.Splash">
+```
+
+Without `configChanges` the splash restarts from the top on every rotation — losing its ad
+requests and its minimum-display clock each time. `uiMode|fontScale` are two more than the SDK's
+own screens declare, and they belong here: a splash holds three seconds of nothing, so absorbing a
+dark-mode or text-size change costs it nothing, while an onboarding step re-inflates on purpose.
+See `BehaviorConfig.lockPortrait` for what the SDK does on its side and how to opt out.
 
 - Do not call `OnboardingSdk.start()` here — it runs once the pipeline resolves.
 - Do not override `onConsentRequired()`; its default runs the UMP flow through `ConsentCenter` in
@@ -286,7 +302,7 @@ persisted progress.
 | Flow never runs | `configure()` failed, or ran before `install()` | Log the `Result`; call `install()` first |
 | User never leaves the flow | No `OnboardingListener`, or it ignores `Skipped` | Handle all three outcomes |
 | Every placement says `no_provider` | `adProvider` left null | `adProvider = ERainAdProvider()` |
-| Every placement says `consent_not_granted` | UMP form unanswered within `consentTimeoutMs` | Set `ConsentOptions(testDeviceHashedId = …)` |
+| Every placement says `consent_not_granted` | The UMP form is still on screen unanswered, or there was no network to consult UMP with | Answer the form; set `ConsentOptions(testDeviceHashedId = …)` so it appears on a test device |
 | Ad-only page never appears | No usable unit for `fullScreenStepNative` / `stepNatives[OB3]` | Configure one; the remote step flag alone is not enough |
 | Splash banner never shows | `ob_splash_ad_container` or the `layout_banner_control` include is missing | Add both to your splash layout |
 

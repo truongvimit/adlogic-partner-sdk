@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.ads.module.config.AdConfig
 import com.ads.module.config.AdRemoteConfig
@@ -155,7 +156,15 @@ open class ObSplashActivity : BaseOnboardActivity() {
         // The remote fetch requests no ads, so it may overlap consent; ad requests may not. A
         // request that goes out before the user has answered is a policy violation, not a race.
         coroutineScope {
-            val consent = async { step("consent", cfg.splash.consentTimeoutMs) { onConsentRequired() } }
+            val consent = async {
+                awaitConsentAnswer(
+                    roundTripMs = cfg.splash.consentTimeoutMs,
+                    isResolving = ConsentCenter::isResolving,
+                    hasAnswered = ConsentCenter::hasAnswered,
+                    isVisible = { lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
+                    request = ::onConsentRequired,
+                )
+            }
             val remote = async {
                 step("remote_fetch", cfg.splash.remoteFetchTimeoutMs) {
                     sdk.remoteOrNull()?.sync(cfg.splash.remoteFetchTimeoutMs)
@@ -164,9 +173,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
                     AdConfig.refresh(cfg.splash.remoteFetchTimeoutMs)
                 }
             }
-            // A timeout leaves the form on screen unanswered — the one case where no ad may go out.
-            // A refusal is not that case: it finishes the step and the ads run non-personalized.
-            val mayRequestAds = consent.await() ?: false
+            // `false` means the form is still on screen unanswered — the one case where no ad may
+            // go out. A refusal is not that case: it finishes the step and the ads run
+            // non-personalized.
+            val mayRequestAds = consent.await()
             OnboardingSdk.setCanRequestAds(mayRequestAds)
             if (!mayRequestAds) {
                 ObLog.w(ObLog.Section.SPLASH, "consent unanswered — running the flow without ads")
@@ -477,6 +487,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * the user still gets ads, non-personalized. `false` means the form is still unanswered on
      * screen, so the flow runs without ads rather than placing one underneath it. Override and
      * return `true` for an app that has no consent step at all.
+     *
+     * The splash gives the default all the time it needs: `consentTimeoutMs` bounds only the round
+     * trip, and once the form is up the wait is the user's — up to a three-minute backstop for a
+     * form UMP has stopped answering for, which only runs while the screen is in front of them.
+     * An override that resolves consent
+     * without going through `ConsentCenter` has no flow for the splash to see, so that one is still
+     * bounded by `consentTimeoutMs` — resolve promptly, or run the slow part elsewhere.
      */
     protected open suspend fun onConsentRequired(): Boolean =
         suspendCancellableCoroutine { continuation ->

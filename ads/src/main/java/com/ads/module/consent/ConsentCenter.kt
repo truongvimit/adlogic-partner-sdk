@@ -135,7 +135,13 @@ object ConsentCenter {
      *   the ad gate shut. Do not restart from [onCompleted]: it also answers `true` for a call
      *   that resolved from an earlier one, which is how Splash and Main came to bounce off each
      *   other for the life of the process.
-     * @param onCompleted always invoked, exactly once, on the main thread.
+     * @param onCompleted invoked at most once, on the main thread. Two things can keep it from
+     *   arriving. [detach] hands an unresolved flow back, but only from the `onDestroy` of the
+     *   screen that asked — the caller waiting on it died with that screen, and the screen that
+     *   asks next runs the flow again rather than inheriting an answer nobody gave. And a form on
+     *   screen has no deadline by design, so a UMP form that stops answering — a dead WebView
+     *   renderer leaves one up with no callback left to fire — never completes; a caller that
+     *   cannot sit there forever needs a bound of its own, as `ObSplashActivity` has.
      */
     @JvmStatic
     @JvmOverloads
@@ -181,15 +187,74 @@ object ConsentCenter {
      * [activity] is the screen that actually started the flow, so an unrelated screen's teardown
      * cannot disarm someone else's.
      *
-     * Nothing else is reset: the UMP callbacks still resolve if they arrive, and a screen that
-     * asks afterwards gets the session's answer through the once-per-process guard.
+     * An unresolved flow is handed back here rather than left claimed. Nothing can resolve a flow
+     * whose only window is gone — UMP puts the form on that Activity, so the callback that lands
+     * seconds later can only drop it — and the screen that asks next asks during this same
+     * destroy/create pair, long before that. Leaving the guard claimed made it inherit a `false`
+     * nobody gave, and the rest of the session ran with the ad gate shut.
+     *
+     * The stale flow's callbacks are still armed; [ownsFlow] is what stops them settling the flow
+     * that replaced them.
      */
     @JvmStatic
     fun detach(activity: Activity) {
         if (pendingScreen?.get() !== activity) return
         pendingScreen = null
         cancelTimeout()
+        if (!callbackHandled) handBackFlow()
     }
+
+    /**
+     * Whether a UMP callback still speaks for the flow that is running.
+     *
+     * UMP's callbacks outlive the screen that armed them, and a screen destroyed mid-flow hands the
+     * flow back, so a newer screen may own one of its own by the time an old callback lands.
+     * [callbackHandled] cannot tell the two apart — [request] clears it for every new flow — but
+     * the screen can. Also `false` once a terminal has run or the timeout has fired, since both
+     * [releaseScreen] and [detach] drop the reference.
+     */
+    private fun ownsFlow(activity: Activity): Boolean = pendingScreen?.get() === activity
+
+    /**
+     * Gives the once-per-process guard back, for a flow that ended without asking anything.
+     *
+     * Three terminals reach here: the round-trip timeout, a form that came back to a dead screen,
+     * and a form dismissed without an answer. None of them persisted anything or read a choice, so
+     * holding the guard would spend the session on a flow that never showed a form — and the
+     * screen that asks next, the recreated splash or the second-chance prompt, would inherit a
+     * `false` nobody gave. [ownsFlow] is what keeps the released flow's callbacks from settling
+     * whichever flow replaces it.
+     */
+    private fun handBackFlow() {
+        requested.set(false)
+    }
+
+    /**
+     * Whether a live screen is still waiting on an answer — the round trip is in the air, or a form
+     * is on screen in front of the user.
+     *
+     * For a caller that runs the step under a deadline of its own. Expiring while this is `true`
+     * means the flow is alive and its answer is still coming: [armTimeout] already bounds the round
+     * trip and fails open, so the only thing a second deadline can cut short is the human.
+     *
+     * `false` once a terminal has run, and once the screen that started the flow is gone — nothing
+     * resolves a flow whose window died, so waiting on one would be waiting forever.
+     */
+    @JvmStatic
+    fun isResolving(): Boolean {
+        if (callbackHandled) return false
+        val owner = pendingScreen?.get() ?: return false
+        return !owner.isFinishing && !owner.isDestroyed
+    }
+
+    /**
+     * Whether the step has an answer of any kind, a refusal included.
+     *
+     * [resolve] publishes it before any callback is delivered, so a caller whose own deadline fired
+     * while that callback was still in flight can read the answer rather than assume there is none.
+     */
+    @JvmStatic
+    fun hasAnswered(): Boolean = _state.value != ConsentState.UNKNOWN
 
     /** True once the user accepted, or once UMP said this region needs no form. */
     @JvmStatic
@@ -230,6 +295,9 @@ object ConsentCenter {
             if (callbackHandled) return@Runnable
             callbackHandled = true
             releaseScreen()
+            // Dropping the screen is what makes [ownsFlow] discard the form this round trip may
+            // still be about to deliver, so without this the session never sees one at all.
+            handBackFlow()
             // UMP never answered. Report it as an error, not as a refusal, and let the flow run:
             // holding ads back here turned a slow network into a session with no ads at all.
             // Cancelled once a form is actually on screen, so this only covers the round trip.
@@ -278,6 +346,7 @@ object ConsentCenter {
             activity,
             params,
             {
+                if (!ownsFlow(activity)) return@requestConsentInfoUpdate
                 Log.v(TAG, "requestConsentInfoUpdate success")
                 if (information.isConsentFormAvailable) {
                     loadForm(activity, information, screen, onFormAnswered, onCompleted)
@@ -285,7 +354,10 @@ object ConsentCenter {
                     onNotRequired(activity, screen, onCompleted)
                 }
             },
-            { formError -> onError(formError, screen, onCompleted) },
+            { formError ->
+                if (!ownsFlow(activity)) return@requestConsentInfoUpdate
+                onError(formError, screen, onCompleted)
+            },
         )
     }
 
@@ -299,12 +371,23 @@ object ConsentCenter {
         UserMessagingPlatform.loadConsentForm(
             activity,
             { form: ConsentForm ->
+                // This load no longer speaks for the flow that is running: its own timeout fired,
+                // another terminal resolved it, or its screen died and a newer one picked the flow
+                // up. Showing the form now would put requests underneath an unanswered one, and on
+                // the way out would cancel the live flow's timeout and drop its screen. Nothing was
+                // persisted, so whoever owns the flow now asks properly.
+                if (!ownsFlow(activity)) {
+                    Log.w(TAG, "consent form ready for a flow that is no longer current — dropping it")
+                    return@loadConsentForm
+                }
                 when (information.consentStatus) {
                     ConsentInformation.ConsentStatus.REQUIRED -> {
                         Tracker.track(TrackkitEvents.ConsentEvents.Shown())
                         // The timeout guards the network round-trip, not the human. Once the form
-                        // is on screen the user may take as long as they like: firing at 15s
+                        // is on screen the user may take as long as they like: firing mid-read
                         // resolved DENIED and then discarded the Accept they were about to tap.
+                        // Callers with a deadline of their own read [isResolving] for the same
+                        // reason.
                         cancelTimeout()
                         // The load is asynchronous, so the screen that asked may already be gone.
                         // UMP shows the form on this Activity's window; handing it a destroyed one
@@ -312,14 +395,35 @@ object ConsentCenter {
                         if (activity.isFinishing || activity.isDestroyed) {
                             callbackHandled = true
                             releaseScreen()
+                            handBackFlow()
                             Log.w(TAG, "consent form ready but the screen is gone — skipping")
                             onCompleted(false)
                             return@loadConsentForm
                         }
-                        form.show(activity) {
-                            if (callbackHandled) return@show
+                        form.show(activity) { dismissError ->
+                            // Same rule as the load callbacks: a dismissal that belongs to a flow
+                            // this screen no longer owns must not settle the one that replaced it.
+                            // The hand-back already happened in `detach`, so there is nothing here
+                            // left to do for it.
+                            if (!ownsFlow(activity) || callbackHandled) return@show
                             callbackHandled = true
                             releaseScreen()
+                            // An error here is UMP saying the form left the screen without an
+                            // answer. Falling through scored the empty TCF strings as a refusal,
+                            // which stamped npa=1 and Consent Mode denied on a user who had
+                            // touched nothing. Hand the flow back instead, same as above.
+                            //
+                            // A destroy is the common producer of one — UMP reports it on every
+                            // destroy of the Activity hosting the form, a rotation included — but
+                            // that case never reaches here: [detach] runs first from `onDestroy`
+                            // and the guard above drops this. What is left is a host that does not
+                            // call [detach], and UMP's two synchronous refusals to show at all.
+                            if (dismissError != null) {
+                                Log.w(TAG, "consent form dismissed unanswered: ${dismissError.message}")
+                                handBackFlow()
+                                onCompleted(false)
+                                return@show
+                            }
                             val personalized = canShowPersonalizedAds(activity)
                             if (personalized) {
                                 remember(activity, KEY_CONSENT_ACCEPTED)
@@ -366,7 +470,10 @@ object ConsentCenter {
                     }
                 }
             },
-            { formError -> onError(formError, screen, onCompleted) },
+            { formError ->
+                if (!ownsFlow(activity)) return@loadConsentForm
+                onError(formError, screen, onCompleted)
+            },
         )
     }
 

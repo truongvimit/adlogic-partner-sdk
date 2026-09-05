@@ -156,8 +156,24 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-Khai báo nó với `android:exported="true"`, một intent-filter MAIN/LAUNCHER và theme
-AppCompat/MaterialComponents.
+Khai báo nó với `android:exported="true"`, một intent-filter MAIN/LAUNCHER, theme
+AppCompat/MaterialComponents, và cặp orientation — `screenOrientation` cùng `configChanges` — mà
+mọi màn của SDK đều đã khai:
+
+```xml
+<activity
+    android:name=".SplashActivity"
+    android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.Splash">
+```
+
+Thiếu `configChanges`, splash sẽ chạy lại từ đầu mỗi lần xoay máy — mất luôn các request quảng cáo
+và đồng hồ hiển thị tối thiểu của lần đó. `uiMode|fontScale` là hai cái nhiều hơn so với các màn của
+chính SDK, và chúng đúng chỗ ở đây: splash chỉ giữ ba giây trống nên nuốt một lần đổi dark mode hay
+cỡ chữ không mất gì, trong khi một bước onboarding thì cố ý dựng lại. Xem
+`BehaviorConfig.lockPortrait` để biết SDK làm gì ở phía nó và cách tắt.
 
 - Đừng gọi `OnboardingSdk.start()` ở đây — nó tự chạy khi pipeline hoàn tất.
 - Đừng override `onConsentRequired()`; mặc định của nó chạy luồng UMP qua `ConsentCenter` trong
@@ -289,7 +305,7 @@ trình đã lưu.
 | Luồng không bao giờ chạy | `configure()` thất bại, hoặc chạy trước `install()` | Log cái `Result`; gọi `install()` trước |
 | Người dùng không thoát khỏi luồng | Không có `OnboardingListener`, hoặc nó bỏ qua `Skipped` | Xử lý cả ba outcome |
 | Mọi placement báo `no_provider` | `adProvider` để null | `adProvider = ERainAdProvider()` |
-| Mọi placement báo `consent_not_granted` | Form UMP chưa được trả lời trong `consentTimeoutMs` | Set `ConsentOptions(testDeviceHashedId = …)` |
+| Mọi placement báo `consent_not_granted` | Form UMP còn trên màn chưa được trả lời, hoặc không có mạng để hỏi UMP | Trả lời form; set `ConsentOptions(testDeviceHashedId = …)` để form hiện trên máy test |
 | Trang chỉ-quảng-cáo không xuất hiện | Không có unit dùng được cho `fullScreenStepNative` / `stepNatives[OB3]` | Cấu hình một cái; chỉ bật cờ remote của step là chưa đủ |
 | Banner splash không hiện | Thiếu `ob_splash_ad_container` hoặc thiếu include `layout_banner_control` | Thêm cả hai vào layout splash |
 

@@ -189,10 +189,12 @@ object OnboardingSdk {
     /**
      * Opens the ad gate as soon as the consent flow resolves, from wherever it resolves.
      *
-     * The splash also reports the answer, but it does so through a step with its own timeout: a
-     * user who takes longer than that to read the form had their acceptance dropped, and the gate
-     * stayed shut for the rest of the process with nothing left to reopen it. Watching the state
-     * directly means a late answer still counts.
+     * The splash reports the answer it got, and three of `ConsentCenter.request`'s terminals answer
+     * `false` with the state still UNKNOWN: no network, a form that came back to a dead screen, a
+     * form dismissed unanswered. The last two hand the flow back, so a later screen runs it again
+     * and resolves it — after the splash has already shut the gate. This is the only thing in the
+     * process that can reopen it, so do not remove it on the grounds that the splash reports the
+     * answer too.
      *
      * Anything other than UNKNOWN means the step finished — a refusal included, since a refusal
      * downgrades ads to non-personalized rather than stopping them.

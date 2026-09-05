@@ -1,5 +1,6 @@
 package io.onboardkit.config
 
+import com.ads.module.consent.ConsentOptions
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.core.StepId
@@ -9,6 +10,43 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OnboardKitConfigTest {
+
+    /**
+     * Both numbers bound the same thing — the UMP round trip — from either side of the module
+     * boundary, and the KDoc on each says so. They disagreed once, at 15s against 20s, and the
+     * splash gave up five seconds before the flow it was waiting on would have resolved itself.
+     */
+    @Test
+    fun `the splash consent bound matches the consent flow's own`() {
+        assertEquals(ConsentOptions().timeoutMs, SplashConfig().consentTimeoutMs)
+    }
+
+    /**
+     * Every screen the SDK owns is portrait in the manifest, but the splash is a base class the
+     * app registers its own subclass of, so the manifest cannot reach it. Shipping the default off
+     * would leave the one screen that recreates mid-consent as the only one that rotates.
+     */
+    @Test
+    fun `portrait is locked out of the box`() {
+        assertTrue(BehaviorConfig().lockPortrait)
+    }
+
+    @Test
+    fun `lockPortrait is applied by the base screen, not just declared`() {
+        // The flag is only worth having if a screen reads it. Same guard as minSelection below:
+        // validation alone kept looking like coverage after the last read site was lost.
+        val source = java.io.File(
+            "src/main/java/io/onboardkit/ui/base/BaseOnboardActivity.kt",
+        ).readText()
+        assertTrue(
+            "BaseOnboardActivity must read BehaviorConfig.lockPortrait",
+            source.contains("lockPortrait"),
+        )
+        assertTrue(
+            "BaseOnboardActivity must pin the orientation when it does",
+            source.contains("SCREEN_ORIENTATION_PORTRAIT"),
+        )
+    }
 
     @Test
     fun `default steps build a valid config`() {

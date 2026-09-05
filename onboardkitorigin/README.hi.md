@@ -154,8 +154,24 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-इसे `android:exported="true"`, एक MAIN/LAUNCHER filter और AppCompat/MaterialComponents theme के साथ
-declare करें।
+इसे `android:exported="true"`, एक MAIN/LAUNCHER filter, AppCompat/MaterialComponents theme, और वही
+orientation जोड़ी — `screenOrientation` और `configChanges`, जो SDK की हर screen पहले से declare करती
+है — के साथ declare करें:
+
+```xml
+<activity
+    android:name=".SplashActivity"
+    android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.Splash">
+```
+
+`configChanges` के बिना splash हर rotation पर शुरू से चलता है — हर बार उसके ad requests और
+minimum-display घड़ी दोनों खोकर। `uiMode|fontScale` SDK की अपनी screens से दो ज़्यादा हैं और यहीं सही
+हैं: splash तीन सेकंड का खाली पर्दा है, इसलिए dark-mode या text-size बदलाव सोख लेने से उसका कुछ नहीं
+जाता, जबकि onboarding step जान-बूझकर दोबारा बनता है। SDK अपनी तरफ़ क्या करता है और इसे कैसे बंद करें,
+यह `BehaviorConfig.lockPortrait` में है।
 
 - यहाँ `OnboardingSdk.start()` न बुलाएँ — pipeline पूरा होते ही वह अपने आप चलता है।
 - `onConsentRequired()` override न करें; उसका default `:ads` के `ConsentCenter` से UMP flow चलाता है।
@@ -284,7 +300,7 @@ documented जहाँ वह declare हुई है। कुछ भी publ
 | Flow कभी चलता ही नहीं | `configure()` विफल, या `install()` से पहले चला | `Result` log करें; पहले `install()` बुलाएँ |
 | User flow से बाहर ही नहीं निकलता | कोई `OnboardingListener` नहीं, या वह `Skipped` को अनदेखा करता है | तीनों outcomes संभालें |
 | हर placement `no_provider` कहता है | `adProvider` null छोड़ा गया | `adProvider = ERainAdProvider()` |
-| हर placement `consent_not_granted` कहता है | `consentTimeoutMs` के भीतर UMP form का जवाब नहीं मिला | `ConsentOptions(testDeviceHashedId = …)` सेट करें |
+| हर placement `consent_not_granted` कहता है | UMP form अब भी स्क्रीन पर बिना जवाब के है, या UMP से पूछने के लिए network नहीं था | form का जवाब दें; test device पर form दिखाने के लिए `ConsentOptions(testDeviceHashedId = …)` सेट करें |
 | सिर्फ़-ad वाला page कभी नहीं दिखता | `fullScreenStepNative` / `stepNatives[OB3]` के लिए कोई usable unit नहीं | एक configure करें; सिर्फ़ remote step flag काफ़ी नहीं |
 | Splash banner कभी नहीं दिखता | `ob_splash_ad_container` या `layout_banner_control` include गायब | दोनों अपने splash layout में जोड़ें |
 
