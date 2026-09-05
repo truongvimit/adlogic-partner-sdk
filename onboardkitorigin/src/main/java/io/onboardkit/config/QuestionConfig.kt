@@ -24,6 +24,6 @@ data class QuestionConfig(
     /** Overridable option item layout — the original SDK hard-coded it. */
     @LayoutRes val optionLayoutRes: Int = 0,
     @LayoutRes val layoutRes: Int = 0,
-    /** Each answer tap re-serving the native ad is an impression tactic; off by default. */
+    /** Opt-in refresh on added selections, after the current bind's cooldown; deselect does not refresh. */
     val refreshAdOnSelect: Boolean = false,
 )

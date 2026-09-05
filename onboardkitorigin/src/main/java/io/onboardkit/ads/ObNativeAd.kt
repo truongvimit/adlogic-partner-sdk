@@ -24,7 +24,8 @@ import io.onboardkit.core.ObLog
  * and the skeleton's geometry always matches the ad that replaces it.
  *
  * @param onBound the ad is in [container]; the skeleton has been swapped out.
- * @param onShown GMA counted the impression. Use it to start dwell timers, not to navigate.
+ * @param onShown provider's legacy impression signal (the built-in provider emits it at bind).
+ * Use it for the existing dwell timers, not as a vendor-counted analytics impression.
  * @param onUnavailable nothing can be shown here — hide the slot, show a fallback, or move on.
  */
 internal fun Activity.showNativeAd(

@@ -24,8 +24,8 @@ data class BannerConfig(
 
 /**
  * Screens with a banner slot declare a [bannerConfig] and inherit the whole banner
- * lifecycle: [BannerAdHelper] owns load, waterfall fallback, reload-on-resume, the
- * auto-reload timer, and teardown.
+ * lifecycle: [BannerAdHelper] owns load, waterfall fallback and teardown. This sample uses
+ * AdMob console refresh; a positive legacy reloadIntervalSeconds does not add an SDK timer.
  */
 abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>() {
 
@@ -61,18 +61,12 @@ abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>()
             return
         }
         frAds.visibleView()
-        val reloadSeconds = unit.reloadIntervalSeconds ?: 0
         val config = BannerAdConfig(
             unit.waterfallIds,
             canShowAds = unit.isEnable,
-            canReloadAds = reloadSeconds > 0,
+            canReloadAds = false,
             bannerType = type,
-        ).also {
-            if (reloadSeconds > 0) {
-                it.enableAutoReload = true
-                it.autoReloadTime = reloadSeconds * 1000L
-            }
-        }
+        )
         bannerAdHelper = BannerAdHelper(this, this, config)
             .attachInto(frAds)
             .also {

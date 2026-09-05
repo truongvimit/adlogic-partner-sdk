@@ -7,14 +7,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * How long a form already on screen may go unanswered before the splash stops waiting on it.
+ * The unanswered-form wait window after the round-trip deadline.
  *
- * Not a reading budget — nobody spends three minutes looking at a consent form — but the escape
- * hatch the old flat timeout used to provide by accident. UMP handles a dead WebView renderer by
- * destroying the view and returning, without calling the dismissal listener and without dismissing
- * its own non-cancelable full-screen dialog, so a flow can stay unresolved with nothing left that
- * could ever resolve it. Reaching this while the screen is in front of the user means no answer is
- * coming; moving on finishes the splash, and destroying its window is what clears the dead dialog.
+ * At the end of a window, a background splash waits for another whole window. A visible splash
+ * may continue using current authorization; the timeout itself does not establish why the form
+ * is unanswered. This is not an accumulated foreground-time budget.
  */
 private const val FORM_ANSWER_CEILING_MS = 180_000L
 

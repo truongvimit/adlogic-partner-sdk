@@ -185,7 +185,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
             step("billing", cfg.splash.billingTimeoutMs) { onInitBilling() }
             // SAME_TIME spends what is left of the fetch window loading with the compiled ad ids;
             // ALTERNATE waits so that a remote id override can still apply.
-            if (cfg.splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) requestSplashAds()
+            if (cfg.splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) {
+                requestSplashAds(deferIfUnauthorized = true)
+            }
             remote.await()
         }
 
@@ -226,9 +228,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
         return result
     }
 
-    /** Fires both splash ad requests. Safe to call twice — only the first one does anything. */
-    private fun requestSplashAds() {
+    /**
+     * Fires both slots at most once. SAME_TIME may defer a closed consent/host gate without
+     * consuming the latch; the final call after onRemoteFetched still settles every declined slot.
+     */
+    private fun requestSplashAds(deferIfUnauthorized: Boolean = false) {
         if (adsRequested) return
+        if (deferIfUnauthorized && !OnboardingSdk.canRequestAds()) return
         adsRequested = true
         requestSplashBanner()
         requestSplashInterstitial()

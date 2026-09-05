@@ -8,6 +8,11 @@ import com.ads.module.helper.IAdsConfig
  *
  * [adUnitIds] is the waterfall, **highest floor first** — the helper falls through to the
  * next id only when the one above it failed to fill. A single id means no waterfall.
+ *
+ * Choose one refresh owner. With AdMob console refresh, set [canReloadAds] and
+ * [enableAutoReload] false. SDK refresh requires console refresh disabled for every tier;
+ * enable [canReloadAds] for resume reload and optionally [enableAutoReload] for its timer.
+ * These flags cannot inspect or change the console setting.
  */
 open class BannerAdConfig @JvmOverloads constructor(
     tiers: List<String>,
@@ -36,6 +41,7 @@ open class BannerAdConfig @JvmOverloads constructor(
             field = value
         }
 
+    /** Adds an SDK timer; false alone does not disable reload-on-resume. */
     var enableAutoReload: Boolean = false
 
     /** Trailing debounce for the reload-on-resume trigger. */

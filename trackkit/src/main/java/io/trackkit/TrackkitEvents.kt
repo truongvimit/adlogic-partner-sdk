@@ -104,6 +104,7 @@ object TrackkitEvents {
     const val FO_QUESTION_ANSWER = "fo_question_answer"
     const val FO_QUESTION_COMPLETE = "fo_question_complete"
     const val FO_FLOW_COMPLETE = "fo_flow_complete"
+    const val FO_AD_BOUND = "fo_ad_bound"
 
     const val IAP_PAYWALL_VIEW = "iap_paywall_view"
     const val IAP_PAYWALL_RESULT = "iap_paywall_result"
@@ -136,7 +137,7 @@ object TrackkitEvents {
         FO_FLOW_START, FO_SPLASH_VIEW, FO_SPLASH_COMPLETE, FO_LANGUAGE_VIEW, FO_LANGUAGE_SELECT,
         FO_LANGUAGE_COMPLETE, FO_LANGUAGE_FLOW_COMPLETE,
         FO_LANGUAGE_CONFIRM_VIEW, FO_LANGUAGE_CONFIRM_RESULT, FO_STEP_VIEW, FO_STEP_COMPLETE,
-        FO_QUESTION_VIEW, FO_QUESTION_ANSWER, FO_QUESTION_COMPLETE, FO_FLOW_COMPLETE,
+        FO_QUESTION_VIEW, FO_QUESTION_ANSWER, FO_QUESTION_COMPLETE, FO_FLOW_COMPLETE, FO_AD_BOUND,
         IAP_PAYWALL_VIEW, IAP_PAYWALL_RESULT, IAP_CLICK, IAP_SUCCESS, IAP_FAIL, IAP_DISMISS,
         CONSENT_REQUEST, CONSENT_SHOWN, CONSENT_RESULT,
         APP_INSTALL_REFERRER,
@@ -230,6 +231,13 @@ object TrackkitEvents {
     // -----------------------------------------------------------------------
 
     object Fo {
+
+        /** The flow bound an ad to its view; this does not assert a vendor-counted impression. */
+        class AdBound(placement: String, format: AdFormat) :
+            SimpleEvent(
+                FO_AD_BOUND,
+                mapOf(PARAM_PLACEMENT to placement, PARAM_AD_FORMAT to format.key),
+            )
 
         /**
          * The flow was entered. It is the denominator every later `fo_` rate divides by, so it is

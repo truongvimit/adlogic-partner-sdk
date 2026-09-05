@@ -3,7 +3,7 @@ package io.onboardkit.ads
 import android.app.Activity
 import android.content.Context
 import io.onboardkit.core.ObLog
-import java.util.concurrent.atomic.AtomicBoolean
+import com.ads.module.admob.AppOpenManager
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -19,7 +19,6 @@ class ObAppResume internal constructor(
 
     /** Counted rather than boolean: two overlapping full-screen ads must both hold it down. */
     private val depth = AtomicInteger(0)
-    private val returningFromAdClick = AtomicBoolean(false)
 
     private val isSuppressed: Boolean get() = depth.get() > 0
 
@@ -39,13 +38,24 @@ class ObAppResume internal constructor(
      */
     fun onAdClicked() {
         ObLog.d(ObLog.Section.RESUME, "ad_clicked — next foreground is not a new session")
-        returningFromAdClick.set(true)
+        AppOpenManager.getInstance().disableAdResumeByClickAction()
     }
 
-    /** `null` means an app-resume ad may show. One-shot state is consumed by asking. */
-    fun skipReason(context: Context): AdSkipReason? {
+    /**
+     * Pure shared eligibility for OPEN and a host welcome flow. Reading never consumes a click;
+     * AppOpenManager captures it at the real host return. Holds remain until every suppress is
+     * released, including holds around a modal or an explicit interstitial request.
+     */
+    fun sharedSkipReason(context: Context): AdSkipReason? {
         if (isSuppressed) return AdSkipReason.SUPPRESSED_BY_FLOW
-        if (returningFromAdClick.getAndSet(false)) return AdSkipReason.RETURNING_FROM_AD_CLICK
+        val returnReason = AppOpenManager.getInstance().resumeReturnSkipReason
+        if (returnReason == AdSkipReason.RETURNING_FROM_AD_CLICK.key) return AdSkipReason.RETURNING_FROM_AD_CLICK
+        return guard.resumeEntrySkipReason(context)
+    }
+
+    /** Pure OPEN-only eligibility; its placement flag and configured unit do not gate WELCOME. */
+    fun skipReason(context: Context): AdSkipReason? {
+        sharedSkipReason(context)?.let { return it }
         return guard.skipReason(context, AdPlacement.AppResume)
     }
 

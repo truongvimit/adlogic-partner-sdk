@@ -34,6 +34,7 @@ android {
         buildConfig = true
     }
     testOptions {
+        targetSdk = compile_sdk_version
         unitTests.returnDefaultValues = true
     }
 

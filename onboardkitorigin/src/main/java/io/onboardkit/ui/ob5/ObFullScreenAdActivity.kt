@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
@@ -96,17 +98,24 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
             return
         }
         skipJob = lifecycleScope.launch {
-            delay(flags.skipButtonDelaySec.coerceAtLeast(0) * 1_000)
-            binding.obSkipButton.visibility = View.VISIBLE
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                delay(flags.skipButtonDelaySec.coerceAtLeast(0) * 1_000)
+                binding.obSkipButton.visibility = View.VISIBLE
+            }
         }
     }
 
-    /** Hard exit: even with Skip hidden and no interaction, the screen closes itself. */
+    /**
+     * Hard exit while the user is here. Like OB3, each resume starts a full countdown;
+     * time before a pause is not accumulated, and an ad destination cannot be navigated over.
+     */
     private fun scheduleAutoDismiss() {
         val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)
         autoDismissJob = lifecycleScope.launch {
-            delay(seconds * 1_000)
-            navigateNext(StepExit.AUTO_DISMISS)
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                delay(seconds * 1_000)
+                navigateNext(StepExit.AUTO_DISMISS)
+            }
         }
     }
 
@@ -116,6 +125,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     private fun navigateNext(exitReason: String) {
+        if (isFinishing || isDestroyed) return
         ObLog.d(ObLog.Section.NAV, "from=ob5 exit=$exitReason")
         if (!navigated.compareAndSet(false, true)) return
         skipJob?.cancel()

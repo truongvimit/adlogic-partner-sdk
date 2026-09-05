@@ -69,22 +69,25 @@ class AdsGuard internal constructor(
         return false
     }
 
+    /** Shared master/host/consent eligibility; no OPEN-only placement flag or unit requirement. */
+    internal fun resumeEntrySkipReason(context: Context): AdSkipReason? {
+        if (isPremium(context)) return AdSkipReason.PREMIUM
+        if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
+        if (provider == null) return AdSkipReason.NO_PROVIDER
+        val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
+        if (!cfg.ads.enabled) return AdSkipReason.ADS_OFF_IN_CONFIG
+        if (!flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
+        return null
+    }
+
     private fun evaluate(
         context: Context,
         placement: AdPlacement,
         unit: AdUnitTiers?,
     ): AdSkipReason? {
-        if (isPremium(context)) return AdSkipReason.PREMIUM
-        // Before anything the app can configure: no ad request may go out until consent answers.
-        if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
-        if (provider == null) return AdSkipReason.NO_PROVIDER
-
+        resumeEntrySkipReason(context)?.let { return it }
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!cfg.ads.enabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-
-        val remote = flags()
-        if (!remote.enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
-        if (!remote.isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
+        if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT

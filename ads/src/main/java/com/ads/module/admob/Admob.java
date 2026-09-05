@@ -39,6 +39,7 @@ import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdGate;
 import com.ads.module.helper.AdSkipReason;
 import com.ads.module.tracking.AdTracking;
+import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
 import com.ads.module.consent.ConsentCenter;
@@ -75,13 +76,21 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
 
 public class Admob {
     private static final String TAG = "ERainStudio";
+
+    /** Internal pre-show lifecycle rejection in the ERainStudio error domain; not a GMA error. */
+    public static final int ERROR_CODE_SHOW_IN_BACKGROUND = 9001;
+
+    /** Only this module's rejection before vendor show permits a cached fill to be reused. */
+    public static boolean isShowInBackgroundError(AdError error) {
+        return error != null && error.getCode() == ERROR_CODE_SHOW_IN_BACKGROUND
+                && TAG.equals(error.getDomain());
+    }
     private static Admob instance;
     private int currentClicked = 0;
     private String nativeId;
@@ -489,10 +498,19 @@ public class Admob {
         }
 
         mInterstitialSplash.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 AppOpenManager.getInstance().setInterstitialShowing(true);
                 isShowLoadingSplash = false;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -539,9 +557,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -626,10 +642,19 @@ public class Admob {
         }
 
         mInterstitialSplash.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 AppOpenManager.getInstance().setInterstitialShowing(true);
                 isShowLoadingSplash = false;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -676,9 +701,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -875,6 +898,7 @@ public class Admob {
             public void onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent();
                 AppOpenManager.getInstance().setInterstitialShowing(true);
+                if (callback != null) callback.onAdImpression();
             }
 
             @Override
@@ -936,14 +960,14 @@ public class Admob {
         // Every exit below reports something. This branch used to return in silence when the
         // process was not resumed, leaving the caller waiting on a callback that never came.
         if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-            notifyShowFailed(callback, "Show fail: process is not resumed", openNextUnderAd);
+            notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail: process is not resumed", openNextUnderAd);
             return;
         }
 
         // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
         // turns what was a ClassCastException on a background thread into a normal skip.
         if (!(context instanceof AppCompatActivity)) {
-            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
+            notifyShowFailed(callback, 0, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
             return;
         }
 
@@ -982,7 +1006,7 @@ public class Admob {
             } else {
                 if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
                     dialog.dismiss();
-                notifyShowFailed(callback, "Show fail in background after show loading ad", openNextUnderAd);
+                notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail in background after show loading ad", openNextUnderAd);
             }
         }, 800);
     }
@@ -993,7 +1017,7 @@ public class Admob {
      * onNextAction is still fired when the next screen was not opened under the ad, because that
      * is the signal legacy call sites advance their flow on.
      */
-    private void notifyShowFailed(AdCallback callback, String message, boolean openNextUnderAd) {
+    private void notifyShowFailed(AdCallback callback, int code, String message, boolean openNextUnderAd) {
         // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
         // a presentation that dies here must lower it whether or not anyone is listening. Leaving
         // it raised suppressed every app-resume ad for the rest of the process.
@@ -1002,7 +1026,7 @@ public class Admob {
             return;
         }
         Log.e(TAG, "showInterstitialAd: " + message);
-        callback.onAdFailedToShow(new AdError(0, message, TAG));
+        callback.onAdFailedToShow(new AdError(code, message, TAG));
         if (!openNextUnderAd) {
             callback.onNextAction();
         }
@@ -1469,7 +1493,6 @@ public class Admob {
         AdRequest.Builder builder = new AdRequest.Builder();
         Bundle admobExtras = new Bundle();
         admobExtras.putString("collapsible", gravity);
-        admobExtras.putString("collapsible_request_id", UUID.randomUUID().toString());
         // One bundle per adapter class — a second addNetworkExtrasBundle would replace this one,
         // so the personalization flag goes in here rather than through applyPersonalization.
         if (!ConsentCenter.canPersonalize()) {
@@ -2069,6 +2092,9 @@ public class Admob {
             adCallback.onRewardedAdFailedToShow(0);
             return;
         } else {
+            final String shownUnitId = Admob.this.rewardedAd.getAdUnitId();
+            final TrackingAdCallback presentationTracking = new TrackingAdCallback(
+                    PlacementRegistry.placementOf(shownUnitId), AdFormat.REWARDED, shownUnitId, null);
             Admob.this.rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
@@ -2083,6 +2109,7 @@ public class Admob {
                 @Override
                 public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
                     super.onAdFailedToShowFullScreenContent(adError);
+                    presentationTracking.onAdFailedToShow(adError);
                     if (adCallback != null)
                         adCallback.onRewardedAdFailedToShow(adError.getCode());
                 }
@@ -2092,6 +2119,7 @@ public class Admob {
                     super.onAdShowedFullScreenContent();
 
                     AppOpenManager.getInstance().setInterstitialShowing(true);
+                    presentationTracking.onAdImpression();
                     rewardedAd = null;
                 }
 
@@ -2131,6 +2159,9 @@ public class Admob {
             adCallback.onRewardedAdFailedToShow(0);
             return;
         } else {
+            final String shownUnitId = rewardedInterstitialAd.getAdUnitId();
+            final TrackingAdCallback presentationTracking = new TrackingAdCallback(
+                    PlacementRegistry.placementOf(shownUnitId), AdFormat.REWARDED_INTERSTITIAL, shownUnitId, null);
             rewardedInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
@@ -2145,6 +2176,7 @@ public class Admob {
                 @Override
                 public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
                     super.onAdFailedToShowFullScreenContent(adError);
+                    presentationTracking.onAdFailedToShow(adError);
                     if (adCallback != null)
                         adCallback.onRewardedAdFailedToShow(adError.getCode());
                 }
@@ -2154,6 +2186,7 @@ public class Admob {
                     super.onAdShowedFullScreenContent();
 
                     AppOpenManager.getInstance().setInterstitialShowing(true);
+                    presentationTracking.onAdImpression();
 
                 }
 
@@ -2190,6 +2223,9 @@ public class Admob {
             adCallback.onRewardedAdFailedToShow(0);
             return;
         } else {
+            final String shownUnitId = rewardedAd.getAdUnitId();
+            final TrackingAdCallback presentationTracking = new TrackingAdCallback(
+                    PlacementRegistry.placementOf(shownUnitId), AdFormat.REWARDED, shownUnitId, null);
             rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
@@ -2205,6 +2241,7 @@ public class Admob {
                 @Override
                 public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
                     super.onAdFailedToShowFullScreenContent(adError);
+                    presentationTracking.onAdFailedToShow(adError);
                     if (adCallback != null)
                         adCallback.onRewardedAdFailedToShow(adError.getCode());
                 }
@@ -2214,7 +2251,8 @@ public class Admob {
                     super.onAdShowedFullScreenContent();
 
                     AppOpenManager.getInstance().setInterstitialShowing(true);
-                    initRewardAds(context, nativeId);
+                    presentationTracking.onAdImpression();
+                    initRewardAds(context, shownUnitId);
                 }
 
                 public void onAdClicked() {
@@ -2893,6 +2931,14 @@ public class Admob {
         }
 
         mInterSplashHigh1.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent();
@@ -2904,6 +2950,7 @@ public class Admob {
                 AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = true;
                 mInterSplashHigh1 = null;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -2955,9 +3002,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -3127,6 +3172,14 @@ public class Admob {
         }
 
         mInterSplashHigh2.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent();
@@ -3138,6 +3191,7 @@ public class Admob {
                 AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = false;
                 mInterSplashHigh2 = null;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -3191,9 +3245,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -3362,6 +3414,14 @@ public class Admob {
         }
 
         mInterSplashHigh3.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent();
@@ -3373,6 +3433,7 @@ public class Admob {
                 AppOpenManager.getInstance().disableAdResumeByClickAction();
                 isShowLoadingSplash = false;
                 mInterSplashHigh3 = null;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -3426,9 +3487,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -3605,11 +3664,20 @@ public class Admob {
         }
 
         mInterSplashNormal.setFullScreenContentCallback(new FullScreenContentCallback() {
+            private boolean impressionForwarded;
+
+            private void forwardImpressionOnce() {
+                if (impressionForwarded) return;
+                impressionForwarded = true;
+                if (adListener != null) adListener.onAdImpression();
+            }
+
             @Override
             public void onAdShowedFullScreenContent() {
                 isShowInterstitialSplashSuccess = true;
                 AppOpenManager.getInstance().setInterstitialShowing(true);
                 isShowLoadingSplash = false;
+                forwardImpressionOnce();
             }
 
             @Override
@@ -3656,9 +3724,7 @@ public class Admob {
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                if (adListener != null) {
-                    adListener.onAdImpression();
-                }
+                forwardImpressionOnce();
             }
         });
 
@@ -3716,6 +3782,12 @@ public class Admob {
         new Handler(activity.getMainLooper()).postDelayed(() -> {
             if (!isShowLoadingSplash() && (mInterSplashHigh1 != null || mInterSplashHigh2 != null || mInterSplashHigh3 != null || mInterSplashNormal != null)) {
                 onShowSplashPriority4(activity, new AdCallback() {
+                    @Override
+                    public void onAdImpression() {
+                        super.onAdImpression();
+                        callback.onAdImpression();
+                    }
+
                     @Override
                     public void onAdClosed() {
                         super.onAdClosed();

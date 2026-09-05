@@ -3,6 +3,8 @@ package io.onboardkit.ui.language
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
@@ -36,8 +38,8 @@ import kotlinx.coroutines.launch
  *
  * The LFO carries two native slots on a single Activity (no duplicated screen, no re-inflate):
  * slot 1 is preloaded from Splash and shown on entry, slot 2 is preloaded as soon as the LFO
- * appears and swapped in on the first language tap — a second impression without the user ever
- * leaving the screen, so selection and scroll position are naturally preserved.
+ * appears. The first language tap requests the swap; slot 1 remains until slot 2 binds, without
+ * leaving the screen or losing selection and scroll position.
  */
 class ObLanguageActivity : BaseOnboardActivity() {
 
@@ -50,8 +52,14 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private var selectedCode: String? = null
     private var languages: List<ObLanguage> = emptyList()
 
-    /** True once the first tap swapped slot 1 out for slot 2. */
+    /** Request is attempted once; a failed replacement leaves the first slot intact. */
+    private var secondSlotRequested = false
     private var secondAdShown = false
+    private var secondSwapPending = false
+    private var pendingSwapCode: String? = null
+    private var languageExitStarted = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val secondSwapTimeout = Runnable { keepFirstNativeSlot() }
 
     /**
      * True once the user has picked a language themselves.
@@ -159,6 +167,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     private fun onLanguageTapped(language: ObLanguage) {
+        if (languageExitStarted) return
         // Tapping the row that is already selected is the confirm gesture, not a new selection:
         // the list does not change, so none of the selection work below runs for it.
         if (isReselect(language)) {
@@ -183,7 +192,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         // rather than on entry — most users never re-tap, and that request would be wasted.
         sdk.preload().onLanguageSelected(this)
 
-        if (secondAdShown) return
+        if (secondSlotRequested) return
 
         val config = sdk.requireConfig()
         if (!config.language.secondNativeOnSelectEnabled ||
@@ -192,13 +201,8 @@ class ObLanguageActivity : BaseOnboardActivity() {
             return
         }
 
-        secondAdShown = true
-        // Slot 1 is genuinely finished here, so it reports its own completion — the audited SDK's
-        // `lfo1_complete`, which fired on exactly this transition (tap on LFO1 -> open LFO2).
-        // Screen 2's completion comes from the Next button, with screen_index=2. Two events with
-        // two different indexes is two screens, not a double count.
-        OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(1, language.code))
-        showSecondNativeSlot()
+        secondSlotRequested = true
+        showSecondNativeSlot(language.code)
     }
 
     /**
@@ -228,13 +232,51 @@ class ObLanguageActivity : BaseOnboardActivity() {
         ).also { it.show() }
     }
 
-    /** First tap: slot 1 goes away, slot 2 takes its place. Same screen, fresh impression. */
-    private fun showSecondNativeSlot() {
+    /** Keep slot 1 visible while the replacement binds inside the hidden second block. */
+    private fun showSecondNativeSlot(code: String) {
+        secondSwapPending = true
+        pendingSwapCode = code
+        binding.obAdBlock2.visibility = View.GONE
+        mainHandler.postDelayed(secondSwapTimeout, SECOND_NATIVE_SWAP_TIMEOUT_MS)
+        showNativeAd(
+            placement = AdPlacement.Language2,
+            unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.Language2),
+            container = binding.obNativeContainer2,
+            onBound = ::commitSecondNativeSlot,
+            onUnavailable = { keepFirstNativeSlot() },
+        )
+    }
+
+    private fun commitSecondNativeSlot() {
+        if (!secondSwapPending || languageExitStarted || isFinishing || isDestroyed) return
+        val code = pendingSwapCode ?: return
+        clearSecondNativeWait()
+        secondAdShown = true
         binding.obAdBlock.visibility = View.INVISIBLE
         binding.obAdBlock2.visibility = View.VISIBLE
         sdk.provider()?.releaseNative(AdPlacement.Language1)
-        setupNativeAd(AdPlacement.Language2)
+        OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(1, code))
         OnboardingSdk.track(AnalyticsEvent.LanguageViewed(2, variant = adVariant()))
+    }
+
+    private fun keepFirstNativeSlot() {
+        if (!secondSwapPending) return
+        cancelSecondNativeSwap()
+        ObLog.w(ObLog.Section.SHOW, "language2 unavailable — keeping language1")
+    }
+
+    private fun clearSecondNativeWait() {
+        secondSwapPending = false
+        pendingSwapCode = null
+        mainHandler.removeCallbacks(secondSwapTimeout)
+    }
+
+    private fun cancelSecondNativeSwap() {
+        if (!secondSwapPending) return
+        clearSecondNativeWait()
+        binding.obAdBlock2.visibility = View.GONE
+        // Detach the built-in provider's pending listener. A stale host callback still cannot commit.
+        sdk.provider()?.releaseNative(AdPlacement.Language2)
     }
 
     private fun adBlockFor(placement: AdPlacement): ViewGroup =
@@ -257,7 +299,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     private fun onConfirm() {
+        if (languageExitStarted) return
         val code = selectedCode ?: return
+        languageExitStarted = true
+        cancelSecondNativeSwap()
         OnboardingSdk.persistLanguage(code)
 
         if (mode == LanguageScreenMode.SETTINGS) {
@@ -356,6 +401,8 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     override fun onDestroy() {
+        languageExitStarted = true
+        clearSecondNativeWait()
         // Dismissed before super: a modal still attached to a finishing Activity leaks its window,
         // and dismissing also hands back the native it was holding.
         confirmDialog?.dismiss()
@@ -371,6 +418,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     companion object {
+        private const val SECOND_NATIVE_SWAP_TIMEOUT_MS = 8_000L
         private const val EXTRA_MODE = "ob_extra_mode"
 
         const val RESULT_LANGUAGE_CODE = "ob_result_language_code"

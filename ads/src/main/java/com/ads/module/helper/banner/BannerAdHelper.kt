@@ -129,7 +129,12 @@ class BannerAdHelper(
             return
         }
         if (param is BannerAdParam.Reload && !canReloadAd()) return
-        load()
+        val effectiveType = if (param is BannerAdParam.Reload && config.bannerType is BannerType.Collapsible) {
+            BannerType.Normal
+        } else {
+            config.bannerType
+        }
+        load(effectiveType)
     }
 
     override fun cancel() {
@@ -166,7 +171,7 @@ class BannerAdHelper(
         }
     }
 
-    private fun load() {
+    private fun load(effectiveType: BannerType) {
         if (config.adUnitIds.isEmpty()) {
             // Failing fast beats a Loading state nothing can ever resolve
             hideShimmer()
@@ -190,10 +195,10 @@ class BannerAdHelper(
             config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
             AdTracking.request(key, AdFormat.BANNER, config.idAds)
         }
-        loadTier(0, oldViews)
+        loadTier(0, oldViews, effectiveType)
     }
 
-    private fun loadTier(index: Int, oldViews: List<AdView>) {
+    private fun loadTier(index: Int, oldViews: List<AdView>, effectiveType: BannerType) {
         val adUnitId = config.adUnitIds.getOrNull(index) ?: return
         val retired = AtomicBoolean(false)
         val callback = object : AdCallback() {
@@ -239,7 +244,7 @@ class BannerAdHelper(
                 }
                 // Waterfall: a lower floor gets its turn before anything is surfaced
                 if (index + 1 < config.adUnitIds.size) {
-                    loadTier(index + 1, oldViews)
+                    loadTier(index + 1, oldViews, effectiveType)
                     return
                 }
                 // Terminal must leave Loading or requestAds stays gated forever; a survivor
@@ -261,7 +266,7 @@ class BannerAdHelper(
         }
         val root = rootView
         val erain = ERainAd.getInstance()
-        when (val type = config.bannerType) {
+        when (val type = effectiveType) {
             is BannerType.Normal ->
                 if (root == null) erain.loadBanner(activity, adUnitId, callback)
                 else erain.loadBannerFragment(activity, adUnitId, root, callback)

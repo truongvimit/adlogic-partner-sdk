@@ -2,6 +2,7 @@ package io.trackkit
 
 import io.trackkit.internal.AdRevenueAccumulator
 import io.trackkit.internal.EventValidator
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,6 +34,19 @@ class TaxonomyTest {
             "expected the whole catalog, found only ${events.size}: ${events.map { it.name }}",
             events.size >= EXPECTED_EVENT_COUNT,
         )
+    }
+
+    @Test
+    fun `flow ad bound is a registered placement and format event`() {
+        val event = TrackkitEvents.Fo.AdBound("language1", AdFormat.NATIVE)
+
+        assertEquals("fo_ad_bound", TrackkitEvents.FO_AD_BOUND)
+        assertEquals("fo_ad_bound", event.name)
+        assertEquals(
+            mapOf("placement" to "language1", "ad_format" to "native"),
+            event.params,
+        )
+        assertTrue("Sinks must be able to configure the new event", event.name in TrackkitEvents.all())
     }
 
     @Test

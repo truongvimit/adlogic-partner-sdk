@@ -30,10 +30,14 @@ import io.trackkit.PlacementRegistry;
  * {@code onAdClickedAll}, …), so loaded / shown / closed are emitted at most once per instance and
  * a tier race can not inflate the counts.
  *
+ * <p>{@code onInterstitialShow} marks the navigation commitment before vendor show; it only
+ * forwards to the delegate. Actual display is reported by {@code onAdImpression}, including
+ * the fullscreen vendor shown callback routed through that hook.
+ *
  * <p>{@code ad_click} is deliberately not emitted here — {@code ERainLogEventManager.logClickAdsEvent}
  * owns it, from the vendor callback that every click path reaches.
  *
- * <p>Applied by {@code ERainAd} itself, never by the host app: the layer that creates the ad object
+ * <p>Applied by the ads SDK itself, never by the host app: the layer that creates the ad object
  * attaches the instrumentation, exactly as it attaches {@code OnPaidEventListener}.
  */
 public class TrackingAdCallback extends AdCallback {
@@ -178,7 +182,6 @@ public class TrackingAdCallback extends AdCallback {
 
     @Override
     public void onInterstitialShow() {
-        reportShown();
         if (delegate != null) delegate.onInterstitialShow();
     }
 

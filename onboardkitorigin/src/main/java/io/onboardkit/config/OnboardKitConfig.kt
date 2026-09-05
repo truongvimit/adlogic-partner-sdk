@@ -21,18 +21,13 @@ data class SplashConfig(
     val minDisplayTimeMs: Long = 3_000,
     val remoteFetchTimeoutMs: Long = 10_000,
     /**
-     * Bounds the UMP round trip, never the user reading the form.
+     * Bounds the initial wait for consent. ConsentCenter separately bounds its own UMP round trip.
+     * A custom consent hook with no SDK-owned flow still resolving is limited to this wait.
      *
-     * On the default path it rarely decides anything: `ConsentCenter` arms a round-trip deadline of
-     * its own that fails open, and normally fires first. This one matters for a
-     * `ObSplashActivity.onConsentRequired` override that resolves consent somewhere `ConsentCenter`
-     * cannot see — there is no flow for the splash to wait on, so that one is held to this alone.
-     * Set to `ConsentOptions.timeoutMs` so the two cannot disagree about when a round trip has gone
-     * on too long.
-     *
-     * A form already on screen outlives this, but not forever: three more minutes of the screen
-     * being in front of the user and the splash moves on regardless, because UMP can leave a form
-     * up that nothing will ever dismiss. Time spent with the app in the background does not count.
+     * If an SDK-owned flow remains open, splash waits a further 180-second window. At its end,
+     * a background splash waits another whole window; a visible splash may continue using current
+     * authorization. These are wall-time windows, not accumulated foreground time. A timeout
+     * never grants consent. Set this consistently with ConsentOptions.timeoutMs for the host.
      */
     val consentTimeoutMs: Long = 20_000,
     val billingTimeoutMs: Long = 5_000,
@@ -49,8 +44,8 @@ data class LanguageConfig(
     val languages: List<ObLanguage> = ObLanguages.ALL,
     val defaultCode: String? = null,
     /**
-     * On the first language tap, swaps the LFO's first native for a second one preloaded on
-     * entry. Same screen, second impression — no duplicated Activity, no lost scroll position.
+     * On the first language tap, requests a swap to the second native preloaded on entry.
+     * The first stays visible until the replacement binds; selection and scroll position remain.
      */
     val secondNativeOnSelectEnabled: Boolean = true,
     /**

@@ -41,6 +41,8 @@ import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.admob.AppOpenManager
+import com.ads.module.admob.ResumeSkipPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -132,6 +134,14 @@ object OnboardingSdk {
         remote = ObRemote(app)
         adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
         appResumeGuard = ObAppResume(adsGuard, adProvider)
+        // Same transient/master policy for both entry paths; OPEN retains its own slot checks.
+        AppOpenManager.getInstance().setResumeSkipPolicy(object : ResumeSkipPolicy {
+            override fun skipReasonFor(activity: Activity): String? =
+                appResumeGuard.sharedSkipReason(activity)?.key
+
+            override fun appOpenSkipReasonFor(activity: Activity): String? =
+                appResumeGuard.skipReason(activity)?.key
+        })
         preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }

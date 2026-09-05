@@ -32,6 +32,9 @@ enum class AdSkipReason(val key: String) {
     /** The module declined by one of its own frequency rules (interval, show counter). */
     CAPPED_BY_MODULE("capped_by_module"),
 
+    /** The host left the foreground before GMA show; a still-fresh fill can be reused. */
+    SHOW_IN_BACKGROUND("show_in_background"),
+
     /** GMA reported a show failure. */
     FAILED_TO_SHOW("failed_to_show"),
     ;

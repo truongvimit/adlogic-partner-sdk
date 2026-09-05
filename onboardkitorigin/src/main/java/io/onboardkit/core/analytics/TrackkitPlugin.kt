@@ -91,7 +91,7 @@ object TrackkitPlugin : AnalyticsPlugin {
                 Tracker.track(TrackkitEvents.Ad.Request(event.placementName, event.format, null))
 
             is AnalyticsEvent.AdImpression ->
-                Tracker.track(TrackkitEvents.Ad.Show(event.placementName, event.format))
+                Tracker.track(TrackkitEvents.Fo.AdBound(event.placementName, event.format))
 
             is AnalyticsEvent.AdFailed ->
                 Tracker.track(TrackkitEvents.Ad.LoadFailed(event.placementName, event.format, null))

@@ -3,7 +3,10 @@ package io.onboardkit.ui.question
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import io.onboardkit.OnboardingSdk
@@ -41,6 +44,8 @@ class ObQuestionActivity : BaseOnboardActivity() {
     private var activeQuestion: QuestionConfig? = null
     private val selectedIds = linkedSetOf<String>()
     private var lastAdRefreshMs = 0L
+    private var nativeLoadPending = false
+    private var pendingReplacement: FrameLayout? = null
 
     /** Remote JSON fully replaces the option list when valid; otherwise compile-time config. */
     private fun resolveQuestion(): QuestionConfig? {
@@ -82,8 +87,10 @@ class ObQuestionActivity : BaseOnboardActivity() {
 
         binding.obQuestionCta.setOnClickListener { onCtaClicked() }
 
-        setupNativeAd()
+        // Warm/join before consuming the initial buffer. Doing this after bind started another
+        // native load whose listener could replace the ad without any selection, even when off.
         sdk.preload().preloadQuestion(this)
+        setupNativeAd()
     }
 
     private fun onOptionToggled(optionId: String, selected: Boolean) {
@@ -101,7 +108,7 @@ class ObQuestionActivity : BaseOnboardActivity() {
 
         bindCtaVisibility()
 
-        if (question.refreshAdOnSelect) refreshAdThrottled()
+        if (selected && question.refreshAdOnSelect) refreshAdThrottled()
     }
 
     /**
@@ -116,21 +123,65 @@ class ObQuestionActivity : BaseOnboardActivity() {
             if (selectedIds.size >= required) View.VISIBLE else View.INVISIBLE
     }
 
-    /** At most one native refresh per 2s regardless of tap rate. */
+    /** Keep the 2s attempt throttle; each successful bind also restarts the visible ad's cooldown. */
     private fun refreshAdThrottled() {
-        val now = System.currentTimeMillis()
-        if (now - lastAdRefreshMs < AD_REFRESH_THROTTLE_MS) return
+        val now = SystemClock.elapsedRealtime()
+        if (nativeLoadPending || now - lastAdRefreshMs < AD_REFRESH_THROTTLE_MS) return
         lastAdRefreshMs = now
-        sdk.provider()?.releaseNative(AdPlacement.QuestionNative)
-        setupNativeAd()
+        nativeLoadPending = true
+        // The helper may show its shimmer, so hide its parent while the current native remains.
+        val staging = FrameLayout(this).apply { visibility = View.GONE }
+        val replacement = FrameLayout(this)
+        staging.addView(replacement, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        binding.obAdBlock.addView(staging, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        pendingReplacement = staging
+        showNativeAd(
+            placement = AdPlacement.QuestionNative,
+            unit = sdk.requireConfig().ads.questionNative,
+            container = replacement,
+            onBound = {
+                if (pendingReplacement === staging) {
+                    pendingReplacement = null
+                    nativeLoadPending = false
+                    lastAdRefreshMs = SystemClock.elapsedRealtime()
+                    staging.removeView(replacement)
+                    binding.obNativeContainer.removeAllViews()
+                    binding.obNativeContainer.addView(replacement)
+                    binding.obAdBlock.removeView(staging)
+                    binding.obNativeContainer.visibility = View.VISIBLE
+                    binding.obAdBlock.visibility = View.VISIBLE
+                    // The provider already retired the previous native when this bind succeeded.
+                }
+            },
+            onUnavailable = {
+                if (pendingReplacement === staging) {
+                    pendingReplacement = null
+                    nativeLoadPending = false
+                    binding.obAdBlock.removeView(staging)
+                }
+            },
+        )
     }
 
     private fun setupNativeAd() {
+        nativeLoadPending = true
+        lastAdRefreshMs = SystemClock.elapsedRealtime()
         showNativeAd(
             placement = AdPlacement.QuestionNative,
             unit = sdk.requireConfig().ads.questionNative,
             container = binding.obNativeContainer,
-            onUnavailable = { binding.obAdBlock.visibility = View.GONE },
+            onBound = {
+                nativeLoadPending = false
+                lastAdRefreshMs = SystemClock.elapsedRealtime()
+            },
+            onUnavailable = {
+                nativeLoadPending = false
+                binding.obAdBlock.visibility = View.GONE
+            },
         )
     }
 
@@ -167,6 +218,8 @@ class ObQuestionActivity : BaseOnboardActivity() {
     }
 
     override fun onDestroy() {
+        pendingReplacement = null
+        nativeLoadPending = false
         sdk.provider()?.releaseNative(AdPlacement.QuestionNative)
         super.onDestroy()
     }

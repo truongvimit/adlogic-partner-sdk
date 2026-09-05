@@ -122,7 +122,10 @@ sealed class AnalyticsEvent(val name: String, val params: Map<String, Any> = emp
     class AdRequested(val placementName: String, val format: AdFormat) :
         AnalyticsEvent("ob_ad_request", mapOf("placement" to placementName))
 
-    /** The ad was actually painted. */
+    /**
+     * The flow's native bind signal. The legacy class and `ob_ad_impression` name remain for
+     * partner plugins; [TrackkitPlugin] maps it to `fo_ad_bound`, not a vendor-counted `ad_show`.
+     */
     class AdImpression(
         val placementName: String,
         val format: AdFormat = AdFormat.NATIVE_FULL_SCREEN,

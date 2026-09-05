@@ -68,6 +68,9 @@ enum class AdSkipReason(val key: String) {
     /** The user is coming back from an ad they tapped, not starting a new session. */
     RETURNING_FROM_AD_CLICK("returning_from_ad_click"),
 
+    /** The host left the foreground before GMA show; a still-fresh fill can be reused. */
+    SHOW_IN_BACKGROUND("show_in_background"),
+
     /** GMA reported a show failure. */
     FAILED_TO_SHOW("failed_to_show"),
 

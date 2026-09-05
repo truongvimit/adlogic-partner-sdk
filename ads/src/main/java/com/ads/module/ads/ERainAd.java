@@ -459,6 +459,12 @@ public class ERainAd {
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
+                if (Admob.isShowInBackgroundError(adError)) {
+                    // GMA show was never invoked: retain the original wrapper for a later trigger.
+                    // The manager may restore it during this callback, so do not clear it afterward.
+                    callback.onAdFailedToShow(adError);
+                    return;
+                }
                 callback.onAdFailedToShow(adError);
                 if (shouldReloadAds) {
                     Admob.getInstance().getInterstitialAds(context, adUnitId, instrument(adUnitId, AdFormat.INTERSTITIAL, new AdCallback() {
@@ -491,6 +497,12 @@ public class ERainAd {
             public void onAdClicked() {
                 super.onAdClicked();
                 callback.onAdClicked();
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                callback.onAdImpression();
             }
 
             @Override
