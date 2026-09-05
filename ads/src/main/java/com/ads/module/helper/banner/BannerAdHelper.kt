@@ -1,6 +1,7 @@
 package com.ads.module.helper.banner
 
 import android.app.Activity
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +15,9 @@ import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdsHelper
 import com.ads.module.tracking.AdTracking
+import com.ads.module.tracking.AdLoadAttempt
+import com.ads.module.tracking.AdLoadContext
+import com.ads.module.tracking.TrackingAdCallback
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
@@ -53,7 +57,7 @@ class BannerAdHelper(
     )
     val bannerAdState: StateFlow<AdBannerState> = _bannerAdState.asStateFlow()
 
-    /** Analytics key. When set, the helper reports request/skip events itself. */
+    /** Analytics key captured per load; null captures the first unit's registered placement. */
     var placement: String? = null
 
     /** Root the module's loaders search for `banner_container`; null = the Activity window. */
@@ -64,8 +68,36 @@ class BannerAdHelper(
     private var currentLoad: BannerLoad? = null
     private val displayedViews = mutableSetOf<AdView>()
 
-    private class BannerLoad(val personalized: Boolean) {
+    private class BannerLoad(val personalized: Boolean, val context: AdLoadContext) {
         val rejected = AtomicBoolean(false)
+        val attempt = AdLoadAttempt(context)
+        var pendingTier: BannerTier? = null
+
+        fun fail(errorCode: Int? = null) {
+            pendingTier?.finish("load_failed", errorCode)
+            attempt.onFailed(errorCode)
+        }
+    }
+
+    private class BannerTier(
+        private val attempt: AdLoadAttempt,
+        private val index: Int,
+        private val unitId: String,
+    ) {
+        private var startedAt: Long? = null
+        private val finished = AtomicBoolean(false)
+
+        fun start() {
+            if (finished.get() || startedAt != null) return
+            startedAt = SystemClock.elapsedRealtime()
+            attempt.onRequestStarted(unitId)
+        }
+
+        fun finish(outcome: String, errorCode: Int? = null) {
+            if (!finished.compareAndSet(false, true)) return
+            val start = startedAt ?: return
+            attempt.onTierResult(index + 1, unitId, outcome, errorCode, SystemClock.elapsedRealtime() - start)
+        }
     }
 
     // When the next interval reload is due; ON_STOP kills the timer, this survives it
@@ -142,6 +174,7 @@ class BannerAdHelper(
     }
 
     override fun cancel() {
+        currentLoad?.fail()
         currentLoad = null
         flagActive.compareAndSet(true, false)
         mainHandler.removeCallbacks(autoReloadRunnable)
@@ -166,6 +199,7 @@ class BannerAdHelper(
             Lifecycle.Event.ON_STOP -> mainHandler.removeCallbacks(autoReloadRunnable)
 
             Lifecycle.Event.ON_DESTROY -> {
+                currentLoad?.fail()
                 currentLoad = null
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.removeCallbacks(autoReloadRunnable)
@@ -199,9 +233,10 @@ class BannerAdHelper(
         }
         placement?.let { key ->
             config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
-            AdTracking.request(key, AdFormat.BANNER, config.idAds)
         }
-        val load = BannerLoad(ConsentCenter.canPersonalize())
+        val loadContext = placement?.let { AdLoadContext(it, bannerFormat()) }
+            ?: AdLoadContext.forAdUnit(config.idAds, bannerFormat())
+        val load = BannerLoad(ConsentCenter.canPersonalize(), loadContext)
         currentLoad = load
         loadTier(0, oldViews, load)
     }
@@ -214,6 +249,8 @@ class BannerAdHelper(
             rejectLoad(load)
             return
         }
+        val tier = BannerTier(load.attempt, index, adUnitId)
+        load.pendingTier = tier
         val initialFillAccepted = AtomicBoolean(false)
         val tierFailed = AtomicBoolean(false)
         val precedingViews = bannerViews()
@@ -227,7 +264,11 @@ class BannerAdHelper(
             restoreBannerVisibility()
         }
 
-        val callback = object : AdCallback() {
+        val callback = TrackingAdCallback.presentationOnly(load.context, adUnitId, object : AdCallback() {
+            override fun onAdRequestStarted(adUnitId: String) {
+                if (currentLoad === load && !load.rejected.get()) tier.start()
+            }
+
             override fun onAdLoaded() {
                 // A rejected/failed tier must not claim a later load, even when GMA delivers
                 // a callback after teardown. The loader toggled visibility before calling us;
@@ -240,11 +281,14 @@ class BannerAdHelper(
                     return
                 }
                 if (!canRetain(load)) {
+                    tier.finish("loaded")
                     if (currentLoad === load) rejectLoad(load) else discardTier()
                     return
                 }
                 // One-shot: a later GMA auto-refresh success must not re-destroy survivors
                 if (initialFillAccepted.compareAndSet(false, true)) {
+                    tier.finish("loaded")
+                    load.attempt.onLoaded(adUnitId)
                     removeViews(oldViews)
                     displayedViews.addAll(tierViews())
                 }
@@ -265,7 +309,8 @@ class BannerAdHelper(
                     return
                 }
                 if (!canRetain(load)) {
-                    if (currentLoad === load) rejectLoad(load) else discardTier()
+                    tier.finish("load_failed", adError?.code)
+                    if (currentLoad === load) rejectLoad(load, adError?.code) else discardTier()
                     return
                 }
                 // Out-of-cycle (GMA auto-refresh miss on the live AdView): keep the creative,
@@ -279,6 +324,7 @@ class BannerAdHelper(
                     restoreBannerVisibility()
                     return
                 }
+                tier.finish("load_failed", adError?.code)
                 // The loader attached this tier's AdView before the request resolved; retire
                 // it (but never the pre-walk survivors) or its armed listener lives on
                 discardTier()
@@ -292,6 +338,7 @@ class BannerAdHelper(
                 }
                 // Terminal must leave Loading or requestAds stays gated forever; a survivor
                 // still on screen is Loaded, not Fail
+                load.attempt.onFailed(adError?.code)
                 setState(if (oldViews.isEmpty()) AdBannerState.Fail else AdBannerState.Loaded)
                 // A no-fill must not end the interval chain — the next tick retries
                 armAutoReload()
@@ -310,7 +357,7 @@ class BannerAdHelper(
                     listeners.forEach { it.onAdImpression() }
                 }
             }
-        }
+        })
         val root = rootView
         val erain = ERainAd.getInstance()
         when (val type = config.bannerType) {
@@ -366,8 +413,9 @@ class BannerAdHelper(
             AdGate.passesUaGate(config.forceUaCheck), checkNetwork = false) == null &&
             ConsentCenter.canPersonalize() == load.personalized
 
-    private fun rejectLoad(load: BannerLoad) {
+    private fun rejectLoad(load: BannerLoad, errorCode: Int? = null) {
         if (currentLoad !== load || !load.rejected.compareAndSet(false, true)) return
+        load.fail(errorCode)
         reportSkip(AdGate.passesUaGate(config.forceUaCheck))
         // Offline prevents a replacement request; it does not invalidate an authorized
         // creative already displayed. Lost authority/premium/personalization does.
@@ -441,8 +489,11 @@ class BannerAdHelper(
     private fun reportSkip(passesUaGate: Boolean) {
         val key = placement ?: return
         val reason = AdGate.skipReason(context, config.canShowAds, passesUaGate) ?: return
-        AdTracking.skipped(key, AdFormat.BANNER, reason.key)
+        AdTracking.skipped(key, bannerFormat(), reason.key)
     }
+
+    private fun bannerFormat(): AdFormat =
+        if (config.bannerType is BannerType.Collapsible) AdFormat.COLLAPSIBLE_BANNER else AdFormat.BANNER
 
     companion object {
 

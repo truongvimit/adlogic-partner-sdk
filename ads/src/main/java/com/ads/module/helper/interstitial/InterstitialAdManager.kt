@@ -10,6 +10,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
 import com.ads.module.tracking.AdTracking
+import com.ads.module.tracking.AdLoadContext
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
@@ -24,7 +25,7 @@ class InterLoadOptions @JvmOverloads constructor(
     val passesUaGate: Boolean = true,
     /** How long one waterfall tier may take before the next floor is tried. */
     val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
-    /** Off when the caller owns request/skip analytics itself (OnboardKit's AdTelemetry). */
+    /** Whether this owner reports request, tier results, load terminals and skips. */
     val reportTelemetry: Boolean = true,
 )
 
@@ -136,14 +137,18 @@ object InterstitialAdManager {
         // so a shared ad unit id was attributed to whichever placement called load() last rather
         // than to the one that actually requested it.
         ids.forEach { AdTracking.registerPlacement(it, placement) }
-        if (options.reportTelemetry) {
-            AdTracking.request(placement, AdFormat.INTERSTITIAL, ids.first())
-        }
         AdWaterfall.loadInterstitial(
             context,
             ids,
             options.tierTimeoutMs,
+            AdLoadContext(placement, AdFormat.INTERSTITIAL, options.reportTelemetry),
             object : AdCallback() {
+                override fun canAcceptLoadedAd(): Boolean =
+                    inFlight[placement] === request &&
+                        AdGate.skipReason(context, options.enabled, options.passesUaGate,
+                            checkNetwork = false) == null &&
+                        personalized == ConsentCenter.canPersonalize() && inFlight[placement] === request
+
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     if (!inFlight.remove(placement, request)) return
                     if (apInterstitialAd == null || !apInterstitialAd.isReady ||

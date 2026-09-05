@@ -16,6 +16,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
 import com.ads.module.tracking.AdTracking
+import com.ads.module.tracking.AdLoadContext
 import com.facebook.shimmer.Shimmer
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
@@ -75,8 +76,15 @@ class NativeAdHelper(
     var nativeAd: ApNativeAd? = null
         private set
 
-    /** Analytics key. When set, the helper reports request/skip events itself. */
+    /** Analytics placement for new load attempts and skipped opportunities. */
     var placement: String? = null
+
+    /**
+     * Optional immutable placement/format/reporting policy for direct loads and buffer refills.
+     * Defaults to [placement] with the native format, or the first unit's legacy registration.
+     * The buffer key remains independent; consuming or joining its ad does not create a request.
+     */
+    var loadContext: AdLoadContext? = null
 
     var adVisibility: AdOptionVisibility = AdOptionVisibility.GONE
 
@@ -377,17 +385,20 @@ class NativeAdHelper(
         }
         val generation = ++requestGeneration
         val personalized = ConsentCenter.canPersonalize()
+        val requestContext = captureLoadContext()
         setState(AdNativeState.Loading)
-        placement?.let { key ->
-            config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
-            AdTracking.request(key, AdFormat.NATIVE, config.idAds)
-        }
+        config.adUnitIds.forEach { AdTracking.registerPlacement(it, requestContext.placement) }
         AdWaterfall.loadNative(
             activity,
             config.adUnitIds,
             config.layoutId,
             config.tierTimeoutMs,
+            requestContext,
             object : AdCallback() {
+                override fun canAcceptLoadedAd(): Boolean =
+                    requestGeneration == generation && isActiveState() && canBind(personalized) &&
+                        requestGeneration == generation
+
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     if (requestGeneration != generation) {
                         destroyNative(nativeAd)
@@ -585,9 +596,15 @@ class NativeAdHelper(
         if (preload.getNativeAdBuffer(preloadKey).isEmpty() &&
             !preload.isPreloadInProgress(preloadKey)
         ) {
-            preload.preloadWithKey(preloadKey, activity, config, preloadClientOption.preloadBuffer)
+            preload.preloadWithKey(
+                preloadKey, activity, config, preloadClientOption.preloadBuffer, captureLoadContext(),
+            )
         }
     }
+
+    private fun captureLoadContext(): AdLoadContext = loadContext ?: placement?.let {
+        AdLoadContext(it, AdFormat.NATIVE)
+    } ?: AdLoadContext.forAdUnit(config.idAds, AdFormat.NATIVE)
 
     private fun applyDefaultVisibility() {
         val hasAd = nativeAd != null && canBind(loadedPersonalized)

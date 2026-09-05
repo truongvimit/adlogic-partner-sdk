@@ -25,6 +25,8 @@ import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
+import com.ads.module.tracking.AdLoadContext
+import com.ads.module.tracking.TrackingAdCallback
 import com.ads.module.util.SharePreferenceUtils
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
@@ -34,6 +36,7 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.PlacementAwareBannerProvider
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
@@ -46,8 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Buffering, expiry, in-flight dedup and the show contract all live in
  * [NativeAdPreload] / [InterstitialAdManager]; this class only translates between the
- * onboarding flow's placement/callback vocabulary and the module's. Telemetry stays with
- * the flow's own AdTelemetry, so the managers are called with reporting off.
+ * onboarding flow's placement/callback vocabulary and the module's. The load owners report
+ * request/load terminals; the flow retains its UI callbacks, skips and impression reporting.
  */
 class ERainAdProvider(
     /**
@@ -58,7 +61,7 @@ class ERainAdProvider(
      * trades fill rate for speed — measure before you do.
      */
     private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
-) : OnboardingAdProvider {
+) : PlacementAwareBannerProvider {
 
     init {
         // The flow reuses its splash interstitial at the language and pager exits, and decides
@@ -112,7 +115,12 @@ class ERainAdProvider(
             ?.let { nativeStyles[key] = it.toNativeStyle() }
         ensureNativeBridge(key)
         val covered =
-            preload.preloadWithKeyIfEmpty(key, activity, nativeConfig(ids, request.layoutRes))
+            preload.preloadWithKeyIfEmpty(
+                key,
+                activity,
+                nativeConfig(ids, request.layoutRes),
+                AdLoadContext(key, request.placement.format),
+            )
         // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
         if (!covered && !isNativeReady(request.placement)) {
             notifyListener(key) { it.onFailedToLoad() }
@@ -172,7 +180,7 @@ class ERainAdProvider(
             context,
             key,
             unit.loadOrder,
-            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = false),
+            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = true),
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
@@ -248,23 +256,23 @@ class ERainAdProvider(
         runCatching { AdmobHelper.getNumClickAdsPerDay(context, adUnitId) }.getOrDefault(0)
 
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
-        ERainAd.getInstance().loadBanner(
-            activity,
-            unit.id,
-            object : AdCallback() {
-                override fun onAdLoaded() {
-                    listener?.onLoaded()
-                }
+        ERainAd.getInstance().loadBanner(activity, unit.id, bannerCallback(listener))
+    }
 
-                override fun onAdFailedToLoad(error: LoadAdError?) {
-                    listener?.onFailedToLoad()
-                }
+    override fun loadBanner(
+        activity: Activity,
+        placement: AdPlacement,
+        unit: BannerAdUnit,
+        listener: AdEventListener?,
+    ) {
+        ERainAd.getInstance().loadBanner(activity, unit.id,
+            TrackingAdCallback(placement.key, placement.format, unit.id, bannerCallback(listener)))
+    }
 
-                override fun onAdClicked() {
-                    listener?.onClicked()
-                }
-            },
-        )
+    private fun bannerCallback(listener: AdEventListener?): AdCallback = object : AdCallback() {
+        override fun onAdLoaded() { listener?.onLoaded() }
+        override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
+        override fun onAdClicked() { listener?.onClicked() }
     }
 
     override fun suppressAppResume(activityClass: Class<out Activity>) {

@@ -36,6 +36,13 @@ data class NativeAdRequest(
  * The SDK ships [io.onboardkit.ads.erain.ERainAdProvider], which bridges the project's `:ads`
  * module (AdMob legacy). Apps may inject any other implementation, or none at all — every
  * placement then reports [AdSkipReason.NO_PROVIDER] instead of failing.
+ *
+ * The provider owns load telemetry. Emit one request at the first actual vendor dispatch of a
+ * logical attempt and one mutually exclusive loaded/failed terminal after its waterfall settles.
+ * Cache hits, callers joining an in-flight request, and screen callbacks emit no additional load
+ * events. Custom providers can use `AdLoadAttempt` with an immutable `AdLoadContext` at their
+ * vendor boundary. The flow continues reporting skips and impressions; it does not infer a
+ * physical load from [preloadNative], [bindNative], or [AdEventListener.onFailedToLoad].
  */
 interface OnboardingAdProvider {
 
@@ -97,4 +104,32 @@ interface OnboardingAdProvider {
     fun suppressAppResume(activityClass: Class<out Activity>)
 
     fun releaseAll()
+}
+
+/**
+ * Optional banner capability for providers that capture the requesting placement explicitly.
+ * Existing [OnboardingAdProvider] implementations retain their original JVM interface.
+ */
+interface PlacementAwareBannerProvider : OnboardingAdProvider {
+    fun loadBanner(
+        activity: Activity,
+        placement: AdPlacement,
+        unit: BannerAdUnit,
+        listener: AdEventListener? = null,
+    )
+}
+
+/**
+ * Passes the semantic placement to capable providers and otherwise uses the original banner API.
+ * The fallback does not manufacture request/load events; custom providers own those at dispatch.
+ */
+@JvmOverloads
+fun OnboardingAdProvider.loadBanner(
+    activity: Activity,
+    placement: AdPlacement,
+    unit: BannerAdUnit,
+    listener: AdEventListener? = null,
+) {
+    if (this is PlacementAwareBannerProvider) loadBanner(activity, placement, unit, listener)
+    else loadBanner(activity, unit, listener)
 }

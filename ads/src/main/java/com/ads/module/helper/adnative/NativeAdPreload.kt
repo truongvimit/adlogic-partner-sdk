@@ -8,7 +8,9 @@ import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.CachedAd
+import com.ads.module.tracking.AdLoadContext
 import com.google.android.gms.ads.LoadAdError
+import io.trackkit.AdFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -29,6 +31,11 @@ class NativeAdPreloadClientOption @JvmOverloads constructor(
  * Buffered ads carry their load time: a stale buffer entry is destroyed on read instead of
  * being handed to a screen that would bind an expired ad.
  *
+ * Each ad in a batch owns a separate load attempt. [AdLoadContext] is captured when the batch is
+ * queued and supplies its analytics placement/format; the cache key does not define either.
+ * Omitting it captures the first ad unit's legacy placement mapping and the native format.
+ * Reading a cached ad or joining an existing request does not emit another load request.
+ *
  * Main-thread only — the legacy GMA SDK requires load calls there.
  */
 class NativeAdPreload private constructor() {
@@ -40,8 +47,19 @@ class NativeAdPreload private constructor() {
 
     /** @return whether a request batch was actually started. */
     @JvmOverloads
-    fun preload(activity: Activity, config: NativeAdConfig, buffer: Int = 1): Boolean =
-        preloadWithKey(keyOf(config), activity, config, buffer)
+    fun preload(
+        activity: Activity,
+        config: NativeAdConfig,
+        buffer: Int = 1,
+    ): Boolean = preload(activity, config, buffer, null)
+
+    /** Same preload policy with an explicit load context; preserves the original default-argument ABI. */
+    fun preload(
+        activity: Activity,
+        config: NativeAdConfig,
+        buffer: Int,
+        loadContext: AdLoadContext?,
+    ): Boolean = preloadWithKey(keyOf(config), activity, config, buffer, loadContext)
 
     /** @return whether a request batch was actually started. */
     @JvmOverloads
@@ -50,11 +68,21 @@ class NativeAdPreload private constructor() {
         activity: Activity,
         config: NativeAdConfig,
         buffer: Int = 1,
+    ): Boolean = preloadWithKey(key, activity, config, buffer, null)
+
+    /** Same keyed preload policy with analytics context independent of [key]. */
+    fun preloadWithKey(
+        key: String,
+        activity: Activity,
+        config: NativeAdConfig,
+        buffer: Int,
+        loadContext: AdLoadContext?,
     ): Boolean {
         require(buffer > 0) { "Buffer must be greater than 0" }
         if (!canRequestLoad(activity)) return false
         if (config.adUnitIds.isEmpty()) return false
-        executors.getOrPut(key) { PreloadExecutor() }.execute(activity, config, buffer)
+        val capturedContext = loadContext ?: AdLoadContext.forAdUnit(config.idAds, AdFormat.NATIVE)
+        executors.getOrPut(key) { PreloadExecutor() }.execute(activity, config, buffer, capturedContext)
         return true
     }
 
@@ -64,14 +92,20 @@ class NativeAdPreload private constructor() {
      * @return true when a buffered ad or an in-flight request already covers [key], or a
      *   new request was started — false only when nothing is or will be available.
      */
-    fun preloadWithKeyIfEmpty(key: String, activity: Activity, config: NativeAdConfig): Boolean {
+    @JvmOverloads
+    fun preloadWithKeyIfEmpty(
+        key: String,
+        activity: Activity,
+        config: NativeAdConfig,
+        loadContext: AdLoadContext? = null,
+    ): Boolean {
         if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null) {
             executors[key]?.invalidate()
             return false
         }
         val executor = executors[key]
         if (executor != null && (executor.isInProgress() || executor.peek() != null)) return true
-        return preloadWithKey(key, activity, config, 1)
+        return preloadWithKey(key, activity, config, 1, loadContext)
     }
 
     /** Every preload uses the shared request gate, including consent authority and active forms. */
@@ -165,6 +199,7 @@ class NativeAdPreload private constructor() {
             val activity: Activity,
             val config: NativeAdConfig,
             val buffer: Int,
+            val loadContext: AdLoadContext,
         )
 
         private val lock = Any()
@@ -178,23 +213,29 @@ class NativeAdPreload private constructor() {
         private val waiters = mutableListOf<(ApNativeAd?) -> Unit>()
         private val callbacks = CopyOnWriteArrayList<AdCallback>()
 
-        fun execute(activity: Activity, config: NativeAdConfig, buffer: Int) {
+        fun execute(activity: Activity, config: NativeAdConfig, buffer: Int, loadContext: AdLoadContext) {
             val startGeneration = synchronized(lock) {
                 if (released) return
                 applicationContext = activity.applicationContext
                 pending += buffer
                 if (batchInFlight) {
-                    deferredBatches.addLast(Batch(activity, config, buffer))
+                    deferredBatches.addLast(Batch(activity, config, buffer, loadContext))
                     null
                 } else {
                     batchInFlight = true
                     generation
                 }
             }
-            if (startGeneration != null) loadBatch(activity, config, buffer, startGeneration)
+            if (startGeneration != null) loadBatch(activity, config, buffer, startGeneration, loadContext)
         }
 
-        private fun loadBatch(activity: Activity, config: NativeAdConfig, remaining: Int, expectedGeneration: Long) {
+        private fun loadBatch(
+            activity: Activity,
+            config: NativeAdConfig,
+            remaining: Int,
+            expectedGeneration: Long,
+            loadContext: AdLoadContext,
+        ) {
             if (!isCurrent(expectedGeneration)) return
             if (remaining <= 0) {
                 onBatchDone(expectedGeneration)
@@ -210,7 +251,13 @@ class NativeAdPreload private constructor() {
                 config.adUnitIds,
                 config.layoutId,
                 config.tierTimeoutMs,
+                loadContext,
                 object : AdCallback() {
+                    override fun canAcceptLoadedAd(): Boolean =
+                        isCurrent(expectedGeneration) &&
+                            AdGate.skipReason(activity, enabled = true, checkNetwork = false) == null &&
+                            ConsentCenter.canPersonalize() == personalized && isCurrent(expectedGeneration)
+
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                         if (!isCurrent(expectedGeneration)) {
                             destroy(nativeAd)
@@ -223,7 +270,9 @@ class NativeAdPreload private constructor() {
                             return
                         }
                         deliver(nativeAd, personalized, expectedGeneration)
-                        if (isCurrent(expectedGeneration)) loadBatch(activity, config, remaining - 1, expectedGeneration)
+                        if (isCurrent(expectedGeneration)) {
+                            loadBatch(activity, config, remaining - 1, expectedGeneration, loadContext)
+                        }
                     }
 
                     override fun onAdFailedToLoad(adError: LoadAdError?) {
@@ -235,7 +284,9 @@ class NativeAdPreload private constructor() {
                         }
                         deliver(null, personalized, expectedGeneration)
                         callbacks.forEach { runCatching { it.onAdFailedToLoad(adError) } }
-                        if (isCurrent(expectedGeneration)) loadBatch(activity, config, remaining - 1, expectedGeneration)
+                        if (isCurrent(expectedGeneration)) {
+                            loadBatch(activity, config, remaining - 1, expectedGeneration, loadContext)
+                        }
                     }
 
                     override fun onAdClicked() {
@@ -261,7 +312,7 @@ class NativeAdPreload private constructor() {
                 if (released || generation != expectedGeneration) return
                 deferredBatches.removeFirstOrNull().also { if (it == null) batchInFlight = false }
             }
-            next?.let { loadBatch(it.activity, it.config, it.buffer, expectedGeneration) }
+            next?.let { loadBatch(it.activity, it.config, it.buffer, expectedGeneration, it.loadContext) }
         }
 
         /** A policy change cancels this whole batch, including queued requests and all waiters. */

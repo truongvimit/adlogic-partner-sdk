@@ -239,12 +239,10 @@ public class ERainAd {
      * Wraps {@code callback} so the whole lifecycle of this ad unit reaches Trackkit.
      */
     private AdCallback instrument(String adUnitId, AdFormat format, AdCallback callback) {
-        // Idempotent: a partner may still hand us a pre-wrapped callback via the deprecated
-        // AdTracking.wrap, and nesting two decorators would double every event.
-        if (callback instanceof TrackingAdCallback) {
-            return callback;
-        }
-        return new TrackingAdCallback(PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
+        // A partner may supply a TrackingAdCallback with explicit placement metadata.
+        // Keep that identity so nesting decorators cannot double its events.
+        return TrackingAdCallback.directLoad(
+                PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
     }
 
     /**
@@ -254,7 +252,7 @@ public class ERainAd {
      */
     private AdCallback instrumentTiered(AdFormat format, AdCallback callback, String... adUnitIds) {
         if (callback instanceof TrackingAdCallback) {
-            return callback;
+            return TrackingAdCallback.legacySplash("unknown", format, adUnitIds[0], callback);
         }
         String placement = "unknown";
         for (String id : adUnitIds) {
@@ -267,7 +265,7 @@ public class ERainAd {
         for (String id : adUnitIds) {
             PlacementRegistry.register(id, placement);
         }
-        return new TrackingAdCallback(placement, format, adUnitIds[0], callback);
+        return TrackingAdCallback.legacySplash(placement, format, adUnitIds[0], callback);
     }
 
     public void loadBanner(Activity mActivity, String id) {
@@ -351,7 +349,8 @@ public class ERainAd {
 
     public void loadSplashInterstitialAds(Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         Admob.getInstance().loadSplashInterstitialAds(context, id, timeOut, timeDelay, true,
-                instrument(id, AdFormat.INTERSTITIAL, adListener));
+                TrackingAdCallback.legacySplash(PlacementRegistry.placementOf(id),
+                        AdFormat.INTERSTITIAL, id, adListener));
     }
 
     public void onCheckShowSplashWhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
@@ -360,29 +359,35 @@ public class ERainAd {
 
     public ApInterstitialAd getInterstitialAds(Context context, String id, AdCallback adListener) {
         ApInterstitialAd apInterstitialAd = new ApInterstitialAd();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
+        final AdCallback tracked = instrument(id, AdFormat.INTERSTITIAL, adListener);
+        Admob.getInstance().getInterstitialAds(context, id, new AdCallback() {
+            @Override
+            public void onAdRequestStarted(String adUnitId) {
+                tracked.onAdRequestStarted(adUnitId);
+            }
+
             @Override
             public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
                 super.onInterstitialLoad(interstitialAd);
                 apInterstitialAd.setInterstitialAd(interstitialAd);
-                adListener.onApInterstitialLoad(apInterstitialAd);
+                tracked.onApInterstitialLoad(apInterstitialAd);
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
                 Log.d(TAG, "Admob onAdFailedToLoad");
-                adListener.onAdFailedToLoad(i);
+                tracked.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
                 Log.d(TAG, "Admob onAdFailedToShow");
-                adListener.onAdFailedToShow(adError);
+                tracked.onAdFailedToShow(adError);
             }
 
-        }));
+        });
         return apInterstitialAd;
     }
 
@@ -505,86 +510,98 @@ public class ERainAd {
 
     public void loadNativeAdResultCallback(final Activity activity, String id,
                                            int layoutCustomNative, AdCallback callback) {
-        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
+        final AdCallback tracked = instrument(id, AdFormat.NATIVE, callback);
+        Admob.getInstance().loadNativeAd(((Context) activity), id, new AdCallback() {
+            @Override
+            public void onAdRequestStarted(String adUnitId) {
+                tracked.onAdRequestStarted(adUnitId);
+            }
+
             @Override
             public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
                 super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
+                tracked.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
-                callback.onAdFailedToLoad(i);
+                tracked.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
-                callback.onAdFailedToShow(adError);
+                tracked.onAdFailedToShow(adError);
             }
 
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                callback.onAdClicked();
+                tracked.onAdClicked();
             }
 
             @Override
             public void onAdOpened() {
                 super.onAdOpened();
-                callback.onAdOpened();
+                tracked.onAdOpened();
             }
 
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                callback.onAdImpression();
+                tracked.onAdImpression();
             }
-        }));
+        });
     }
 
     public void loadNativeAd(final Activity activity, String id,
                              int layoutCustomNative, FrameLayout adPlaceHolder, ShimmerFrameLayout
                                      containerShimmerLoading, AdCallback callback) {
-        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
+        final AdCallback tracked = instrument(id, AdFormat.NATIVE, callback);
+        Admob.getInstance().loadNativeAd(((Context) activity), id, new AdCallback() {
+            @Override
+            public void onAdRequestStarted(String adUnitId) {
+                tracked.onAdRequestStarted(adUnitId);
+            }
+
             @Override
             public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
                 super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
+                tracked.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
                 populateNativeAdView(activity, new ApNativeAd(layoutCustomNative, unifiedNativeAd), adPlaceHolder, containerShimmerLoading);
             }
 
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                callback.onAdImpression();
+                tracked.onAdImpression();
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
-                callback.onAdFailedToLoad(i);
+                tracked.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
-                callback.onAdFailedToShow(adError);
+                tracked.onAdFailedToShow(adError);
             }
 
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                callback.onAdClicked();
+                tracked.onAdClicked();
             }
 
             @Override
             public void onAdOpened() {
                 super.onAdOpened();
-                callback.onAdOpened();
+                tracked.onAdOpened();
             }
-        }));
+        });
     }
 
     public void populateNativeAdView(Activity activity, ApNativeAd apNativeAd, FrameLayout adPlaceHolder, ShimmerFrameLayout containerShimmerLoading) {

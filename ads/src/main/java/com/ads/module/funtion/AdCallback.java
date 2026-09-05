@@ -15,6 +15,20 @@ import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 
 public class AdCallback {
 
+    /** The SDK is invoking a vendor load, after its request guards. Cache delivery does not fire it. */
+    public void onAdRequestStarted(String adUnitId) {
+    }
+
+    /**
+     * Whether this load's owner can currently accept a vendor fill. The default accepts it;
+     * cache/helper owners override this to check their generation, authorization and lifecycle.
+     * Load instrumentation checks immediately before its logical terminal. A false result records
+     * failure while the original typed callback still runs its cleanup/navigation contract.
+     */
+    public boolean canAcceptLoadedAd() {
+        return true;
+    }
+
     public void onNextAction() {
     }
 

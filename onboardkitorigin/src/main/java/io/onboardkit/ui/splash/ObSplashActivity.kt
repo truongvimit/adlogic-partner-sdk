@@ -25,7 +25,7 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.ads.tracked
-import io.onboardkit.ads.trackRequest
+import io.onboardkit.ads.loadBanner
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.InterstitialAdUnit
@@ -255,9 +255,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
             )
         }
         ObLog.d(ObLog.Section.LOAD, "${placement.key} request")
-        placement.trackRequest()
         provider.loadBanner(
             this,
+            placement,
             unit,
             placement.tracked(
                 object : AdEventListener {
@@ -292,7 +292,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ObLog.Section.LOAD,
             "${placement.key} request tiers=${unit.tierCount} budgetMs=${sdk.flags().splashAdBudgetMs}",
         )
-        placement.trackRequest()
         provider.loadInterstitial(
             this,
             placement,

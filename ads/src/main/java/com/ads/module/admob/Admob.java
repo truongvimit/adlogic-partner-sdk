@@ -754,6 +754,7 @@ public class Admob {
             return;
         }
 
+        if (adCallback != null) adCallback.onAdRequestStarted(id);
         InterstitialAd.load(context, id, getAdRequest(),
                 new InterstitialAdLoadCallback() {
                     @Override
@@ -1287,6 +1288,7 @@ public class Admob {
                 }
             });
 
+            if (callback != null) callback.onAdRequestStarted(id);
             adView.loadAd(getAdRequest());
         } catch (Exception e) {
             e.printStackTrace();
@@ -1316,7 +1318,6 @@ public class Admob {
             containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
             adView.setAdListener(new AdListener() {
 
                 @Override
@@ -1362,6 +1363,8 @@ public class Admob {
                     }
                 }
             });
+            if (callback != null) callback.onAdRequestStarted(id);
+            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1390,7 +1393,6 @@ public class Admob {
             containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
             adView.setAdListener(new AdListener() {
 
                 @Override
@@ -1436,6 +1438,8 @@ public class Admob {
                     }
                 }
             });
+            if (callback != null) callback.onAdRequestStarted(id);
+            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1563,6 +1567,7 @@ public class Admob {
                 })
                 .withNativeAdOptions(adOptions)
                 .build();
+        callback.onAdRequestStarted(id);
         adLoader.loadAd(getAdRequest());
     }
 
@@ -1994,6 +1999,7 @@ public class Admob {
             return;
         }
         this.nativeId = id;
+        callback.onAdRequestStarted(id);
         RewardedAd.load(context, id, getAdRequest(), new RewardedAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
@@ -2029,6 +2035,7 @@ public class Admob {
             return;
         }
         this.nativeId = id;
+        callback.onAdRequestStarted(id);
         RewardedInterstitialAd.load(context, id, getAdRequest(), new RewardedInterstitialAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedInterstitialAd rewardedAd) {

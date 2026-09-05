@@ -69,7 +69,6 @@ internal fun Activity.showNativeAd(
         },
     )
 
-    placement.trackRequest()
     // Buffered by the preload chain on the common path, so the slot paints without a round trip
     if (bindBuffered(provider, placement, container, shimmer = null, listener)) {
         onBound()

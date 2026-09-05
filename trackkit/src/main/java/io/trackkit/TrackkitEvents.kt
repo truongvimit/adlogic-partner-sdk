@@ -26,6 +26,9 @@ object TrackkitEvents {
     const val PARAM_PLACEMENT = "placement"
     const val PARAM_AD_FORMAT = "ad_format"
     const val PARAM_AD_UNIT_ID = "ad_unit_id"
+    const val PARAM_ATTEMPT_ID = "attempt_id"
+    const val PARAM_TIER_INDEX = "tier_index"
+    const val PARAM_OUTCOME = "outcome"
     const val PARAM_AD_PLATFORM = "ad_platform"
     const val PARAM_AD_NETWORK = "ad_network"
     const val PARAM_VALUE = "value"
@@ -68,6 +71,7 @@ object TrackkitEvents {
     const val AD_REQUEST = "ad_request"
     const val AD_LOADED = "ad_loaded"
     const val AD_LOAD_FAILED = "ad_load_failed"
+    const val AD_TIER_RESULT = "ad_tier_result"
     const val AD_SHOW = "ad_show"
     const val AD_SHOW_FAILED = "ad_show_failed"
     const val AD_CLICK = "ad_click"
@@ -130,7 +134,7 @@ object TrackkitEvents {
      */
     @JvmStatic
     fun all(): Set<String> = setOf(
-        AD_REQUEST, AD_LOADED, AD_LOAD_FAILED, AD_SHOW, AD_SHOW_FAILED, AD_CLICK, AD_CLOSED,
+        AD_REQUEST, AD_LOADED, AD_LOAD_FAILED, AD_TIER_RESULT, AD_SHOW, AD_SHOW_FAILED, AD_CLICK, AD_CLOSED,
         AD_IMPRESSION, AD_REWARD_EARNED, AD_SKIPPED,
         AD_REVENUE_TOTAL, AD_REVENUE_MICRO_FLUSH, AD_REVENUE_D3, AD_REVENUE_D7,
         FO_FLOW_START, FO_SPLASH_VIEW, FO_SPLASH_COMPLETE, FO_LANGUAGE_VIEW, FO_LANGUAGE_SELECT,
@@ -163,28 +167,118 @@ object TrackkitEvents {
             PARAM_AD_UNIT_ID to adUnitId,
         )
 
-        /** A load was actually requested from the network. */
-        class Request(placement: String, format: AdFormat, adUnitId: String?) :
-            SimpleEvent(AD_REQUEST, base(placement, format, adUnitId))
+        /**
+         * One logical load attempt reached its first vendor dispatch, after request guards.
+         * Cache hits and callers sharing an existing attempt do not create another request.
+         *
+         * [adUnitId] is the first dispatched unit. [attemptId] is a short, non-identifying ID
+         * allocated by the load owner and shared with its terminal and tier results; null keeps
+         * legacy producers valid. Trackkit transports events without deduplicating attempts.
+         */
+        class Request @JvmOverloads constructor(
+            placement: String,
+            format: AdFormat,
+            adUnitId: String?,
+            attemptId: String? = null,
+        ) : SimpleEvent(
+            AD_REQUEST,
+            base(placement, format, adUnitId) + mapOf(PARAM_ATTEMPT_ID to attemptId),
+        )
 
+        /**
+         * The load owner accepted one usable ad. [adUnitId] is the winning unit; [latencyMs]
+         * measures monotonic elapsed time from the attempt's first vendor dispatch.
+         * [attemptId] defaults to null for legacy producers.
+         */
         class Loaded(
             placement: String,
             format: AdFormat,
             adUnitId: String?,
             latencyMs: Long? = null,
+            attemptId: String? = null,
         ) : SimpleEvent(
             AD_LOADED,
-            base(placement, format, adUnitId) + mapOf(PARAM_LATENCY_MS to latencyMs)
-        )
+            base(placement, format, adUnitId) + mapOf(
+                PARAM_LATENCY_MS to latencyMs,
+                PARAM_ATTEMPT_ID to attemptId,
+            ),
+        ) {
+            /** Retains the original constructor and Kotlin default-argument bridge. */
+            @JvmOverloads
+            constructor(
+                placement: String,
+                format: AdFormat,
+                adUnitId: String?,
+                latencyMs: Long? = null,
+            ) : this(placement, format, adUnitId, latencyMs, null)
+        }
 
+        /**
+         * A started logical attempt ended without an accepted ad. Individual tier
+         * failures belong to [TierResult]. [adUnitId] is the last dispatched unit; [latencyMs]
+         * measures monotonic elapsed time from the attempt's first vendor dispatch.
+         * [attemptId] and [latencyMs] default to null for legacy producers.
+         */
         class LoadFailed(
             placement: String,
             format: AdFormat,
             adUnitId: String?,
             errorCode: Int? = null,
+            latencyMs: Long? = null,
+            attemptId: String? = null,
         ) : SimpleEvent(
             AD_LOAD_FAILED,
-            base(placement, format, adUnitId) + mapOf(PARAM_ERROR_CODE to errorCode)
+            base(placement, format, adUnitId) + mapOf(
+                PARAM_ERROR_CODE to errorCode,
+                PARAM_LATENCY_MS to latencyMs,
+                PARAM_ATTEMPT_ID to attemptId,
+            ),
+        ) {
+            /** Retains the original constructor and Kotlin default-argument bridge. */
+            @JvmOverloads
+            constructor(
+                placement: String,
+                format: AdFormat,
+                adUnitId: String?,
+                errorCode: Int? = null,
+            ) : this(placement, format, adUnitId, errorCode, null, null)
+
+            constructor(
+                placement: String,
+                format: AdFormat,
+                adUnitId: String?,
+                errorCode: Int?,
+                latencyMs: Long?,
+            ) : this(placement, format, adUnitId, errorCode, latencyMs, null)
+        }
+
+        /**
+         * Diagnostic terminal for one dispatched vendor tier, separate from the logical attempt's
+         * [Loaded]/[LoadFailed] terminal. A tier declined before dispatch emits no result.
+         *
+         * [tierIndex] is the one-based configured position; non-dispatched tiers may leave gaps.
+         * [outcome] is `loaded`, `load_failed`, or `timeout`. [latencyMs] is measured by the owner
+         * from this tier's vendor dispatch using monotonic time. Optional error and latency
+         * default to null. [attemptId] joins this result to its logical request and terminal.
+         */
+        class TierResult @JvmOverloads constructor(
+            placement: String,
+            format: AdFormat,
+            adUnitId: String?,
+            attemptId: String,
+            tierIndex: Int,
+            outcome: String,
+            errorCode: Int? = null,
+            latencyMs: Long? = null,
+        ) : SimpleEvent(
+            AD_TIER_RESULT,
+            base(placement, format, adUnitId) + mapOf(
+                PARAM_ATTEMPT_ID to attemptId,
+                PARAM_TIER_INDEX to tierIndex,
+                PARAM_OUTCOME to outcome,
+                PARAM_ERROR_CODE to errorCode,
+                PARAM_LATENCY_MS to latencyMs,
+            ),
         )
 
         /**

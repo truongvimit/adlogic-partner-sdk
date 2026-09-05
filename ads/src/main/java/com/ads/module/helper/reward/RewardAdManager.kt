@@ -11,6 +11,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
 import com.ads.module.tracking.AdTracking
+import com.ads.module.tracking.AdLoadContext
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.android.gms.ads.rewarded.RewardedAd
@@ -107,12 +108,17 @@ object RewardAdManager {
         val personalized = ConsentCenter.canPersonalize()
         val applicationContext = context.applicationContext
         ids.forEach { AdTracking.registerPlacement(it, placement) }
-        AdTracking.request(placement, AdFormat.REWARDED, ids.first())
         AdWaterfall.loadReward(
             context,
             ids,
             tierTimeoutMs,
+            AdLoadContext(placement, AdFormat.REWARDED),
             object : AdCallback() {
+                override fun canAcceptLoadedAd(): Boolean =
+                    loadGenerations[placement] == generation &&
+                        AdGate.skipReason(applicationContext, enabled = true, checkNetwork = false) == null &&
+                        ConsentCenter.canPersonalize() == personalized && loadGenerations[placement] == generation
+
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
                     if (loadGenerations[placement] != generation) return
                     val allowed = AdGate.skipReason(applicationContext, enabled = true, checkNetwork = false) == null &&
@@ -200,13 +206,23 @@ object RewardAdManager {
         if (!inFlight.add(placement)) return
         val presentation = Presentation(activity, onSuccess, onFailed)
         presentations[placement] = presentation
-        AdTracking.request(placement, AdFormat.REWARDED, ids.first())
         ids.forEach { AdTracking.registerPlacement(it, placement) }
         AdWaterfall.loadReward(
             activity,
             ids,
             tierTimeoutMs,
+            AdLoadContext(placement, AdFormat.REWARDED),
             object : AdCallback() {
+                override fun canAcceptLoadedAd(): Boolean {
+                    if (presentations[placement] !== presentation) return false
+                    val allowed = AdGate.skipReason(presentation.context, enabled = true,
+                        checkNetwork = false) == null &&
+                        ConsentCenter.canPersonalize() == presentation.personalized
+                    val owner = presentation.activityReference.get()
+                    return allowed && owner != null && !owner.isFinishing && !owner.isDestroyed &&
+                        presentations[placement] === presentation
+                }
+
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
                     if (presentations[placement] !== presentation) return
                     val purchased = AdGate.isPurchased(presentation.context)

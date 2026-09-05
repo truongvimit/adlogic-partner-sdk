@@ -4,15 +4,23 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.ads.module.admob.Admob;
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.helper.AdGate;
+import com.ads.module.tracking.AdLoadAttempt;
+import com.ads.module.tracking.AdLoadContext;
+import com.ads.module.tracking.TrackingAdCallback;
+import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.nativead.NativeAd;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 
@@ -20,6 +28,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.trackkit.AdFormat;
 
 /**
  * Requests one ad unit at a time, highest floor first, and stops at the first fill.
@@ -42,10 +52,11 @@ public final class AdWaterfall {
     private AdWaterfall() {
     }
 
-    private static boolean canContinue(Context context, AdCallback callback) {
+    private static boolean canContinue(Context context, AdCallback callback, AdLoadAttempt attempt) {
         // A fallback is another vendor request, so it needs current authority too.
         // Keep rewarded's offline behavior; each helper owns its network policy.
         if (AdGate.skipReason(context, true, true, false) == null) return true;
+        attempt.onFailed(null);
         callback.onAdFailedToLoad(null);
         return false;
     }
@@ -71,67 +82,96 @@ public final class AdWaterfall {
             long tierTimeoutMs,
             @NonNull AdCallback callback) {
         List<String> tiers = usableIds(adUnitIds);
+        loadNative(activity, tiers, layoutRes, tierTimeoutMs,
+                AdLoadContext.forAdUnit(tiers.isEmpty() ? null : tiers.get(0), AdFormat.NATIVE), callback);
+    }
+
+    /** One logical native attempt with immutable placement/format, independent of any cache key. */
+    public static void loadNative(
+            @NonNull Activity activity,
+            @Nullable List<String> adUnitIds,
+            int layoutRes,
+            long tierTimeoutMs,
+            @NonNull AdLoadContext context,
+            @NonNull AdCallback callback) {
+        List<String> tiers = usableIds(adUnitIds);
         if (tiers.isEmpty()) {
-            Log.w(TAG, "loadNative: no usable ad unit id");
             callback.onAdFailedToLoad(null);
             return;
         }
-        loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, 0, callback);
+        loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, 0, callback,
+                new AdLoadAttempt(context), null);
     }
 
     private static void loadNativeTier(
-            Activity activity,
-            List<String> tiers,
-            int layoutRes,
-            long tierTimeoutMs,
-            int index,
-            AdCallback callback) {
+            Activity activity, List<String> tiers, int layoutRes, long tierTimeoutMs,
+            int index, AdCallback callback, AdLoadAttempt attempt, LoadAdError lastError) {
         if (index >= tiers.size()) {
-            Log.w(TAG, "loadNative: all " + tiers.size() + " tier(s) failed");
+            attempt.onFailed(lastError == null ? null : lastError.getCode());
             callback.onAdFailedToLoad(null);
             return;
         }
-        if (!canContinue(activity, callback)) return;
+        if (AdGate.skipReason(activity, true, true, false) != null) {
+            attempt.onFailed(null);
+            callback.onAdFailedToLoad(null);
+            return;
+        }
+        final String unit = tiers.get(index);
         final Tier tier = new Tier(tierTimeoutMs, () ->
-                loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().loadNativeAdResultCallback(activity, tiers.get(index), layoutRes,
-                new AdCallback() {
-                    @Override
-                    public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
-                        // A fill from a tier the waterfall already moved past has nowhere to go
-                        if (!tier.settle()) {
-                            if (nativeAd.getAdmobNativeAd() != null) {
-                                nativeAd.getAdmobNativeAd().destroy();
-                            }
-                            return;
-                        }
-                        callback.onNativeAdLoaded(nativeAd);
-                    }
+                loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1,
+                        callback, attempt, null), attempt, index + 1, unit);
+        final AdCallback presentation = TrackingAdCallback.presentationOnly(attempt.getContext(), unit, callback);
+        Admob.getInstance().loadNativeAd(activity, unit, new AdCallback() {
+            private NativeAd resolvedAd;
+            private boolean delivered;
 
-                    @Override
-                    public void onAdFailedToLoad(@Nullable LoadAdError error) {
-                        if (!tier.settle()) return;
-                        Log.w(TAG, "loadNative tier " + (index + 1) + "/" + tiers.size()
-                                + " failed: " + (error == null ? "null" : error.getMessage()));
-                        loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1, callback);
-                    }
+            @Override
+            public void onAdRequestStarted(String adUnitId) {
+                tier.dispatched();
+                attempt.onRequestStarted(adUnitId);
+                callback.onAdRequestStarted(adUnitId);
+            }
 
-                    @Override
-                    public void onAdClicked() {
-                        callback.onAdClicked();
-                    }
+            @Override
+            public void onUnifiedNativeAdLoaded(@NonNull NativeAd nativeAd) {
+                if (!tier.settle("loaded", null)) {
+                    if (nativeAd != resolvedAd) nativeAd.destroy();
+                    return;
+                }
+                resolvedAd = nativeAd;
+                delivered = callback.canAcceptLoadedAd();
+                if (delivered) attempt.onLoaded(unit);
+                else attempt.onFailed(null);
+                presentation.onNativeAdLoaded(new ApNativeAd(layoutRes, nativeAd));
+            }
 
-                    @Override
-                    public void onAdOpened() {
-                        callback.onAdOpened();
-                    }
+            @Override
+            public void onAdFailedToLoad(@Nullable LoadAdError error) {
+                if (!tier.settle("load_failed", error == null ? null : error.getCode())) return;
+                loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1,
+                        callback, attempt, error);
+            }
 
-                    @Override
-                    public void onAdImpression() {
-                        // Only the winning tier's view can render, so no settle() gate needed
-                        callback.onAdImpression();
-                    }
-                });
+            @Override
+            public void onAdFailedToShow(@Nullable AdError error) {
+                if (delivered) presentation.onAdFailedToShow(error);
+            }
+
+            @Override
+            public void onAdClicked() {
+                if (delivered) presentation.onAdClicked();
+            }
+
+            @Override
+            public void onAdOpened() {
+                if (delivered) presentation.onAdOpened();
+            }
+
+            @Override
+            public void onAdImpression() {
+                if (delivered) presentation.onAdImpression();
+            }
+        });
     }
 
     /**
@@ -153,47 +193,58 @@ public final class AdWaterfall {
             long tierTimeoutMs,
             @NonNull AdCallback callback) {
         List<String> tiers = usableIds(adUnitIds);
-        if (tiers.isEmpty()) {
-            Log.w(TAG, "loadInterstitial: no usable ad unit id");
-            callback.onAdFailedToLoad(null);
-            return;
-        }
-        loadInterstitialTier(context, tiers, tierTimeoutMs, 0, callback);
+        loadInterstitial(context, tiers, tierTimeoutMs,
+                AdLoadContext.forAdUnit(tiers.isEmpty() ? null : tiers.get(0), AdFormat.INTERSTITIAL), callback);
+    }
+
+    /** One logical interstitial attempt, including all dispatched fallback tiers. */
+    public static void loadInterstitial(
+            @NonNull Context context, @Nullable List<String> adUnitIds, long tierTimeoutMs,
+            @NonNull AdLoadContext loadContext, @NonNull AdCallback callback) {
+        List<String> tiers = usableIds(adUnitIds);
+        loadInterstitialTier(context, tiers, tierTimeoutMs, 0, callback,
+                new AdLoadAttempt(loadContext), null);
     }
 
     private static void loadInterstitialTier(
-            Context context,
-            List<String> tiers,
-            long tierTimeoutMs,
-            int index,
-            AdCallback callback) {
+            Context context, List<String> tiers, long tierTimeoutMs, int index,
+            AdCallback callback, AdLoadAttempt attempt, LoadAdError lastError) {
         if (index >= tiers.size()) {
-            Log.w(TAG, "loadInterstitial: all " + tiers.size() + " tier(s) failed");
+            attempt.onFailed(lastError == null ? null : lastError.getCode());
             callback.onAdFailedToLoad(null);
             return;
         }
-        if (!canContinue(context, callback)) return;
+        if (!canContinue(context, callback, attempt)) return;
+        final String unit = tiers.get(index);
         final Tier tier = new Tier(tierTimeoutMs, () ->
-                loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().getInterstitialAds(context, tiers.get(index), new AdCallback() {
+                loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, null),
+                attempt, index + 1, unit);
+        final AdCallback presentation = TrackingAdCallback.presentationOnly(attempt.getContext(), unit, callback);
+        Admob.getInstance().getInterstitialAds(context, unit, new AdCallback() {
             @Override
-            public void onApInterstitialLoad(@Nullable ApInterstitialAd interstitialAd) {
-                if (!tier.settle()) return;
-                // A null wrapper is how the module reports a purchased or capped user; that is
-                // this tier declining, not a fill.
+            public void onAdRequestStarted(String adUnitId) {
+                tier.dispatched();
+                attempt.onRequestStarted(adUnitId);
+                callback.onAdRequestStarted(adUnitId);
+            }
+
+            @Override
+            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
+                if (!tier.settle(interstitialAd == null ? "load_failed" : "loaded", null)) return;
+                // Premium/click-cap declines can return null without a vendor dispatch.
                 if (interstitialAd == null) {
-                    loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback);
+                    loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, null);
                     return;
                 }
-                callback.onApInterstitialLoad(interstitialAd);
+                if (callback.canAcceptLoadedAd()) attempt.onLoaded(unit);
+                else attempt.onFailed(null);
+                presentation.onApInterstitialLoad(new ApInterstitialAd(interstitialAd));
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError error) {
-                if (!tier.settle()) return;
-                Log.w(TAG, "loadInterstitial tier " + (index + 1) + "/" + tiers.size()
-                        + " failed: " + (error == null ? "null" : error.getMessage()));
-                loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback);
+                if (!tier.settle("load_failed", error == null ? null : error.getCode())) return;
+                loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, error);
             }
         });
     }
@@ -217,47 +268,56 @@ public final class AdWaterfall {
             long tierTimeoutMs,
             @NonNull AdCallback callback) {
         List<String> tiers = usableIds(adUnitIds);
-        if (tiers.isEmpty()) {
-            Log.w(TAG, "loadReward: no usable ad unit id");
-            callback.onAdFailedToLoad(null);
-            return;
-        }
-        loadRewardTier(context, tiers, tierTimeoutMs, 0, callback);
+        loadReward(context, tiers, tierTimeoutMs,
+                AdLoadContext.forAdUnit(tiers.isEmpty() ? null : tiers.get(0), AdFormat.REWARDED), callback);
+    }
+
+    /** One logical rewarded attempt, including all dispatched fallback tiers. */
+    public static void loadReward(
+            @NonNull Context context, @Nullable List<String> adUnitIds, long tierTimeoutMs,
+            @NonNull AdLoadContext loadContext, @NonNull AdCallback callback) {
+        List<String> tiers = usableIds(adUnitIds);
+        loadRewardTier(context, tiers, tierTimeoutMs, 0, callback, new AdLoadAttempt(loadContext), null);
     }
 
     private static void loadRewardTier(
-            Context context,
-            List<String> tiers,
-            long tierTimeoutMs,
-            int index,
-            AdCallback callback) {
+            Context context, List<String> tiers, long tierTimeoutMs, int index,
+            AdCallback callback, AdLoadAttempt attempt, LoadAdError lastError) {
         if (index >= tiers.size()) {
-            Log.w(TAG, "loadReward: all " + tiers.size() + " tier(s) failed");
+            attempt.onFailed(lastError == null ? null : lastError.getCode());
             callback.onAdFailedToLoad(null);
             return;
         }
-        if (!canContinue(context, callback)) return;
+        if (!canContinue(context, callback, attempt)) return;
+        final String unit = tiers.get(index);
         final Tier tier = new Tier(tierTimeoutMs, () ->
-                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().initRewardAds(context, tiers.get(index), new AdCallback() {
+                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, null),
+                attempt, index + 1, unit);
+        final AdCallback presentation = TrackingAdCallback.presentationOnly(attempt.getContext(), unit, callback);
+        Admob.getInstance().initRewardAds(context, unit, new AdCallback() {
+            @Override
+            public void onAdRequestStarted(String adUnitId) {
+                tier.dispatched();
+                attempt.onRequestStarted(adUnitId);
+                callback.onAdRequestStarted(adUnitId);
+            }
+
             @Override
             public void onRewardAdLoaded(RewardedAd rewardedAd) {
-                if (!tier.settle()) return;
-                // The module answers a purchased user with silence, not null — the tier
-                // timeout covers that; a null here is still a decline, not a fill.
+                if (!tier.settle(rewardedAd == null ? "load_failed" : "loaded", null)) return;
                 if (rewardedAd == null) {
-                    loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback);
+                    loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, null);
                     return;
                 }
-                callback.onRewardAdLoaded(rewardedAd);
+                if (callback.canAcceptLoadedAd()) attempt.onLoaded(unit);
+                else attempt.onFailed(null);
+                presentation.onRewardAdLoaded(rewardedAd);
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError error) {
-                if (!tier.settle()) return;
-                Log.w(TAG, "loadReward tier " + (index + 1) + "/" + tiers.size()
-                        + " failed: " + (error == null ? "null" : error.getMessage()));
-                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback);
+                if (!tier.settle("load_failed", error == null ? null : error.getCode())) return;
+                loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback, attempt, error);
             }
         });
     }
@@ -283,10 +343,19 @@ public final class AdWaterfall {
 
         private final AtomicBoolean settled = new AtomicBoolean(false);
         private final Runnable onTimeout;
+        private final AdLoadAttempt attempt;
+        private final int index;
+        private final String unit;
+        private boolean dispatched;
+        private long dispatchedAt;
 
-        Tier(long timeoutMs, Runnable advance) {
+        Tier(long timeoutMs, Runnable advance, AdLoadAttempt attempt, int index, String unit) {
+            this.attempt = attempt;
+            this.index = index;
+            this.unit = unit;
             this.onTimeout = () -> {
                 if (settled.compareAndSet(false, true)) {
+                    report("timeout", null);
                     Log.w(TAG, "tier timed out after " + timeoutMs + "ms");
                     advance.run();
                 }
@@ -294,10 +363,24 @@ public final class AdWaterfall {
             MAIN.postDelayed(onTimeout, timeoutMs);
         }
 
-        boolean settle() {
+        void dispatched() {
+            if (dispatched) return;
+            dispatched = true;
+            dispatchedAt = SystemClock.elapsedRealtime();
+        }
+
+        boolean settle(String outcome, Integer errorCode) {
             if (!settled.compareAndSet(false, true)) return false;
             MAIN.removeCallbacks(onTimeout);
+            report(outcome, errorCode);
             return true;
+        }
+
+        private void report(String outcome, Integer errorCode) {
+            if (attempt != null && dispatched && outcome != null) {
+                attempt.onTierResult(index, unit, outcome, errorCode,
+                        SystemClock.elapsedRealtime() - dispatchedAt);
+            }
         }
     }
 }
