@@ -5,14 +5,19 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.event.ERainLogEventManager
 import com.ads.module.funtion.AdType
 import com.ads.module.helper.AdGate
+import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.Entitlement
+import com.ads.module.tracking.AdLoadAttempt
+import com.ads.module.tracking.AdLoadContext
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.appopen.AppOpenAd
+import io.trackkit.AdFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,9 +27,21 @@ import kotlinx.coroutines.launch
  * Owns the resume buffer and its vendor request. All mutations run on the main thread; returning
  * from a vendor request does not authorize it to refill a newer unit or a revoked session.
  * [AppOpenManager] exposes this owner only for foreground resume.
+ *
+ * Request telemetry marks the logical dispatch boundary. A synchronous telemetry sink may revoke
+ * that request before vendor entry; cancellation settles it without adding network backoff.
+ * A request event alone therefore does not prove that a physical network request was sent.
  */
 internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
-    private data class BufferedAd(val ad: AppOpenAd, val loadedAt: Long, val personalized: Boolean)
+    /** Original accepted fill and attribution, retained unchanged through pre-show rejection. */
+    class LoadedAd(
+        val ad: AppOpenAd,
+        val context: AdLoadContext,
+        val attemptId: String,
+        val generation: Long,
+        val loadedAt: Long,
+        val personalized: Boolean,
+    )
 
     private class Pending(
         val generation: Long,
@@ -33,6 +50,9 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
         val deadline: Long,
     ) {
         lateinit var timeout: Runnable
+        val attempt = AdLoadAttempt(AdLoadContext("app_resume", AdFormat.APP_OPEN))
+        var startedAt: Long? = null
+        var vendorResultReceived = false
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -48,7 +68,7 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     private var retryAfter = 0L
 
     @Volatile
-    private var buffered: BufferedAd? = null
+    private var buffered: LoadedAd? = null
 
     fun initialize(app: Application, id: String?) {
         onMain {
@@ -120,61 +140,66 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     fun invalidate() {
         onMain {
             generation++
-            pending?.let { handler.removeCallbacks(it.timeout) }
+            val cancelled = pending
+            val discarded = buffered
+            cancelled?.let { handler.removeCallbacks(it.timeout) }
             pending = null
-            buffered?.ad?.setOnPaidEventListener(null)
             buffered = null
             failures = 0
             retryAfter = 0L
+            // Settle the detached request without turning invalidation into network backoff.
+            cancelled?.let {
+                reportTier(it, "load_failed")
+                it.attempt.onFailed(null)
+            }
+            discarded?.let { clearPaidListener(it.ad) }
         }
     }
 
     fun request() {
         onMain {
             val context = application ?: return@onMain
-            if (!canLoad(context)) return@onMain
+            val expectedGeneration = generation
+            if (!canLoad(context) || generation != expectedGeneration) return@onMain
             val now = SystemClock.elapsedRealtime()
             pending?.let {
-                if (now >= it.deadline) fail(it) else return@onMain
+                if (now >= it.deadline) fail(it, outcome = "timeout") else return@onMain
             }
-            if (isAdAvailable()) return@onMain
-            if (now < retryAfter) return@onMain
+            // Expiry telemetry can release this generation or synchronously start its replacement.
+            if (!canStartRequest(context, expectedGeneration)) return@onMain
             // Expiry releases an old cache before its replacement is requested.
-            buffered?.ad?.setOnPaidEventListener(null)
+            val discarded = buffered
             buffered = null
+            discarded?.let { clearPaidListener(it.ad) }
+            if (!canStartRequest(context, expectedGeneration)) return@onMain
 
-            val request = Pending(generation, unitId, ConsentCenter.canPersonalize(), now + LOAD_TIMEOUT_MS)
-            request.timeout = Runnable { fail(request) }
+            val request = Pending(generation, unitId, ConsentCenter.canPersonalize(),
+                SystemClock.elapsedRealtime() + LOAD_TIMEOUT_MS)
+            request.timeout = Runnable { fail(request, outcome = "timeout") }
             // Claim before dispatch: a vendor adapter (and a fake) may answer synchronously.
             pending = request
             handler.postDelayed(request.timeout, LOAD_TIMEOUT_MS)
             try {
                 val adRequest = AdRequest.Builder().also(Admob::applyPersonalization).build()
+                request.startedAt = SystemClock.elapsedRealtime()
+                request.attempt.onRequestStarted(request.unitId)
+                if (!isRequestAuthorized(context, request)) {
+                    cancel(request)
+                    return@onMain
+                }
+                if (SystemClock.elapsedRealtime() >= request.deadline) {
+                    fail(request, outcome = "timeout")
+                    return@onMain
+                }
                 loader.load(context, request.unitId, adRequest, object : AppOpenAd.AppOpenAdLoadCallback() {
                     override fun onAdLoaded(ad: AppOpenAd) {
-                        onMain {
-                            if (!owns(request)) return@onMain
-                            // Handler delays use uptime; elapsed time also includes deep sleep.
-                            if (SystemClock.elapsedRealtime() >= request.deadline) {
-                                fail(request)
-                                return@onMain
-                            }
-                            finish(request)
-                            if (!canLoad(context) || request.personalized != ConsentCenter.canPersonalize()) return@onMain
-                            failures = 0
-                            retryAfter = 0L
-                            ad.setOnPaidEventListener { value ->
-                                ERainLogEventManager.logPaidAdImpression(
-                                    context, value, ad.adUnitId,
-                                    ad.responseInfo?.mediationAdapterClassName.orEmpty(), AdType.APP_OPEN,
-                                )
-                            }
-                            buffered = BufferedAd(ad, SystemClock.elapsedRealtime(), request.personalized)
-                        }
+                        onMain { acceptFill(context, request, ad) }
                     }
 
                     override fun onAdFailedToLoad(error: LoadAdError) {
-                        onMain { fail(request) }
+                        onMain {
+                            if (claimVendorResult(request)) fail(request, error.code)
+                        }
                     }
                 })
             } catch (_: Exception) {
@@ -187,28 +212,123 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     private fun owns(request: Pending): Boolean =
         pending === request && request.generation == generation && request.unitId == unitId
 
+    private fun canStartRequest(context: Context, expectedGeneration: Long): Boolean =
+        generation == expectedGeneration && pending == null && !isAdAvailable() &&
+            SystemClock.elapsedRealtime() >= retryAfter && canLoad(context) &&
+            generation == expectedGeneration && pending == null && !isAdAvailable() &&
+            SystemClock.elapsedRealtime() >= retryAfter
+
+    private fun claimVendorResult(request: Pending): Boolean {
+        if (!owns(request) || request.vendorResultReceived) return false
+        request.vendorResultReceived = true
+        return true
+    }
+
+    private fun acceptFill(context: Context, request: Pending, ad: AppOpenAd) {
+        // Claim before reporting the tier: a telemetry sink can synchronously deliver a duplicate.
+        if (!claimVendorResult(request)) return
+        // Handler delays use uptime; elapsed time also includes deep sleep.
+        if (SystemClock.elapsedRealtime() >= request.deadline) {
+            fail(request, outcome = "timeout")
+            return
+        }
+        reportTier(request, "loaded")
+        if (!isRequestAuthorized(context, request)) {
+            cancel(request)
+            return
+        }
+        val capturedContext = request.attempt.context
+        try {
+            ad.setOnPaidEventListener { value ->
+                ERainLogEventManager.logPaidAdImpression(
+                    context, value, ad.adUnitId,
+                    ad.responseInfo?.mediationAdapterClassName.orEmpty(), AdType.APP_OPEN,
+                    capturedContext,
+                )
+            }
+        } catch (error: RuntimeException) {
+            cancel(request)
+            clearPaidListener(ad)
+            Log.w(TAG, "App-open paid callback setup failed", error)
+            return
+        }
+        // Vendor setup and telemetry sinks can reenter policy, release or unit updates.
+        if (!isRequestAuthorized(context, request)) {
+            cancel(request)
+            clearPaidListener(ad)
+            return
+        }
+        if (SystemClock.elapsedRealtime() >= request.deadline) {
+            fail(request, outcome = "timeout")
+            clearPaidListener(ad)
+            return
+        }
+        finish(request)
+        failures = 0
+        retryAfter = 0L
+        buffered = LoadedAd(ad, capturedContext, request.attempt.id, request.generation,
+            SystemClock.elapsedRealtime(), request.personalized)
+        request.attempt.onLoaded(request.unitId)
+    }
+
+    private fun isRequestAuthorized(context: Context, request: Pending): Boolean =
+        owns(request) && canLoad(context) && request.personalized == ConsentCenter.canPersonalize() && owns(request)
+
+    /** Policy cancellation or unusable setup does not add network backoff. */
+    private fun cancel(request: Pending) {
+        if (!owns(request)) return
+        finish(request)
+        reportTier(request, "load_failed")
+        request.attempt.onFailed(null)
+    }
+
+    private fun clearPaidListener(ad: AppOpenAd) {
+        try {
+            ad.setOnPaidEventListener(null)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "App-open paid callback cleanup failed", error)
+        }
+    }
+
     private fun finish(request: Pending) {
         handler.removeCallbacks(request.timeout)
         pending = null
     }
 
-    private fun fail(request: Pending) {
+    private fun fail(request: Pending, errorCode: Int? = null, outcome: String = "load_failed") {
         if (!owns(request)) return
         finish(request)
         failures = (failures + 1).coerceAtMost(5)
         val delay = (INITIAL_BACKOFF_MS shl (failures - 1)).coerceAtMost(MAX_BACKOFF_MS)
         retryAfter = SystemClock.elapsedRealtime() + delay
         // A later lifecycle/explicit request may retry. No timer introduces a new ad opportunity.
+        reportTier(request, outcome, errorCode)
+        request.attempt.onFailed(errorCode)
+    }
+
+    private fun reportTier(request: Pending, outcome: String, errorCode: Int? = null) {
+        val startedAt = request.startedAt ?: return
+        request.attempt.onTierResult(1, request.unitId, outcome, errorCode,
+            (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L))
     }
 
     private fun canLoad(context: Context): Boolean =
         initialized && enabled && unitId.isNotEmpty() && ConsentCenter.canRequestAds() &&
             !AdGate.isPurchased(context) && AdGate.isNetworkAvailable(context)
 
-    fun canShow(): Boolean {
-        val context = application ?: return false
-        return initialized && enabled && unitId.isNotEmpty() && ConsentCenter.canRequestAds() &&
-            !ConsentCenter.isFormShowing() && !AdGate.isPurchased(context)
+    fun canShow(): Boolean = showSkipReason() == null
+
+    /** Policy-only query. It emits nothing and does not consume a buffer or resume opportunity. */
+    fun showSkipReason(): AdSkipReason? {
+        val context = application ?: return AdSkipReason.DISABLED_CONFIG
+        return when {
+            !initialized || !enabled || unitId.isEmpty() -> AdSkipReason.DISABLED_CONFIG
+            !ConsentCenter.canRequestAds() -> AdSkipReason.CONSENT_NOT_GRANTED
+            ConsentCenter.isFormShowing() -> AdSkipReason.CONSENT_FORM_SHOWING
+            // initialize already owns the entitlement observer; a query does not install another.
+            Entitlement.isPremium(context) -> AdSkipReason.PURCHASED
+            else -> null
+        }
     }
 
     fun isAdAvailable(): Boolean {
@@ -218,11 +338,22 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     }
 
     /** Keeps the original buffer while its vendor callback and cosmetic options are prepared. */
-    fun peekForShow(): AppOpenAd? {
+    fun peekForShow(): LoadedAd? {
         check(Looper.myLooper() == Looper.getMainLooper())
         val candidate = buffered ?: return null
-        if (!canShow() || !isAdAvailable()) return null
-        return candidate.ad.takeIf { buffered === candidate }
+        return candidate.takeIf { rejectionFor(it) == null }
+    }
+
+    /** Checks the captured fill's original lifetime, policy and identity without consuming it. */
+    fun rejectionFor(expected: LoadedAd): AdSkipReason? {
+        showSkipReason()?.let { return it }
+        val age = SystemClock.elapsedRealtime() - expected.loadedAt
+        return when {
+            age < 0 || age >= MAX_AD_AGE_MS -> AdSkipReason.EXPIRED
+            expected.personalized != ConsentCenter.canPersonalize() -> AdSkipReason.NOT_READY
+            buffered !== expected -> AdSkipReason.NOT_READY
+            else -> null
+        }
     }
 
     /**
@@ -230,13 +361,12 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
      * A rejected commitment may synchronously notify the host; it must leave the original buffer
      * and timestamp, or a replacement installed by that notification, untouched.
      */
-    fun takeForShow(expected: AppOpenAd, commit: () -> Boolean): AppOpenAd? {
+    fun takeForShow(expected: LoadedAd, commit: () -> Boolean): LoadedAd? {
         check(Looper.myLooper() == Looper.getMainLooper())
-        val candidate = buffered ?: return null
-        if (candidate.ad !== expected || !canShow() || !isAdAvailable() || buffered !== candidate) return null
-        if (!commit() || buffered !== candidate) return null
+        if (rejectionFor(expected) != null) return null
+        if (!commit() || buffered !== expected) return null
         buffered = null
-        return candidate.ad
+        return expected
     }
 
     private fun onMain(action: () -> Unit) {
@@ -244,6 +374,7 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     }
 
     private companion object {
+        const val TAG = "AppResumeLoadOwner"
         const val LOAD_TIMEOUT_MS = 30_000L
         const val INITIAL_BACKOFF_MS = 5_000L
         const val MAX_BACKOFF_MS = 60_000L

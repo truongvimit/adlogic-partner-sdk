@@ -38,7 +38,7 @@ enum class AdSkipReason(val key: String) {
     /** The application is not in the foreground. */
     PROCESS_NOT_RESUMED("process_not_resumed"),
 
-    /** This entry point requires a live AppCompatActivity. */
+    /** The host must be a live Activity compatible with the entry point. */
     INVALID_HOST("invalid_host"),
 
     /** Vendor callback setup failed before show was invoked. */
@@ -46,6 +46,12 @@ enum class AdSkipReason(val key: String) {
 
     /** Another presentation owns this opportunity. */
     PRESENTATION_BUSY("presentation_busy"),
+
+    /** The active host or flow suppresses this placement. */
+    SUPPRESSED_BY_FLOW("suppressed_by_flow"),
+
+    /** One return was suppressed after the host explicitly marked an ad click/action. */
+    RETURNING_FROM_AD_CLICK("returning_from_ad_click"),
 
     /** The configured time interval has not elapsed. */
     INTERVAL("interval"),

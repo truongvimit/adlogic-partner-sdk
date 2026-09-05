@@ -25,12 +25,16 @@ import com.ads.module.R;
 import com.ads.module.dialog.ResumeLoadingDialog;
 import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.helper.AdGate;
+import com.ads.module.helper.AdSkipReason;
+import com.ads.module.tracking.AdTracking;
 import com.google.android.gms.ads.AdActivity;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.appopen.AppOpenAd;
 
 import io.trackkit.AdFormat;
+import io.trackkit.Tracker;
+import io.trackkit.TrackkitEvents;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,6 +48,8 @@ import java.util.List;
  * A dispatched fullscreen ad holds process-wide ownership until a terminal callback. A missing
  * terminal callback is not recovered by elapsed time or host lifecycle in this contract.
  * Host callback exceptions are logged; they do not release a presentation or become vendor errors.
+ * Canonical show/closed events require actual vendor callbacks and retain the accepted load's
+ * attempt ID even when host notifications are disabled. Pre-show completion reports a skip.
  */
 public class AppOpenManager implements Application.ActivityLifecycleCallbacks, LifecycleObserver {
     private static final String TAG = "AppOpenManager";
@@ -72,9 +78,13 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     AppOpenManager(AppResumeAdLoader resumeAdLoader) {
         this.resumeLoadOwner = new AppResumeLoadOwner((context, unitId, request, callback) -> {
-            if (currentActivity != null && Arrays.asList(
-                    currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(unitId)) {
-                showTestIdAlert(currentActivity, unitId);
+            try {
+                if (currentActivity != null && Arrays.asList(
+                        currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(unitId)) {
+                    showTestIdAlert(currentActivity, unitId);
+                }
+            } catch (Exception error) {
+                Log.w(TAG, "Test-id notification unavailable", error);
             }
             resumeAdLoader.load(context, unitId, request, callback);
         });
@@ -362,34 +372,44 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             runOnMain(this::showResumeAdIfAvailable);
             return;
         }
-        if (!resumeLoadOwner.canShow()) return;
-        if (currentActivity == null || AdGate.isPurchased(currentActivity)) {
-            if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                fullScreenContentCallback.onAdDismissedFullScreenContent();
-            }
+        ResumePresentation presentation = new ResumePresentation(
+                currentActivity, fullScreenContentCallback, enableScreenContentCallback);
+        AdSkipReason policyReason = resumeLoadOwner.showSkipReason();
+        if (policyReason != null) {
+            presentation.rejectBeforeShow(policyReason, false);
+            return;
+        }
+        if (currentActivity == null) {
+            presentation.rejectBeforeShow(AdSkipReason.INVALID_HOST, true);
+            return;
+        }
+        if (AdGate.isPurchased(currentActivity)) {
+            presentation.rejectBeforeShow(AdSkipReason.PURCHASED, true);
             return;
         }
         if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
-            if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                fullScreenContentCallback.onAdDismissedFullScreenContent();
-            }
+            presentation.rejectBeforeShow(AdSkipReason.PROCESS_NOT_RESUMED, true);
             return;
         }
-        if (!presentationOwner.isBusy() && isResumeAdAvailable()) {
-            showResumeAds();
-        } else {
+        if (presentationOwner.isBusy()) {
+            presentation.rejectBeforeShow(AdSkipReason.PRESENTATION_BUSY, false);
             fetchResumeAd();
+            return;
         }
+        if (!isResumeAdAvailable()) {
+            presentation.rejectBeforeShow(AdSkipReason.NOT_READY, false);
+            fetchResumeAd();
+            return;
+        }
+        if (currentActivity.isFinishing() || currentActivity.isDestroyed()) {
+            presentation.rejectBeforeShow(AdSkipReason.INVALID_HOST, false);
+            return;
+        }
+        if (presentation.acquire()) presentation.show();
     }
 
-    private void showResumeAds() {
-        if (!resumeLoadOwner.canShow() || !resumeLoadOwner.isAdAvailable()
-                || currentActivity == null || currentActivity.isFinishing() || currentActivity.isDestroyed()
-                || presentationOwner.isBusy()) return;
-        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
-        ResumePresentation presentation = new ResumePresentation(
-                currentActivity, fullScreenContentCallback, enableScreenContentCallback);
-        if (presentation.acquire()) presentation.show();
+    private void reportResumeSkipped(AdSkipReason reason) {
+        AdTracking.skipped("app_resume", AdFormat.APP_OPEN, reason.getKey());
     }
 
     /** Captures the lease, vendor ad, host, dialog and callback for exactly one show attempt. */
@@ -400,8 +420,11 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         private FullscreenPresentationOwner.Lease lease;
         private Dialog presentationDialog;
         private AppOpenAd ad;
+        private AppResumeLoadOwner.LoadedAd selected;
+        private String adUnitId;
         private boolean terminal;
         private boolean invoked;
+        private boolean presented;
 
         ResumePresentation(Activity activity, FullScreenContentCallback callback, boolean notifyContent) {
             this.activity = activity;
@@ -411,17 +434,21 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         boolean acquire() {
             lease = presentationOwner.tryAcquire(AdFormat.APP_OPEN,
-                    () -> runOnMain(this::rejectBeforeShow));
+                    () -> runOnMain(() -> rejectBeforeShow(AdSkipReason.EXPIRED, true)));
+            if (lease == null) rejectBeforeShow(AdSkipReason.PRESENTATION_BUSY, false);
             return lease != null;
         }
 
         void show() {
             // Capture the selected fill before a cosmetic window can synchronously replace it.
-            ad = resumeLoadOwner.peekForShow();
-            if (ad == null) {
-                finishPresentation();
+            selected = resumeLoadOwner.peekForShow();
+            if (selected == null) {
+                AdSkipReason reason = resumeLoadOwner.showSkipReason();
+                rejectBeforeShow(reason == null ? AdSkipReason.NOT_READY : reason, false);
                 return;
             }
+            ad = selected.getAd();
+            adUnitId = ad.getAdUnitId();
             try {
                 presentationDialog = new ResumeLoadingDialog(activity);
                 presentationDialog.show();
@@ -430,8 +457,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 Log.w(TAG, "App-open loading dialog unavailable", error);
             }
             if (terminal || !lease.isCurrent()) return;
-            if (!hasValidHost()) {
-                rejectBeforeShow();
+            AdSkipReason hostReason = hostRejection();
+            if (hostReason != null) {
+                rejectBeforeShow(hostReason, true);
                 return;
             }
             try {
@@ -442,12 +470,14 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     Log.w(TAG, "App-open immersive mode unavailable", error);
                 }
                 if (terminal) return;
-                if (!hasValidHost()) {
-                    rejectBeforeShow();
+                hostReason = hostRejection();
+                if (hostReason != null) {
+                    rejectBeforeShow(hostReason, true);
                     return;
                 }
-                if (resumeLoadOwner.takeForShow(ad, lease::start) == null) {
-                    rejectBeforeShow();
+                if (resumeLoadOwner.takeForShow(selected, lease::start) == null) {
+                    AdSkipReason reason = resumeLoadOwner.rejectionFor(selected);
+                    rejectBeforeShow(reason == null ? AdSkipReason.EXPIRED : reason, true);
                     return;
                 }
                 invoked = true;
@@ -455,17 +485,20 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             } catch (RuntimeException error) {
                 if (!invoked) {
                     Log.w(TAG, "App-open callback setup failed", error);
-                    rejectBeforeShow();
+                    rejectBeforeShow(AdSkipReason.PREPARATION_FAILED, true);
                 } else {
                     failPresentation(new AdError(0,
-                            error.getMessage() == null ? "App-open show failed" : error.getMessage(), TAG));
+                            error.getMessage() == null ? "App-open show failed" : error.getMessage(), TAG), null);
                 }
             }
         }
 
-        private boolean hasValidHost() {
-            return !activity.isFinishing() && !activity.isDestroyed()
-                    && ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
+        private AdSkipReason hostRejection() {
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return AdSkipReason.INVALID_HOST;
+            if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
+                return AdSkipReason.PROCESS_NOT_RESUMED;
+            }
+            return null;
         }
 
         private boolean ownsPresentation() {
@@ -487,13 +520,18 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return true;
         }
 
-        private void rejectBeforeShow() {
+        private void rejectBeforeShow(AdSkipReason reason, boolean notifyCompatibility) {
             if (!finishPresentation()) return;
-            if (callback != null && notifyContent) notifyHost(callback::onAdDismissedFullScreenContent);
+            reportResumeSkipped(reason);
+            if (notifyCompatibility && callback != null && notifyContent) {
+                notifyHost(callback::onAdDismissedFullScreenContent);
+            }
         }
 
-        private void failPresentation(AdError error) {
+        private void failPresentation(AdError error, Integer errorCode) {
             if (!finishPresentation()) return;
+            Tracker.track(new TrackkitEvents.Ad.ShowFailed(selected.getContext().getPlacement(),
+                    selected.getContext().getFormat(), adUnitId, errorCode, selected.getAttemptId()));
             if (callback != null && notifyContent) notifyHost(() -> callback.onAdFailedToShowFullScreenContent(error));
             fetchResumeAd();
         }
@@ -511,6 +549,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         public void onAdDismissedFullScreenContent() {
             runOnMain(() -> {
                 if (!invoked || !finishPresentation()) return;
+                if (presented) {
+                    Tracker.track(new TrackkitEvents.Ad.Closed(selected.getContext().getPlacement(),
+                            selected.getContext().getFormat(), adUnitId, selected.getAttemptId()));
+                }
                 if (callback != null && notifyContent) notifyHost(callback::onAdDismissedFullScreenContent);
                 fetchResumeAd();
             });
@@ -519,7 +561,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         @Override
         public void onAdFailedToShowFullScreenContent(AdError error) {
             runOnMain(() -> {
-                if (invoked) failPresentation(error);
+                if (invoked) failPresentation(error, error.getCode());
             });
         }
 
@@ -527,6 +569,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         public void onAdShowedFullScreenContent() {
             runOnMain(() -> {
                 if (!ownsPresentation() || !lease.presented()) return;
+                presented = true;
+                Tracker.track(new TrackkitEvents.Ad.Show(selected.getContext().getPlacement(),
+                        selected.getContext().getFormat(), adUnitId, selected.getAttemptId()));
                 if (callback != null && notifyContent) notifyHost(callback::onAdShowedFullScreenContent);
             });
         }
@@ -535,7 +580,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         public void onAdClicked() {
             runOnMain(() -> {
                 if (!ownsPresentation()) return;
-                ERainLogEventManager.logClickAdsEvent(activity, ad.getAdUnitId());
+                ERainLogEventManager.logClickAdsEvent(activity, adUnitId, selected.getContext());
                 if (callback != null) notifyHost(callback::onAdClicked);
             });
         }
@@ -557,12 +602,14 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         if (presentationOwner.isBusy()) {
             Log.d(TAG, "onResume: fullscreen presentation is busy");
+            reportResumeSkipped(AdSkipReason.PRESENTATION_BUSY);
             return;
         }
 
         if (disableAdResumeByClickAction) {
             Log.d(TAG, "onResume:ad resume disable ad by action");
             disableAdResumeByClickAction = false;
+            reportResumeSkipped(AdSkipReason.RETURNING_FROM_AD_CLICK);
             return;
         }
 
@@ -570,6 +617,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         // dereference it.
         if (currentActivity == null) {
             Log.d(TAG, "onResume: no current activity");
+            reportResumeSkipped(AdSkipReason.INVALID_HOST);
             return;
         }
 
@@ -578,6 +626,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         // suppressed one path and not the other.
         if (isResumeSuppressedFor(currentActivity)) {
             Log.d(TAG, "onStart: activity is disabled");
+            reportResumeSkipped(AdSkipReason.SUPPRESSED_BY_FLOW);
             return;
         }
 

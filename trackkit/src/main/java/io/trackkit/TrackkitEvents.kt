@@ -299,25 +299,70 @@ object TrackkitEvents {
         /**
          * The ad was actually displayed. The previous pipeline had no such event at all — only
          * request / matched / paid-impression — so show-rate and show failures were invisible.
+         * [attemptId] optionally correlates presentation with the accepted load; null is omitted
+         * from sink payloads. Existing producers retain the constructor without correlation.
          */
-        class Show(placement: String, format: AdFormat, adUnitId: String? = null) :
-            SimpleEvent(AD_SHOW, base(placement, format, adUnitId))
+        class Show(
+            placement: String,
+            format: AdFormat,
+            adUnitId: String?,
+            attemptId: String?,
+        ) : SimpleEvent(
+            AD_SHOW,
+            base(placement, format, adUnitId) + mapOf(PARAM_ATTEMPT_ID to attemptId),
+        ) {
+            /** Retains the original constructor and Kotlin default-argument bridge. */
+            constructor(placement: String, format: AdFormat, adUnitId: String? = null) :
+                this(placement, format, adUnitId, null)
+        }
 
+        /**
+         * Actual vendor presentation failed. Optional [attemptId] identifies the accepted load;
+         * null correlation/error values are omitted from sink payloads. Pre-show policy rejection
+         * belongs to [Skipped], not this event.
+         */
         class ShowFailed(
             placement: String,
             format: AdFormat,
-            adUnitId: String? = null,
-            errorCode: Int? = null,
+            adUnitId: String?,
+            errorCode: Int?,
+            attemptId: String?,
         ) : SimpleEvent(
             AD_SHOW_FAILED,
-            base(placement, format, adUnitId) + mapOf(PARAM_ERROR_CODE to errorCode)
-        )
+            base(placement, format, adUnitId) + mapOf(
+                PARAM_ERROR_CODE to errorCode,
+                PARAM_ATTEMPT_ID to attemptId,
+            ),
+        ) {
+            /** Retains the original constructor and Kotlin default-argument bridge. */
+            constructor(
+                placement: String,
+                format: AdFormat,
+                adUnitId: String? = null,
+                errorCode: Int? = null,
+            ) : this(placement, format, adUnitId, errorCode, null)
+        }
 
         class Click(placement: String, format: AdFormat, adUnitId: String? = null) :
             SimpleEvent(AD_CLICK, base(placement, format, adUnitId))
 
-        class Closed(placement: String, format: AdFormat, adUnitId: String? = null) :
-            SimpleEvent(AD_CLOSED, base(placement, format, adUnitId))
+        /**
+         * A displayed ad was dismissed. Optional [attemptId] joins the accepted load and its
+         * presentation; null is omitted from sink payloads for existing producers.
+         */
+        class Closed(
+            placement: String,
+            format: AdFormat,
+            adUnitId: String?,
+            attemptId: String?,
+        ) : SimpleEvent(
+            AD_CLOSED,
+            base(placement, format, adUnitId) + mapOf(PARAM_ATTEMPT_ID to attemptId),
+        ) {
+            /** Retains the original constructor and Kotlin default-argument bridge. */
+            constructor(placement: String, format: AdFormat, adUnitId: String? = null) :
+                this(placement, format, adUnitId, null)
+        }
 
         class RewardEarned(placement: String, adUnitId: String? = null) :
             SimpleEvent(AD_REWARD_EARNED, base(placement, AdFormat.REWARDED, adUnitId))
