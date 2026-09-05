@@ -362,9 +362,20 @@ object OnboardingSdk {
     internal suspend fun presentPaywall(
         activity: Activity,
         placement: PaywallPlacement,
+    ): PaywallOutcome? = presentPaywall(activity, placement, beforePresent = {})
+
+    /**
+     * Lets a lifecycle-owned caller await safe presentation after the host's eligibility decision.
+     * [beforePresent] runs only for an accepted decision, before view telemetry and presentation.
+     */
+    internal suspend fun presentPaywall(
+        activity: Activity,
+        placement: PaywallPlacement,
+        beforePresent: suspend () -> Unit,
     ): PaywallOutcome? {
         val gate = paywallGate ?: return null
         if (!gate.shouldShow(placement)) return null
+        beforePresent()
         val key = placement.name.lowercase()
         track(AnalyticsEvent.PaywallViewed(key))
         eventBus.emit(OnboardingEvent.PaywallShown(key))

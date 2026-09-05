@@ -4,11 +4,13 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import io.onboardkit.OnboardingSdk
+import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
-import io.onboardkit.ads.showNativeAd
+import io.onboardkit.ads.flowAdListener
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
@@ -20,15 +22,22 @@ import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Standalone full-screen native (OB5). Uses its own OB5 ad pool, honors premium like every
- * other screen, and always auto-dismisses after a remote-configured timeout so nobody can be
- * trapped — three separate bugs of the original, fixed here.
+ * Standalone full-screen native (OB5), disabled by default and using its existing ready pool.
+ * An empty pool exits when navigation is safe without requesting a replacement ad.
+ * Skip defaults to 3 seconds; auto-dismiss defaults to 15 seconds and clamps to at least 5.
+ * Both countdowns run only while RESUMED and restart in full after pause. Once unlocked, Skip
+ * stays available across resume, while the current remote flag may hide it without resetting
+ * that latch. Successful binding starts the hard-exit countdown, but only a real vendor impression
+ * reports [OnboardingEvent.AdShown]. A paywall runs once independently of those countdowns.
+ * If its eligibility decision or result arrives while paused, presentation telemetry and flow
+ * completion wait for safe RESUMED navigation.
  */
 class ObFullScreenAdActivity : BaseOnboardActivity() {
 
@@ -38,6 +47,10 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     private var skipJob: Job? = null
     private var autoDismissJob: Job? = null
     private var adBound = false
+    private var skipUnlocked = false
+    private var pendingExit: String? = null
+    private var completionPending = false
+    private var navigationWaiter: CompletableDeferred<Unit>? = null
 
     /** -1 until the step is counted; stays -1 on the policy-declined path, which shows nothing. */
     private var stepIndex = -1
@@ -49,10 +62,11 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         binding = ObActivityFullscreenAdBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.obSkipButton.setOnClickListener { requestExit(StepExit.SKIP) }
 
         sdk.guard().skipReason(this, AdPlacement.Ob5)?.let { reason ->
             AdPlacement.Ob5.trackSkipped(reason)
-            navigateNext(StepExit.SKIP)
+            requestExit(StepExit.SKIP)
             return
         }
 
@@ -64,40 +78,83 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         stepIndex = OnboardingSdk.session.stepsShown.indexOf(StepId.OB5)
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
-
-        binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
-
-        requestAd()
-        scheduleSkip()
-        scheduleAutoDismiss()
     }
 
-    private fun requestAd() {
-        showNativeAd(
-            placement = AdPlacement.Ob5,
-            unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.Ob5),
-            container = binding.obNativeContainer,
-            onBound = {
-                adBound = true
+    override fun onPostResume() {
+        super.onPostResume()
+        if (!::binding.isInitialized || !canNavigate()) return
+        navigationWaiter?.let { waiter ->
+            navigationWaiter = null
+            waiter.complete(Unit)
+        }
+        if (pendingExit != null) {
+            drainPendingExit()
+            return
+        }
+        sdk.guard().skipReason(this, AdPlacement.Ob5)?.let { reason ->
+            AdPlacement.Ob5.trackSkipped(reason)
+            requestExit(StepExit.SKIP)
+            return
+        }
+        // A successful bind consumes its pool entry. Readiness is relevant only before binding.
+        if (!adBound) bindReadyAd()
+        if (adBound && pendingExit == null && !navigated.get()) {
+            scheduleSkip()
+            scheduleAutoDismiss()
+        }
+    }
+
+    private fun bindReadyAd() {
+        val provider = sdk.provider()
+        if (provider == null || !provider.isNativeReady(AdPlacement.Ob5)) {
+            AdPlacement.Ob5.trackSkipped(if (provider == null) AdSkipReason.NO_PROVIDER else AdSkipReason.NOT_READY)
+            requestExit(StepExit.AD_FAILED)
+            return
+        }
+        val flowListener = flowAdListener(object : AdEventListener {
+            override fun onImpression() {
                 OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.Ob5.key))
-            },
-            // Nothing configured means this screen has no reason to exist; a failed load still
-            // leaves a screen the user must be able to leave.
-            onUnavailable = { reason ->
-                if (reason == AdSkipReason.NO_AD_UNIT) navigateNext(StepExit.AD_FAILED) else showSkipNow()
-            },
+            }
+        })
+        val listener = object : AdEventListener {
+            // No load callback may bind again: this page only consumes the fill already ready.
+            override fun onImpression() = whileActive { flowListener.onImpression() }
+            override fun onClicked() = whileActive { flowListener.onClicked() }
+            override fun onAdOpened() = whileActive { flowListener.onAdOpened() }
+            override fun onFailedToLoad() = whileActive { requestExit(StepExit.AD_FAILED) }
+        }
+        val bound = provider.bindNative(
+            this, AdPlacement.Ob5, binding.obNativeContainer, shimmer = null, listener = listener,
         )
+        if (pendingExit != null || navigated.get() || isFinishing || isDestroyed) return
+        if (bound) adBound = true else {
+            AdPlacement.Ob5.trackSkipped(AdSkipReason.NOT_READY)
+            requestExit(StepExit.AD_FAILED)
+        }
+    }
+
+    private fun whileActive(action: () -> Unit) {
+        runOnUiThread {
+            if (pendingExit == null && !navigated.get() && !isFinishing && !isDestroyed) action()
+        }
     }
 
     private fun scheduleSkip() {
         val flags = sdk.flags()
         if (!flags.showSkipOb5) {
-            // Auto-dismiss still guarantees an exit; keep Skip hidden as remote asked
+            binding.obSkipButton.visibility = View.GONE
+            return
+        }
+        if (skipUnlocked) {
+            binding.obSkipButton.visibility = View.VISIBLE
             return
         }
         skipJob = lifecycleScope.launch {
             delay(flags.skipButtonDelaySec.coerceAtLeast(0) * 1_000)
-            binding.obSkipButton.visibility = View.VISIBLE
+            if (canNavigate() && pendingExit == null) {
+                skipUnlocked = true
+                binding.obSkipButton.visibility = View.VISIBLE
+            }
         }
     }
 
@@ -106,20 +163,54 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)
         autoDismissJob = lifecycleScope.launch {
             delay(seconds * 1_000)
-            navigateNext(StepExit.AUTO_DISMISS)
+            requestExit(StepExit.AUTO_DISMISS)
         }
     }
 
-    private fun showSkipNow() {
-        skipJob?.cancel()
-        binding.obSkipButton.visibility = View.VISIBLE
-    }
-
-    private fun navigateNext(exitReason: String) {
-        ObLog.d(ObLog.Section.NAV, "from=ob5 exit=$exitReason")
-        if (!navigated.compareAndSet(false, true)) return
+    override fun onPause() {
         skipJob?.cancel()
         autoDismissJob?.cancel()
+        super.onPause()
+    }
+
+    private fun canNavigate(): Boolean =
+        !isFinishing && !isDestroyed && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            !supportFragmentManager.isStateSaved
+
+    private suspend fun awaitSafeNavigation() {
+        while (!canNavigate()) {
+            val waiter = CompletableDeferred<Unit>()
+            navigationWaiter = waiter
+            try {
+                waiter.await()
+            } finally {
+                if (navigationWaiter === waiter) navigationWaiter = null
+            }
+        }
+    }
+
+    /** The first reason closes listener/bind admission immediately, even while navigation waits. */
+    private fun requestExit(exitReason: String) {
+        if (pendingExit != null || navigated.get()) return
+        pendingExit = exitReason
+        ObLog.d(ObLog.Section.NAV, "from=ob5 exit=$exitReason")
+        skipJob?.cancel()
+        autoDismissJob?.cancel()
+        sdk.provider()?.releaseNative(AdPlacement.Ob5)
+        drainPendingExit()
+    }
+
+    private fun drainPendingExit() {
+        val exitReason = pendingExit ?: return
+        if (!canNavigate()) return
+        if (completionPending) {
+            // Claim completion before notifying the host, which may synchronously navigate again.
+            completionPending = false
+            OnboardingSdk.completeFlow(this)
+            finish()
+            return
+        }
+        if (!navigated.compareAndSet(false, true)) return
         if (stepIndex >= 0) {
             OnboardingSdk.track(
                 AnalyticsEvent.StepCompleted(
@@ -138,9 +229,10 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         }
         lifecycleScope.launch {
             // Outcome ignored: the flow completes either way
-            sdk.presentPaywall(this@ObFullScreenAdActivity, PaywallPlacement.AFTER_ONBOARDING)
-            OnboardingSdk.completeFlow(this@ObFullScreenAdActivity)
-            finish()
+            sdk.presentPaywall(this@ObFullScreenAdActivity, PaywallPlacement.AFTER_ONBOARDING,
+                beforePresent = { awaitSafeNavigation() })
+            completionPending = true
+            drainPendingExit()
         }
     }
 
