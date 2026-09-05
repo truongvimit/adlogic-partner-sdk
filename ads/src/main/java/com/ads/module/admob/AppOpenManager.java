@@ -36,9 +36,9 @@ import io.trackkit.AdFormat;
 import io.trackkit.Tracker;
 import io.trackkit.TrackkitEvents;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.Arrays;
-import java.util.List;
+import java.util.Set;
 
 /**
  * App-open ads for foreground resume. Initialization can preload; lifecycle or an explicit
@@ -68,7 +68,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private boolean isAppResumeEnabled = true;
     private boolean enableScreenContentCallback = false;
     private boolean disableAdResumeByClickAction = false;
-    private final List<Class> disabledAppOpenList;
+    private final Set<Class<?>> disabledAppOpenActivities;
     /**
      * Constructor
      */
@@ -88,7 +88,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             }
             resumeAdLoader.load(context, unitId, request, callback);
         });
-        disabledAppOpenList = new ArrayList<>();
+        disabledAppOpenActivities = new LinkedHashSet<>();
     }
 
     public static synchronized AppOpenManager getInstance() {
@@ -185,16 +185,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Suppresses the resume ad whenever {@code activityClass} is on top.
+     * Suppresses the resume ad whenever {@code activityClass} or a subclass is on top.
+     * Registration is idempotent: one enable removes the exclusion even after repeated calls.
      */
     public void disableAppResumeWithActivity(Class activityClass) {
         Log.d(TAG, "disableAppResumeWithActivity: " + activityClass.getName());
-        disabledAppOpenList.add(activityClass);
+        disabledAppOpenActivities.add(activityClass);
     }
 
     public void enableAppResumeWithActivity(Class activityClass) {
         Log.d(TAG, "enableAppResumeWithActivity: " + activityClass.getName());
-        disabledAppOpenList.remove(activityClass);
+        disabledAppOpenActivities.remove(activityClass);
     }
 
     /**
@@ -220,7 +221,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (activity == null || activity instanceof AdActivity) {
             return true;
         }
-        for (Class activityClass : disabledAppOpenList) {
+        for (Class<?> activityClass : disabledAppOpenActivities) {
             if (activityClass.isInstance(activity)) {
                 return true;
             }

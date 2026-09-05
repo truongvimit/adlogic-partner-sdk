@@ -451,6 +451,26 @@ class AppOpenPresentationTelemetryTest {
         assertEquals(1, ad.shows)
     }
 
+    @Test
+    fun `repeated class exclusion registration is removed by one enable without consuming the fill`() {
+        val ad = fill()
+        val initialEvents = events.toList()
+        repeat(3) { manager.disableAppResumeWithActivity(ComponentActivity::class.java) }
+        assertTrue(manager.isResumeSuppressedFor(host.get()))
+
+        manager.enableAppResumeWithActivity(ComponentActivity::class.java)
+
+        assertFalse("Exclusion registration has set semantics, not counted suppression",
+            manager.isResumeSuppressedFor(host.get()))
+        assertTrue(manager.isResumeAdAvailable())
+        assertEquals(initialEvents, events)
+        assertEquals(1, requests.size)
+        assertEquals(0, ad.shows)
+        manager.showResumeAdIfAvailable()
+        assertEquals(1, ad.shows)
+        assertTrue(params("ad_skipped").isEmpty())
+    }
+
     private fun params(name: String) = events.filter { it.first == name }.map { it.second }
 
     private fun fill(index: Int = 0): VendorAd = VendorAd(requests[index].first).also {
