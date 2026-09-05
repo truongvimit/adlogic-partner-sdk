@@ -65,7 +65,7 @@ public class ERainLogEventManager {
 
     /**
      * Sole emitter of {@code ad_click}. It sits on the vendor callback, so it fires once per real
-     * click on every path — including the AppOpenManager resume/splash flows, which have no
+     * click on every path — including the AppOpenManager resume flow, which have no
      * {@code AdCallback} to decorate. {@code TrackingAdCallback} therefore only forwards clicks.
      */
     public static void logClickAdsEvent(Context context, String adUnitId) {

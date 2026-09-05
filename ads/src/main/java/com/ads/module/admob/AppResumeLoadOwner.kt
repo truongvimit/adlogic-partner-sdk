@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 /**
  * Owns the resume buffer and its vendor request. All mutations run on the main thread; returning
  * from a vendor request does not authorize it to refill a newer unit or a revoked session.
- * Splash keeps its existing, independent owner in [AppOpenManager].
+ * [AppOpenManager] exposes this owner only for foreground resume.
  */
 internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
     private data class BufferedAd(val ad: AppOpenAd, val loadedAt: Long, val personalized: Boolean)

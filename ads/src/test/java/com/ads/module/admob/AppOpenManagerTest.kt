@@ -39,10 +39,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.Implementation
-import org.robolectric.annotation.Implements
 import org.robolectric.annotation.LooperMode
-import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowNetworkInfo
 import org.robolectric.shadows.ShadowSystemClock
 
@@ -90,8 +87,8 @@ class AppOpenManagerTest {
     fun `repeated resume requests share one vendor load until it finishes`() {
         manager.init(app, "resume-unit")
 
-        manager.fetchAd(false)
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
+        manager.fetchResumeAd()
 
         assertEquals(1, vendor.requests.size)
     }
@@ -105,8 +102,8 @@ class AppOpenManagerTest {
 
         vendor.fill(0)
         manager.setAppResumeAdId("resume-unit")
-        manager.fetchAd(false)
-        assertTrue(manager.isAdAvailable(false))
+        manager.fetchResumeAd()
+        assertTrue(manager.isResumeAdAvailable())
         assertEquals(1, vendor.requests.size)
     }
 
@@ -114,15 +111,15 @@ class AppOpenManagerTest {
     fun `disabled resume neither requests nor accepts an older fill`() {
         manager.disableAppResume()
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(0, vendor.requests.size)
 
         manager.enableAppResume()
         assertEquals(1, vendor.requests.size)
         manager.disableAppResume()
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
-        manager.fetchAd(false)
+        assertFalse(manager.isResumeAdAvailable())
+        manager.fetchResumeAd()
         assertEquals(1, vendor.requests.size)
     }
 
@@ -133,11 +130,11 @@ class AppOpenManagerTest {
         assertEquals(listOf("old-unit", "new-unit"), vendor.requests.map { it.unitId })
 
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         vendor.fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
         vendor.fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
@@ -145,8 +142,8 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         manager.setAppResumeAdId(" ")
         vendor.fill(0)
-        manager.fetchAd(false)
-        assertFalse(manager.isAdAvailable(false))
+        manager.fetchResumeAd()
+        assertFalse(manager.isResumeAdAvailable())
         assertEquals(1, vendor.requests.size)
     }
 
@@ -155,27 +152,27 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         manager.releaseCachedAds()
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
 
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         vendor.fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
     fun `load timeout releases ownership and its late callback cannot fill a newer request`() {
         manager.init(app, "resume-unit")
         mainLooper.idleFor(30, TimeUnit.SECONDS)
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(1, vendor.requests.size)
 
         mainLooper.idleFor(5, TimeUnit.SECONDS)
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(2, vendor.requests.size)
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         vendor.fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
@@ -183,11 +180,11 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         ShadowSystemClock.simulateDeepSleep(Duration.ofSeconds(31))
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         // idleFor uses setCurrentTimeMillis in Robolectric 4.13, which erases the simulated sleep
         // offset. The shadow's sleep advances uptime and elapsed time together without rewinding.
         SystemClock.sleep(5_000L)
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(2, vendor.requests.size)
     }
 
@@ -196,13 +193,13 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         listOf(5_000L, 10_000L, 20_000L, 40_000L, 60_000L, 60_000L).forEachIndexed { index, delay ->
             vendor.fail(index)
-            manager.fetchAd(false)
+            manager.fetchResumeAd()
             mainLooper.idleFor(delay - 1, TimeUnit.MILLISECONDS)
-            manager.fetchAd(false)
+            manager.fetchResumeAd()
             assertEquals(index + 1, vendor.requests.size)
             mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
             assertEquals(index + 1, vendor.requests.size)
-            manager.fetchAd(false)
+            manager.fetchResumeAd()
             assertEquals(index + 2, vendor.requests.size)
         }
     }
@@ -211,29 +208,29 @@ class AppOpenManagerTest {
     fun `a synchronous vendor fill is accepted and prevents a duplicate request`() {
         vendor.synchronousFill = true
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(1, vendor.requests.size)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
     fun `dispatch exceptions settle the request and allow a later retry`() {
         vendor.throwOnLoad = true
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(1, vendor.requests.size)
         mainLooper.idleFor(5, TimeUnit.SECONDS)
         vendor.throwOnLoad = false
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         vendor.fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
     fun `consent reopening preloads once without showing and revocation rejects late fill`() {
         ConsentCenter.setHostConsent(false, false)
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(0, vendor.requests.size)
 
         ConsentCenter.setHostConsent(true, false)
@@ -242,7 +239,7 @@ class AppOpenManagerTest {
         ConsentCenter.setHostConsent(false, false)
         mainLooper.idle()
         val late = vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         assertEquals(0, late.showCount)
     }
 
@@ -252,12 +249,12 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         ConsentCenter.setHostConsent(true, false)
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         mainLooper.idle()
         assertEquals(2, vendor.requests.size)
         assertEquals("1", vendor.requests[1].request.getNetworkExtrasBundle(AdMobAdapter::class.java)?.getString("npa"))
         vendor.fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
@@ -265,10 +262,10 @@ class AppOpenManagerTest {
         ConsentCenter.setHostConsent(true, true)
         manager.init(app, "resume-unit")
         vendor.fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
         ConsentCenter.setHostConsent(true, false)
         mainLooper.idle()
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         assertEquals(2, vendor.requests.size)
     }
 
@@ -276,7 +273,7 @@ class AppOpenManagerTest {
     fun `premium is checked with application context even before there is an activity`() {
         premium = true
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(0, vendor.requests.size)
         assertTrue(queriedContexts.isNotEmpty())
         assertTrue(queriedContexts.all { it === app.applicationContext })
@@ -286,11 +283,11 @@ class AppOpenManagerTest {
         mainLooper.idle()
         assertEquals(1, vendor.requests.size)
         vendor.fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
         premium = true
         Entitlement.notifyChanged()
         mainLooper.idle()
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
     }
 
     @Test
@@ -298,35 +295,35 @@ class AppOpenManagerTest {
         manager.init(app, "resume-unit")
         premium = true
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
     }
 
     @Test
     fun `offline request and a fill delivered after disconnection are both gated`() {
         networkAvailable(false)
         manager.init(app, "resume-unit")
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(0, vendor.requests.size)
         networkAvailable(true)
-        manager.fetchAd(false)
+        manager.fetchResumeAd()
         assertEquals(1, vendor.requests.size)
         networkAvailable(false)
         vendor.fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
     }
 
     @Test
     fun `worker calls and vendor callbacks are serialized onto the main thread`() {
-        Thread { manager.init(app, "resume-unit"); manager.fetchAd(false) }.apply { start(); join() }
+        Thread { manager.init(app, "resume-unit"); manager.fetchResumeAd() }.apply { start(); join() }
         assertEquals(0, vendor.requests.size)
         mainLooper.idle()
         assertEquals(1, vendor.requests.size)
         assertSame(Looper.getMainLooper(), vendor.requests.single().looper)
 
         Thread { vendor.fill(0) }.apply { start(); join() }
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isResumeAdAvailable())
         mainLooper.idle()
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isResumeAdAvailable())
     }
 
     @Test
@@ -338,49 +335,19 @@ class AppOpenManagerTest {
             assertTrue(androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState
                 .isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
             val first = vendor.fill(0)
-            manager.showAdIfAvailable(false)
+            manager.showResumeAdIfAvailable()
             assertEquals(1, first.showCount)
-            manager.fetchAd(false)
+            manager.fetchResumeAd()
             val second = vendor.fill(1)
-            assertTrue(manager.isAdAvailable(false))
+            assertTrue(manager.isResumeAdAvailable())
             first.fullScreenContentCallback!!.onAdDismissedFullScreenContent()
-            assertTrue(manager.isAdAvailable(false))
+            assertTrue(manager.isResumeAdAvailable())
             first.fullScreenContentCallback!!.onAdDismissedFullScreenContent()
-            manager.showAdIfAvailable(false)
+            manager.showResumeAdIfAvailable()
             assertEquals(1, second.showCount)
             second.fullScreenContentCallback!!.onAdDismissedFullScreenContent()
         } finally {
             manager.disableAppResume()
-            activity.pause().stop().destroy()
-            mainLooper.idleFor(1, TimeUnit.SECONDS)
-        }
-    }
-
-    @Test
-    @Config(application = ResumeLifecycleApplication::class, shadows = [LegacyAppOpenVendorShadow::class])
-    fun `closing a legacy splash leaves an independent resume request able to fill`() {
-        LegacyAppOpenVendorShadow.callbacks.clear()
-        manager.init(app, "resume-unit")
-        manager.setSplashActivity(null, "splash-unit", 5_000)
-        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
-        try {
-            manager.fetchAd(true)
-            assertEquals(1, LegacyAppOpenVendorShadow.callbacks.size)
-            val splash = FakeAd("splash-unit")
-            LegacyAppOpenVendorShadow.callbacks.single().onAdLoaded(splash)
-            manager.showAdIfAvailable(true)
-            mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
-            assertEquals(1, splash.showCount)
-            assertEquals(1, vendor.requests.size)
-
-            splash.fullScreenContentCallback!!.onAdDismissedFullScreenContent()
-            vendor.fill(0)
-
-            assertTrue(manager.isAdAvailable(false))
-            assertEquals(1, vendor.requests.size)
-        } finally {
-            manager.disableAppResume()
-            ShadowDialog.getLatestDialog()?.dismiss()
             activity.pause().stop().destroy()
             mainLooper.idleFor(1, TimeUnit.SECONDS)
         }
@@ -395,9 +362,9 @@ class AppOpenManagerTest {
             assertTrue(androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState
                 .isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
             val ad = vendor.fill(0)
-            assertTrue(manager.isAdAvailable(false))
+            assertTrue(manager.isResumeAdAvailable())
             premium = true
-            manager.showAdIfAvailable(false)
+            manager.showResumeAdIfAvailable()
             assertEquals(0, ad.showCount)
         } finally {
             manager.disableAppResume()
@@ -477,20 +444,6 @@ class AppOpenManagerTest {
         override fun setImmersiveMode(immersiveMode: Boolean) = Unit
         override fun getPlacementId(): Long = placement
         override fun setPlacementId(placementId: Long) { placement = placementId }
-    }
-}
-
-/** Only the legacy GMA network boundary is replaced; public manager load/show callbacks stay real. */
-@Implements(value = AppOpenAd::class, isInAndroidSdk = false)
-class LegacyAppOpenVendorShadow {
-    companion object {
-        val callbacks = mutableListOf<AppOpenAd.AppOpenAdLoadCallback>()
-
-        @JvmStatic
-        @Implementation
-        fun load(context: Context, unitId: String, request: AdRequest, callback: AppOpenAd.AppOpenAdLoadCallback) {
-            callbacks += callback
-        }
     }
 }
 
