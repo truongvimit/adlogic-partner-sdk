@@ -49,7 +49,7 @@ internal fun Activity.showNativeAd(
     var skeleton: ShimmerFrameLayout? = null
     // Captured: inside the object below, the name resolves to the override, not the parameter.
     val notifyAdEngaged = onAdEngaged
-    val listener = flowAdListener(
+    val listener = placement.tracked(
         object : AdEventListener {
             override fun onLoaded() = onMainThread {
                 if (bindBuffered(provider, placement, container, skeleton)) onBound()
@@ -69,6 +69,7 @@ internal fun Activity.showNativeAd(
         },
     )
 
+    placement.trackRequest()
     // Buffered by the preload chain on the common path, so the slot paints without a round trip
     if (bindBuffered(provider, placement, container, shimmer = null, listener)) {
         onBound()

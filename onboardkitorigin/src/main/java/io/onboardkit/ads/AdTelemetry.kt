@@ -2,32 +2,46 @@ package io.onboardkit.ads
 
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.analytics.AnalyticsEvent
+import io.trackkit.AdFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Forwards callbacks for one flow slot and coordinates click-return suppression.
- * The provider owns actual load/show telemetry. The first real impression after each load notifies
- * the screen once; binding or joining a pending load does not manufacture an impression.
+ * Reports the lifecycle of one ad slot, then forwards to the screen's own listener.
+ *
+ * Revenue, impressions-with-money and clicks all arrive through the vendor callback inside `:ads`.
+ * What only this layer knows is the *opportunity*: which onboarding screen asked, and whether it
+ * got anything. Wrapping the listener keeps that reporting in one place — the screens used to
+ * duplicate it, or more often skip it.
+ *
+ * Impression and failure are latched. A bound native reaches the screen twice on the common path
+ * (once synchronously from `bindNative`'s own listener notification, once from the caller's
+ * post-bind branch), which is exactly how `ob_ad_impression` came to be double-counted on OB3.
  */
-internal class FlowAdListener(
+internal class TrackedAdListener(
+    private val placementKey: String,
+    private val format: AdFormat,
     private val delegate: AdEventListener?,
 ) : AdEventListener {
 
     private val impressionReported = AtomicBoolean(false)
+    private val failureReported = AtomicBoolean(false)
 
     override fun onLoaded() {
-        impressionReported.set(false)
         delegate?.onLoaded()
     }
 
     override fun onFailedToLoad() {
+        if (failureReported.compareAndSet(false, true)) {
+            OnboardingSdk.track(AnalyticsEvent.AdFailed(placementKey, format))
+        }
         delegate?.onFailedToLoad()
     }
 
     override fun onImpression() {
         if (impressionReported.compareAndSet(false, true)) {
-            delegate?.onImpression()
+            OnboardingSdk.track(AnalyticsEvent.AdImpression(placementKey, format))
         }
+        delegate?.onImpression()
     }
 
     override fun onClicked() {
@@ -43,10 +57,15 @@ internal class FlowAdListener(
     }
 }
 
-/** Wraps one flow slot's callbacks without duplicating its provider's telemetry. */
-internal fun flowAdListener(
+/** Wraps [listener] so this placement's load outcome and first impression reach analytics. */
+internal fun AdPlacement.tracked(
     listener: AdEventListener? = null,
-): AdEventListener = FlowAdListener(listener)
+): AdEventListener = TrackedAdListener(key, format, listener)
+
+/** A load is about to go out for this placement. */
+internal fun AdPlacement.trackRequest() {
+    OnboardingSdk.track(AnalyticsEvent.AdRequested(key, format))
+}
 
 /**
  * No ad was shown for this placement. [reason] is the precise cause, not a bucket — a dashboard

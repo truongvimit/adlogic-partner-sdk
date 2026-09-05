@@ -56,10 +56,6 @@ object ConsentCenter {
 
     private val _state = MutableStateFlow(ConsentState.UNKNOWN)
     val state: StateFlow<ConsentState> = _state.asStateFlow()
-    private val _requestEligibility = MutableStateFlow(false)
-
-    /** Current request authority, including previous-session UMP consent after this launch's update. */
-    val requestEligibility: StateFlow<Boolean> = _requestEligibility.asStateFlow()
 
     private val requested = AtomicBoolean(false)
     @Volatile private var consentInformation: ConsentInformation? = null
@@ -140,8 +136,8 @@ object ConsentCenter {
      * retryable. UMP is consulted on every new process, even when old SDK preferences exist.
      *
      * [onCompleted] reports current request eligibility, not personalization. Previous UMP consent
-     * can permit requests while the update is pending; [requestEligibility] publishes that as soon
-     * as UMP makes it available. The network deadline does not time out a form the user is reading.
+     * can permit requests while the update is pending. The network deadline does not time out a
+     * form the user is reading.
      *
      * Call on the main thread. Completion runs at most once, except that [detach] abandons a dead
      * screen's callback. [onFormAnswered] runs only after a form shown by this call was answered.
@@ -343,7 +339,7 @@ object ConsentCenter {
         if (formAnswered && answered) onFormAnswered?.invoke(personalized)
     }
 
-    /** Publishes choices before eligibility so request observers see the matching personalization. */
+    /** Publishes personalization independently from the current request authority. */
     private fun publishAuthority() {
         val host = hostConsent
         val allowed = canRequestAds()
@@ -360,7 +356,6 @@ object ConsentCenter {
         _state.value = choice
         Tracker.setConsent(analytics = true, ads = choice == ConsentState.GRANTED)
         MmpTracking.setConsent(true, choice == ConsentState.GRANTED)
-        _requestEligibility.value = allowed
     }
 
     /** Unknown consent is conservative; use [canRequestAds] separately before sending requests. */

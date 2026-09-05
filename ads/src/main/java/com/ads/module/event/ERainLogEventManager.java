@@ -8,7 +8,6 @@ import androidx.annotation.Nullable;
 import com.ads.module.admob.Admob;
 import com.ads.module.funtion.AdType;
 import com.ads.module.tracking.AdFormatRegistry;
-import com.ads.module.tracking.AdLoadContext;
 import com.google.android.gms.ads.AdValue;
 
 import io.trackkit.AdFormat;
@@ -45,27 +44,14 @@ public class ERainLogEventManager {
      */
     public static void logPaidAdImpression(Context context, AdValue adValue, String adUnitId,
                                            String mediationAdapterClassName, AdType adType) {
-        logPaidAdImpression(context, adValue, adUnitId, mediationAdapterClassName, adType, null);
-    }
-
-    /**
-     * Paid impression using the load owner's captured placement and format. A null context keeps
-     * the legacy registry/AdType resolution. The context's load-only reportTelemetry flag does
-     * not suppress revenue, and each real paid callback still reaches Trackkit and Adjust once.
-     */
-    public static void logPaidAdImpression(Context context, AdValue adValue, String adUnitId,
-                                           String mediationAdapterClassName, AdType adType,
-                                           @Nullable AdLoadContext loadContext) {
         if (adValue == null) {
             return;
         }
         String unitId = orEmpty(adUnitId);
-        String placement = loadContext == null
-                ? PlacementRegistry.placementOf(unitId) : loadContext.getPlacement();
-        AdFormat format = loadContext == null ? toAdFormat(adType) : loadContext.getFormat();
+        String placement = PlacementRegistry.placementOf(unitId);
         Tracker.adRevenue(new AdImpression(
                 placement,
-                format,
+                toAdFormat(adType),
                 unitId,
                 AdImpression.PLATFORM_ADMOB,
                 mediationAdapterClassName,
@@ -79,26 +65,14 @@ public class ERainLogEventManager {
 
     /**
      * Sole emitter of {@code ad_click}. It sits on the vendor callback, so it fires once per real
-     * click on every path — including the AppOpenManager resume flow, which have no
+     * click on every path — including the AppOpenManager resume/splash flows, which have no
      * {@code AdCallback} to decorate. {@code TrackingAdCallback} therefore only forwards clicks.
      */
     public static void logClickAdsEvent(Context context, String adUnitId) {
-        logClickAdsEvent(context, adUnitId, null);
-    }
-
-    /**
-     * Real click using the load owner's captured placement and format. Null keeps legacy registry
-     * lookup; the context's load-only reporting flag does not mute clicks or the daily cap.
-     * Distinct vendor click callbacks remain distinct events and cap increments.
-     */
-    public static void logClickAdsEvent(Context context, String adUnitId,
-                                        @Nullable AdLoadContext loadContext) {
         Log.d(TAG, String.format("User click ad for ad unit %s.", adUnitId));
         String unitId = orEmpty(adUnitId);
-        String placement = loadContext == null
-                ? PlacementRegistry.placementOf(unitId) : loadContext.getPlacement();
-        AdFormat format = loadContext == null ? AdFormatRegistry.formatOf(unitId) : loadContext.getFormat();
-        Tracker.track(new TrackkitEvents.Ad.Click(placement, format, unitId));
+        Tracker.track(new TrackkitEvents.Ad.Click(
+                PlacementRegistry.placementOf(unitId), AdFormatRegistry.formatOf(unitId), unitId));
         // Being the sole click emitter makes this the only place the daily cap can count from
         // without a new ad format silently escaping it. No-op while the cap is off.
         Admob.getInstance().recordAdClick(context, unitId);

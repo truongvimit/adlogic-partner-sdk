@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * | Callback | When | What belongs here |
  * |---|---|---|
- * | [onNext] | navigation is committed before vendor show, or no ad will appear | `startActivity(next)` |
+ * | [onNext] | the ad is on screen, or it never will be | `startActivity(next)` |
  * | [onFinished] | the ad is gone | `finish()` |
  *
  * Starting the next screen at [onNext] lets it inflate and bind *underneath* the ad, so it is
@@ -57,8 +57,7 @@ internal object ObInterstitial {
         val startedAtMs = System.currentTimeMillis()
         var ownsPresentation = false
         val next = RunOnce<Unit> { onNext() }
-        val finish = RunOnce<PresentationOutcome> { outcome ->
-            val reason = outcome.reason
+        val finish = RunOnce<AdSkipReason?> { reason ->
             // Only the call that raised them may lower them: a second show is refused below and
             // runs its own finish, which would otherwise release the presentation it lost to.
             if (ownsPresentation) {
@@ -70,7 +69,7 @@ internal object ObInterstitial {
                 ObLog.d(ObLog.Section.SHOW, "${placement.key} end shown ms=$elapsed")
             } else {
                 ObLog.w(ObLog.Section.SHOW, "${placement.key} end skipped=${reason.key} ms=$elapsed")
-                if (!outcome.telemetryReported) placement.trackSkipped(reason)
+                placement.trackSkipped(reason)
             }
             // A presentation that never reached the screen still owes the caller its go-ahead,
             // or a screen wired to start its destination on onNext would simply never leave.
@@ -80,7 +79,7 @@ internal object ObInterstitial {
 
         val blocked = blockReason(activity, placement)
         if (blocked != null) {
-            finish.run(PresentationOutcome(blocked))
+            finish.run(blocked)
             return
         }
 
@@ -95,10 +94,10 @@ internal object ObInterstitial {
         activity.whenResumed(
             // Without this the presentation would never end and the process-wide latch above
             // would block every later interstitial.
-            onHostLost = { finish.run(PresentationOutcome(AdSkipReason.NOT_READY)) },
+            onHostLost = { finish.run(AdSkipReason.NOT_READY) },
         ) {
             if (activity.isFinishing || activity.isDestroyed) {
-                finish.run(PresentationOutcome(AdSkipReason.NOT_READY))
+                finish.run(AdSkipReason.NOT_READY)
                 return@whenResumed
             }
             present(activity, placement, next, finish)
@@ -117,10 +116,10 @@ internal object ObInterstitial {
         activity: AppCompatActivity,
         placement: AdPlacement,
         next: RunOnce<Unit>,
-        finish: RunOnce<PresentationOutcome>,
+        finish: RunOnce<AdSkipReason?>,
     ) {
         val provider = OnboardingSdk.provider() ?: run {
-            finish.run(PresentationOutcome(AdSkipReason.NO_PROVIDER))
+            finish.run(AdSkipReason.NO_PROVIDER)
             return
         }
         ObLog.d(ObLog.Section.SHOW, "${placement.key} vendor_show")
@@ -128,29 +127,18 @@ internal object ObInterstitial {
             activity,
             placement,
             object : ObInterstitialCallback() {
-                private val presented = AtomicBoolean(false)
-
                 override fun onNextAction() {
-                    ObLog.d(ObLog.Section.SHOW, "${placement.key} committed -> next")
+                    ObLog.d(ObLog.Section.SHOW, "${placement.key} visible -> next")
+                    activity.endWhenBackInFront(placement, finish)
                     next.run()
                 }
 
-                override fun onPresented() {
-                    if (presented.compareAndSet(false, true)) {
-                        activity.endWhenBackInFront(placement, finish)
-                    }
-                }
-
                 override fun onAdClosed() {
-                    finish.run(PresentationOutcome(null))
+                    finish.run(null)
                 }
 
                 override fun onAdSkipped(reason: AdSkipReason) {
-                    finish.run(PresentationOutcome(reason))
-                }
-
-                override fun onAdSkipped(reason: AdSkipReason, telemetryReported: Boolean) {
-                    finish.run(PresentationOutcome(reason, telemetryReported))
+                    finish.run(reason)
                 }
             },
         )
@@ -163,9 +151,8 @@ internal object ObInterstitial {
  *
  * A full-screen ad necessarily pauses its host, so the host being resumed *after* a pause is
  * first-party evidence that whatever took the screen has gone — evidence the flow owns, unlike
- * the callback it stands in for. Registered only after the vendor confirms presentation, so
- * navigation commitment alone cannot make an unrelated pause look like a displayed ad. If the
- * vendor reports presentation after the host has already paused, that paused state is retained.
+ * the callback it stands in for. Registered only once the module has committed, so an unrelated
+ * pause before the ad cannot be mistaken for one.
  *
  * It is a second source of the same fact, never a different one: [finish] runs once, so a vendor
  * that does report still owns the outcome, and the reason is `null` either way. Inert for a caller
@@ -174,15 +161,11 @@ internal object ObInterstitial {
  */
 private fun AppCompatActivity.endWhenBackInFront(
     placement: AdPlacement,
-    finish: RunOnce<PresentationOutcome>,
+    finish: RunOnce<AdSkipReason?>,
 ) {
-    // A vendor may acknowledge an invoked show after destruction; this host cannot return,
-    // and no later lifecycle event could remove a newly registered observer.
-    if (isDestroyed || lifecycle.currentState == Lifecycle.State.DESTROYED) return
     lifecycle.addObserver(
         object : LifecycleEventObserver {
-            private var paused = !this@endWhenBackInFront.lifecycle.currentState
-                .isAtLeast(Lifecycle.State.RESUMED)
+            private var paused = false
 
             override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
                 when (event) {
@@ -191,7 +174,7 @@ private fun AppCompatActivity.endWhenBackInFront(
                     Lifecycle.Event.ON_RESUME -> if (paused) {
                         source.lifecycle.removeObserver(this)
                         ObLog.d(ObLog.Section.SHOW, "${placement.key} host back in front -> end")
-                        finish.run(PresentationOutcome(null))
+                        finish.run(null)
                     }
 
                     Lifecycle.Event.ON_DESTROY -> source.lifecycle.removeObserver(this)
@@ -237,12 +220,6 @@ private fun AppCompatActivity.whenResumed(onHostLost: () -> Unit, block: () -> U
         },
     )
 }
-
-/** The terminal reason and whether its canonical event already belongs to the provider. */
-private data class PresentationOutcome(
-    val reason: AdSkipReason?,
-    val telemetryReported: Boolean = false,
-)
 
 /**
  * Runs [block] for the first caller only.

@@ -178,7 +178,7 @@ class TaxonomyTest {
             }
 
     private companion object {
-        /** 11 ad + 15 first-open + 6 iap + 3 consent. Raise it when the catalog grows. */
-        const val EXPECTED_EVENT_COUNT = 35
+        /** 9 ad + 13 first-open + 6 iap + 3 consent. Raise it when the catalog grows. */
+        const val EXPECTED_EVENT_COUNT = 31
     }
 }

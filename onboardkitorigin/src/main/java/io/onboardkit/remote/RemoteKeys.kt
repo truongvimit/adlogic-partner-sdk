@@ -13,30 +13,23 @@ sealed class RemoteKey<T>(val key: String, val default: T) {
 }
 
 object ObRemoteKeys {
-    private val snapshotReaders = linkedMapOf<RemoteKey<*>, (RemoteFlags) -> String>()
-
-    private fun <T, K : RemoteKey<T>> K.bind(read: (RemoteFlags) -> T): K {
-        snapshotReaders[this] = { snapshot -> read(snapshot).toString() }
-        return this
-    }
-
     // Kill switches
-    val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", true).bind(RemoteFlags::enableAllAds)
-    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true).bind(RemoteFlags::enableUiContent)
+    val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", true)
+    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true)
 
     // Step gating — order is fixed in code; remote can only toggle
-    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", true).bind(RemoteFlags::enableStepOb1)
-    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", true).bind(RemoteFlags::enableStepOb2)
-    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", true).bind(RemoteFlags::enableStepOb3)
-    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", true).bind(RemoteFlags::enableStepOb4)
-    val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", false).bind(RemoteFlags::enableStepOb5)
-    val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", true).bind(RemoteFlags::enableQuestion)
-    val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", false).bind(RemoteFlags::enableQuestionOldUser)
+    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", true)
+    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", true)
+    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", true)
+    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", true)
+    val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", false)
+    val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", true)
+    val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", false)
 
     // Language flow
     /** Second native shown in-place on the LFO after the first language tap. */
-    val ENABLE_LANGUAGE_NATIVE_2 = RemoteKey.BoolKey("ob_enable_language_native_2", true).bind(RemoteFlags::enableLanguageNative2)
-    val PASS_LFO_IF_COMPLETED = RemoteKey.BoolKey("ob_pass_lfo_if_completed", true).bind(RemoteFlags::passLfoIfCompleted)
+    val ENABLE_LANGUAGE_NATIVE_2 = RemoteKey.BoolKey("ob_enable_language_native_2", true)
+    val PASS_LFO_IF_COMPLETED = RemoteKey.BoolKey("ob_pass_lfo_if_completed", true)
 
     /**
      * The "Confirm Language" modal, raised when the user taps the language already selected.
@@ -46,13 +39,13 @@ object ObRemoteKeys {
      * re-tap behaviour entirely and a second tap goes back to being inert.
      */
     val SHOW_LANGUAGE_CONFIRM_DIALOG =
-        RemoteKey.BoolKey("ob_show_language_confirm_dialog", true).bind(RemoteFlags::showLanguageConfirmDialog)
+        RemoteKey.BoolKey("ob_show_language_confirm_dialog", true)
 
     /**
      * Animated hand nudging the row the device locale points at, while nothing is selected yet.
      * Purely a UX nudge, so it is safe to switch off remotely without touching the flow.
      */
-    val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", true).bind(RemoteFlags::showLanguageTapHint)
+    val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", true)
 
     /**
      * Whether the LFO confirm button is on screen before a language is picked. Off hides it until
@@ -60,22 +53,22 @@ object ObRemoteKeys {
      * never be left without a way out.
      */
     val SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT =
-        RemoteKey.BoolKey("ob_show_language_confirm_before_select", true).bind(RemoteFlags::showLanguageConfirmBeforeSelect)
-    val LANGUAGE_SUPPORTED_CODES = RemoteKey.StringKey("ob_language_supported_codes", "").bind(RemoteFlags::languageSupportedCodes)
+        RemoteKey.BoolKey("ob_show_language_confirm_before_select", true)
+    val LANGUAGE_SUPPORTED_CODES = RemoteKey.StringKey("ob_language_supported_codes", "")
 
     // Per-placement switches. One key per placement, all AND-ed with ENABLE_ALL_ADS by
     // RemoteFlags — a placement can never out-vote the master kill switch.
-    val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", true).bind(RemoteFlags::reuseSplashInter)
-    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true).bind(RemoteFlags::adsSplashBanner)
-    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true).bind(RemoteFlags::adsSplashInter)
-    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true).bind(RemoteFlags::adsLanguageNative)
+    val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", true)
+    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
+    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
+    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
     val ADS_LANGUAGE_CONFIRM_NATIVE =
-        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true).bind(RemoteFlags::adsLanguageConfirmNative)
-    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true).bind(RemoteFlags::adsContentNative)
-    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true).bind(RemoteFlags::adsFullScreenNative)
-    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true).bind(RemoteFlags::adsQuestionNative)
-    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true).bind(RemoteFlags::adsQuestionInter)
-    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true).bind(RemoteFlags::adsAppResume)
+        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true)
+    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true)
+    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true)
+    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true)
+    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
+    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
 
     // Splash interstitial ids — the returning-user segment and the SplashEntry keys
     // (`inter_noti` / `inter_widget` / `inter_uninstall`) included — come from the ads config
@@ -84,7 +77,7 @@ object ObRemoteKeys {
     // read; a second cap over the same store silently subtracted impressions nobody could attribute.
 
     // Timing
-    val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", 3_000).bind(RemoteFlags::splashMinDisplayMs)
+    val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", 3_000)
 
     /**
      * How long the splash waits for its full-screen ad before giving up and moving on.
@@ -93,32 +86,43 @@ object ObRemoteKeys {
      * cover: at 30 s per ad unit anything lower silently denies the lower floors their turn. The
      * audit hard-coded it; here it is remote-tunable per app.
      */
-    val SPLASH_AD_BUDGET_MS = RemoteKey.LongKey("ob_splash_ad_budget_ms", 60_000).bind(RemoteFlags::splashAdBudgetMs)
+    val SPLASH_AD_BUDGET_MS = RemoteKey.LongKey("ob_splash_ad_budget_ms", 60_000)
 
     /**
      * How long the splash holds for its banner/native slot to render before the full-screen ad
      * is allowed to cover it. `0` means do not wait, which is what the audited build shipped.
      */
-    val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", 0).bind(RemoteFlags::splashBannerWaitMs)
+    val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", 0)
 
-    val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", 3).bind(RemoteFlags::skipButtonDelaySec)
-    val FULLSCREEN_AUTO_DISMISS_SEC = RemoteKey.LongKey("ob_fullscreen_auto_dismiss_sec", 15).bind(RemoteFlags::fullScreenAutoDismissSec)
+    val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", 3)
+    val FULLSCREEN_AUTO_DISMISS_SEC = RemoteKey.LongKey("ob_fullscreen_auto_dismiss_sec", 15)
 
     // Skip buttons on ad-only screens
-    val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", true).bind(RemoteFlags::showSkipOb3)
-    val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", true).bind(RemoteFlags::showSkipOb5)
+    val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", true)
+    val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", true)
 
     // Server-driven UI payloads
-    val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "").bind(RemoteFlags::uiContentJson)
-    val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "").bind(RemoteFlags::uiDesignTokensJson)
-    val QUESTION_CONFIG_JSON = RemoteKey.StringKey("ob_question_config", "").bind(RemoteFlags::questionConfigJson)
+    val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")
+    val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "")
+    val QUESTION_CONFIG_JSON = RemoteKey.StringKey("ob_question_config", "")
 
-    /** Version stamp persisted with the complete snapshot when the local cache is replaced. */
-    val CONFIG_VERSION = RemoteKey.LongKey("ob_config_version", 0).bind(RemoteFlags::configVersion)
+    /** Version stamp: when it changes, the local cache is cleared before syncing. */
+    val CONFIG_VERSION = RemoteKey.LongKey("ob_config_version", 0)
 
-    /** Every declared key, registered together with its snapshot value for cache persistence. */
-    val ALL: List<RemoteKey<*>> = snapshotReaders.keys.toList()
-
-    internal fun cacheValues(snapshot: RemoteFlags): Map<String, String> =
-        snapshotReaders.entries.associate { (key, read) -> key.key to read(snapshot) }
+    val ALL: List<RemoteKey<*>> = listOf(
+        ENABLE_ALL_ADS, ENABLE_UI_CONTENT,
+        ENABLE_STEP_OB1, ENABLE_STEP_OB2, ENABLE_STEP_OB3, ENABLE_STEP_OB4, ENABLE_STEP_OB5,
+        ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
+        ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
+        SHOW_LANGUAGE_TAP_HINT, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
+        SHOW_LANGUAGE_CONFIRM_DIALOG,
+        REUSE_SPLASH_INTER, ADS_SPLASH_BANNER, ADS_SPLASH_INTER, ADS_LANGUAGE_NATIVE,
+        ADS_LANGUAGE_CONFIRM_NATIVE,
+        ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
+        ADS_APP_RESUME,
+        SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_BANNER_WAIT_MS,
+        SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
+        SHOW_SKIP_OB3, SHOW_SKIP_OB5,
+        UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, QUESTION_CONFIG_JSON, CONFIG_VERSION,
+    )
 }

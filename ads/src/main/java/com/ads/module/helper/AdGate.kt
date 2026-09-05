@@ -3,8 +3,6 @@ package com.ads.module.helper
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Handler
-import android.os.Looper
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.ads.ERainAd
@@ -12,11 +10,10 @@ import com.ads.module.helper.adnative.NativeAdPreload
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
@@ -26,12 +23,9 @@ import kotlin.coroutines.CoroutineContext
  * placement load" with the reason a dashboard can act on.
  *
  * Checks run in the established telemetry order — disabled config, purchased, offline,
- * UA gate — followed by consent authorization and its active form.
+ * UA gate — so existing dashboards keep reading the same reason for the same state.
  */
 object AdGate {
-    private val bufferScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var entitlementObserver: Job? = null
 
     @JvmStatic
     @JvmOverloads
@@ -56,33 +50,12 @@ object AdGate {
     fun passesUaGate(forceUaCheck: Boolean, bypass: Boolean = false): Boolean =
         bypass || ERainAd.getInstance().shouldDisplayForUa(forceUaCheck)
 
-    /**
-     * Reads the installed source and starts process-wide buffer invalidation on first use.
-     * Only the application context is retained; installing a new source also updates the observer.
-     */
     @JvmStatic
-    fun isPurchased(context: Context): Boolean {
-        observeEntitlement(context.applicationContext)
-        return Entitlement.isPremium(context)
-    }
-
-    private fun observeEntitlement(appContext: Context) {
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            mainHandler.post { observeEntitlement(appContext) }
-            return
-        }
-        if (entitlementObserver?.isActive == true) return
-        // Publish ownership before collecting the seed: releasing a buffer may reenter a gate.
-        entitlementObserver = bufferScope.launch(start = CoroutineStart.LAZY) {
-            Entitlement.observe(appContext).filter { it }.collect { releaseBufferedAds() }
-        }
-        entitlementObserver?.start()
-    }
+    fun isPurchased(context: Context): Boolean = Entitlement.isPremium(context)
 
     /**
-     * Clears the helper buffers for an initial true value and later false -> true changes.
-     * Existing helpers already observe [Entitlement] automatically; this optional adapter is for
-     * hosts that also supply a separate observable billing source.
+     * Drops every preloaded ad when [premium] flips false -> true; a purchase that lands
+     * mid-session would otherwise leave a bought user watching what was already buffered.
      *
      * @param premium the app's premium state, e.g. `Billing.isPremium`
      * @param context defaults to the main dispatcher because the release paths destroy GMA ad
@@ -97,16 +70,13 @@ object AdGate {
         context: CoroutineContext = Dispatchers.Main.immediate,
     ): Job =
         scope.launch(context) {
-            premium.filter { it }.collect { releaseBufferedAds() }
+            premium.drop(1).filter { it }.collect { releaseBufferedAds() }
         }
 
-    /**
-     * Releases native preload, interstitial/reward manager buffers and cached app-open ads.
-     * Call on the main thread. An ad already presenting keeps its own terminal callback.
-     */
+    /** Releases every ad buffer the module owns; safe to call at any time. */
     @JvmStatic
     fun releaseBufferedAds() {
-        NativeAdPreload.getInstance().invalidateBuffers()
+        NativeAdPreload.getInstance().releaseAll()
         InterstitialAdManager.releaseAll()
         RewardAdManager.releaseAll()
         AppOpenManager.getInstance().releaseCachedAds()

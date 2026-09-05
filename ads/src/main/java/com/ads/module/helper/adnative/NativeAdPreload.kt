@@ -4,13 +4,10 @@ import android.app.Activity
 import android.content.Context
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.CachedAd
-import com.ads.module.tracking.AdLoadContext
 import com.google.android.gms.ads.LoadAdError
-import io.trackkit.AdFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -31,11 +28,6 @@ class NativeAdPreloadClientOption @JvmOverloads constructor(
  * Buffered ads carry their load time: a stale buffer entry is destroyed on read instead of
  * being handed to a screen that would bind an expired ad.
  *
- * Each ad in a batch owns a separate load attempt. [AdLoadContext] is captured when the batch is
- * queued and supplies its analytics placement/format; the cache key does not define either.
- * Omitting it captures the first ad unit's legacy placement mapping and the native format.
- * Reading a cached ad or joining an existing request does not emit another load request.
- *
  * Main-thread only — the legacy GMA SDK requires load calls there.
  */
 class NativeAdPreload private constructor() {
@@ -47,19 +39,8 @@ class NativeAdPreload private constructor() {
 
     /** @return whether a request batch was actually started. */
     @JvmOverloads
-    fun preload(
-        activity: Activity,
-        config: NativeAdConfig,
-        buffer: Int = 1,
-    ): Boolean = preload(activity, config, buffer, null)
-
-    /** Same preload policy with an explicit load context; preserves the original default-argument ABI. */
-    fun preload(
-        activity: Activity,
-        config: NativeAdConfig,
-        buffer: Int,
-        loadContext: AdLoadContext?,
-    ): Boolean = preloadWithKey(keyOf(config), activity, config, buffer, loadContext)
+    fun preload(activity: Activity, config: NativeAdConfig, buffer: Int = 1): Boolean =
+        preloadWithKey(keyOf(config), activity, config, buffer)
 
     /** @return whether a request batch was actually started. */
     @JvmOverloads
@@ -68,21 +49,11 @@ class NativeAdPreload private constructor() {
         activity: Activity,
         config: NativeAdConfig,
         buffer: Int = 1,
-    ): Boolean = preloadWithKey(key, activity, config, buffer, null)
-
-    /** Same keyed preload policy with analytics context independent of [key]. */
-    fun preloadWithKey(
-        key: String,
-        activity: Activity,
-        config: NativeAdConfig,
-        buffer: Int,
-        loadContext: AdLoadContext?,
     ): Boolean {
         require(buffer > 0) { "Buffer must be greater than 0" }
         if (!canRequestLoad(activity)) return false
         if (config.adUnitIds.isEmpty()) return false
-        val capturedContext = loadContext ?: AdLoadContext.forAdUnit(config.idAds, AdFormat.NATIVE)
-        executors.getOrPut(key) { PreloadExecutor() }.execute(activity, config, buffer, capturedContext)
+        executors.getOrPut(key) { PreloadExecutor() }.execute(activity, config, buffer)
         return true
     }
 
@@ -92,23 +63,13 @@ class NativeAdPreload private constructor() {
      * @return true when a buffered ad or an in-flight request already covers [key], or a
      *   new request was started — false only when nothing is or will be available.
      */
-    @JvmOverloads
-    fun preloadWithKeyIfEmpty(
-        key: String,
-        activity: Activity,
-        config: NativeAdConfig,
-        loadContext: AdLoadContext? = null,
-    ): Boolean {
-        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null) {
-            executors[key]?.invalidate()
-            return false
-        }
+    fun preloadWithKeyIfEmpty(key: String, activity: Activity, config: NativeAdConfig): Boolean {
         val executor = executors[key]
         if (executor != null && (executor.isInProgress() || executor.peek() != null)) return true
-        return preloadWithKey(key, activity, config, 1, loadContext)
+        return preloadWithKey(key, activity, config, 1)
     }
 
-    /** Every preload uses the shared request gate, including consent authority and active forms. */
+    /** Uses the same request eligibility as the visible ad helpers. */
     fun canRequestLoad(context: Context): Boolean =
         AdGate.skipReason(context, enabled = true) == null
 
@@ -133,7 +94,7 @@ class NativeAdPreload private constructor() {
     fun awaitNext(key: String, onResult: (ApNativeAd?) -> Unit) {
         val executor = executors[key]
         if (executor == null || !executor.isInProgress()) {
-            runCatching { onResult(executor?.poll()) }
+            onResult(executor?.poll())
         } else {
             executor.addWaiter(onResult)
         }
@@ -162,14 +123,6 @@ class NativeAdPreload private constructor() {
         keys.forEach { release(it) }
     }
 
-    /**
-     * Cancels pending work and destroys buffered ads while retaining placement subscriptions.
-     * Use for entitlement/policy changes; [releaseAll] also disposes the observers themselves.
-     */
-    fun invalidateBuffers() {
-        executors.values.toList().forEach { it.invalidate() }
-    }
-
     companion object {
         @Volatile
         private var instance: NativeAdPreload? = null
@@ -187,159 +140,84 @@ class NativeAdPreload private constructor() {
      */
     private class PreloadExecutor {
 
-        private class BufferedNative(ad: ApNativeAd, val personalized: Boolean) {
-            val cached = CachedAd(ad)
-            val ad: ApNativeAd get() = cached.ad
-            val isFresh: Boolean get() = cached.isFresh &&
-                personalized == ConsentCenter.canPersonalize() && ConsentCenter.canRequestAds() &&
-                !ConsentCenter.isFormShowing()
-        }
-
         private class Batch(
             val activity: Activity,
             val config: NativeAdConfig,
             val buffer: Int,
-            val loadContext: AdLoadContext,
         )
 
         private val lock = Any()
-        private val queue = ArrayDeque<BufferedNative>()
+        private val queue = ArrayDeque<CachedAd<ApNativeAd>>()
         private var pending = 0
         private var batchInFlight = false
         private var released = false
-        private var generation = 0L
-        private var applicationContext: Context? = null
         private val deferredBatches = ArrayDeque<Batch>()
         private val waiters = mutableListOf<(ApNativeAd?) -> Unit>()
         private val callbacks = CopyOnWriteArrayList<AdCallback>()
 
-        fun execute(activity: Activity, config: NativeAdConfig, buffer: Int, loadContext: AdLoadContext) {
-            val startGeneration = synchronized(lock) {
-                if (released) return
-                applicationContext = activity.applicationContext
+        fun execute(activity: Activity, config: NativeAdConfig, buffer: Int) {
+            val startNow = synchronized(lock) {
                 pending += buffer
                 if (batchInFlight) {
-                    deferredBatches.addLast(Batch(activity, config, buffer, loadContext))
-                    null
+                    deferredBatches.addLast(Batch(activity, config, buffer))
+                    false
                 } else {
                     batchInFlight = true
-                    generation
+                    true
                 }
             }
-            if (startGeneration != null) loadBatch(activity, config, buffer, startGeneration, loadContext)
+            if (startNow) loadBatch(activity, config, buffer)
         }
 
-        private fun loadBatch(
-            activity: Activity,
-            config: NativeAdConfig,
-            remaining: Int,
-            expectedGeneration: Long,
-            loadContext: AdLoadContext,
-        ) {
-            if (!isCurrent(expectedGeneration)) return
+        private fun loadBatch(activity: Activity, config: NativeAdConfig, remaining: Int) {
             if (remaining <= 0) {
-                onBatchDone(expectedGeneration)
+                onBatchDone()
                 return
             }
-            if (AdGate.skipReason(activity, enabled = true) != null) {
-                cancelPending(expectedGeneration)
-                return
-            }
-            val personalized = ConsentCenter.canPersonalize()
             AdWaterfall.loadNative(
                 activity,
                 config.adUnitIds,
                 config.layoutId,
                 config.tierTimeoutMs,
-                loadContext,
                 object : AdCallback() {
-                    override fun canAcceptLoadedAd(): Boolean =
-                        isCurrent(expectedGeneration) &&
-                            AdGate.skipReason(activity, enabled = true, checkNetwork = false) == null &&
-                            ConsentCenter.canPersonalize() == personalized && isCurrent(expectedGeneration)
-
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                        if (!isCurrent(expectedGeneration)) {
-                            destroy(nativeAd)
-                            return
-                        }
-                        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null ||
-                            ConsentCenter.canPersonalize() != personalized) {
-                            destroy(nativeAd)
-                            cancelPending(expectedGeneration)
-                            return
-                        }
-                        deliver(nativeAd, personalized, expectedGeneration)
-                        if (isCurrent(expectedGeneration)) {
-                            loadBatch(activity, config, remaining - 1, expectedGeneration, loadContext)
-                        }
+                        deliver(nativeAd)
+                        if (!isReleased()) loadBatch(activity, config, remaining - 1)
                     }
 
                     override fun onAdFailedToLoad(adError: LoadAdError?) {
-                        if (!isCurrent(expectedGeneration)) return
-                        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null ||
-                            ConsentCenter.canPersonalize() != personalized) {
-                            cancelPending(expectedGeneration)
-                            return
-                        }
-                        deliver(null, personalized, expectedGeneration)
+                        deliver(null)
                         callbacks.forEach { runCatching { it.onAdFailedToLoad(adError) } }
-                        if (isCurrent(expectedGeneration)) {
-                            loadBatch(activity, config, remaining - 1, expectedGeneration, loadContext)
-                        }
+                        if (!isReleased()) loadBatch(activity, config, remaining - 1)
                     }
 
                     override fun onAdClicked() {
-                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdClicked() } }
                     }
 
                     override fun onAdOpened() {
-                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdOpened() } }
                     }
 
                     override fun onAdImpression() {
-                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdImpression() } }
                     }
                 },
             )
         }
 
-        private fun onBatchDone(expectedGeneration: Long) {
+        private fun onBatchDone() {
             val next = synchronized(lock) {
-                if (released || generation != expectedGeneration) return
                 deferredBatches.removeFirstOrNull().also { if (it == null) batchInFlight = false }
             }
-            next?.let { loadBatch(it.activity, it.config, it.buffer, expectedGeneration, it.loadContext) }
+            next?.let { loadBatch(it.activity, it.config, it.buffer) }
         }
 
-        /** A policy change cancels this whole batch, including queued requests and all waiters. */
-        private fun cancelPending(expectedGeneration: Long? = null) {
-            val orphaned: List<(ApNativeAd?) -> Unit>
-            val hadWork: Boolean
-            synchronized(lock) {
-                if (released || (expectedGeneration != null && generation != expectedGeneration)) return
-                generation++
-                hadWork = pending > 0 || queue.isNotEmpty()
-                pending = 0
-                batchInFlight = false
-                deferredBatches.clear()
-                queue.forEach { destroy(it.ad) }
-                queue.clear()
-                orphaned = waiters.toList()
-                waiters.clear()
-            }
-            orphaned.forEach { runCatching { it.invoke(null) } }
-            if (hadWork) callbacks.forEach { runCatching { it.onAdFailedToLoad(null) } }
-        }
-
-        private fun deliver(ad: ApNativeAd?, personalized: Boolean, expectedGeneration: Long) {
+        private fun deliver(ad: ApNativeAd?) {
             val claimed = mutableListOf<Pair<(ApNativeAd?) -> Unit, ApNativeAd?>>()
             synchronized(lock) {
                 // A fill landing after release() has no owner left — destroy, don't orphan
-                if (released || generation != expectedGeneration) {
+                if (released) {
                     if (ad != null) destroy(ad)
                     return
                 }
@@ -347,7 +225,7 @@ class NativeAdPreload private constructor() {
                 val first = waiters.removeFirstOrNull()
                 // A waiter consumes the ad directly; only unclaimed fills are buffered
                 if (first != null) claimed.add(first to ad)
-                else if (ad != null) queue.addLast(BufferedNative(ad, personalized))
+                else if (ad != null) queue.addLast(CachedAd(ad))
                 // Nothing else will arrive: flush stragglers or they wait forever
                 if (pending == 0) {
                     while (waiters.isNotEmpty()) {
@@ -356,18 +234,9 @@ class NativeAdPreload private constructor() {
                     }
                 }
             }
-            claimed.forEach { (waiter, result) ->
-                val current = isCurrent(expectedGeneration) && canReadBuffer() &&
-                    personalized == ConsentCenter.canPersonalize()
-                if (!current && result != null) destroy(result)
-                runCatching { waiter.invoke(if (current) result else null) }
-            }
+            claimed.forEach { (waiter, result) -> waiter.invoke(result) }
             // Observers see every fill after it is buffered, so a bind on this signal hits
-            if (ad != null) callbacks.forEach {
-                if (isCurrent(expectedGeneration) && canReadBuffer() && personalized == ConsentCenter.canPersonalize()) {
-                    runCatching { it.onNativeAdLoaded(ad) }
-                }
-            }
+            if (ad != null) callbacks.forEach { runCatching { it.onNativeAdLoaded(ad) } }
         }
 
         fun registerCallback(adCallback: AdCallback) {
@@ -378,33 +247,15 @@ class NativeAdPreload private constructor() {
             callbacks.remove(adCallback)
         }
 
-        fun peek(): ApNativeAd? {
-            if (!canReadBuffer()) { cancelPending(); return null }
-            return synchronized(lock) { dropStale(); queue.firstOrNull()?.ad }
-        }
+        fun peek(): ApNativeAd? = synchronized(lock) { dropStale(); queue.firstOrNull()?.ad }
 
-        fun poll(): ApNativeAd? {
-            if (!canReadBuffer()) { cancelPending(); return null }
-            return synchronized(lock) { dropStale(); queue.removeFirstOrNull()?.ad }
-        }
+        fun poll(): ApNativeAd? = synchronized(lock) { dropStale(); queue.removeFirstOrNull()?.ad }
 
         fun isInProgress(): Boolean = synchronized(lock) { pending > 0 }
 
-        fun isAvailable(): Boolean {
-            if (!canReadBuffer()) { cancelPending(); return false }
-            return synchronized(lock) { dropStale(); pending > 0 || queue.isNotEmpty() }
-        }
+        fun isAvailable(): Boolean = synchronized(lock) { pending > 0 || queue.isNotEmpty() }
 
-        fun buffer(): List<ApNativeAd> {
-            if (!canReadBuffer()) { cancelPending(); return emptyList() }
-            return synchronized(lock) { dropStale(); queue.map { it.ad } }
-        }
-
-        private fun canReadBuffer(): Boolean = applicationContext?.let {
-            AdGate.skipReason(it, enabled = true, checkNetwork = false) == null
-        } ?: true
-
-        fun invalidate() = cancelPending()
+        fun buffer(): List<ApNativeAd> = synchronized(lock) { dropStale(); queue.map { it.ad } }
 
         fun addWaiter(onResult: (ApNativeAd?) -> Unit) {
             synchronized(lock) { waiters.add(onResult) }
@@ -414,9 +265,6 @@ class NativeAdPreload private constructor() {
             val orphaned: List<(ApNativeAd?) -> Unit>
             synchronized(lock) {
                 released = true
-                generation++
-                pending = 0
-                batchInFlight = false
                 queue.forEach { destroy(it.ad) }
                 queue.clear()
                 deferredBatches.clear()
@@ -425,11 +273,10 @@ class NativeAdPreload private constructor() {
             }
             callbacks.clear()
             // A silently dropped waiter would pin its helper in Loading forever
-            orphaned.forEach { runCatching { it.invoke(null) } }
+            orphaned.forEach { it.invoke(null) }
         }
 
-        private fun isCurrent(expectedGeneration: Long): Boolean =
-            synchronized(lock) { !released && generation == expectedGeneration }
+        private fun isReleased(): Boolean = synchronized(lock) { released }
 
         private fun dropStale() {
             while (true) {

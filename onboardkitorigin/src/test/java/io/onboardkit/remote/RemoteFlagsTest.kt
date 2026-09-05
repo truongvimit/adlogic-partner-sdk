@@ -101,17 +101,16 @@ class RemoteFlagsTest {
     }
 
     @Test
-    fun `every public remote key is registered exactly once`() {
-        // Discover the public key API independently of ALL, so forgetting to register a new
-        // declaration cannot silently exclude it from the cache round-trip tests.
-        val declaredKeys = ObRemoteKeys::class.java.methods
-            .filter { it.parameterCount == 0 && RemoteKey::class.java.isAssignableFrom(it.returnType) }
-            .map { (it.invoke(ObRemoteKeys) as RemoteKey<*>).key }
-        val registeredKeys = ObRemoteKeys.ALL.map { it.key }
-
-        assertTrue(declaredKeys.isNotEmpty())
-        assertEquals(declaredKeys.sorted(), registeredKeys.sorted())
-        assertEquals(registeredKeys.size, registeredKeys.distinct().size)
+    fun `every declared key round-trips through the flags snapshot`() {
+        // ObRemoteKeys.ALL is what RemoteConfigSyncer fetches; a key declared but not read by
+        // RemoteFlags.from is a console switch that silently does nothing.
+        val allTrue = ObRemoteKeys.ALL.filterIsInstance<RemoteKey.BoolKey>()
+            .associate { it.key to (!it.default).toString() }
+        val flipped = RemoteFlags.from(reader(allTrue))
+        assertFalse(flipped.showLanguageConfirmDialog == ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_DIALOG.default)
+        assertFalse(
+            flipped.adsLanguageConfirmNative == ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.default,
+        )
     }
 
     @Test

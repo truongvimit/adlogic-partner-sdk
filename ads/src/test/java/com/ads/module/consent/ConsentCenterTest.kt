@@ -66,7 +66,6 @@ class ConsentCenterTest {
         assertFalse(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.canPersonalize())
         assertFalse(ConsentCenter.hasAnswered())
-        assertFalse(ConsentCenter.requestEligibility.value)
     }
 
     @Test
@@ -88,7 +87,6 @@ class ConsentCenterTest {
         ConsentCenter.request(activity, onCompleted = completions::add)
 
         assertTrue(ConsentCenter.canRequestAds())
-        assertTrue(ConsentCenter.requestEligibility.value)
         assertTrue(ConsentCenter.isAlreadyResolved(activity))
         assertEquals(ConsentState.DENIED, ConsentCenter.state.value)
         assertFalse(ConsentCenter.canPersonalize())
@@ -159,7 +157,6 @@ class ConsentCenterTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
 
         assertEquals(listOf(true), completions)
-        assertTrue(ConsentCenter.requestEligibility.value)
         assertFalse(ConsentCenter.canPersonalize())
         assertEquals(0, vendor.information.resetCount)
     }
@@ -324,12 +321,10 @@ class ConsentCenterTest {
         assertEquals(listOf(true), completions)
         assertTrue(answers.isEmpty())
         assertTrue(vendor.forms.isEmpty())
-        assertTrue(ConsentCenter.requestEligibility.value)
         assertFalse(ConsentCenter.canPersonalize())
         assertFalse(ConsentCenter.isResolving())
         ConsentCenter.setHostConsent(canRequestAds = false, personalized = true)
         assertFalse(ConsentCenter.canRequestAds())
-        assertFalse(ConsentCenter.requestEligibility.value)
         assertFalse(ConsentCenter.canPersonalize())
     }
 
@@ -419,7 +414,6 @@ class ConsentCenterTest {
         ConsentCenter.clearHostConsent()
 
         assertTrue(ConsentCenter.canRequestAds())
-        assertTrue(ConsentCenter.requestEligibility.value)
         assertFalse(ConsentCenter.canPersonalize())
         assertEquals(0, vendor.information.resetCount)
         ConsentCenter.request(activity) {}
@@ -431,14 +425,12 @@ class ConsentCenterTest {
         val completions = mutableListOf<Boolean>()
         vendor.information.onUpdate = { vendor.information.notRequired() }
         ConsentCenter.request(activity, onCompleted = completions::add)
-        assertTrue(ConsentCenter.requestEligibility.value)
 
         vendor.information.required(formAvailable = false)
         vendor.information.updates.single().succeed()
 
         assertEquals(listOf(false), completions)
         assertFalse(ConsentCenter.canRequestAds())
-        assertFalse(ConsentCenter.requestEligibility.value)
         assertFalse(ConsentCenter.canPersonalize())
         assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
     }

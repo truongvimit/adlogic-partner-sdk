@@ -28,10 +28,6 @@ import com.ads.module.event.ERainAdjust;
 import com.ads.module.event.MmpTracking;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.RewardCallback;
-import com.ads.module.helper.AdSkipReason;
-import com.ads.module.helper.interstitial.InterstitialFrequency;
-import com.ads.module.helper.interstitial.InterShowOptions;
-import java.util.concurrent.atomic.AtomicBoolean;
 import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.AppUtil;
 import com.ads.module.util.SharePreferenceUtils;
@@ -243,10 +239,12 @@ public class ERainAd {
      * Wraps {@code callback} so the whole lifecycle of this ad unit reaches Trackkit.
      */
     private AdCallback instrument(String adUnitId, AdFormat format, AdCallback callback) {
-        // A partner may supply a TrackingAdCallback with explicit placement metadata.
-        // Keep that identity so nesting decorators cannot double its events.
-        return TrackingAdCallback.directLoad(
-                PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
+        // Idempotent: a partner may still hand us a pre-wrapped callback via the deprecated
+        // AdTracking.wrap, and nesting two decorators would double every event.
+        if (callback instanceof TrackingAdCallback) {
+            return callback;
+        }
+        return new TrackingAdCallback(PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
     }
 
     /**
@@ -256,7 +254,7 @@ public class ERainAd {
      */
     private AdCallback instrumentTiered(AdFormat format, AdCallback callback, String... adUnitIds) {
         if (callback instanceof TrackingAdCallback) {
-            return TrackingAdCallback.legacySplash("unknown", format, adUnitIds[0], callback);
+            return callback;
         }
         String placement = "unknown";
         for (String id : adUnitIds) {
@@ -269,7 +267,7 @@ public class ERainAd {
         for (String id : adUnitIds) {
             PlacementRegistry.register(id, placement);
         }
-        return TrackingAdCallback.legacySplash(placement, format, adUnitIds[0], callback);
+        return new TrackingAdCallback(placement, format, adUnitIds[0], callback);
     }
 
     public void loadBanner(Activity mActivity, String id) {
@@ -353,8 +351,7 @@ public class ERainAd {
 
     public void loadSplashInterstitialAds(Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         Admob.getInstance().loadSplashInterstitialAds(context, id, timeOut, timeDelay, true,
-                TrackingAdCallback.legacySplash(PlacementRegistry.placementOf(id),
-                        AdFormat.INTERSTITIAL, id, adListener));
+                instrument(id, AdFormat.INTERSTITIAL, adListener));
     }
 
     public void onCheckShowSplashWhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
@@ -363,35 +360,29 @@ public class ERainAd {
 
     public ApInterstitialAd getInterstitialAds(Context context, String id, AdCallback adListener) {
         ApInterstitialAd apInterstitialAd = new ApInterstitialAd();
-        final AdCallback tracked = instrument(id, AdFormat.INTERSTITIAL, adListener);
-        Admob.getInstance().getInterstitialAds(context, id, new AdCallback() {
-            @Override
-            public void onAdRequestStarted(String adUnitId) {
-                tracked.onAdRequestStarted(adUnitId);
-            }
-
+        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
             @Override
             public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
                 super.onInterstitialLoad(interstitialAd);
                 apInterstitialAd.setInterstitialAd(interstitialAd);
-                tracked.onApInterstitialLoad(apInterstitialAd);
+                adListener.onApInterstitialLoad(apInterstitialAd);
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
                 Log.d(TAG, "Admob onAdFailedToLoad");
-                tracked.onAdFailedToLoad(i);
+                adListener.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
                 Log.d(TAG, "Admob onAdFailedToShow");
-                tracked.onAdFailedToShow(adError);
+                adListener.onAdFailedToShow(adError);
             }
 
-        });
+        }));
         return apInterstitialAd;
     }
 
@@ -412,250 +403,188 @@ public class ERainAd {
     public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
                                       @NonNull final AdCallback callback, boolean shouldReloadAds,
                                       boolean openNextUnderAd) {
-        forceShowInterstitial(context, mInterstitialAd, callback, shouldReloadAds,
-                openNextUnderAd, InterShowOptions.DEFAULT);
-    }
-
-    /**
-     * Shows with captured preparation options; existing overloads keep the dialog/800 ms default.
-     * Options do not change reload timing, navigation mode or pre-show eligibility.
-     */
-    public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
-                                      @NonNull final AdCallback callback, boolean shouldReloadAds,
-                                      boolean openNextUnderAd, @NonNull InterShowOptions options) {
-        java.util.Objects.requireNonNull(options, "options");
-        final InterstitialAd shownAd = mInterstitialAd == null ? null : mInterstitialAd.getInterstitialAd();
-        final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
-        final AdCallback tracked = TrackingAdCallback.fullscreenPresentation(
-                PlacementRegistry.placementOf(adUnitId), AdFormat.INTERSTITIAL, adUnitId, callback);
-        forceShowTrackedInterstitial(context, mInterstitialAd, tracked, shouldReloadAds, openNextUnderAd, options);
-    }
-
-    /** Adapters enter here after selecting their single presentation tracker. */
-    private void forceShowTrackedInterstitial(Context context, ApInterstitialAd mInterstitialAd,
-                                              final AdCallback tracked, boolean shouldReloadAds,
-                                              boolean openNextUnderAd) {
-        forceShowTrackedInterstitial(context, mInterstitialAd, tracked, shouldReloadAds,
-                openNextUnderAd, InterShowOptions.DEFAULT);
-    }
-
-    private void forceShowTrackedInterstitial(Context context, ApInterstitialAd mInterstitialAd,
-                                              final AdCallback tracked, boolean shouldReloadAds,
-                                              boolean openNextUnderAd, InterShowOptions options) {
-        final InterstitialAd shownAd = mInterstitialAd == null ? null : mInterstitialAd.getInterstitialAd();
-        final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
-        if (!InterstitialFrequency.elapsed(context)) {
-            tracked.onAdShowRejected(AdSkipReason.INTERVAL);
+        if (System.currentTimeMillis() - SharePreferenceUtils.getLastImpressionInterstitialTime(context)
+                < ERainAd.getInstance().adConfig.getIntervalInterstitialAd() * 1000L
+        ) {
+            callback.onNextAction();
             return;
         }
-        if (shownAd == null) {
-            tracked.onAdShowRejected(AdSkipReason.NOT_READY);
+        if (mInterstitialAd == null || mInterstitialAd.isNotReady()) {
+            callback.onNextAction();
             return;
         }
+        // Captured while the ad is still held: the reload paths below used to dereference it after
+        // it could already have been cleared.
+        InterstitialAd shownAd = mInterstitialAd.getInterstitialAd();
+        final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
         AdCallback adCallback = new AdCallback() {
-            private final AtomicBoolean terminal = new AtomicBoolean(false);
-
-            @Override
-            public AdSkipReason getAdShowSkipReason() {
-                return tracked.getAdShowSkipReason();
-            }
-
-            @Override
-            public void onAdShowRejected(@NonNull AdSkipReason reason) {
-                if (terminal.compareAndSet(false, true)) tracked.onAdShowRejected(reason);
-            }
-
-            @Override
-            public void onAdPresented() {
-                if (!terminal.get()) tracked.onAdPresented();
-            }
-
-            @Override
-            public void onAdImpression() {
-                if (!terminal.get()) tracked.onAdImpression();
-            }
-
-            private void consumeOriginal() {
-                if (mInterstitialAd.getInterstitialAd() == shownAd) mInterstitialAd.setInterstitialAd(null);
-            }
-
             @Override
             public void onAdClosed() {
-                if (!terminal.compareAndSet(false, true)) return;
-                consumeOriginal();
-                tracked.onAdClosed();
+                super.onAdClosed();
+                callback.onAdClosed();
                 if (shouldReloadAds) {
                     Admob.getInstance().getInterstitialAds(context, adUnitId, instrument(adUnitId, AdFormat.INTERSTITIAL, new AdCallback() {
                         @Override
                         public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
                             super.onInterstitialLoad(interstitialAd);
                             mInterstitialAd.setInterstitialAd(interstitialAd);
-                            tracked.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
+                            callback.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
                         }
 
                         @Override
                         public void onAdFailedToLoad(@Nullable LoadAdError i) {
                             super.onAdFailedToLoad(i);
                             mInterstitialAd.setInterstitialAd(null);
-                            tracked.onAdFailedToLoad(i);
+                            callback.onAdFailedToLoad(i);
                         }
 
                         @Override
                         public void onAdFailedToShow(@Nullable AdError adError) {
                             super.onAdFailedToShow(adError);
-                            tracked.onAdFailedToShow(adError);
+                            callback.onAdFailedToShow(adError);
                         }
 
                     }));
+                } else {
+                    mInterstitialAd.setInterstitialAd(null);
                 }
             }
 
             @Override
             public void onNextAction() {
                 super.onNextAction();
-                tracked.onNextAction();
+                callback.onNextAction();
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
-                if (!terminal.compareAndSet(false, true)) return;
-                consumeOriginal();
-                tracked.onAdFailedToShow(adError);
+                super.onAdFailedToShow(adError);
+                callback.onAdFailedToShow(adError);
                 if (shouldReloadAds) {
                     Admob.getInstance().getInterstitialAds(context, adUnitId, instrument(adUnitId, AdFormat.INTERSTITIAL, new AdCallback() {
                         @Override
                         public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
                             super.onInterstitialLoad(interstitialAd);
                             mInterstitialAd.setInterstitialAd(interstitialAd);
-                            tracked.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
+                            callback.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
                         }
 
                         @Override
                         public void onAdFailedToLoad(@Nullable LoadAdError i) {
                             super.onAdFailedToLoad(i);
-                            tracked.onAdFailedToLoad(i);
+                            callback.onAdFailedToLoad(i);
                         }
 
                         @Override
                         public void onAdFailedToShow(@Nullable AdError adError) {
                             super.onAdFailedToShow(adError);
-                            tracked.onAdFailedToShow(adError);
+                            callback.onAdFailedToShow(adError);
                         }
 
                     }));
+                } else {
+                    mInterstitialAd.setInterstitialAd(null);
                 }
             }
 
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                tracked.onAdClicked();
+                callback.onAdClicked();
             }
 
             @Override
             public void onInterstitialShow() {
                 super.onInterstitialShow();
-                tracked.onInterstitialShow();
+                callback.onInterstitialShow();
             }
         };
         Admob.getInstance().forceShowInterstitial(context, shownAd,
-                adCallback, openNextUnderAd, options);
+                instrument(adUnitId, AdFormat.INTERSTITIAL, adCallback), openNextUnderAd);
     }
 
     public void loadNativeAdResultCallback(final Activity activity, String id,
                                            int layoutCustomNative, AdCallback callback) {
-        final AdCallback tracked = instrument(id, AdFormat.NATIVE, callback);
-        Admob.getInstance().loadNativeAd(((Context) activity), id, new AdCallback() {
-            @Override
-            public void onAdRequestStarted(String adUnitId) {
-                tracked.onAdRequestStarted(adUnitId);
-            }
-
+        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
             @Override
             public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
                 super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                tracked.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
+                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
-                tracked.onAdFailedToLoad(i);
+                callback.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
-                tracked.onAdFailedToShow(adError);
+                callback.onAdFailedToShow(adError);
             }
 
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                tracked.onAdClicked();
+                callback.onAdClicked();
             }
 
             @Override
             public void onAdOpened() {
                 super.onAdOpened();
-                tracked.onAdOpened();
+                callback.onAdOpened();
             }
 
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                tracked.onAdImpression();
+                callback.onAdImpression();
             }
-        });
+        }));
     }
 
     public void loadNativeAd(final Activity activity, String id,
                              int layoutCustomNative, FrameLayout adPlaceHolder, ShimmerFrameLayout
                                      containerShimmerLoading, AdCallback callback) {
-        final AdCallback tracked = instrument(id, AdFormat.NATIVE, callback);
-        Admob.getInstance().loadNativeAd(((Context) activity), id, new AdCallback() {
-            @Override
-            public void onAdRequestStarted(String adUnitId) {
-                tracked.onAdRequestStarted(adUnitId);
-            }
-
+        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
             @Override
             public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
                 super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                tracked.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
+                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
                 populateNativeAdView(activity, new ApNativeAd(layoutCustomNative, unifiedNativeAd), adPlaceHolder, containerShimmerLoading);
             }
 
             @Override
             public void onAdImpression() {
                 super.onAdImpression();
-                tracked.onAdImpression();
+                callback.onAdImpression();
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
                 super.onAdFailedToLoad(i);
-                tracked.onAdFailedToLoad(i);
+                callback.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
                 super.onAdFailedToShow(adError);
-                tracked.onAdFailedToShow(adError);
+                callback.onAdFailedToShow(adError);
             }
 
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                tracked.onAdClicked();
+                callback.onAdClicked();
             }
 
             @Override
             public void onAdOpened() {
                 super.onAdOpened();
-                tracked.onAdOpened();
+                callback.onAdOpened();
             }
-        });
+        }));
     }
 
     public void populateNativeAdView(Activity activity, ApNativeAd apNativeAd, FrameLayout adPlaceHolder, ShimmerFrameLayout containerShimmerLoading) {
@@ -1044,49 +973,26 @@ public class ERainAd {
         ) {
             interstitialAd = apInterstitialPriorityAd.getNormalPriorityInterstitialAd();
         } else {
-            java.util.List<String> configured = AdWaterfall.usableIds(java.util.Arrays.asList(
-                    apInterstitialPriorityAd.getHigh1PriorityId(), apInterstitialPriorityAd.getHigh2PriorityId(),
-                    apInterstitialPriorityAd.getHigh3PriorityId(), apInterstitialPriorityAd.getNormalPriorityId()));
-            String firstUnit = configured.isEmpty() ? "" : configured.get(0);
-            TrackingAdCallback.fullscreenPresentation(PlacementRegistry.placementOf(firstUnit),
-                    AdFormat.INTERSTITIAL, firstUnit, adCallback).onAdShowRejected(AdSkipReason.NOT_READY);
+            adCallback.onNextAction();
             if (isReloadAds) {
                 loadPriorityInterstitialAds(context, apInterstitialPriorityAd, new AdCallback());
             }
             return;
         }
-        final String shownUnit = interstitialAd.getInterstitialAd().getAdUnitId();
-        final AdCallback priorityTracked = TrackingAdCallback.fullscreenPresentation(
-                PlacementRegistry.placementOf(shownUnit), AdFormat.INTERSTITIAL, shownUnit, adCallback);
-        forceShowTrackedInterstitial(context,
+        forceShowInterstitial(context,
                 interstitialAd,
                 new AdCallback() {
                     @Override
-                    public AdSkipReason getAdShowSkipReason() {
-                        return priorityTracked.getAdShowSkipReason();
-                    }
-
-                    @Override
-                    public void onAdShowRejected(@NonNull AdSkipReason reason) {
-                        priorityTracked.onAdShowRejected(reason);
-                    }
-
-                    @Override
-                    public void onAdPresented() {
-                        priorityTracked.onAdPresented();
-                    }
-
-                    @Override
                     public void onNextAction() {
                         super.onNextAction();
-                        priorityTracked.onNextAction();
+                        adCallback.onNextAction();
                     }
 
                     @Override
                     public void onAdClosed() {
                         super.onAdClosed();
                         interstitialAd.setInterstitialAd(null);
-                        priorityTracked.onAdClosed();
+                        adCallback.onAdClosed();
                         if (isReloadAds) {
                             loadPriorityInterstitialAds(context, apInterstitialPriorityAd, new AdCallback());
                         }
@@ -1095,29 +1001,28 @@ public class ERainAd {
                     @Override
                     public void onInterstitialShow() {
                         super.onInterstitialShow();
-                        priorityTracked.onInterstitialShow();
+                        adCallback.onInterstitialShow();
                     }
 
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        priorityTracked.onAdClicked();
+                        adCallback.onAdClicked();
                     }
 
                     @Override
                     public void onAdFailedToShow(@Nullable AdError adError) {
                         super.onAdFailedToShow(adError);
-                        priorityTracked.onAdFailedToShow(adError);
+                        adCallback.onAdFailedToShow(adError);
                     }
 
                     @Override
                     public void onAdImpression() {
                         super.onAdImpression();
-                        priorityTracked.onAdImpression();
+                        adCallback.onAdImpression();
                     }
                 },
-                false,
-                isOpenActivityAfterShowInterAds()
+                false
         );
     }
 }

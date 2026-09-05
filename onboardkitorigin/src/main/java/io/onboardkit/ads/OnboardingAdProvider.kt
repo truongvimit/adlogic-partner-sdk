@@ -13,7 +13,6 @@ import io.onboardkit.config.NativeAdUnit
 interface AdEventListener {
     fun onLoaded() {}
     fun onFailedToLoad() {}
-    /** A real vendor impression, never a successful bind or a preload fill. */
     fun onImpression() {}
     fun onClicked() {}
 
@@ -37,16 +36,6 @@ data class NativeAdRequest(
  * The SDK ships [io.onboardkit.ads.erain.ERainAdProvider], which bridges the project's `:ads`
  * module (AdMob legacy). Apps may inject any other implementation, or none at all — every
  * placement then reports [AdSkipReason.NO_PROVIDER] instead of failing.
- *
- * The provider owns load telemetry. Emit one request at the first actual vendor dispatch of a
- * logical attempt and one mutually exclusive loaded/failed terminal after its waterfall settles.
- * Cache hits, callers joining an in-flight request, and screen callbacks emit no additional load
- * events. Custom providers can use `AdLoadAttempt` with an immutable `AdLoadContext` at their
- * vendor boundary. Providers also own actual show telemetry and forward real vendor impressions
- * through [AdEventListener.onImpression]; the flow does not emit a second show. A native bind may
- * emit `ad_bound`, which does not imply visibility. The flow reports skips and forwards UI
- * callbacks; it does not infer a physical load or impression from [preloadNative], [bindNative],
- * or [AdEventListener.onFailedToLoad].
  */
 interface OnboardingAdProvider {
 
@@ -86,12 +75,9 @@ interface OnboardingAdProvider {
     /**
      * Shows the buffered interstitial for [placement].
      *
-     * Must call [ObInterstitialCallback.onNextAction] at most once at navigation commitment,
-     * and exactly one terminal callback. Forward [ObInterstitialCallback.onPresented] only from
-     * actual vendor presentation; this enables the host-return fallback independently of navigation.
-     * The original skipped callback retains flow-owned analytics for custom providers. A provider
-     * already reporting the canonical skipped/show-failed outcome uses the overload carrying
-     * `telemetryReported = true`, so the flow only completes its UI contract.
+     * Must call [ObInterstitialCallback.onNextAction] at most once, and exactly one terminal
+     * callback. Callers rely on "the ad is on screen" and "the ad is gone" being two distinct
+     * moments — see [showInterstitial].
      */
     fun showInterstitial(
         activity: Activity,
@@ -111,32 +97,4 @@ interface OnboardingAdProvider {
     fun suppressAppResume(activityClass: Class<out Activity>)
 
     fun releaseAll()
-}
-
-/**
- * Optional banner capability for providers that capture the requesting placement explicitly.
- * Existing [OnboardingAdProvider] implementations retain their original JVM interface.
- */
-interface PlacementAwareBannerProvider : OnboardingAdProvider {
-    fun loadBanner(
-        activity: Activity,
-        placement: AdPlacement,
-        unit: BannerAdUnit,
-        listener: AdEventListener? = null,
-    )
-}
-
-/**
- * Passes the semantic placement to capable providers and otherwise uses the original banner API.
- * The fallback does not manufacture request/load events; custom providers own those at dispatch.
- */
-@JvmOverloads
-fun OnboardingAdProvider.loadBanner(
-    activity: Activity,
-    placement: AdPlacement,
-    unit: BannerAdUnit,
-    listener: AdEventListener? = null,
-) {
-    if (this is PlacementAwareBannerProvider) loadBanner(activity, placement, unit, listener)
-    else loadBanner(activity, unit, listener)
 }

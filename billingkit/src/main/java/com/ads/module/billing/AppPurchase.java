@@ -410,7 +410,6 @@ public class AppPurchase {
             endConnection();
         }
         appContext = application.getApplicationContext();
-        EntitlementWiring.notifyAdsIfPresent();
 
         purchaseItems.clear();
         List<String> inAppIdList = new ArrayList<>();
@@ -547,7 +546,6 @@ public class AppPurchase {
     public void setPurchase(boolean purchase) {
         isPurchase = purchase;
         PurchasePrefs.write(appContext, purchase, "manual");
-        EntitlementWiring.notifyAdsIfPresent();
         notifyVerifyCompletion(BillingClient.BillingResponseCode.OK);
     }
 
@@ -701,7 +699,6 @@ public class AppPurchase {
             publishOwnership(sweep);
             verifiedThisProcess = true;
             PurchasePrefs.write(appContext, isPurchase, "play");
-            EntitlementWiring.notifyAdsIfPresent();
         } else {
             // a half-failed sweep knows nothing, so the previous entitlement and its cache stand
             Log.e(TAG, "verifyPurchased: keeping previous entitlement, worst code " + sweep.worstCode);
@@ -853,7 +850,6 @@ public class AppPurchase {
                         }
                         isUpdateInapps = true;
                         if (isUpdateSubs) {
-                            EntitlementWiring.notifyAdsIfPresent();
                             if (updatePurchaseListener != null) {
                                 updatePurchaseListener.onUpdateFinished();
                             }
@@ -881,7 +877,6 @@ public class AppPurchase {
                         }
                         isUpdateSubs = true;
                         if (isUpdateInapps) {
-                            EntitlementWiring.notifyAdsIfPresent();
                             if (updatePurchaseListener != null) {
                                 updatePurchaseListener.onUpdateFinished();
                             }
@@ -1273,7 +1268,6 @@ public class AppPurchase {
     void grantDevPurchase(String productId, String transactionJson, PurchaseListener extraListener) {
         isPurchase = true;
         idPurchased = productId;
-        EntitlementWiring.notifyAdsIfPresent();
         fanOutProductPurchased(productId, transactionJson);
         if (extraListener != null && extraListener != purchaseListener) {
             extraListener.onProductPurchased(productId, transactionJson);
@@ -1285,7 +1279,6 @@ public class AppPurchase {
             isPurchase = true;
             idPurchased = productId;
             PurchasePrefs.write(appContext, true, "purchase");
-            EntitlementWiring.notifyAdsIfPresent();
         }
 
         BillingTracking.trackPurchaseSuccess(

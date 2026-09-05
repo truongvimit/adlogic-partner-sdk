@@ -23,11 +23,8 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
-import com.ads.module.helper.interstitial.InterShowOptions
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
-import com.ads.module.tracking.AdLoadContext
-import com.ads.module.tracking.TrackingAdCallback
 import com.ads.module.util.SharePreferenceUtils
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
@@ -37,13 +34,10 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
-import io.onboardkit.ads.PlacementAwareBannerProvider
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
 import io.trackkit.PlacementRegistry
-import io.trackkit.Tracker
-import io.trackkit.TrackkitEvents
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -52,9 +46,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Buffering, expiry, in-flight dedup and the show contract all live in
  * [NativeAdPreload] / [InterstitialAdManager]; this class only translates between the
- * onboarding flow's placement/callback vocabulary and the module's. The load owners report
- * request/load terminals and actual show events; the flow retains UI callbacks and skips.
- * Successful native binding is reported separately from a vendor impression.
+ * onboarding flow's placement/callback vocabulary and the module's. Telemetry stays with
+ * the flow's own AdTelemetry, so the managers are called with reporting off.
  */
 class ERainAdProvider(
     /**
@@ -64,23 +57,8 @@ class ERainAdProvider(
      * own budget (`ob_splash_ad_budget_ms`, `60 s`, the audited `LOAD_AD_TIMEOUT`). Lowering this
      * trades fill rate for speed — measure before you do.
      */
-    private val tierTimeoutMs: Long,
-    /**
-     * Immutable preparation options for this provider's interstitials. The default constructor
-     * keeps the loading dialog and 800 ms delay. Disabling the dialog leaves the delay and show
-     * gates intact; UnderAd navigation and its fixed 1,500 ms cosmetic cleanup do not change.
-     */
-    private val interstitialShowOptions: InterShowOptions,
-) : PlacementAwareBannerProvider {
-
-    /** Retains the original Java constructors and Kotlin default-argument bridge. */
-    @JvmOverloads
-    constructor(tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS) :
-        this(tierTimeoutMs, InterShowOptions())
-
-    /** Uses the default waterfall timeout with explicit immutable interstitial preparation. */
-    constructor(interstitialShowOptions: InterShowOptions) :
-        this(AdWaterfall.DEFAULT_TIER_TIMEOUT_MS, interstitialShowOptions)
+    private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+) : OnboardingAdProvider {
 
     init {
         // The flow reuses its splash interstitial at the language and pager exits, and decides
@@ -134,12 +112,7 @@ class ERainAdProvider(
             ?.let { nativeStyles[key] = it.toNativeStyle() }
         ensureNativeBridge(key)
         val covered =
-            preload.preloadWithKeyIfEmpty(
-                key,
-                activity,
-                nativeConfig(ids, request.layoutRes),
-                AdLoadContext(key, request.placement.format),
-            )
+            preload.preloadWithKeyIfEmpty(key, activity, nativeConfig(ids, request.layoutRes))
         // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
         if (!covered && !isNativeReady(request.placement)) {
             notifyListener(key) { it.onFailedToLoad() }
@@ -172,8 +145,8 @@ class ERainAdProvider(
         boundNatives.put(placement.key, ad)?.let { previous ->
             if (previous !== ad) destroyNative(previous)
         }
-        // Binding can happen before attach or while covered. Only the vendor counts a show.
-        Tracker.track(TrackkitEvents.Ad.Bound(placement.key, placement.format))
+        // GMA counts the impression once the view tree is bound and visible
+        notifyListener(placement.key) { it.onImpression() }
         return true
     }
 
@@ -199,7 +172,7 @@ class ERainAdProvider(
             context,
             key,
             unit.loadOrder,
-            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = true),
+            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = false),
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
@@ -221,12 +194,12 @@ class ERainAdProvider(
 
     /**
      * Maps the store's show contract onto the flow's two moments: `onComplete` without a
-     * preceding skip is navigation commitment immediately before vendor show. Actual presentation
-     * arrives separately through `onPresented`; a skip suppresses `onNextAction` entirely.
+     * preceding skip is the commit — the ad is on screen and the next screen may start
+     * underneath it — while a skip suppresses `onNextAction` entirely.
      *
      * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]
      * because it is what [ObInterstitialCallback.onNextAction] *means*: `UnderAd` is the only mode
-     * under which `onComplete` starts the next screen before vendor invocation. An app that prefers `AfterDismiss` for
+     * under which `onComplete` says "the ad is on screen". An app that prefers `AfterDismiss` for
      * its own placements must not be able to redefine that. A flow screen whose destination has to
      * wait for the dismissal leaves `onNext` unused instead — see
      * [io.onboardkit.ads.NextScreenTiming].
@@ -247,15 +220,11 @@ class ERainAdProvider(
                 override fun onSkipped(reason: SdkAdSkipReason) {
                     skipped.set(true)
                     ObLog.w(ObLog.Section.SHOW, "$key skipped: ${reason.key}")
-                    callback.onAdSkipped(mapReason(reason), telemetryReported = true)
+                    callback.onAdSkipped(mapReason(reason))
                 }
 
                 override fun onComplete() {
                     if (!skipped.get()) callback.onNextAction()
-                }
-
-                override fun onPresented() {
-                    callback.onPresented()
                 }
 
                 override fun onClosed() {
@@ -266,8 +235,7 @@ class ERainAdProvider(
                     notifyListener(key) { it.onClicked() }
                 }
             },
-            options = interstitialShowOptions,
-            reportTelemetry = true,
+            reportTelemetry = false,
             nextAction = InterNextAction.UnderAd,
         )
     }
@@ -280,24 +248,23 @@ class ERainAdProvider(
         runCatching { AdmobHelper.getNumClickAdsPerDay(context, adUnitId) }.getOrDefault(0)
 
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
-        ERainAd.getInstance().loadBanner(activity, unit.id, bannerCallback(listener))
-    }
+        ERainAd.getInstance().loadBanner(
+            activity,
+            unit.id,
+            object : AdCallback() {
+                override fun onAdLoaded() {
+                    listener?.onLoaded()
+                }
 
-    override fun loadBanner(
-        activity: Activity,
-        placement: AdPlacement,
-        unit: BannerAdUnit,
-        listener: AdEventListener?,
-    ) {
-        ERainAd.getInstance().loadBanner(activity, unit.id,
-            TrackingAdCallback(placement.key, placement.format, unit.id, bannerCallback(listener)))
-    }
+                override fun onAdFailedToLoad(error: LoadAdError?) {
+                    listener?.onFailedToLoad()
+                }
 
-    private fun bannerCallback(listener: AdEventListener?): AdCallback = object : AdCallback() {
-        override fun onAdLoaded() { listener?.onLoaded() }
-        override fun onAdImpression() { listener?.onImpression() }
-        override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
-        override fun onAdClicked() { listener?.onClicked() }
+                override fun onAdClicked() {
+                    listener?.onClicked()
+                }
+            },
+        )
     }
 
     override fun suppressAppResume(activityClass: Class<out Activity>) {
@@ -341,10 +308,6 @@ class ERainAdProvider(
                     notifyListener(key) { it.onAdOpened() }
                 }
 
-                override fun onAdImpression() {
-                    notifyListener(key) { it.onImpression() }
-                }
-
             }.also { preload.registerAdCallback(key, it) }
         }
     }
@@ -352,16 +315,6 @@ class ERainAdProvider(
     // Exhaustive so adding a store reason forces a mapping decision here
     private fun mapReason(reason: SdkAdSkipReason): AdSkipReason = when (reason) {
         SdkAdSkipReason.NOT_READY -> AdSkipReason.NOT_READY
-        SdkAdSkipReason.EXPIRED -> AdSkipReason.EXPIRED
-        SdkAdSkipReason.HOST_NOT_RESUMED -> AdSkipReason.HOST_NOT_RESUMED
-        SdkAdSkipReason.PROCESS_NOT_RESUMED -> AdSkipReason.PROCESS_NOT_RESUMED
-        SdkAdSkipReason.INVALID_HOST -> AdSkipReason.INVALID_HOST
-        SdkAdSkipReason.PRESENTATION_BUSY -> AdSkipReason.PRESENTATION_BUSY
-        SdkAdSkipReason.SUPPRESSED_BY_FLOW -> AdSkipReason.SUPPRESSED_BY_FLOW
-        SdkAdSkipReason.RETURNING_FROM_AD_CLICK -> AdSkipReason.RETURNING_FROM_AD_CLICK
-        SdkAdSkipReason.PREPARATION_FAILED -> AdSkipReason.PREPARATION_FAILED
-        SdkAdSkipReason.INTERVAL -> AdSkipReason.INTERVAL
-        SdkAdSkipReason.CLICK_CAP -> AdSkipReason.CLICK_CAP
         SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE
         SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW
         SdkAdSkipReason.PURCHASED -> AdSkipReason.PREMIUM

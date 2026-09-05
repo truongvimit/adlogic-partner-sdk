@@ -77,28 +77,6 @@ place.
 first-open funnel, IAP, consent — and `TrackkitEvents.all()` returns the full set at runtime. Open
 it in the IDE rather than copying a list that ages; each event class documents what it means.
 
-Ad load owners join `Ad.Request`, `Ad.Loaded` and `Ad.LoadFailed` with an optional `attempt_id`.
-A request counts one logical attempt that reached vendor dispatch; cache hits, callers sharing
-an in-flight attempt and declines before dispatch do not add requests. Owners measure load duration
-with a monotonic clock and emit one terminal per started attempt. Trackkit validates and transports
-these events; it does not deduplicate them by attempt ID. Existing Java constructor calls remain valid.
-
-`Ad.TierResult` (`ad_tier_result`) carries diagnostics for dispatched tiers. Its one-based
-`tier_index` follows the configured order and may have gaps for tiers that were not dispatched;
-`outcome` is `loaded`, `load_failed`, or `timeout`. Use these diagnostics separately from the
-logical request/fill denominator. Nullable additions are omitted from sink payloads when absent;
-the event classes in `TrackkitEvents` document the fields and defaults.
-
-`Ad.Bound` (`ad_bound`) records a native creative successfully bound into a view tree. A creative
-still in the preload cache produces no bound event; binding before attachment or into a covered
-view can produce `ad_bound` with no `ad_show`. The event carries placement, format and an optional
-ad unit, with no load-attempt or revenue fields. Actual native presentation remains owned by the
-vendor impression callback; binding does not imply an impression or paid revenue.
-
-For dashboard migration, move native bind counts to `ad_bound` and use `ad_show` for actual
-presentations. Historical native `ad_show` may include bind-driven events, so annotate the upgrade
-date instead of treating the old and new counts as directly comparable.
-
 Every event also carries `app_vc`, `sdk_ver`, `session_no`, `install_day`, and `consent_ads` once
 UMP resolves.
 

@@ -12,25 +12,12 @@ package io.onboardkit.ads
  */
 open class ObInterstitialCallback {
 
-    /** Navigation is committed immediately before vendor show; it is not proof of presentation. */
+    /** The ad is committed to the screen. Safe to start the destination underneath it. */
     open fun onNextAction() {}
-
-    /** The vendor confirmed presentation. Forward this to enable the host-return fallback. */
-    open fun onPresented() {}
 
     /** Terminal: the ad was displayed and dismissed. */
     open fun onAdClosed() {}
 
     /** Terminal: the ad never reached the screen. */
     open fun onAdSkipped(reason: AdSkipReason) {}
-
-    /**
-     * Terminal with explicit analytics ownership. True means the provider has handled the
-     * canonical outcome (skipped or vendor show-failed); the flow must not emit it again.
-     * Delegates to the original callback so existing consumers continue receiving outcomes.
-     * Custom providers using the original overload retain flow-owned skipped reporting.
-     */
-    open fun onAdSkipped(reason: AdSkipReason, telemetryReported: Boolean) {
-        onAdSkipped(reason)
-    }
 }

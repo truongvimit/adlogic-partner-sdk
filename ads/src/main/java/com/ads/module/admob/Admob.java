@@ -38,8 +38,6 @@ import com.ads.module.funtion.AdmobHelper;
 import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdGate;
 import com.ads.module.helper.AdSkipReason;
-import com.ads.module.helper.interstitial.InterstitialFrequency;
-import com.ads.module.helper.interstitial.InterShowOptions;
 import com.ads.module.tracking.AdTracking;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
@@ -57,6 +55,7 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MediaAspectRatio;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.OnPaidEventListener;
+import com.google.android.gms.ads.OnUserEarnedRewardListener;
 import com.google.android.gms.ads.RequestConfiguration;
 import com.google.android.gms.ads.VideoOptions;
 import com.google.android.gms.ads.initialization.AdapterStatus;
@@ -65,6 +64,7 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.nativead.NativeAd;
 import com.google.android.gms.ads.nativead.NativeAdOptions;
 import com.google.android.gms.ads.nativead.NativeAdView;
+import com.google.android.gms.ads.rewarded.RewardItem;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
@@ -76,18 +76,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
 
-/**
- * Vendor ad adapters. Every retained interstitial, splash and rewarded show shares process-wide
- * fullscreen ownership with app-open resume, including cosmetic preparation. Interstitials default
- * to 800 ms preparation and keep fixed 1500 ms UnderAd dialog cleanup. Splash captures its navigation mode per
- * call; busy or pre-invocation rejection does not consume its chosen ad. Vendor callbacks own the
- * active presentation until terminal, independently of cache loads and navigation completion.
- */
 public class Admob {
     private static final String TAG = "ERainStudio";
     private static Admob instance;
@@ -106,6 +98,7 @@ public class Admob {
     private volatile int maxClickAds = 0;
     private Handler handlerTimeout;
     private Runnable rdTimeout;
+    private PrepareLoadingAdsDialog dialog;
     private boolean isTimeout;
     private boolean disableAdResumeWhenClickAds = false;
     private boolean isShowLoadingSplash = false;
@@ -117,7 +110,7 @@ public class Admob {
      * <p>
      * Only a <em>default</em> — the interstitial show path takes the value as a parameter, so one
      * presentation's choice can no longer be changed by another's while it is on screen. The
-     * splash paths capture this default when the public show call begins, including priority fallback.
+     * splash paths, which have no per-show surface, read it directly.
      */
     private volatile boolean openActivityAfterShowInterAds = false;
     private Context context;
@@ -471,22 +464,282 @@ public class Admob {
     }
 
     public void onShowSplash(AppCompatActivity activity, AdCallback adListener) {
-        showBufferedSplash(activity, adListener, SplashSlot.STANDARD, mInterstitialSplash, openActivityAfterShowInterAds);
+        isShowLoadingSplash = true;
+
+        if (mInterstitialSplash == null) {
+            adListener.onNextAction();
+            return;
+        }
+
+        mInterstitialSplash.setOnPaidEventListener(adValue -> {
+            ERainLogEventManager.logPaidAdImpression(context,
+                    adValue,
+                    mInterstitialSplash.getAdUnitId(),
+                    mInterstitialSplash.getResponseInfo()
+                            .getMediationAdapterClassName(), AdType.INTERSTITIAL);
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
+        });
+
+        if (handlerTimeout != null && rdTimeout != null) {
+            handlerTimeout.removeCallbacks(rdTimeout);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterstitialSplash.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterstitialSplash = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                mInterstitialSplash = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                if (dialog != null && dialog.isShowing())
+                    dialog.dismiss();
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+                } catch (Exception e) {
+                    assert adListener != null;
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterstitialSplash != null) {
+                        // The host app keeps its windows immersive; without this the ad activity
+                        // brings the system bars back for the whole impression.
+                        mInterstitialSplash.setImmersiveMode(true);
+                        mInterstitialSplash.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    assert adListener != null;
+                    adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
+                }
+            }, 800);
+
+        } else {
+            isShowLoadingSplash = false;
+        }
     }
 
     public void onShowSplash(AppCompatActivity activity, AdCallback adListener, InterstitialAd mInter) {
-        // Do not replace a newer cached fill merely to present the explicit ad selected by caller.
-        if (mInterstitialSplash == null) mInterstitialSplash = mInter;
-        showBufferedSplash(activity, adListener, SplashSlot.STANDARD, mInter, openActivityAfterShowInterAds);
+        mInterstitialSplash = mInter;
+        isShowLoadingSplash = true;
+
+        if (mInter == null) {
+            adListener.onNextAction();
+            return;
+        }
+
+        mInterstitialSplash.setOnPaidEventListener(adValue -> {
+            ERainLogEventManager.logPaidAdImpression(context,
+                    adValue,
+                    mInterstitialSplash.getAdUnitId(),
+                    mInterstitialSplash.getResponseInfo()
+                            .getMediationAdapterClassName(), AdType.INTERSTITIAL);
+
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
+        });
+
+        if (handlerTimeout != null && rdTimeout != null) {
+            handlerTimeout.removeCallbacks(rdTimeout);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterstitialSplash.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterstitialSplash = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                mInterstitialSplash = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                if (dialog != null && dialog.isShowing())
+                    dialog.dismiss();
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+                } catch (Exception e) {
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterstitialSplash != null) {
+                        // The host app keeps its windows immersive; without this the ad activity
+                        // brings the system bars back for the whole impression.
+                        mInterstitialSplash.setImmersiveMode(true);
+                        mInterstitialSplash.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    assert adListener != null;
+                    adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
+                }
+            }, 800);
+
+        } else {
+            isShowLoadingSplash = false;
+        }
     }
 
     public void onCheckShowSplashWhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
-        final boolean underAd = openActivityAfterShowInterAds;
         new Handler(activity.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (interstitialSplashLoaded() && !isShowLoadingSplash()) {
-                    showBufferedSplash(activity, callback, SplashSlot.STANDARD, mInterstitialSplash, underAd);
+                    Admob.getInstance().onShowSplash(activity, callback);
                 }
             }
         }, timeDelay);
@@ -501,7 +754,6 @@ public class Admob {
             return;
         }
 
-        if (adCallback != null) adCallback.onAdRequestStarted(id);
         InterstitialAd.load(context, id, getAdRequest(),
                 new InterstitialAdLoadCallback() {
                     @Override
@@ -533,21 +785,19 @@ public class Admob {
 
     /**
      * Shows the interstitial after {@code timeDelay}, for the reopen-on-splash flow.
-     * Navigation mode is captured now, before either the scheduling or preparation delay.
      */
     public void showInterstitialAdByTimes(final Context context, final InterstitialAd mInterstitialAd, final AdCallback callback, long timeDelay) {
-        final boolean underAd = openActivityAfterShowInterAds;
         if (timeDelay > 0) {
             handlerTimeout = new Handler();
             rdTimeout = new Runnable() {
                 @Override
                 public void run() {
-                    forceShowInterstitial(context, mInterstitialAd, callback, underAd);
+                    forceShowInterstitial(context, mInterstitialAd, callback);
                 }
             };
             handlerTimeout.postDelayed(rdTimeout, timeDelay);
         } else {
-            forceShowInterstitial(context, mInterstitialAd, callback, underAd);
+            forceShowInterstitial(context, mInterstitialAd, callback);
         }
     }
 
@@ -566,77 +816,88 @@ public class Admob {
      * @param openNextUnderAd {@code true} fires {@code onNextAction} as the ad goes to the screen,
      *                        so the caller's next screen starts underneath it; {@code false} fires
      *                        it on dismissal instead. Taken as a parameter, not read from
-     *                        {@link #openActivityAfterShowInterAds}, because another placement may
-     *                        change the field during the configured preparation delay.
+     *                        {@link #openActivityAfterShowInterAds}, because the field is read
+     *                        800 ms after the show begins — long enough for another placement to
+     *                        have changed what this presentation's callbacks mean.
      */
     private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
-        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd, InterShowOptions.DEFAULT);
-    }
-
-    private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd,
-                                           final AdCallback callback, final boolean openNextUnderAd,
-                                           InterShowOptions options) {
         // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
         // so it can no longer be skipped by the load-time gate that never called it.
-        AdSkipReason policy = AdGate.skipReason(context, true, true, false);
-        if (policy != null) {
-            if (callback != null) callback.onAdShowRejected(policy);
+        if (AdGate.isPurchased(context)) {
+            callback.onNextAction();
             return;
         }
         if (mInterstitialAd == null) {
             if (callback != null) {
-                callback.onAdShowRejected(AdSkipReason.NOT_READY);
+                callback.onNextAction();
             }
             return;
         }
 
-        final InterstitialPreparation preparation = new InterstitialPreparation();
+        mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
 
-
-        if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
-            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd, preparation, options);
-            return;
-        }
-        notifyShowRejected(callback, AdSkipReason.CLICK_CAP, preparation);
-    }
-
-
-    private void attachInterstitialPresentationCallback(Context context, InterstitialAd ad,
-                                                         AdCallback callback, boolean underAd,
-                                                         InterstitialPreparation preparation,
-                                                         boolean recordInterval) {
-        ad.setFullScreenContentCallback(new FullScreenContentCallback() {
-            @Override public void onAdDismissedFullScreenContent() {
-                if (!preparation.finishInvoked()) return;
-                if (recordInterval) SharePreferenceUtils.setLastImpressionInterstitialTime(context);
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                super.onAdDismissedFullScreenContent();
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                SharePreferenceUtils.setLastImpressionInterstitialTime(context);
                 if (callback != null) {
-                    if (!underAd) notifyPresentationCallback(callback::onNextAction);
-                    notifyPresentationCallback(callback::onAdClosed);
+                    if (!openNextUnderAd) {
+                        callback.onNextAction();
+                    }
+                    callback.onAdClosed();
+                }
+                if (dialog != null) {
+                    dialog.dismiss();
                 }
             }
-            @Override public void onAdFailedToShowFullScreenContent(@NonNull AdError error) {
-                if (preparation.finishInvoked()) notifyInterstitialFailure(callback, underAd, error);
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                super.onAdFailedToShowFullScreenContent(adError);
+                // Before the null check, and for the same reason as notifyShowFailed: the show
+                // path raised both, so a failure has to lower them whether or not anyone is
+                // listening. Leaving the flag up suppressed every app-resume ad until the
+                // AppOpenManager watchdog cleared it 90 s later.
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                if (dialog != null) {
+                    dialog.dismiss();
+                }
+                if (callback != null) {
+                    callback.onAdFailedToShow(adError);
+                    if (!openNextUnderAd) {
+                        callback.onNextAction();
+                    }
+                }
             }
-            @Override public void onAdShowedFullScreenContent() {
-                if (!preparation.wasInvoked() || !preparation.lease.presented()) return;
-                if (preparation.splashSlot == SplashSlot.HIGH1 || preparation.splashSlot == SplashSlot.HIGH2
-                        || preparation.splashSlot == SplashSlot.HIGH3) {
-                    // Existing priority splash return suppression; policy is consolidated in G12.
+
+            @Override
+            public void onAdShowedFullScreenContent() {
+                super.onAdShowedFullScreenContent();
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (disableAdResumeWhenClickAds)
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
+                if (callback != null) {
+                    callback.onAdClicked();
                 }
-                if (callback != null) notifyPresentationCallback(callback::onAdPresented);
-            }
-            @Override public void onAdImpression() {
-                if (preparation.wasInvoked() && callback != null) notifyPresentationCallback(callback::onAdImpression);
-            }
-            @Override public void onAdClicked() {
-                if (!preparation.wasInvoked()) return;
-                if (disableAdResumeWhenClickAds) AppOpenManager.getInstance().disableAdResumeByClickAction();
-                notifyPresentationCallback(() -> ERainLogEventManager.logClickAdsEvent(context, ad.getAdUnitId()));
-                if (callback != null) notifyPresentationCallback(callback::onAdClicked);
+                ERainLogEventManager.logClickAdsEvent(context, mInterstitialAd.getAdUnitId());
             }
         });
+
+        if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
+            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd);
+            return;
+        }
+        if (callback != null) {
+            callback.onNextAction();
+        }
     }
+
 
     /**
      * Shows the interstitial now, ignoring the click counter.
@@ -651,196 +912,99 @@ public class Admob {
      * {@link #setOpenActivityAfterShowInterAds(boolean)}.
      */
     public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback, boolean openNextUnderAd) {
-        forceShowInterstitial(context, mInterstitialAd, callback, openNextUnderAd, InterShowOptions.DEFAULT);
-    }
-
-    /**
-     * Shows with immutable preparation options and captured navigation mode. Existing overloads
-     * retain the dialog and 800 ms delay; all options use the same ownership and final gates.
-     */
-    public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd,
-                                      final AdCallback callback, boolean openNextUnderAd,
-                                      @NonNull InterShowOptions options) {
-        Objects.requireNonNull(options, "options");
         currentClicked = numShowAds;
-        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd, options);
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd);
     }
 
     /**
      * Shows the ad when the click counter has reached the threshold, otherwise runs the next action.
      */
-    private void showInterstitialAd(Context context, InterstitialAd ad, AdCallback callback,
-                                    boolean openNextUnderAd, InterstitialPreparation preparation,
-                                    InterShowOptions options) {
-        if (FullscreenPresentationOwner.getInstance().isBusy()) {
-            notifyShowRejected(callback, AdSkipReason.PRESENTATION_BUSY, preparation);
-            return;
-        }
+    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback, boolean openNextUnderAd) {
         currentClicked++;
-        if (currentClicked < numShowAds || ad == null) {
-            notifyShowRejected(callback, ad == null ? AdSkipReason.NOT_READY
-                    : AdSkipReason.CAPPED_BY_MODULE, preparation);
+        if (currentClicked < numShowAds || mInterstitialAd == null) {
+            if (dialog != null) {
+                dialog.dismiss();
+            }
+            if (callback != null) {
+                callback.onNextAction();
+            }
             return;
         }
+
         currentClicked = 0;
-        prepareInterstitialPresentation(context, ad, callback, openNextUnderAd, preparation, true, true, options);
-    }
 
-    /** One preparation implementation for modern and retained splash interstitials. */
-    private void prepareInterstitialPresentation(Context context, InterstitialAd ad, AdCallback callback,
-                                                boolean underAd, InterstitialPreparation preparation,
-                                                boolean checkCaps, boolean immersive, InterShowOptions options) {
-        AdSkipReason rejection = interstitialShowSkipReason(context, ad.getAdUnitId(), callback, checkCaps);
-        if (rejection != null) {
-            notifyShowRejected(callback, rejection, preparation);
+        // Every exit below reports something. This branch used to return in silence when the
+        // process was not resumed, leaving the caller waiting on a callback that never came.
+        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            notifyShowFailed(callback, "Show fail: process is not resumed", openNextUnderAd);
             return;
         }
-        if (!preparation.begin(() -> notifyShowRejected(callback, AdSkipReason.EXPIRED, preparation))) {
-            notifyShowRejected(callback, AdSkipReason.PRESENTATION_BUSY, preparation);
+
+        // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
+        // turns what was a ClassCastException on a background thread into a normal skip.
+        if (!(context instanceof AppCompatActivity)) {
+            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
             return;
         }
-        if (preparation.splashSlot != null) {
-            activeSplashPreparation = preparation;
-            isShowLoadingSplash = true;
-            cancelSplashTimeout(preparation.splashSlot);
-        }
+
+        // The loading dialog is cosmetic; failing to put it up must never cost an impression.
         try {
-            attachInterstitialPresentationCallback(context, ad, callback, underAd, preparation, checkCaps);
-            if (preparation.splashSlot != null) attachSplashPaidCallback(context, ad);
-        } catch (RuntimeException error) {
-            Log.w(TAG, "Interstitial callback setup failed", error);
-            notifyShowRejected(callback, AdSkipReason.PREPARATION_FAILED, preparation);
-            return;
+            if (dialog != null && dialog.isShowing())
+                dialog.dismiss();
+            dialog = new PrepareLoadingAdsDialog(context);
+            dialog.setCancelable(false);
+            dialog.show();
+            AppOpenManager.getInstance().setInterstitialShowing(true);
+        } catch (Exception e) {
+            dialog = null;
+            Log.w(TAG, "showInterstitialAd: loading dialog unavailable, showing the ad anyway", e);
         }
-        if (preparation.ended.get()) return;
-        // Retain the raw splash ready notification without treating it as a new request or show.
-        if (preparation.splashSlot != null && callback != null) notifyPresentationCallback(callback::onAdLoaded);
-        if (options.getShowLoading()) {
-            try {
-                preparation.loadingDialog = new PrepareLoadingAdsDialog(context);
-                preparation.loadingDialog.setCancelable(false);
-                preparation.loadingDialog.show();
-            } catch (RuntimeException error) {
-                preparation.dismissDialog();
-                Log.w(TAG, "Loading dialog unavailable; continuing interstitial presentation", error);
-            }
+
+        // Committed to showing. Call sites use this to tell the two meanings of onNextAction
+        // apart, so it has to fire on every path that reaches show().
+        if (callback != null) {
+            callback.onInterstitialShow();
         }
-        if (preparation.splashSlot == null && callback != null) {
-            notifyPresentationCallback(callback::onInterstitialShow);
-        }
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (preparation.ended.get()) return;
-            AdSkipReason delayed = interstitialShowSkipReason(context, ad.getAdUnitId(), callback, checkCaps);
-            if (delayed != null) {
-                notifyShowRejected(callback, delayed, preparation);
-                return;
-            }
-            if (immersive) {
-                try { ad.setImmersiveMode(true); }
-                catch (RuntimeException error) { Log.w(TAG, "Immersive mode unavailable", error); }
-            }
-            // Cosmetic/vendor setup may call back synchronously and change the policy or host.
-            delayed = interstitialShowSkipReason(context, ad.getAdUnitId(), callback, checkCaps);
-            if (delayed != null) {
-                notifyShowRejected(callback, delayed, preparation);
-                return;
-            }
-            if (!preparation.lease.start()) {
-                notifyShowRejected(callback, AdSkipReason.EXPIRED, preparation);
-                return;
-            }
-            if (underAd && callback != null) {
-                // Keep next and vendor.show on the same tick; navigation itself may pause the host.
-                notifyPresentationCallback(callback::onNextAction);
-                new Handler(Looper.getMainLooper()).postDelayed(preparation::dismissDialog, 1500);
-            }
-            try {
-                preparation.invoked = true;
-                if (preparation.splashSlot != null) {
-                    consumeSplashAd(preparation.splashSlot, ad);
-                    if (activeSplashPreparation == preparation) isShowLoadingSplash = false;
+
+        new Handler().postDelayed(() -> {
+            if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                if (openNextUnderAd && callback != null) {
+                    // Same tick as show() below, deliberately: the next Activity has to be queued
+                    // before the ad's, or it is stacked on top of it instead of underneath.
+                    callback.onNextAction();
+                    new Handler().postDelayed(() -> {
+                        if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
+                            dialog.dismiss();
+                    }, 1500);
                 }
-                ad.show((Activity) context);
-            } catch (RuntimeException error) {
-                if (!preparation.finish()) return;
-                notifyInterstitialFailure(callback, underAd,
-                        new AdError(0, String.valueOf(error.getMessage()), TAG));
+                mInterstitialAd.setImmersiveMode(true);
+                mInterstitialAd.show((Activity) context);
+            } else {
+                if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
+                    dialog.dismiss();
+                notifyShowFailed(callback, "Show fail in background after show loading ad", openNextUnderAd);
             }
-        }, options.getPreShowDelayMs());
+        }, 800);
     }
 
-    private static void notifyPresentationCallback(Runnable action) {
-        try { action.run(); }
-        catch (Exception error) { Log.w(TAG, "Interstitial callback failed", error); }
-    }
-
-    private static void notifyInterstitialFailure(AdCallback callback, boolean underAd, AdError error) {
-        if (callback == null) return;
-        notifyPresentationCallback(() -> callback.onAdFailedToShow(error));
-        if (!underAd) notifyPresentationCallback(callback::onNextAction);
-    }
-
-    private AdSkipReason interstitialShowSkipReason(Context context, String adUnitId, AdCallback callback, boolean checkCaps) {
-        if (!(context instanceof AppCompatActivity)) return AdSkipReason.INVALID_HOST;
-        AppCompatActivity host = (AppCompatActivity) context;
-        if (host.isFinishing() || host.isDestroyed()) return AdSkipReason.INVALID_HOST;
-        if (!host.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED))
-            return AdSkipReason.HOST_NOT_RESUMED;
-        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED))
-            return AdSkipReason.PROCESS_NOT_RESUMED;
-        AdSkipReason policy = AdGate.skipReason(context, true, true, false);
-        if (policy != null) return policy;
-        if (checkCaps && !InterstitialFrequency.elapsed(context)) return AdSkipReason.INTERVAL;
-        if (checkCaps && isClickCapReached(context, adUnitId)) return AdSkipReason.CLICK_CAP;
-        try {
-            return callback == null ? null : callback.getAdShowSkipReason();
-        } catch (Exception error) {
-            Log.w(TAG, "Interstitial admission check failed", error);
-            return AdSkipReason.PREPARATION_FAILED;
+    /**
+     * Reports a presentation that never reached the screen.
+     * <p>
+     * onNextAction is still fired when the next screen was not opened under the ad, because that
+     * is the signal legacy call sites advance their flow on.
+     */
+    private void notifyShowFailed(AdCallback callback, String message, boolean openNextUnderAd) {
+        // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
+        // a presentation that dies here must lower it whether or not anyone is listening. Leaving
+        // it raised suppressed every app-resume ad for the rest of the process.
+        AppOpenManager.getInstance().setInterstitialShowing(false);
+        if (callback == null) {
+            return;
         }
-    }
-
-    /** Declines before vendor invocation; the original wrapper remains reusable. */
-    private void notifyShowRejected(AdCallback callback, AdSkipReason reason,
-                                    InterstitialPreparation preparation) {
-        if (preparation.finish() && callback != null) notifyPresentationCallback(() -> callback.onAdShowRejected(reason));
-    }
-
-    /** One call's UI and terminal state; no cleanup reaches another call's dialog. */
-    private final class InterstitialPreparation {
-        final AtomicBoolean ended = new AtomicBoolean(false);
-        PrepareLoadingAdsDialog loadingDialog;
-        boolean invoked;
-        FullscreenPresentationOwner.Lease lease;
-        SplashSlot splashSlot;
-
-        boolean begin(Runnable onExpired) {
-            lease = FullscreenPresentationOwner.getInstance().tryAcquire(AdFormat.INTERSTITIAL, onExpired);
-            return lease != null;
-        }
-
-        boolean wasInvoked() { return invoked && !ended.get() && lease.isCurrent(); }
-
-        boolean finishInvoked() { return invoked && finish(); }
-
-        boolean finish() {
-            if (!ended.compareAndSet(false, true)) return false;
-            if (lease != null) lease.finish();
-            dismissDialog();
-            if (activeSplashPreparation == this) {
-                activeSplashPreparation = null;
-                isShowLoadingSplash = false;
-            }
-            return true;
-        }
-
-        void dismissDialog() {
-            PrepareLoadingAdsDialog owned = loadingDialog;
-            loadingDialog = null;
-            if (owned != null) {
-                try { owned.dismiss(); }
-                catch (Exception error) { Log.w(TAG, "Preparation dialog cleanup failed", error); }
-            }
+        Log.e(TAG, "showInterstitialAd: " + message);
+        callback.onAdFailedToShow(new AdError(0, message, TAG));
+        if (!openNextUnderAd) {
+            callback.onNextAction();
         }
     }
 
@@ -1123,7 +1287,6 @@ public class Admob {
                 }
             });
 
-            if (callback != null) callback.onAdRequestStarted(id);
             adView.loadAd(getAdRequest());
         } catch (Exception e) {
             e.printStackTrace();
@@ -1153,6 +1316,7 @@ public class Admob {
             containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
             adView.setAdListener(new AdListener() {
 
                 @Override
@@ -1197,17 +1361,7 @@ public class Admob {
                         callback.onAdClicked();
                     }
                 }
-
-                @Override
-                public void onAdImpression() {
-                    super.onAdImpression();
-                    if (callback != null) {
-                        callback.onAdImpression();
-                    }
-                }
             });
-            if (callback != null) callback.onAdRequestStarted(id);
-            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1236,6 +1390,7 @@ public class Admob {
             containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
             adView.setAdListener(new AdListener() {
 
                 @Override
@@ -1280,17 +1435,7 @@ public class Admob {
                         callback.onAdClicked();
                     }
                 }
-
-                @Override
-                public void onAdImpression() {
-                    super.onAdImpression();
-                    if (callback != null) {
-                        callback.onAdImpression();
-                    }
-                }
             });
-            if (callback != null) callback.onAdRequestStarted(id);
-            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1418,7 +1563,6 @@ public class Admob {
                 })
                 .withNativeAdOptions(adOptions)
                 .build();
-        callback.onAdRequestStarted(id);
         adLoader.loadAd(getAdRequest());
     }
 
@@ -1813,8 +1957,6 @@ public class Admob {
 
 
     private RewardedAd rewardedAd;
-    // Identity belongs only to the raw member cache; every caller retains its own load callbacks.
-    private Object rewardedLoadOwner;
 
     /**
      * Buffers a rewarded ad; premium users return without a request.
@@ -1823,20 +1965,15 @@ public class Admob {
         if (AdGate.isPurchased(context)) {
             return;
         }
-        final Object loadOwner = new Object();
-        rewardedLoadOwner = loadOwner;
         this.nativeId = id;
         RewardedAd.load(context, id, getAdRequest(), new RewardedAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
-                if (rewardedLoadOwner == loadOwner) {
-                    rewardedLoadOwner = null;
-                    Admob.this.rewardedAd = rewardedAd;
-                }
-                rewardedAd.setOnPaidEventListener(adValue -> {
+                Admob.this.rewardedAd = rewardedAd;
+                Admob.this.rewardedAd.setOnPaidEventListener(adValue -> {
                     ERainLogEventManager.logPaidAdImpression(context,
                             adValue,
-                            rewardedAd.getAdUnitId(), rewardedAd.getResponseInfo().getMediationAdapterClassName()
+                            rewardedAd.getAdUnitId(), Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
                     ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
@@ -1844,7 +1981,6 @@ public class Admob {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                if (rewardedLoadOwner == loadOwner) rewardedLoadOwner = null;
                 super.onAdFailedToLoad(loadAdError);
             }
         });
@@ -1857,35 +1993,27 @@ public class Admob {
         if (AdGate.isPurchased(context)) {
             return;
         }
-        final Object loadOwner = new Object();
-        rewardedLoadOwner = loadOwner;
         this.nativeId = id;
-        callback.onAdRequestStarted(id);
         RewardedAd.load(context, id, getAdRequest(), new RewardedAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
-                if (rewardedLoadOwner == loadOwner) {
-                    rewardedLoadOwner = null;
-                    Admob.this.rewardedAd = rewardedAd;
-                }
-                rewardedAd.setOnPaidEventListener(adValue -> {
+                callback.onRewardAdLoaded(rewardedAd);
+                Admob.this.rewardedAd = rewardedAd;
+                Admob.this.rewardedAd.setOnPaidEventListener(adValue -> {
                     ERainLogEventManager.logPaidAdImpression(context,
                             adValue,
                             rewardedAd.getAdUnitId(),
-                            rewardedAd.getResponseInfo().getMediationAdapterClassName()
+                            Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
                     ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
-                callback.onRewardAdLoaded(rewardedAd);
+
             }
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                if (rewardedLoadOwner == loadOwner) {
-                    rewardedLoadOwner = null;
-                    Admob.this.rewardedAd = null;
-                }
                 callback.onAdFailedToLoad(loadAdError);
+                Admob.this.rewardedAd = null;
             }
         });
     }
@@ -1901,7 +2029,6 @@ public class Admob {
             return;
         }
         this.nativeId = id;
-        callback.onAdRequestStarted(id);
         RewardedInterstitialAd.load(context, id, getAdRequest(), new RewardedInterstitialAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedInterstitialAd rewardedAd) {
@@ -1936,22 +2063,55 @@ public class Admob {
             adCallback.onUserEarnedReward(null);
             return;
         }
-        final RewardedAd ad = rewardedAd;
-        if (ad == null) {
-            if (FullscreenPresentationOwner.getInstance().isBusy()) {
-                if (adCallback != null) adCallback.onAdShowRejected(AdSkipReason.PRESENTATION_BUSY);
-                return;
-            }
+        if (rewardedAd == null) {
             initRewardAds(context, nativeId);
+
             adCallback.onRewardedAdFailedToShow(0);
             return;
+        } else {
+            Admob.this.rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                @Override
+                public void onAdDismissedFullScreenContent() {
+                    super.onAdDismissedFullScreenContent();
+                    if (adCallback != null)
+                        adCallback.onRewardedAdClosed();
+
+                    AppOpenManager.getInstance().setInterstitialShowing(false);
+
+                }
+
+                @Override
+                public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                    super.onAdFailedToShowFullScreenContent(adError);
+                    if (adCallback != null)
+                        adCallback.onRewardedAdFailedToShow(adError.getCode());
+                }
+
+                @Override
+                public void onAdShowedFullScreenContent() {
+                    super.onAdShowedFullScreenContent();
+
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+                    rewardedAd = null;
+                }
+
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    if (disableAdResumeWhenClickAds)
+                        AppOpenManager.getInstance().disableAdResumeByClickAction();
+                    ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
+                }
+            });
+            rewardedAd.show(context, new OnUserEarnedRewardListener() {
+                @Override
+                public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
+                    if (adCallback != null) {
+                        adCallback.onUserEarnedReward(rewardItem);
+
+                    }
+                }
+            });
         }
-        RewardPresentation presentation = RewardPresentation.acquire(context, AdFormat.REWARDED,
-                ad.getAdUnitId(), adCallback, disableAdResumeWhenClickAds,
-                () -> { if (rewardedAd == ad) rewardedAd = null; }, () -> {});
-        if (presentation == null) return;
-        presentation.show(() -> ad.setFullScreenContentCallback(presentation),
-                () -> ad.show(context, presentation));
     }
 
     /**
@@ -1966,20 +2126,53 @@ public class Admob {
             return;
         }
         if (rewardedInterstitialAd == null) {
-            if (FullscreenPresentationOwner.getInstance().isBusy()) {
-                if (adCallback != null) adCallback.onAdShowRejected(AdSkipReason.PRESENTATION_BUSY);
-                return;
-            }
             initRewardAds(activity, nativeId);
+
             adCallback.onRewardedAdFailedToShow(0);
             return;
+        } else {
+            rewardedInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                @Override
+                public void onAdDismissedFullScreenContent() {
+                    super.onAdDismissedFullScreenContent();
+                    if (adCallback != null)
+                        adCallback.onRewardedAdClosed();
+
+                    AppOpenManager.getInstance().setInterstitialShowing(false);
+
+                }
+
+                @Override
+                public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                    super.onAdFailedToShowFullScreenContent(adError);
+                    if (adCallback != null)
+                        adCallback.onRewardedAdFailedToShow(adError.getCode());
+                }
+
+                @Override
+                public void onAdShowedFullScreenContent() {
+                    super.onAdShowedFullScreenContent();
+
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+
+                }
+
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    ERainLogEventManager.logClickAdsEvent(activity, rewardedAd.getAdUnitId());
+                    if (disableAdResumeWhenClickAds)
+                        AppOpenManager.getInstance().disableAdResumeByClickAction();
+                }
+            });
+            rewardedInterstitialAd.show(activity, new OnUserEarnedRewardListener() {
+                @Override
+                public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
+                    if (adCallback != null) {
+                        adCallback.onUserEarnedReward(rewardItem);
+                    }
+                }
+            });
         }
-        RewardPresentation presentation = RewardPresentation.acquire(activity, AdFormat.REWARDED_INTERSTITIAL,
-                rewardedInterstitialAd.getAdUnitId(), adCallback, disableAdResumeWhenClickAds,
-                () -> {}, () -> {});
-        if (presentation == null) return;
-        presentation.show(() -> rewardedInterstitialAd.setFullScreenContentCallback(presentation),
-                () -> rewardedInterstitialAd.show(activity, presentation));
     }
 
 
@@ -1992,22 +2185,58 @@ public class Admob {
             return;
         }
         if (rewardedAd == null) {
-            if (FullscreenPresentationOwner.getInstance().isBusy()) {
-                if (adCallback != null) adCallback.onAdShowRejected(AdSkipReason.PRESENTATION_BUSY);
-                return;
-            }
             initRewardAds(context, nativeId);
+
             adCallback.onRewardedAdFailedToShow(0);
             return;
+        } else {
+            rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                @Override
+                public void onAdDismissedFullScreenContent() {
+                    super.onAdDismissedFullScreenContent();
+                    if (adCallback != null)
+                        adCallback.onRewardedAdClosed();
+
+
+                    AppOpenManager.getInstance().setInterstitialShowing(false);
+
+                }
+
+                @Override
+                public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                    super.onAdFailedToShowFullScreenContent(adError);
+                    if (adCallback != null)
+                        adCallback.onRewardedAdFailedToShow(adError.getCode());
+                }
+
+                @Override
+                public void onAdShowedFullScreenContent() {
+                    super.onAdShowedFullScreenContent();
+
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+                    initRewardAds(context, nativeId);
+                }
+
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    if (disableAdResumeWhenClickAds)
+                        AppOpenManager.getInstance().disableAdResumeByClickAction();
+                    if (adCallback != null) {
+                        adCallback.onAdClicked();
+                    }
+                    ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
+                }
+            });
+            rewardedAd.show(context, new OnUserEarnedRewardListener() {
+                @Override
+                public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
+                    if (adCallback != null) {
+                        adCallback.onUserEarnedReward(rewardItem);
+
+                    }
+                }
+            });
         }
-        final String adUnitId = rewardedAd.getAdUnitId();
-        RewardPresentation presentation = RewardPresentation.acquire(context, AdFormat.REWARDED,
-                adUnitId, adCallback, disableAdResumeWhenClickAds,
-                () -> { if (Admob.this.rewardedAd == rewardedAd) Admob.this.rewardedAd = null; },
-                () -> initRewardAds(context, adUnitId));
-        if (presentation == null) return;
-        presentation.show(() -> rewardedAd.setFullScreenContentCallback(presentation),
-                () -> rewardedAd.show(context, presentation));
     }
 
 
@@ -2050,6 +2279,7 @@ public class Admob {
     private final static int NATIVE_ADS = 5;
 
 
+    private boolean isShowInterstitialSplashSuccess = false;
     private boolean isInterHigh1Failed = false;
     private boolean isInterHigh2Loaded = false;
     private boolean isInterHigh3Loaded = false;
@@ -2191,158 +2421,360 @@ public class Admob {
         });
     }
 
+    private boolean isFailedPriority = false;
 
     public void onShowSplashPriority4(AppCompatActivity activity, AdCallback adListener) {
-        new SplashPriorityPresentation(activity, adListener, openActivityAfterShowInterAds).showFrom(0);
-    }
-
-    private enum SplashSlot { STANDARD, HIGH1, HIGH2, HIGH3, NORMAL }
-    private InterstitialPreparation activeSplashPreparation;
-
-    /** Splash keeps its existing pacing and 800/1500 ms timing, with captured cache/UI ownership. */
-    private void showBufferedSplash(AppCompatActivity activity, AdCallback callback, SplashSlot slot,
-                                    InterstitialAd ad, boolean underAd) {
-        if (ad == null) {
-            if (callback != null) notifyPresentationCallback(() -> callback.onAdShowRejected(AdSkipReason.NOT_READY));
-            return;
-        }
-        InterstitialPreparation preparation = new InterstitialPreparation();
-        preparation.splashSlot = slot;
-        prepareInterstitialPresentation(activity, ad, callback, underAd, preparation, false,
-                slot == SplashSlot.STANDARD, InterShowOptions.DEFAULT);
-    }
-
-    private InterstitialAd splashAdAt(SplashSlot slot) {
-        switch (slot) {
-            case STANDARD: return mInterstitialSplash;
-            case HIGH1: return mInterSplashHigh1;
-            case HIGH2: return mInterSplashHigh2;
-            case HIGH3: return mInterSplashHigh3;
-            case NORMAL: return mInterSplashNormal;
-            default: throw new AssertionError(slot);
-        }
-    }
-
-    private void consumeSplashAd(SplashSlot slot, InterstitialAd ad) {
-        switch (slot) {
-            case STANDARD: if (mInterstitialSplash == ad) mInterstitialSplash = null; break;
-            case HIGH1: if (mInterSplashHigh1 == ad) mInterSplashHigh1 = null; break;
-            case HIGH2: if (mInterSplashHigh2 == ad) mInterSplashHigh2 = null; break;
-            case HIGH3: if (mInterSplashHigh3 == ad) mInterSplashHigh3 = null; break;
-            case NORMAL: if (mInterSplashNormal == ad) mInterSplashNormal = null; break;
-        }
-    }
-
-    private void cancelSplashTimeout(SplashSlot slot) {
-        Handler handler;
-        Runnable timeout;
-        switch (slot) {
-            case STANDARD: handler = handlerTimeout; timeout = rdTimeout; break;
-            case HIGH1: handler = handlerTimeoutHigh1; timeout = rdTimeoutHigh1; break;
-            case HIGH2: handler = handlerTimeoutHigh2; timeout = rdTimeoutHigh2; break;
-            case HIGH3: handler = handlerTimeoutHigh3; timeout = rdTimeoutHigh3; break;
-            case NORMAL: handler = handlerTimeoutNormal; timeout = rdTimeoutNormal; break;
-            default: throw new AssertionError(slot);
-        }
-        if (handler != null && timeout != null) handler.removeCallbacks(timeout);
-    }
-
-    private void attachSplashPaidCallback(Context host, InterstitialAd ad) {
-        ad.setOnPaidEventListener(value -> {
-            ERainLogEventManager.logPaidAdImpression(host, value, ad.getAdUnitId(),
-                    ad.getResponseInfo().getMediationAdapterClassName(), AdType.INTERSTITIAL);
-            ERainLogEventManager.logPaidAdjustWithToken(value, ad.getAdUnitId());
-        });
-    }
-
-    /** Tier failure and navigation belong to one public call, never to a shared mutable flag. */
-    private final class SplashPriorityPresentation {
-        private final SplashSlot[] tiers = {SplashSlot.HIGH1, SplashSlot.HIGH2, SplashSlot.HIGH3, SplashSlot.NORMAL};
-        private final AppCompatActivity activity;
-        private final AdCallback callback;
-        private final boolean underAd;
-        private boolean ended;
-        private boolean nextDelivered;
-        private AdError lastFailure;
-
-        SplashPriorityPresentation(AppCompatActivity activity, AdCallback callback, boolean underAd) {
-            this.activity = activity;
-            this.callback = callback;
-            this.underAd = underAd;
-        }
-
-        private void nextOnce() {
-            if (nextDelivered) return;
-            nextDelivered = true;
-            if (callback != null) notifyPresentationCallback(callback::onNextAction);
-        }
-
-        void showFrom(int start) {
-            if (ended) return;
-            int candidate = start;
-            while (candidate < tiers.length && splashAdAt(tiers[candidate]) == null) candidate++;
-            if (candidate == tiers.length) {
-                ended = true;
-                if (lastFailure == null && !nextDelivered && callback != null) {
-                    nextDelivered = true;
-                    notifyPresentationCallback(() -> callback.onAdShowRejected(AdSkipReason.NOT_READY));
-                } else {
-                    if (lastFailure != null && callback != null) {
-                        notifyPresentationCallback(() -> callback.onAdFailedToShow(lastFailure));
-                    }
-                    nextOnce();
+        isFailedPriority = false;
+        if (mInterSplashHigh1 != null) {
+            onShowSplashHigh1(activity, new AdCallback() {
+                @Override
+                public void onAdClosed() {
+                    super.onAdClosed();
+                    adListener.onAdClosed();
                 }
-                return;
-            }
-            final int index = candidate;
-            final SplashSlot slot = tiers[index];
-            showBufferedSplash(activity, new AdCallback() {
-                private boolean failed;
-                @Override public AdSkipReason getAdShowSkipReason() {
-                    return callback == null ? null : callback.getAdShowSkipReason();
+
+                @Override
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    adListener.onAdClicked();
                 }
-                @Override public void onNextAction() { if (!failed && !ended) nextOnce(); }
-                @Override public void onAdPresented() {
-                    if (!ended && callback != null) notifyPresentationCallback(callback::onAdPresented);
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    adListener.onAdImpression();
                 }
-                @Override public void onAdImpression() {
-                    if (!ended && callback != null) notifyPresentationCallback(callback::onAdImpression);
+
+                @Override
+                public void onInterstitialShow() {
+                    super.onInterstitialShow();
                 }
-                @Override public void onAdClicked() {
-                    if (!ended && callback != null) notifyPresentationCallback(callback::onAdClicked);
+
+                @Override
+                public void onAdFailedToShow(@Nullable AdError adError) {
+                    super.onAdFailedToShow(adError);
+                    isShowLoadingSplash = false;
+                    Log.i(TAG, "onAdFailedToShowPriority: ");
+                    adListener.onAdPriorityFailedToShow(adError);
+                    isFailedPriority = true;
+                    onShowSplashHigh2(activity, new AdCallback() {
+                        @Override
+                        public void onAdClosed() {
+                            super.onAdClosed();
+                            adListener.onAdClosed();
+                        }
+
+                        @Override
+                        public void onAdClicked() {
+                            super.onAdClicked();
+                            adListener.onAdClicked();
+                        }
+
+                        @Override
+                        public void onAdImpression() {
+                            super.onAdImpression();
+                            adListener.onAdImpression();
+                        }
+
+                        @Override
+                        public void onAdFailedToShow(@Nullable AdError adError) {
+                            super.onAdFailedToShow(adError);
+                            isShowLoadingSplash = false;
+                            adListener.onAdPriorityFailedToShow(adError);
+                            isFailedPriority = true;
+                            onShowSplashHigh3(activity, new AdCallback() {
+                                @Override
+                                public void onAdClosed() {
+                                    super.onAdClosed();
+                                    adListener.onAdClosed();
+                                }
+
+                                @Override
+                                public void onAdClicked() {
+                                    super.onAdClicked();
+                                    adListener.onAdClicked();
+                                }
+
+                                @Override
+                                public void onAdImpression() {
+                                    super.onAdImpression();
+                                    adListener.onAdImpression();
+                                }
+
+                                @Override
+                                public void onAdFailedToShow(@Nullable AdError adError) {
+                                    super.onAdFailedToShow(adError);
+                                    isShowLoadingSplash = false;
+                                    adListener.onAdPriorityFailedToShow(adError);
+                                    isFailedPriority = true;
+                                    onShowSplashNormal(activity, new AdCallback() {
+                                        @Override
+                                        public void onAdClosed() {
+                                            super.onAdClosed();
+                                            adListener.onAdClosed();
+                                        }
+
+                                        @Override
+                                        public void onAdClicked() {
+                                            super.onAdClicked();
+                                            adListener.onAdClicked();
+                                        }
+
+                                        @Override
+                                        public void onAdImpression() {
+                                            super.onAdImpression();
+                                            adListener.onAdImpression();
+                                        }
+
+                                        @Override
+                                        public void onAdFailedToShow(@Nullable AdError adError) {
+                                            super.onAdFailedToShow(adError);
+                                            isShowLoadingSplash = false;
+                                            adListener.onAdFailedToShow(adError);
+                                        }
+
+                                        @Override
+                                        public void onNextAction() {
+                                            super.onNextAction();
+                                            adListener.onNextAction();
+                                        }
+                                    });
+                                }
+
+                                @Override
+                                public void onNextAction() {
+                                    super.onNextAction();
+                                    if (!isFailedPriority) {
+                                        adListener.onNextAction();
+                                    }
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onNextAction() {
+                            super.onNextAction();
+                            if (!isFailedPriority) {
+                                adListener.onNextAction();
+                            }
+                        }
+                    });
                 }
-                @Override public void onAdClosed() {
-                    if (ended) return;
-                    ended = true;
-                    if (callback != null) notifyPresentationCallback(callback::onAdClosed);
-                }
-                @Override public void onAdShowRejected(@NonNull AdSkipReason reason) {
-                    if (ended) return;
-                    ended = true;
-                    if (callback == null) return;
-                    if (!nextDelivered) {
-                        nextDelivered = true;
-                        notifyPresentationCallback(() -> callback.onAdShowRejected(reason));
-                    } else if (lastFailure != null) {
-                        // UnderAd already advanced on an actual failed tier. Complete with that
-                        // vendor failure; default rejection must not navigate a second time.
-                        notifyPresentationCallback(() -> callback.onAdFailedToShow(lastFailure));
-                    }
-                }
-                @Override public void onAdFailedToShow(@Nullable AdError error) {
-                    if (failed || ended) return;
-                    failed = true;
-                    lastFailure = error;
-                    if (index < tiers.length - 1) {
-                        if (callback != null) notifyPresentationCallback(() -> callback.onAdPriorityFailedToShow(error));
-                        showFrom(index + 1);
-                    } else {
-                        ended = true;
-                        if (callback != null) notifyPresentationCallback(() -> callback.onAdFailedToShow(error));
-                        nextOnce();
+
+                @Override
+                public void onNextAction() {
+                    super.onNextAction();
+                    if (!isFailedPriority) {
+                        adListener.onNextAction();
                     }
                 }
-            }, slot, splashAdAt(slot), underAd);
+            });
+        } else if (mInterSplashHigh2 != null) {
+            onShowSplashHigh2(activity, new AdCallback() {
+                @Override
+                public void onAdClosed() {
+                    super.onAdClosed();
+                    adListener.onAdClosed();
+                }
+
+                @Override
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    adListener.onAdClicked();
+                }
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    adListener.onAdImpression();
+                }
+
+                @Override
+                public void onAdFailedToShow(@Nullable AdError adError) {
+                    super.onAdFailedToShow(adError);
+                    isShowLoadingSplash = false;
+                    adListener.onAdPriorityFailedToShow(adError);
+                    isFailedPriority = true;
+                    onShowSplashHigh3(activity, new AdCallback() {
+                        @Override
+                        public void onAdClosed() {
+                            super.onAdClosed();
+                            adListener.onAdClosed();
+                        }
+
+                        @Override
+                        public void onAdClicked() {
+                            super.onAdClicked();
+                            adListener.onAdClicked();
+                        }
+
+                        @Override
+                        public void onAdImpression() {
+                            super.onAdImpression();
+                            adListener.onAdImpression();
+                        }
+
+                        @Override
+                        public void onAdFailedToShow(@Nullable AdError adError) {
+                            super.onAdFailedToShow(adError);
+                            isShowLoadingSplash = false;
+                            adListener.onAdPriorityFailedToShow(adError);
+                            isFailedPriority = true;
+                            onShowSplashNormal(activity, new AdCallback() {
+                                @Override
+                                public void onAdClosed() {
+                                    super.onAdClosed();
+                                    adListener.onAdClosed();
+                                }
+
+                                @Override
+                                public void onAdClicked() {
+                                    super.onAdClicked();
+                                    adListener.onAdClicked();
+                                }
+
+                                @Override
+                                public void onAdImpression() {
+                                    super.onAdImpression();
+                                    adListener.onAdImpression();
+                                }
+
+                                @Override
+                                public void onAdFailedToShow(@Nullable AdError adError) {
+                                    super.onAdFailedToShow(adError);
+                                    isShowLoadingSplash = false;
+                                    adListener.onAdFailedToShow(adError);
+                                }
+
+                                @Override
+                                public void onNextAction() {
+                                    super.onNextAction();
+                                    adListener.onNextAction();
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onNextAction() {
+                            super.onNextAction();
+                            if (!isFailedPriority) {
+                                adListener.onNextAction();
+                            }
+                        }
+                    });
+                }
+
+                @Override
+                public void onNextAction() {
+                    super.onNextAction();
+                    if (!isFailedPriority) {
+                        adListener.onNextAction();
+                    }
+                }
+            });
+        } else if (mInterSplashHigh3 != null) {
+            onShowSplashHigh3(activity, new AdCallback() {
+                @Override
+                public void onAdClosed() {
+                    super.onAdClosed();
+                    adListener.onAdClosed();
+                }
+
+                @Override
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    adListener.onAdClicked();
+                }
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    adListener.onAdImpression();
+                }
+
+                @Override
+                public void onAdFailedToShow(@Nullable AdError adError) {
+                    super.onAdFailedToShow(adError);
+                    isShowLoadingSplash = false;
+                    adListener.onAdPriorityFailedToShow(adError);
+                    isFailedPriority = true;
+                    onShowSplashNormal(activity, new AdCallback() {
+                        @Override
+                        public void onAdClosed() {
+                            super.onAdClosed();
+                            adListener.onAdClosed();
+                        }
+
+                        @Override
+                        public void onAdClicked() {
+                            super.onAdClicked();
+                            adListener.onAdClicked();
+                        }
+
+                        @Override
+                        public void onAdImpression() {
+                            super.onAdImpression();
+                            adListener.onAdImpression();
+                        }
+
+                        @Override
+                        public void onAdFailedToShow(@Nullable AdError adError) {
+                            super.onAdFailedToShow(adError);
+                            isShowLoadingSplash = false;
+                            adListener.onAdFailedToShow(adError);
+                        }
+
+                        @Override
+                        public void onNextAction() {
+                            super.onNextAction();
+                            adListener.onNextAction();
+                        }
+                    });
+                }
+
+                @Override
+                public void onNextAction() {
+                    super.onNextAction();
+                    if (!isFailedPriority) {
+                        adListener.onNextAction();
+                    }
+                }
+            });
+        } else if (mInterSplashNormal != null) {
+            onShowSplashNormal(activity, new AdCallback() {
+                @Override
+                public void onAdClosed() {
+                    super.onAdClosed();
+                    adListener.onAdClosed();
+                }
+
+                @Override
+                public void onAdClicked() {
+                    super.onAdClicked();
+                    adListener.onAdClicked();
+                }
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    adListener.onAdImpression();
+                }
+
+                @Override
+                public void onAdFailedToShow(@Nullable AdError adError) {
+                    super.onAdFailedToShow(adError);
+                    isShowLoadingSplash = false;
+                    adListener.onAdFailedToShow(adError);
+                }
+
+                @Override
+                public void onNextAction() {
+                    super.onNextAction();
+                    adListener.onNextAction();
+                }
+            });
+        } else {
+            adListener.onNextAction();
         }
     }
 
@@ -2446,7 +2878,145 @@ public class Admob {
     }
 
     private void onShowSplashHigh1(AppCompatActivity activity, AdCallback adListener) {
-        showBufferedSplash(activity, adListener, SplashSlot.HIGH1, mInterSplashHigh1, openActivityAfterShowInterAds);
+        isShowLoadingSplash = true;
+        if (mInterSplashHigh1 == null) {
+            adListener.onNextAction();
+            return;
+        }
+
+        if (handlerTimeoutHigh1 != null && rdTimeoutHigh1 != null) {
+            handlerTimeoutHigh1.removeCallbacks(rdTimeoutHigh1);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterSplashHigh1.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                super.onAdShowedFullScreenContent();
+                isShowInterstitialSplashSuccess = true;
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
+                isShowLoadingSplash = true;
+                mInterSplashHigh1 = null;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                super.onAdDismissedFullScreenContent();
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterSplashHigh1 = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                super.onAdFailedToShowFullScreenContent(adError);
+                mInterSplashHigh1 = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (adListener != null) {
+                    adListener.onAdClicked();
+                }
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh1.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                try {
+                    if (dialog != null && dialog.isShowing()) {
+                        dialog.dismiss();
+                    }
+                } catch (Exception e) {
+                    dialog = null;
+                    e.printStackTrace();
+                }
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                } catch (Exception e) {
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterSplashHigh1 != null) {
+                        Log.i(TAG, "start show InterstitialAd " + activity.getLifecycle().getCurrentState().name() + "/" + ProcessLifecycleOwner.get().getLifecycle().getCurrentState().name());
+                        mInterSplashHigh1.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    Log.e(TAG, "onShowSplash:   show fail in background after show loading ad");
+                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "MiaAd"));
+                }
+            }, 800);
+        } else {
+            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "MiaAd"));
+            Log.e(TAG, "onShowSplash: fail on background");
+            isShowLoadingSplash = false;
+        }
+
     }
 
     private InterstitialAd mInterSplashHigh2;
@@ -2540,7 +3110,148 @@ public class Admob {
     }
 
     private void onShowSplashHigh2(AppCompatActivity activity, AdCallback adListener) {
-        showBufferedSplash(activity, adListener, SplashSlot.HIGH2, mInterSplashHigh2, openActivityAfterShowInterAds);
+        isShowLoadingSplash = true;
+        if (mInterSplashHigh2 == null) {
+            isShowLoadingSplash = false;
+            adListener.onAdFailedToShow(new AdError(0, "mInterSplashHigh2 null", "MiaAd"));
+            adListener.onNextAction();
+            return;
+        }
+
+        if (handlerTimeoutHigh2 != null && rdTimeoutHigh2 != null) {
+            handlerTimeoutHigh2.removeCallbacks(rdTimeoutHigh2);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterSplashHigh2.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                super.onAdShowedFullScreenContent();
+                isShowInterstitialSplashSuccess = true;
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
+                isShowLoadingSplash = false;
+                mInterSplashHigh2 = null;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                super.onAdDismissedFullScreenContent();
+                Log.d(TAG, " Splash:onAdDismissedFullScreenContent ");
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterSplashHigh2 = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                super.onAdFailedToShowFullScreenContent(adError);
+                Log.e(TAG, "Splash onAdFailedToShowFullScreenContent: " + adError.getMessage());
+                mInterSplashHigh2 = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (adListener != null) {
+                    adListener.onAdClicked();
+                }
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh2.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                try {
+                    if (dialog != null && dialog.isShowing()) {
+                        dialog.dismiss();
+                    }
+                } catch (Exception e) {
+                    dialog = null;
+                    e.printStackTrace();
+                }
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                } catch (Exception e) {
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterSplashHigh2 != null) {
+                        Log.i(TAG, "start show InterstitialAd " + activity.getLifecycle().getCurrentState().name() + "/" + ProcessLifecycleOwner.get().getLifecycle().getCurrentState().name());
+                        mInterSplashHigh2.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
+                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+                }
+            }, 800);
+
+        } else {
+            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+            Log.e(TAG, "onShowSplash: fail on background");
+            isShowLoadingSplash = false;
+        }
     }
 
     private InterstitialAd mInterSplashHigh3;
@@ -2634,7 +3345,148 @@ public class Admob {
     }
 
     private void onShowSplashHigh3(AppCompatActivity activity, AdCallback adListener) {
-        showBufferedSplash(activity, adListener, SplashSlot.HIGH3, mInterSplashHigh3, openActivityAfterShowInterAds);
+        isShowLoadingSplash = true;
+        if (mInterSplashHigh3 == null) {
+            isShowLoadingSplash = false;
+            adListener.onAdFailedToShow(new AdError(0, "mInterSplashHigh3 null", "MiaAd"));
+            adListener.onNextAction();
+            return;
+        }
+
+        if (handlerTimeoutHigh3 != null && rdTimeoutHigh3 != null) {
+            handlerTimeoutHigh3.removeCallbacks(rdTimeoutHigh3);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterSplashHigh3.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                super.onAdShowedFullScreenContent();
+                isShowInterstitialSplashSuccess = true;
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                // The line above already holds app-resume off for as long as this ad is on screen.
+                // Toggling the durable enable/disable switch here as well overwrote the entry-mode
+                // decision, and its enable() on dismiss turned app-resume ON in modes that had it off.
+                AppOpenManager.getInstance().disableAdResumeByClickAction();
+                isShowLoadingSplash = false;
+                mInterSplashHigh3 = null;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                super.onAdDismissedFullScreenContent();
+                Log.d(TAG, " Splash:onAdDismissedFullScreenContent ");
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterSplashHigh3 = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                super.onAdFailedToShowFullScreenContent(adError);
+                Log.e(TAG, "Splash onAdFailedToShowFullScreenContent: " + adError.getMessage());
+                mInterSplashHigh3 = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (adListener != null) {
+                    adListener.onAdClicked();
+                }
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh3.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                try {
+                    if (dialog != null && dialog.isShowing()) {
+                        dialog.dismiss();
+                    }
+                } catch (Exception e) {
+                    dialog = null;
+                    e.printStackTrace();
+                }
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                } catch (Exception e) {
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterSplashHigh3 != null) {
+                        Log.i(TAG, "start show InterstitialAd " + activity.getLifecycle().getCurrentState().name() + "/" + ProcessLifecycleOwner.get().getLifecycle().getCurrentState().name());
+                        mInterSplashHigh3.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
+                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+                }
+            }, 800);
+
+        } else {
+            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+            Log.e(TAG, "onShowSplash: fail on background");
+            isShowLoadingSplash = false;
+        }
     }
 
     private InterstitialAd mInterSplashNormal;
@@ -2728,14 +3580,171 @@ public class Admob {
     }
 
     public void onShowSplashNormal(AppCompatActivity activity, AdCallback adListener) {
-        showBufferedSplash(activity, adListener, SplashSlot.NORMAL, mInterSplashNormal, openActivityAfterShowInterAds);
+        isShowLoadingSplash = true;
+
+        if (mInterSplashNormal == null) {
+            adListener.onNextAction();
+            return;
+        }
+
+        mInterSplashNormal.setOnPaidEventListener(adValue -> {
+            ERainLogEventManager.logPaidAdImpression(context,
+                    adValue,
+                    mInterSplashNormal.getAdUnitId(),
+                    mInterSplashNormal.getResponseInfo()
+                            .getMediationAdapterClassName(), AdType.INTERSTITIAL);
+            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId());
+        });
+
+        if (handlerTimeoutNormal != null && rdTimeoutNormal != null) {
+            handlerTimeoutNormal.removeCallbacks(rdTimeoutNormal);
+        }
+
+        if (adListener != null) {
+            adListener.onAdLoaded();
+        }
+
+        mInterSplashNormal.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdShowedFullScreenContent() {
+                isShowInterstitialSplashSuccess = true;
+                AppOpenManager.getInstance().setInterstitialShowing(true);
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                AppOpenManager.getInstance().setInterstitialShowing(false);
+                mInterSplashNormal = null;
+                if (adListener != null) {
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+                    adListener.onAdClosed();
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+                isShowLoadingSplash = false;
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                mInterSplashNormal = null;
+                isShowLoadingSplash = false;
+                if (adListener != null) {
+                    adListener.onAdFailedToShow(adError);
+                    if (!openActivityAfterShowInterAds) {
+                        adListener.onNextAction();
+                    }
+
+                    if (dialog != null) {
+                        dialog.dismiss();
+                    }
+                }
+            }
+
+            @Override
+            public void onAdClicked() {
+                super.onAdClicked();
+                if (disableAdResumeWhenClickAds)
+                    AppOpenManager.getInstance().disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(context, mInterSplashNormal.getAdUnitId());
+            }
+
+            @Override
+            public void onAdImpression() {
+                super.onAdImpression();
+                if (adListener != null) {
+                    adListener.onAdImpression();
+                }
+            }
+        });
+
+        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                if (dialog != null && dialog.isShowing())
+                    dialog.dismiss();
+                dialog = new PrepareLoadingAdsDialog(activity);
+                try {
+                    dialog.show();
+                    AppOpenManager.getInstance().setInterstitialShowing(true);
+                } catch (Exception e) {
+                    assert adListener != null;
+                    adListener.onNextAction();
+                    return;
+                }
+            } catch (Exception e) {
+                dialog = null;
+                e.printStackTrace();
+            }
+            new Handler().postDelayed(() -> {
+                if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                    if (openActivityAfterShowInterAds && adListener != null) {
+                        adListener.onNextAction();
+                        new Handler().postDelayed(() -> {
+                            if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                                dialog.dismiss();
+                        }, 1500);
+                    }
+                    if (mInterSplashNormal != null) {
+                        mInterSplashNormal.show(activity);
+                        isShowLoadingSplash = false;
+                    } else if (adListener != null) {
+                        if (dialog != null) {
+                            dialog.dismiss();
+                        }
+                        adListener.onNextAction();
+                        isShowLoadingSplash = false;
+                    }
+                } else {
+                    if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
+                        dialog.dismiss();
+                    isShowLoadingSplash = false;
+                    assert adListener != null;
+                    adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
+                }
+            }, 800);
+
+        } else {
+            isShowLoadingSplash = false;
+        }
     }
 
     public void onCheckShowSplashPriority4WhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
-        final boolean underAd = openActivityAfterShowInterAds;
         new Handler(activity.getMainLooper()).postDelayed(() -> {
             if (!isShowLoadingSplash() && (mInterSplashHigh1 != null || mInterSplashHigh2 != null || mInterSplashHigh3 != null || mInterSplashNormal != null)) {
-                new SplashPriorityPresentation(activity, callback, underAd).showFrom(0);
+                onShowSplashPriority4(activity, new AdCallback() {
+                    @Override
+                    public void onAdClosed() {
+                        super.onAdClosed();
+                        Log.i(TAG, "onAdClosed: ");
+                        callback.onAdClosed();
+                    }
+
+                    @Override
+                    public void onAdPriorityFailedToShow(@Nullable AdError adError) {
+                        super.onAdPriorityFailedToShow(adError);
+                        Log.e(TAG, "onAdPriorityFailedToShow: ");
+                        callback.onAdPriorityFailedToShow(adError);
+                    }
+
+                    @Override
+                    public void onAdFailedToShow(@Nullable AdError adError) {
+                        super.onAdFailedToShow(adError);
+                        Log.e(TAG, "onAdFailedToShow: ");
+                        callback.onAdFailedToShow(adError);
+                        isShowLoadingSplash = false;
+                    }
+
+                    @Override
+                    public void onNextAction() {
+                        super.onNextAction();
+                        Log.i(TAG, "onNextAction: ");
+                        callback.onNextAction();
+                    }
+                });
             } else {
                 callback.onNextAction();
 

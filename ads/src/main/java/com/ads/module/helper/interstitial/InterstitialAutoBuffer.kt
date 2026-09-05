@@ -7,6 +7,7 @@ import android.util.Log
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
+import io.trackkit.ConsentState
 import java.util.concurrent.ConcurrentHashMap
 
 /** What the partner wants auto-buffered, and how hard. */
@@ -207,7 +208,7 @@ object InterstitialAutoBuffer {
         val context = appContext ?: return options.minTickMs
         // Never request before the UMP answer. AdGate does not cover consent, and this runs on a
         // timer rather than behind the flow's consent step.
-        if (!ConsentCenter.canRequestAds()) return options.minTickMs
+        if (ConsentCenter.state.value == ConsentState.UNKNOWN) return options.minTickMs
         // A paying user has nothing to wait for.
         if (AdGate.isPurchased(context)) return 0L
 
