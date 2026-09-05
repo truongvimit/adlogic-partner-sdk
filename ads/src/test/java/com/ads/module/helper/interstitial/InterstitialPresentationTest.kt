@@ -354,6 +354,273 @@ class InterstitialPresentationTest {
         assertEquals(1, next)
     }
 
+    @Test
+    fun `disabling loading retains the default delay and AfterDismiss waits for the real ad`() {
+        loadAndFill()
+        val dialogBefore = ShadowDialog.getLatestDialog()
+        val order = mutableListOf<String>()
+        Mockito.doAnswer { invocation ->
+            vendorHosts += invocation.getArgument<Activity>(0)
+            order += "vendor.show"
+            null
+        }.`when`(googleAd).show(Mockito.any(Activity::class.java))
+        val callback = object : InterShowCallback() {
+            override fun onPresented() { order += "presented" }
+            override fun onClosed() { order += "closed" }
+            override fun onComplete() { order += "complete" }
+        }
+        InterstitialAdManager.show(activity, PLACEMENT, callback,
+            options = InterShowOptions(showLoading = false),
+            nextAction = InterNextAction.AfterDismiss)
+
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        mainLooper.idleFor(799, TimeUnit.MILLISECONDS)
+        assertTrue(order.isEmpty())
+        assertEquals(0, vendorHosts.size)
+        mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(listOf("vendor.show"), order)
+        assertEquals(0, params("ad_show").size)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+
+        fullscreenCallback.onAdShowedFullScreenContent()
+        fullscreenCallback.onAdShowedFullScreenContent()
+        mainLooper.idle()
+        assertEquals(listOf("vendor.show", "presented"), order)
+        assertEquals(1, params("ad_show").size)
+        assertEquals(PLACEMENT, params("ad_show").single()["placement"])
+        assertEquals(UNIT, params("ad_show").single()["ad_unit_id"])
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        mainLooper.idle()
+        assertEquals(listOf("vendor.show", "presented", "closed", "complete"), order)
+        assertFalse(InterstitialAdManager.isReady(PLACEMENT))
+        assertEquals(0, params("ad_show_failed").size)
+        assertEquals(0, params("ad_skipped").size)
+    }
+
+    @Test
+    fun `zero delay stays queued and rechecks consent before vendor invocation`() {
+        loadAndFill()
+        val dialogBefore = ShadowDialog.getLatestDialog()
+        val result = RecordingShowCallback()
+        InterstitialAdManager.show(activity, PLACEMENT, result,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 0),
+            nextAction = InterNextAction.AfterDismiss)
+        assertEquals("Zero delay must not invoke show inline", 0, vendorHosts.size)
+        assertEquals(0, result.completed)
+
+        ConsentCenter.setHostConsent(false, false)
+        mainLooper.idle()
+
+        assertEquals(0, vendorHosts.size)
+        assertEquals(listOf(AdSkipReason.CONSENT_NOT_GRANTED), result.skipped)
+        assertEquals(1, result.completed)
+        assertEquals(0, result.presented)
+        assertFalse(InterstitialAdManager.isReady(PLACEMENT))
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        assertEquals("consent_not_granted", params("ad_skipped").single()["reason"])
+        assertEquals(0, params("ad_show").size)
+        assertEquals(0, params("ad_show_failed").size)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `custom delay without loading keeps UnderAd completion immediately before vendor show`() {
+        loadAndFill()
+        val dialogBefore = ShadowDialog.getLatestDialog()
+        val order = mutableListOf<String>()
+        Mockito.doAnswer { invocation ->
+            vendorHosts += invocation.getArgument<Activity>(0)
+            order += "vendor.show"
+            null
+        }.`when`(googleAd).show(Mockito.any(Activity::class.java))
+        val callback = object : InterShowCallback() {
+            override fun onComplete() { order += "complete" }
+            override fun onPresented() { order += "presented" }
+            override fun onClosed() { order += "closed" }
+        }
+        InterstitialAdManager.show(activity, PLACEMENT, callback,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 250),
+            nextAction = InterNextAction.UnderAd)
+
+        mainLooper.idleFor(249, TimeUnit.MILLISECONDS)
+        assertTrue(order.isEmpty())
+        assertEquals(0, vendorHosts.size)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(listOf("complete", "vendor.show"), order)
+        assertEquals(0, params("ad_show").size)
+        fullscreenCallback.onAdShowedFullScreenContent()
+        mainLooper.idle()
+        assertEquals(listOf("complete", "vendor.show", "presented"), order)
+        assertEquals(1, params("ad_show").size)
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        mainLooper.idleFor(1_500, TimeUnit.MILLISECONDS)
+        assertEquals(listOf("complete", "vendor.show", "presented", "closed"), order)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        assertEquals(0, params("ad_skipped").size)
+        assertEquals(0, params("ad_show_failed").size)
+    }
+
+    @Test
+    fun `Home during custom delay keeps the original fill for a queued zero delay retry`() {
+        val original = loadAndFill()
+        val dialogBefore = ShadowDialog.getLatestDialog()
+        val rejected = RecordingShowCallback()
+        InterstitialAdManager.show(activity, PLACEMENT, rejected,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 2_000),
+            nextAction = InterNextAction.AfterDismiss)
+        mainLooper.idleFor(100, TimeUnit.MILLISECONDS)
+        controller.pause().stop()
+        mainLooper.idleFor(1_900, TimeUnit.MILLISECONDS)
+
+        assertEquals(0, vendorHosts.size)
+        assertEquals(listOf(AdSkipReason.HOST_NOT_RESUMED), rejected.skipped)
+        assertEquals(1, rejected.completed)
+        assertEquals(0, rejected.presented)
+        assertTrue(InterstitialAdManager.isReady(PLACEMENT))
+        assertTrue(original.isReady)
+        assertSame(googleAd, original.interstitialAd)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        assertEquals("host_not_resumed", params("ad_skipped").single()["reason"])
+        assertEquals(0, params("ad_show").size)
+
+        returnFromHome()
+        assertSame(original, cachedThroughPublicLoad())
+        val retry = RecordingShowCallback()
+        InterstitialAdManager.show(activity, PLACEMENT, retry,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 0),
+            nextAction = InterNextAction.AfterDismiss)
+        assertEquals(0, vendorHosts.size)
+        mainLooper.idle()
+        assertEquals(listOf(activity), vendorHosts)
+        assertEquals(0, retry.completed)
+        assertEquals(0, params("ad_show").size)
+        fullscreenCallback.onAdShowedFullScreenContent()
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        mainLooper.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, retry.presented)
+        assertEquals(1, retry.closed)
+        assertEquals(1, retry.completed)
+        assertEquals(1, rejected.completed)
+        assertEquals(1, params("ad_show").size)
+        assertEquals(1, params("ad_skipped").size)
+        assertEquals(0, params("ad_show_failed").size)
+        assertEquals(1, requests.size)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+    }
+
+    @Test
+    fun `preparation without loading still rejects another placement without spending its fill`() {
+        loadAndFill()
+        val dialogBefore = ShadowDialog.getLatestDialog()
+        val first = RecordingShowCallback()
+        InterstitialAdManager.show(activity, PLACEMENT, first,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 1_500),
+            nextAction = InterNextAction.AfterDismiss)
+        val firstVendorCallback = fullscreenCallback
+        val secondPlacement = "options-second-placement"
+        val secondAd = replacementVendor()
+        var secondWrapper: ApInterstitialAd? = null
+        InterstitialAdManager.load(activity, secondPlacement, listOf(UNIT),
+            listener = object : AdCallback() {
+                override fun onApInterstitialLoad(ad: ApInterstitialAd?) { secondWrapper = ad }
+            })
+        requests.last().onAdLoaded(secondAd)
+        mainLooper.idle()
+        val second = RecordingShowCallback()
+        InterstitialAdManager.show(activity, secondPlacement, second,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 0),
+            nextAction = InterNextAction.AfterDismiss)
+
+        assertEquals(listOf(AdSkipReason.PRESENTATION_BUSY), second.skipped)
+        assertEquals(1, second.completed)
+        assertEquals(0, vendorHosts.size)
+        assertTrue(InterstitialAdManager.isReady(secondPlacement))
+        assertSame(secondAd, requireNotNull(secondWrapper).interstitialAd)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+        assertEquals("presentation_busy", params("ad_skipped").single()["reason"])
+        mainLooper.idleFor(1_500, TimeUnit.MILLISECONDS)
+        assertEquals(1, vendorHosts.size)
+        firstVendorCallback.onAdShowedFullScreenContent()
+        firstVendorCallback.onAdDismissedFullScreenContent()
+        assertEquals(1, first.completed)
+
+        val retry = RecordingShowCallback()
+        InterstitialAdManager.show(activity, secondPlacement, retry,
+            options = InterShowOptions(showLoading = false, preShowDelayMs = 0),
+            nextAction = InterNextAction.AfterDismiss)
+        assertEquals(1, vendorHosts.size)
+        mainLooper.idle()
+        assertEquals(2, vendorHosts.size)
+        fullscreenCallback.onAdShowedFullScreenContent()
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        mainLooper.idle()
+        assertEquals(1, retry.presented)
+        assertEquals(1, retry.completed)
+        assertEquals(2, params("ad_show").size)
+        assertEquals(1, params("ad_skipped").size)
+        assertEquals(2, requests.size)
+        assertSame(dialogBefore, ShadowDialog.getLatestDialog())
+    }
+
+    @Test
+    fun `show options accept both delay boundaries and reject values outside the reservation window`() {
+        val defaults = InterShowOptions()
+        assertTrue(defaults.showLoading)
+        assertEquals(800L, defaults.preShowDelayMs)
+        assertEquals(0L, InterShowOptions(preShowDelayMs = 0).preShowDelayMs)
+        assertEquals(89_999L, InterShowOptions(preShowDelayMs = 89_999).preShowDelayMs)
+        for (delay in listOf(-1L, Long.MIN_VALUE, 90_000L, Long.MAX_VALUE)) {
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                InterShowOptions(preShowDelayMs = delay)
+            }
+        }
+    }
+
+    @Test
+    @Config(shadows = [com.ads.module.admob.ResumeOwnershipDialogShadow::class])
+    fun `a rejected cosmetic window keeps the reservation and configured dispatch for the original ad`() {
+        loadAndFill()
+        val otherPlacement = "window-failure-other"
+        InterstitialAdManager.load(activity, otherPlacement, listOf("other-unit"))
+        val otherAd = Mockito.mock(InterstitialAd::class.java)
+        Mockito.`when`(otherAd.adUnitId).thenReturn("other-unit")
+        requests.last().onAdLoaded(otherAd)
+        val rejected = RecordingShowCallback()
+        val original = RecordingShowCallback()
+        val windows = com.ads.module.admob.ResumeOwnershipDialogShadow
+        windows.beforeShow = {
+            assertTrue(AppOpenManager.getInstance().isInterstitialShowing)
+            InterstitialAdManager.show(activity, otherPlacement, rejected,
+                options = InterShowOptions(showLoading = false, preShowDelayMs = 0))
+        }
+        windows.throwNextShow = true
+        try {
+            InterstitialAdManager.show(activity, PLACEMENT, original,
+                options = InterShowOptions(preShowDelayMs = 250),
+                nextAction = InterNextAction.AfterDismiss)
+            assertEquals(listOf(AdSkipReason.PRESENTATION_BUSY), rejected.skipped)
+            assertEquals(1, rejected.completed)
+            assertTrue(InterstitialAdManager.isReady(otherPlacement))
+            assertEquals(0, vendorHosts.size)
+
+            mainLooper.idleFor(250, TimeUnit.MILLISECONDS)
+            assertEquals(1, vendorHosts.size)
+            assertTrue(original.skipped.isEmpty())
+            assertEquals(0, original.completed)
+            assertEquals(0, params("ad_show_failed").size)
+            fullscreenCallback.onAdShowedFullScreenContent()
+            fullscreenCallback.onAdDismissedFullScreenContent()
+            assertEquals(1, original.presented)
+            assertEquals(1, original.completed)
+            assertFalse(AppOpenManager.getInstance().isInterstitialShowing)
+        } finally {
+            windows.beforeShow = null
+            windows.throwNextShow = false
+        }
+    }
+
     private fun loadAndFill(raw: InterstitialAd = googleAd): ApInterstitialAd {
         val before = requests.size
         var loaded: ApInterstitialAd? = null

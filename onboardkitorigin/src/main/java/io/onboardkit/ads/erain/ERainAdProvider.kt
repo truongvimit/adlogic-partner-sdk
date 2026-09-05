@@ -23,6 +23,7 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
+import com.ads.module.helper.interstitial.InterShowOptions
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
 import com.ads.module.tracking.AdLoadContext
@@ -63,8 +64,23 @@ class ERainAdProvider(
      * own budget (`ob_splash_ad_budget_ms`, `60 s`, the audited `LOAD_AD_TIMEOUT`). Lowering this
      * trades fill rate for speed — measure before you do.
      */
-    private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+    private val tierTimeoutMs: Long,
+    /**
+     * Immutable preparation options for this provider's interstitials. The default constructor
+     * keeps the loading dialog and 800 ms delay. Disabling the dialog leaves the delay and show
+     * gates intact; UnderAd navigation and its fixed 1,500 ms cosmetic cleanup do not change.
+     */
+    private val interstitialShowOptions: InterShowOptions,
 ) : PlacementAwareBannerProvider {
+
+    /** Retains the original Java constructors and Kotlin default-argument bridge. */
+    @JvmOverloads
+    constructor(tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS) :
+        this(tierTimeoutMs, InterShowOptions())
+
+    /** Uses the default waterfall timeout with explicit immutable interstitial preparation. */
+    constructor(interstitialShowOptions: InterShowOptions) :
+        this(AdWaterfall.DEFAULT_TIER_TIMEOUT_MS, interstitialShowOptions)
 
     init {
         // The flow reuses its splash interstitial at the language and pager exits, and decides
@@ -250,6 +266,7 @@ class ERainAdProvider(
                     notifyListener(key) { it.onClicked() }
                 }
             },
+            options = interstitialShowOptions,
             reportTelemetry = true,
             nextAction = InterNextAction.UnderAd,
         )

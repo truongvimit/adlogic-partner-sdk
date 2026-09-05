@@ -222,6 +222,22 @@ object InterstitialAdManager {
         callback: InterShowCallback,
         reportTelemetry: Boolean = true,
         nextAction: InterNextAction = defaultNextAction,
+    ) = show(context, placement, callback, InterShowOptions.DEFAULT, reportTelemetry, nextAction)
+
+    /**
+     * Shows with immutable preparation [options]. The original overload retains its default
+     * dialog/800 ms behavior and compiled Java/Kotlin entry points. Options change only cosmetic
+     * preparation; freshness, policy checks, callback order and [nextAction] are unchanged.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun show(
+        context: Context,
+        placement: String,
+        callback: InterShowCallback,
+        options: InterShowOptions,
+        reportTelemetry: Boolean = true,
+        nextAction: InterNextAction = defaultNextAction,
     ) {
         val blockReason = showSkipReason(context, placement)
         if (blockReason != null) {
@@ -340,6 +356,7 @@ object InterstitialAdManager {
             // Reloading is the caller's decision; the module doing it too double-requests.
             false,
             nextAction == InterNextAction.UnderAd,
+            options,
         )
     }
 

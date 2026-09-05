@@ -39,6 +39,7 @@ import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdGate;
 import com.ads.module.helper.AdSkipReason;
 import com.ads.module.helper.interstitial.InterstitialFrequency;
+import com.ads.module.helper.interstitial.InterShowOptions;
 import com.ads.module.tracking.AdTracking;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
@@ -82,8 +83,8 @@ import io.trackkit.PlacementRegistry;
 
 /**
  * Vendor ad adapters. Every retained interstitial, splash and rewarded show shares process-wide
- * fullscreen ownership with app-open resume, including cosmetic preparation. Interstitials keep
- * 800 ms preparation and 1500 ms UnderAd dialog cleanup. Splash captures its navigation mode per
+ * fullscreen ownership with app-open resume, including cosmetic preparation. Interstitials default
+ * to 800 ms preparation and keep fixed 1500 ms UnderAd dialog cleanup. Splash captures its navigation mode per
  * call; busy or pre-invocation rejection does not consume its chosen ad. Vendor callbacks own the
  * active presentation until terminal, independently of cache loads and navigation completion.
  */
@@ -565,11 +566,16 @@ public class Admob {
      * @param openNextUnderAd {@code true} fires {@code onNextAction} as the ad goes to the screen,
      *                        so the caller's next screen starts underneath it; {@code false} fires
      *                        it on dismissal instead. Taken as a parameter, not read from
-     *                        {@link #openActivityAfterShowInterAds}, because the field is read
-     *                        800 ms after the show begins — long enough for another placement to
-     *                        have changed what this presentation's callbacks mean.
+     *                        {@link #openActivityAfterShowInterAds}, because another placement may
+     *                        change the field during the configured preparation delay.
      */
     private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd, InterShowOptions.DEFAULT);
+    }
+
+    private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd,
+                                           final AdCallback callback, final boolean openNextUnderAd,
+                                           InterShowOptions options) {
         // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
         // so it can no longer be skipped by the load-time gate that never called it.
         AdSkipReason policy = AdGate.skipReason(context, true, true, false);
@@ -588,7 +594,7 @@ public class Admob {
 
 
         if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
-            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd, preparation);
+            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd, preparation, options);
             return;
         }
         notifyShowRejected(callback, AdSkipReason.CLICK_CAP, preparation);
@@ -645,15 +651,27 @@ public class Admob {
      * {@link #setOpenActivityAfterShowInterAds(boolean)}.
      */
     public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback, boolean openNextUnderAd) {
+        forceShowInterstitial(context, mInterstitialAd, callback, openNextUnderAd, InterShowOptions.DEFAULT);
+    }
+
+    /**
+     * Shows with immutable preparation options and captured navigation mode. Existing overloads
+     * retain the dialog and 800 ms delay; all options use the same ownership and final gates.
+     */
+    public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd,
+                                      final AdCallback callback, boolean openNextUnderAd,
+                                      @NonNull InterShowOptions options) {
+        Objects.requireNonNull(options, "options");
         currentClicked = numShowAds;
-        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd);
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd, options);
     }
 
     /**
      * Shows the ad when the click counter has reached the threshold, otherwise runs the next action.
      */
     private void showInterstitialAd(Context context, InterstitialAd ad, AdCallback callback,
-                                    boolean openNextUnderAd, InterstitialPreparation preparation) {
+                                    boolean openNextUnderAd, InterstitialPreparation preparation,
+                                    InterShowOptions options) {
         if (FullscreenPresentationOwner.getInstance().isBusy()) {
             notifyShowRejected(callback, AdSkipReason.PRESENTATION_BUSY, preparation);
             return;
@@ -665,13 +683,13 @@ public class Admob {
             return;
         }
         currentClicked = 0;
-        prepareInterstitialPresentation(context, ad, callback, openNextUnderAd, preparation, true, true);
+        prepareInterstitialPresentation(context, ad, callback, openNextUnderAd, preparation, true, true, options);
     }
 
     /** One preparation implementation for modern and retained splash interstitials. */
     private void prepareInterstitialPresentation(Context context, InterstitialAd ad, AdCallback callback,
                                                 boolean underAd, InterstitialPreparation preparation,
-                                                boolean checkCaps, boolean immersive) {
+                                                boolean checkCaps, boolean immersive, InterShowOptions options) {
         AdSkipReason rejection = interstitialShowSkipReason(context, ad.getAdUnitId(), callback, checkCaps);
         if (rejection != null) {
             notifyShowRejected(callback, rejection, preparation);
@@ -697,13 +715,15 @@ public class Admob {
         if (preparation.ended.get()) return;
         // Retain the raw splash ready notification without treating it as a new request or show.
         if (preparation.splashSlot != null && callback != null) notifyPresentationCallback(callback::onAdLoaded);
-        try {
-            preparation.loadingDialog = new PrepareLoadingAdsDialog(context);
-            preparation.loadingDialog.setCancelable(false);
-            preparation.loadingDialog.show();
-        } catch (RuntimeException error) {
-            preparation.dismissDialog();
-            Log.w(TAG, "Loading dialog unavailable; continuing interstitial presentation", error);
+        if (options.getShowLoading()) {
+            try {
+                preparation.loadingDialog = new PrepareLoadingAdsDialog(context);
+                preparation.loadingDialog.setCancelable(false);
+                preparation.loadingDialog.show();
+            } catch (RuntimeException error) {
+                preparation.dismissDialog();
+                Log.w(TAG, "Loading dialog unavailable; continuing interstitial presentation", error);
+            }
         }
         if (preparation.splashSlot == null && callback != null) {
             notifyPresentationCallback(callback::onInterstitialShow);
@@ -746,7 +766,7 @@ public class Admob {
                 notifyInterstitialFailure(callback, underAd,
                         new AdError(0, String.valueOf(error.getMessage()), TAG));
             }
-        }, 800);
+        }, options.getPreShowDelayMs());
     }
 
     private static void notifyPresentationCallback(Runnable action) {
@@ -2189,7 +2209,7 @@ public class Admob {
         InterstitialPreparation preparation = new InterstitialPreparation();
         preparation.splashSlot = slot;
         prepareInterstitialPresentation(activity, ad, callback, underAd, preparation, false,
-                slot == SplashSlot.STANDARD);
+                slot == SplashSlot.STANDARD, InterShowOptions.DEFAULT);
     }
 
     private InterstitialAd splashAdAt(SplashSlot slot) {

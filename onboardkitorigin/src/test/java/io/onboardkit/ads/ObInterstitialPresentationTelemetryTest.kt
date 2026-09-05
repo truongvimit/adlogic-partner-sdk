@@ -373,7 +373,7 @@ class ObPresentationActivity : AppCompatActivity() {
 }
 
 /** Real AndroidX process lifecycle bootstrap for a library unit-test manifest. */
-class ObPresentationApplication : Application() {
+open class ObPresentationApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         if (AppInitializer.getInstance(this).isEagerlyInitialized(ProcessLifecycleInitializer::class.java)) {

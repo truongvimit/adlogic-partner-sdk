@@ -30,6 +30,7 @@ import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdSkipReason;
 import com.ads.module.helper.interstitial.InterstitialFrequency;
+import com.ads.module.helper.interstitial.InterShowOptions;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.AppUtil;
@@ -411,17 +412,36 @@ public class ERainAd {
     public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
                                       @NonNull final AdCallback callback, boolean shouldReloadAds,
                                       boolean openNextUnderAd) {
+        forceShowInterstitial(context, mInterstitialAd, callback, shouldReloadAds,
+                openNextUnderAd, InterShowOptions.DEFAULT);
+    }
+
+    /**
+     * Shows with captured preparation options; existing overloads keep the dialog/800 ms default.
+     * Options do not change reload timing, navigation mode or pre-show eligibility.
+     */
+    public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
+                                      @NonNull final AdCallback callback, boolean shouldReloadAds,
+                                      boolean openNextUnderAd, @NonNull InterShowOptions options) {
+        java.util.Objects.requireNonNull(options, "options");
         final InterstitialAd shownAd = mInterstitialAd == null ? null : mInterstitialAd.getInterstitialAd();
         final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
         final AdCallback tracked = TrackingAdCallback.fullscreenPresentation(
                 PlacementRegistry.placementOf(adUnitId), AdFormat.INTERSTITIAL, adUnitId, callback);
-        forceShowTrackedInterstitial(context, mInterstitialAd, tracked, shouldReloadAds, openNextUnderAd);
+        forceShowTrackedInterstitial(context, mInterstitialAd, tracked, shouldReloadAds, openNextUnderAd, options);
     }
 
     /** Adapters enter here after selecting their single presentation tracker. */
     private void forceShowTrackedInterstitial(Context context, ApInterstitialAd mInterstitialAd,
                                               final AdCallback tracked, boolean shouldReloadAds,
                                               boolean openNextUnderAd) {
+        forceShowTrackedInterstitial(context, mInterstitialAd, tracked, shouldReloadAds,
+                openNextUnderAd, InterShowOptions.DEFAULT);
+    }
+
+    private void forceShowTrackedInterstitial(Context context, ApInterstitialAd mInterstitialAd,
+                                              final AdCallback tracked, boolean shouldReloadAds,
+                                              boolean openNextUnderAd, InterShowOptions options) {
         final InterstitialAd shownAd = mInterstitialAd == null ? null : mInterstitialAd.getInterstitialAd();
         final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
         if (!InterstitialFrequency.elapsed(context)) {
@@ -539,7 +559,7 @@ public class ERainAd {
             }
         };
         Admob.getInstance().forceShowInterstitial(context, shownAd,
-                adCallback, openNextUnderAd);
+                adCallback, openNextUnderAd, options);
     }
 
     public void loadNativeAdResultCallback(final Activity activity, String id,
