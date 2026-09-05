@@ -38,6 +38,7 @@ import com.ads.module.funtion.AdmobHelper;
 import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdGate;
 import com.ads.module.helper.AdSkipReason;
+import com.ads.module.helper.interstitial.InterstitialFrequency;
 import com.ads.module.tracking.AdTracking;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
@@ -76,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
@@ -824,23 +826,24 @@ public class Admob {
     private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
         // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
         // so it can no longer be skipped by the load-time gate that never called it.
-        if (AdGate.isPurchased(context)) {
-            callback.onNextAction();
+        AdSkipReason policy = AdGate.skipReason(context, true, true, false);
+        if (policy != null) {
+            if (callback != null) callback.onAdShowRejected(policy);
             return;
         }
         if (mInterstitialAd == null) {
             if (callback != null) {
-                callback.onNextAction();
+                callback.onAdShowRejected(AdSkipReason.NOT_READY);
             }
             return;
         }
 
+        final InterstitialPreparation preparation = new InterstitialPreparation();
         mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
 
             @Override
             public void onAdDismissedFullScreenContent() {
-                super.onAdDismissedFullScreenContent();
-                AppOpenManager.getInstance().setInterstitialShowing(false);
+                if (!preparation.finishInvoked()) return;
                 SharePreferenceUtils.setLastImpressionInterstitialTime(context);
                 if (callback != null) {
                     if (!openNextUnderAd) {
@@ -848,22 +851,11 @@ public class Admob {
                     }
                     callback.onAdClosed();
                 }
-                if (dialog != null) {
-                    dialog.dismiss();
-                }
             }
 
             @Override
             public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
-                super.onAdFailedToShowFullScreenContent(adError);
-                // Before the null check, and for the same reason as notifyShowFailed: the show
-                // path raised both, so a failure has to lower them whether or not anyone is
-                // listening. Leaving the flag up suppressed every app-resume ad until the
-                // AppOpenManager watchdog cleared it 90 s later.
-                AppOpenManager.getInstance().setInterstitialShowing(false);
-                if (dialog != null) {
-                    dialog.dismiss();
-                }
+                if (!preparation.finishInvoked()) return;
                 if (callback != null) {
                     callback.onAdFailedToShow(adError);
                     if (!openNextUnderAd) {
@@ -874,13 +866,19 @@ public class Admob {
 
             @Override
             public void onAdShowedFullScreenContent() {
-                super.onAdShowedFullScreenContent();
-                AppOpenManager.getInstance().setInterstitialShowing(true);
+                if (!preparation.wasInvoked() || !preparation.presented.compareAndSet(false, true)) return;
+                if (callback != null) callback.onAdPresented();
+            }
+
+            @Override
+            public void onAdImpression() {
+                if (!preparation.wasInvoked()) return;
+                if (callback != null) callback.onAdImpression();
             }
 
             @Override
             public void onAdClicked() {
-                super.onAdClicked();
+                if (!preparation.wasInvoked()) return;
                 if (disableAdResumeWhenClickAds)
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 if (callback != null) {
@@ -891,12 +889,10 @@ public class Admob {
         });
 
         if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
-            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd);
+            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd, preparation);
             return;
         }
-        if (callback != null) {
-            callback.onNextAction();
-        }
+        notifyShowRejected(callback, AdSkipReason.CLICK_CAP, preparation);
     }
 
 
@@ -920,44 +916,32 @@ public class Admob {
     /**
      * Shows the ad when the click counter has reached the threshold, otherwise runs the next action.
      */
-    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback, boolean openNextUnderAd) {
+    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback,
+                                    boolean openNextUnderAd, InterstitialPreparation preparation) {
         currentClicked++;
         if (currentClicked < numShowAds || mInterstitialAd == null) {
-            if (dialog != null) {
-                dialog.dismiss();
-            }
-            if (callback != null) {
-                callback.onNextAction();
-            }
+            notifyShowRejected(callback, mInterstitialAd == null
+                    ? AdSkipReason.NOT_READY : AdSkipReason.CAPPED_BY_MODULE, preparation);
             return;
         }
 
         currentClicked = 0;
 
-        // Every exit below reports something. This branch used to return in silence when the
-        // process was not resumed, leaving the caller waiting on a callback that never came.
-        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-            notifyShowFailed(callback, "Show fail: process is not resumed", openNextUnderAd);
+        AdSkipReason rejection = interstitialShowSkipReason(context, mInterstitialAd.getAdUnitId(), callback);
+        if (rejection != null) {
+            notifyShowRejected(callback, rejection, preparation);
             return;
         }
 
-        // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
-        // turns what was a ClassCastException on a background thread into a normal skip.
-        if (!(context instanceof AppCompatActivity)) {
-            notifyShowFailed(callback, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
-            return;
-        }
-
-        // The loading dialog is cosmetic; failing to put it up must never cost an impression.
+        // Preparation owns its cleanup even when the cosmetic dialog cannot be shown.
+        preparation.begin();
         try {
-            if (dialog != null && dialog.isShowing())
-                dialog.dismiss();
-            dialog = new PrepareLoadingAdsDialog(context);
-            dialog.setCancelable(false);
-            dialog.show();
-            AppOpenManager.getInstance().setInterstitialShowing(true);
+            preparation.loadingDialog = new PrepareLoadingAdsDialog(context);
+            dialog = preparation.loadingDialog;
+            preparation.loadingDialog.setCancelable(false);
+            preparation.loadingDialog.show();
         } catch (Exception e) {
-            dialog = null;
+            preparation.dismissDialog();
             Log.w(TAG, "showInterstitialAd: loading dialog unavailable, showing the ad anyway", e);
         }
 
@@ -967,45 +951,91 @@ public class Admob {
             callback.onInterstitialShow();
         }
 
-        new Handler().postDelayed(() -> {
-            if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                if (openNextUnderAd && callback != null) {
-                    // Same tick as show() below, deliberately: the next Activity has to be queued
-                    // before the ad's, or it is stacked on top of it instead of underneath.
-                    callback.onNextAction();
-                    new Handler().postDelayed(() -> {
-                        if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                            dialog.dismiss();
-                    }, 1500);
-                }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (preparation.ended.get()) return;
+            AdSkipReason delayedRejection = interstitialShowSkipReason(context, mInterstitialAd.getAdUnitId(), callback);
+            if (delayedRejection != null) {
+                notifyShowRejected(callback, delayedRejection, preparation);
+                return;
+            }
+            if (openNextUnderAd && callback != null) {
+                // Keep next -> vendor show on the same tick. Navigation itself may change the
+                // host state, so its transition is not a second policy check after commitment.
+                callback.onNextAction();
+                new Handler(Looper.getMainLooper()).postDelayed(preparation::dismissDialog, 1500);
+            }
+            try {
                 mInterstitialAd.setImmersiveMode(true);
+            } catch (Exception error) {
+                Log.w(TAG, "Immersive mode unavailable; continuing vendor show", error);
+            }
+            try {
+                preparation.invoked = true;
                 mInterstitialAd.show((Activity) context);
-            } else {
-                if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                    dialog.dismiss();
-                notifyShowFailed(callback, "Show fail in background after show loading ad", openNextUnderAd);
+            } catch (Exception error) {
+                // Vendor invocation was attempted: this is a consumed ad and a show failure.
+                if (!preparation.finish()) return;
+                if (callback != null) {
+                    callback.onAdFailedToShow(new AdError(0, String.valueOf(error.getMessage()), TAG));
+                    if (!openNextUnderAd) callback.onNextAction();
+                }
             }
         }, 800);
     }
 
-    /**
-     * Reports a presentation that never reached the screen.
-     * <p>
-     * onNextAction is still fired when the next screen was not opened under the ad, because that
-     * is the signal legacy call sites advance their flow on.
-     */
-    private void notifyShowFailed(AdCallback callback, String message, boolean openNextUnderAd) {
-        // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
-        // a presentation that dies here must lower it whether or not anyone is listening. Leaving
-        // it raised suppressed every app-resume ad for the rest of the process.
-        AppOpenManager.getInstance().setInterstitialShowing(false);
-        if (callback == null) {
-            return;
+    private AdSkipReason interstitialShowSkipReason(Context context, String adUnitId, AdCallback callback) {
+        if (!(context instanceof AppCompatActivity)) return AdSkipReason.INVALID_HOST;
+        AppCompatActivity host = (AppCompatActivity) context;
+        if (host.isFinishing() || host.isDestroyed()) return AdSkipReason.INVALID_HOST;
+        if (!host.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED))
+            return AdSkipReason.HOST_NOT_RESUMED;
+        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED))
+            return AdSkipReason.PROCESS_NOT_RESUMED;
+        AdSkipReason policy = AdGate.skipReason(context, true, true, false);
+        if (policy != null) return policy;
+        if (!InterstitialFrequency.elapsed(context)) return AdSkipReason.INTERVAL;
+        if (isClickCapReached(context, adUnitId)) return AdSkipReason.CLICK_CAP;
+        return callback == null ? null : callback.getAdShowSkipReason();
+    }
+
+    /** Declines before vendor invocation; the original wrapper remains reusable. */
+    private void notifyShowRejected(AdCallback callback, AdSkipReason reason,
+                                    InterstitialPreparation preparation) {
+        if (preparation.finish() && callback != null) callback.onAdShowRejected(reason);
+    }
+
+    /** One modern call's UI and terminal state; no cleanup reaches another call's dialog. */
+    private final class InterstitialPreparation {
+        final AtomicBoolean ended = new AtomicBoolean(false);
+        final AtomicBoolean presented = new AtomicBoolean(false);
+        PrepareLoadingAdsDialog loadingDialog;
+        boolean invoked;
+        boolean began;
+
+        void begin() {
+            began = true;
+            AppOpenManager.getInstance().setInterstitialShowing(true);
         }
-        Log.e(TAG, "showInterstitialAd: " + message);
-        callback.onAdFailedToShow(new AdError(0, message, TAG));
-        if (!openNextUnderAd) {
-            callback.onNextAction();
+
+        boolean wasInvoked() { return invoked && !ended.get(); }
+
+        boolean finishInvoked() { return invoked && finish(); }
+
+        boolean finish() {
+            if (!ended.compareAndSet(false, true)) return false;
+            if (began) AppOpenManager.getInstance().setInterstitialShowing(false);
+            dismissDialog();
+            return true;
+        }
+
+        void dismissDialog() {
+            PrepareLoadingAdsDialog owned = loadingDialog;
+            loadingDialog = null;
+            if (dialog == owned) dialog = null;
+            if (owned != null) {
+                try { owned.dismiss(); }
+                catch (Exception error) { Log.w(TAG, "Preparation dialog cleanup failed", error); }
+            }
         }
     }
 

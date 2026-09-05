@@ -61,8 +61,9 @@ internal enum class NextActionMeaning {
 
 /**
  * The module spends one callback — `onNextAction` — on three unrelated events, and which one it is
- * can only be read from the state around it. [committed] is the `onInterstitialShow` marker;
- * [completed] says this presentation has already reported its outcome.
+ * can only be read from the state around it. [committed] is the legacy `onInterstitialShow`
+ * preparation marker; it does not prove vendor presentation. [completed] means navigation has
+ * been completed, independently of the actual presentation's later vendor terminal callback.
  */
 internal fun meaningOfNextAction(
     nextAction: InterNextAction,

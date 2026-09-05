@@ -86,9 +86,12 @@ interface OnboardingAdProvider {
     /**
      * Shows the buffered interstitial for [placement].
      *
-     * Must call [ObInterstitialCallback.onNextAction] at most once, and exactly one terminal
-     * callback. Callers rely on "the ad is on screen" and "the ad is gone" being two distinct
-     * moments — see [showInterstitial].
+     * Must call [ObInterstitialCallback.onNextAction] at most once at navigation commitment,
+     * and exactly one terminal callback. Forward [ObInterstitialCallback.onPresented] only from
+     * actual vendor presentation; this enables the host-return fallback independently of navigation.
+     * The original skipped callback retains flow-owned analytics for custom providers. A provider
+     * already reporting the canonical skipped/show-failed outcome uses the overload carrying
+     * `telemetryReported = true`, so the flow only completes its UI contract.
      */
     fun showInterstitial(
         activity: Activity,

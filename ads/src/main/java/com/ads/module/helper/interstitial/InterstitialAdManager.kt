@@ -11,6 +11,7 @@ import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
 import com.ads.module.tracking.AdTracking
 import com.ads.module.tracking.AdLoadContext
+import com.ads.module.tracking.TrackingAdCallback
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
@@ -34,14 +35,17 @@ class InterLoadOptions @JvmOverloads constructor(
  * path — wire navigation there and nothing else, so a failed or skipped show can never
  * strand the screen.
  *
- * *When* it fires is [InterNextAction]: after the ad is gone by default, or while the ad is on
- * screen when the caller asked for [InterNextAction.UnderAd]. Only the timing changes — the
- * once-on-every-path guarantee holds either way.
+ * *When* it fires is [InterNextAction]: after the ad is gone by default, or immediately before
+ * vendor show when the caller asked for [InterNextAction.UnderAd]. Completion is not evidence
+ * of presentation. The once-on-every-path guarantee holds either way.
  */
 open class InterShowCallback {
 
-    /** The ad is committed to the screen. */
+    /** Legacy preparation/commit marker; it does not prove that the vendor presented the ad. */
     open fun onShowed() {}
+
+    /** The vendor confirmed fullscreen presentation. Never use this to move UnderAd navigation. */
+    open fun onPresented() {}
 
     /**
      * The ad was displayed and dismissed. Runs before [onComplete] under
@@ -97,6 +101,8 @@ object InterstitialAdManager {
 
     private val cache = ConcurrentHashMap<String, BufferedAd>()
     private val inFlight = ConcurrentHashMap<String, Any>()
+    // A held ad is outside the cache; a token keeps release and late callbacks from reclaiming it.
+    private val presentations = ConcurrentHashMap<String, Any>()
     // One observer per placement; a list here would re-report against dead screens
     private val listeners = ConcurrentHashMap<String, AdCallback>()
 
@@ -187,7 +193,8 @@ object InterstitialAdManager {
     @JvmStatic
     fun showSkipReason(context: Context, placement: String): AdSkipReason? =
         AdGate.skipReason(context, enabled = true, checkNetwork = false) ?: when {
-            !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
+            presentations.containsKey(placement) -> AdSkipReason.PRESENTATION_BUSY
+            !InterstitialFrequency.elapsed(context) -> AdSkipReason.INTERVAL
             !isReady(placement) -> AdSkipReason.NOT_READY
             else -> null
         }
@@ -198,15 +205,14 @@ object InterstitialAdManager {
         showSkipReason(context, placement) == null
 
     /**
-     * Shows the buffered ad for [placement].
+     * Shows the buffered ad for [placement]. The original cache entry is held while preparing;
+     * a rejection before vendor invocation restores it only while fresh, authorized and still
+     * owned by this presentation. A replacement loaded meanwhile always wins.
      *
-     * Single-use: the buffer is dropped before `show()` so one fill can never show twice.
-     * The module's interval/counter caps surface as [AdSkipReason.CAPPED_BY_MODULE] — it
-     * answers those with a bare `onNextAction`, told apart by the commit marker.
-     *
-     * [nextAction] decides when `onComplete` fires; it defaults to [defaultNextAction] and is
-     * read per call, so one placement can open its next screen under the ad while another waits
-     * for the dismissal.
+     * [nextAction] pins navigation timing per call. [InterShowCallback.onShowed] retains its old
+     * preparation meaning; only [InterShowCallback.onPresented] confirms vendor presentation.
+     * [reportTelemetry] controls skipped events. The fullscreen tracking
+     * callback separately owns actual show/show-failed events; callback delivery is never muted.
      */
     @JvmStatic
     @JvmOverloads
@@ -217,15 +223,8 @@ object InterstitialAdManager {
         reportTelemetry: Boolean = true,
         nextAction: InterNextAction = defaultNextAction,
     ) {
-        // Decided BEFORE the buffer is touched. The interval rule lives downstream in
-        // ERainAd.forceShowInterstitial, which answers a blocked show with a bare onNextAction —
-        // so a tap one second inside the interval used to reach this method, drop a perfectly
-        // good fill, and only then be refused. A withheld ad is not a spent ad.
         val blockReason = showSkipReason(context, placement)
         if (blockReason != null) {
-            // PURCHASED still drops it: a bought entitlement must not leave a showable ad behind.
-            // CAPPED_BY_MODULE and NOT_READY do not — the first still has an ad worth keeping,
-            // the second has nothing to drop.
             if (blockReason == AdSkipReason.PURCHASED) cache.remove(placement)
             if (reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, blockReason.key)
@@ -234,9 +233,7 @@ object InterstitialAdManager {
             callback.onComplete()
             return
         }
-        // Committed to showing: single-use, so the buffer is dropped before show() to make one
-        // fill impossible to show twice.
-        val ad = takeFresh(placement) ?: run {
+        val original = takeFreshEntry(placement) ?: run {
             if (reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, AdSkipReason.NOT_READY.key)
             }
@@ -244,60 +241,103 @@ object InterstitialAdManager {
             callback.onComplete()
             return
         }
-        cache.remove(placement)
+        val token = Any()
+        if (presentations.putIfAbsent(placement, token) != null) {
+            if (reportTelemetry) {
+                AdTracking.skipped(placement, AdFormat.INTERSTITIAL, AdSkipReason.PRESENTATION_BUSY.key)
+            }
+            callback.onSkipped(AdSkipReason.PRESENTATION_BUSY)
+            callback.onComplete()
+            return
+        }
+        cache.remove(placement, original)
+        val ad = original.cached.ad
         val committed = AtomicBoolean(false)
+        val presented = AtomicBoolean(false)
+        val terminal = AtomicBoolean(false)
         val completed = AtomicBoolean(false)
         val complete = { if (completed.compareAndSet(false, true)) callback.onComplete() }
+        val ownerCallback = object : AdCallback() {
+            override fun getAdShowSkipReason(): AdSkipReason? {
+                if (presentations[placement] !== token || terminal.get()) return AdSkipReason.NOT_READY
+                AdGate.skipReason(context, enabled = true, checkNetwork = false)?.let { return it }
+                // The gate can synchronously release buffers after a newly observed purchase.
+                if (presentations[placement] !== token) return AdSkipReason.NOT_READY
+                if (original.personalized != ConsentCenter.canPersonalize()) return AdSkipReason.NOT_READY
+                if (!original.cached.isFresh) return AdSkipReason.EXPIRED
+                if (!ad.isReady) return AdSkipReason.NOT_READY
+                if (!InterstitialFrequency.elapsed(context)) return AdSkipReason.INTERVAL
+                return null
+            }
+
+            override fun onInterstitialShow() {
+                if (!terminal.get() && committed.compareAndSet(false, true)) callback.onShowed()
+            }
+
+            override fun onAdPresented() {
+                if (!terminal.get() && presented.compareAndSet(false, true)) callback.onPresented()
+            }
+
+            override fun onAdShowRejected(reason: AdSkipReason) {
+                if (!terminal.compareAndSet(false, true)) return
+                // A cap or a background host withholds this fill; neither starts a new cache age.
+                // Recheck the token after the gate in case entitlement invalidation ran there.
+                if (presentations[placement] === token && original.cached.isFresh && ad.isReady &&
+                    AdGate.skipReason(context, enabled = true, checkNetwork = false) == null &&
+                    original.personalized == ConsentCenter.canPersonalize() &&
+                    presentations[placement] === token
+                ) {
+                    cache.putIfAbsent(placement, original)
+                }
+                presentations.remove(placement, token)
+                if (reportTelemetry) {
+                    AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key)
+                }
+                callback.onSkipped(reason)
+                complete()
+            }
+
+            override fun onNextAction() {
+                if (terminal.get()) return
+                when (meaningOfNextAction(nextAction, committed.get(), completed.get())) {
+                    // Compatibility for a module path not yet emitting a structured rejection.
+                    NextActionMeaning.MODULE_CAP -> onAdShowRejected(AdSkipReason.CAPPED_BY_MODULE)
+                    // Navigation is committed just before vendor invocation, on the same tick.
+                    NextActionMeaning.NEXT_SCREEN -> complete()
+                    // The real close/failure still owns the outcome in AfterDismiss mode.
+                    NextActionMeaning.IGNORED -> Unit
+                }
+            }
+
+            override fun onAdClosed() {
+                if (!terminal.compareAndSet(false, true)) return
+                presentations.remove(placement, token)
+                callback.onClosed()
+                complete()
+            }
+
+            override fun onAdFailedToShow(adError: AdError?) {
+                if (!terminal.compareAndSet(false, true)) return
+                presentations.remove(placement, token)
+                // Tracking reports a vendor show failure. Preserve the old UI outcome without
+                // also turning the same failure into a canonical skipped event here.
+                callback.onSkipped(AdSkipReason.FAILED_TO_SHOW)
+                complete()
+            }
+
+            override fun onAdClicked() {
+                if (terminal.get()) return
+                callback.onClicked()
+                notifyListener(placement) { it.onAdClicked() }
+            }
+        }
         ERainAd.getInstance().forceShowInterstitial(
             context,
             ad,
-            object : AdCallback() {
-                override fun onInterstitialShow() {
-                    committed.set(true)
-                    callback.onShowed()
-                }
-
-                override fun onNextAction() {
-                    when (meaningOfNextAction(nextAction, committed.get(), completed.get())) {
-                        NextActionMeaning.MODULE_CAP -> {
-                            if (reportTelemetry) {
-                                AdTracking.skipped(
-                                    placement,
-                                    AdFormat.INTERSTITIAL,
-                                    AdSkipReason.CAPPED_BY_MODULE.key,
-                                )
-                            }
-                            callback.onSkipped(AdSkipReason.CAPPED_BY_MODULE)
-                            complete()
-                        }
-                        // The ad is on screen; the next screen starts underneath it.
-                        NextActionMeaning.NEXT_SCREEN -> complete()
-                        // onAdClosed / onAdFailedToShow owns the outcome in this mode.
-                        NextActionMeaning.IGNORED -> Unit
-                    }
-                }
-
-                override fun onAdClosed() {
-                    callback.onClosed()
-                    complete()
-                }
-
-                override fun onAdFailedToShow(adError: AdError?) {
-                    if (reportTelemetry) {
-                        AdTracking.skipped(
-                            placement, AdFormat.INTERSTITIAL, AdSkipReason.FAILED_TO_SHOW.key,
-                        )
-                    }
-                    callback.onSkipped(AdSkipReason.FAILED_TO_SHOW)
-                    complete()
-                }
-
-                override fun onAdClicked() {
-                    callback.onClicked()
-                    notifyListener(placement) { it.onAdClicked() }
-                }
-            },
-            // Reloading is the caller's decision; the module doing it too double-requests
+            TrackingAdCallback.fullscreenPresentation(
+                placement, AdFormat.INTERSTITIAL, ad.interstitialAd?.adUnitId, ownerCallback, false,
+            ),
+            // Reloading is the caller's decision; the module doing it too double-requests.
             false,
             nextAction == InterNextAction.UnderAd,
         )
@@ -305,6 +345,7 @@ object InterstitialAdManager {
 
     @JvmStatic
     fun release(placement: String) {
+        presentations.remove(placement)
         cache.remove(placement)
         // inFlight is deliberately left alone: the walk it marks is not cancellable, and clearing
         // it here let the very next load() start a second concurrent request for the same
@@ -317,6 +358,7 @@ object InterstitialAdManager {
     @JvmStatic
     fun releaseAll() {
         val cancelled = inFlight.keys.mapNotNull { listeners[it] }
+        presentations.clear()
         cache.clear()
         inFlight.clear()
         listeners.clear()
@@ -325,15 +367,17 @@ object InterstitialAdManager {
     }
 
     /** Drops an expired buffer so a caller never shows a stale wrapper that no-ops. */
-    private fun takeFresh(placement: String): ApInterstitialAd? {
+    private fun takeFresh(placement: String): ApInterstitialAd? = takeFreshEntry(placement)?.cached?.ad
+
+    private fun takeFreshEntry(placement: String): BufferedAd? {
         val cached = cache[placement] ?: return null
         if (!cached.cached.isFresh || !ConsentCenter.canRequestAds() ||
             cached.personalized != ConsentCenter.canPersonalize()
         ) {
-            cache.remove(placement)
+            cache.remove(placement, cached)
             return null
         }
-        return cached.cached.ad.takeIf { it.isReady }
+        return cached.takeIf { it.cached.ad.isReady }
     }
 
     private fun notifyListener(placement: String, block: (AdCallback) -> Unit) {

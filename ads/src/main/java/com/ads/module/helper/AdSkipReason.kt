@@ -29,6 +29,27 @@ enum class AdSkipReason(val key: String) {
     /** Nothing usable is buffered at the moment the caller wants to show. */
     NOT_READY("not_ready"),
 
+    /** The captured ad expired while waiting to invoke the vendor. */
+    EXPIRED("expired"),
+
+    /** The host left RESUMED before the vendor was called. */
+    HOST_NOT_RESUMED("host_not_resumed"),
+
+    /** The application is not in the foreground. */
+    PROCESS_NOT_RESUMED("process_not_resumed"),
+
+    /** This entry point requires a live AppCompatActivity. */
+    INVALID_HOST("invalid_host"),
+
+    /** Another presentation owns this opportunity. */
+    PRESENTATION_BUSY("presentation_busy"),
+
+    /** The configured time interval has not elapsed. */
+    INTERVAL("interval"),
+
+    /** The ad unit's daily click cap was reached. */
+    CLICK_CAP("click_cap"),
+
     /** The module declined by one of its own frequency rules (interval, show counter). */
     CAPPED_BY_MODULE("capped_by_module"),
 

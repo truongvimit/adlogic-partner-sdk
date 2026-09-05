@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.funtion.AdCallback;
+import com.ads.module.helper.AdSkipReason;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
@@ -52,6 +53,9 @@ public class TrackingAdCallback extends AdCallback {
     private AdLoadContext presentationContext;
     private String presentationUnitId;
     private boolean requestStarted;
+    private boolean requiresPresented;
+    private boolean reportRejections;
+    private final AtomicBoolean presentationEnded = new AtomicBoolean(false);
     private long requestStartedAtMs;
     private String requestUnitId;
 
@@ -107,6 +111,43 @@ public class TrackingAdCallback extends AdCallback {
         return tracked;
     }
 
+    /**
+     * Captures one modern fullscreen presentation. Only the vendor presented callback reports
+     * show; navigation/preparation and impression forwarding remain separate. Reuses an existing
+     * active presentation tracker and its captured attribution. A retry after a terminal gets
+     * fresh presentation state and the same original delegate; old callbacks keep their ended
+     * owner and cannot settle the retry. This overload reports rejections itself.
+     */
+    public static TrackingAdCallback fullscreenPresentation(String placement, AdFormat format,
+                                                            String adUnitId, @Nullable AdCallback delegate) {
+        return fullscreenPresentation(placement, format, adUnitId, delegate, true);
+    }
+
+    /**
+     * Selects the rejection reporter for a new presentation. Pass false when a placement manager
+     * owns skipped events. Active wrappers and retries retain the original reporting policy;
+     * this flag never disables actual show/show-failed events or UI callbacks.
+     */
+    public static TrackingAdCallback fullscreenPresentation(String placement, AdFormat format,
+                                                            String adUnitId, @Nullable AdCallback delegate,
+                                                            boolean reportRejections) {
+        TrackingAdCallback tracked = delegate instanceof TrackingAdCallback
+                ? (TrackingAdCallback) delegate
+                : new TrackingAdCallback(placement, format, adUnitId, delegate, Mode.PRESENTATION);
+        boolean capturedReporting = tracked.requiresPresented ? tracked.reportRejections : reportRejections;
+        if (tracked.requiresPresented && tracked.presentationEnded.get()) {
+            TrackingAdCallback previous = tracked;
+            tracked = new TrackingAdCallback(previous.presentationContext.getPlacement(),
+                    previous.presentationContext.getFormat(), adUnitId, previous.delegate, Mode.PRESENTATION);
+            tracked.presentationContext = previous.presentationContext;
+        }
+        tracked.mode = Mode.PRESENTATION;
+        tracked.requiresPresented = true;
+        tracked.reportRejections = capturedReporting;
+        tracked.presentationUnitId = adUnitId;
+        return tracked;
+    }
+
     private TrackingAdCallback(String placement, AdFormat format, String adUnitId,
                               @Nullable AdCallback delegate, Mode mode) {
         this.placement = placement == null || placement.isEmpty() ? "unknown" : placement;
@@ -129,6 +170,29 @@ public class TrackingAdCallback extends AdCallback {
     @Override
     public boolean canAcceptLoadedAd() {
         return delegate == null || delegate.canAcceptLoadedAd();
+    }
+
+    @Override
+    public AdSkipReason getAdShowSkipReason() {
+        return delegate == null ? null : delegate.getAdShowSkipReason();
+    }
+
+    @Override
+    public void onAdShowRejected(@NonNull AdSkipReason reason) {
+        if (requiresPresented && !presentationEnded.compareAndSet(false, true)) return;
+        if (requiresPresented && reportRejections) {
+            Tracker.track(new TrackkitEvents.Ad.Skipped(presentationContext.getPlacement(),
+                    presentationContext.getFormat(), reason.getKey()));
+        }
+        if (delegate != null) delegate.onAdShowRejected(reason);
+    }
+
+    @Override
+    public void onAdPresented() {
+        if (requiresPresented && presentationEnded.get()) return;
+        boolean first = !shownReported.get();
+        reportShown();
+        if (first && delegate != null) delegate.onAdPresented();
     }
 
     @Override
@@ -260,18 +324,21 @@ public class TrackingAdCallback extends AdCallback {
 
     @Override
     public void onAdImpression() {
-        reportShown();
+        if (requiresPresented && presentationEnded.get()) return;
+        if (!requiresPresented) reportShown();
         if (delegate != null) delegate.onAdImpression();
     }
 
     @Override
     public void onInterstitialShow() {
-        reportShown();
+        if (requiresPresented && presentationEnded.get()) return;
+        if (!requiresPresented) reportShown();
         if (delegate != null) delegate.onInterstitialShow();
     }
 
     @Override
     public void onAdFailedToShow(@Nullable AdError adError) {
+        if (requiresPresented && !presentationEnded.compareAndSet(false, true)) return;
         reportShowFailed(adError);
         if (delegate != null) delegate.onAdFailedToShow(adError);
     }
@@ -329,6 +396,7 @@ public class TrackingAdCallback extends AdCallback {
 
     @Override
     public void onAdClosed() {
+        if (requiresPresented && !presentationEnded.compareAndSet(false, true)) return;
         if (closedReported.compareAndSet(false, true)) {
             Tracker.track(new TrackkitEvents.Ad.Closed(presentationContext.getPlacement(),
                     presentationContext.getFormat(), presentationUnitId));

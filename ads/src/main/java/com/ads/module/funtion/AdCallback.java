@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.helper.AdSkipReason;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
@@ -47,6 +48,28 @@ public class AdCallback {
     }
 
     public void onAdFailedToShow(@Nullable AdError adError) {
+    }
+
+    /**
+     * The SDK declined before invoking the vendor's show method, so the ad was not consumed.
+     * The default continues the legacy navigation contract. This is not a vendor show failure.
+     */
+    public void onAdShowRejected(@NonNull AdSkipReason reason) {
+        onNextAction();
+    }
+
+    /** The vendor confirmed fullscreen presentation; preparation/navigation is not presentation. */
+    public void onAdPresented() {
+    }
+
+    /**
+     * Optional owner check immediately before vendor invocation. Check the captured ad's validity,
+     * not a cache entry already consumed for this presentation. Null permits the attempt;
+     * the SDK still checks current consent and host lifecycle. Default: no owner restriction.
+     */
+    @Nullable
+    public AdSkipReason getAdShowSkipReason() {
+        return null;
     }
 
     public void onAdFailedToShowHigh(@Nullable AdError adError) {
@@ -111,6 +134,7 @@ public class AdCallback {
 
     }
 
+    /** Legacy preparation/commit marker. Use onAdPresented for proof of fullscreen presentation. */
     public void onInterstitialShow() {
 
     }

@@ -205,12 +205,12 @@ class ERainAdProvider(
 
     /**
      * Maps the store's show contract onto the flow's two moments: `onComplete` without a
-     * preceding skip is the commit — the ad is on screen and the next screen may start
-     * underneath it — while a skip suppresses `onNextAction` entirely.
+     * preceding skip is navigation commitment immediately before vendor show. Actual presentation
+     * arrives separately through `onPresented`; a skip suppresses `onNextAction` entirely.
      *
      * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]
      * because it is what [ObInterstitialCallback.onNextAction] *means*: `UnderAd` is the only mode
-     * under which `onComplete` says "the ad is on screen". An app that prefers `AfterDismiss` for
+     * under which `onComplete` starts the next screen before vendor invocation. An app that prefers `AfterDismiss` for
      * its own placements must not be able to redefine that. A flow screen whose destination has to
      * wait for the dismissal leaves `onNext` unused instead — see
      * [io.onboardkit.ads.NextScreenTiming].
@@ -231,11 +231,15 @@ class ERainAdProvider(
                 override fun onSkipped(reason: SdkAdSkipReason) {
                     skipped.set(true)
                     ObLog.w(ObLog.Section.SHOW, "$key skipped: ${reason.key}")
-                    callback.onAdSkipped(mapReason(reason))
+                    callback.onAdSkipped(mapReason(reason), telemetryReported = true)
                 }
 
                 override fun onComplete() {
                     if (!skipped.get()) callback.onNextAction()
+                }
+
+                override fun onPresented() {
+                    callback.onPresented()
                 }
 
                 override fun onClosed() {
@@ -246,7 +250,7 @@ class ERainAdProvider(
                     notifyListener(key) { it.onClicked() }
                 }
             },
-            reportTelemetry = false,
+            reportTelemetry = true,
             nextAction = InterNextAction.UnderAd,
         )
     }
@@ -331,6 +335,13 @@ class ERainAdProvider(
     // Exhaustive so adding a store reason forces a mapping decision here
     private fun mapReason(reason: SdkAdSkipReason): AdSkipReason = when (reason) {
         SdkAdSkipReason.NOT_READY -> AdSkipReason.NOT_READY
+        SdkAdSkipReason.EXPIRED -> AdSkipReason.EXPIRED
+        SdkAdSkipReason.HOST_NOT_RESUMED -> AdSkipReason.HOST_NOT_RESUMED
+        SdkAdSkipReason.PROCESS_NOT_RESUMED -> AdSkipReason.PROCESS_NOT_RESUMED
+        SdkAdSkipReason.INVALID_HOST -> AdSkipReason.INVALID_HOST
+        SdkAdSkipReason.PRESENTATION_BUSY -> AdSkipReason.PRESENTATION_BUSY
+        SdkAdSkipReason.INTERVAL -> AdSkipReason.INTERVAL
+        SdkAdSkipReason.CLICK_CAP -> AdSkipReason.CLICK_CAP
         SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE
         SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW
         SdkAdSkipReason.PURCHASED -> AdSkipReason.PREMIUM
