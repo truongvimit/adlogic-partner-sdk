@@ -177,7 +177,9 @@ cỡ chữ không mất gì, trong khi một bước onboarding thì cố ý d�
 
 - Đừng gọi `OnboardingSdk.start()` ở đây — nó tự chạy khi pipeline hoàn tất.
 - Đừng override `onConsentRequired()`; mặc định của nó chạy luồng UMP qua `ConsentCenter` trong
-  `:ads`. Chỉ override để `return true` nếu app không có bước consent.
+  `:ads`. Nếu dùng consent provider riêng, gọi `ConsentCenter.setHostConsent(...)` với quyền
+  request và lựa chọn cá nhân hóa trước khi hoàn tất override. Chỉ `return true` không còn cấp
+  quyền; xem [migration 5.1.0](../MIGRATION-5.1.0.md).
 - Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` — `ConsentCenter.detach(this)` nằm ở đó.
 
 Về sau, từ bất kỳ đâu: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.

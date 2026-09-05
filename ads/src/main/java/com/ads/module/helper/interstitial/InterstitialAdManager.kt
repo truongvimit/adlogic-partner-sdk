@@ -4,6 +4,7 @@ import android.content.Context
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
@@ -91,8 +92,10 @@ object InterstitialAdManager {
                 .setOpenActivityAfterShowInterAds(value == InterNextAction.UnderAd)
         }
 
-    private val cache = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
-    private val inFlight = ConcurrentHashMap.newKeySet<String>()
+    private data class BufferedAd(val cached: CachedAd<ApInterstitialAd>, val personalized: Boolean)
+
+    private val cache = ConcurrentHashMap<String, BufferedAd>()
+    private val inFlight = ConcurrentHashMap<String, Any>()
     // One observer per placement; a list here would re-report against dead screens
     private val listeners = ConcurrentHashMap<String, AdCallback>()
 
@@ -109,23 +112,26 @@ object InterstitialAdManager {
         options: InterLoadOptions = InterLoadOptions(),
         listener: AdCallback? = null,
     ) {
-        listener?.let { listeners[placement] = it }
-        // Re-requesting over a ready ad burns a request and the fill
-        cache[placement]?.takeIf { it.isFresh && it.ad.isReady }?.let { cached ->
-            notifyListener(placement) { it.onApInterstitialLoad(cached.ad) }
-            return
-        }
         val ids = AdWaterfall.usableIds(adUnitIds)
-        val skipReason =
-            AdGate.skipReason(context, options.enabled && ids.isNotEmpty(), options.passesUaGate)
+        val cached = takeFresh(placement)
+        val skipReason = AdGate.skipReason(context, options.enabled && ids.isNotEmpty(),
+            options.passesUaGate, checkNetwork = cached == null)
         if (skipReason != null) {
             if (options.reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, skipReason.key)
             }
-            notifyListener(placement) { it.onAdFailedToLoad(null) }
+            listener?.let { runCatching { it.onAdFailedToLoad(null) } }
             return
         }
-        if (!inFlight.add(placement)) return
+        listener?.let { listeners[placement] = it }
+        // Re-requesting over a ready ad burns a request and the fill. Policy still gates reuse.
+        cached?.let {
+            notifyListener(placement) { it.onApInterstitialLoad(cached) }
+            return
+        }
+        val request = Any()
+        if (inFlight.putIfAbsent(placement, request) != null) return
+        val personalized = ConsentCenter.canPersonalize()
         // After the guard, not before: a de-duplicated no-op load used to re-point the registry,
         // so a shared ad unit id was attributed to whichever placement called load() last rather
         // than to the one that actually requested it.
@@ -139,17 +145,21 @@ object InterstitialAdManager {
             options.tierTimeoutMs,
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
-                    inFlight.remove(placement)
-                    if (apInterstitialAd == null) {
+                    if (!inFlight.remove(placement, request)) return
+                    if (apInterstitialAd == null || !apInterstitialAd.isReady ||
+                        AdGate.skipReason(context, options.enabled, options.passesUaGate,
+                            checkNetwork = false) != null ||
+                        personalized != ConsentCenter.canPersonalize()
+                    ) {
                         notifyListener(placement) { it.onAdFailedToLoad(null) }
                         return
                     }
-                    cache[placement] = CachedAd(apInterstitialAd)
+                    cache[placement] = BufferedAd(CachedAd(apInterstitialAd), personalized)
                     notifyListener(placement) { it.onApInterstitialLoad(apInterstitialAd) }
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    inFlight.remove(placement)
+                    if (!inFlight.remove(placement, request)) return
                     notifyListener(placement) { it.onAdFailedToLoad(adError) }
                 }
             },
@@ -161,21 +171,21 @@ object InterstitialAdManager {
     fun isReady(placement: String): Boolean = takeFresh(placement) != null
 
     @JvmStatic
-    fun isLoading(placement: String): Boolean = placement in inFlight
+    fun isLoading(placement: String): Boolean = inFlight.containsKey(placement)
 
     /**
      * Why [show] would decline right now, or null when it would go ahead.
      *
-     * Read-only: unlike [show] it never touches the buffer, so a caller can branch on the answer
-     * — hide a loading dialog, take a different route — without spending the ad it asked about.
+     * Does not consume an ad for presentation, so a caller can branch without spending a fill.
+     * Expiry cleanup and the shared premium observer can still invalidate unusable buffers.
      */
     @JvmStatic
-    fun showSkipReason(context: Context, placement: String): AdSkipReason? = when {
-        AdGate.isPurchased(context) -> AdSkipReason.PURCHASED
-        !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
-        !isReady(placement) -> AdSkipReason.NOT_READY
-        else -> null
-    }
+    fun showSkipReason(context: Context, placement: String): AdSkipReason? =
+        AdGate.skipReason(context, enabled = true, checkNetwork = false) ?: when {
+            !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
+            !isReady(placement) -> AdSkipReason.NOT_READY
+            else -> null
+        }
 
     /** True when [show] would put an ad on screen. See [showSkipReason] for the reason it would not. */
     @JvmStatic
@@ -298,21 +308,27 @@ object InterstitialAdManager {
         listeners.remove(placement)
     }
 
+    /** Clears all buffers and completes each pending load listener once with failure. */
     @JvmStatic
     fun releaseAll() {
+        val cancelled = inFlight.keys.mapNotNull { listeners[it] }
         cache.clear()
         inFlight.clear()
         listeners.clear()
+        // Clear ownership first: a terminal callback can immediately request a replacement.
+        cancelled.forEach { listener -> runCatching { listener.onAdFailedToLoad(null) } }
     }
 
     /** Drops an expired buffer so a caller never shows a stale wrapper that no-ops. */
     private fun takeFresh(placement: String): ApInterstitialAd? {
         val cached = cache[placement] ?: return null
-        if (!cached.isFresh) {
+        if (!cached.cached.isFresh || !ConsentCenter.canRequestAds() ||
+            cached.personalized != ConsentCenter.canPersonalize()
+        ) {
             cache.remove(placement)
             return null
         }
-        return cached.ad.takeIf { it.isReady }
+        return cached.cached.ad.takeIf { it.isReady }
     }
 
     private fun notifyListener(placement: String, block: (AdCallback) -> Unit) {

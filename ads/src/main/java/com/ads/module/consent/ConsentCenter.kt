@@ -9,13 +9,11 @@ import android.os.Looper
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.ads.module.event.MmpTracking
-import com.ads.module.helper.AdGate
 import com.google.android.ump.ConsentDebugSettings
 import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.FormError
-import com.google.android.ump.UserMessagingPlatform
 import io.trackkit.ConsentState
 import io.trackkit.Tracker
 import io.trackkit.TrackkitEvents
@@ -27,50 +25,29 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * The UMP consent flow, and the single place ad consent is resolved.
- *
- * Every terminal path funnels through [resolve], the only caller of `Tracker.setConsent`.
- *
- * The answer decides **how** ads are requested, not **whether**. A user who refuses personalization
- * still gets ads — AdMob downgrades them to non-personalized or limited from the TC string UMP
- * wrote, and [canPersonalize] carries the same verdict into the request extras. The one thing that
- * does hold requests back is an unanswered form still on screen, because an ad underneath it is a
- * policy problem rather than a revenue one.
+ * Coordinates UMP consent for this process. UMP's [canRequestAds] authority is separate from
+ * [canPersonalize]: an answered form can allow an ad request without allowing personalization.
+ * Hosts using their own consent provider must publish its decision with [setHostConsent].
  */
 object ConsentCenter {
+    internal var umpClient: UmpClient = PlatformUmpClient
 
     private const val TAG = "ConsentCenter"
-
-    /** Google Advertising Products, the vendor whose consent an AdMob request depends on. */
     private const val GOOGLE_VENDOR_ID = 755
-
-    /** Purposes that require explicit consent; legitimate interest is not enough. */
     private val PURPOSES_REQUIRING_CONSENT = listOf(1, 3, 4)
-
-    /** Purposes satisfied by either consent or legitimate interest. */
     private val PURPOSES_ALLOWING_LEGITIMATE_INTEREST = listOf(2, 7, 9, 10)
-
     private const val PREF_FILE_SUFFIX = "_preferences"
-
     private const val PREF_CONSENT = "ads_consent"
-
-    /** The user accepted the form; do not ask again. */
     private const val KEY_CONSENT_ACCEPTED = "consent_accepted"
-
-    /** UMP reported no form is needed here; do not ask again. */
     private const val KEY_CONSENT_NOT_REQUIRED = "consent_not_required"
-
     private const val KEY_PURPOSE_CONSENTS = "IABTCF_PurposeConsents"
     private const val KEY_VENDOR_CONSENTS = "IABTCF_VendorConsents"
     private const val KEY_VENDOR_LI = "IABTCF_VendorLegitimateInterests"
     private const val KEY_PURPOSE_LI = "IABTCF_PurposeLegitimateInterests"
-
-    // Values of the `status` param on consent_result.
     private const val STATUS_GRANTED = "granted"
     private const val STATUS_DENIED = "denied"
     private const val STATUS_NOT_REQUIRED = "not_required"
     private const val STATUS_ERROR = "error"
-
     private val EEA_COUNTRIES = listOf(
         "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE",
         "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
@@ -78,34 +55,48 @@ object ConsentCenter {
     private val UK_COUNTRIES = listOf("GB", "GG", "IM", "JE")
 
     private val _state = MutableStateFlow(ConsentState.UNKNOWN)
-
-    /** Replays to late subscribers, so a screen that starts after the answer still sees it. */
     val state: StateFlow<ConsentState> = _state.asStateFlow()
+    private val _requestEligibility = MutableStateFlow(false)
 
-    /** Process-wide: the UMP form belongs to the session, not to whichever screen asks. */
+    /** Current request authority, including previous-session UMP consent after this launch's update. */
+    val requestEligibility: StateFlow<Boolean> = _requestEligibility.asStateFlow()
+
     private val requested = AtomicBoolean(false)
-
-    @Volatile
-    private var consentInformation: ConsentInformation? = null
-
-    @Volatile
-    private var options: ConsentOptions = ConsentOptions()
-
+    @Volatile private var consentInformation: ConsentInformation? = null
+    @Volatile private var umpUpdateRequested = false
+    @Volatile private var applicationContext: Context? = null
+    @Volatile private var options = ConsentOptions()
+    @Volatile private var hostConsent: HostConsent? = null
+    @Volatile private var generation = 0L
+    @Volatile private var pendingFlow: PendingFlow? = null
+    @Volatile private var visibleForm: VisibleForm? = null
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
 
-    /**
-     * The screen whose flow is in flight, weakly — the timeout Runnable captures its callback, and
-     * through it the Activity. Weak so that a screen destroyed mid-flow is collectable even before
-     * [detach] runs.
-     */
-    @Volatile
-    private var pendingScreen: WeakReference<Activity>? = null
+    private data class HostConsent(val allowed: Boolean, val personalized: Boolean)
 
-    @Volatile
-    private var callbackHandled = false
+    private class PendingFlow(
+        val generation: Long,
+        activity: Activity,
+        val screen: String,
+        onFormAnswered: ((Boolean) -> Unit)?,
+        onCompleted: (Boolean) -> Unit,
+    ) {
+        val activity = WeakReference(activity)
+        var onFormAnswered: ((Boolean) -> Unit)? = onFormAnswered
+        var onCompleted: ((Boolean) -> Unit)? = onCompleted
 
-    /** Set once at init so the flow can run without the host passing options every time. */
+        fun clearCallbacks() {
+            onFormAnswered = null
+            onCompleted = null
+        }
+    }
+
+    /** A host handoff can settle the request, but cannot dismiss UMP's visible form. */
+    private class VisibleForm(activity: Activity) {
+        val activity = WeakReference(activity)
+    }
+
     @JvmStatic
     fun configure(newOptions: ConsentOptions) {
         options = newOptions
@@ -115,33 +106,45 @@ object ConsentCenter {
     fun options(): ConsentOptions = options
 
     /**
-     * Runs the UMP flow at most once per process, then reports that it is safe to request ads.
+     * Reads UMP's request authorization, or an explicit host-managed decision. A timeout, network
+     * error, remembered SDK preference, and personalization choice cannot grant this permission.
+     */
+    @JvmStatic
+    fun canRequestAds(): Boolean = hostConsent?.allowed
+        ?: (umpUpdateRequested && consentInformation?.canRequestAds() == true)
+
+    /**
+     * Selects host-managed consent. Call on the main thread after the host consent provider has
+     * resolved. A pending UMP request completes with this decision; its late callbacks are ignored.
+     */
+    @JvmStatic
+    fun setHostConsent(canRequestAds: Boolean, personalized: Boolean) {
+        val onCompleted = pendingFlow?.onCompleted
+        invalidateFlow()
+        hostConsent = HostConsent(canRequestAds, canRequestAds && personalized)
+        publishAuthority()
+        onCompleted?.invoke(canRequestAds)
+    }
+
+    /** Returns to UMP authority; the next [request] refreshes it without clearing UMP's stored consent. */
+    @JvmStatic
+    fun clearHostConsent() {
+        if (hostConsent == null) return
+        hostConsent = null
+        requested.set(false)
+        publishAuthority()
+    }
+
+    /**
+     * Refreshes UMP once per successful process flow. Errors and unanswered attempts remain
+     * retryable. UMP is consulted on every new process, even when old SDK preferences exist.
      *
-     * **[onCompleted] answers "is the consent step finished", not "did the user agree".** A refusal
-     * finishes the step: AdMob still serves that user, downgraded to non-personalized or limited
-     * ads from the TC string UMP wrote. Refusing to request at all would forfeit that inventory for
-     * no compliance benefit. What the user chose is carried by [canPersonalize] instead, and is
-     * what reaches Consent Mode and the request extras.
+     * [onCompleted] reports current request eligibility, not personalization. Previous UMP consent
+     * can permit requests while the update is pending; [requestEligibility] publishes that as soon
+     * as UMP makes it available. The network deadline does not time out a form the user is reading.
      *
-     * `false` therefore means only "do not request yet" — the form is still on screen unanswered,
-     * or there was no network to consult UMP with.
-     *
-     * A second caller resolves immediately with the first one's outcome: splash and main both ask,
-     * and without this the user saw the form twice in one session.
-     *
-     * @param screen tags the telemetry so a funnel can tell splash from main.
-     * @param onFormAnswered fires **only** when this call put a form on screen and the user
-     *   answered it — the second-chance prompt's cue to restart a session that spent itself with
-     *   the ad gate shut. Do not restart from [onCompleted]: it also answers `true` for a call
-     *   that resolved from an earlier one, which is how Splash and Main came to bounce off each
-     *   other for the life of the process.
-     * @param onCompleted invoked at most once, on the main thread. Two things can keep it from
-     *   arriving. [detach] hands an unresolved flow back, but only from the `onDestroy` of the
-     *   screen that asked — the caller waiting on it died with that screen, and the screen that
-     *   asks next runs the flow again rather than inheriting an answer nobody gave. And a form on
-     *   screen has no deadline by design, so a UMP form that stops answering — a dead WebView
-     *   renderer leaves one up with no callback left to fire — never completes; a caller that
-     *   cannot sit there forever needs a bound of its own, as `ObSplashActivity` has.
+     * Call on the main thread. Completion runs at most once, except that [detach] abandons a dead
+     * screen's callback. [onFormAnswered] runs only after a form shown by this call was answered.
      */
     @JvmStatic
     @JvmOverloads
@@ -151,159 +154,76 @@ object ConsentCenter {
         onFormAnswered: ((personalized: Boolean) -> Unit)? = null,
         onCompleted: (mayRequestAds: Boolean) -> Unit,
     ) {
-        // Answered in an earlier session, or a region UMP does not ask in: done, and ads may run.
-        // This early return is load-bearing. Without it every launch waits on a UMP round trip,
-        // and any launch where that round trip is slow loses its ads for the whole session.
-        if (isAlreadyResolved(activity)) {
-            grantWithoutAsking()
-            onCompleted(true)
+        applicationContext = activity.applicationContext
+        if (hostConsent != null) {
+            publishAuthority()
+            onCompleted(canRequestAds())
             return
         }
-        // No network means UMP cannot be consulted and no form can appear. The flow runs, but
-        // without ads: a request sent before any answer exists is the one thing consent forbids,
-        // and an offline session had no fill to lose anyway. Nothing is persisted, so the next
-        // launch asks properly, and the second-chance prompt reopens the gate within this one.
-        if (!AdGate.isNetworkAvailable(activity)) {
-            Log.d(TAG, "consent skipped: no network")
-            onCompleted(false)
-            return
-        }
+        val existing = pendingFlow
+        if (existing != null && !isResolving()) invalidateFlow()
         if (!requested.compareAndSet(false, true)) {
-            onCompleted(_state.value != ConsentState.UNKNOWN)
+            publishAuthority()
+            onCompleted(canRequestAds())
             return
         }
-        callbackHandled = false
-        pendingScreen = WeakReference(activity)
+        val flow = PendingFlow(++generation, activity, screen, onFormAnswered, onCompleted)
+        pendingFlow = flow
         Tracker.track(TrackkitEvents.ConsentEvents.Requested())
-        armTimeout(screen, onCompleted)
-        loadAndShowConsent(activity, screen, onFormAnswered, onCompleted)
+        armTimeout(flow)
+        loadAndShowConsent(activity, flow)
     }
 
-    /**
-     * Drops the pending timeout when the screen that started the flow goes away.
-     *
-     * The Runnable holds the completion callback for the whole timeout window, and through it the
-     * Activity — the module this replaced cleared exactly this from `onDestroy`. A no-op unless
-     * [activity] is the screen that actually started the flow, so an unrelated screen's teardown
-     * cannot disarm someone else's.
-     *
-     * An unresolved flow is handed back here rather than left claimed. Nothing can resolve a flow
-     * whose only window is gone — UMP puts the form on that Activity, so the callback that lands
-     * seconds later can only drop it — and the screen that asks next asks during this same
-     * destroy/create pair, long before that. Leaving the guard claimed made it inherit a `false`
-     * nobody gave, and the rest of the session ran with the ad gate shut.
-     *
-     * The stale flow's callbacks are still armed; [ownsFlow] is what stops them settling the flow
-     * that replaced them.
-     */
+    /** Releases only this screen's pending flow. A recreated screen can ask again immediately. */
     @JvmStatic
     fun detach(activity: Activity) {
-        if (pendingScreen?.get() !== activity) return
-        pendingScreen = null
-        cancelTimeout()
-        if (!callbackHandled) handBackFlow()
+        if (visibleForm?.activity?.get() === activity) visibleForm = null
+        if (pendingFlow?.activity?.get() === activity) invalidateFlow()
     }
 
-    /**
-     * Whether a UMP callback still speaks for the flow that is running.
-     *
-     * UMP's callbacks outlive the screen that armed them, and a screen destroyed mid-flow hands the
-     * flow back, so a newer screen may own one of its own by the time an old callback lands.
-     * [callbackHandled] cannot tell the two apart — [request] clears it for every new flow — but
-     * the screen can. Also `false` once a terminal has run or the timeout has fired, since both
-     * [releaseScreen] and [detach] drop the reference.
-     */
-    private fun ownsFlow(activity: Activity): Boolean = pendingScreen?.get() === activity
+    private fun ownsFlow(flow: PendingFlow): Boolean =
+        pendingFlow === flow && generation == flow.generation
 
-    /**
-     * Gives the once-per-process guard back, for a flow that ended without asking anything.
-     *
-     * Three terminals reach here: the round-trip timeout, a form that came back to a dead screen,
-     * and a form dismissed without an answer. None of them persisted anything or read a choice, so
-     * holding the guard would spend the session on a flow that never showed a form — and the
-     * screen that asks next, the recreated splash or the second-chance prompt, would inherit a
-     * `false` nobody gave. [ownsFlow] is what keeps the released flow's callbacks from settling
-     * whichever flow replaces it.
-     */
-    private fun handBackFlow() {
+    private fun invalidateFlow() {
+        generation++
+        cancelTimeout()
+        pendingFlow?.clearCallbacks()
+        pendingFlow = null
         requested.set(false)
     }
 
-    /**
-     * Whether a live screen is still waiting on an answer — the round trip is in the air, or a form
-     * is on screen in front of the user.
-     *
-     * For a caller that runs the step under a deadline of its own. Expiring while this is `true`
-     * means the flow is alive and its answer is still coming: [armTimeout] already bounds the round
-     * trip and fails open, so the only thing a second deadline can cut short is the human.
-     *
-     * `false` once a terminal has run, and once the screen that started the flow is gone — nothing
-     * resolves a flow whose window died, so waiting on one would be waiting forever.
-     */
+    /** Whether a live screen is waiting for the UMP update or the user's answer. */
     @JvmStatic
     fun isResolving(): Boolean {
-        if (callbackHandled) return false
-        val owner = pendingScreen?.get() ?: return false
+        val owner = pendingFlow?.activity?.get() ?: return false
         return !owner.isFinishing && !owner.isDestroyed
     }
 
-    /**
-     * Whether the step has an answer of any kind, a refusal included.
-     *
-     * [resolve] publishes it before any callback is delivered, so a caller whose own deadline fired
-     * while that callback was still in flight can read the answer rather than assume there is none.
-     */
+    /** Whether UMP has a form on the live screen, separate from a background update. */
+    @JvmStatic
+    fun isFormShowing(): Boolean {
+        val owner = visibleForm?.activity?.get() ?: return false
+        return !owner.isFinishing && !owner.isDestroyed
+    }
+
+    /** Whether personalization has a known answer; this is not request authorization. */
     @JvmStatic
     fun hasAnswered(): Boolean = _state.value != ConsentState.UNKNOWN
 
-    /** True once the user accepted, or once UMP said this region needs no form. */
+    /** Current UMP or explicit host authorization. Old SDK preference flags are intentionally ignored. */
     @JvmStatic
-    fun isAlreadyResolved(context: Context): Boolean {
-        val prefs = sdkPreferences(context)
-        return prefs.getBoolean(KEY_CONSENT_ACCEPTED, false) ||
-            prefs.getBoolean(KEY_CONSENT_NOT_REQUIRED, false)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun isAlreadyResolved(context: Context): Boolean = canRequestAds()
 
-    private fun grantWithoutAsking() {
-        if (_state.value == ConsentState.GRANTED) return
-        _state.value = ConsentState.GRANTED
-        Tracker.setConsent(analytics = true, ads = true)
-        MmpTracking.setConsent(true, true)
-    }
+    private fun isDebugFlow(context: Context): Boolean = options.debug
+        ?: ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
 
-    private fun remember(context: Context, key: String) {
-        sdkPreferences(context).edit().putBoolean(key, true).apply()
-    }
-
-    private fun sdkPreferences(context: Context): SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREF_CONSENT, Context.MODE_PRIVATE)
-
-    /**
-     * Whether to hand UMP the debug settings that force the EEA form.
-     *
-     * Unset follows the host's own debuggable flag: the module this replaced read the app's
-     * `BuildConfig.DEBUG` through its callback, and leaving the switch off by default meant a
-     * debug build outside the EEA never saw the form at all.
-     */
-    private fun isDebugFlow(context: Context): Boolean =
-        options.debug
-            ?: ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
-
-    private fun armTimeout(screen: String, onCompleted: (Boolean) -> Unit) {
+    private fun armTimeout(flow: PendingFlow) {
         cancelTimeout()
         val runnable = Runnable {
-            if (callbackHandled) return@Runnable
-            callbackHandled = true
-            releaseScreen()
-            // Dropping the screen is what makes [ownsFlow] discard the form this round trip may
-            // still be about to deliver, so without this the session never sees one at all.
-            handBackFlow()
-            // UMP never answered. Report it as an error, not as a refusal, and let the flow run:
-            // holding ads back here turned a slow network into a session with no ads at all.
-            // Cancelled once a form is actually on screen, so this only covers the round trip.
-            Log.w(TAG, "consent timed out after ${options.timeoutMs}ms — continuing")
-            resolve(personalized = true, status = STATUS_ERROR, screen = screen)
-            onCompleted(true)
+            if (!ownsFlow(flow)) return@Runnable
+            Log.w(TAG, "consent update timed out after ${options.timeoutMs}ms")
+            finish(flow, retryable = true, error = true)
         }
         timeoutRunnable = runnable
         timeoutHandler.postDelayed(runnable, options.timeoutMs)
@@ -314,20 +234,9 @@ object ConsentCenter {
         timeoutRunnable = null
     }
 
-    /** Terminal for this flow: nothing more will fire, so stop pointing at the screen. */
-    private fun releaseScreen() {
-        pendingScreen = null
-    }
-
-    private fun loadAndShowConsent(
-        activity: Activity,
-        screen: String,
-        onFormAnswered: ((Boolean) -> Unit)?,
-        onCompleted: (Boolean) -> Unit,
-    ) {
-        val information = UserMessagingPlatform.getConsentInformation(activity)
+    private fun loadAndShowConsent(activity: Activity, flow: PendingFlow) {
+        val information = umpClient.consentInformation(activity)
         consentInformation = information
-
         val params = ConsentRequestParameters.Builder()
             .setTagForUnderAgeOfConsent(options.underAgeOfConsent)
             .apply {
@@ -341,245 +250,141 @@ object ConsentCenter {
                 }
             }
             .build()
-
+        umpUpdateRequested = true
         information.requestConsentInfoUpdate(
             activity,
             params,
             {
-                if (!ownsFlow(activity)) return@requestConsentInfoUpdate
-                Log.v(TAG, "requestConsentInfoUpdate success")
-                if (information.isConsentFormAvailable) {
-                    loadForm(activity, information, screen, onFormAnswered, onCompleted)
-                } else {
-                    onNotRequired(activity, screen, onCompleted)
+                if (!ownsFlow(flow)) return@requestConsentInfoUpdate
+                publishAuthority()
+                when (information.consentStatus) {
+                    ConsentInformation.ConsentStatus.NOT_REQUIRED,
+                    ConsentInformation.ConsentStatus.OBTAINED -> finish(flow)
+                    ConsentInformation.ConsentStatus.REQUIRED -> {
+                        val owner = flow.activity.get()
+                        if (information.isConsentFormAvailable && owner != null) loadForm(owner, information, flow)
+                        else finish(flow, retryable = true, error = true)
+                    }
+                    else -> finish(flow, retryable = true, error = true)
                 }
             },
-            { formError ->
-                if (!ownsFlow(activity)) return@requestConsentInfoUpdate
-                onError(formError, screen, onCompleted)
+            { error ->
+                if (ownsFlow(flow)) onError(flow, error)
             },
         )
+        // UMP restores previous-session status synchronously when update is called. This must run
+        // even without network, before the asynchronous result, so eligible sessions retain ads.
+        publishAuthority()
     }
 
-    private fun loadForm(
-        activity: Activity,
-        information: ConsentInformation,
-        screen: String,
-        onFormAnswered: ((Boolean) -> Unit)?,
-        onCompleted: (Boolean) -> Unit,
-    ) {
-        UserMessagingPlatform.loadConsentForm(
+    private fun loadForm(activity: Activity, information: ConsentInformation, flow: PendingFlow) {
+        umpClient.loadForm(
             activity,
             { form: ConsentForm ->
-                // This load no longer speaks for the flow that is running: its own timeout fired,
-                // another terminal resolved it, or its screen died and a newer one picked the flow
-                // up. Showing the form now would put requests underneath an unanswered one, and on
-                // the way out would cancel the live flow's timeout and drop its screen. Nothing was
-                // persisted, so whoever owns the flow now asks properly.
-                if (!ownsFlow(activity)) {
-                    Log.w(TAG, "consent form ready for a flow that is no longer current — dropping it")
-                    return@loadConsentForm
-                }
+                if (!ownsFlow(flow)) return@loadForm
                 when (information.consentStatus) {
+                    ConsentInformation.ConsentStatus.NOT_REQUIRED,
+                    ConsentInformation.ConsentStatus.OBTAINED -> finish(flow)
                     ConsentInformation.ConsentStatus.REQUIRED -> {
+                        val owner = flow.activity.get()
+                        if (owner == null || owner.isFinishing || owner.isDestroyed) {
+                            finish(flow, retryable = true, error = true)
+                            return@loadForm
+                        }
+                        cancelTimeout()
+                        val displayed = VisibleForm(owner)
+                        visibleForm = displayed
                         Tracker.track(TrackkitEvents.ConsentEvents.Shown())
-                        // The timeout guards the network round-trip, not the human. Once the form
-                        // is on screen the user may take as long as they like: firing mid-read
-                        // resolved DENIED and then discarded the Accept they were about to tap.
-                        // Callers with a deadline of their own read [isResolving] for the same
-                        // reason.
-                        cancelTimeout()
-                        // The load is asynchronous, so the screen that asked may already be gone.
-                        // UMP shows the form on this Activity's window; handing it a destroyed one
-                        // is a crash on some devices and a leak on the rest.
-                        if (activity.isFinishing || activity.isDestroyed) {
-                            callbackHandled = true
-                            releaseScreen()
-                            handBackFlow()
-                            Log.w(TAG, "consent form ready but the screen is gone — skipping")
-                            onCompleted(false)
-                            return@loadConsentForm
-                        }
-                        form.show(activity) { dismissError ->
-                            // Same rule as the load callbacks: a dismissal that belongs to a flow
-                            // this screen no longer owns must not settle the one that replaced it.
-                            // The hand-back already happened in `detach`, so there is nothing here
-                            // left to do for it.
-                            if (!ownsFlow(activity) || callbackHandled) return@show
-                            callbackHandled = true
-                            releaseScreen()
-                            // An error here is UMP saying the form left the screen without an
-                            // answer. Falling through scored the empty TCF strings as a refusal,
-                            // which stamped npa=1 and Consent Mode denied on a user who had
-                            // touched nothing. Hand the flow back instead, same as above.
-                            //
-                            // A destroy is the common producer of one — UMP reports it on every
-                            // destroy of the Activity hosting the form, a rotation included — but
-                            // that case never reaches here: [detach] runs first from `onDestroy`
-                            // and the guard above drops this. What is left is a host that does not
-                            // call [detach], and UMP's two synchronous refusals to show at all.
-                            if (dismissError != null) {
-                                Log.w(TAG, "consent form dismissed unanswered: ${dismissError.message}")
-                                handBackFlow()
-                                onCompleted(false)
-                                return@show
-                            }
-                            val personalized = canShowPersonalizedAds(activity)
-                            if (personalized) {
-                                remember(activity, KEY_CONSENT_ACCEPTED)
-                            } else {
-                                // Only an acceptance is remembered. Recording a refusal here would
-                                // make the next launch skip UMP and resolve "granted" from the
-                                // flag — serving personalised ads to someone who refused them.
-                                // Resetting brings the form back so they can change their mind.
-                                information.reset()
-                            }
-                            resolve(
-                                personalized = personalized,
-                                status = if (personalized) STATUS_GRANTED else STATUS_DENIED,
-                                screen = screen,
-                            )
-                            // Answered is answered — requests may go out now, personalized or not.
-                            onCompleted(true)
-                            // Only this path is a real answer to a form this call put on screen.
-                            // The second-chance prompt restarts the app from here, and firing it
-                            // from any other terminal path restarted a session that had already
-                            // resolved — Splash and Main then bounced off each other forever.
-                            onFormAnswered?.invoke(personalized)
+                        form.show(owner) { error ->
+                            if (visibleForm === displayed) visibleForm = null
+                            if (!ownsFlow(flow)) return@show
+                            if (error != null) onError(flow, error)
+                            else finish(flow, formAnswered = true)
                         }
                     }
-
-                    ConsentInformation.ConsentStatus.NOT_REQUIRED ->
-                        onNotRequired(activity, screen, onCompleted)
-
-                    // OBTAINED means the user already answered — and in TCF a refusal is OBTAINED
-                    // too. Read what they actually chose instead of assuming a grant.
-                    ConsentInformation.ConsentStatus.OBTAINED ->
-                        onAlreadyAnswered(activity, screen, onCompleted)
-
-                    // UNKNOWN: no answer to read and no form to show. Resolve closed for this
-                    // launch and leave nothing persisted, so the next launch asks again.
-                    else -> {
-                        if (callbackHandled) return@loadConsentForm
-                        callbackHandled = true
-                        cancelTimeout()
-                        releaseScreen()
-                        Log.w(TAG, "consent status unknown — continuing without a form")
-                        resolve(personalized = true, status = STATUS_ERROR, screen = screen)
-                        onCompleted(true)
-                    }
+                    else -> finish(flow, retryable = true, error = true)
                 }
             },
-            { formError ->
-                if (!ownsFlow(activity)) return@loadConsentForm
-                onError(formError, screen, onCompleted)
-            },
+            { error -> if (ownsFlow(flow)) onError(flow, error) },
         )
     }
 
-    private fun onNotRequired(activity: Activity, screen: String, onCompleted: (Boolean) -> Unit) {
-        if (callbackHandled) return
-        callbackHandled = true
-        cancelTimeout()
-        releaseScreen()
-        // Outside the consent regions UMP has nothing to ask, and personalised ads are allowed.
-        remember(activity, KEY_CONSENT_NOT_REQUIRED)
-        resolve(personalized = true, status = STATUS_NOT_REQUIRED, screen = screen)
-        onCompleted(true)
+    private fun onError(flow: PendingFlow, error: FormError) {
+        Log.w(TAG, "consent error ${error.errorCode}: ${error.message}")
+        finish(flow, retryable = true, error = true, errorCode = error.errorCode)
     }
 
-    /**
-     * The user answered in an earlier session. Read the answer out of the TCF strings rather than
-     * assuming it was a grant: a refusal is also [ConsentInformation.ConsentStatus.OBTAINED], and
-     * treating the two alike turned a refusal into a permanent grant.
-     */
-    private fun onAlreadyAnswered(activity: Activity, screen: String, onCompleted: (Boolean) -> Unit) {
-        if (callbackHandled) return
-        callbackHandled = true
-        cancelTimeout()
-        releaseScreen()
-        val personalized = canShowPersonalizedAds(activity)
-        // Same rule as the form path: only an acceptance is remembered, so a refusal is re-read
-        // from the TCF strings next launch rather than short-circuiting to "granted".
-        if (personalized) remember(activity, KEY_CONSENT_ACCEPTED)
-        resolve(
-            personalized = personalized,
-            status = if (personalized) STATUS_GRANTED else STATUS_DENIED,
-            screen = screen,
-        )
-        onCompleted(true)
-    }
-
-    private fun onError(
-        formError: FormError,
-        screen: String,
-        onCompleted: (Boolean) -> Unit,
+    private fun finish(
+        flow: PendingFlow,
+        retryable: Boolean = false,
+        error: Boolean = false,
+        errorCode: Int? = null,
+        formAnswered: Boolean = false,
     ) {
-        if (callbackHandled) return
-        callbackHandled = true
+        if (!ownsFlow(flow)) return
         cancelTimeout()
-        releaseScreen()
-        Log.e(TAG, "consent error ${formError.errorCode}: ${formError.message}")
-        // UMP could not be consulted, so there is no answer to read. Reading the TCF strings here
-        // resolved DENIED for everyone who has none — every user outside a consent region on a
-        // launch where the round trip failed — and that stamped npa=1 and Consent Mode "denied"
-        // on the whole session. An error is not a refusal: report it and carry on personalized,
-        // which is what the module this replaced did.
-        resolve(
-            personalized = true,
-            status = STATUS_ERROR,
-            screen = screen,
-            errorCode = formError.errorCode,
-        )
-        onCompleted(true)
+        val onCompleted = flow.onCompleted
+        val onFormAnswered = flow.onFormAnswered
+        flow.clearCallbacks()
+        pendingFlow = null
+        publishAuthority()
+        val allowed = canRequestAds()
+        val personalized = canPersonalize()
+        val answered = hasAnswered()
+        if (retryable || !allowed) requested.set(false)
+        val status = when {
+            error || !answered -> STATUS_ERROR
+            consentInformation?.consentStatus == ConsentInformation.ConsentStatus.NOT_REQUIRED -> STATUS_NOT_REQUIRED
+            personalized -> STATUS_GRANTED
+            else -> STATUS_DENIED
+        }
+        Tracker.track(TrackkitEvents.ConsentEvents.Result(status, errorCode, flow.screen))
+        onCompleted?.invoke(allowed)
+        if (formAnswered && answered) onFormAnswered?.invoke(personalized)
     }
 
-    /**
-     * Records what the user chose. Do not call `Tracker.setConsent` anywhere else.
-     *
-     * [personalized] drives Consent Mode and the request extras — it does **not** decide whether a
-     * request happens at all. UMP asks about **ads**, so only the ads axis follows the answer:
-     * first-party analytics stays granted, because refusing personalised ads must not also erase
-     * `first_open`, retention and the onboarding funnel. Sinks translate the pair into their own
-     * vendor switch.
-     */
-    private fun resolve(personalized: Boolean, status: String, screen: String, errorCode: Int? = null) {
-        _state.value = if (personalized) ConsentState.GRANTED else ConsentState.DENIED
-        Tracker.track(TrackkitEvents.ConsentEvents.Result(status, errorCode, screen))
-        Tracker.setConsent(analytics = true, ads = personalized)
-        // Adjust is not a Trackkit sink — it lives in :ads — so the same gate relays to it here.
-        MmpTracking.setConsent(true, personalized)
+    /** Publishes choices before eligibility so request observers see the matching personalization. */
+    private fun publishAuthority() {
+        val host = hostConsent
+        val allowed = canRequestAds()
+        val choice = when {
+            host != null -> if (host.personalized) ConsentState.GRANTED else ConsentState.DENIED
+            !allowed -> ConsentState.UNKNOWN
+            consentInformation?.consentStatus == ConsentInformation.ConsentStatus.NOT_REQUIRED -> ConsentState.GRANTED
+            consentInformation?.consentStatus == ConsentInformation.ConsentStatus.OBTAINED -> {
+                if (applicationContext?.let(::canShowPersonalizedAds) == true) ConsentState.GRANTED
+                else ConsentState.DENIED
+            }
+            else -> ConsentState.UNKNOWN
+        }
+        _state.value = choice
+        Tracker.setConsent(analytics = true, ads = choice == ConsentState.GRANTED)
+        MmpTracking.setConsent(true, choice == ConsentState.GRANTED)
+        _requestEligibility.value = allowed
     }
 
-    /**
-     * Whether ad requests may be personalised.
-     *
-     * `false` does not mean "no ads" — it means non-personalized ones. Read by the request builders
-     * so the `npa` extra matches what the user actually chose.
-     */
+    /** Unknown consent is conservative; use [canRequestAds] separately before sending requests. */
     @JvmStatic
-    fun canPersonalize(): Boolean = _state.value != ConsentState.DENIED
+    fun canPersonalize(): Boolean = _state.value == ConsentState.GRANTED
 
     /**
-     * Clears the stored answer so the form shows again — the "withdraw consent" entry a privacy
-     * settings screen needs, and the reset a debug build wants.
-     *
-     * Clears the module's own flags as well as UMP's state: leaving them set meant the next
-     * request short-circuited to "already resolved" and silently re-granted, which is the one
-     * thing a withdrawal must never do.
+     * Clears UMP consent for debugging/testing only. This is not a production withdrawal API;
+     * production privacy choices must use the consent provider's privacy-options flow. Resetting
+     * storage does not dismiss a UMP form already on screen.
      */
     @JvmStatic
     fun reset(context: Context) {
-        consentInformation?.reset()
-        sdkPreferences(context).edit()
+        invalidateFlow()
+        (consentInformation ?: umpClient.consentInformation(context.applicationContext)).reset()
+        consentInformation = null
+        umpUpdateRequested = false
+        hostConsent = null
+        applicationContext = null
+        context.applicationContext.getSharedPreferences(PREF_CONSENT, Context.MODE_PRIVATE).edit()
             .remove(KEY_CONSENT_ACCEPTED)
             .remove(KEY_CONSENT_NOT_REQUIRED)
             .apply()
-        requested.set(false)
-        callbackHandled = false
-        cancelTimeout()
-        releaseScreen()
-        _state.value = ConsentState.UNKNOWN
+        publishAuthority()
     }
 
     // -----------------------------------------------------------------------

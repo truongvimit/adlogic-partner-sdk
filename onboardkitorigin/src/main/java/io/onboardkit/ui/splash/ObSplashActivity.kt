@@ -160,7 +160,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 awaitConsentAnswer(
                     roundTripMs = cfg.splash.consentTimeoutMs,
                     isResolving = ConsentCenter::isResolving,
-                    hasAnswered = ConsentCenter::hasAnswered,
+                    canRequestAds = ConsentCenter::canRequestAds,
                     isVisible = { lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
                     request = ::onConsentRequired,
                 )
@@ -173,13 +173,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
                     AdConfig.refresh(cfg.splash.remoteFetchTimeoutMs)
                 }
             }
-            // `false` means the form is still on screen unanswered — the one case where no ad may
-            // go out. A refusal is not that case: it finishes the step and the ads run
-            // non-personalized.
+            // Completing the step and authorizing requests are separate. The SDK reads current
+            // authority at each gate, so a later answer can recover without overwriting host-off.
             val mayRequestAds = consent.await()
-            OnboardingSdk.setCanRequestAds(mayRequestAds)
             if (!mayRequestAds) {
-                ObLog.w(ObLog.Section.SPLASH, "consent unanswered — running the flow without ads")
+                ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
             }
             // Before any request: entitlement decides whether one is legitimate at all, and a
             // request made while it is still unknown reaches a paying user. Billing was started in
@@ -483,10 +481,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * Whether ads may now be requested. Runs the SDK's own UMP flow by default, so an app that
      * wants standard GDPR behaviour writes nothing.
      *
-     * This is "has the consent step finished", not "did the user agree". A refusal returns `true`:
-     * the user still gets ads, non-personalized. `false` means the form is still unanswered on
-     * screen, so the flow runs without ads rather than placing one underneath it. Override and
-     * return `true` for an app that has no consent step at all.
+     * Returns current request authorization, independently of personalization. UMP can permit
+     * non-personalized requests after a refusal; a timeout cannot grant permission by itself.
+     *
+     * For a custom CMP, publish both decisions through [ConsentCenter.setHostConsent] before
+     * returning. Returning `true` alone does not grant permission. The default UMP flow needs no
+     * host wiring, and a host's explicit `OnboardingSdk.setCanRequestAds(false)` remains in force.
      *
      * The splash gives the default all the time it needs: `consentTimeoutMs` bounds only the round
      * trip, and once the form is up the wait is the user's — up to a three-minute backstop for a

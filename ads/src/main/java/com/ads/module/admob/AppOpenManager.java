@@ -52,7 +52,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     public static final String AD_UNIT_ID_TEST = "ca-app-pub-3940256099942544/3419835294";
 
     private static volatile AppOpenManager INSTANCE;
-    private AppOpenAd appResumeAd = null;
+    private final AppResumeLoadOwner resumeLoadOwner;
+    private AppOpenAd presentingResumeAd;
     private AppOpenAd splashAd = null;
     private AppOpenAd.AppOpenAdLoadCallback loadCallback;
 
@@ -63,7 +64,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private AppOpenAd.AppOpenAdLoadCallback loadCallbackOpen;
     private FullScreenContentCallback fullScreenContentCallback;
 
-    private String appResumeAdId;
     private String splashAdId;
 
     private Activity currentActivity;
@@ -71,7 +71,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private Application myApplication;
 
     private static boolean isShowingAd = false;
-    private long appResumeLoadTime = 0;
     private long splashLoadTime = 0;
     private int splashTimeout = 0;
 
@@ -87,7 +86,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private static final Handler showingAdWatchdogHandler = new Handler(Looper.getMainLooper());
     private static Runnable showingAdWatchdogRunnable;
 
-    private boolean isInitialized = false;// on  - off ad resume on app
+    private volatile boolean isInitialized = false;// on  - off ad resume on app
     private boolean lifecycleHooksAttached = false;
     private boolean isAppResumeEnabled = true;
     private boolean isInterstitialShowing = false;
@@ -137,6 +136,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Constructor
      */
     private AppOpenManager() {
+        this(AppOpenAd::load);
+    }
+
+    AppOpenManager(AppResumeAdLoader resumeAdLoader) {
+        this.resumeLoadOwner = new AppResumeLoadOwner((context, unitId, request, callback) -> {
+            if (currentActivity != null && Arrays.asList(
+                    currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(unitId)) {
+                showTestIdAlert(currentActivity, false, unitId);
+            }
+            resumeAdLoader.load(context, unitId, request, callback);
+        });
         disabledAppOpenList = new ArrayList<>();
     }
 
@@ -148,24 +158,32 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Starts observing the process lifecycle so the app-open ad can show on resume.
+     * Initializes the resume unit and attaches activity, process and request-policy observers once.
+     * A blank unit still attaches the observers; no request is sent until a unit is available.
+     * Reinitializing with the same unit preserves a valid resume buffer or active request. A changed
+     * unit invalidates the previous buffer and pending fill. The durable resume mode is preserved.
+     * <p>
+     * Initialization can preload through the consent, premium, network, cache and cooldown gates;
+     * it never presents an ad. Later consent or entitlement changes use the same request gates.
+     * Calls on the main thread apply immediately; calls from another thread enqueue the update.
      */
     public void init(Application application, String appOpenAdId) {
-        disableAdResumeByClickAction = false;
-        this.appResumeAdId = appOpenAdId;
-        // Register unconditionally, even with a blank id: the id usually only arrives later, from
-        // remote config via setAppResumeAdId. Gating registration on it left the hooks unattached
-        // for the whole process, so app-resume never fired. Requests stay gated in fetchAd.
-        isInitialized = true;
-        // Separate from isInitialized, which has a public setter partners toggle to switch
-        // app-resume off: re-registering the callbacks would double every lifecycle event.
-        if (lifecycleHooksAttached) {
-            return;
-        }
-        lifecycleHooksAttached = true;
-        this.myApplication = application;
-        this.myApplication.registerActivityLifecycleCallbacks(this);
-        ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
+        runOnMain(() -> {
+            disableAdResumeByClickAction = false;
+            isInitialized = true;
+            this.myApplication = application;
+            resumeLoadOwner.initialize(application, appOpenAdId);
+            // Blank units still attach the hooks: remote config commonly supplies the unit later.
+            if (lifecycleHooksAttached) return;
+            lifecycleHooksAttached = true;
+            application.registerActivityLifecycleCallbacks(this);
+            ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
+        });
+    }
+
+    private void runOnMain(Runnable action) {
+        if (Looper.myLooper() == Looper.getMainLooper()) action.run();
+        else interstitialWatchdogHandler.post(action);
     }
 
     public boolean isInitialized() {
@@ -173,8 +191,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
 
+    /**
+     * Pauses or reactivates the resume owner without registering lifecycle observers again.
+     * Pausing invalidates the buffer and pending fill; reactivation attempts a gated preload while
+     * retaining the durable resume mode. Off-main calls enqueue the update on the main thread.
+     */
     public void setInitialized(boolean initialized) {
-        isInitialized = initialized;
+        runOnMain(() -> {
+            isInitialized = initialized;
+            resumeLoadOwner.setInitialized(initialized);
+        });
     }
 
     public void setEnableScreenContentCallback(boolean enableScreenContentCallback) {
@@ -317,21 +343,34 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Turns app-resume ads off for the rest of the process.
+     * Disables resume requests and shows until {@link #enableAppResume()} is called. Clears the
+     * resume buffer and invalidates pending fills, so late vendor callbacks cannot restore it.
+     * An ad already presenting completes through its existing callbacks.
      * <p>
-     * This is the durable entry-mode switch, owned by whoever decides that mode — in this template
-     * the splash, from remote config. It is the wrong tool for "not on this one return": use
-     * {@link #disableAdResumeByClickAction()} there, because {@link #enableAppResume()} has no
-     * memory of what the mode was and would switch app-resume back on for a session that had it
-     * off. That is what the splash-interstitial callbacks and the settings screen used to do.
+     * The entry-mode owner controls this durable switch. To suppress one return, use
+     * {@link #disableAdResumeByClickAction()}; enabling the durable switch does not restore an
+     * earlier mode choice. Calls on the main thread apply immediately; off-main calls enqueue it.
      */
     public void disableAppResume() {
-        isAppResumeEnabled = false;
+        runOnMain(() -> {
+            isAppResumeEnabled = false;
+            resumeLoadOwner.setEnabled(false);
+        });
     }
 
-    /** @see #disableAppResume() — same ownership rule; this is not an "undo my suppression". */
+    /**
+     * Enables the durable resume mode and attempts a preload through the current consent, premium,
+     * network, cache and cooldown gates. Repeated calls share any active request. This method does
+     * not itself present an ad. Only the entry-mode owner should change this switch.
+     * Calls on the main thread apply immediately; off-main calls enqueue the update.
+     *
+     * @see #disableAppResume()
+     */
     public void enableAppResume() {
-        isAppResumeEnabled = true;
+        runOnMain(() -> {
+            isAppResumeEnabled = true;
+            resumeLoadOwner.setEnabled(true);
+        });
     }
 
     public void setSplashActivity(Class splashActivity, String adId, int timeoutInMillis) {
@@ -340,8 +379,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.splashTimeout = timeoutInMillis;
     }
 
+    /**
+     * Applies the resume unit after trimming surrounding whitespace. An unchanged unit is a no-op.
+     * A changed unit clears the old buffer, invalidates pending fills and attempts a gated preload
+     * under the existing resume mode. Null or blank clears the unit and prevents further requests.
+     * Calls on the main thread apply immediately; off-main calls enqueue the update.
+     */
     public void setAppResumeAdId(String appResumeAdId) {
-        this.appResumeAdId = appResumeAdId;
+        runOnMain(() -> {
+            resumeLoadOwner.setUnitId(appResumeAdId);
+        });
     }
 
     public void setFullScreenContentCallback(FullScreenContentCallback callback) {
@@ -352,100 +399,61 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.fullScreenContentCallback = null;
     }
 
-    /**
-     * Drops every buffered app-open ad — call it when the user turns premium, or the ad loaded
-     * before they paid is still shown to them.
-     */
+    /** Drops cached app-open ads and invalidates any pending resume fill. */
     public void releaseCachedAds() {
-        appResumeAd = null;
-        splashAd = null;
-        splashAdHigh = null;
-        splashAdMedium = null;
-        splashAdAll = null;
-        splashAdOpen = null;
-        splashAdInter = null;
+        runOnMain(() -> {
+            resumeLoadOwner.invalidate();
+            splashAd = null;
+            splashAdHigh = null;
+            splashAdMedium = null;
+            splashAdAll = null;
+            splashAdOpen = null;
+            splashAdInter = null;
+        });
     }
 
     /**
      * Request an ad
      */
     public void fetchAd(final boolean isSplash) {
+        if (!isSplash) {
+            resumeLoadOwner.request();
+            return;
+        }
+        // Legacy splash remains independent of the resume request generation.
         Log.d(TAG, "fetchAd: isSplash = " + isSplash);
-        if (isAdAvailable(isSplash)) {
-            return;
-        }
-        // GMA rejects a blank unit with "Cannot determine request type" on every call.
-        String adUnitId = isSplash ? splashAdId : appResumeAdId;
+        if (isAdAvailable(true)) return;
+        String adUnitId = splashAdId;
         if (adUnitId == null || adUnitId.trim().isEmpty()) {
-            Log.d(TAG, "fetchAd: no ad unit set yet (isSplash = " + isSplash + ")");
+            Log.d(TAG, "fetchAd: no ad unit set yet (isSplash = true)");
             return;
         }
-
-        loadCallback =
-                new AppOpenAd.AppOpenAdLoadCallback() {
-
-                    /**
-                     * Called when an app open ad has loaded.
-                     *
-                     * @param ad the loaded app open ad.
-                     */
-
-
-                    @Override
-                    public void onAdLoaded(AppOpenAd ad) {
-                        Log.d(TAG, "onAppOpenAdLoaded: isSplash = " + isSplash);
-                        if (!isSplash) {
-                            AppOpenManager.this.appResumeAd = ad;
-                            AppOpenManager.this.appResumeAd.setOnPaidEventListener(adValue -> {
-                                ERainLogEventManager.logPaidAdImpression(myApplication.getApplicationContext(),
-                                        adValue,
-                                        ad.getAdUnitId(),
-                                        ad.getResponseInfo()
-                                                .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            });
-                            AppOpenManager.this.appResumeLoadTime = (new Date()).getTime();
-                        } else {
-                            AppOpenManager.this.splashAd = ad;
-
-                            // Luan
-                            AppOpenManager.this.setSplashAd(ad);
-
-                            AppOpenManager.this.splashAd.setOnPaidEventListener(adValue -> {
-                                ERainLogEventManager.logPaidAdImpression(myApplication.getApplicationContext(),
-                                        adValue,
-                                        ad.getAdUnitId(),
-                                        ad.getResponseInfo()
-                                                .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            });
-                            AppOpenManager.this.splashLoadTime = (new Date()).getTime();
-                        }
-
-
-                    }
-
-
-                    /**
-                     * Called when an app open ad has failed to load.
-                     *
-                     * @param loadAdError the error.
-                     */
-                    @Override
-                    public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                        Log.d(TAG, "onAppOpenAdFailedToLoad: isSplash" + isSplash + " message " + loadAdError.getMessage());
-                    }
-
-
-                };
-        if (currentActivity != null) {
-            if (AdGate.isPurchased(currentActivity))
-                return;
-            if (Arrays.asList(currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(isSplash ? splashAdId : appResumeAdId)) {
-                showTestIdAlert(currentActivity, isSplash, isSplash ? splashAdId : appResumeAdId);
+        loadCallback = new AppOpenAd.AppOpenAdLoadCallback() {
+            @Override
+            public void onAdLoaded(AppOpenAd ad) {
+                Log.d(TAG, "onAppOpenAdLoaded: isSplash = true");
+                AppOpenManager.this.splashAd = ad;
+                AppOpenManager.this.setSplashAd(ad);
+                AppOpenManager.this.splashAd.setOnPaidEventListener(adValue -> {
+                    ERainLogEventManager.logPaidAdImpression(myApplication.getApplicationContext(),
+                            adValue, ad.getAdUnitId(),
+                            ad.getResponseInfo().getMediationAdapterClassName(), AdType.APP_OPEN);
+                });
+                AppOpenManager.this.splashLoadTime = (new Date()).getTime();
             }
 
+            @Override
+            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                Log.d(TAG, "onAppOpenAdFailedToLoad: isSplashtrue message " + loadAdError.getMessage());
+            }
+        };
+        if (currentActivity != null) {
+            if (AdGate.isPurchased(currentActivity)) return;
+            if (Arrays.asList(currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(splashAdId)) {
+                showTestIdAlert(currentActivity, true, splashAdId);
+            }
         }
-        AdRequest request = getAdRequest();
-        AppOpenAd.load(myApplication, isSplash ? splashAdId : appResumeAdId, request, loadCallback);
+        AppOpenAd.load(myApplication, splashAdId, getAdRequest(), loadCallback);
     }
 
     @SuppressLint("MissingPermission")
@@ -487,11 +495,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Utility method that checks if ad exists and can be shown.
      */
     public boolean isAdAvailable(boolean isSplash) {
-        long loadTime = isSplash ? splashLoadTime : appResumeLoadTime;
-        boolean wasLoadTimeLessThanNHoursAgo = wasLoadTimeLessThanNHoursAgo(loadTime, 4);
-        Log.d(TAG, "isAdAvailable: " + wasLoadTimeLessThanNHoursAgo);
-        return (isSplash ? splashAd != null : appResumeAd != null)
-                && wasLoadTimeLessThanNHoursAgo;
+        if (!isSplash) return resumeLoadOwner.isAdAvailable();
+        return splashAd != null && wasLoadTimeLessThanNHoursAgo(splashLoadTime, 4);
     }
 
     @Override
@@ -545,6 +550,13 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     public void showAdIfAvailable(final boolean isSplash) {
+        if (!isSplash) {
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                runOnMain(() -> showAdIfAvailable(false));
+                return;
+            }
+            if (!resumeLoadOwner.canShow()) return;
+        }
         if (currentActivity == null || AdGate.isPurchased(currentActivity)) {
             if (fullScreenContentCallback != null && enableScreenContentCallback) {
                 fullScreenContentCallback.onAdDismissedFullScreenContent();
@@ -605,8 +617,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             new FullScreenContentCallback() {
                                 @Override
                                 public void onAdDismissedFullScreenContent() {
-                                    // Set the reference to null so isAdAvailable() returns false.
-                                    appResumeAd = null;
                                     if (fullScreenContentCallback != null && enableScreenContentCallback) {
                                         fullScreenContentCallback.onAdDismissedFullScreenContent();
                                         enableScreenContentCallback = false;
@@ -653,95 +663,105 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     Dialog dialog = null;
 
     private void showResumeAds() {
-        if (appResumeAd == null || currentActivity == null || AdGate.isPurchased(currentActivity)) {
+        if (!resumeLoadOwner.canShow() || !resumeLoadOwner.isAdAvailable()
+                || currentActivity == null || currentActivity.isFinishing() || currentActivity.isDestroyed()
+                || isShowingAd) return;
+        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+
+        try {
+            dismissDialogLoading();
+            dialog = new ResumeLoadingDialog(currentActivity);
+            dialog.show();
+        } catch (Exception e) {
+            dismissDialogLoading();
+            if (fullScreenContentCallback != null && enableScreenContentCallback) {
+                fullScreenContentCallback.onAdDismissedFullScreenContent();
+            }
             return;
         }
-        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
+        final AppOpenAd ad = resumeLoadOwner.takeForShow();
+        if (ad == null) {
+            dismissDialogLoading();
+            return;
+        }
+        final Activity activity = currentActivity;
+        final Dialog presentationDialog = dialog;
+        final FullScreenContentCallback callback = fullScreenContentCallback;
+        final boolean notifyContent = enableScreenContentCallback;
+        presentingResumeAd = ad;
+        // Reserve before calling the vendor, including the interval before its shown callback.
+        setShowingAd(true);
+        FullScreenContentCallback presentation = new FullScreenContentCallback() {
+            private boolean terminal;
+            private boolean shown;
 
-            try {
-                dismissDialogLoading();
-                dialog = new ResumeLoadingDialog(currentActivity);
+            private boolean ownsPresentation() {
+                return !terminal && presentingResumeAd == ad;
+            }
+
+            private boolean finishPresentation() {
+                if (!ownsPresentation()) return false;
+                terminal = true;
+                presentingResumeAd = null;
+                setShowingAd(false);
                 try {
-                    dialog.show();
-                } catch (Exception e) {
-                    if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                        fullScreenContentCallback.onAdDismissedFullScreenContent();
-
-                    }
-                    return;
+                    if (presentationDialog != null && presentationDialog.isShowing()) presentationDialog.dismiss();
+                } catch (Exception ignored) {
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
+                if (dialog == presentationDialog) dialog = null;
+                return true;
             }
-            if (appResumeAd != null) {
-                appResumeAd.setFullScreenContentCallback(new FullScreenContentCallback() {
-                    @Override
-                    public void onAdDismissedFullScreenContent() {
-                        appResumeAd = null;
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdDismissedFullScreenContent();
-                        }
-                        setShowingAd(false);
-                        fetchAd(false);
 
-                        dismissDialogLoading();
-                    }
-
-                    @Override
-                    public void onAdFailedToShowFullScreenContent(AdError adError) {
-                        Log.e(TAG, "onAdFailedToShowFullScreenContent: " + adError.getMessage());
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdFailedToShowFullScreenContent(adError);
-                        }
-
-                        if (currentActivity != null && !currentActivity.isDestroyed() && dialog != null && dialog.isShowing()) {
-                            Log.d(TAG, "dismiss dialog loading ad open: ");
-                            try {
-                                dialog.dismiss();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                        appResumeAd = null;
-                        setShowingAd(false);
-                        fetchAd(false);
-                    }
-
-                    @Override
-                    public void onAdShowedFullScreenContent() {
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdShowedFullScreenContent();
-                        }
-                        setShowingAd(true);
-                        appResumeAd = null;
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        if (currentActivity != null) {
-                            ERainLogEventManager.logClickAdsEvent(currentActivity, appResumeAdId);
-                            if (fullScreenContentCallback != null) {
-                                fullScreenContentCallback.onAdClicked();
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onAdImpression() {
-                        super.onAdImpression();
-                        if (currentActivity != null) {
-                            if (fullScreenContentCallback != null) {
-                                fullScreenContentCallback.onAdImpression();
-                            }
-                        }
-                    }
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                runOnMain(() -> {
+                    if (!finishPresentation()) return;
+                    if (callback != null && notifyContent) callback.onAdDismissedFullScreenContent();
+                    fetchAd(false);
                 });
-                appResumeAd.setImmersiveMode(true);
-                appResumeAd.show(currentActivity);
-            } else {
-                dismissDialogLoading();
             }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(AdError error) {
+                runOnMain(() -> {
+                    if (!finishPresentation()) return;
+                    if (callback != null && notifyContent) callback.onAdFailedToShowFullScreenContent(error);
+                    fetchAd(false);
+                });
+            }
+
+            @Override
+            public void onAdShowedFullScreenContent() {
+                runOnMain(() -> {
+                    if (!ownsPresentation() || shown) return;
+                    shown = true;
+                    if (callback != null && notifyContent) callback.onAdShowedFullScreenContent();
+                });
+            }
+
+            @Override
+            public void onAdClicked() {
+                runOnMain(() -> {
+                    if (!ownsPresentation()) return;
+                    ERainLogEventManager.logClickAdsEvent(activity, ad.getAdUnitId());
+                    if (callback != null) callback.onAdClicked();
+                });
+            }
+
+            @Override
+            public void onAdImpression() {
+                runOnMain(() -> {
+                    if (ownsPresentation() && callback != null) callback.onAdImpression();
+                });
+            }
+        };
+        try {
+            ad.setFullScreenContentCallback(presentation);
+            ad.setImmersiveMode(true);
+            ad.show(activity);
+        } catch (RuntimeException error) {
+            presentation.onAdFailedToShowFullScreenContent(new AdError(
+                    0, error.getMessage() == null ? "App-open show failed" : error.getMessage(), TAG));
         }
     }
 
@@ -1873,4 +1893,3 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         return cm.getActiveNetworkInfo() != null && cm.getActiveNetworkInfo().isConnected();
     }
 }
-

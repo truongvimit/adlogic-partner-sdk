@@ -318,6 +318,8 @@ class ERainAdProvider(
         SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE
         SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW
         SdkAdSkipReason.PURCHASED -> AdSkipReason.PREMIUM
+        SdkAdSkipReason.CONSENT_NOT_GRANTED -> AdSkipReason.CONSENT_NOT_GRANTED
+        SdkAdSkipReason.CONSENT_FORM_SHOWING -> AdSkipReason.SUPPRESSED_BY_FLOW
         SdkAdSkipReason.DISABLED_CONFIG -> AdSkipReason.NO_AD_UNIT
         // 1:1 rather than collapsed into NOT_READY: reporting an offline or gated request as
         // "nothing buffered" hid the two causes a funnel actually needs to tell apart.

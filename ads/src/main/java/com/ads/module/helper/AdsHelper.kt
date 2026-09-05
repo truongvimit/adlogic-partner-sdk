@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.ads.module.consent.ConsentCenter
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -44,7 +45,8 @@ abstract class AdsHelper<C : IAdsConfig, P : IAdsParam>(
     protected fun isResumed(): Boolean =
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
-    open fun canShowAds(): Boolean = config.canShowAds && !AdGate.isPurchased(context)
+    open fun canShowAds(): Boolean = config.canShowAds && !AdGate.isPurchased(context) &&
+        ConsentCenter.canRequestAds() && !ConsentCenter.isFormShowing()
 
     open fun canRequestAds(): Boolean = canShowAds() && AdGate.isNetworkAvailable(context)
 

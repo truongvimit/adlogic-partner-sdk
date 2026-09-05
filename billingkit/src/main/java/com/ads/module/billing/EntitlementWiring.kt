@@ -24,6 +24,19 @@ internal object EntitlementWiring {
         } catch (_: ExceptionInInitializerError) {
         }
     }
+
+    @JvmStatic
+    @JvmName("notifyAdsIfPresent")
+    fun notifyAdsIfPresent() {
+        try {
+            AdsEntitlementHook.notifyChanged()
+        } catch (_: NoClassDefFoundError) {
+            // :ads absent — billing still works independently.
+        } catch (_: ExceptionInInitializerError) {
+        } catch (_: NoSuchMethodError) {
+            // An older :ads still supports synchronous checks, without the observation port.
+        }
+    }
 }
 
 // Separate object so the Entitlement reference resolves only inside the guarded call above.
@@ -36,5 +49,9 @@ private object AdsEntitlementHook {
                     AppPurchase.getInstance().isPurchased(context)
             },
         )
+    }
+
+    fun notifyChanged() {
+        Entitlement.notifyChanged()
     }
 }

@@ -11,6 +11,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
@@ -32,6 +33,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * The app hands over views once and calls [requestAds]; everything after that — including
  * hiding the slot for purchased users and keeping the old ad on a failed reload — is owned
  * here.
+ *
+ * Direct requests retain their personalization choice; every late fill and bind rechecks current
+ * authorization. A rejected fill is destroyed and leaves Loading without calling the binder.
+ * Cancellation and screen destruction invalidate callbacks from the earlier request.
  *
  * While loading, the slot shows a shimmer skeleton. By default it is derived from the ad
  * layout itself ([NativeAdConfig.autoShimmer]); an explicit skeleton via [setShimmerLayoutView]
@@ -110,6 +115,8 @@ class NativeAdHelper(
     private val resumeCount = AtomicInteger(0)
     private var timeShowAdRecent = 0L
     private var reloadByTimeMs = 0L
+    private var requestGeneration = 0L
+    private var loadedPersonalized: Boolean? = null
 
     private val resumeReloadRunnable = Runnable {
         if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && isActiveState()) {
@@ -288,6 +295,7 @@ class NativeAdHelper(
     }
 
     override fun cancel() {
+        requestGeneration++
         flagActive.compareAndSet(true, false)
         mainHandler.removeCallbacks(reloadByTimeRunnable)
         setState(AdNativeState.Cancel)
@@ -317,12 +325,14 @@ class NativeAdHelper(
             Lifecycle.Event.ON_DESTROY -> {
                 // Deactivate first: a late fill must hit the !isActiveState() path and die
                 flagActive.set(false)
+                requestGeneration++
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.removeCallbacks(reloadByTimeRunnable)
                 NativeAdPreload.getInstance().unregisterAdCallback(preloadKey, preloadObserver)
                 listeners.clear()
                 nativeAd?.let { destroyNative(it) }
                 nativeAd = null
+                loadedPersonalized = null
                 dropGeneratedShimmer()
                 contentView = null
                 shimmerView = null
@@ -344,8 +354,13 @@ class NativeAdHelper(
             buffered != null -> onLoadedAd(buffered)
 
             preload.isPreloadInProgress(preloadKey) -> {
+                val generation = ++requestGeneration
                 setState(AdNativeState.Loading)
                 preload.awaitNext(preloadKey) { ad ->
+                    if (requestGeneration != generation) {
+                        ad?.let(::destroyNative)
+                        return@awaitNext
+                    }
                     if (ad != null) onLoadedAd(ad) else onFailedToLoad()
                 }
             }
@@ -360,6 +375,8 @@ class NativeAdHelper(
             else setState(AdNativeState.Fail)
             return
         }
+        val generation = ++requestGeneration
+        val personalized = ConsentCenter.canPersonalize()
         setState(AdNativeState.Loading)
         placement?.let { key ->
             config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
@@ -372,12 +389,17 @@ class NativeAdHelper(
             config.tierTimeoutMs,
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    onLoadedAd(nativeAd)
+                    if (requestGeneration != generation) {
+                        destroyNative(nativeAd)
+                        return
+                    }
+                    onLoadedAd(nativeAd, personalized)
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
+                    if (requestGeneration != generation) return
                     onFailedToLoad()
-                    listeners.forEach { it.onAdFailedToLoad(adError) }
+                    listeners.forEach { runCatching { it.onAdFailedToLoad(adError) } }
                 }
 
                 override fun onAdClicked() {
@@ -401,18 +423,25 @@ class NativeAdHelper(
         }
     }
 
-    private fun onLoadedAd(ad: ApNativeAd) {
+    private fun onLoadedAd(ad: ApNativeAd, personalized: Boolean = ConsentCenter.canPersonalize()) {
         if (!isActiveState()) {
             destroyNative(ad)
             return
         }
+        if (!canBind(personalized)) {
+            rejectAd(ad)
+            return
+        }
         val previous = nativeAd
         nativeAd = ad
+        loadedPersonalized = personalized
         // Bind first, destroy after: the outgoing ad backs the view on screen until the
         // new one replaces it, so the slot never blanks between the two
         setState(AdNativeState.Loaded(ad))
         if (previous != null && previous !== ad) destroyNative(previous)
-        listeners.forEach { it.onNativeAdLoaded(ad) }
+        if (nativeAd === ad && _nativeAdState.value is AdNativeState.Loaded) {
+            listeners.forEach { runCatching { it.onNativeAdLoaded(ad) } }
+        }
     }
 
     private fun onFailedToLoad() {
@@ -420,6 +449,8 @@ class NativeAdHelper(
         val survivor = nativeAd
         if (survivor == null) {
             setState(AdNativeState.Fail)
+        } else if (!canBind(loadedPersonalized)) {
+            rejectAd(survivor, reportFailure = false)
         } else {
             // Failed reload keeps the old ad. Write the flow directly: going through
             // setState would re-bind the same ad; staying Loading would gate every
@@ -452,14 +483,40 @@ class NativeAdHelper(
     }
 
     private fun bindLoadedAd(ad: ApNativeAd) {
+        if (!isActiveState() || !canBind(loadedPersonalized)) {
+            rejectAd(ad)
+            return
+        }
         val container = contentView ?: return
         runCatching { binder.bind(activity, ad, container, shimmerView) }
+        if (!canBind(loadedPersonalized)) {
+            rejectAd(ad)
+            return
+        }
         // The binder's removeAllViews detached a generated skeleton (or it serves a
         // replaced container); drop the refs so the next Loading regenerates a fresh one
         if (generatedShimmer != null && generatedShimmer?.parent !== contentView) dropGeneratedShimmer()
         // Bind is the baseline anchor; the impression callback re-anchors when it lands
         onAdImpressionInternal()
         refillAfterShow()
+    }
+
+    private fun canBind(personalized: Boolean?): Boolean =
+        !activity.isFinishing && !activity.isDestroyed && canShowAds() &&
+            personalized != null && personalized == ConsentCenter.canPersonalize()
+
+    /** A rejected fill cannot be made visible again by the default or a host-supplied binder. */
+    private fun rejectAd(ad: ApNativeAd, reportFailure: Boolean = true) {
+        requestGeneration++
+        nativeAd?.takeIf { it !== ad }?.let(::destroyNative)
+        destroyNative(ad)
+        nativeAd = null
+        loadedPersonalized = null
+        mainHandler.removeCallbacks(reloadByTimeRunnable)
+        setState(if (isActiveState()) AdNativeState.Fail else AdNativeState.Cancel)
+        if (reportFailure && isActiveState()) {
+            listeners.forEach { runCatching { it.onAdFailedToLoad(null) } }
+        }
     }
 
     /**
@@ -533,7 +590,7 @@ class NativeAdHelper(
     }
 
     private fun applyDefaultVisibility() {
-        val hasAd = nativeAd != null
+        val hasAd = nativeAd != null && canBind(loadedPersonalized)
         contentView?.let { checkAdVisibility(it, canRequestAds() || hasAd) }
         shimmerView?.let { checkAdVisibility(it, canRequestAds() && !hasAd) }
     }

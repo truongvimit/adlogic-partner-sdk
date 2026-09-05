@@ -175,7 +175,9 @@ minimum-display घड़ी दोनों खोकर। `uiMode|fontScale` 
 
 - यहाँ `OnboardingSdk.start()` न बुलाएँ — pipeline पूरा होते ही वह अपने आप चलता है।
 - `onConsentRequired()` override न करें; उसका default `:ads` के `ConsentCenter` से UMP flow चलाता है।
-  सिर्फ़ उस app के लिए override करें जिसमें consent step है ही नहीं — तब `return true`।
+  Custom consent provider के लिए override पूरा करने से पहले उसके request और personalization
+  decisions को `ConsentCenter.setHostConsent(...)` से publish करें। केवल `return true` permission
+  नहीं देता; [5.1.0 migration](../MIGRATION-5.1.0.md) देखें।
 - `onDestroy()` override करें तो `super.onDestroy()` ज़रूर बुलाएँ — `ConsentCenter.detach(this)` वहीं है।
 
 बाद में, कहीं से भी: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`।

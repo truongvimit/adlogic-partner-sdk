@@ -6,6 +6,7 @@ import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
@@ -14,6 +15,7 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.android.gms.ads.rewarded.RewardedAd
 import io.trackkit.AdFormat
+import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 /** Outcomes of one rewarded presentation, in the order GMA reports them. */
@@ -43,10 +45,29 @@ open class RewardShowCallback {
  */
 object RewardAdManager {
 
-    private val cache = ConcurrentHashMap<String, CachedAd<RewardedAd>>()
+    private val cache = ConcurrentHashMap<String, BufferedReward>()
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
+    private val loadGenerations = ConcurrentHashMap<String, Long>()
+    private var nextLoadGeneration = 0L
     // One observer per placement; the freshest caller hears the in-flight outcome
     private val listeners = ConcurrentHashMap<String, AdCallback>()
+    private val presentations = ConcurrentHashMap<String, Presentation>()
+
+    private class BufferedReward(ad: RewardedAd, val context: Context, val personalized: Boolean) {
+        val cached = CachedAd(ad)
+        val ad: RewardedAd get() = cached.ad
+        val isFresh: Boolean get() = cached.isFresh && personalized == ConsentCenter.canPersonalize()
+    }
+
+    private class Presentation(activity: Activity, onSuccess: Runnable, onFailed: Runnable) {
+        val activityReference = WeakReference(activity)
+        val context: Context = activity.applicationContext
+        val personalized = ConsentCenter.canPersonalize()
+        var showing = false
+        var completion: ((Boolean) -> Unit)? = { earned ->
+            if (earned) onSuccess.run() else onFailed.run()
+        }
+    }
 
     /**
      * Buffers one rewarded ad for [placement], walking [adUnitIds] highest floor first;
@@ -62,21 +83,29 @@ object RewardAdManager {
         tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
         listener: AdCallback? = null,
     ) {
-        listener?.let { listeners[placement] = it }
-        cache[placement]?.takeIf { it.isFresh }?.let { cached ->
-            notifyListener(placement) { it.onRewardAdLoaded(cached.ad) }
-            return
-        }
         val ids = AdWaterfall.usableIds(adUnitIds)
         val skipReason = AdGate.skipReason(
             context, enabled && ids.isNotEmpty(), passesUaGate = true, checkNetwork = false,
         )
         if (skipReason != null) {
+            release(placement)
             AdTracking.skipped(placement, AdFormat.REWARDED, skipReason.key)
-            notifyListener(placement) { it.onAdFailedToLoad(null) }
+            listener?.let { runCatching { it.onAdFailedToLoad(null) } }
             return
         }
+        // The gate can synchronously release seeded-premium buffers. Register the incoming
+        // callback afterwards, and never let a cached value bypass current authorization.
+        listener?.let { listeners[placement] = it }
+        cache[placement]?.takeIf { it.isFresh }?.let { cached ->
+            notifyListener(placement) { it.onRewardAdLoaded(cached.ad) }
+            return
+        }
+        cache.remove(placement)
         if (!inFlight.add(placement)) return
+        val generation = ++nextLoadGeneration
+        loadGenerations[placement] = generation
+        val personalized = ConsentCenter.canPersonalize()
+        val applicationContext = context.applicationContext
         ids.forEach { AdTracking.registerPlacement(it, placement) }
         AdTracking.request(placement, AdFormat.REWARDED, ids.first())
         AdWaterfall.loadReward(
@@ -85,16 +114,22 @@ object RewardAdManager {
             tierTimeoutMs,
             object : AdCallback() {
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
+                    if (loadGenerations[placement] != generation) return
+                    val allowed = AdGate.skipReason(applicationContext, enabled = true, checkNetwork = false) == null &&
+                        ConsentCenter.canPersonalize() == personalized
+                    // Evaluating the gate may itself release this request after a purchase.
+                    if (!loadGenerations.remove(placement, generation)) return
                     inFlight.remove(placement)
-                    if (rewardedAd == null) {
+                    if (rewardedAd == null || !allowed) {
                         notifyListener(placement) { it.onAdFailedToLoad(null) }
                         return
                     }
-                    cache[placement] = CachedAd(rewardedAd)
+                    cache[placement] = BufferedReward(rewardedAd, applicationContext, personalized)
                     notifyListener(placement) { it.onRewardAdLoaded(rewardedAd) }
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
+                    if (!loadGenerations.remove(placement, generation)) return
                     inFlight.remove(placement)
                     notifyListener(placement) { it.onAdFailedToLoad(adError) }
                 }
@@ -106,16 +141,26 @@ object RewardAdManager {
     @JvmStatic
     fun isReady(placement: String): Boolean {
         val cached = cache[placement] ?: return false
-        if (!cached.isFresh) {
-            cache.remove(placement)
+        if (!cached.isFresh || AdGate.skipReason(cached.context, enabled = true, checkNetwork = false) != null) {
+            cache.remove(placement, cached)
             return false
         }
         return true
     }
 
-    /** Shows the buffered ad. Single-use: the buffer is dropped before `show()`. */
+    /**
+     * Shows the buffered ad. Single-use: the buffer is dropped before `show()`.
+     * Premium users receive an automatic earn/close even if entitlement invalidation cleared it.
+     */
     @JvmStatic
     fun show(activity: Activity, placement: String, callback: RewardShowCallback) {
+        // Premium invalidation may already have removed the buffer; preserve the rewarded
+        // presentation API's automatic earn/close outcome without requiring an ad object.
+        if (AdGate.isPurchased(activity)) {
+            cache.remove(placement)
+            showInternal(activity, null, callback)
+            return
+        }
         val cached = cache.remove(placement)?.takeIf { it.isFresh }
         if (cached == null) {
             AdTracking.skipped(placement, AdFormat.REWARDED, AdSkipReason.NOT_READY.key)
@@ -126,8 +171,10 @@ object RewardAdManager {
     }
 
     /**
-     * The classic gate → request → load → show chain in one call: [onSuccess] only after
-     * the user earned and the ad closed, [onFailed] on every other outcome.
+     * The classic gate → request → load → show chain in one call. [onSuccess] follows earning
+     * and dismissal. If a new premium grant releases a still-loading request, it automatically
+     * earns without presenting an ad; other cancelled loads invoke [onFailed]. Once presentation
+     * starts, release preserves the real earn/dismiss outcome rather than completing it early.
      */
     @JvmStatic
     @JvmOverloads
@@ -151,6 +198,8 @@ object RewardAdManager {
         }
         // The guard spans load AND show — loadAndShow's contract is one presentation
         if (!inFlight.add(placement)) return
+        val presentation = Presentation(activity, onSuccess, onFailed)
+        presentations[placement] = presentation
         AdTracking.request(placement, AdFormat.REWARDED, ids.first())
         ids.forEach { AdTracking.registerPlacement(it, placement) }
         AdWaterfall.loadReward(
@@ -159,42 +208,71 @@ object RewardAdManager {
             tierTimeoutMs,
             object : AdCallback() {
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
+                    if (presentations[placement] !== presentation) return
+                    val purchased = AdGate.isPurchased(presentation.context)
+                    if (presentations[placement] !== presentation) return
+                    if (!purchased && ConsentCenter.canPersonalize() != presentation.personalized) {
+                        finishPresentation(placement, presentation, false)
+                        return
+                    }
+                    val owner = presentation.activityReference.get()
+                    if (owner == null || owner.isFinishing || owner.isDestroyed) {
+                        finishPresentation(placement, presentation, false)
+                        return
+                    }
+                    presentation.showing = true
                     showInternal(
-                        activity, rewardedAd,
+                        owner, rewardedAd,
                         object : RewardShowCallback() {
                             override fun onClosed(earned: Boolean) {
-                                inFlight.remove(placement)
-                                if (earned) onSuccess.run() else onFailed.run()
+                                finishPresentation(placement, presentation, earned)
                             }
 
                             override fun onFailedToShow(codeError: Int) {
-                                inFlight.remove(placement)
-                                onFailed.run()
+                                finishPresentation(placement, presentation, false)
                             }
                         },
                     )
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    inFlight.remove(placement)
-                    onFailed.run()
+                    if (presentations[placement] === presentation) {
+                        finishPresentation(placement, presentation, false)
+                    }
                 }
             },
         )
     }
 
+    /**
+     * Drops buffered/in-flight loading work and settles its listener. A pending [loadAndShow]
+     * succeeds for a newly premium user and fails otherwise. An already presenting instance
+     * keeps its actual terminal callback; it cannot clear a replacement load for this placement.
+     */
     @JvmStatic
     fun release(placement: String) {
         cache.remove(placement)
         inFlight.remove(placement)
-        listeners.remove(placement)
+        val cancelledLoad = loadGenerations.remove(placement)
+        val listener = listeners.remove(placement)
+        val presentation = presentations.remove(placement)
+        if (cancelledLoad != null) listener?.let { runCatching { it.onAdFailedToLoad(null) } }
+        if (presentation != null && !presentation.showing) {
+            finishPresentation(placement, presentation, AdGate.isPurchased(presentation.context))
+        }
     }
 
+    /** Applies [release] to every owned placement, including pending load-and-show requests. */
     @JvmStatic
     fun releaseAll() {
-        cache.clear()
-        inFlight.clear()
-        listeners.clear()
+        (cache.keys + inFlight + loadGenerations.keys + listeners.keys + presentations.keys).toSet().forEach(::release)
+    }
+
+    private fun finishPresentation(placement: String, presentation: Presentation, earned: Boolean) {
+        val completion = presentation.completion ?: return
+        presentation.completion = null
+        if (presentations.remove(placement, presentation)) inFlight.remove(placement)
+        runCatching { completion(earned) }
     }
 
     private fun showInternal(activity: Activity, ad: RewardedAd?, callback: RewardShowCallback) {
@@ -203,6 +281,10 @@ object RewardAdManager {
         if (AdGate.isPurchased(activity)) {
             callback.onEarned(null)
             callback.onClosed(earned = true)
+            return
+        }
+        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null) {
+            callback.onFailedToShow(0)
             return
         }
         var earned = false

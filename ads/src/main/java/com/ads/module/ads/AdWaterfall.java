@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.funtion.AdCallback;
+import com.ads.module.helper.AdGate;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 
@@ -39,6 +40,14 @@ public final class AdWaterfall {
     public static final long DEFAULT_TIER_TIMEOUT_MS = 30_000L;
 
     private AdWaterfall() {
+    }
+
+    private static boolean canContinue(Context context, AdCallback callback) {
+        // A fallback is another vendor request, so it needs current authority too.
+        // Keep rewarded's offline behavior; each helper owns its network policy.
+        if (AdGate.skipReason(context, true, true, false) == null) return true;
+        callback.onAdFailedToLoad(null);
+        return false;
     }
 
     /**
@@ -82,6 +91,7 @@ public final class AdWaterfall {
             callback.onAdFailedToLoad(null);
             return;
         }
+        if (!canContinue(activity, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1, callback));
         ERainAd.getInstance().loadNativeAdResultCallback(activity, tiers.get(index), layoutRes,
@@ -162,6 +172,7 @@ public final class AdWaterfall {
             callback.onAdFailedToLoad(null);
             return;
         }
+        if (!canContinue(context, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback));
         ERainAd.getInstance().getInterstitialAds(context, tiers.get(index), new AdCallback() {
@@ -225,6 +236,7 @@ public final class AdWaterfall {
             callback.onAdFailedToLoad(null);
             return;
         }
+        if (!canContinue(context, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback));
         ERainAd.getInstance().initRewardAds(context, tiers.get(index), new AdCallback() {

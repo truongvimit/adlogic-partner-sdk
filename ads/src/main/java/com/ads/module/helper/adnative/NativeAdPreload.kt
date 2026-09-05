@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.CachedAd
@@ -64,14 +65,18 @@ class NativeAdPreload private constructor() {
      *   new request was started — false only when nothing is or will be available.
      */
     fun preloadWithKeyIfEmpty(key: String, activity: Activity, config: NativeAdConfig): Boolean {
+        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null) {
+            executors[key]?.invalidate()
+            return false
+        }
         val executor = executors[key]
         if (executor != null && (executor.isInProgress() || executor.peek() != null)) return true
         return preloadWithKey(key, activity, config, 1)
     }
 
-    /** Purchased or offline users never spend a preload request. */
+    /** Every preload uses the shared request gate, including consent authority and active forms. */
     fun canRequestLoad(context: Context): Boolean =
-        !AdGate.isPurchased(context) && AdGate.isNetworkAvailable(context)
+        AdGate.skipReason(context, enabled = true) == null
 
     /** Peeks the freshest buffered ad without consuming it. */
     fun getAdNative(key: String): ApNativeAd? = executors[key]?.peek()
@@ -94,7 +99,7 @@ class NativeAdPreload private constructor() {
     fun awaitNext(key: String, onResult: (ApNativeAd?) -> Unit) {
         val executor = executors[key]
         if (executor == null || !executor.isInProgress()) {
-            onResult(executor?.poll())
+            runCatching { onResult(executor?.poll()) }
         } else {
             executor.addWaiter(onResult)
         }
@@ -123,6 +128,14 @@ class NativeAdPreload private constructor() {
         keys.forEach { release(it) }
     }
 
+    /**
+     * Cancels pending work and destroys buffered ads while retaining placement subscriptions.
+     * Use for entitlement/policy changes; [releaseAll] also disposes the observers themselves.
+     */
+    fun invalidateBuffers() {
+        executors.values.toList().forEach { it.invalidate() }
+    }
+
     companion object {
         @Volatile
         private var instance: NativeAdPreload? = null
@@ -140,6 +153,14 @@ class NativeAdPreload private constructor() {
      */
     private class PreloadExecutor {
 
+        private class BufferedNative(ad: ApNativeAd, val personalized: Boolean) {
+            val cached = CachedAd(ad)
+            val ad: ApNativeAd get() = cached.ad
+            val isFresh: Boolean get() = cached.isFresh &&
+                personalized == ConsentCenter.canPersonalize() && ConsentCenter.canRequestAds() &&
+                !ConsentCenter.isFormShowing()
+        }
+
         private class Batch(
             val activity: Activity,
             val config: NativeAdConfig,
@@ -147,33 +168,43 @@ class NativeAdPreload private constructor() {
         )
 
         private val lock = Any()
-        private val queue = ArrayDeque<CachedAd<ApNativeAd>>()
+        private val queue = ArrayDeque<BufferedNative>()
         private var pending = 0
         private var batchInFlight = false
         private var released = false
+        private var generation = 0L
+        private var applicationContext: Context? = null
         private val deferredBatches = ArrayDeque<Batch>()
         private val waiters = mutableListOf<(ApNativeAd?) -> Unit>()
         private val callbacks = CopyOnWriteArrayList<AdCallback>()
 
         fun execute(activity: Activity, config: NativeAdConfig, buffer: Int) {
-            val startNow = synchronized(lock) {
+            val startGeneration = synchronized(lock) {
+                if (released) return
+                applicationContext = activity.applicationContext
                 pending += buffer
                 if (batchInFlight) {
                     deferredBatches.addLast(Batch(activity, config, buffer))
-                    false
+                    null
                 } else {
                     batchInFlight = true
-                    true
+                    generation
                 }
             }
-            if (startNow) loadBatch(activity, config, buffer)
+            if (startGeneration != null) loadBatch(activity, config, buffer, startGeneration)
         }
 
-        private fun loadBatch(activity: Activity, config: NativeAdConfig, remaining: Int) {
+        private fun loadBatch(activity: Activity, config: NativeAdConfig, remaining: Int, expectedGeneration: Long) {
+            if (!isCurrent(expectedGeneration)) return
             if (remaining <= 0) {
-                onBatchDone()
+                onBatchDone(expectedGeneration)
                 return
             }
+            if (AdGate.skipReason(activity, enabled = true) != null) {
+                cancelPending(expectedGeneration)
+                return
+            }
+            val personalized = ConsentCenter.canPersonalize()
             AdWaterfall.loadNative(
                 activity,
                 config.adUnitIds,
@@ -181,43 +212,83 @@ class NativeAdPreload private constructor() {
                 config.tierTimeoutMs,
                 object : AdCallback() {
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                        deliver(nativeAd)
-                        if (!isReleased()) loadBatch(activity, config, remaining - 1)
+                        if (!isCurrent(expectedGeneration)) {
+                            destroy(nativeAd)
+                            return
+                        }
+                        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null ||
+                            ConsentCenter.canPersonalize() != personalized) {
+                            destroy(nativeAd)
+                            cancelPending(expectedGeneration)
+                            return
+                        }
+                        deliver(nativeAd, personalized, expectedGeneration)
+                        if (isCurrent(expectedGeneration)) loadBatch(activity, config, remaining - 1, expectedGeneration)
                     }
 
                     override fun onAdFailedToLoad(adError: LoadAdError?) {
-                        deliver(null)
+                        if (!isCurrent(expectedGeneration)) return
+                        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null ||
+                            ConsentCenter.canPersonalize() != personalized) {
+                            cancelPending(expectedGeneration)
+                            return
+                        }
+                        deliver(null, personalized, expectedGeneration)
                         callbacks.forEach { runCatching { it.onAdFailedToLoad(adError) } }
-                        if (!isReleased()) loadBatch(activity, config, remaining - 1)
+                        if (isCurrent(expectedGeneration)) loadBatch(activity, config, remaining - 1, expectedGeneration)
                     }
 
                     override fun onAdClicked() {
+                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdClicked() } }
                     }
 
                     override fun onAdOpened() {
+                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdOpened() } }
                     }
 
                     override fun onAdImpression() {
+                        if (!isCurrent(expectedGeneration)) return
                         callbacks.forEach { runCatching { it.onAdImpression() } }
                     }
                 },
             )
         }
 
-        private fun onBatchDone() {
+        private fun onBatchDone(expectedGeneration: Long) {
             val next = synchronized(lock) {
+                if (released || generation != expectedGeneration) return
                 deferredBatches.removeFirstOrNull().also { if (it == null) batchInFlight = false }
             }
-            next?.let { loadBatch(it.activity, it.config, it.buffer) }
+            next?.let { loadBatch(it.activity, it.config, it.buffer, expectedGeneration) }
         }
 
-        private fun deliver(ad: ApNativeAd?) {
+        /** A policy change cancels this whole batch, including queued requests and all waiters. */
+        private fun cancelPending(expectedGeneration: Long? = null) {
+            val orphaned: List<(ApNativeAd?) -> Unit>
+            val hadWork: Boolean
+            synchronized(lock) {
+                if (released || (expectedGeneration != null && generation != expectedGeneration)) return
+                generation++
+                hadWork = pending > 0 || queue.isNotEmpty()
+                pending = 0
+                batchInFlight = false
+                deferredBatches.clear()
+                queue.forEach { destroy(it.ad) }
+                queue.clear()
+                orphaned = waiters.toList()
+                waiters.clear()
+            }
+            orphaned.forEach { runCatching { it.invoke(null) } }
+            if (hadWork) callbacks.forEach { runCatching { it.onAdFailedToLoad(null) } }
+        }
+
+        private fun deliver(ad: ApNativeAd?, personalized: Boolean, expectedGeneration: Long) {
             val claimed = mutableListOf<Pair<(ApNativeAd?) -> Unit, ApNativeAd?>>()
             synchronized(lock) {
                 // A fill landing after release() has no owner left — destroy, don't orphan
-                if (released) {
+                if (released || generation != expectedGeneration) {
                     if (ad != null) destroy(ad)
                     return
                 }
@@ -225,7 +296,7 @@ class NativeAdPreload private constructor() {
                 val first = waiters.removeFirstOrNull()
                 // A waiter consumes the ad directly; only unclaimed fills are buffered
                 if (first != null) claimed.add(first to ad)
-                else if (ad != null) queue.addLast(CachedAd(ad))
+                else if (ad != null) queue.addLast(BufferedNative(ad, personalized))
                 // Nothing else will arrive: flush stragglers or they wait forever
                 if (pending == 0) {
                     while (waiters.isNotEmpty()) {
@@ -234,9 +305,18 @@ class NativeAdPreload private constructor() {
                     }
                 }
             }
-            claimed.forEach { (waiter, result) -> waiter.invoke(result) }
+            claimed.forEach { (waiter, result) ->
+                val current = isCurrent(expectedGeneration) && canReadBuffer() &&
+                    personalized == ConsentCenter.canPersonalize()
+                if (!current && result != null) destroy(result)
+                runCatching { waiter.invoke(if (current) result else null) }
+            }
             // Observers see every fill after it is buffered, so a bind on this signal hits
-            if (ad != null) callbacks.forEach { runCatching { it.onNativeAdLoaded(ad) } }
+            if (ad != null) callbacks.forEach {
+                if (isCurrent(expectedGeneration) && canReadBuffer() && personalized == ConsentCenter.canPersonalize()) {
+                    runCatching { it.onNativeAdLoaded(ad) }
+                }
+            }
         }
 
         fun registerCallback(adCallback: AdCallback) {
@@ -247,15 +327,33 @@ class NativeAdPreload private constructor() {
             callbacks.remove(adCallback)
         }
 
-        fun peek(): ApNativeAd? = synchronized(lock) { dropStale(); queue.firstOrNull()?.ad }
+        fun peek(): ApNativeAd? {
+            if (!canReadBuffer()) { cancelPending(); return null }
+            return synchronized(lock) { dropStale(); queue.firstOrNull()?.ad }
+        }
 
-        fun poll(): ApNativeAd? = synchronized(lock) { dropStale(); queue.removeFirstOrNull()?.ad }
+        fun poll(): ApNativeAd? {
+            if (!canReadBuffer()) { cancelPending(); return null }
+            return synchronized(lock) { dropStale(); queue.removeFirstOrNull()?.ad }
+        }
 
         fun isInProgress(): Boolean = synchronized(lock) { pending > 0 }
 
-        fun isAvailable(): Boolean = synchronized(lock) { pending > 0 || queue.isNotEmpty() }
+        fun isAvailable(): Boolean {
+            if (!canReadBuffer()) { cancelPending(); return false }
+            return synchronized(lock) { dropStale(); pending > 0 || queue.isNotEmpty() }
+        }
 
-        fun buffer(): List<ApNativeAd> = synchronized(lock) { dropStale(); queue.map { it.ad } }
+        fun buffer(): List<ApNativeAd> {
+            if (!canReadBuffer()) { cancelPending(); return emptyList() }
+            return synchronized(lock) { dropStale(); queue.map { it.ad } }
+        }
+
+        private fun canReadBuffer(): Boolean = applicationContext?.let {
+            AdGate.skipReason(it, enabled = true, checkNetwork = false) == null
+        } ?: true
+
+        fun invalidate() = cancelPending()
 
         fun addWaiter(onResult: (ApNativeAd?) -> Unit) {
             synchronized(lock) { waiters.add(onResult) }
@@ -265,6 +363,9 @@ class NativeAdPreload private constructor() {
             val orphaned: List<(ApNativeAd?) -> Unit>
             synchronized(lock) {
                 released = true
+                generation++
+                pending = 0
+                batchInFlight = false
                 queue.forEach { destroy(it.ad) }
                 queue.clear()
                 deferredBatches.clear()
@@ -273,10 +374,11 @@ class NativeAdPreload private constructor() {
             }
             callbacks.clear()
             // A silently dropped waiter would pin its helper in Loading forever
-            orphaned.forEach { it.invoke(null) }
+            orphaned.forEach { runCatching { it.invoke(null) } }
         }
 
-        private fun isReleased(): Boolean = synchronized(lock) { released }
+        private fun isCurrent(expectedGeneration: Long): Boolean =
+            synchronized(lock) { !released && generation == expectedGeneration }
 
         private fun dropStale() {
             while (true) {

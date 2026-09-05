@@ -17,11 +17,28 @@ import org.junit.Test
 class AwaitConsentAnswerTest {
 
     @Test
+    fun `a successful callback cannot overrule authorization revoked before resuming`() = runTest {
+        var mayRequestAds = true
+
+        val allowed = awaitConsentAnswer(
+            roundTripMs = 20_000,
+            isResolving = { false },
+            canRequestAds = { mayRequestAds },
+            request = {
+                mayRequestAds = false
+                true
+            },
+        )
+
+        assertFalse(allowed)
+    }
+
+    @Test
     fun `an answer inside the round trip is returned`() = runTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { false },
-            hasAnswered = { false },
+            canRequestAds = { true },
             request = { delay(1_000); true },
         )
 
@@ -29,15 +46,15 @@ class AwaitConsentAnswerTest {
     }
 
     /**
-     * `false` is not a refusal — it is "no answer yet", the one case that holds ads back. A refusal
-     * answers `true`: the flow resolves DENIED and the ads run non-personalized.
+     * Step completion cannot grant permission when the authoritative source does not allow it.
+     * A personalization refusal is separate: UMP may still authorize a non-personalized request.
      */
     @Test
     fun `no answer yet inside the round trip holds the gate shut`() = runTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { false },
-            hasAnswered = { false },
+            canRequestAds = { false },
             request = { delay(1_000); false },
         )
 
@@ -55,7 +72,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { true },
-            hasAnswered = { false },
+            canRequestAds = { true },
             request = { answered.await() },
         )
 
@@ -66,22 +83,21 @@ class AwaitConsentAnswerTest {
     /**
      * The other half of "still open": the round trip is in the air and no form has appeared yet.
      *
-     * `ConsentCenter` arms a deadline of its own for exactly this, and that one fails **open** —
-     * it resolves the step `true` and lets the ads run, because a slow network is not a refusal.
-     * The splash's deadline expires a hair earlier, so giving up there would answer `false` and
-     * shut the gate moments before the flow was going to open it.
+     * `ConsentCenter` arms its own deadline for this. When UMP still authorizes requests from
+     * a previous session, a slow update does not revoke that permission. The splash must wait for
+     * the terminal without cutting off a live flow just before its callback arrives.
      */
     @Test
-    fun `a round trip still in the air outlives the deadline and takes its fail-open answer`() = runTest {
+    fun `a live round trip reaches its terminal while previous authorization remains valid`() = runTest {
         val startedAt = testScheduler.currentTime
         val answered = CompletableDeferred<Boolean>()
-        // ConsentCenter's own 20s timer, firing just after the splash's and resolving open.
+        // ConsentCenter's own 20s timer fires just after the splash's; prior permission is valid.
         launch { delay(20_050); answered.complete(true) }
 
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { true },
-            hasAnswered = { false },
+            canRequestAds = { true },
             request = { answered.await() },
         )
 
@@ -101,7 +117,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { true },
-            hasAnswered = { false },
+            canRequestAds = { false },
             request = { CompletableDeferred<Boolean>().await() },
         )
 
@@ -127,7 +143,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { true },
-            hasAnswered = { false },
+            canRequestAds = { true },
             isVisible = { visible },
             formWaitMs = 180_000,
             request = { answered.await() },
@@ -144,7 +160,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { false },
-            hasAnswered = { false },
+            canRequestAds = { false },
             request = { CompletableDeferred<Boolean>().await() },
         )
 
@@ -162,7 +178,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { false },
-            hasAnswered = { true },
+            canRequestAds = { true },
             request = { delay(100); false },
         )
 
@@ -175,7 +191,7 @@ class AwaitConsentAnswerTest {
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { false },
-            hasAnswered = { true },
+            canRequestAds = { true },
             request = { CompletableDeferred<Boolean>().await() },
         )
 
@@ -190,7 +206,7 @@ class AwaitConsentAnswerTest {
         awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { asked++; false },
-            hasAnswered = { false },
+            canRequestAds = { false },
             request = { delay(1_000); true },
         )
         assertEquals(0, asked)
@@ -198,7 +214,7 @@ class AwaitConsentAnswerTest {
         awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { asked++; false },
-            hasAnswered = { false },
+            canRequestAds = { false },
             request = { CompletableDeferred<Boolean>().await() },
         )
         assertEquals(1, asked)

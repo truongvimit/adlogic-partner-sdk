@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
 import com.ads.module.ads.ERainAd
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdsHelper
@@ -29,8 +30,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * (resume debounce + optional timer), proper teardown of the previous [AdView], and
  * skip/request telemetry.
  *
- * The module's loaders own the shimmer/visibility plumbing inside `banner_container`;
- * this helper owns everything around them that apps used to hand-roll.
+ * Loaders create views inside `banner_container`. This helper restores container visibility,
+ * removes unauthorized or stale fills, and preserves an authorized displayed banner when a
+ * replacement cannot load offline. Each tier rechecks dispatch authority; live refresh callbacks
+ * remain attached to their accepted view. Cancellation invalidates pending view ownership.
  *
  * ```
  * val helper = BannerAdHelper(activity, this, BannerAdConfig(id, true, false))
@@ -58,6 +61,12 @@ class BannerAdHelper(
 
     private val listeners = CopyOnWriteArrayList<AdCallback>()
     private val resumeCount = AtomicInteger(0)
+    private var currentLoad: BannerLoad? = null
+    private val displayedViews = mutableSetOf<AdView>()
+
+    private class BannerLoad(val personalized: Boolean) {
+        val rejected = AtomicBoolean(false)
+    }
 
     // When the next interval reload is due; ON_STOP kills the timer, this survives it
     private var nextReloadAtMs = 0L
@@ -133,6 +142,7 @@ class BannerAdHelper(
     }
 
     override fun cancel() {
+        currentLoad = null
         flagActive.compareAndSet(true, false)
         mainHandler.removeCallbacks(autoReloadRunnable)
         detachAdView()
@@ -156,6 +166,7 @@ class BannerAdHelper(
             Lifecycle.Event.ON_STOP -> mainHandler.removeCallbacks(autoReloadRunnable)
 
             Lifecycle.Event.ON_DESTROY -> {
+                currentLoad = null
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.removeCallbacks(autoReloadRunnable)
                 detachAdView()
@@ -190,56 +201,93 @@ class BannerAdHelper(
             config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
             AdTracking.request(key, AdFormat.BANNER, config.idAds)
         }
-        loadTier(0, oldViews)
+        val load = BannerLoad(ConsentCenter.canPersonalize())
+        currentLoad = load
+        loadTier(0, oldViews, load)
     }
 
-    private fun loadTier(index: Int, oldViews: List<AdView>) {
+    private fun loadTier(index: Int, oldViews: List<AdView>, load: BannerLoad) {
+        if (currentLoad !== load || load.rejected.get()) return
         val adUnitId = config.adUnitIds.getOrNull(index) ?: return
-        val retired = AtomicBoolean(false)
+        val passesUaGate = AdGate.passesUaGate(config.forceUaCheck)
+        if (AdGate.skipReason(context, config.canShowAds, passesUaGate) != null) {
+            rejectLoad(load)
+            return
+        }
+        val initialFillAccepted = AtomicBoolean(false)
+        val tierFailed = AtomicBoolean(false)
+        val precedingViews = bannerViews()
+        var ownedViews: List<AdView>? = null
+        fun tierViews(): List<AdView> = ownedViews ?: bannerViews()
+            .filterNot { it in precedingViews }
+            .also { ownedViews = it }
+
+        fun discardTier() {
+            removeViews(tierViews())
+            restoreBannerVisibility()
+        }
+
         val callback = object : AdCallback() {
             override fun onAdLoaded() {
-                // One-shot: a later GMA auto-refresh success must not re-destroy survivors
-                if (retired.compareAndSet(false, true)) {
-                    oldViews.forEach { view ->
-                        view.destroy()
-                        (view.parent as? ViewGroup)?.removeView(view)
-                    }
+                // A rejected/failed tier must not claim a later load, even when GMA delivers
+                // a callback after teardown. The loader toggled visibility before calling us;
+                // restore it synchronously so an obsolete view never reaches the next frame.
+                if (tierFailed.get() || load.rejected.get() ||
+                    (!initialFillAccepted.get() && currentLoad !== load) ||
+                    (initialFillAccepted.get() && tierViews().none { it in displayedViews })
+                ) {
+                    discardTier()
+                    return
                 }
-                setState(AdBannerState.Loaded)
+                if (!canRetain(load)) {
+                    if (currentLoad === load) rejectLoad(load) else discardTier()
+                    return
+                }
+                // One-shot: a later GMA auto-refresh success must not re-destroy survivors
+                if (initialFillAccepted.compareAndSet(false, true)) {
+                    removeViews(oldViews)
+                    displayedViews.addAll(tierViews())
+                }
+                // A survivor can auto-refresh while its replacement is loading.
+                if (currentLoad === load) setState(AdBannerState.Loaded)
+                restoreBannerVisibility()
                 // Collapsible loaders never forward onAdImpression; arm the timer here
                 if (config.bannerType is BannerType.Collapsible) armAutoReload()
                 listeners.forEach { it.onAdLoaded() }
             }
 
             override fun onAdFailedToLoad(adError: LoadAdError?) {
+                if (load.rejected.get() ||
+                    (!initialFillAccepted.get() && currentLoad !== load) ||
+                    (initialFillAccepted.get() && tierViews().none { it in displayedViews })
+                ) {
+                    discardTier()
+                    return
+                }
+                if (!canRetain(load)) {
+                    if (currentLoad === load) rejectLoad(load) else discardTier()
+                    return
+                }
                 // Out-of-cycle (GMA auto-refresh miss on the live AdView): keep the creative,
                 // just undo the loader's container hide — never destroy or re-walk
-                if (_bannerAdState.value !is AdBannerState.Loading) {
-                    if (_bannerAdState.value is AdBannerState.Loaded) {
-                        bannerContainer()?.visibility = View.VISIBLE
-                    }
+                if (initialFillAccepted.get()) {
+                    restoreBannerVisibility()
                     listeners.forEach { it.onAdFailedToLoad(adError) }
+                    return
+                }
+                if (!tierFailed.compareAndSet(false, true)) {
+                    restoreBannerVisibility()
                     return
                 }
                 // The loader attached this tier's AdView before the request resolved; retire
                 // it (but never the pre-walk survivors) or its armed listener lives on
-                bannerContainer()?.let { container ->
-                    (0 until container.childCount)
-                        .mapNotNull { container.getChildAt(it) as? AdView }
-                        .filterNot { it in oldViews }
-                        .forEach {
-                            it.destroy()
-                            container.removeView(it)
-                        }
-                }
+                discardTier()
                 // The loader goned the container on fail. Restore it in the SAME main-loop
                 // message so a surviving banner never renders a hidden frame — no flicker
-                if (oldViews.isNotEmpty()) {
-                    bannerContainer()?.visibility = View.VISIBLE
-                }
+                restoreBannerVisibility()
                 // Waterfall: a lower floor gets its turn before anything is surfaced
                 if (index + 1 < config.adUnitIds.size) {
-                    loadTier(index + 1, oldViews)
+                    loadTier(index + 1, oldViews, load)
                     return
                 }
                 // Terminal must leave Loading or requestAds stays gated forever; a survivor
@@ -251,12 +299,16 @@ class BannerAdHelper(
             }
 
             override fun onAdClicked() {
-                listeners.forEach { it.onAdClicked() }
+                if (canRetain(load) && tierViews().any { it in displayedViews }) {
+                    listeners.forEach { it.onAdClicked() }
+                }
             }
 
             override fun onAdImpression() {
-                armAutoReload()
-                listeners.forEach { it.onAdImpression() }
+                if (canRetain(load) && tierViews().any { it in displayedViews }) {
+                    armAutoReload()
+                    listeners.forEach { it.onAdImpression() }
+                }
             }
         }
         val root = rootView
@@ -301,10 +353,53 @@ class BannerAdHelper(
                     )
                 }
         }
+        // Capture just this vendor view before another tier or reload can attach its own.
+        tierViews()
         // The loaders raise the shimmer on every request, and it is drawn over the banner.
         // With an ad still on screen that reads as ad → shimmer → ad, so undo it in the same
         // main-loop message: the live banner stays until the new one renders over it
         if (oldViews.isNotEmpty()) hideShimmer()
+    }
+
+    private fun canRetain(load: BannerLoad): Boolean =
+        AdGate.skipReason(context, config.canShowAds,
+            AdGate.passesUaGate(config.forceUaCheck), checkNetwork = false) == null &&
+            ConsentCenter.canPersonalize() == load.personalized
+
+    private fun rejectLoad(load: BannerLoad) {
+        if (currentLoad !== load || !load.rejected.compareAndSet(false, true)) return
+        reportSkip(AdGate.passesUaGate(config.forceUaCheck))
+        // Offline prevents a replacement request; it does not invalidate an authorized
+        // creative already displayed. Lost authority/premium/personalization does.
+        if (canRetain(load)) removeViews(bannerViews().filterNot { it in displayedViews })
+        else detachAdView()
+        restoreBannerVisibility()
+        hideShimmer()
+        setState(if (displayedViews.isEmpty()) AdBannerState.Fail else AdBannerState.Loaded)
+        armAutoReload()
+        listeners.forEach { it.onAdFailedToLoad(null) }
+    }
+
+    private fun bannerViews(): List<AdView> = bannerContainer()?.let { container ->
+        (0 until container.childCount).mapNotNull { container.getChildAt(it) as? AdView }
+    } ?: emptyList()
+
+    private fun removeViews(views: List<AdView>) {
+        views.forEach { view ->
+            (view.parent as? ViewGroup)?.let { parent ->
+                view.destroy()
+                parent.removeView(view)
+            }
+            displayedViews.remove(view)
+        }
+    }
+
+    private fun restoreBannerVisibility() {
+        bannerContainer()?.let { container ->
+            container.visibility = if (displayedViews.any { it.parent === container }) {
+                View.VISIBLE
+            } else View.GONE
+        }
     }
 
     private fun armAutoReload() {
@@ -338,6 +433,7 @@ class BannerAdHelper(
     }
 
     private fun detachAdView() {
+        displayedViews.clear()
         val container = bannerContainer() ?: return
         destroyAdViews(container)
     }

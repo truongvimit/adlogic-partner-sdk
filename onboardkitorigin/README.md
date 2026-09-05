@@ -176,7 +176,9 @@ See `BehaviorConfig.lockPortrait` for what the SDK does on its side and how to o
 
 - Do not call `OnboardingSdk.start()` here — it runs once the pipeline resolves.
 - Do not override `onConsentRequired()`; its default runs the UMP flow through `ConsentCenter` in
-  `:ads`. Override it only to `return true` for an app with no consent step.
+  `:ads`. For a custom consent provider, publish its request and personalization decisions through
+  `ConsentCenter.setHostConsent(...)` before completing the override. Returning `true` alone no
+  longer grants permission; see [5.1.0 migration](../MIGRATION-5.1.0.md).
 - If you override `onDestroy()`, call `super.onDestroy()` — `ConsentCenter.detach(this)` lives there.
 
 Later, from anywhere: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.

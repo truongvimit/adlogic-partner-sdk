@@ -28,18 +28,18 @@ private const val FORM_ANSWER_CEILING_MS = 180_000L
  * screen still owes an answer, and the wait continues on the far more generous [formWaitMs].
  *
  * On the default path [roundTripMs] rarely decides anything, because the consent flow arms a round
- * trip deadline of its own that fails open and normally fires first. It is the bound for a
- * [request] that resolves consent somewhere the flow cannot see — an override reports neither
- * predicate, so that one is held to [roundTripMs] alone, exactly as it was before.
+ * trip deadline of its own. A timeout finishes the step without inventing authorization. A host
+ * using its own consent provider must publish that provider's authorization before completing
+ * [request]; its wait is still bounded by [roundTripMs] when no SDK-owned flow is resolving.
  *
- * [hasAnswered] is the last word when the wait does end empty: an answer published while its
- * callback was still in flight is still an answer, and only a form genuinely unanswered should shut
- * the gate.
+ * [canRequestAds] is the final authority, including after a successful callback. Permission can
+ * be revoked between callback delivery and this coroutine resuming. Finishing the step and being
+ * allowed to request ads are separate outcomes.
  */
 internal suspend fun awaitConsentAnswer(
     roundTripMs: Long,
     isResolving: () -> Boolean,
-    hasAnswered: () -> Boolean,
+    canRequestAds: () -> Boolean,
     isVisible: () -> Boolean = { true },
     formWaitMs: Long = FORM_ANSWER_CEILING_MS,
     request: suspend () -> Boolean,
@@ -66,9 +66,6 @@ internal suspend fun awaitConsentAnswer(
     } else {
         ObLog.d(ObLog.Section.SPLASH, "consent done ms=$elapsed")
     }
-    // Not `granted ?: hasAnswered()`: a terminal can answer `false` outright — no network, a form
-    // that came back to a dead screen — while an earlier flow in this process has already resolved.
-    // Passing that `false` on lowered a gate nothing would raise again, because the state it is
-    // derived from never emits a second time for an unchanged value.
-    granted == true || hasAnswered()
+    // Re-read authority even after a true callback: that earlier answer may already be stale.
+    canRequestAds()
 }
