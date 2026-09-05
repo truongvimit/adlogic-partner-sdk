@@ -64,6 +64,32 @@ class AwaitConsentAnswerTest {
     }
 
     /**
+     * The other half of "still open": the round trip is in the air and no form has appeared yet.
+     *
+     * `ConsentCenter` arms a deadline of its own for exactly this, and that one fails **open** —
+     * it resolves the step `true` and lets the ads run, because a slow network is not a refusal.
+     * The splash's deadline expires a hair earlier, so giving up there would answer `false` and
+     * shut the gate moments before the flow was going to open it.
+     */
+    @Test
+    fun `a round trip still in the air outlives the deadline and takes its fail-open answer`() = runTest {
+        val startedAt = testScheduler.currentTime
+        val answered = CompletableDeferred<Boolean>()
+        // ConsentCenter's own 20s timer, firing just after the splash's and resolving open.
+        launch { delay(20_050); answered.complete(true) }
+
+        val granted = awaitConsentAnswer(
+            roundTripMs = 20_000,
+            isResolving = { true },
+            hasAnswered = { false },
+            request = { answered.await() },
+        )
+
+        assertTrue(granted)
+        assertEquals(20_050, testScheduler.currentTime - startedAt)
+    }
+
+    /**
      * UMP can leave a non-cancelable form on screen with no terminal left to fire — a dead WebView
      * renderer does exactly that. The wait has to end anyway, because finishing the splash is what
      * destroys the window that orphaned dialog lives on.
