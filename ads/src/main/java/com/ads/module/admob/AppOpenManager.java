@@ -209,14 +209,15 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Whether a resume ad is suppressed while {@code activity} is on top.
+     * Whether a resume ad is suppressed while {@code activity} is on top. A null host or GMA
+     * {@link AdActivity} is always suppressed. This query does not consume a return or request ads.
      * <p>
      * The one place this is answered. A host that runs its own resume flow asks here rather than
      * keeping a second list: the two drifted, and a screen excluded from app-open ads still got a
      * welcome ad launched over it.
      */
     public boolean isResumeSuppressedFor(Activity activity) {
-        if (activity == null) {
+        if (activity == null || activity instanceof AdActivity) {
             return true;
         }
         for (Class activityClass : disabledAppOpenList) {
@@ -365,6 +366,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     /**
      * Attempts to present a ready resume ad on the currently tracked host. Preserves the resume
      * mode and lifecycle gates; if no buffer is ready, requests a preload without a later auto-show.
+     * Explicit calls respect the same activity exclusions as lifecycle resume; a vendor AdActivity
+     * cannot host an app-open show. Preparation rechecks exclusions before consuming the fill.
      * Calls from a worker thread enqueue the attempt on the main thread.
      */
     public void showResumeAdIfAvailable() {
@@ -379,7 +382,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             presentation.rejectBeforeShow(policyReason, false);
             return;
         }
-        if (currentActivity == null) {
+        if (currentActivity == null || currentActivity instanceof AdActivity) {
             presentation.rejectBeforeShow(AdSkipReason.INVALID_HOST, true);
             return;
         }
@@ -394,6 +397,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (presentationOwner.isBusy()) {
             presentation.rejectBeforeShow(AdSkipReason.PRESENTATION_BUSY, false);
             fetchResumeAd();
+            return;
+        }
+        if (isResumeSuppressedFor(currentActivity)) {
+            presentation.rejectBeforeShow(AdSkipReason.SUPPRESSED_BY_FLOW, false);
             return;
         }
         if (!isResumeAdAvailable()) {
@@ -494,7 +501,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         }
 
         private AdSkipReason hostRejection() {
-            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return AdSkipReason.INVALID_HOST;
+            if (activity == null || currentActivity != activity || activity instanceof AdActivity
+                    || activity.isFinishing() || activity.isDestroyed()) return AdSkipReason.INVALID_HOST;
+            if (isResumeSuppressedFor(activity)) return AdSkipReason.SUPPRESSED_BY_FLOW;
             if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
                 return AdSkipReason.PROCESS_NOT_RESUMED;
             }
@@ -615,8 +624,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         // Foreground can be reported before any activity has started, and the checks below all
         // dereference it.
-        if (currentActivity == null) {
-            Log.d(TAG, "onResume: no current activity");
+        if (currentActivity == null || currentActivity instanceof AdActivity) {
+            Log.d(TAG, "onResume: no application host");
             reportResumeSkipped(AdSkipReason.INVALID_HOST);
             return;
         }

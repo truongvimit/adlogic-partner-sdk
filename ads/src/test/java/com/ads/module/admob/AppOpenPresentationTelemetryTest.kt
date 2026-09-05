@@ -13,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
+import com.google.android.gms.ads.AdActivity
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
@@ -302,6 +303,152 @@ class AppOpenPresentationTelemetryTest {
         manager.showResumeAdIfAvailable()
         ad.fullScreenContentCallback!!.onAdShowedFullScreenContent()
         assertEquals(params("ad_loaded").single()["attempt_id"], params("ad_show").single()["attempt_id"])
+    }
+
+    @Test
+    fun `direct show respects an excluded host without consuming its ready fill`() {
+        assertDirectShowRespectsExclusion(ComponentActivity::class.java)
+    }
+
+    @Test
+    fun `direct show respects exclusion of the host base class`() {
+        assertNotEquals(Activity::class.java, host.get().javaClass)
+        assertDirectShowRespectsExclusion(Activity::class.java)
+    }
+
+    @Test
+    fun `vendor AdActivity is an invalid direct show host until the application host returns`() {
+        val ad = fill()
+        // A real vendor Activity delivered through the public OS callback boundary. Its vendor
+        // onCreate implementation is not invoked: this test supplies no GMA overlay controller.
+        val vendorActivity = Robolectric.buildActivity(AdActivity::class.java).get()
+        assertFalse(vendorActivity.isFinishing)
+        assertFalse(vendorActivity.isDestroyed)
+        manager.onActivityStarted(vendorActivity)
+        manager.onActivityResumed(vendorActivity)
+        try {
+            val eventsBeforeQueries = events.toList()
+            val requestsBeforeQueries = requests.size
+            repeat(3) {
+                assertTrue(manager.isResumeAdAvailable())
+                manager.isResumeSuppressedFor(vendorActivity)
+            }
+            assertEquals(eventsBeforeQueries, events)
+            assertEquals(requestsBeforeQueries, requests.size)
+
+            manager.showResumeAdIfAvailable()
+
+            assertEquals("A GMA Activity must not host a second fullscreen ad", 0, ad.shows)
+            assertEquals("invalid_host", params("ad_skipped").single()["reason"])
+            assertTrue(manager.isResumeAdAvailable())
+            assertFalse(manager.isShowingAd)
+            assertTrue(params("ad_show").isEmpty())
+            assertTrue(params("ad_show_failed").isEmpty())
+            assertTrue(params("ad_closed").isEmpty())
+            assertEquals(1, requests.size)
+        } finally {
+            // Resume the original host through the same callback boundary; no SDK state reset.
+            manager.onActivityStarted(host.get())
+            manager.onActivityResumed(host.get())
+        }
+        mainLooper.idle()
+        assertEquals("Returning to a valid host does not auto-show the rejected fill", 0, ad.shows)
+        assertTrue(manager.isResumeAdAvailable())
+        manager.showResumeAdIfAvailable()
+        assertEquals(1, ad.shows)
+        ad.fullScreenContentCallback!!.onAdShowedFullScreenContent()
+        assertEquals(1, params("ad_show").size)
+    }
+
+    private fun assertDirectShowRespectsExclusion(excludedClass: Class<out Activity>) {
+        val ad = fill()
+        manager.disableAppResumeWithActivity(excludedClass)
+        val eventsBeforeQueries = events.toList()
+        val requestsBeforeQueries = requests.size
+        repeat(3) {
+            assertTrue(manager.isResumeSuppressedFor(host.get()))
+            assertTrue(manager.isResumeAdAvailable())
+        }
+        assertEquals(eventsBeforeQueries, events)
+        assertEquals(requestsBeforeQueries, requests.size)
+
+        manager.showResumeAdIfAvailable()
+
+        assertEquals("Direct calls must honor the exclusion used by foreground resume", 0, ad.shows)
+        assertEquals("suppressed_by_flow", params("ad_skipped").single()["reason"])
+        assertTrue(manager.isResumeAdAvailable())
+        assertFalse(manager.isShowingAd)
+        assertTrue(params("ad_show").isEmpty())
+        assertTrue(params("ad_show_failed").isEmpty())
+        assertTrue(params("ad_closed").isEmpty())
+        assertEquals(1, requests.size)
+
+        manager.enableAppResumeWithActivity(excludedClass)
+        assertFalse(manager.isResumeSuppressedFor(host.get()))
+        mainLooper.idle()
+        assertEquals("Lifting suppression must not create an auto-show opportunity", 0, ad.shows)
+        manager.showResumeAdIfAvailable()
+        assertEquals(1, ad.shows)
+        ad.fullScreenContentCallback!!.onAdShowedFullScreenContent()
+        assertEquals(1, params("ad_show").size)
+        assertEquals(1, params("ad_skipped").size)
+    }
+
+    @Test
+    fun `exclusion raised during dialog preparation rejects before consuming the selected fill`() {
+        val ad = fill()
+        var dismissals = 0
+        manager.setEnableScreenContentCallback(true)
+        manager.setFullScreenContentCallback(object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() { dismissals++ }
+        })
+        ResumeOwnershipDialogShadow.beforeShow = {
+            manager.disableAppResumeWithActivity(ComponentActivity::class.java)
+        }
+        manager.showResumeAdIfAvailable()
+        assertEquals(0, ad.shows)
+        assertEquals(1, dismissals)
+        assertTrue(manager.isResumeAdAvailable())
+        assertFalse(manager.isShowingAd)
+        assertEquals("suppressed_by_flow", params("ad_skipped").single()["reason"])
+        assertTrue(params("ad_closed").isEmpty())
+        assertTrue(params("ad_show_failed").isEmpty())
+        ResumeOwnershipDialogShadow.beforeShow = null
+        manager.enableAppResumeWithActivity(ComponentActivity::class.java)
+        manager.showResumeAdIfAvailable()
+        assertEquals(1, ad.shows)
+    }
+
+    @Test
+    fun `vendor Activity arriving during dialog preparation invalidates the captured application host`() {
+        val ad = fill()
+        var dismissals = 0
+        manager.setEnableScreenContentCallback(true)
+        manager.setFullScreenContentCallback(object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() { dismissals++ }
+        })
+        val vendorActivity = Robolectric.buildActivity(AdActivity::class.java).get()
+        ResumeOwnershipDialogShadow.beforeShow = {
+            manager.onActivityStarted(vendorActivity)
+            manager.onActivityResumed(vendorActivity)
+        }
+        try {
+            manager.showResumeAdIfAvailable()
+            assertEquals(0, ad.shows)
+            assertEquals(1, dismissals)
+            assertTrue(manager.isResumeAdAvailable())
+            assertFalse(manager.isShowingAd)
+            assertEquals("invalid_host", params("ad_skipped").single()["reason"])
+            assertTrue(params("ad_show").isEmpty())
+            assertTrue(params("ad_closed").isEmpty())
+            assertTrue(params("ad_show_failed").isEmpty())
+        } finally {
+            ResumeOwnershipDialogShadow.beforeShow = null
+            manager.onActivityStarted(host.get())
+            manager.onActivityResumed(host.get())
+        }
+        manager.showResumeAdIfAvailable()
+        assertEquals(1, ad.shows)
     }
 
     private fun params(name: String) = events.filter { it.first == name }.map { it.second }
