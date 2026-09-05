@@ -13,6 +13,7 @@ import io.onboardkit.config.NativeAdUnit
 interface AdEventListener {
     fun onLoaded() {}
     fun onFailedToLoad() {}
+    /** A real vendor impression, never a successful bind or a preload fill. */
     fun onImpression() {}
     fun onClicked() {}
 
@@ -41,8 +42,11 @@ data class NativeAdRequest(
  * logical attempt and one mutually exclusive loaded/failed terminal after its waterfall settles.
  * Cache hits, callers joining an in-flight request, and screen callbacks emit no additional load
  * events. Custom providers can use `AdLoadAttempt` with an immutable `AdLoadContext` at their
- * vendor boundary. The flow continues reporting skips and impressions; it does not infer a
- * physical load from [preloadNative], [bindNative], or [AdEventListener.onFailedToLoad].
+ * vendor boundary. Providers also own actual show telemetry and forward real vendor impressions
+ * through [AdEventListener.onImpression]; the flow does not emit a second show. A native bind may
+ * emit `ad_bound`, which does not imply visibility. The flow reports skips and forwards UI
+ * callbacks; it does not infer a physical load or impression from [preloadNative], [bindNative],
+ * or [AdEventListener.onFailedToLoad].
  */
 interface OnboardingAdProvider {
 

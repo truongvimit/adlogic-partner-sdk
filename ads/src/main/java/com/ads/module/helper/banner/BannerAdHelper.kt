@@ -295,7 +295,7 @@ class BannerAdHelper(
                 // A survivor can auto-refresh while its replacement is loading.
                 if (currentLoad === load) setState(AdBannerState.Loaded)
                 restoreBannerVisibility()
-                // Collapsible loaders never forward onAdImpression; arm the timer here
+                // Keep the loaded fallback anchor; a real impression can re-anchor the timer.
                 if (config.bannerType is BannerType.Collapsible) armAutoReload()
                 listeners.forEach { it.onAdLoaded() }
             }

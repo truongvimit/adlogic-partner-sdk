@@ -2,30 +2,21 @@ package io.onboardkit.ads
 
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.analytics.AnalyticsEvent
-import io.trackkit.AdFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Reports the first impression of one ad slot and forwards its UI callbacks.
- *
- * Revenue, impressions-with-money and clicks all arrive through the vendor callback inside `:ads`.
- * Request and load terminals belong to the provider's actual load attempt. A screen may join an
- * existing request, bind a cached ad, or stop waiting before the provider finishes; none of those
- * UI actions creates another load event.
- *
- * Impression is latched. A bound native reaches the screen twice on the common path
- * (once synchronously from `bindNative`'s own listener notification, once from the caller's
- * post-bind branch), which is exactly how `ob_ad_impression` came to be double-counted on OB3.
+ * Forwards callbacks for one flow slot and coordinates click-return suppression.
+ * The provider owns actual load/show telemetry. The first real impression after each load notifies
+ * the screen once; binding or joining a pending load does not manufacture an impression.
  */
-internal class TrackedAdListener(
-    private val placementKey: String,
-    private val format: AdFormat,
+internal class FlowAdListener(
     private val delegate: AdEventListener?,
 ) : AdEventListener {
 
     private val impressionReported = AtomicBoolean(false)
 
     override fun onLoaded() {
+        impressionReported.set(false)
         delegate?.onLoaded()
     }
 
@@ -35,9 +26,8 @@ internal class TrackedAdListener(
 
     override fun onImpression() {
         if (impressionReported.compareAndSet(false, true)) {
-            OnboardingSdk.track(AnalyticsEvent.AdImpression(placementKey, format))
+            delegate?.onImpression()
         }
-        delegate?.onImpression()
     }
 
     override fun onClicked() {
@@ -53,10 +43,10 @@ internal class TrackedAdListener(
     }
 }
 
-/** Wraps [listener] so this placement's first impression reaches analytics. */
-internal fun AdPlacement.tracked(
+/** Wraps one flow slot's callbacks without duplicating its provider's telemetry. */
+internal fun flowAdListener(
     listener: AdEventListener? = null,
-): AdEventListener = TrackedAdListener(key, format, listener)
+): AdEventListener = FlowAdListener(listener)
 
 /**
  * No ad was shown for this placement. [reason] is the precise cause, not a bucket — a dashboard

@@ -41,6 +41,8 @@ import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
 import io.trackkit.PlacementRegistry
+import io.trackkit.Tracker
+import io.trackkit.TrackkitEvents
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -50,7 +52,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Buffering, expiry, in-flight dedup and the show contract all live in
  * [NativeAdPreload] / [InterstitialAdManager]; this class only translates between the
  * onboarding flow's placement/callback vocabulary and the module's. The load owners report
- * request/load terminals; the flow retains its UI callbacks, skips and impression reporting.
+ * request/load terminals and actual show events; the flow retains UI callbacks and skips.
+ * Successful native binding is reported separately from a vendor impression.
  */
 class ERainAdProvider(
     /**
@@ -153,8 +156,8 @@ class ERainAdProvider(
         boundNatives.put(placement.key, ad)?.let { previous ->
             if (previous !== ad) destroyNative(previous)
         }
-        // GMA counts the impression once the view tree is bound and visible
-        notifyListener(placement.key) { it.onImpression() }
+        // Binding can happen before attach or while covered. Only the vendor counts a show.
+        Tracker.track(TrackkitEvents.Ad.Bound(placement.key, placement.format))
         return true
     }
 
@@ -271,6 +274,7 @@ class ERainAdProvider(
 
     private fun bannerCallback(listener: AdEventListener?): AdCallback = object : AdCallback() {
         override fun onAdLoaded() { listener?.onLoaded() }
+        override fun onAdImpression() { listener?.onImpression() }
         override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
         override fun onAdClicked() { listener?.onClicked() }
     }
@@ -314,6 +318,10 @@ class ERainAdProvider(
 
                 override fun onAdOpened() {
                     notifyListener(key) { it.onAdOpened() }
+                }
+
+                override fun onAdImpression() {
+                    notifyListener(key) { it.onImpression() }
                 }
 
             }.also { preload.registerAdCallback(key, it) }

@@ -49,7 +49,7 @@ internal fun Activity.showNativeAd(
     var skeleton: ShimmerFrameLayout? = null
     // Captured: inside the object below, the name resolves to the override, not the parameter.
     val notifyAdEngaged = onAdEngaged
-    val listener = placement.tracked(
+    val listener = flowAdListener(
         object : AdEventListener {
             override fun onLoaded() = onMainThread {
                 if (bindBuffered(provider, placement, container, skeleton)) onBound()

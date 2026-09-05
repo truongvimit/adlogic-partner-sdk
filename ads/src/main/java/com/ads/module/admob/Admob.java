@@ -1362,6 +1362,14 @@ public class Admob {
                         callback.onAdClicked();
                     }
                 }
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    if (callback != null) {
+                        callback.onAdImpression();
+                    }
+                }
             });
             if (callback != null) callback.onAdRequestStarted(id);
             adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
@@ -1435,6 +1443,14 @@ public class Admob {
                     ERainLogEventManager.logClickAdsEvent(context, id);
                     if (callback != null) {
                         callback.onAdClicked();
+                    }
+                }
+
+                @Override
+                public void onAdImpression() {
+                    super.onAdImpression();
+                    if (callback != null) {
+                        callback.onAdImpression();
                     }
                 }
             });

@@ -21,6 +21,8 @@ import com.facebook.shimmer.Shimmer
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
+import io.trackkit.Tracker
+import io.trackkit.TrackkitEvents
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +40,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * Direct requests retain their personalization choice; every late fill and bind rechecks current
  * authorization. A rejected fill is destroyed and leaves Loading without calling the binder.
  * Cancellation and screen destruction invalidate callbacks from the earlier request.
+ * A completed binder reports `ad_bound`, including a bind before the view is attached. Only the
+ * vendor impression reports `ad_show`; a binder that throws does not report a successful bind.
  *
  * While loading, the slot shows a shimmer skeleton. By default it is derived from the ad
  * layout itself ([NativeAdConfig.autoShimmer]); an explicit skeleton via [setShimmerLayoutView]
@@ -60,7 +64,10 @@ class NativeAdHelper(
     config: NativeAdConfig,
 ) : AdsHelper<NativeAdConfig, NativeAdParam>(activity, lifecycleOwner, config) {
 
-    /** Swaps the default `populateNativeAdView` for the app's own styling/binding. */
+    /**
+     * Swaps the default `populateNativeAdView` for the app's own synchronous binding.
+     * Returning normally means the creative is bound and produces `ad_bound`, not an impression.
+     */
     fun interface NativeAdBinder {
         fun bind(
             activity: Activity,
@@ -499,10 +506,14 @@ class NativeAdHelper(
             return
         }
         val container = contentView ?: return
-        runCatching { binder.bind(activity, ad, container, shimmerView) }
+        val bound = runCatching { binder.bind(activity, ad, container, shimmerView) }.isSuccess
         if (!canBind(loadedPersonalized)) {
             rejectAd(ad)
             return
+        }
+        if (bound) {
+            val boundContext = captureLoadContext()
+            Tracker.track(TrackkitEvents.Ad.Bound(boundContext.placement, boundContext.format))
         }
         // The binder's removeAllViews detached a generated skeleton (or it serves a
         // replaced container); drop the refs so the next Loading regenerates a fresh one

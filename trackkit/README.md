@@ -89,6 +89,16 @@ these events; it does not deduplicate them by attempt ID. Existing Java construc
 logical request/fill denominator. Nullable additions are omitted from sink payloads when absent;
 the event classes in `TrackkitEvents` document the fields and defaults.
 
+`Ad.Bound` (`ad_bound`) records a native creative successfully bound into a view tree. A creative
+still in the preload cache produces no bound event; binding before attachment or into a covered
+view can produce `ad_bound` with no `ad_show`. The event carries placement, format and an optional
+ad unit, with no load-attempt or revenue fields. Actual native presentation remains owned by the
+vendor impression callback; binding does not imply an impression or paid revenue.
+
+For dashboard migration, move native bind counts to `ad_bound` and use `ad_show` for actual
+presentations. Historical native `ad_show` may include bind-driven events, so annotate the upgrade
+date instead of treating the old and new counts as directly comparable.
+
 Every event also carries `app_vc`, `sdk_ver`, `session_no`, `install_day`, and `consent_ads` once
 UMP resolves.
 

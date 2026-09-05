@@ -197,6 +197,44 @@ class NativeAdHelperTelemetryTest {
         assertEquals(0, params("ad_show").size)
     }
 
+    @Test
+    fun `successful native helper binding is distinct from a vendor impression`() {
+        val config = NativeAdConfig("unit", true, true, 0).apply { autoShimmer = false }
+        val host = FrameLayout(activity)
+        var binds = 0
+        val helper = NativeAdHelper(activity, activity, config)
+            .setNativeContentView(host)
+            .setNativeAdBinder { _, _, container, _ ->
+                binds++
+                container.removeAllViews()
+                container.addView(android.view.View(activity))
+            }
+        helper.placement = "native_home"
+        helper.requestAds(NativeAdParam.Request)
+        assertEquals(0, params("ad_bound").size)
+        requests.single().onLoaded.onNativeAdLoaded(Mockito.mock(NativeAd::class.java))
+        assertEquals(1, binds)
+        assertEquals(1, host.childCount)
+        assertEquals(0, params("ad_show").size)
+        assertEquals("native_home", params("ad_bound").single()["placement"])
+        requests.single().adListener.onAdImpression()
+        requests.single().adListener.onAdImpression()
+        assertEquals(1, params("ad_show").size)
+        assertEquals(1, params("ad_bound").size)
+    }
+
+    @Test
+    fun `failed custom binder does not report a native bound event`() {
+        val config = NativeAdConfig("unit", true, true, 0).apply { autoShimmer = false }
+        val helper = NativeAdHelper(activity, activity, config)
+            .setNativeContentView(FrameLayout(activity))
+            .setNativeAdBinder { _, _, _, _ -> error("host binder failed") }
+        helper.placement = "native_home"
+        helper.requestAds(NativeAdParam.Request)
+        requests.single().onLoaded.onNativeAdLoaded(Mockito.mock(NativeAd::class.java))
+        assertEquals(0, params("ad_bound").size)
+    }
+
     private fun params(name: String) = events.filter { it.first == name }.map { it.second }
 
     private class NativeRequest {

@@ -72,6 +72,7 @@ object TrackkitEvents {
     const val AD_LOADED = "ad_loaded"
     const val AD_LOAD_FAILED = "ad_load_failed"
     const val AD_TIER_RESULT = "ad_tier_result"
+    const val AD_BOUND = "ad_bound"
     const val AD_SHOW = "ad_show"
     const val AD_SHOW_FAILED = "ad_show_failed"
     const val AD_CLICK = "ad_click"
@@ -134,7 +135,7 @@ object TrackkitEvents {
      */
     @JvmStatic
     fun all(): Set<String> = setOf(
-        AD_REQUEST, AD_LOADED, AD_LOAD_FAILED, AD_TIER_RESULT, AD_SHOW, AD_SHOW_FAILED, AD_CLICK, AD_CLOSED,
+        AD_REQUEST, AD_LOADED, AD_LOAD_FAILED, AD_TIER_RESULT, AD_BOUND, AD_SHOW, AD_SHOW_FAILED, AD_CLICK, AD_CLOSED,
         AD_IMPRESSION, AD_REWARD_EARNED, AD_SKIPPED,
         AD_REVENUE_TOTAL, AD_REVENUE_MICRO_FLUSH, AD_REVENUE_D3, AD_REVENUE_D7,
         FO_FLOW_START, FO_SPLASH_VIEW, FO_SPLASH_COMPLETE, FO_LANGUAGE_VIEW, FO_LANGUAGE_SELECT,
@@ -280,6 +281,20 @@ object TrackkitEvents {
                 PARAM_LATENCY_MS to latencyMs,
             ),
         )
+
+        /**
+         * A native creative was successfully bound into a view tree. Loading it into a cache
+         * alone does not count as a bind. A preloaded creative bound before attachment or into
+         * a covered view can emit this event without any vendor impression or [Show].
+         *
+         * This is a bind diagnostic, independent of actual presentation and paid revenue.
+         * [adUnitId] defaults to null when unknown and is then omitted from sink payloads.
+         */
+        class Bound @JvmOverloads constructor(
+            placement: String,
+            format: AdFormat,
+            adUnitId: String? = null,
+        ) : SimpleEvent(AD_BOUND, base(placement, format, adUnitId))
 
         /**
          * The ad was actually displayed. The previous pipeline had no such event at all — only

@@ -40,6 +40,7 @@ import io.trackkit.TrackerConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,7 +89,12 @@ class ERainAdProviderTelemetryTest {
         Tracker.install(activity, TrackerConfig(strictValidation = true, logLevel = 0))
         AnalyticsHub.clear()
         AnalyticsHub.addPlugin(TrackkitPlugin)
-        provider = ERainAdProvider()
+        // OnboardingSdk installs once per process, including Robolectric's reused SDK sandbox.
+        // Use that same real provider for both direct loads and the public flow entry point.
+        provider = (OnboardingSdk.provider() as? ERainAdProvider) ?: ERainAdProvider().also { installed ->
+            OnboardingSdk.install(activity.application as Application) { adProvider = installed }
+        }
+        assertSame(provider, OnboardingSdk.provider())
         vendor = Mockito.mockConstruction(AdLoader.Builder::class.java) { builder, _ ->
             val request = NativeRequest()
             Mockito.`when`(builder.forNativeAd(Mockito.any(NativeAd.OnNativeAdLoadedListener::class.java)))
@@ -119,7 +125,7 @@ class ERainAdProviderTelemetryTest {
         var screenFailures = 0
         val placement = AdPlacement.Language1
         assertFalse(provider.bindNative(activity, placement, FrameLayout(activity), null,
-            placement.tracked(object : AdEventListener {
+            flowAdListener(object : AdEventListener {
                 override fun onFailedToLoad() { screenFailures++ }
             })))
 
@@ -220,7 +226,7 @@ class ERainAdProviderTelemetryTest {
             var screenFailures = 0
             val placement = AdPlacement.SplashInterstitial
             provider.loadInterstitial(activity, placement, InterstitialAdUnit(listOf("high", "fallback")),
-                placement.tracked(object : AdEventListener {
+                flowAdListener(object : AdEventListener {
                     override fun onFailedToLoad() { screenFailures++ }
                 }))
             callbacks[0].onAdFailedToLoad(LoadAdError(3, "no fill", "test", null, null))
@@ -247,7 +253,7 @@ class ERainAdProviderTelemetryTest {
         var screenFailures = 0
 
         api.loadBanner(activity, placement, BannerAdUnit("banner-unit"),
-            placement.tracked(object : AdEventListener {
+            flowAdListener(object : AdEventListener {
                 override fun onFailedToLoad() { screenFailures++ }
             }))
         ProviderBannerVendorShadow.requests.single().onAdFailedToLoad(
@@ -287,6 +293,87 @@ class ERainAdProviderTelemetryTest {
         assertEquals(0, ProviderBannerVendorShadow.requests.size)
         assertEquals(0, sink.events("ad_request").size)
         assertEquals(0, sink.events("ad_loaded").size)
+    }
+
+    @Test
+    fun `unattached native bind reports bound while only a vendor impression reports shown`() {
+        val placement = AdPlacement.Language1
+        val unit = NativeAdUnit("unit")
+        OnboardingSdk.install(activity.application as Application) { adProvider = provider }
+        OnboardingSdk.configure(onboardKitConfig {
+            defaultSteps()
+            ads = AdsConfig(languageNative = unit)
+        }.getOrThrow()).getOrThrow()
+        provider.preloadNative(activity, NativeAdRequest(placement, unit,
+            NativeTemplates.layoutForPlacement(placement)))
+        requests.single().onLoaded.onNativeAdLoaded(Mockito.mock(NativeAd::class.java))
+        assertEquals(0, sink.events("ad_bound").size)
+        assertEquals(0, sink.events("ad_show").size)
+        var bound = 0
+        var shown = 0
+        var unavailable = 0
+        val container = FrameLayout(activity)
+        activity.showNativeAd(placement, unit, container,
+            onBound = { bound++ }, onShown = { shown++ }, onUnavailable = { unavailable++ })
+        assertFalse(container.isAttachedToWindow)
+        assertEquals(1, container.childCount)
+        assertEquals(1, bound)
+        assertEquals(0, unavailable)
+        assertEquals(0, sink.events("ad_show").size)
+        assertEquals(0, shown)
+        assertEquals("language1", sink.events("ad_bound").single()["placement"])
+        requests.single().adListener.onAdImpression()
+        requests.single().adListener.onAdImpression()
+        assertEquals(1, sink.events("ad_show").size)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(1, shown)
+        assertEquals(1, sink.events("ad_bound").size)
+        assertEquals(1, bound)
+    }
+
+    @Test
+    fun `banner provider forwards the real impression without a second canonical producer`() {
+        val host = FrameLayout(activity)
+        host.addView(FrameLayout(activity).apply { id = com.ads.module.R.id.banner_container })
+        host.addView(ShimmerFrameLayout(activity).apply { id = com.ads.module.R.id.shimmer_container_banner })
+        activity.setContentView(host)
+        var loaded = 0
+        var impressions = 0
+        provider.loadBanner(activity, AdPlacement.SplashBanner, BannerAdUnit("banner-unit"),
+            flowAdListener(object : AdEventListener {
+                override fun onLoaded() { loaded++ }
+                override fun onImpression() { impressions++ }
+            }))
+        ProviderBannerVendorShadow.requests.single().onAdLoaded()
+        assertEquals(1, loaded)
+        assertEquals(0, impressions)
+        assertEquals(0, sink.events("ad_show").size)
+        ProviderBannerVendorShadow.requests.single().onAdImpression()
+        ProviderBannerVendorShadow.requests.single().onAdImpression()
+        assertEquals(1, impressions)
+        assertEquals(1, sink.events("ad_show").size)
+    }
+
+    @Test
+    fun `reusing a banner flow listener reports each newly loaded creative`() {
+        val host = FrameLayout(activity)
+        host.addView(FrameLayout(activity).apply { id = com.ads.module.R.id.banner_container })
+        host.addView(ShimmerFrameLayout(activity).apply { id = com.ads.module.R.id.shimmer_container_banner })
+        activity.setContentView(host)
+        var impressions = 0
+        val listener = flowAdListener(object : AdEventListener {
+            override fun onImpression() { impressions++ }
+        })
+
+        repeat(2) { index ->
+            provider.loadBanner(activity, AdPlacement.SplashBanner, BannerAdUnit("banner-unit"), listener)
+            ProviderBannerVendorShadow.requests[index].onAdLoaded()
+            ProviderBannerVendorShadow.requests[index].onAdImpression()
+            ProviderBannerVendorShadow.requests[index].onAdImpression()
+        }
+
+        assertEquals(2, sink.events("ad_show").size)
+        assertEquals(2, impressions)
     }
 
     private class NativeRequest {
