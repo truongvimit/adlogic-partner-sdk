@@ -66,6 +66,7 @@ public class AdCallback {
      * Optional owner check immediately before vendor invocation. Check the captured ad's validity,
      * not a cache entry already consumed for this presentation. Null permits the attempt;
      * the SDK still checks current consent and host lifecycle. Default: no owner restriction.
+     * A thrown exception rejects with PREPARATION_FAILED before the ad is consumed.
      */
     @Nullable
     public AdSkipReason getAdShowSkipReason() {

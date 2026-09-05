@@ -29,7 +29,7 @@ enum class AdSkipReason(val key: String) {
     /** Nothing usable is buffered at the moment the caller wants to show. */
     NOT_READY("not_ready"),
 
-    /** The captured ad expired while waiting to invoke the vendor. */
+    /** The captured ad or its presentation reservation expired before vendor invocation. */
     EXPIRED("expired"),
 
     /** The host left RESUMED before the vendor was called. */
@@ -40,6 +40,9 @@ enum class AdSkipReason(val key: String) {
 
     /** This entry point requires a live AppCompatActivity. */
     INVALID_HOST("invalid_host"),
+
+    /** Vendor callback setup failed before show was invoked. */
+    PREPARATION_FAILED("preparation_failed"),
 
     /** Another presentation owns this opportunity. */
     PRESENTATION_BUSY("presentation_busy"),

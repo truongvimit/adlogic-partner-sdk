@@ -50,6 +50,9 @@ enum class AdSkipReason(val key: String) {
     INVALID_HOST("invalid_host"),
     /** A presentation already owns this placement. */
     PRESENTATION_BUSY("presentation_busy"),
+
+    /** Vendor callback setup failed before presentation invocation. */
+    PREPARATION_FAILED("preparation_failed"),
     /** The configured interstitial interval has not elapsed. */
     INTERVAL("interval"),
     /** The ad unit's daily click cap has been reached. */

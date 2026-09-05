@@ -38,6 +38,7 @@ class RewardAdManagerTest {
     private lateinit var vendor: MockedStatic<RewardedAd>
     private val requests = mutableListOf<RewardedAdLoadCallback>()
     private var premium = false
+    private val vendorPresentations = mutableListOf<FullScreenContentCallback>()
 
     @Before
     fun setUp() {
@@ -57,6 +58,8 @@ class RewardAdManagerTest {
 
     @After
     fun tearDown() {
+        // Every dispatched external fake must terminate through its vendor contract.
+        vendorPresentations.toList().forEach { it.onAdDismissedFullScreenContent() }
         RewardAdManager.releaseAll()
         vendor.close()
         activity.finish()
@@ -65,7 +68,7 @@ class RewardAdManagerTest {
     @Test
     fun `revoked consent prevents showing an already loaded reward`() {
         RewardAdManager.load(activity, "reward", listOf("unit"))
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
         requests.single().onAdLoaded(ad)
         ConsentCenter.setHostConsent(false, false)
         var failures = 0
@@ -88,7 +91,7 @@ class RewardAdManagerTest {
         RewardAdManager.release("reward")
 
         assertEquals(1, failures)
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
         requests.single().onAdLoaded(ad)
         assertEquals(0, successes)
         assertEquals(1, failures)
@@ -101,10 +104,10 @@ class RewardAdManagerTest {
         RewardAdManager.release("reward")
         RewardAdManager.load(activity, "reward", listOf("new-unit"))
 
-        requests[0].onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests[0].onAdLoaded(rewardAd())
 
         assertFalse(RewardAdManager.isReady("reward"))
-        requests[1].onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests[1].onAdLoaded(rewardAd())
         assertTrue(RewardAdManager.isReady("reward"))
     }
 
@@ -120,7 +123,7 @@ class RewardAdManagerTest {
 
         assertEquals(1, successes)
         assertEquals(0, failures)
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
         requests.single().onAdLoaded(ad)
         assertEquals(1, successes)
         Mockito.verify(ad, Mockito.never()).show(Mockito.eq(activity), Mockito.any(OnUserEarnedRewardListener::class.java))
@@ -132,7 +135,7 @@ class RewardAdManagerTest {
         var failures = 0
         RewardAdManager.loadAndShow(activity, "reward", listOf("unit"),
             onSuccess = Runnable { successes++ }, onFailed = Runnable { failures++ })
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
         requests.single().onAdLoaded(ad)
         val fullscreen = ArgumentCaptor.forClass(FullScreenContentCallback::class.java)
         val reward = ArgumentCaptor.forClass(OnUserEarnedRewardListener::class.java)
@@ -154,7 +157,7 @@ class RewardAdManagerTest {
     @Test
     fun `revoked authority is checked before reusing a cached reward`() {
         RewardAdManager.load(activity, "reward", listOf("unit"))
-        requests.single().onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests.single().onAdLoaded(rewardAd())
         ConsentCenter.setHostConsent(false, false)
         val listener = RecordingListener()
 
@@ -183,7 +186,7 @@ class RewardAdManagerTest {
         RewardAdManager.load(activity, "reward", listOf("unit"), listener = listener)
         ConsentCenter.setHostConsent(false, false)
 
-        requests.single().onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests.single().onAdLoaded(rewardAd())
 
         assertEquals(0, listener.loaded)
         assertEquals(1, listener.failed)
@@ -197,7 +200,7 @@ class RewardAdManagerTest {
         RewardAdManager.load(activity, "reward", listOf("unit"), listener = listener)
         ConsentCenter.setHostConsent(true, false)
 
-        requests.single().onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests.single().onAdLoaded(rewardAd())
 
         assertEquals(0, listener.loaded)
         assertEquals(1, listener.failed)
@@ -211,7 +214,7 @@ class RewardAdManagerTest {
         RewardAdManager.loadAndShow(activity, "reward", listOf("unit"),
             onSuccess = Runnable {}, onFailed = Runnable { failures++ })
         ConsentCenter.setHostConsent(true, false)
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
 
         requests.single().onAdLoaded(ad)
 
@@ -224,7 +227,7 @@ class RewardAdManagerTest {
         val connectivity = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork, null)
         RewardAdManager.load(activity, "reward", listOf("unit"))
-        val ad = Mockito.mock(RewardedAd::class.java)
+        val ad = rewardAd()
         requests.single().onAdLoaded(ad)
         assertTrue(RewardAdManager.isReady("reward"))
 
@@ -236,7 +239,7 @@ class RewardAdManagerTest {
     @Test
     fun `premium buffered presentation still earns and closes after global invalidation`() {
         RewardAdManager.load(activity, "reward", listOf("unit"))
-        requests.single().onAdLoaded(Mockito.mock(RewardedAd::class.java))
+        requests.single().onAdLoaded(rewardAd())
         premium = true
         RewardAdManager.releaseAll()
         val events = mutableListOf<String>()
@@ -247,6 +250,13 @@ class RewardAdManagerTest {
         })
 
         assertEquals(listOf("earned", "closed:true"), events)
+    }
+
+    private fun rewardAd(): RewardedAd = Mockito.mock(RewardedAd::class.java).also { ad ->
+        Mockito.doAnswer { invocation ->
+            vendorPresentations += invocation.getArgument<FullScreenContentCallback>(0)
+            null
+        }.`when`(ad).setFullScreenContentCallback(Mockito.any(FullScreenContentCallback::class.java))
     }
 
     private class RecordingListener : AdCallback() {

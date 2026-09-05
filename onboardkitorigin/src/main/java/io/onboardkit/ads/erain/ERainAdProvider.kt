@@ -340,6 +340,7 @@ class ERainAdProvider(
         SdkAdSkipReason.PROCESS_NOT_RESUMED -> AdSkipReason.PROCESS_NOT_RESUMED
         SdkAdSkipReason.INVALID_HOST -> AdSkipReason.INVALID_HOST
         SdkAdSkipReason.PRESENTATION_BUSY -> AdSkipReason.PRESENTATION_BUSY
+        SdkAdSkipReason.PREPARATION_FAILED -> AdSkipReason.PREPARATION_FAILED
         SdkAdSkipReason.INTERVAL -> AdSkipReason.INTERVAL
         SdkAdSkipReason.CLICK_CAP -> AdSkipReason.CLICK_CAP
         SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE

@@ -217,11 +217,26 @@ internal class AppResumeLoadOwner(private val loader: AppResumeAdLoader) {
         return age >= 0 && age < MAX_AD_AGE_MS && ad.personalized == ConsentCenter.canPersonalize()
     }
 
-    /** Claim before show so a previous presentation's terminal cannot clear its replacement. */
-    fun takeForShow(): AppOpenAd? {
+    /** Keeps the original buffer while its vendor callback and cosmetic options are prepared. */
+    fun peekForShow(): AppOpenAd? {
         check(Looper.myLooper() == Looper.getMainLooper())
+        val candidate = buffered ?: return null
         if (!canShow() || !isAdAvailable()) return null
-        return buffered?.ad.also { buffered = null }
+        return candidate.ad.takeIf { buffered === candidate }
+    }
+
+    /**
+     * Claims only the expected, still-authorized buffer after [commit] accepts presentation.
+     * A rejected commitment may synchronously notify the host; it must leave the original buffer
+     * and timestamp, or a replacement installed by that notification, untouched.
+     */
+    fun takeForShow(expected: AppOpenAd, commit: () -> Boolean): AppOpenAd? {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        val candidate = buffered ?: return null
+        if (candidate.ad !== expected || !canShow() || !isAdAvailable() || buffered !== candidate) return null
+        if (!commit() || buffered !== candidate) return null
+        buffered = null
+        return candidate.ad
     }
 
     private fun onMain(action: () -> Unit) {

@@ -166,6 +166,10 @@ class InterstitialPresentationTest {
             // Let ProcessLifecycleOwner finish the framework's 700 ms background debounce.
             mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         }
+        // External vendor fakes must finish an invoked ad even when a test assertion throws.
+        if (::fullscreenCallback.isInitialized && vendorHosts.isNotEmpty()) {
+            fullscreenCallback.onAdDismissedFullScreenContent()
+        }
         if (::vendor.isInitialized) vendor.close()
         Tracker.resetForTesting()
     }
@@ -261,6 +265,93 @@ class InterstitialPresentationTest {
         assertEquals(0, params("ad_show_failed").size)
         assertEquals(1, params("ad_skipped").size)
         assertEquals(1, rejected.completed)
+    }
+
+    @Test
+    fun `a different placement cannot present during preparation and keeps its fill for retry`() {
+        loadAndFill()
+        val first = RecordingShowCallback()
+        InterstitialAdManager.show(activity, PLACEMENT, first, nextAction = InterNextAction.AfterDismiss)
+        val firstCallback = fullscreenCallback
+        val firstDialog = ShadowDialog.getLatestDialog()
+
+        val secondPlacement = "second-fullscreen-slot"
+        val secondAd = replacementVendor()
+        var secondWrapper: ApInterstitialAd? = null
+        InterstitialAdManager.load(activity, secondPlacement, listOf(UNIT), listener = object : AdCallback() {
+            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { secondWrapper = ad }
+        })
+        requests.last().onAdLoaded(secondAd)
+        mainLooper.idle()
+        val second = RecordingShowCallback()
+        InterstitialAdManager.show(activity, secondPlacement, second, nextAction = InterNextAction.AfterDismiss)
+
+        assertEquals(listOf(AdSkipReason.PRESENTATION_BUSY), second.skipped)
+        assertEquals(1, second.completed)
+        assertTrue(InterstitialAdManager.isReady(secondPlacement))
+        assertSame(secondAd, requireNotNull(secondWrapper).interstitialAd)
+        assertSame(firstDialog, ShadowDialog.getLatestDialog())
+        assertTrue(firstDialog.isShowing)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(1, vendorHosts.size)
+        firstCallback.onAdShowedFullScreenContent()
+        firstCallback.onAdDismissedFullScreenContent()
+
+        val retry = RecordingShowCallback()
+        InterstitialAdManager.show(activity, secondPlacement, retry, nextAction = InterNextAction.AfterDismiss)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(2, vendorHosts.size)
+        fullscreenCallback.onAdShowedFullScreenContent()
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        assertEquals(1, retry.closed)
+        assertEquals(1, retry.completed)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `a throwing host presented callback cannot unlock a synchronously shown vendor ad`() {
+        val callback = object : AdCallback() {
+            // Kotlin callers may throw checked exceptions through the Java callback interface.
+            override fun onAdPresented() { throw Exception("host callback failed") }
+        }
+        val wrapper = loadDirect(callback)
+        Mockito.doAnswer { invocation ->
+            vendorHosts += invocation.getArgument<Activity>(0)
+            fullscreenCallback.onAdShowedFullScreenContent()
+            null
+        }.`when`(googleAd).show(Mockito.any(Activity::class.java))
+
+        ERainAd.getInstance().forceShowInterstitial(activity, wrapper, callback, false, false)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        assertEquals(1, vendorHosts.size)
+        assertEquals(1, params("ad_show").size)
+        assertEquals(0, params("ad_show_failed").size)
+        assertTrue(AppOpenManager.getInstance().isInterstitialShowing)
+        assertTrue(wrapper.isReady)
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        assertFalse(AppOpenManager.getInstance().isInterstitialShowing)
+        assertFalse(wrapper.isReady)
+    }
+
+    @Test
+    fun `timed public interstitial captures navigation mode before the scheduling delay`() {
+        val sdk = com.ads.module.admob.Admob.getInstance()
+        sdk.setOpenActivityAfterShowInterAds(false)
+        var next = 0
+        sdk.showInterstitialAdByTimes(activity, googleAd, object : AdCallback() {
+            override fun onNextAction() { next++ }
+        }, 100L)
+        sdk.setOpenActivityAfterShowInterAds(true)
+
+        mainLooper.idleFor(100, TimeUnit.MILLISECONDS)
+        // Real dialog creation can advance the virtual clock inside the first scheduled task.
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        assertEquals(1, vendorHosts.size)
+        assertEquals(0, next)
+        fullscreenCallback.onAdDismissedFullScreenContent()
+        assertEquals(1, next)
     }
 
     private fun loadAndFill(raw: InterstitialAd = googleAd): ApInterstitialAd {

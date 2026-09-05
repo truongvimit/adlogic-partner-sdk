@@ -30,6 +30,8 @@ import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.appopen.AppOpenAd;
 
+import io.trackkit.AdFormat;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -37,8 +39,11 @@ import java.util.List;
 /**
  * App-open ads for foreground resume. Initialization can preload; lifecycle or an explicit
  * {@link #showResumeAdIfAvailable()} call decides when to present. Resume mode defaults to enabled,
- * and full-screen content notifications default to disabled until explicitly requested.
+ * and shown/dismissed/failure notifications default to disabled until explicitly requested.
  * Raw cold-start app-open splash APIs are removed in 5.1.0; they do not alias resume presentation.
+ * A dispatched fullscreen ad holds process-wide ownership until a terminal callback. A missing
+ * terminal callback is not recovered by elapsed time or host lifecycle in this contract.
+ * Host callback exceptions are logged; they do not release a presentation or become vendor errors.
  */
 public class AppOpenManager implements Application.ActivityLifecycleCallbacks, LifecycleObserver {
     private static final String TAG = "AppOpenManager";
@@ -46,29 +51,15 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private static volatile AppOpenManager INSTANCE;
     private final AppResumeLoadOwner resumeLoadOwner;
-    private AppOpenAd presentingResumeAd;
+    private final FullscreenPresentationOwner presentationOwner = FullscreenPresentationOwner.getInstance();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private FullScreenContentCallback fullScreenContentCallback;
 
     private Activity currentActivity;
 
-    private static boolean isShowingAd = false;
-
-    /**
-     * How long a full-screen ad may hold the suppression flags before they are assumed stuck.
-     * Longer than any real interstitial, including a 30s rewarded video plus its end card.
-     */
-    private static final long INTERSTITIAL_SHOWING_TIMEOUT_MS = 90_000;
-
-    private final Handler interstitialWatchdogHandler = new Handler(Looper.getMainLooper());
-    private Runnable interstitialWatchdogRunnable;
-
-    private static final Handler showingAdWatchdogHandler = new Handler(Looper.getMainLooper());
-    private static Runnable showingAdWatchdogRunnable;
-
     private volatile boolean isInitialized = false;// on  - off ad resume on app
     private boolean lifecycleHooksAttached = false;
     private boolean isAppResumeEnabled = true;
-    private boolean isInterstitialShowing = false;
     private boolean enableScreenContentCallback = false;
     private boolean disableAdResumeByClickAction = false;
     private final List<Class> disabledAppOpenList;
@@ -122,7 +113,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private void runOnMain(Runnable action) {
         if (Looper.myLooper() == Looper.getMainLooper()) action.run();
-        else interstitialWatchdogHandler.post(action);
+        else mainHandler.post(action);
     }
 
     public boolean isInitialized() {
@@ -147,49 +138,22 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.enableScreenContentCallback = enableScreenContentCallback;
     }
 
+    /** True for reserved/active interstitial or rewarded ads, or separate legacy suppression. */
     public boolean isInterstitialShowing() {
-        return isInterstitialShowing;
+        return presentationOwner.isInterstitialBusy();
     }
 
     /**
-     * Marks whether a full-screen ad (or its loading dialog) owns the screen.
-     * <p>
-     * Raising it arms a watchdog. The flag is set from several places — the loading dialog, the
-     * GMA show callback — while only some of the failure paths lowered it again, so one dropped
-     * callback used to suppress every resume ad for the rest of the process. The watchdog bounds
-     * that to {@link #INTERSTITIAL_SHOWING_TIMEOUT_MS} instead of forever; the normal terminal
-     * callbacks still lower it immediately and cancel the watchdog.
+     * Legacy suppression for an external integration; this does not own an SDK presentation.
+     * Raising suppression arms its own 90-second timeout. Neither clearing it nor its timeout
+     * can release an interstitial, rewarded or app-open presentation owned by the SDK.
+     *
+     * @deprecated SDK adapters acquire a captured presentation lease instead. This descriptor
+     * remains only for integrations that need temporary resume suppression.
      */
+    @Deprecated
     public void setInterstitialShowing(boolean interstitialShowing) {
-        isInterstitialShowing = interstitialShowing;
-        if (interstitialShowing) {
-            armInterstitialWatchdog();
-        } else {
-            cancelInterstitialWatchdog();
-        }
-    }
-
-    private void armInterstitialWatchdog() {
-        cancelInterstitialWatchdog();
-        interstitialWatchdogRunnable = () -> {
-            if (!isInterstitialShowing) {
-                return;
-            }
-            Log.w(TAG, "interstitial-showing flag stuck for "
-                    + INTERSTITIAL_SHOWING_TIMEOUT_MS + "ms — clearing it. "
-                    + "A show path raised it and never reported a terminal callback.");
-            isInterstitialShowing = false;
-            interstitialWatchdogRunnable = null;
-        };
-        interstitialWatchdogHandler.postDelayed(
-                interstitialWatchdogRunnable, INTERSTITIAL_SHOWING_TIMEOUT_MS);
-    }
-
-    private void cancelInterstitialWatchdog() {
-        if (interstitialWatchdogRunnable != null) {
-            interstitialWatchdogHandler.removeCallbacks(interstitialWatchdogRunnable);
-            interstitialWatchdogRunnable = null;
-        }
+        presentationOwner.setLegacyInterstitialSuppressed(interstitialShowing);
     }
 
     /**
@@ -204,39 +168,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * True while an app-open ad owns the screen.
+     * True while an app-open presentation is reserved or dispatched in this process.
      */
     public boolean isShowingAd() {
-        return isShowingAd;
-    }
-
-    /**
-     * Marks whether an app-open ad owns the screen.
-     * <p>
-     * Static and process-wide, and it gates every later resume ad at
-     * {@link #showResumeAdIfAvailable()}. It used to be cleared only by the dismiss and
-     * fail-to-show callbacks, so a show that reported neither blocked resume ads permanently. Same
-     * watchdog as the interstitial flag.
-     */
-    private static void setShowingAd(boolean showing) {
-        isShowingAd = showing;
-        if (showingAdWatchdogRunnable != null) {
-            showingAdWatchdogHandler.removeCallbacks(showingAdWatchdogRunnable);
-            showingAdWatchdogRunnable = null;
-        }
-        if (!showing) {
-            return;
-        }
-        showingAdWatchdogRunnable = () -> {
-            if (!isShowingAd) {
-                return;
-            }
-            Log.w(TAG, "app-open showing flag stuck for " + INTERSTITIAL_SHOWING_TIMEOUT_MS
-                    + "ms — clearing it. A show path raised it and never reported a terminal callback.");
-            isShowingAd = false;
-            showingAdWatchdogRunnable = null;
-        };
-        showingAdWatchdogHandler.postDelayed(showingAdWatchdogRunnable, INTERSTITIAL_SHOWING_TIMEOUT_MS);
+        return presentationOwner.isAppOpenBusy();
     }
 
     /**
@@ -440,115 +375,176 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             }
             return;
         }
-        if (!isShowingAd && isResumeAdAvailable()) {
+        if (!presentationOwner.isBusy() && isResumeAdAvailable()) {
             showResumeAds();
         } else {
             fetchResumeAd();
         }
     }
 
-    Dialog dialog = null;
-
     private void showResumeAds() {
         if (!resumeLoadOwner.canShow() || !resumeLoadOwner.isAdAvailable()
                 || currentActivity == null || currentActivity.isFinishing() || currentActivity.isDestroyed()
-                || isShowingAd) return;
+                || presentationOwner.isBusy()) return;
         if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) return;
+        ResumePresentation presentation = new ResumePresentation(
+                currentActivity, fullScreenContentCallback, enableScreenContentCallback);
+        if (presentation.acquire()) presentation.show();
+    }
 
-        try {
-            dismissDialogLoading();
-            dialog = new ResumeLoadingDialog(currentActivity);
-            dialog.show();
-        } catch (Exception e) {
-            dismissDialogLoading();
-            if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                fullScreenContentCallback.onAdDismissedFullScreenContent();
-            }
-            return;
+    /** Captures the lease, vendor ad, host, dialog and callback for exactly one show attempt. */
+    private final class ResumePresentation extends FullScreenContentCallback {
+        private final Activity activity;
+        private final FullScreenContentCallback callback;
+        private final boolean notifyContent;
+        private FullscreenPresentationOwner.Lease lease;
+        private Dialog presentationDialog;
+        private AppOpenAd ad;
+        private boolean terminal;
+        private boolean invoked;
+
+        ResumePresentation(Activity activity, FullScreenContentCallback callback, boolean notifyContent) {
+            this.activity = activity;
+            this.callback = callback;
+            this.notifyContent = notifyContent;
         }
-        final AppOpenAd ad = resumeLoadOwner.takeForShow();
-        if (ad == null) {
-            dismissDialogLoading();
-            return;
+
+        boolean acquire() {
+            lease = presentationOwner.tryAcquire(AdFormat.APP_OPEN,
+                    () -> runOnMain(this::rejectBeforeShow));
+            return lease != null;
         }
-        final Activity activity = currentActivity;
-        final Dialog presentationDialog = dialog;
-        final FullScreenContentCallback callback = fullScreenContentCallback;
-        final boolean notifyContent = enableScreenContentCallback;
-        presentingResumeAd = ad;
-        // Reserve before calling the vendor, including the interval before its shown callback.
-        setShowingAd(true);
-        FullScreenContentCallback presentation = new FullScreenContentCallback() {
-            private boolean terminal;
-            private boolean shown;
 
-            private boolean ownsPresentation() {
-                return !terminal && presentingResumeAd == ad;
+        void show() {
+            // Capture the selected fill before a cosmetic window can synchronously replace it.
+            ad = resumeLoadOwner.peekForShow();
+            if (ad == null) {
+                finishPresentation();
+                return;
             }
-
-            private boolean finishPresentation() {
-                if (!ownsPresentation()) return false;
-                terminal = true;
-                presentingResumeAd = null;
-                setShowingAd(false);
+            try {
+                presentationDialog = new ResumeLoadingDialog(activity);
+                presentationDialog.show();
+            } catch (Exception error) {
+                dismissDialog();
+                Log.w(TAG, "App-open loading dialog unavailable", error);
+            }
+            if (terminal || !lease.isCurrent()) return;
+            if (!hasValidHost()) {
+                rejectBeforeShow();
+                return;
+            }
+            try {
+                ad.setFullScreenContentCallback(this);
                 try {
-                    if (presentationDialog != null && presentationDialog.isShowing()) presentationDialog.dismiss();
-                } catch (Exception ignored) {
+                    ad.setImmersiveMode(true);
+                } catch (RuntimeException error) {
+                    Log.w(TAG, "App-open immersive mode unavailable", error);
                 }
-                if (dialog == presentationDialog) dialog = null;
-                return true;
+                if (terminal) return;
+                if (!hasValidHost()) {
+                    rejectBeforeShow();
+                    return;
+                }
+                if (resumeLoadOwner.takeForShow(ad, lease::start) == null) {
+                    rejectBeforeShow();
+                    return;
+                }
+                invoked = true;
+                ad.show(activity);
+            } catch (RuntimeException error) {
+                if (!invoked) {
+                    Log.w(TAG, "App-open callback setup failed", error);
+                    rejectBeforeShow();
+                } else {
+                    failPresentation(new AdError(0,
+                            error.getMessage() == null ? "App-open show failed" : error.getMessage(), TAG));
+                }
             }
+        }
 
-            @Override
-            public void onAdDismissedFullScreenContent() {
-                runOnMain(() -> {
-                    if (!finishPresentation()) return;
-                    if (callback != null && notifyContent) callback.onAdDismissedFullScreenContent();
-                    fetchResumeAd();
-                });
-            }
+        private boolean hasValidHost() {
+            return !activity.isFinishing() && !activity.isDestroyed()
+                    && ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
+        }
 
-            @Override
-            public void onAdFailedToShowFullScreenContent(AdError error) {
-                runOnMain(() -> {
-                    if (!finishPresentation()) return;
-                    if (callback != null && notifyContent) callback.onAdFailedToShowFullScreenContent(error);
-                    fetchResumeAd();
-                });
-            }
+        private boolean ownsPresentation() {
+            return !terminal && invoked && lease.isCurrent();
+        }
 
-            @Override
-            public void onAdShowedFullScreenContent() {
-                runOnMain(() -> {
-                    if (!ownsPresentation() || shown) return;
-                    shown = true;
-                    if (callback != null && notifyContent) callback.onAdShowedFullScreenContent();
-                });
+        private void dismissDialog() {
+            try {
+                if (presentationDialog != null && presentationDialog.isShowing()) presentationDialog.dismiss();
+            } catch (Exception ignored) {
             }
+        }
 
-            @Override
-            public void onAdClicked() {
-                runOnMain(() -> {
-                    if (!ownsPresentation()) return;
-                    ERainLogEventManager.logClickAdsEvent(activity, ad.getAdUnitId());
-                    if (callback != null) callback.onAdClicked();
-                });
-            }
+        private boolean finishPresentation() {
+            if (terminal) return false;
+            terminal = true;
+            if (lease != null) lease.finish();
+            dismissDialog();
+            return true;
+        }
 
-            @Override
-            public void onAdImpression() {
-                runOnMain(() -> {
-                    if (ownsPresentation() && callback != null) callback.onAdImpression();
-                });
+        private void rejectBeforeShow() {
+            if (!finishPresentation()) return;
+            if (callback != null && notifyContent) notifyHost(callback::onAdDismissedFullScreenContent);
+        }
+
+        private void failPresentation(AdError error) {
+            if (!finishPresentation()) return;
+            if (callback != null && notifyContent) notifyHost(() -> callback.onAdFailedToShowFullScreenContent(error));
+            fetchResumeAd();
+        }
+
+        private void notifyHost(Runnable notification) {
+            try {
+                notification.run();
+            } catch (Exception error) {
+                // A synchronous host callback can run inside vendor.show; it is not vendor failure.
+                Log.e(TAG, "App-open host callback failed", error);
             }
-        };
-        try {
-            ad.setFullScreenContentCallback(presentation);
-            ad.setImmersiveMode(true);
-            ad.show(activity);
-        } catch (RuntimeException error) {
-            presentation.onAdFailedToShowFullScreenContent(new AdError(
-                    0, error.getMessage() == null ? "App-open show failed" : error.getMessage(), TAG));
+        }
+
+        @Override
+        public void onAdDismissedFullScreenContent() {
+            runOnMain(() -> {
+                if (!invoked || !finishPresentation()) return;
+                if (callback != null && notifyContent) notifyHost(callback::onAdDismissedFullScreenContent);
+                fetchResumeAd();
+            });
+        }
+
+        @Override
+        public void onAdFailedToShowFullScreenContent(AdError error) {
+            runOnMain(() -> {
+                if (invoked) failPresentation(error);
+            });
+        }
+
+        @Override
+        public void onAdShowedFullScreenContent() {
+            runOnMain(() -> {
+                if (!ownsPresentation() || !lease.presented()) return;
+                if (callback != null && notifyContent) notifyHost(callback::onAdShowedFullScreenContent);
+            });
+        }
+
+        @Override
+        public void onAdClicked() {
+            runOnMain(() -> {
+                if (!ownsPresentation()) return;
+                ERainLogEventManager.logClickAdsEvent(activity, ad.getAdUnitId());
+                if (callback != null) notifyHost(callback::onAdClicked);
+            });
+        }
+
+        @Override
+        public void onAdImpression() {
+            runOnMain(() -> {
+                if (ownsPresentation() && callback != null) notifyHost(callback::onAdImpression);
+            });
         }
     }
 
@@ -559,8 +555,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
-        if (isInterstitialShowing) {
-            Log.d(TAG, "onResume: interstitial is showing");
+        if (presentationOwner.isBusy()) {
+            Log.d(TAG, "onResume: fullscreen presentation is busy");
             return;
         }
 
@@ -599,17 +595,5 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     public void onPause() {
         Log.d(TAG, "onPause");
     }
-
-    private void dismissDialogLoading() {
-        if (dialog != null && dialog.isShowing()) {
-            try {
-                dialog.dismiss();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-
 
 }

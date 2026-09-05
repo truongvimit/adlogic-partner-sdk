@@ -22,14 +22,17 @@ import java.util.concurrent.ConcurrentHashMap
 /** Outcomes of one rewarded presentation, in the order GMA reports them. */
 open class RewardShowCallback {
 
-    /** The user watched far enough to earn. Grant the reward from [onClosed]. */
+    /** The vendor granted a reward. Delivered once; it may arrive after [onClosed]. */
     open fun onEarned(item: RewardItem?) {}
 
-    /** Terminal: the ad is gone; [earned] says whether [onEarned] fired before it. */
+    /** Presentation ended; [earned] says whether [onEarned] fired before this close. */
     open fun onClosed(earned: Boolean) {}
 
     /** Terminal: the ad never reached the screen. */
     open fun onFailedToShow(codeError: Int) {}
+
+    /** Declined before vendor invocation; existing consumers receive their failure callback. */
+    open fun onRejected(reason: AdSkipReason) { onFailedToShow(0) }
 
     open fun onClicked() {}
 }
@@ -53,6 +56,7 @@ object RewardAdManager {
     // One observer per placement; the freshest caller hears the in-flight outcome
     private val listeners = ConcurrentHashMap<String, AdCallback>()
     private val presentations = ConcurrentHashMap<String, Presentation>()
+    private val bufferedShows = ConcurrentHashMap<String, Any>()
 
     private class BufferedReward(ad: RewardedAd, val context: Context, val personalized: Boolean) {
         val cached = CachedAd(ad)
@@ -155,7 +159,8 @@ object RewardAdManager {
     }
 
     /**
-     * Shows the buffered ad. Single-use: the buffer is dropped before `show()`.
+     * Shows the buffered ad. A pre-invocation rejection retains the original fresh buffer;
+     * an invoked ad is single-use, including a vendor show failure.
      * Premium users receive an automatic earn/close even if entitlement invalidation cleared it.
      */
     @JvmStatic
@@ -173,7 +178,39 @@ object RewardAdManager {
             callback.onFailedToShow(0)
             return
         }
-        showInternal(activity, cached.ad, callback)
+        val ownership = Any()
+        bufferedShows[placement] = ownership
+        showInternal(activity, cached.ad, object : RewardShowCallback() {
+            override fun onEarned(item: RewardItem?) = callback.onEarned(item)
+
+            override fun onClosed(earned: Boolean) {
+                bufferedShows.remove(placement, ownership)
+                callback.onClosed(earned)
+            }
+
+            override fun onFailedToShow(codeError: Int) {
+                bufferedShows.remove(placement, ownership)
+                callback.onFailedToShow(codeError)
+            }
+
+            override fun onRejected(reason: AdSkipReason) {
+                val allowed = cached.isFresh &&
+                    AdGate.skipReason(cached.context, enabled = true, checkNetwork = false) == null
+                if (bufferedShows.remove(placement, ownership) && allowed) {
+                    cache.putIfAbsent(placement, cached)
+                }
+                callback.onRejected(reason)
+            }
+
+            override fun onClicked() = callback.onClicked()
+        }, admission = {
+            when {
+                bufferedShows[placement] !== ownership -> AdSkipReason.NOT_READY
+                !cached.cached.isFresh -> AdSkipReason.EXPIRED
+                cached.personalized != ConsentCenter.canPersonalize() -> AdSkipReason.NOT_READY
+                else -> null
+            }
+        })
     }
 
     /**
@@ -248,6 +285,13 @@ object RewardAdManager {
                                 finishPresentation(placement, presentation, false)
                             }
                         },
+                        admission = {
+                            when {
+                                presentations[placement] !== presentation -> AdSkipReason.NOT_READY
+                                ConsentCenter.canPersonalize() != presentation.personalized -> AdSkipReason.NOT_READY
+                                else -> null
+                            }
+                        },
                     )
                 }
 
@@ -267,6 +311,7 @@ object RewardAdManager {
      */
     @JvmStatic
     fun release(placement: String) {
+        bufferedShows.remove(placement)
         cache.remove(placement)
         inFlight.remove(placement)
         val cancelledLoad = loadGenerations.remove(placement)
@@ -281,7 +326,8 @@ object RewardAdManager {
     /** Applies [release] to every owned placement, including pending load-and-show requests. */
     @JvmStatic
     fun releaseAll() {
-        (cache.keys + inFlight + loadGenerations.keys + listeners.keys + presentations.keys).toSet().forEach(::release)
+        (cache.keys + inFlight + loadGenerations.keys + listeners.keys + presentations.keys + bufferedShows.keys)
+            .toSet().forEach(::release)
     }
 
     private fun finishPresentation(placement: String, presentation: Presentation, earned: Boolean) {
@@ -291,7 +337,12 @@ object RewardAdManager {
         runCatching { completion(earned) }
     }
 
-    private fun showInternal(activity: Activity, ad: RewardedAd?, callback: RewardShowCallback) {
+    private fun showInternal(
+        activity: Activity,
+        ad: RewardedAd?,
+        callback: RewardShowCallback,
+        admission: () -> AdSkipReason? = { null },
+    ) {
         // The module answers purchased users with a lone onUserEarnedReward(null) and no
         // terminal callback; map that to a completed earn so the caller is never stranded
         if (AdGate.isPurchased(activity)) {
@@ -299,8 +350,9 @@ object RewardAdManager {
             callback.onClosed(earned = true)
             return
         }
-        if (AdGate.skipReason(activity, enabled = true, checkNetwork = false) != null) {
-            callback.onFailedToShow(0)
+        val rejection = AdGate.skipReason(activity, enabled = true, checkNetwork = false)
+        if (rejection != null) {
+            callback.onRejected(rejection)
             return
         }
         var earned = false
@@ -308,6 +360,8 @@ object RewardAdManager {
             activity,
             ad,
             object : RewardCallback {
+                override fun getAdShowSkipReason(): AdSkipReason? = admission()
+
                 override fun onUserEarnedReward(item: RewardItem?) {
                     earned = true
                     callback.onEarned(item)
@@ -319,6 +373,15 @@ object RewardAdManager {
 
                 override fun onRewardedAdFailedToShow(codeError: Int) {
                     callback.onFailedToShow(codeError)
+                }
+
+                override fun onAdShowRejected(reason: AdSkipReason) {
+                    if (reason == AdSkipReason.PURCHASED) {
+                        callback.onEarned(null)
+                        callback.onClosed(earned = true)
+                    } else {
+                        callback.onRejected(reason)
+                    }
                 }
 
                 override fun onAdClicked() {
