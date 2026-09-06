@@ -19,6 +19,17 @@
 - Actual JUnit XML independently checked with `scripts/retentionkit/verify.py tests`: 1 passed, zero failures/errors/skips. Captured output `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-bridge-device-home-return.log`; evidence hash/count record alongside it as `.json`.
 - Partial05 implementer checks: full ads 159 + OnboardKit 164 tests passed for suppression/no-splash changes; active-flow 4 + splash 10 targeted tests passed after active-state addition. Final combined rerun remains pending.
 
+## Ticket 01 — core/publication foundation
+
+Status: **PASS** for Ticket 01 scope, 2026-09-07.
+
+- 29 Robolectric tests: transactional namespaces, corruption/rollback, concurrent installs/patches, callback lock inversion, state restore, explicit config removal, current-process entitlement, setup grace, scoped onboarding, entry/reusable identity/consumption and weak-Activity UI leases.
+- `:retention-core:testDebugUnitTest` and `:retention-core:assembleRelease` passed with `--max-workers=2`.
+- All six new modules produced release AARs; five non-core libraries remain build scaffolds for downstream implementation.
+- Publication POMs generated/inspected for all six. Core releaseRuntimeClasspath contains no ads/Firebase/billing/Compose. Settings and JitPack publication registrations are present.
+- Detailed commands and limits: `retention-core/VERIFICATION.md`. Public APIs: `retention-core/CONTRACT.md`.
+- **Not tested here:** ADB, physical device, notification post delivery, widget launcher outcome, Play review display, optional adapters, sample end-to-end behavior, minified consuming application. These remain downstream acceptance work.
+
 ## Implementation acceptance
 
 Status values: PENDING, PASS, FAIL, PLATFORM LIMIT, HARDWARE UNAVAILABLE. Unit evidence and device evidence are independent; source inspection is not a device pass. Test counts are taken from completed JUnit XML, not console task names. Final checks run on the integrated branch.
