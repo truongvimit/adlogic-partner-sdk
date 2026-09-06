@@ -2,7 +2,7 @@
 
 This small application proves selective dependency composition, public API linkage and R8 packaging separately from the full SDK demo. It is not published, has no Google Services plugin, and contains no ad/Firebase/OnboardKit/billing dependency. Common source imports only core. Each build includes exactly one profile's source directory and one selected SDK artifact.
 
-**Preparation status:** source and configuration are prepared; Gradle builds are deliberately pending the final Ticket04/05 API integration. No APK, minify, dependency, POM or device pass is claimed by this commit. The umbrella source installs and dispatches entries through the real facade API; the final build matrix is still required before acceptance.
+**Build validation:** all six project and six POM-only Maven release builds passed R8/resource shrinking at `723a57c`, with all 12 actual runtime graph/merged-manifest composition checks and six local AAR/POM/metadata inspections passing. See [VERIFICATION.md](VERIFICATION.md) for the frozen source, exact QA version, evidence and the subsequent scoped pending-route correction. This is local publication/build evidence; device validation is owned separately by the root task. The artifacts are unreleased and are not part of the existing 5.1.1 release.
 
 ## Select a profile and dependency source
 
@@ -78,11 +78,11 @@ The launcher Activity shows profile/dependency/version, initialization status, r
 - Widget profile links real pin-capability/request/refresh calls; automatic shortcuts are disabled in this proof app. A request is not pin confirmation.
 - Feedback profile opens the actual optional exit-feedback UI; automatic feedback shortcut creation is disabled here. Opening Settings never claims uninstall.
 - Review profile links actual eligibility request and manual Play Store APIs; automatic review remains driven by completed text operations and the module's standard gates/limits. Flow completion does not prove a card or rating.
-- Umbrella profile installs using `RetentionKit.install`/`RetentionKitOptions`, captures through `kit.capture`, and routes through `kit.dispatchPending`, including the standard feedback destination. Navigation waits until setup is complete and the final Activity is resumed. It also exposes actual widget, notification, feedback and Store actions.
+- Umbrella profile installs using `RetentionKit.install`/`RetentionKitOptions`, captures through `kit.capture`, and routes through `kit.dispatchPending`, including the standard feedback destination. Navigation waits until setup is complete and the final Activity is resumed. A source Activity can finish its external scope just after the destination resumes: routing retries every 250 ms at most 20 times, cancels on pause/consumption and preserves the pending entry after the window ends. Resume, setup completion, a new entry or explicit status refresh starts a fresh bounded window. It also exposes actual widget, notification, feedback and Store actions.
 
 Stable common view IDs `rk_proof_status`, `rk_proof_input`, `rk_proof_result`, `rk_proof_setup`, `rk_proof_run`, `rk_proof_entry` support the root-owned instrumentation/device smoke. There is no exported test receiver, hidden backdoor, debug timestamp bypass or fake-success toggle. Only the root/device owner may install/launch this app through ADB and add observed evidence to the ledger.
 
-## Preparation checks
+## Tooling checks and remaining acceptance
 
 The Python tooling tests validate profile/property parsing, safety and umbrella composition rules using explicitly synthetic files. They do not run Gradle or prove this application compiles:
 
@@ -90,4 +90,4 @@ The Python tooling tests validate profile/property parsing, safety and umbrella 
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/retentionkit -p 'test_*.py' -v
 ```
 
-Required follow-up acceptance: compile/minify all project profiles; publish final AAR/POMs; compile/minify all Maven/POM profiles with matching graph/merged manifest evidence; then root-owned runtime routing smoke. Ticket07 remains open until its broader acceptance is completed.
+The baseline project/POM matrix and publication inspections are complete. Three actual ProofActivity/core routing regressions now pass after reproducing the late-source-readiness bug; the 25 Python parser fixtures also pass separately. Final consumer minify/publication follow-up waits for the widget return correction and a new QA version, as recorded in [VERIFICATION.md](VERIFICATION.md). Root-owned runtime routing/device and full example acceptance remain separate. Ticket07 stays open until the root validation owner completes that broader acceptance.

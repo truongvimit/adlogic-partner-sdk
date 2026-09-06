@@ -26,6 +26,8 @@ class ProofActivity : Activity() {
     private lateinit var input: EditText
     private var destination = "uppercase"
     private var pendingToken: String? = null
+    private var resumed = false
+    private var routeRetries = 0
     private val main = Handler(Looper.getMainLooper())
     private val resumeEntry = Runnable { consumePending(); refreshStatus() }
     private val proofApp get() = application as ProofApplication
@@ -46,7 +48,7 @@ class ProofActivity : Activity() {
         }
         button("Complete setup", R.id.rk_proof_setup) {
             runtime?.signal(RetentionSignal.SetupCompleted)
-            consumePending()
+            requestRouteAttempt()
         }
         button("Run text tool", R.id.rk_proof_run) { runTextTool() }
         button("Open word-count typed entry", R.id.rk_proof_entry) {
@@ -57,7 +59,7 @@ class ProofActivity : Activity() {
         runtime?.let { rt ->
             proofApp.profile.actions(this, rt).forEach { action -> button(action.label) { result.text = action.run() } }
         }
-        button("Refresh SDK status") { runtime?.reconcile("consumer_manual_refresh") }
+        button("Refresh SDK status") { runtime?.reconcile("consumer_manual_refresh"); requestRouteAttempt() }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(content) }
         val outer = FrameLayout(this).apply {
             id = R.id.rk_proof_insets
@@ -89,10 +91,11 @@ class ProofActivity : Activity() {
     }
     override fun onResume() {
         super.onResume()
+        resumed = true
         // Core's ActivityLifecycleCallbacks observes this Activity after Activity.onResume.
-        if (::status.isInitialized) main.post(resumeEntry)
+        if (::status.isInitialized) requestRouteAttempt()
     }
-    override fun onPause() { main.removeCallbacks(resumeEntry); super.onPause() }
+    override fun onPause() { resumed = false; main.removeCallbacks(resumeEntry); super.onPause() }
     override fun onDestroy() { main.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -104,31 +107,48 @@ class ProofActivity : Activity() {
         when (val accepted = proofApp.profile.capture(rt, intent)) {
             is RetentionEntryAcceptance.Accepted -> {
                 pendingToken = accepted.entry.token
-                main.post(resumeEntry)
+                requestRouteAttempt()
             }
             is RetentionEntryAcceptance.Rejected -> {
                 if (pendingToken?.let { rt.entries.pending(it) } == null) pendingToken = null
                 result.text = "Entry rejected: ${accepted.reason}"
             }
-            else -> if (pendingToken != null) consumePending()
+            else -> if (pendingToken != null) requestRouteAttempt()
         }
     }
+    private fun requestRouteAttempt() {
+        routeRetries = 0
+        main.removeCallbacks(resumeEntry)
+        if (resumed) main.post(resumeEntry)
+    }
+    private fun retryPendingWhenReady() {
+        if (!resumed || pendingToken == null || routeRetries >= 20) return
+        routeRetries++
+        main.removeCallbacks(resumeEntry)
+        // The source Activity can close its external scope after this destination resumes.
+        main.postDelayed(resumeEntry, 250)
+    }
     private fun consumePending() {
+        if (!resumed || isFinishing || isDestroyed) return
         val rt = runtime ?: return
         val token = pendingToken ?: return
         when (val route = proofApp.profile.dispatchPending(rt, token)) {
             is ProofRoute.Navigate -> {
                 destination = route.entry.destination
                 pendingToken = null
+                main.removeCallbacks(resumeEntry)
                 result.text = "Entry consumed once. Tool: $destination"
             }
             ProofRoute.SdkHandled -> {
-                pendingToken = null
+                // Accepted SDK work may still be blocked before it claims the staged entry.
+                if (rt.entries.pending(token) == null) pendingToken = null
                 result.text = "SDK route accepted; inspect its actual screen/outcome."
+                retryPendingWhenReady()
             }
             is ProofRoute.Blocked -> {
                 if (rt.entries.pending(token) == null) pendingToken = null
                 result.text = "Entry pending: ${route.reason}"
+                retryPendingWhenReady()
             }
         }
     }
