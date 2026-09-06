@@ -84,6 +84,26 @@ class NativeAdShimmerOpacityTest {
     }
 
     @Test
+    fun defaultSkeletonIsLightWithSubtleVisibleBlocks() {
+        withSkeleton({ NativeAdShimmer.from(it, R.layout.custom_native_admob_medium) }) { host, skeleton ->
+            val headline = skeleton.findViewById<TextView>(R.id.ad_headline)
+            val bounds = boundsIn(skeleton as ViewGroup, headline)
+            val frame = render(host, Color.RED)
+            try {
+                val background = frame.getPixel(bounds.centerX(), 3)
+                val block = frame.getPixel(bounds.centerX(), bounds.centerY())
+                for (channel in listOf(Color::red, Color::green, Color::blue)) {
+                    assertTrue("Default skeleton background must be light; actual=${Integer.toHexString(background)}",
+                        channel(background) >= 240)
+                    val contrast = channel(background) - channel(block)
+                    assertTrue("Default blocks need subtle visible contrast; background=${Integer.toHexString(background)}, block=${Integer.toHexString(block)}",
+                        contrast in 1..24)
+                }
+            } finally { frame.recycle() }
+        }
+    }
+
+    @Test
     fun shimmerKeepTagPreservesHostDecoration() {
         withSkeleton({ activity ->
             NativeAdShimmer.from(TaggedInflaterContext(activity), R.layout.custom_native_admob_medium)

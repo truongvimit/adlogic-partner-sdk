@@ -39,8 +39,8 @@ object NativeAdShimmer {
     /** Views tagged with this string survive the transform untouched (brand mark, badge). */
     const val TAG_SHIMMER_KEEP = "shimmer_keep"
 
-    private const val CONTAINER_COLOR = 0xFFE0E0E0.toInt()
-    private const val BLOCK_COLOR = 0xFFC0C0C0.toInt()
+    private const val CONTAINER_COLOR = 0xFFFFFFFF.toInt()
+    private const val BLOCK_COLOR = 0xFFE0E0E0.toInt()
     private const val CORNER_RADIUS_DP = 8f
     private const val EMPTY_TEXT_MIN_WIDTH_DP = 48
     private const val MEDIA_MIN_HEIGHT_DP = 160
@@ -213,7 +213,7 @@ object NativeAdShimmer {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
             addView(
-                View(context).apply { setBackgroundColor(CONTAINER_COLOR) },
+                View(context).apply { setBackgroundColor(BLOCK_COLOR) },
                 ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(FALLBACK_HEIGHT_DP)),
             )
         }
