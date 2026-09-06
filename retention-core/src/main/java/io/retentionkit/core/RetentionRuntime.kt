@@ -20,6 +20,7 @@ data class RetentionOptions @JvmOverloads constructor(
     val store: RetentionStore? = null,
     val initialUserState: RetentionUserState = RetentionUserState(),
     val initialOverrides: Map<String, String> = emptyMap(),
+    val uiHost: RetentionUiHost = RetentionUiHost.NONE,
 )
 
 sealed class RetentionInstallResult {
@@ -45,7 +46,9 @@ class RetentionRuntime private constructor(val application: Application, private
     @Volatile var isForeground: Boolean = false; private set
     private val tracker = RetentionActivityTracker(application, { signal(it) }, { ui.invalidate() }, diagnostics)
     val activities: ForegroundActivityProvider = tracker
-    val ui = RetentionUiCoordinator(clock, activities, { isForeground && !closed }, { userState.onboardingActive })
+    val ui = RetentionUiCoordinator(clock, activities, { isForeground && !closed }, { userState.onboardingActive }, options.uiHost) {
+        diagnostics.record("core.ui_host", "Host UI adapter failed", RetentionDiagnosticLevel.ERROR, it)
+    }
 
     private fun initialize(): List<String> {
         if (options.modules.map { it.id }.distinct().size != options.modules.size) return listOf("Duplicate module ID")
