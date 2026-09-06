@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.event.ERainLogEventManager
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.ui.splash.ObSplashActivity
@@ -33,6 +34,7 @@ class OnboardRetentionBridge @JvmOverloads constructor(
     @Volatile private var closed = true
     private data class Transition(val handle: AutoCloseable, val timeout: Runnable)
     private val transitions = mutableMapOf<String, Transition>()
+    private var clickObservation: AutoCloseable? = null
 
     /** Keeps typed extras in core's envelope; no splash/load/exit interstitial or checkpoint. */
     val router = RetentionRouter { context, entry ->
@@ -50,13 +52,22 @@ class OnboardRetentionBridge @JvmOverloads constructor(
         // SDK-owned Activity exclusion must exist before onActivityStarted/process-onStart. Waiting
         // for its later onResume lease would be too late for OPEN/WELCOME's current-Activity gate.
         AppOpenManager.getInstance().disableAppResumeWithActivity(RetentionFeedbackActivity::class.java)
+        clickObservation = ERainLogEventManager.observeAdClicks("retention.onboard") { clickId, _ ->
+            if (!closed) runtime.signal(RetentionSignal.AdClicked(clickId))
+        }
         scope.launch {
             OnboardingSdk.isFlowActive.collect { active -> if (!closed) runtime.signal(RetentionSignal.OnboardingChanged(active)) }
         }
         val stateFlow = try { OnboardingSdk.state } catch (error: Exception) { diagnose("onboarding_state", error); null }
         if (stateFlow != null) scope.launch {
             try {
-                stateFlow.collect { state -> if (!closed && state.isFlowCompleted) runtime.signal(RetentionSignal.SetupCompleted) }
+                stateFlow.collect { state ->
+                    if (!closed && state.isFlowCompleted && !runtime.userState.setupCompleted) {
+                        runtime.signal(RetentionSignal.SetupCompleted)
+                        // Restoring completed setup must not hide an actual returning onboarding UI.
+                        runtime.signal(RetentionSignal.OnboardingChanged(OnboardingSdk.isFlowActive.value))
+                    }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { diagnose("onboarding_state", error) }
         }
@@ -128,6 +139,8 @@ class OnboardRetentionBridge @JvmOverloads constructor(
     }
     override fun shutdown() {
         closed = true
+        clickObservation?.let(::close)
+        clickObservation = null
         scope.cancel()
         val cleanup = Runnable {
             transitions.values.forEach { handler.removeCallbacks(it.timeout); close(it.handle) }

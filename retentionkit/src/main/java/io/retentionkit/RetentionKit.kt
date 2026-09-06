@@ -79,6 +79,9 @@ class RetentionKit private constructor(
             }
         }
         if (runtime.features().none { it.id == entry.destination }) return RetentionDispatchResult.Unavailable("unknown_destination")
+        if (!runtime.userState.setupCompleted || runtime.ui.eligibility() is RetentionEligibility.Blocked) {
+            return RetentionDispatchResult.Unavailable("ui_changed")
+        }
         return consume(token)?.let(RetentionDispatchResult::Navigate) ?: RetentionDispatchResult.Unavailable("already_consumed")
     }
     fun setupCompleted() { runtime.signal(RetentionSignal.SetupCompleted) }

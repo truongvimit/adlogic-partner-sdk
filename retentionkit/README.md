@@ -64,19 +64,21 @@ val result = RetentionKit.install(this, RetentionKitOptions(
     localeProvider = locale,
     router = bridge.router,
     uiHost = bridge,
-    adapters = listOf(bridge),
+    adapters = listOf(bridge, BillingRetentionBridge()), // omit billing bridge in apps without IAP
     eventSink = TrackkitRetentionEventSink(),
     configSource = FirebaseRetentionConfigSource(),
 ))
 ```
 
-Packages: facade `io.retentionkit`, module/core types `io.retentionkit.*`, suite adapters `io.retentionkit.integration`, Firebase source `io.suite.firebase`. Install Tracker and its chosen sinks once, then existing OnboardKit, then RetentionKit. The facade does not install Tracker/Firebase/OnboardKit again. Keep initial entitlement UNKNOWN until the host has trustworthy purchase verification; cached false is not proof of a non-subscriber.
+Packages: facade `io.retentionkit`, module/core types `io.retentionkit.*`, suite adapters `io.retentionkit.integration`, Firebase source `io.suite.firebase`. Install Tracker and its chosen sinks once, then existing OnboardKit, then RetentionKit. The facade does not install Tracker/Firebase/OnboardKit again. `BillingRetentionBridge` observes BillingKit's engine-owned authoritative `Billing.entitlement` StateFlow: UNKNOWN stays unknown; only VERIFIED_NON_PREMIUM maps to NON_SUBSCRIBER, and VERIFIED_PREMIUM maps to SUBSCRIBER. Late installation reads the current verified snapshot. It never uses cached/default `isPremium` or `awaitReady` as proof, and never launches/initializes billing. Declare BillingKit explicitly only when using this optional adapter.
 
 `OnboardRetentionBridge` implements core `RetentionModule` and `RetentionUiHost`. Its router uses the existing `SplashEntry.intentWithoutSplashAds`: suppresses splash banner/interstitial requests, display and SPLASH_INTER checkpoint while retaining consent, permission and first-open setup under host policy. Later onboarding ads remain host policy. All initial routes still use the host entry Activity; the feedback module alone launches its session-protected internal Activity.
 
 In the existing `OnboardingListener`, call `bridge.onOutcome(outcome)` and forward the returned Bundle to the final host Activity. It marks Completed/Skipped as setup complete by default; pass `setupCompleted=false` if the host still has setup work. Aborted does not complete setup. The bridge also collects authoritative `OnboardingSdk.isFlowActive` and persisted completed state; it does not infer active UI from FlowStarted telemetry or replace the host's listener. `bridge.capture(intent)` is a convenience equivalent to facade capture when attached.
 
 The bridge's synchronous UI gate checks actual fullscreen-ad state, current GMA/Splash Activity and authoritative onboarding activity. Optional `hostCanPresent(Activity)` adds the host's paywall/dialog gate. It never treats a generic consent/premium/remote-disabled ad reason as unsafe UI. Each SDK UI lease owns a bounded resume-suppression resource; expiry/pause/destroy/close releases only that lease. External/system transitions own separate tokens and preserve them when a UI lease is revoked for handoff. Finished-token cleanup is posted to the next main turn, so a core ProcessForeground callback cannot remove suppression between OPEN and WELCOME's synchronous return readers. Failure without departure clears next turn, without poisoning a later return or clearing other owners. The SDK feedback Activity is registered in the existing Activity exclusion list before it starts.
+
+Actual ad clicks are forwarded once from the ads module's sole synchronous vendor-click point (`ERainLogEventManager.observeAdClicks`). No per-placement Retention callback wiring is needed when this bridge is installed. The observer is owner-scoped, removable, exception-isolated and never replays buffered Tracker events; shutdown removes only the bridge registration. Existing Tracker ad_click emission and daily cap counting continue unchanged. Do not also call `kit.adClicked` for those same suite clicks; keep the explicit helper for an app-owned ad system outside this bridge.
 
 For host-controlled Settings/permission handoffs, `bridge.beginExternal(kind, durationMillis=120000)` returns AutoCloseable; close on result or launch failure. This scope does not launch a second permission UI. No bridge replaces `setResumeSkipPolicy`, changes global resume-enable flags, or installs a duplicate process lifecycle observer.
 
@@ -90,6 +92,6 @@ Migrate one old owner at a time: map the feature catalogue/entry routes, preserv
 
 ## Validation scope
 
-Module tests cover config missing/invalid/stale/restart/timeout/source failure, shared-fetch concurrency/cancellation, facade cold/warm/reusable entry consumption, standard internal feedback routing, authoritative UI safety/lease cleanup, and both core-first/ads-first OPEN/WELCOME return-reader orders. Run `:retention-core:testDebugUnitTest :suite-firebase:testDebugUnitTest :retentionkit:testDebugUnitTest` plus existing ads/OnboardKit regressions with `--max-workers=2`.
+Module tests cover config missing/invalid/stale/restart/timeout/source failure, shared-fetch concurrency/cancellation, facade cold/warm/reusable entry consumption, standard internal feedback routing, authoritative UI safety/lease cleanup, actual LifecycleRegistry core-first/ads-first OPEN/WELCOME return-reader orders, authoritative Billing transitions, and synchronous removable ad-click observers. Final suite run: 162 ads + 168 OnboardKit + 39 core + 4 Firebase + 12 facade tests passed with zero failures/errors/skips; retentionkit and suite-firebase release AAR assembly passed. Run `:retention-core:testDebugUnitTest :suite-firebase:testDebugUnitTest :retentionkit:testDebugUnitTest` plus existing ads/OnboardKit regressions with `--max-workers=2`.
 
 Publishable AAR assembly does not prove optional-dependency R8 composition or OEM behavior. The integration acceptance includes minified selective/umbrella consumers and device smoke on the example. Neither unit tests nor a successful system API call claims a notification was seen, a widget was placed, a Play review was shown/rated, or an app was uninstalled.

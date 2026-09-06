@@ -6,9 +6,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.admob.ResumeSkipPolicy
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.event.ERainLogEventManager
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.core.SkipReason
@@ -56,16 +61,24 @@ class OnboardBridgeTest {
             runtime.signal(RetentionSignal.ProcessBackground)
             ads.onStop()
             runtime.subscribe("finish") { if (it == RetentionSignal.ProcessForeground) runtime.signal(RetentionSignal.ExternalTransitionFinished(token)) }
-            if (coreFirst) {
-                runtime.signal(RetentionSignal.ProcessForeground)
-                ads.onResume()
-            } else {
-                ads.onResume()
-                runtime.signal(RetentionSignal.ProcessForeground)
+            val owner = object : LifecycleOwner {
+                val registry = LifecycleRegistry(this)
+                override val lifecycle: Lifecycle get() = registry
             }
+            val coreObserver = object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) { runtime.signal(RetentionSignal.ProcessForeground) }
+            }
+            if (coreFirst) { owner.registry.addObserver(coreObserver); owner.registry.addObserver(ads) }
+            else { owner.registry.addObserver(ads); owner.registry.addObserver(coreObserver) }
+            var welcomeReason: String? = null
+            owner.registry.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) { welcomeReason = ads.resumeSkipReasonFor(activity) }
+            })
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+            owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
             // OPEN and later WELCOME both read this shared gate in the same lifecycle dispatch.
             assertEquals("retention_widget_pin", ads.resumeSkipReasonFor(activity))
-            assertEquals("retention_widget_pin", ads.resumeSkipReasonFor(activity))
+            assertEquals("retention_widget_pin", welcomeReason)
             shadowOf(Looper.getMainLooper()).idle()
             assertNotEquals("retention_widget_pin", ads.resumeSkipReasonFor(activity))
         }
@@ -123,5 +136,17 @@ class OnboardBridgeTest {
         val sdkActivity = Robolectric.buildActivity(RetentionFeedbackActivity::class.java).get()
         assertTrue(ads.isResumeSuppressedFor(sdkActivity))
         ads.setResumeSkipPolicy(null)
+    }
+
+    @Test fun actualVendorClickIsForwardedOnceAndDetachedBridgeCannotReplayOrForward() {
+        val (runtime, bridge) = fixture()
+        foreground(runtime)
+        val clickIds = mutableListOf<String>()
+        runtime.subscribe("click-test") { if (it is RetentionSignal.AdClicked) clickIds.add(it.clickId) }
+        ERainLogEventManager.logClickAdsEvent(app, "unit")
+        assertEquals(1, clickIds.size)
+        bridge.shutdown()
+        ERainLogEventManager.logClickAdsEvent(app, "unit")
+        assertEquals(1, clickIds.size)
     }
 }
