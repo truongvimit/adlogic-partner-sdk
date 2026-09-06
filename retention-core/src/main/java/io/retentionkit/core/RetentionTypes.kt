@@ -19,6 +19,7 @@ interface RetentionClock {
 }
 
 enum class RetentionEntitlement { UNKNOWN, NON_SUBSCRIBER, SUBSCRIBER }
+enum class RetentionMarketingPhase { AFTER_SETUP, ONBOARDING }
 
 data class RetentionUserState @JvmOverloads constructor(
     val setupCompleted: Boolean = false,
@@ -59,7 +60,7 @@ fun interface ForegroundActivityProvider { fun current(): Activity? }
 enum class RetentionSuppressionReason {
     NOT_INSTALLED, INVALID_CONFIGURATION, DISABLED, SETUP_INCOMPLETE, ENTITLEMENT_UNKNOWN,
     SUBSCRIBER, FOREGROUND, BACKGROUND, NO_ACTIVITY, HOST_UI, EXTERNAL_TRANSITION,
-    PROMPT_BUSY, EXPIRED, PERMISSION, CHANNEL, COOLDOWN, CAP, DUPLICATE, UNAVAILABLE,
+    PROMPT_BUSY, EXPIRED, PERMISSION, CHANNEL, COOLDOWN, CAP, DUPLICATE, UNAVAILABLE, WRONG_PHASE,
 }
 
 sealed class RetentionEligibility {
