@@ -1,28 +1,20 @@
 # RetentionKit task graph
 
-Spec: [spec.md](spec.md)
-Base: 632df43
-Branch: codex/retentionkit
+Spec: [spec.md](spec.md) · Base: `632df43` · Branch: `codex/retentionkit`
 
 ## Frontier
 
-Tickets01–05 and additive05a Billing entitlement are resolved and merged. Ticket06 is integrated with four functional example tools and is completing Android UI acceptance. Ticket07 has passed all twelve project/Maven minified consumer combinations at723a57c; final device checks found a widget Activity-return gap and a proof-consumer route-readiness race, now assigned to scoped implementers. Root owns final device/full-example evidence. Ticket08 follows integrated validation.
+Tickets01–07 and additive05a are resolved and merged. SDK/app implementation, supported validation, partner documentation and code-review corrections are accepted. Ticket08 remains **claimed** only because the ready-PR step requires a GitHub account with write permission. The current account has READ-only repository access; branch pushes through the existing owner SSH identity succeed. The spec stays active for that external completion step. Full physical feature UI remains unavailable while the attached Pixel5 is PIN-locked; this is separate from passing API36 emulator acceptance.
 
-## Decisions
+## Decisions and completion pointers
 
-- Use Translate flows as behavioral reference, shared presets plus replaceable content/UI.
-- New opt-in modules; no changes to reference apps and no breaking existing SDK consumers.
-- Test on attached Pixel5/API34. API36 emulator core minified preflight routing passed; complete example checks remain pending. This is not physical/OEM coverage. Pixel is currently PIN-locked and the user unlock request is pending.
-- Complete individual commits and draft PR; no merge/release tag requested.
+- Shared presets based on TranslatorGuru, with PDF Reader/Caller-ID variants; core plus four selective feature artifacts and umbrella facade. Reference apps were not modified by this task.
+- Optional integration reuses OnboardKit, Ads, authoritative Billing, Trackkit and shared Firebase. No forced release or change to existing consumer defaults.
+- [01 core](issues/01-core-foundation.md), [02 notifications](issues/02-notifications.md), [03 widgets](issues/03-widgets-shortcuts.md), [04 feedback/review](issues/04-feedback-review.md), [05 suite/facade](issues/05-suite-adapters-facade.md), [05a Billing](issues/05a-billing-entitlement.md): implementation and module contracts merged; final integrated evidence supersedes earlier scoped counts.
+- [06 example](issues/06-example-integration.md): four functional EN/VI tools, SDK-owned flows, durable app outbox and typed routing. Final app-only correction `a4d3c31`, integrated `2ff967a`, prevents older queued entries overwriting the selected destination; three new actual-Activity regressions. Final docs/acceptance `6ac6724`.
+- [07 packaging/docs](issues/07-validation-docs.md): six local publications, twelve selective/umbrella project/POM-only Maven R8 consumers and actual dependency/manifest checks passed at unchanged SDK `bf68f1e`. Partner guides and final evidence are linked in the ticket Answer.
+- [08 review](issues/08-review-completion.md): independent Standards2/P3 and Spec1/P2 findings fixed by one implementer in `6988108`/`90ac742`, integrated `bf68f1e`. All findings have fixes and affected regression evidence. PR creation/readiness remains an external authentication prerequisite.
+- Final verification: **549 unit/Robolectric cases** (532 unchanged non-app +17 fresh app), **15/15 actual API36 emulator cases**, full example debug/test/release R8 and existing paywall sample build passed. Installed debug APK SHA matches on emulator and physical Pixel5. Physical baseline/Home-return evidence is scoped separately from unavailable full UI coverage.
+- Actual emulator manual checks include pin Cancel/Add, multiple/resize/delete/locale widgets, real feature routing, permission/Later/shortcuts, reboot/timezone/force-stop reconciliation and final minified POM consumer feedback/Store return. Play quota/card/rating and OEM alarm timing are platform-controlled.
 
-## Completion pointers
-
-- 01: final core `6eab586`, integrated `5e620e2`; 29 tests and release build passed. See `retention-core/VERIFICATION.md`.
-- 02: `8a23082`, integrated `b972b42`; 35 tests, release build and lint passed. See `retention-notifications/CONTRACT.md` and `README.md`.
-- 03: `90cab23`, integrated `235803c`; 26 tests and release build passed. See `retention-widgets/README.md`.
-- 04: `0a5e20f`, integrated `bc34199`;32 tests and feedback/review release AARs passed.
-- 05a: `67df3c2`, integrated `92e1213`;20 tests and Billing release AAR passed; authoritative entitlement is separate from cached legacy readiness.
-- 05: final source `ac8c7d5`, integrated `d8a4af4`;385 tests (ads162, Onboard168, core39, Firebase4, facade12) passed. Independent umbrella project/POM R8 evidence at723a57c completed the final acceptance condition, recorded by4be56c9.
-- 06: implementation0178bc7 plus scoped outbox/fixture/channel/route corrections through89b9386, integratedce85e7f;14 app unit tests passed. Device cases are still being verified; compiled tests are not a device pass.
-- 07 tooling: `9366030`, integrated `56a6c25`; six project/POM profiles and25 parser/fixture tests. Twelve release R8/graph/composition checks and six publication inspections passed at723a57c. Later source corrections require targeted replacement evidence. Tooling fixture counts are separate from product tests.
-- Draft PR remains blocked by current GitHub CLI account permission; branch pushes through the existing SSH owner identity work. See `verification.md` for exact scope and evidence.
+Exact commands, source checkpoints, actual JUnit hashes, failed runs/fixes and limitations: [verification.md](verification.md). Partner entry: [RetentionKit README](../../retentionkit/README.md). Implementation report: [Vietnamese handoff](../../retentionkit/IMPLEMENTATION_REPORT.vi.md). Prepared PR description: [pr-body.md](pr-body.md). No release tag or remote RetentionKit publication was created.

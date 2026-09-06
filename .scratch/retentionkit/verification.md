@@ -1,91 +1,102 @@
 # RetentionKit verification
 
-## Baseline
+Implementation base: `632df43026b6f880deb84d478c71d22188ce093a`. Delivery branch: `codex/retentionkit`. Final SDK checkpoint: `bf68f1e6b11e0c15e2e1f8ad64670b516529de33`. Final app implementation: `2ff967a909cf043bf6e66b3424258a78efe67947`; the four changed app files do not change any library, tooling or consumer tree. Later acceptance commits change documentation only.
 
-- Base `632df43`; unmodified example `./gradlew :app:assembleDebug --console=plain --max-workers=2`: PASS (2026-09-07, 1m30s).
-- Connected device: Pixel 5, Android14/API34, serial 14161FDD400111. This is the available real-device scope; other OEMs are not yet verified.
-- Existing compiler/deprecation/resource warnings observed; baseline app build succeeds.
-- Baseline `:ads:testDebugUnitTest :onboardkitorigin:testDebugUnitTest :trackkit:testDebugUnitTest`: PASS, 316 tests (149 ads, 159 onboarding, 8 trackkit), zero failures/errors/skips. Log outside repo: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-baseline-tests.log`.
-- Baseline APK installed using `adb install -r`; launcher cold start `am start -W` succeeded (2225 ms). Evidence directory outside repo: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device`.
+## Final execution
 
-## PR setup
+- **549 unit/Robolectric cases PASS**, zero failures/errors/skips. The full integrated run at SDK `bf68f1e` executed546 cases across12 actual test tasks, plus debug/test/full R8 release and the existing paywall-only debug app. After the app-only race correction, the17 affected app tests were forced to execute again at a clean tree equal to `2ff967a`; app debug/test/release rebuilt successfully in3m38s. The final549 count combines532 immutable cases from unchanged non-app source with17 newly executed app cases, excluding the replaced14 app results. It is not claimed as one549-case invocation. Actual reports, commands, source equality and hashes: `/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/{run,tests,combined-product-tests,artifacts,sha256-manifest}.json`; prior complete run is `retentionkit-final-example-20260907-bf68f1e`. Retention modules contribute170 tests; ads162, Onboard168, Billing20, Firebase4, Trackkit8 and app17 make the rest.
+- **15/15 actual Android cases PASS** on API36 emulator after the final app correction, zero failures/errors/skips, actual JUnit time70.808s. Exact frozen source before/after: private06 `97cc904`, entire tree equal to delivery `2ff967a`. JUnit SHA256 `09d11219e950a8cb785d4560e104ccc4c179d38e7115c35abb1bcc4a21a47d3b`. Evidence: `retentionkit-device/example-api36-run-6-final/{run.json,sha256-manifest.json,reports/}` and adjacent `example-api36-run-6-final-verification.json`; log `retentionkit-example-api36-instrumentation-8.log` under the same SDKOptimize directory. The tightened pinned case requires four distinct materialized/consumed tokens, matching source/destination/title and the same Activity/task.
+- **Six local publications and all12 minified consumers PASS** at exact QA `retentionkit-qa-20260907-bf68f1e`: each of core/notifications/widgets/feedback/review/umbrella built as project and POM-only Maven dependency, with R8/resource shrinking,12 actual runtime graphs/composition checks and matching AAR/POM/Gradle metadata/merged manifests. Every captured checkout remained unchanged; no Maven project substitution. Evidence: `/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-bf68f1e/matrix-summary.json`. The app-only correction leaves all library/tooling/consumer trees equal to this SDK checkpoint.
+- **Final POM-only minified umbrella operated on API36** using SDK QA `retentionkit-qa-20260907-bf68f1e`, APK SHA256 `d48fc9fc3b56e562447bb874d20700c0ec4c2d6868039780b494fb03628de421`: cold launch, setup, optional-reason feedback, immediate rescue to word_count without Home, actual4-word result, Store launch, Back allowing feedback and Keep. Evidence: `retentionkit-device/example-api36-manual/final-bf68-maven-umbrella-verdict.json` plus linked actual XML/PNG. Store reports Item not found for the unpublished consumer; no rating is inferred. The first details-URI capture filter missed Play URI canonicalization; actual source-UID market launch is preserved, and exact final detail-query is not claimed for this consumer run.
+- **Final debug APK identity matches both installations:** `b639397390479de43e087101d68d309af72e837f15d803ece893e112c746806c`. The attached physical Pixel5 accepted update via `adb install -r` and Activity start statusok, but LaunchState was UNKNOWN behind the PIN lock. This is installation/command acceptance, not full physical UI acceptance. Evidence: `retentionkit-device/{final-installed-apk-2ff967a.json,physical-api34-final-install-2ff967a/result.json}`.
+- Release validation excludes only `:app:uploadCrashlyticsMappingFileRelease`; no mapping upload or release installation with live ads was performed. Debug/test APKs, R8 release APK/mapping and their SHA256 records are preserved outside temporary worktrees. Existing vendor missing-class/deprecation warnings remain separately visible in logs; standalone RetentionKit consumers have no broad keep/dontwarn workaround.
 
-- Branch pushed through existing owner SSH identity. Draft PR creation via gh failed: `must be a collaborator`; active gh account only has READ, owner token invalid. In-app browser has no logged-in GitHub session. User was asked asynchronously to restore the existing owner login; implementation continues.
 
-## Integrated bridge checkpoint
+Test counts come from completed JUnit testcase records, with zero skipped tests. Parser fixtures are separate from product tests. QA Maven publications are local, exact-version artifacts; they are not a remote release. The existing 5.1.1 release does not contain RetentionKit.
 
-- Root at `64ffcfb`: `./gradlew :onboardkitorigin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.onboardkit.ads.AppOpenResumeHomeReturnDeviceTest --console=plain --max-workers=2`: PASS on Pixel5/API34, 1 test, 45 seconds build/run.
-- The test performs two actual Android Home/return cycles. Two process-lifecycle readers observe the same legacy click suppression on the first return; neither sees it on the next return. This is a physical regression check after the scoped-suppression changes, not proof of a real ad click or the new RetentionKit feature flows.
-- Actual JUnit XML independently checked with `scripts/retentionkit/verify.py tests`: 1 passed, zero failures/errors/skips. Captured output `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-bridge-device-home-return.log`; evidence hash/count record alongside it as `.json`.
-- Partial05 implementer checks: full ads 159 + OnboardKit 164 tests passed for suppression/no-splash changes; active-flow 4 + splash 10 targeted tests passed after active-state addition. Final combined rerun remains pending.
+## Device scope and reproduction
 
-## Selective consumer preflight
+- Full feature acceptance used the **API36 / Android16 Google Play arm64 emulator**, serial `emulator-5554`, based on the existing Pixel_4_2 AVD running read-only without saving a snapshot. This is not physical Pixel or other-OEM coverage.
+- Physical Pixel5/API34 (`14161FDD400111`) passed baseline APK install/cold start and the integrated OnboardKit Home/return regression (one actual instrumented test). It remains securely PIN-locked; full new-feature UI tests could not be run there. The existing unlock request is pending. No PIN, bypass or app-data reset was attempted.
+- Baseline unmodified example debug build passed in1m30s. Baseline existing SDK regressions passed316 tests (ads149, Onboard159, Trackkit8). Physical baseline cold start completed in2225ms. Integrated physical bridge test at64ffcfb passed one test in45s, observing two readers across two actual Home/return cycles. It is not proof of a real ad click. Evidence: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-bridge-device-home-return.{log,json}`.
+- The standard example was tested outside isolated QA: real launcher widget → Splash without splash interstitial → UMP consent → language → onboarding → PayKit Continue with ads → functional TextTools. VI locale refreshed actual widget labels; a warm widget Document action reached the functional document view.
+- Debug engine QA uses a separate store and synthetic eligibility clock/user state, with actual Android notification permission/channels, NotificationManager, receiver, PendingIntents, widget launcher and Play transport. A saved alarm envelope delivered to the actual receiver proves engine/adapter behavior; it does not prove AlarmManager wake or a notification seen by the user. QA ad click is synthetic; the genuine suite click bridge has deterministic regression coverage.
 
-- Before final05 core/adapter integration, isolated project consumers for core, notifications and widgets each passed `assembleRelease` with R8/resource shrinking and no broad keep/dontwarn rules. These checks detect early packaging/API issues; the final publication/project/POM matrix remains pending.
-- Exact captured commands and source commits: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-consumers-preflight/{core,notifications,widgets}-project/run.json` (core at35ee9c6; notifications/widgets atbb78c64). Durations46/42/41 seconds respectively.
-- Core minified preflight APK installed and launched on an API36 Google Play arm64 emulator. Real UI showed setup-incomplete entry waiting, then completed setup and executed word count (`A useful text tool` → `4 words`). Separate asserted ADB scenarios passed cold typed entry, warm replay rejection and process-restart replay rejection. Evidence `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/core-api36-routing-preflight/` plus `core-api36-*.xml`/PNG.
-- Emulator was launched read-only/no snapshot save from existing Pixel_4_2 AVD. Boot initially showed a System UI ANR under build load; after Wait, UI checks passed and crash log was empty. Emulator stopped after this preflight to release RAM. This is emulator evidence, not physical API36 hardware coverage.
-- Widget minified preflight APK installed on physical Pixel5; `am start` succeeded. UI inspection then found the device locked behind PIN, so no pin outcome is claimed. User was asked asynchronously to unlock; no credentials requested or attempted. Full physical feature UI acceptance is pending unlock.
+Connected command (from the frozen final example checkout):
 
-## Ticket 01 — core/publication foundation
+```sh
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.itg.template.retention.RetentionExampleEngineTest \
+  -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+  --console=plain --max-workers=2
+```
 
-Status: **PASS** for Ticket 01 scope, 2026-09-07.
+AGP8.12's task `--serial` filter fails in ImmutableCollection.remove; use ANDROID_SERIAL. AGP uninstalls tested APKs by default, so retain leaveApksInstalledAfterRun=true and do not enable uninstallIncompatibleApks. These behaviors were checked against locally cached AGP sources and actual failed setup runs. Grant POST_NOTIFICATIONS on the disposable test installation before the suite; absence is a failed precondition, never a skipped pass.
 
-- 29 Robolectric tests: transactional namespaces, corruption/rollback, concurrent installs/patches, callback lock inversion, state restore, explicit config removal, current-process entitlement, setup grace, scoped onboarding, entry/reusable identity/consumption and weak-Activity UI leases.
-- `:retention-core:testDebugUnitTest` and `:retention-core:assembleRelease` passed with `--max-workers=2`.
-- All six new modules produced release AARs; five non-core libraries remain build scaffolds for downstream implementation.
-- Publication POMs generated/inspected for all six. Core releaseRuntimeClasspath contains no ads/Firebase/billing/Compose. Settings and JitPack publication registrations are present.
-- Detailed commands and limits: `retention-core/VERIFICATION.md`. Public APIs: `retention-core/CONTRACT.md`.
-- **Not tested here:** ADB, physical device, notification post delivery, widget launcher outcome, Play review display, optional adapters, sample end-to-end behavior, minified consuming application. These remain downstream acceptance work.
+## Acceptance matrix
 
-## Implementation acceptance
+PASS means the stated evidence passed, not universal platform behavior. Hardware-unavailable and platform-controlled outcomes remain separate. Physical new-feature UI coverage is unavailable for every row below; the API36 emulator evidence is explicitly identified.
 
-### Integrated execution checkpoints (acceptance still in progress)
-
-- Final05 source ac8c7d5:385 completed unit tests passed (ads162, OnboardKit168, core39, shared Firebase4, facade12), plus facade/Firebase release AAR builds. Billing adds20 tests; notification35, widget26, feedback18 and review14 suites passed in their implementing commits. These are scoped results; the final integrated regression run is still pending.
-- At723a57c, six local Maven publications and all twelve selective/umbrella project-versus-POM consumer combinations passed release R8/resource shrinking, actual runtime dependency graphs and matching AAR/POM/merged-manifest checks. Maven consumers used exact QA version `retentionkit-qa-20260907-723a57c`, without project substitution or broad keep/dontwarn rules. Immutable evidence: `/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c`. Later widget/consumer fixes require updated affected evidence.
-- Example14 unit tests and debug/test APK builds passed through89b9386, mergedce85e7f. The first API36 device suite at5898af5 ran11 cases:9 passed,2 failed. Pinned actions reached all four real destinations but ActivityScenario teardown rejected the intentionally mutated Intent identity; the outbox fixture incorrectly disabled review counting. Source fixtures corrected; these initial failures remain preserved in `retentionkit-device/example-api36-run-1/`.
-- The next13-case attempt atce85e7f stopped all cases at the explicit notification-permission precondition: the earlier AGP run had uninstalled the app, and reinstall restored the default denied state. This is a harness setup failure, not feature acceptance. Evidence: `retentionkit-device/example-api36-run-2-precondition/`. Permission was then granted on the disposable emulator before rerun.
-- AGP8.12 exposes a broken task `--serial` filter (ImmutableCollection.remove). Use `ANDROID_SERIAL` instead. It also uninstalls tested APKs by default; all subsequent connected runs set `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`. The option and behavior were verified in the locally cached AGP8.12 BooleanOption/UtpConfigFactory source. No physical app data was cleared.
-- Actual minified umbrella UI on API36 confirmed launcher pin dialog/cancel and reason-free feedback Keep. Cancel exposed a bounded widget lifecycle gap: transparent launcher return left the external owner active until a full process foreground or120s timeout. Feedback rescue exposed a consumer retry race: host resumed before the finishing feedback Activity released its scope; the entry remained durable and routed correctly on the next resume. Both are being corrected, so these are findings, not final passes. XML/PNG evidence: `retentionkit-device/example-api36-manual/`.
-- Physical Pixel5 remains securely locked (`dumpsys trust`: deviceLocked=1). The earlier asynchronous unlock request remains pending; no PIN was requested or attempted. Current API36 results are emulator coverage only.
-
-Status values: PENDING, PASS, FAIL, PLATFORM LIMIT, HARDWARE UNAVAILABLE. Unit evidence and device evidence are independent; source inspection is not a device pass. Test counts are taken from completed JUnit XML, not console task names. Final checks run on the integrated branch.
-
-| ID | Contract | Deterministic / build evidence | Physical-device evidence |
+| ID | Contract | Deterministic / build evidence | API36 emulator evidence and remaining scope |
 |---|---|---|---|
-| C01 | Repeated install, invalid configuration, failing module/sink isolation | PENDING | PENDING cold Application start |
-| C02 | Transactional state, restart, last-known-good config, invalid/missing fields | PENDING | PENDING process restart |
-| C03 | Prompt single-flight, timeout, Activity destruction, host UI/external leases | PENDING | PENDING system return |
-| C04 | Entry validation, action/instance identity, capture/consume, expiry, replay | PENDING | PENDING cold/warm/new Intent |
-| N01 | Permission denied/granted later, disabled channel, setup/unknown/premium gates | PENDING | PENDING permission + channel |
-| N02 | Daily and inactive winback slots, initial grace and new-user profile | PENDING | PENDING engine-driven sample |
-| N03 | DST, timezone/clock change, stale/reduced/disabled schedule revisions | PENDING | PENDING reschedule inspection |
-| N04 | Duplicate occurrence, side-effect failure, budget/rotation after submit | PENDING | PENDING actual post + actions |
-| N05 | Foreground/config/user-state/TTL recheck before posting | PENDING | PENDING foreground suppression |
-| N06 | Scoped onboarding abandonment and cancellation on completion | PENDING | PENDING sample flow |
-| N07 | Delayed ad-return, click expiry, return/system/process cancellation | PENDING | PENDING background/return |
-| N08 | Silent reminder, Later, cooldown and action routing | PENDING | PENDING shade action |
-| N09 | Pinned action tiles and per-action destination | PENDING | PENDING shade taps |
-| N10 | Lockscreen skip/replace across midnight and persisted rotation | PENDING | PENDING active/replace post |
-| N11 | Boot/package/time reconciliation, Doze/TTL, force-stop relaunch | PENDING | PENDING available device scenarios |
-| W01 | Pin supported/requested/confirmed/unknown, duplicate callback | PENDING | PENDING Pixel launcher cancel/confirm |
-| W02 | Multiple widget instances, resize/update/delete/restore, locale | PENDING | PENDING launcher instances + resize |
-| W03 | Owned dynamic shortcuts and disable reconciliation | PENDING | PENDING launcher shortcut |
-| F01 | Optional reasons, Keep, feature rescue, Continue to App Info | PENDING | PENDING each UI action |
-| R01 | Success threshold, persisted cooldown/cap, concurrent/late/failing callbacks | PENDING | PENDING genuine request outcome |
-| R02 | Destroyed/background Activity, bounded UI ownership, manual Store | PENDING | PENDING handoff/return |
-| I01 | OnboardKit source compatibility, durable destination, genuine no-ad entry | PENDING | PENDING splash/onboarding route |
-| I02 | Existing OPEN/WELCOME policy, overlapping owners, failed external launch | PENDING | PENDING resume behavior |
-| I03 | Shared Firebase source, missing remote, Trackkit exception isolation | PENDING | PENDING bundled/cached startup |
-| P01 | Every selective AAR/POM and umbrella, no unrelated transitive modules | PENDING | Not a device check |
-| P02 | Debug + minified release build, consumer rules and merged manifests | PENDING | PENDING installed debug smoke |
-| P03 | Existing SDK regression suites | Baseline PASS 316; integrated PENDING | Targeted integrated tests PENDING |
-| D01 | Partner install/config/custom UI/migration and callback semantics | PENDING documentation review | Reproduction instructions PENDING |
+| C01 | Repeat install, invalid config, module/sink isolation | PASS: core runtime/concurrency and facade suites. | PASS: standard Application cold starts, installed debug and minified consumer. |
+| C02 | Transactions, restart, last-good config, missing fields | PASS: store/config/remote/concurrency suites, rollback and stale generation. | PASS: process restart routing/state and actual force-stop relaunch; remote live server variation is not claimed. |
+| C03 | Single prompt, timeout, destroyed Activity, host/external ownership | PASS: core UI/host/shared handoff suites; reentrant observers, foreign owners, queue limit/shutdown. | PASS: actual widget Cancel return, feedback/system return and genuine Play-request terminal cleanup. |
+| C04 | Typed entry identity, capture/consume, expiry/replay | PASS: core entry/facade/proof routing suites. | PASS: cold/warm/restart rejection, all four pinned destinations, setup → consumed real feature. |
+| N01 | Permission/channel and setup/entitlement gates | PASS: notification behavior/platform tests. | PASS: actual permission revoke → zero posts; later grant → posts; actual IMPORTANCE_NONE channel suppressed; QA subscriber/setup gates; UNKNOWN is covered deterministically. |
+| N02 | Daily/winback, setup grace, new-user defaults | PASS: CalendarSlots/behavior tests. | PASS: engine QA uses real saved schedule/receiver and NotificationManager; no wall-clock wake SLA claimed. |
+| N03 | DST/timezone/clock and schedule revision changes | PASS: CalendarSlots, backward clock, reduced slots/stale revision tests. | PASS: real system timezone HCM → Tokyo → HCM updates/restores seven schedules and OS alarms. DST hardware simulation not run. |
+| N04 | Dedupe, failures, budget and rotation | PASS: concurrent claims, failed renderer/notify/store and restored rotation tests. | PASS: actual duplicate saved occurrence produces one post, distinct actual actions. Crash-at-notify timing is deterministic coverage. |
+| N05 | Final foreground/config/user/TTL rechecks | PASS: async config/renderer mutation and eligibility tests. | PASS: foreground, stale config and subscriber suppression through actual engine/adapter. |
+| N06 | Active unfinished onboarding/cancel on completion | PASS: explicit onboarding phase, scoped replacement and grace tests. | PASS: synthetic unfinished setup plus actual Home/background; completed setup suppresses it. Standard complete setup route also verified. |
+| N07 | Fresh ad-return/delay/TTL/cancellation | PASS: fresh sole suite click observer, process/system/expiry tests. | PASS: synthetic QA click + actual Home/return and delayed adapter; no real paid-ad click claimed. |
+| N08 | Quiet reminder/Later/cooldown/routing | PASS: notification behavior/platform tests. | PASS: real LOW/silent/PRIVATE notification, shade Later removes reminder only and leaves pinned notification. |
+| N09 | Pinned feature actions | PASS: source/action identity and builder tests. | PASS: all four actual PendingIntent actions reach four functional feature screens. |
+| N10 | Lockscreen skip/replace/rotation | PASS: active item across midnight, skip/replace and persisted rotation. | PASS: actual saved-envelope lockscreen-family post with no full-screen intent. Visible locked-screen presentation and midnight hardware timing not claimed. |
+| N11 | Boot/package/time/force-stop reconciliation, TTL/Doze | PASS: receiver action validation/reconciliation, expiry and rearming. | PASS: actual guest reboot restores seven alarms before manual launch; force-stop7→0 then user relaunch→7; timezone rearm. Doze delivery timing/OEM behavior remains PLATFORM LIMIT, not a device pass. |
+| W01 | Pin support/request/confirm/unknown/duplicates | PASS: widget pin/return/timeout/foreign callback tests. | PASS: actual launcher Cancel → Unknown and immediate feedback; actual Add → verified widget ID. |
+| W02 | Independent widget instances/resize/update/delete/restore/locale | PASS: widget instance/renderer/restore tests. | PASS: two actual instances, widths353/207 select row/grid independently, VI refresh, reboot persistence, launcher removes ID3 while ID2 remains. Backup-ID remap is unit coverage only. |
+| W03 | Owned shortcuts and disable reconciliation | PASS: FeatureShortcuts and feedback shortcut quota/ownership tests. | PASS: four actual dynamic shortcuts, localized launcher menu, Feedback shortcut cold route to SDK UI. Foreign-ID preservation/disable is deterministic coverage. |
+| F01 | Optional reasons, Keep/rescue/Continue | PASS: feedback state/reentrant/lifecycle/failure tests. | PASS: reason-free Keep, real feature rescue without Home, actual App Info + Back; reason selection persistence covered in unit tests. |
+| R01 | Threshold/cooldown/cap/concurrent/late/failing callbacks | PASS: review tests; cancel before transport preserves attempt/success counters. | PASS: actual Play service bind/request and honest failed/timeout/unknown terminal with released lease; card display/rating controlled by Play. |
+| R02 | Safe lifecycle, bounded handoff, manual Store | PASS: shared scope and review tests, including sink/queued subscriber/host-finish. | PASS: Store opens correct example package; Back permits feedback. Store says Item not found for unpublished example; no rating success inferred. |
+| I01 | Onboard compatibility, durable route, no-splash-ad entry | PASS: Onboard/bridge/facade/source compatibility suites. | PASS: standard widget cold entry through consent/language/onboard/PayKit to usable TextTools and warm Document. |
+| I02 | OPEN/WELCOME behavior and scoped external owners | PASS: actual LifecycleRegistry both reader orders, overlap/failure/expiry tests. | PASS: physical API34 Home/return regression and emulator feedback/App Info/Store return; no host ad-policy override. |
+| I03 | Shared Firebase/Trackkit exception isolation | PASS: shared Firebase, remote controller, Trackkit and facade tests. | PASS: normal app initializes existing suite client/sink; no second Retention network fetcher. Network error/quota cases are deterministic tests. |
+| P01 | Selective/umbrella AAR/POM dependency closure | PASS: six exact publications, twelve actual graphs/composition scans; zero Maven project substitutions. | Build evidence, not a device check. |
+| P02 | Debug/minified release, manifests/consumer rules | PASS: full example debug/test/release plus twelve isolated R8/resource-shrink consumers. | PASS: debug example and minified independent consumer installed and operated. Release demo with live ads is not installed for testing. |
+| P03 | Existing SDK regression | PASS: final integrated ads/Onboard/Billing/Firebase/Trackkit tests; existing paywall-only consumer builds. | PASS: scoped API34 Home/return test; full example suite on API36 emulator. |
+| D01 | Partner integration/custom UI/migration/semantics | PASS: facade/module guides, compiling independent profiles and functional app example; code review corrections documented. | Reproduction commands and limitations recorded here and in app/RETENTION_EXAMPLE.md. |
 
-## Platform scope
+## Manual evidence
 
-- Pixel 5 API34 is available. Other launchers/OEMs and API24/API36 hardware: HARDWARE UNAVAILABLE unless a supported emulator is added and explicitly identified.
-- Play controls whether the review card is shown and whether a review is submitted. An SDK completion is outcome-unknown; a sideloaded device run cannot certify production Play quota/display.
-- Inexact delivery may be deferred by Android/Doze. Force-stop recovery starts with user interaction; there is no claim of automatic execution while the app remains stopped.
-- The available package has notification permission granted at baseline. Device tests must restore permission and any global device settings they change; do not clear unrelated app data.
+Directory: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual`.
+
+- Standard routing/locale: `example-widget-business-after-full-setup`, `example-widget-vietnamese-refresh`, `example-widget-warm-document-route` XML/PNG.
+- Permission/Later: `example-notification-denied-verified`, `example-denied-active-records.txt`, `example-granted-later-active-records.txt`, `example-reminder-later-shade`, `example-later-active-records.txt`.
+- Widget correction: `example-fixed-widget-cancel-outcome.json`, `example-fixed-cancel-feedback-immediate`, `example-fixed-two-instances-resize.json`; `widget-delete-verdict.json` plus SDK/system state prove only the removed instance is deleted.
+- Shortcuts: `shortcut-verdict.json`, `example-shortcuts-system.txt`, `example-shortcut-menu`, `example-feedback-shortcut-result`.
+- Actual system scenarios: `force-stop-verdict.json`, `timezone-verdict.json`, `reboot-verdict.json`. Early reboot capture observed zero alarms while the existing app/vendor stack was still initializing; settled capture found seven before any manual app launch. No boot timing SLA is inferred.
+- Manual Store: `example-manual-store-open`, `example-manual-store-intent.txt`, `example-after-store-feedback`.
+- Corrected minified umbrella rescue: `final-umbrella-feedback-rescue-immediate` and `final-umbrella-feedback-business` at immutable QA1d06439, real word_count →4 words without Home.
+
+Manual captures above use1d06439 unless named otherwise; final-bf68 captures use the final minified POM-only SDK package. Later review correction changes core/feedback/review handoff safety; final integrated unit/device/package checks above verify that correction. The previously fixed widget renderer/return logic and scheduler behavior remain unchanged.
+
+## Failures found and corrected
+
+Earlier evidence is preserved rather than overwritten:
+
+- API36 first11-case run:9 pass,2 fixture failures. All pinned actions worked, but ActivityScenario cleanup rejected required setIntent identity changes; the outbox fixture had disabled review before expecting its counter. Fixtures corrected.
+- Next13-case run failed its notification-permission precondition after AGP uninstalled/reinstalled the app. Corrected installation/permission setup, retained APKs and reran:13/13 pass, then15/15 pass at1d06439.
+- Actual transparent launcher Cancel originally left the widget external owner until Home/timeout.1239bd3 adds source Activity return tracking; real Cancel and immediate feedback then passed.
+- Consumer feedback rescue originally waited for the next resume. Deferred bounded readiness retry plus regression test fixes it; minified actual immediate rescue passes.
+- The post-review API36 run at bf68f1e passed14/15 and exposed an actual app entry-ordering defect: two new Intents could let an older staged token overwrite the latest destination. The title-only pinned fixture also acknowledged the default title too early. The minimized actual Activity regression failed twice before correction. App-only a4d3c31, integrated2ff967a, removes unrelated ledger fallback, coalesces route callbacks and gives each new Intent a fresh bounded retry budget. Three new Activity regressions pass; the pinned instrumented test requires four distinct consumed tokens/source/destination/title without increasing timeout. Failed device evidence and red/green results remain preserved in `RETENTIONKIT_EXAMPLE_ROUTE_RACE_FIX.md` and `retentionkit-device/example-api36-run-5-review-fix-failure/`.
+- Standards review found S1 tracker vocabulary and S2 duplicated handoff scope. Spec review found P2 launch after reentrant host/config callbacks. Single implementer fixes:6988108 and90ac742, integratedbf68f1e;16 new tests and170 retention tests pass before final integrated rerun. Separate reports and fix evidence: `/Users/Shared/Panacea/Documents/SDKOptimize/RETENTIONKIT_REVIEW_{STANDARDS,SPEC,FIXES}.md`.
+
+## External completion and platform limits
+
+- Branch push is authorized and works through existing owner SSH. Draft PR creation failed because active gh account is READ-only (`must be a collaborator`); owner token is invalid and browser signed out. Restoring authorized owner login remains an external prerequisite. No PR URL, ready status or remote release is claimed.
+- Full physical new-feature UI acceptance is unavailable while the attached Pixel5 remains locked. Other OEMs/API24 hardware are not certified. API36 emulator tests are identified separately throughout.
+- Play decides review-card display and submission; launcher decides pin outcome. App Info is a handoff, not uninstall interception/completion. Android may defer inexact alarms under Doze/OEM policy; force-stopped apps need user interaction before recovery. No marketing full-screen intent, forced screen wake, exact-alarm permission or persistent FGS is added.
+- State is transactional within one app process. Entry consumption is at-most-once; a crash between consumption and navigation can lose that navigation. Subscriber queue acceptance is not an all-module durable acknowledgement.
+- Emulator permission and timezone settings changed for tests were restored. Physical app data and unrelated app/device settings were preserved. Task-owned emulator stopped after settings restoration; see `retentionkit-device/final-emulator-cleanup.json`. Worktree cleanup disposition is recorded separately in `/Users/Shared/Panacea/Documents/SDKOptimize/RETENTIONKIT_CLOSURE.json`; delivery branch and immutable evidence are retained.

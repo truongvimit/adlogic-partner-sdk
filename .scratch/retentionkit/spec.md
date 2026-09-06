@@ -1,6 +1,7 @@
 # RetentionKit implementation specification
 
 Status: active
+Implementation: accepted; PR creation/readiness awaits authorized GitHub write login.
 Base: main at 632df43026b6f880deb84d478c71d22188ce093a
 Delivery branch: codex/retentionkit
 Requested: 2026-09-07
@@ -73,3 +74,11 @@ T05 may inspect while other modules are being implemented but must verify agains
 ## PR and local issues
 
 This repository's issue tracker is local Markdown. The PR closes this spec and the numbered local tickets by path/checklist, not fabricated GitHub issue numbers. Specs/tickets are force-added individually because `.scratch/` is ignored; do not alter the user's ignore policy or commit unrelated local notes/secrets.
+
+## Completion record — 2026-09-07
+
+The six SDK artifacts, optional suite integrations, working example, isolated consumer profiles, partner guides and all supported checks are implemented and accepted. Final SDK source is `bf68f1e`; final app source is `2ff967a`. Later commits update documentation only. Tickets01–07 and05a are resolved;08 remains claimed for the external PR-readiness step. The source branch is separate and committed incrementally; no tag, remote RetentionKit release or PR merge was made.
+
+Final evidence:549 unit/Robolectric cases with explicit split provenance,15/15 actual API36 emulator cases,12/12 project/POM-only Maven R8 consumers,12 runtime graph/composition checks,6 publication inspections and full example debug/test/release builds. Actual manual checks cover launcher widget lifecycle, feature/feedback/Store return, permissions/Later/shortcuts, reboot/timezone and force-stop relaunch. The final debug APK was installed on the attached Pixel5, whose PIN lock prevents full physical feature UI acceptance; baseline and the scoped physical Home/return test remain separately recorded. No universal OEM/Play guarantee is inferred.
+
+See [verification.md](verification.md), [map.md](map.md), [prepared PR](pr-body.md) and [Vietnamese implementation report](../../retentionkit/IMPLEMENTATION_REPORT.vi.md). Task-only worktrees and registry entries were removed after their commits/artifacts were retained; the emulator was stopped after restoring its settings. The parent spec stays active for the documented external PR completion requirement.
