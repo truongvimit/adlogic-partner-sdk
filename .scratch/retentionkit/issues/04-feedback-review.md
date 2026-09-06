@@ -1,7 +1,7 @@
 # 04 Exit feedback and Play review
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 Spec: ../spec.md
@@ -14,4 +14,4 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 
 ## Comments
 
-Implementation pending.
+Claimed in isolated worktree `04-feedback-review`, branch `codex/retentionkit-feedback-review`, 2026-09-07.
