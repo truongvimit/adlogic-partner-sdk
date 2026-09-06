@@ -14,7 +14,7 @@ English: **[README.md](README.md)** · हिन्दी: **[README.hi.md](READ
 |---|---|
 | minSdk / compileSdk / JDK | 24 / 36 / 17 |
 | Namespace, resource prefix, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
-| Firebase | `google-services.json` + `com.google.gms.google-services`; thiếu thì mọi key `ob_*` giữ nguyên giá trị mặc định |
+| Firebase | `google-services.json` + `com.google.gms.google-services` để fetch giá trị `ob_*` từ server |
 | Ad unit id | qua `AdRemoteConfig` từ `assets/ad_config.json`, hoặc ghi thẳng trong `AdsConfig` |
 
 ## Cài đặt
@@ -48,7 +48,7 @@ override fun onCreate() {
     initTracking()                                    // Tracker.install + Tracker.addSink
     AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
     AdConfig.install(FirebaseAdConfigSource())        // tùy chọn: remote ad config
-    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000, testDeviceHashedId = "…"))
+    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000))
     ERainAd.getInstance().init(this, buildERainAdConfig())   // xem ../ads/README.md
     ERainTuning.install()                             // một lần, sau ERainAd.init
 
@@ -84,17 +84,17 @@ private fun buildConfig() = onboardKitConfig {
 }.getOrThrow()
 ```
 
-`onboardKitConfig { }` trả về một `Result` — nó validate và từ chối ngay, thay vì để crash về sau.
+`onboardKitConfig { }` trả về `Result` chứa config hợp lệ hoặc các lỗi validation.
 `SplashConfig`, `LanguageConfig`, `BehaviorConfig`, `SystemBarConfig`, `QuestionConfig` và
-`AdsConfig` mỗi cái có bộ tùy chọn riêng, được ghi chú từng field bằng KDoc; mặc định đã là một luồng
-chạy được, nên chỉ cần set thứ bạn muốn đổi.
+`AdsConfig` ghi rõ tùy chọn và giá trị mặc định trong KDoc. Cấu hình nội dung và các slot quảng cáo
+mà luồng của bạn cần.
 
 **Slot quảng cáo.** Slot `null` thì không hiện quảng cáo. Mọi slot native và interstitial đều là
 waterfall: id xếp từ giá sàn cao nhất trước, gọi từng cái một, dừng ở lần fill đầu tiên. `AdsConfig`
 liệt kê đủ mọi slot mà luồng này có thể lấp.
 
-Muốn giữ id trong `ad_config.json` thay vì hard-code, hãy nạp slot từ `AdRemoteConfig`. SDK không có
-helper sẵn cho việc này — ba hàm dưới đây là phần glue phía app, và chừng đó là đủ:
+Muốn giữ id trong `ad_config.json` thay vì hard-code, dùng helper phía app để chuyển giá trị
+`AdRemoteConfig` thành các slot:
 
 ```kotlin
 private fun AdRemoteConfig?.native(baseKey: String): NativeAdUnit? =
@@ -109,12 +109,14 @@ private fun AdUnitConfig?.toBanner(): BannerAdUnit? =
 ```
 
 ```kotlin
-val ads = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
-ads = AdsConfig(
-    splashInterstitial = ads.interstitial("inter_splash"),
-    languageNative     = ads.native("native_lang"),
-    contentStepNative  = ads.native("native_ob1"),
-)
+val remoteAds = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
+val config = onboardKitConfig {
+    ads = AdsConfig(
+        splashInterstitial = remoteAds.interstitial("inter_splash"),
+        languageNative     = remoteAds.native("native_lang"),
+        contentStepNative  = remoteAds.native("native_ob1"),
+    )
+}.getOrThrow()
 ```
 
 **Các bước (step).** Thay cho `defaultSteps()`, bạn có thể tự liệt kê bằng
@@ -141,9 +143,9 @@ private fun AdRemoteConfig?.templateOf(
 
 ### 3. Splash
 
-Launcher activity của bạn kế thừa `ObSplashActivity`. Consent, billing, remote fetch, request quảng
-cáo, thời gian hiển thị tối thiểu, interstitial và việc điều hướng ra ngoài đều nằm bên trong; bạn
-chỉ điền vào các hook.
+Launcher activity kế thừa `ObSplashActivity`. SDK xử lý consent, billing, remote fetch, tải quảng
+cáo, quyền thông báo, thời gian hiển thị tối thiểu và điều hướng. Override các hook để bổ sung
+phần khởi tạo riêng của app.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
@@ -156,9 +158,25 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-Khai báo nó với `android:exported="true"`, một intent-filter MAIN/LAUNCHER, theme
-AppCompat/MaterialComponents, và cặp orientation — `screenOrientation` cùng `configChanges` — mà
-mọi màn của SDK đều đã khai:
+`SplashConfig.notificationPermissionEnabled` mặc định là `true`. Trên Android 13+ khi target SDK
+33+, splash xin `POST_NOTIFICATIONS` sau khi bước consent hoàn tất. Thư viện đã khai báo quyền này.
+Không hiện prompt nếu quyền đã được cấp, lần hỏi tự động trước đã có kết quả, hoặc app đã gỡ quyền
+khỏi manifest. Từ chối hay hủy không chặn luồng và không cấp quyền request quảng cáo. Nếu app tự
+quản lý quyền thông báo, tắt lần hỏi tự động trong config:
+
+```kotlin
+splash = SplashConfig(notificationPermissionEnabled = false)
+```
+
+Consent và remote fetch có thể chạy song song. Banner/interstitial của splash đủ điều kiện vẫn có
+thể tải khi prompt thông báo đang mở. Splash chờ các khoảng tải quảng cáo đã cấu hình, thời gian
+hiển thị tối thiểu và kết quả xin quyền nếu có. Trước khi preload native của màn đích, splash chờ
+Activity ở trạng thái resumed và có window focus, rồi bắt đầu preload trước khi thử hiện
+interstitial splash và chuyển luồng. Thời gian chờ banner mặc định là `0`; thời gian chờ
+interstitial kết thúc khi tải xong hoặc hết budget cấu hình, nên không yêu cầu mọi quảng cáo đều fill.
+
+Khai báo launcher activity với `android:exported="true"`, intent-filter MAIN/LAUNCHER và theme
+AppCompat/MaterialComponents. Với splash dọc, dùng:
 
 ```xml
 <activity
@@ -167,30 +185,32 @@ mọi màn của SDK đều đã khai:
     android:exported="true"
     android:screenOrientation="portrait"
     android:theme="@style/Theme.Splash">
+    <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+    </intent-filter>
+</activity>
 ```
 
-Thiếu `configChanges`, splash sẽ chạy lại từ đầu mỗi lần xoay máy — mất luôn các request quảng cáo
-và đồng hồ hiển thị tối thiểu của lần đó. `uiMode|fontScale` là hai cái nhiều hơn so với các màn của
-chính SDK, và chúng đúng chỗ ở đây: splash chỉ giữ ba giây trống nên nuốt một lần đổi dark mode hay
-cỡ chữ không mất gì, trong khi một bước onboarding thì cố ý dựng lại. Xem
-`BehaviorConfig.lockPortrait` để biết SDK làm gì ở phía nó và cách tắt.
+`configChanges` cho phép Activity tự xử lý các thay đổi đã liệt kê mà không tạo lại. Nếu giữ
+`uiMode|fontScale`, hãy tự cập nhật các custom view bị ảnh hưởng. Activity vẫn có thể được tạo lại
+vì nguyên nhân khác. Với app ngang hoặc tablet, xem lại orientation trong manifest và đặt
+`BehaviorConfig.lockPortrait = false`.
 
 - Đừng gọi `OnboardingSdk.start()` ở đây — nó tự chạy khi pipeline hoàn tất.
-- Đừng override `onConsentRequired()`; mặc định của nó chạy luồng UMP qua `ConsentCenter` trong
-  `:ads`. Nếu dùng consent provider riêng, gọi `ConsentCenter.setHostConsent(...)` với quyền
-  request và lựa chọn cá nhân hóa trước khi hoàn tất override. Chỉ `return true` không còn cấp
-  quyền; xem [migration 5.1.0](../MIGRATION-5.1.0.md).
+- Giữ `onConsentRequired()` mặc định để chạy UMP qua `ConsentCenter` trong `:ads`. Nếu dùng
+  consent provider riêng, gọi `ConsentCenter.setHostConsent(...)` với quyền request và lựa chọn
+  cá nhân hóa trước khi hoàn tất override. Chỉ `return true` không cấp quyền request quảng cáo.
+  `OnboardingSdk.setCanRequestAds(false)` vẫn là giới hạn riêng ngay cả khi consent cho phép.
 - Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` — `ConsentCenter.detach(this)` nằm ở đó.
 
 Về sau, từ bất kỳ đâu: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
 
 ## Vào app từ notification, widget hoặc uninstall shortcut
 
-Một cú chạm chỉ đích danh một tính năng phải sống sót qua trọn luồng mở app lần đầu, rồi mở đúng tính
-năng đó mà không che mất quảng cáo vừa được trả tiền. Phần wiring đó đã có sẵn dưới dạng
-`SplashEntry` (`NOTIFICATION`, `WIDGET`, `UNINSTALL`) — intent vào app, ad unit mà nó tiêu, và thời
-điểm chuyển màn đều đã được trả lời sẵn. Phần còn lại của bạn là các extra chỉ đích danh tính năng và
-màn hình mà mỗi entry sẽ đáp xuống.
+`SplashEntry` (`NOTIFICATION`, `WIDGET`, `UNINSTALL`) đưa các lần mở tính năng qua splash, chọn
+interstitial riêng cho từng entry và xác định thời điểm mở màn đích. Bạn cung cấp extra của tính
+năng và xử lý màn đích trong listener.
 
 **1. Bắn intent của entry vào splash, không phải vào màn hình chính.** Cú chạm mở một session mới,
 nên nó đi đúng con đường mà một cú chạm từ launcher đi. `SplashEntry.intent` gắn nhãn cho lần mở đó
@@ -226,11 +246,11 @@ listener = OnboardingListener { context, outcome ->
 }
 ```
 
-Chỉ `NEW_TASK`, tuyệt đối không `CLEAR_TASK`: đoạn này có thể chạy trong lúc quảng cáo đang hiển thị,
-và xóa task sẽ finish luôn Activity đang chứa nó. Hãy đọc extra ở **cả** `onCreate` lẫn `onNewIntent`
-— chạm nguội rơi vào cái đầu, chạm nóng rơi vào cái sau — và tiêu thụ nó ngay khi đọc.
+Dùng `NEW_TASK` và không thêm `CLEAR_TASK` khi chuyển màn này: quảng cáo có thể vẫn đang hiển
+thị, và xóa task sẽ finish Activity chứa nó. Xử lý extra ở **cả** `onCreate` lẫn `onNewIntent`,
+vì nơi nhận phụ thuộc launch mode của màn đích và trạng thái task.
 
-**4. Ad unit và thời điểm chuyển màn đã được trả lời sẵn.** Một lần mở qua `SplashEntry` sẽ tiêu key
+**4. Quảng cáo và thời điểm điều hướng theo entry.** Một lần mở qua `SplashEntry` dùng key
 của chính entry đó (`inter_noti`, `inter_widget`, `inter_uninstall`), đầy đủ waterfall, và quay về
 cách phân giải splash thông thường nếu key đó thiếu hoặc bị tắt. Nó cũng nhận `AFTER_AD`, trong khi
 cú chạm từ launcher giữ `UNDER_AD` — cùng một đánh đổi như `InterNextAction` trong
@@ -263,7 +283,7 @@ kèm một dòng log.
 
 Với một màn hình của riêng bạn nằm trong luồng, `showInterstitial(placement, onNext, onFinished)` là
 extension public trên `AppCompatActivity`: mở màn đích trong `onNext` (nằm dưới quảng cáo), finish
-màn hiện tại trong `onFinished`. Cả hai chạy tối đa một lần, `onNext` luôn trước, trên mọi nhánh;
+màn hiện tại trong `onFinished`. Mỗi callback chạy tối đa một lần, `onNext` trước `onFinished`;
 tuyệt đối đừng gọi `finish()` trong `onNext`. Không có API public tương đương cho native — hãy tự
 render native bằng `NativeAdHelper` trong `:ads`.
 
@@ -285,10 +305,9 @@ xem [`../paykit/README.md`](../paykit/README.md).
 
 ## Remote config
 
-Mọi key `ob_*`, kiểu dữ liệu và giá trị mặc định của nó đều nằm trong
-`io.onboardkit.remote.ObRemoteKeys` — một object duy nhất, mỗi key được ghi chú ngay tại chỗ khai
-báo. Không publish gì thì luồng chạy theo các mặc định đó; publish một key trên Firebase console là
-ghi đè. Phần này không cần code phía app: remote fetch của splash sẽ tự áp dụng.
+Xem từng key `ob_*`, kiểu dữ liệu và giá trị mặc định tại `io.onboardkit.remote.ObRemoteKeys`.
+SDK khôi phục các flag đã cache khi khởi động, dùng mặc định nếu chưa có cache. Khi Firebase đã
+được cấu hình, splash tự fetch và áp dụng giá trị remote. Publish giá trị ghi đè trên Firebase console.
 
 ## Analytics
 
@@ -297,8 +316,8 @@ Funnel được phát tự động một khi `Tracker.install()` và một `Trac
 SDK, thêm `analyticsPlugin { event -> log(event.name, event.params) }` bên trong `install`, hoặc
 collect `OnboardingSdk.events` / `.state`.
 
-`isCompleted()`, `selectedLanguage()`, `answers()`, `markCompleted()` và `reset()` đọc và xóa tiến
-trình đã lưu.
+`isCompleted()`, `selectedLanguage()` và `answers()` đọc tiến trình đã lưu. `markCompleted()`
+đánh dấu hoàn tất; `reset()` xóa tiến trình. Đây đều là hàm suspend.
 
 ## Xử lý sự cố
 
@@ -307,7 +326,7 @@ trình đã lưu.
 | Luồng không bao giờ chạy | `configure()` thất bại, hoặc chạy trước `install()` | Log cái `Result`; gọi `install()` trước |
 | Người dùng không thoát khỏi luồng | Không có `OnboardingListener`, hoặc nó bỏ qua `Skipped` | Xử lý cả ba outcome |
 | Mọi placement báo `no_provider` | `adProvider` để null | `adProvider = ERainAdProvider()` |
-| Mọi placement báo `consent_not_granted` | Form UMP còn trên màn chưa được trả lời, hoặc không có mạng để hỏi UMP | Trả lời form; set `ConsentOptions(testDeviceHashedId = …)` để form hiện trên máy test |
+| Mọi placement báo `consent_not_granted` | Consent chưa cho phép request, hoặc host đã tắt quảng cáo | Kiểm tra `ConsentCenter.canRequestAds()` và `OnboardingSdk.canRequestAds()`; hoàn tất UMP hoặc công bố kết quả consent provider riêng |
 | Trang chỉ-quảng-cáo không xuất hiện | Không có unit dùng được cho `fullScreenStepNative` / `stepNatives[OB3]` | Cấu hình một cái; chỉ bật cờ remote của step là chưa đủ |
 | Banner splash không hiện | Thiếu `ob_splash_ad_container` hoặc thiếu include `layout_banner_control` | Thêm cả hai vào layout splash |
 

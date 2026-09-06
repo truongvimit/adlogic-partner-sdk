@@ -13,8 +13,8 @@
 | Module | यह क्या करता है | Guide |
 |---|---|---|
 | `ads` | AdMob load/show, ad config, UMP consent, premium gating | [ads/README.md](ads/README.md) |
-| `onboardkitorigin` | First-open flow: splash, language, onboarding pager, survey | [onboardkitorigin/README.md](onboardkitorigin/README.md) |
-| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`) | [trackkit/README.md](trackkit/README.md) |
+| `onboardkitorigin` | First-open flow: splash, language, onboarding pager, survey | [onboardkitorigin/README.hi.md](onboardkitorigin/README.hi.md) |
+| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`) | [trackkit/README.hi.md](trackkit/README.hi.md) |
 | `suite-firebase` | एकमात्र Firebase adapter: GA4 sink, ad config source, paywall config source | [suite-firebase/README.md](suite-firebase/README.md) |
 | `billingkit` | Play Billing engine (`com.ads.module.billing`) | [billingkit/README.md](billingkit/README.md) |
 | `paykit` | `billingkit` engine के ऊपर paywall UI | [paykit/README.md](paykit/README.md) |
@@ -22,27 +22,31 @@
 
 ## कौन-से modules declare करें
 
-| आप क्या ship कर रहे हैं | क्या declare करें | APK में निश्चित रूप से क्या नहीं होगा |
+| आप क्या ship कर रहे हैं | क्या declare करें | ये modules कौन-सी dependencies नहीं लाते |
 |---|---|---|
-| सिर्फ़ ads (IAA) | `ads` (+ `suite-firebase`) | एक भी Play Billing class नहीं |
-| IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | एक भी GMA/AdMob class नहीं |
+| सिर्फ़ ads (IAA) | `ads` (+ `suite-firebase`) | Play Billing |
+| IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | GMA/AdMob |
 | IAP, paywall UI अपनी | `billingkit` | न `paykit`, न `ads` |
 | ads और IAP दोनों | `ads` + `billingkit` (+ `paykit`) | — |
+| सिर्फ़ analytics | `trackkit` (+ GA4 के लिए `suite-firebase`) | `ads`, `billingkit`, `paykit` |
 
 `onboardkitorigin` `ads` पर और `paykit` `billingkit` पर निर्भर है, पर `implementation` scope में — अगर आप
-उनकी API कॉल करते हैं तो उन्हें अलग से declare करें। `trackkit` कभी declare न करें: जो भी module उसे इस्तेमाल
-करता है, वह उसे `api` से export करता है।
+उनकी API कॉल करते हैं तो उन्हें अलग से declare करें। अगर चुना हुआ module `trackkit` को `api` से export
+करता है तो उसे अलग से declare करने की ज़रूरत नहीं है; केवल analytics वाली app उसे सीधे declare कर सकती है।
 
 ## आवश्यकताएँ
 
 | | |
 |---|---|
-| JDK / Kotlin `jvmTarget` | 17 |
+| Build के लिए न्यूनतम JDK | 17 |
 | `minSdk` | 24 |
 | `compileSdk` / `targetSdk` | 36 |
 | AGP / Gradle | 8.12.0 / 8.13 |
 
 ## Installation
+
+Version **5.1.0 अभी publish नहीं हुआ है**। बदलावों के लिए [migration guide](MIGRATION-5.1.0.md) देखें;
+नीचे dependency examples में कोई प्रकाशित tag इस्तेमाल करें।
 
 `ads` जिन mediation adapters को bundle करता है वे Maven Central पर नहीं हैं — आख़िरी तीन repositories के
 बिना build Pangle, ironSource और Mintegral को resolve नहीं कर पाएगा।
@@ -96,8 +100,8 @@ throw करता है; दोनों Facebook entries ज़रूरी �
 
 | Path | किसके लिए ज़रूरी | न होने पर |
 |---|---|---|
-| `src/main/assets/ad_config.json` | `ads` | हर placement चुपचाप बंद, कोई crash नहीं |
-| `src/main/assets/ad_config_debug.json` | debug builds | debug run आपके **live** ad units खर्च करेगा |
+| `src/main/assets/ad_config.json` | स्थानीय ad placement configuration | कोई स्थानीय placement configuration load नहीं होता |
+| `src/main/assets/ad_config_debug.json` | debug builds के लिए अलग test ad units | `ad_config.json` इस्तेमाल होगा, जिसमें live ad units हो सकते हैं |
 | `google-services.json` + `com.google.gms.google-services` plugin | `suite-firebase` | न GA4 sink, न remote ad config, न paywall document |
 
 ## Initialization क्रम
@@ -143,16 +147,17 @@ class App : AdsMultiDexApplication() {
 }
 ```
 
-फिर अपनी launcher activity को `class SplashActivity : ObSplashActivity()` बनाएँ। Consent, remote fetch,
-splash ads, न्यूनतम display समय और आगे का navigation — सब उसी के अंदर है; देखें
-[onboardkitorigin/README.md](onboardkitorigin/README.md)।
+फिर अपनी launcher activity को `class SplashActivity : ObSplashActivity()` बनाएँ। Consent, वैकल्पिक notification
+permission prompt, remote fetch, splash ads, न्यूनतम display समय और navigation उसी के अंदर हैं; देखें
+[onboardkitorigin/README.hi.md](onboardkitorigin/README.hi.md)।
 
-जिस module को आप ship नहीं करते, उसका step हटा दें: सिर्फ़ ads वाली app step 2 पर रुक जाती है, सिर्फ़ IAP वाली
-app केवल 1 और 3 रखती है।
+अपनी app में इस्तेमाल होने वाले modules के steps रखें। केवल ads वाली app steps 1 और 2 इस्तेमाल करती है।
+केवल IAP वाली app steps 1 और 3 रखती है और `AdsMultiDexApplication` की जगह `Application` या अपनी
+मौजूदा application base class से inherit करती है।
 
 ## APK का आकार घटाना
 
-`ads` सात AdMob mediation adapters bundle करता है — APK की सबसे भारी चीज़। जिन networks को आपका AdMob
+`ads` सात AdMob mediation adapters bundle करता है, जो APK का आकार बढ़ाते हैं। जिन networks को आपका AdMob
 account mediate नहीं करता, उन्हें हटा दें — और `ads` dependency पर नहीं, `configurations` पर, क्योंकि
 `onboardkitorigin` भी `ads` पर निर्भर है और per-dependency exclude वह दूसरा रास्ता खुला छोड़ देता:
 
@@ -176,9 +181,9 @@ groups बदलें।
 
 ## विस्तृत जानकारी कहाँ है
 
-ये READMEs सिर्फ़ integration कवर करते हैं। हर option, default और behaviour flag उसी type पर KDoc में
-documented है जो उसका मालिक है, और हर module sources jar के साथ publish होता है — यानी पूरा और हमेशा
-अद्यतन reference IDE में एक **Go to definition** दूर है। शुरुआत करें `AdUnitConfig` और `ConsentOptions`
+ये READMEs integration समझाते हैं। Defaults और व्यवहार के लिए संबंधित type की KDoc देखें। हर module
+sources jar के साथ publish होता है; IDE में **Go to definition** से अपनी app के उपयोग वाले version की
+जानकारी देखें। शुरुआत करें `AdUnitConfig` और `ConsentOptions`
 (ads), `OnboardKitConfig` और `ObRemoteKeys` (onboardkitorigin), `TrackerConfig` और `TrackkitEvents`
 (trackkit), `PayKitConfig` (paykit), `AppPurchase` (billingkit) से।
 

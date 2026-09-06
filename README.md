@@ -22,27 +22,31 @@ each module's README is the guide for its own surface.
 
 ## Which modules to declare
 
-| You ship | Declare | What the APK provably lacks |
+| You ship | Declare | Dependencies these modules do not pull in |
 |---|---|---|
-| Ads only (IAA) | `ads` (+ `suite-firebase`) | No Play Billing class at all |
-| IAP + prebuilt paywall, no ads | `billingkit` + `paykit` | No GMA/AdMob class at all |
+| Ads only (IAA) | `ads` (+ `suite-firebase`) | Play Billing |
+| IAP + prebuilt paywall, no ads | `billingkit` + `paykit` | GMA/AdMob |
 | IAP with your own paywall UI | `billingkit` | Neither `paykit` nor `ads` |
 | Ads and IAP | `ads` + `billingkit` (+ `paykit`) | — |
+| Analytics only | `trackkit` (+ `suite-firebase` for GA4) | `ads`, `billingkit`, `paykit` |
 
 `onboardkitorigin` depends on `ads`, and `paykit` on `billingkit`, at `implementation` scope —
-declare those explicitly if you call their APIs. Never declare `trackkit`: every module that uses
-it exports it with `api`.
+declare those explicitly if you call their APIs. A separate `trackkit` dependency is unnecessary
+when another selected module exports it with `api`; declare it directly for standalone analytics.
 
 ## Requirements
 
 | | |
 |---|---|
-| JDK / Kotlin `jvmTarget` | 17 |
+| Minimum build JDK | 17 |
 | `minSdk` | 24 |
 | `compileSdk` / `targetSdk` | 36 |
 | AGP / Gradle | 8.12.0 / 8.13 |
 
 ## Installation
+
+Version **5.1.0 is not yet published**. See the [migration guide](MIGRATION-5.1.0.md) for its changes;
+use a published tag in the dependency examples below.
 
 The mediation adapters `ads` bundles are not on Maven Central — without the last three
 repositories the build cannot resolve Pangle, ironSource and Mintegral.
@@ -97,13 +101,13 @@ by the `AdjustConfig` you build yourself — a blank `adjust_token` turns Adjust
 
 | Path | Required for | Missing it means |
 |---|---|---|
-| `src/main/assets/ad_config.json` | `ads` | Every placement is disabled silently, no crash |
-| `src/main/assets/ad_config_debug.json` | debug builds | A debug run spends your **live** ad units |
+| `src/main/assets/ad_config.json` | Local ad placement configuration | No local ad placement configuration is loaded |
+| `src/main/assets/ad_config_debug.json` | Separate test ad units in debug builds | Falls back to `ad_config.json`, which may contain live ad units |
 | `google-services.json` + the `com.google.gms.google-services` plugin | `suite-firebase` | No GA4 sink, no remote ad config, no paywall document |
 
 ## Integration order
 
-Everything below runs in `Application.onCreate()`, in this order. The order is load-bearing:
+Everything below runs in `Application.onCreate()`, in this order:
 `Tracker` first because events emitted earlier are only buffered, and the ad config before
 `ERainAd.init` because that is what binds ad unit ids to placements.
 
@@ -144,16 +148,17 @@ class App : AdsMultiDexApplication() {
 }
 ```
 
-Then make your launcher activity `class SplashActivity : ObSplashActivity()`. Consent, the remote
-fetch, splash ads, the minimum display time and the navigation out all run inside it — see
+Then make your launcher activity `class SplashActivity : ObSplashActivity()`. Consent, the optional
+notification permission prompt, remote fetch, splash ads, minimum display time and navigation run inside it — see
 [onboardkitorigin/README.md](onboardkitorigin/README.md).
 
-Drop any step whose module you do not ship: an ads-only app stops after 2, an IAP-only app declares
-only 1 and 3.
+Include the steps for the modules your app uses. An ads-only app uses steps 1 and 2.
+An IAP-only app uses steps 1 and 3 and extends `Application` (or its existing application base)
+instead of `AdsMultiDexApplication`.
 
 ## Reducing APK size
 
-`ads` bundles seven AdMob mediation adapters, the largest thing in the APK. Drop the ones your
+`ads` bundles seven AdMob mediation adapters, which add to APK size. Drop the ones your
 AdMob account does not mediate — on `configurations`, not on the `ads` dependency, because
 `onboardkitorigin` depends on `ads` too and a per-dependency exclude would leave that second path
 open:
@@ -177,9 +182,9 @@ on) to `proguard-rules.pro`. Change your AdMob mediation groups before the Gradl
 
 ## Finding the details
 
-These READMEs cover integration only. Every option, default and behaviour flag is documented in
-KDoc on the type that owns it, and every module publishes a sources jar — so the full, always
-current reference is one **Go to definition** away in the IDE. Start from `AdUnitConfig` and
+These READMEs cover integration. Consult the owning type's KDoc for option defaults and behavior.
+Each module publishes a sources jar; use **Go to definition** in the IDE to inspect the version
+your app uses. Start from `AdUnitConfig` and
 `ConsentOptions` (ads), `OnboardKitConfig` and `ObRemoteKeys` (onboardkitorigin), `TrackerConfig`
 and `TrackkitEvents` (trackkit), `PayKitConfig` (paykit), `AppPurchase` (billingkit).
 

@@ -2,9 +2,9 @@
 
 > Debug-only ad lifecycle tracker with an embedded dashboard.
 
-AdTracer records what happens to every ad opportunity — requested, skipped, filled, shown, clicked,
-dismissed — journals it to disk and serves a live dashboard over loopback HTTP. Zero dependencies,
-and `debugImplementation` keeps every byte of it out of release builds.
+AdTracer records the ad lifecycle events you send it, journals them to disk, and serves a live
+dashboard over loopback HTTP. It has no declared library dependencies. Use `debugImplementation`
+to include it only in debug builds.
 
 ## Requirements
 
@@ -19,22 +19,21 @@ and `debugImplementation` keeps every byte of it out of release builds.
 // Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
 def sdkVersion = '<tag>'
 dependencies {
-    // Debug builds only — never `implementation`
+    // Keep AdTracer out of release builds.
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
 ```
 
 ## Integration
 
-`io.adtracer` can only be imported from `src/debug`, so put the wiring behind a variant seam: one
-function in `src/debug` that does the work, and a twin in `src/release` — same package, same
-signature — that does nothing.
+With `debugImplementation`, keep `io.adtracer` imports in `src/debug`. Put the wiring behind a
+variant seam: one function in `src/debug` that does the work, and a twin in `src/release` — same
+package, same signature — that does nothing.
 
-**1. Bridge Trackkit into AdTracer.** Every ad event `:ads` and `:onboardkitorigin` emit already goes
-through `Tracker`, so no call site needs wrapping. Write this as a `TrackSink` in
-`app/src/debug/java/.../AdTracerSink.kt`; the sample app's copy is
-[`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt) — copy it
-verbatim.
+**1. Bridge Trackkit into AdTracer.** A `TrackSink` receives the SDK events routed through
+`Tracker`. Put the bridge in `app/src/debug/java/.../AdTracerSink.kt`; see
+[`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt) for the full
+implementation, including imports and format conversion.
 
 ```kotlin
 class AdTracerSink : TrackSink {
@@ -91,7 +90,8 @@ fun installDebugSinks() = Unit
 `AdTracer` exposes one function per lifecycle moment — `loadRequested` / `loadSkipped`, `loaded` /
 `loadFailed`, `showRequested` / `showStarted` / `shown`, `showBlocked` / `showFailed`, `impression` /
 `clicked` / `dismissed`, `rendered` / `reRendered` / `discarded`, and `event(...)` as the escape
-hatch. Each is a no-op until `start` runs, and none of them throw. `format` is `io.adtracer.AdFormat`:
+hatch. Event calls are no-ops until `start` runs, and emission errors are caught and logged.
+`format` is `io.adtracer.AdFormat`:
 `NATIVE`, `INTERSTITIAL`, `BANNER`, `REWARDED`, `APP_OPEN`, `OTHER`.
 
 ## Viewing the dashboard
@@ -104,16 +104,17 @@ adb forward tcp:8686 tcp:8686
 
 Open **http://localhost:8686**. If 8686 is taken the server tries 8687–8695 and logs the bound port
 (`adb logcat -s AdTracer`); `AdTracer.dashboardPort` holds it, or `-1` when none was free. The server
-binds `127.0.0.1` only, so it is never reachable from the LAN.
+binds `127.0.0.1`, so direct access uses the device loopback interface or an `adb forward`.
 
 ## What it records
 
 One event per observation: `seq`, `sessionId`, wall-clock and `elapsedRealtime` timestamps, type,
 placement, format, plus optional ad unit id, reason, error code and message.
 
-- `(sessionId, seq)` is gapless per session, so a browser reconnect never duplicates or drops.
-- Events reach `filesDir/adtracer/s-<sessionId>.ndjson` **before** the browser, so killing the app
-  keeps the history; the 10 newest sessions are kept and browsable.
+- `(sessionId, seq)` identifies processed events for browser deduplication and reconnect replay.
+- The collector writes and flushes `filesDir/adtracer/s-<sessionId>.ndjson` before streaming each
+  event. The 10 newest sessions are kept and browsable. Pending events can be lost if the process
+  stops; a storage failure disables journaling and is logged.
 - Emitting is a bounded, non-blocking hand-off; under overload it drops events and reports how many
   as a `tracer_overflow` event rather than growing the queue.
 - Placements starting with `preview_` stay hidden until the `Ads test (preview_*)` toggle is on.

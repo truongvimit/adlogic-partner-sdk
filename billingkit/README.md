@@ -109,8 +109,8 @@ registered — `:ads` registers the Adjust one during `ERainAd.init`.
 
 ## Premium gating
 
-`:ads` gates every load and show on `AdGate.isPurchased(context)`, which reads the `Entitlement`
-port. BillingKit installs itself as that port's source on the first `AppPurchase.getInstance()` call,
+The ad helpers consult `AdGate.isPurchased(context)`, which reads the `Entitlement` port. BillingKit
+installs itself as that port's source on the first `AppPurchase.getInstance()` call,
 or from `Billing.install` — whichever runs first. The hand-off runs once and is skipped when `:ads`
 is absent. For purchases that land mid-session, drop what is already preloaded:
 
@@ -133,7 +133,7 @@ AdGate.installPremiumObserver(scope, Billing.isPremium)
 | `subscribeProduct` returns `NO_OFFER` | Play returned no offer — no active base plan, or the user's region excludes every offer | Inspect `getSubscriptionOffers(productId)` |
 | The wrong plan is charged | A null offer token, so the SDK picked the first free-trial offer | Resolve the token with `resolveOfferToken(productId, basePlanId, offerId)` and pass it in |
 | Prices come back `""` | Details not fetched, or the id is not in the catalogue | Re-check `initBilling`, then `refreshProductDetails()` |
-| A premium user still sees ads | `Billing.install` never ran before the first ad request | Call it in `Application.onCreate` |
+| A premium user still sees ads | Billing entitlement may not be connected before the first request | Call `Billing.install` in `Application.onCreate`; check the current premium state |
 | Ads keep showing right after a purchase | Preloaded ads are still buffered | `AdGate.installPremiumObserver(scope, Billing.isPremium)` |
 | A release build grants premium for free | Dev mode is on; `initBilling` logs this at ERROR | `BillingKit.setDevMode(false)`, or use `ERainAdConfig.ENVIRONMENT_PRODUCTION` |
 

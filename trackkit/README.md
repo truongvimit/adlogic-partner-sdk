@@ -2,9 +2,10 @@
 
 > One analytics facade every module reports through, and a sink per vendor.
 
-Everything the app, `:ads`, `:onboardkitorigin`, `:paykit` and `:billingkit` emit goes through
-`io.trackkit.Tracker`, so consent gating, default params, GA4 name validation, dedupe and cumulative
-ad revenue are implemented once. The core is vendor-free: vendors arrive as separate sink modules.
+`io.trackkit.Tracker` handles the SDK analytics emitted by `:ads`, `:onboardkitorigin`, `:paykit`
+and `:billingkit`. Apps can send their own events through the same facade for consent gating,
+default params, GA4 name validation, dedupe and cumulative ad revenue. The core has no vendor SDK
+dependency; sink implementations connect it to analytics vendors.
 
 Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · Tiếng Việt: [README.vi.md](README.vi.md) ·
 हिन्दी: [README.hi.md](README.hi.md)
@@ -34,7 +35,8 @@ yourself only for a standalone `TrackSink`.
 
 ## Integration
 
-Call `Tracker.install` on the first line of `Application.onCreate()`, then register your sinks.
+Call `Tracker.install` after `super.onCreate()` and before initialising modules that emit events,
+then register your sinks.
 
 ```kotlin
 override fun onCreate() {
@@ -48,8 +50,9 @@ override fun onCreate() {
 }
 ```
 
-That is the whole integration. You do not wrap ad callbacks and you do not map ad units to
-placements: `:ads` creates the ad objects, so `:ads` reports the ad lifecycle and paid impressions.
+The SDK reports lifecycle events and paid impressions for the ad objects it manages. A sink
+receives those reports without wrapping the host callbacks. For custom ad integrations, supply
+placement context through `PlacementRegistry` or your own event payloads.
 
 Events emitted before `install()` are buffered — 128 items, then the oldest are dropped with a
 warning. A second `install()` is ignored. With no sink, every event is validated and discarded.
@@ -63,13 +66,15 @@ Also on `Tracker`: `track(name, params)`, `track(TrackEvent)`, `screen(name, scr
 
 ## Consent
 
-Do not call `Tracker.setConsent` when `:ads` is on the classpath.
-`com.ads.module.consent.ConsentCenter` is its only caller, resolves UMP for the whole process, and
-passes `Tracker.setConsent(analytics = true, ads = personalized)`.
+When using `com.ads.module.consent.ConsentCenter`, each consent publication calls
+`Tracker.setConsent(analytics = true, ads = personalized)`. This is the SDK's current mapping;
+the ads axis describes personalization, not permission to send an ad request. Use
+`ConsentCenter.canRequestAds()` for request authority.
 
-The analytics axis is always `true`: UMP asks about ads only, so a refusal must not also erase
-`first_open`, retention and the funnel. Call it yourself only in an app with no `:ads`, from one
-place.
+Keep consent updates coordinated: a later `ConsentCenter` publication overwrites a direct
+`Tracker.setConsent` call, including its analytics value. Without `ConsentCenter`, the host supplies
+Tracker consent from its own consent flow. Analytics consent and ad personalization are separate
+settings; an ads denial alone does not disable analytics in this mapping.
 
 ## Events
 
@@ -77,13 +82,12 @@ place.
 first-open funnel, IAP, consent — and `TrackkitEvents.all()` returns the full set at runtime. Open
 it in the IDE rather than copying a list that ages; each event class documents what it means.
 
-Every event also carries `app_vc`, `sdk_ver`, `session_no`, `install_day`, and `consent_ads` once
-UMP resolves.
+Events sent through `Tracker.track` also carry `app_vc`, `sdk_ver`, `session_no`, `install_day`,
+and `consent_ads` after a consent update.
 
-**One setup step on your side:** GA4 stores custom parameters but does not report on them until they
-are registered as custom dimensions. Register the params your dashboards need — the constants are on
-`TrackkitEvents` as `PARAM_*` — or they stay in DebugView and BigQuery only. Screen views are not
-events: `Tracker.screen()` lets each sink emit its own.
+Use the `PARAM_*` constants on `TrackkitEvents` when configuring custom dimensions for your GA4
+reports. `Tracker.screen()` routes through `TrackSink.onScreen`; `FirebaseSink` translates it to
+Firebase's `screen_view` event.
 
 ## Custom events
 
@@ -137,9 +141,9 @@ arrive sanitised: no nulls, strings capped at 100 characters, at most 25 keys. F
 | Symptom | Cause | Fix |
 |---|---|---|
 | Nothing reaches any vendor; logcat says `install() ran with no sink` | no sink registered | `Tracker.addSink(FirebaseSink())` or your own `TrackSink` |
-| `N events were dropped before install (buffer overflow)` | over 128 events emitted before `install()` | move `Tracker.install` to the first line of `onCreate()` |
+| `N events were dropped before install (buffer overflow)` | over 128 events emitted before `install()` | install Tracker before modules start emitting events |
 | `install() called twice` or `sink 'x' already registered` | a duplicate `install()` or two sinks sharing an `id` | keep one `install()`; give each sink a unique `id` |
-| Every event stops after launch | `consentPolicy = DROP_UNTIL_GRANTED` and analytics consent not granted | with `:ads` the analytics axis is always granted; check that `ConsentCenter.request` ran |
+| Every event stops after launch | `consentPolicy = DROP_UNTIL_GRANTED` and analytics consent not granted | inspect `Tracker.currentConsent` and the code responsible for publishing consent |
 | `ad_revenue_total` stays at 0 while `ad_impression` arrives | impressions are in a currency other than `reportingCurrency` | set `TrackerConfig.reportingCurrency` to the account currency |
 | `IllegalArgumentException: Trackkit: …` in production | `strictValidation` left `true` in release | wire it to `BuildConfig.DEBUG` |
 

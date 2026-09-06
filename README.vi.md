@@ -13,8 +13,8 @@ README của từng module là hướng dẫn tích hợp cho phần việc củ
 | Module | Làm gì | Tài liệu |
 |---|---|---|
 | `ads` | Load/show AdMob, ad config, UMP consent, chặn ad cho user premium | [ads/README.md](ads/README.md) |
-| `onboardkitorigin` | Luồng mở app lần đầu: splash, chọn ngôn ngữ, pager onboarding, survey | [onboardkitorigin/README.md](onboardkitorigin/README.md) |
-| `trackkit` | Hợp đồng analytics không phụ thuộc vendor (`Tracker`, `TrackSink`) | [trackkit/README.md](trackkit/README.md) |
+| `onboardkitorigin` | Luồng mở app lần đầu: splash, chọn ngôn ngữ, pager onboarding, survey | [onboardkitorigin/README.vi.md](onboardkitorigin/README.vi.md) |
+| `trackkit` | Hợp đồng analytics không phụ thuộc vendor (`Tracker`, `TrackSink`) | [trackkit/README.vi.md](trackkit/README.vi.md) |
 | `suite-firebase` | Adapter Firebase duy nhất: GA4 sink, nguồn ad config, nguồn paywall config | [suite-firebase/README.md](suite-firebase/README.md) |
 | `billingkit` | Engine Play Billing (`com.ads.module.billing`) | [billingkit/README.md](billingkit/README.md) |
 | `paykit` | UI paywall chạy trên engine `billingkit` | [paykit/README.md](paykit/README.md) |
@@ -22,27 +22,31 @@ README của từng module là hướng dẫn tích hợp cho phần việc củ
 
 ## Chọn module nào để khai báo
 
-| Bạn ship gì | Khai báo | APK chắc chắn không chứa |
+| Bạn ship gì | Khai báo | Dependency các module này không kéo theo |
 |---|---|---|
-| Chỉ ads (IAA) | `ads` (+ `suite-firebase`) | Không có class Play Billing nào |
-| IAP + paywall dựng sẵn, không ads | `billingkit` + `paykit` | Không có class GMA/AdMob nào |
+| Chỉ ads (IAA) | `ads` (+ `suite-firebase`) | Play Billing |
+| IAP + paywall dựng sẵn, không ads | `billingkit` + `paykit` | GMA/AdMob |
 | IAP với UI paywall tự viết | `billingkit` | Không có `paykit` lẫn `ads` |
 | Vừa ads vừa IAP | `ads` + `billingkit` (+ `paykit`) | — |
+| Chỉ analytics | `trackkit` (+ `suite-firebase` cho GA4) | `ads`, `billingkit`, `paykit` |
 
 `onboardkitorigin` phụ thuộc `ads`, và `paykit` phụ thuộc `billingkit`, ở scope `implementation` —
-hãy khai báo chúng tường minh nếu bạn gọi API của chúng. Đừng bao giờ khai báo `trackkit`: mọi module
-dùng nó đều export bằng `api`.
+hãy khai báo chúng tường minh nếu bạn gọi API của chúng. Không cần khai báo riêng `trackkit` khi
+module đã chọn export nó bằng `api`; ứng dụng chỉ dùng analytics có thể khai báo trực tiếp.
 
 ## Yêu cầu
 
 | | |
 |---|---|
-| JDK / Kotlin `jvmTarget` | 17 |
+| JDK tối thiểu để build | 17 |
 | `minSdk` | 24 |
 | `compileSdk` / `targetSdk` | 36 |
 | AGP / Gradle | 8.12.0 / 8.13 |
 
 ## Cài đặt
+
+Phiên bản **5.1.0 chưa phát hành**. Xem các thay đổi trong [hướng dẫn migration](MIGRATION-5.1.0.md);
+ví dụ dependency bên dưới cần dùng một tag đã phát hành.
 
 Các mediation adapter mà `ads` đóng gói không nằm trên Maven Central — thiếu ba repository cuối,
 build sẽ không resolve được Pangle, ironSource và Mintegral.
@@ -97,8 +101,8 @@ buộc khi dùng `ads`. `adjust_token`, `event_token` và `adjust_event_token_pu
 
 | Đường dẫn | Cần cho | Thiếu thì sao |
 |---|---|---|
-| `src/main/assets/ad_config.json` | `ads` | Mọi placement bị tắt âm thầm, không crash |
-| `src/main/assets/ad_config_debug.json` | build debug | Chạy debug sẽ tiêu ad unit **thật** |
+| `src/main/assets/ad_config.json` | Cấu hình placement quảng cáo cục bộ | Không có cấu hình placement cục bộ được tải |
+| `src/main/assets/ad_config_debug.json` | Tách ad unit thử nghiệm cho build debug | Dùng `ad_config.json` thay thế; file đó có thể chứa ad unit thật |
 | `google-services.json` + plugin `com.google.gms.google-services` | `suite-firebase` | Không có GA4 sink, không có remote ad config, không có paywall document |
 
 ## Thứ tự khởi tạo
@@ -144,16 +148,17 @@ class App : AdsMultiDexApplication() {
 }
 ```
 
-Sau đó cho launcher activity kế thừa: `class SplashActivity : ObSplashActivity()`. Consent, remote
-fetch, ad splash, thời gian hiển thị tối thiểu và việc điều hướng ra ngoài đều nằm bên trong nó —
-xem [onboardkitorigin/README.md](onboardkitorigin/README.md).
+Sau đó cho launcher activity kế thừa: `class SplashActivity : ObSplashActivity()`. Consent, bước xin
+quyền thông báo có thể bật/tắt, remote fetch, ad splash, thời gian hiển thị tối thiểu và điều hướng đều nằm bên trong nó —
+xem [onboardkitorigin/README.vi.md](onboardkitorigin/README.vi.md).
 
-Bỏ bước nào ứng với module bạn không ship: app chỉ có ads dừng ở bước 2, app chỉ có IAP chỉ cần bước
-1 và 3.
+Chỉ giữ những bước ứng với module ứng dụng sử dụng. App chỉ có ads dùng bước 1 và 2.
+App chỉ có IAP dùng bước 1 và 3, đồng thời kế thừa `Application` hoặc lớp Application sẵn có
+thay cho `AdsMultiDexApplication`.
 
 ## Giảm dung lượng APK
 
-`ads` đóng gói bảy mediation adapter của AdMob — phần nặng nhất trong APK. Hãy loại những mạng mà tài
+`ads` đóng gói bảy mediation adapter của AdMob, làm tăng dung lượng APK. Hãy loại những mạng mà tài
 khoản AdMob của bạn không mediation, và loại trên `configurations` chứ không phải trên dependency
 `ads`: `onboardkitorigin` cũng phụ thuộc `ads`, nên loại trừ theo từng dependency sẽ để hở đường thứ
 hai đó.
@@ -178,9 +183,9 @@ Gradle.
 
 ## Tra cứu chi tiết
 
-Các README này chỉ nói về tích hợp. Mọi tùy chọn, giá trị mặc định và cờ hành vi đều được ghi bằng
-KDoc ngay trên kiểu dữ liệu sở hữu nó, và mọi module đều publish kèm sources jar — nên tài liệu đầy
-đủ và luôn cập nhật chỉ cách bạn một thao tác **Go to definition** trong IDE. Bắt đầu từ
+Các README này hướng dẫn tích hợp. Tra cứu giá trị mặc định và hành vi trong KDoc của kiểu dữ liệu
+tương ứng. Mỗi module publish kèm sources jar; dùng **Go to definition** trong IDE để xem đúng
+phiên bản ứng dụng đang sử dụng. Bắt đầu từ
 `AdUnitConfig` và `ConsentOptions` (ads), `OnboardKitConfig` và `ObRemoteKeys` (onboardkitorigin),
 `TrackerConfig` và `TrackkitEvents` (trackkit), `PayKitConfig` (paykit), `AppPurchase` (billingkit).
 

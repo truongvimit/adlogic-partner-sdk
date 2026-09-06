@@ -2,10 +2,10 @@
 
 > एक ही analytics facade जिससे हर module रिपोर्ट करता है, और हर vendor के लिए एक sink।
 
-App, `:ads`, `:onboardkitorigin`, `:paykit` और `:billingkit` जो कुछ भी emit करते हैं, वह सब
-`io.trackkit.Tracker` से होकर जाता है — इसलिए consent gating, default params, GA4 name validation, dedupe
-और cumulative ad revenue सिर्फ़ एक बार implement होते हैं। Core vendor-free है: vendors अलग sink modules के
-रूप में आते हैं।
+`io.trackkit.Tracker`, `:ads`, `:onboardkitorigin`, `:paykit` और `:billingkit` के SDK analytics संभालता है।
+App अपने events भी इसी facade से भेज सकता है ताकि consent gating, default params, GA4 name validation,
+dedupe और cumulative ad revenue का उपयोग हो। Core में vendor SDK dependency नहीं है; sink implementations
+उसे analytics vendors से जोड़ते हैं।
 
 Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · English: [README.md](README.md) ·
 Tiếng Việt: [README.vi.md](README.vi.md)
@@ -35,7 +35,8 @@ dependencies {
 
 ## Integration
 
-`Tracker.install` को `Application.onCreate()` की पहली लाइन पर बुलाएँ, फिर अपने sinks register करें।
+`Tracker.install` को `super.onCreate()` के बाद और events भेजने वाले modules को initialise करने से पहले
+बुलाएँ, फिर अपने sinks register करें।
 
 ```kotlin
 override fun onCreate() {
@@ -49,8 +50,9 @@ override fun onCreate() {
 }
 ```
 
-बस इतनी ही integration है। आपको ad callbacks wrap नहीं करने हैं और ad units को placements से map भी नहीं
-करना है: ad objects `:ads` बनाता है, इसलिए ad lifecycle और paid impressions `:ads` ही रिपोर्ट करता है।
+SDK अपने द्वारा प्रबंधित ad objects के lifecycle और paid impressions रिपोर्ट करता है। Sink इन reports को
+host callbacks wrap किए बिना प्राप्त करता है। Custom ad integrations के लिए `PlacementRegistry` या अपने
+event payloads से placement context दें।
 
 `install()` से पहले निकले events buffer होते हैं — 128 items, उसके बाद सबसे पुराने एक warning के साथ गिरा
 दिए जाते हैं। दूसरा `install()` अनदेखा कर दिया जाता है। कोई sink न हो तो हर event validate होकर हटा दिया
@@ -65,13 +67,15 @@ default params — हर एक KDoc में documented। Defaults काम
 
 ## Consent
 
-जब `:ads` classpath पर हो तो `Tracker.setConsent` न बुलाएँ।
-`com.ads.module.consent.ConsentCenter` ही उसका एकमात्र caller है, पूरे process के लिए UMP सुलझाता है, और
-`Tracker.setConsent(analytics = true, ads = personalized)` पास करता है।
+`com.ads.module.consent.ConsentCenter` का हर consent update
+`Tracker.setConsent(analytics = true, ads = personalized)` बुलाता है। यह SDK की वर्तमान mapping है;
+ads axis personalization बताता है, ad request भेजने की अनुमति नहीं। Request की अनुमति जाँचने के लिए
+`ConsentCenter.canRequestAds()` का उपयोग करें।
 
-Analytics axis हमेशा `true` रहता है: UMP सिर्फ़ ads के बारे में पूछता है, इसलिए एक इनकार से `first_open`,
-retention और funnel भी मिट नहीं जाने चाहिए। इसे खुद सिर्फ़ उस app में बुलाएँ जिसमें `:ads` है ही नहीं, और एक
-ही जगह से।
+Consent updates को एक जगह समन्वित करें: अगला `ConsentCenter` update सीधे किए गए `Tracker.setConsent`
+call को, उसके analytics value सहित, overwrite करता है। `ConsentCenter` के बिना host अपने consent flow से
+Tracker को consent देता है। Analytics consent और ad personalization अलग settings हैं; इस mapping में
+केवल ads को deny करने से analytics बंद नहीं होता।
 
 ## Events
 
@@ -79,12 +83,12 @@ retention और funnel भी मिट नहीं जाने चाहि�
 ads, revenue, first-open funnel, IAP, consent — और `TrackkitEvents.all()` runtime पर पूरा set लौटाता है।
 ऐसी सूची कॉपी करने के बजाय जो पुरानी पड़ जाएगी, उसे IDE में खोलें; हर event class अपना अर्थ खुद बताती है।
 
-हर event `app_vc`, `sdk_ver`, `session_no`, `install_day` भी साथ लाती है, और UMP सुलझते ही `consent_ads`।
+`Tracker.track` से भेजे events में `app_vc`, `sdk_ver`, `session_no`, `install_day` भी होते हैं, और consent
+update के बाद `consent_ads` होता है।
 
-**आपकी तरफ़ का एक setup step:** GA4 custom parameters सहेजता तो है, पर जब तक उन्हें custom dimensions के
-रूप में register न किया जाए, वह उन पर रिपोर्ट नहीं करता। अपने dashboards के लिए ज़रूरी params register करें —
-constants `TrackkitEvents` पर `PARAM_*` के रूप में हैं — वरना वे सिर्फ़ DebugView और BigQuery में रह जाएँगे।
-Screen views events नहीं हैं: `Tracker.screen()` हर sink को अपना तरीक़ा चुनने देता है।
+GA4 reports के लिए custom dimensions configure करते समय `TrackkitEvents` के `PARAM_*` constants का
+उपयोग करें। `Tracker.screen()` calls को `TrackSink.onScreen` तक भेजता है; `FirebaseSink` इन्हें Firebase
+के `screen_view` event में बदलता है।
 
 ## अपने custom events
 
@@ -138,9 +142,9 @@ Tracker.addSink(MyBackendSink(api))
 | लक्षण | कारण | समाधान |
 |---|---|---|
 | किसी vendor तक कुछ नहीं पहुँचता; logcat कहता है `install() ran with no sink` | कोई sink register नहीं हुआ | `Tracker.addSink(FirebaseSink())` या अपना `TrackSink` |
-| `N events were dropped before install (buffer overflow)` | `install()` से पहले 128 से ज़्यादा events निकले | `Tracker.install` को `onCreate()` की पहली लाइन पर ले जाएँ |
+| `N events were dropped before install (buffer overflow)` | `install()` से पहले 128 से ज़्यादा events निकले | modules के events भेजने से पहले Tracker install करें |
 | `install() called twice` या `sink 'x' already registered` | दो बार `install()`, या दो sinks की एक ही `id` | एक `install()` रखें; हर sink को अलग `id` दें |
-| Launch के बाद सारे events रुक जाते हैं | `consentPolicy = DROP_UNTIL_GRANTED` और analytics consent नहीं मिला | `:ads` के साथ analytics axis हमेशा मिलता है; जाँचें कि `ConsentCenter.request` चला या नहीं |
+| Launch के बाद सारे events रुक जाते हैं | `consentPolicy = DROP_UNTIL_GRANTED` और analytics consent नहीं मिला | `Tracker.currentConsent` और consent publish करने वाले code को जाँचें |
 | `ad_impression` आते रहने पर भी `ad_revenue_total` 0 पर अटका है | impressions `reportingCurrency` से अलग currency में हैं | `TrackerConfig.reportingCurrency` को account की currency पर सेट करें |
 | Production में `IllegalArgumentException: Trackkit: …` | release में `strictValidation` `true` छूट गया | उसे `BuildConfig.DEBUG` से जोड़ें |
 

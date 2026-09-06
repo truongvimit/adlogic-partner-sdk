@@ -36,7 +36,7 @@ dependencies {
 ```
 
 `:paykit` exposes `:trackkit`, `kotlinx-coroutines-android` and `kotlinx-serialization-json` as `api`
-dependencies — do not declare them yourself. Events only reach a dashboard once `Tracker.install()`
+dependencies, so they are available transitively. Events reach a dashboard once `Tracker.install()`
 and a sink are wired: [`../trackkit/README.md`](../trackkit/README.md).
 
 ## Integration
@@ -68,7 +68,7 @@ Three fields decide whether anything shows at all, so they are worth stating pla
 - `defaultPlacements` is empty by default, which shows no paywall anywhere until a fetched document
   names its own placements.
 - `fallbackConfigRes` points at your own catalogue JSON in `res/raw`. Left unset, PayKit runs on its
-  own sample ids and every price is blank.
+  bundled sample ids. Supply your Play catalogue through this resource or a fetched document.
 
 The remaining knobs (exit-button delay, the double-tap window, log level) are documented on
 `PayKitConfigBuilder`.
@@ -79,7 +79,7 @@ The remaining knobs (exit-button delay, the double-tap window, log level) are do
 lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
 ```
 
-`sync` is the only call that fetches. It never throws and returns `false` on timeout, on error, or
+`sync` fetches from the installed source and returns `false` on timeout, on fetch error, or
 when no `configSource` was installed; the snapshot already in place keeps working. Sync before the
 first paywall — a document that changes the package list re-registers the catalogue with Play. If
 you run your own remote config, skip `configSource` and `sync` and call `PayKit.applySnapshot(json)`.
@@ -127,8 +127,8 @@ Also on `PayKit`: `isReady()` (a usable **config document** is loaded, not that 
 ## The paywall document
 
 One JSON document drives the whole screen — which plans to sell, the copy, the colours, which
-placements are allowed. `paykit/src/main/res/raw/pw_default_config.json` is a complete working
-example; copy it into your own `res/raw` as the starting point for `fallbackConfigRes`.
+placements are allowed. `paykit/src/main/res/raw/pw_default_config.json` is a schema example; copy
+it into your own `res/raw` and replace the product ids for use as `fallbackConfigRes`.
 
 ```json
 {

@@ -3,8 +3,8 @@
 > The suite's single Firebase adapter: GA4 sink, ad-config source, paywall-config source, and the
 > one Remote Config client the two sources share.
 
-`:trackkit`, `:ads` and `:paykit` are all vendor-free. This module supplies their Firebase
-implementations; the app wires each one in a single line.
+This module provides Firebase implementations of the tracking and config interfaces exposed by
+`:trackkit`, `:ads` and `:paykit`. Those modules do not depend on Firebase.
 
 ## Requirements
 
@@ -20,11 +20,11 @@ implementations; the app wires each one in a single line.
 **Consent Mode defaults are yours to declare.** Put the `google_analytics_default_allow_*`
 `<meta-data>` entries in the **app** manifest, one per consent type the sink sets
 (`ANALYTICS_STORAGE`, `AD_STORAGE`, `AD_USER_DATA`, `AD_PERSONALIZATION`). This module's manifest
-declares none, so it cannot override yours — and without them the sink's resolved UMP decision has
-nothing to sit on.
+declares none. When both Tracker consent axes are unknown, the sink leaves Firebase consent
+unchanged; configure the initial values in the app.
 
-`firebase-bom`, `firebase-analytics` and `firebase-config` are exported as `api` — do not declare
-them again unless you want a different BOM version.
+`firebase-bom`, `firebase-analytics` and `firebase-config` are exported as `api`, so they are
+available transitively. Align any additional Firebase dependencies with the BOM used by your app.
 
 ## Installation
 
@@ -66,11 +66,13 @@ PayKit.configSource(FirebaseConfigSource())
 
 Installing a source does not fetch. The fetch happens when the host calls `AdConfig.refresh(...)`
 and `PayKit.sync(...)`, normally on the splash screen. Both go through `RemoteConfigClient`, which
-runs one `fetchAndActivate` and hands the same result to every caller.
+shares an in-flight fetch and caches a successful result for the process. A failed or timed-out
+fetch allows a later call to retry.
 
-`collectionFollowsConsent = true` (the default) also calls `setAnalyticsCollectionEnabled(false)` on
-denial; pass `false` to keep pure Consent Mode, where Firebase still sends consent-less pings —
-which is what keeps `first_open` and retention intact after a UMP refusal.
+`collectionFollowsConsent = true` (the default) also sets analytics collection to the value of
+`consent.analyticsGranted`. With `false`, the sink still calls Firebase `setConsent` but does not
+change the collection-enabled flag. Choose this separately from the ad-personalization setting;
+an ads denial alone is not an analytics denial in Tracker.
 
 Both sources take the Remote Config parameter name as a constructor argument, so
 `FirebaseAdConfigSource(key = "…")` and `FirebaseConfigSource(key = "…")` work if you name yours
@@ -79,8 +81,8 @@ differently.
 ### Default event parameters
 
 `setDefaultEventParameters` is an instance member, so keep the sink in a variable. The params ride on
-every Firebase event, including `first_open`, `session_start` and `screen_view`. Safe to call before
-`Tracker.install`; pass `null` to clear.
+subsequent Firebase events, including automatically collected events and `screen_view`. It can be
+called before `Tracker.install`; pass `null` to clear.
 
 ```kotlin
 val sink = FirebaseSink(collectionFollowsConsent = false)
@@ -108,7 +110,7 @@ Only values published on the console are read — an in-app default or a blank s
 | Parameter set, `AdConfig.refresh()` still returns false | The value is an in-app default, is blank, or the document has no placements | Publish the value on the console |
 | `AdConfig.refresh()` returns false on a debug build | Any debuggable build is pinned to its assets by `AdRemoteConfig.initializeFromAssets` | Expected; use a release build, or `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` |
 | Warning `sink 'firebase' already registered` | `Tracker.addSink(FirebaseSink())` called twice | Register it once |
-| `first_open` and retention drop after users decline the UMP form | `collectionFollowsConsent = true` | Pass `false` |
+| Analytics collection is disabled after a consent update | `collectionFollowsConsent = true` follows the analytics axis | Inspect `Tracker.currentConsent` and the chosen collection policy |
 | A `Boolean` param reads as `1` / `0` in GA4 | GA4 stores String, long and double only | Expected; the sink encodes rather than drops it |
 
 ## License

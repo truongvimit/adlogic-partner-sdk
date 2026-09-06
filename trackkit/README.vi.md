@@ -2,10 +2,10 @@
 
 > Một facade analytics duy nhất mà mọi module báo cáo qua, và mỗi vendor là một sink.
 
-Mọi thứ mà app, `:ads`, `:onboardkitorigin`, `:paykit` và `:billingkit` phát ra đều đi qua
-`io.trackkit.Tracker`, nhờ đó việc chặn theo consent, tham số mặc định, kiểm tra tên theo chuẩn GA4,
-khử trùng lặp và cộng dồn doanh thu quảng cáo chỉ được cài đặt một lần. Phần lõi không phụ thuộc
-vendor: vendor đến dưới dạng các module sink riêng.
+`io.trackkit.Tracker` xử lý analytics của SDK do `:ads`, `:onboardkitorigin`, `:paykit` và
+`:billingkit` phát ra. App có thể gửi event riêng qua cùng facade để áp dụng consent, tham số mặc
+định, kiểm tra tên theo chuẩn GA4, khử trùng lặp và cộng dồn doanh thu quảng cáo. Phần lõi không phụ
+thuộc SDK vendor; các sink kết nối nó với dịch vụ analytics.
 
 Phân tầng module: **[ARCHITECTURE.md](ARCHITECTURE.md)** · English: [README.md](README.md) ·
 हिन्दी: [README.hi.md](README.hi.md)
@@ -35,7 +35,8 @@ khai báo khi bạn viết một `TrackSink` độc lập.
 
 ## Tích hợp
 
-Gọi `Tracker.install` ở dòng đầu tiên của `Application.onCreate()`, rồi đăng ký các sink.
+Gọi `Tracker.install` sau `super.onCreate()` và trước khi khởi tạo các module phát event, rồi đăng
+ký các sink.
 
 ```kotlin
 override fun onCreate() {
@@ -49,9 +50,9 @@ override fun onCreate() {
 }
 ```
 
-Đó là toàn bộ phần tích hợp. Bạn không cần bọc callback quảng cáo và cũng không cần map ad unit sang
-placement: `:ads` là nơi tạo ra các đối tượng quảng cáo, nên `:ads` báo cáo vòng đời quảng cáo và các
-impression có doanh thu.
+SDK báo cáo vòng đời và impression có doanh thu của các đối tượng quảng cáo do nó quản lý. Sink
+nhận các báo cáo đó mà không cần bọc callback của host. Với tích hợp quảng cáo riêng, cung cấp
+placement qua `PlacementRegistry` hoặc payload event của bạn.
 
 Event phát ra trước `install()` sẽ được buffer — 128 mục, sau đó những cái cũ nhất bị bỏ kèm cảnh
 báo. Lần `install()` thứ hai bị bỏ qua. Không có sink nào thì mọi event vẫn được validate rồi bỏ đi.
@@ -65,13 +66,15 @@ Ngoài ra trên `Tracker`: `track(name, params)`, `track(TrackEvent)`, `screen(n
 
 ## Consent
 
-Đừng gọi `Tracker.setConsent` khi `:ads` có trên classpath.
-`com.ads.module.consent.ConsentCenter` là nơi duy nhất gọi nó, xử lý UMP cho cả process, và truyền
-`Tracker.setConsent(analytics = true, ads = personalized)`.
+Khi dùng `com.ads.module.consent.ConsentCenter`, mỗi lần cập nhật consent sẽ gọi
+`Tracker.setConsent(analytics = true, ads = personalized)`. Đây là cách ánh xạ hiện tại của SDK;
+trục ads mô tả cá nhân hóa, không phải quyền gửi request quảng cáo. Dùng
+`ConsentCenter.canRequestAds()` để kiểm tra quyền gửi request.
 
-Trục analytics luôn là `true`: UMP chỉ hỏi về quảng cáo, nên một lần từ chối không được phép xóa luôn
-`first_open`, retention và funnel. Chỉ tự gọi nó trong app không có `:ads`, và gọi từ một chỗ duy
-nhất.
+Cần điều phối các lần cập nhật consent: lần cập nhật tiếp theo từ `ConsentCenter` sẽ ghi đè lời gọi
+`Tracker.setConsent` trực tiếp, kể cả giá trị analytics. Khi không dùng `ConsentCenter`, host cung
+cấp consent cho Tracker từ flow riêng. Consent analytics và cá nhân hóa quảng cáo là hai thiết
+lập riêng; chỉ từ chối ads không tắt analytics theo cách ánh xạ này.
 
 ## Event
 
@@ -80,13 +83,12 @@ doanh thu, funnel mở app lần đầu, IAP, consent — và `TrackkitEvents.al
 runtime. Hãy mở nó trong IDE thay vì chép lại một danh sách sẽ cũ đi; mỗi class event đều tự mô tả ý
 nghĩa của nó.
 
-Mọi event còn mang theo `app_vc`, `sdk_ver`, `session_no`, `install_day`, và `consent_ads` sau khi
-UMP có kết quả.
+Event gửi qua `Tracker.track` còn mang theo `app_vc`, `sdk_ver`, `session_no`, `install_day`, và
+`consent_ads` sau khi consent được cập nhật.
 
-**Một bước bạn phải tự làm:** GA4 có lưu custom parameter nhưng sẽ không báo cáo chúng cho tới khi
-được đăng ký làm custom dimension. Hãy đăng ký những tham số mà dashboard của bạn cần — các hằng số
-nằm trên `TrackkitEvents` dưới dạng `PARAM_*` — nếu không chúng chỉ hiện trong DebugView và BigQuery.
-Screen view không phải event: `Tracker.screen()` để mỗi sink tự phát theo cách của nó.
+Dùng các hằng `PARAM_*` trên `TrackkitEvents` khi cấu hình custom dimension cho báo cáo GA4.
+`Tracker.screen()` gọi `TrackSink.onScreen`; `FirebaseSink` chuyển lời gọi này thành event
+`screen_view` của Firebase.
 
 ## Event tự định nghĩa
 
@@ -141,9 +143,9 @@ log kèm `id` của nó; các sink còn lại vẫn nhận được event. `addS
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | Không gì tới được vendor; logcat báo `install() ran with no sink` | chưa đăng ký sink nào | `Tracker.addSink(FirebaseSink())` hoặc `TrackSink` của bạn |
-| `N events were dropped before install (buffer overflow)` | hơn 128 event phát ra trước `install()` | chuyển `Tracker.install` lên dòng đầu của `onCreate()` |
+| `N events were dropped before install (buffer overflow)` | hơn 128 event phát ra trước `install()` | cài Tracker trước khi các module bắt đầu phát event |
 | `install() called twice` hoặc `sink 'x' already registered` | gọi `install()` hai lần, hoặc hai sink trùng `id` | giữ một `install()`; cho mỗi sink một `id` riêng |
-| Mọi event ngừng ngay sau khi mở app | `consentPolicy = DROP_UNTIL_GRANTED` và consent analytics chưa được cấp | với `:ads` thì trục analytics luôn được cấp; kiểm tra `ConsentCenter.request` đã chạy chưa |
+| Mọi event ngừng ngay sau khi mở app | `consentPolicy = DROP_UNTIL_GRANTED` và consent analytics chưa được cấp | kiểm tra `Tracker.currentConsent` và nơi chịu trách nhiệm cập nhật consent |
 | `ad_revenue_total` đứng ở 0 dù `ad_impression` vẫn về | impression ở đơn vị tiền khác `reportingCurrency` | đặt `TrackerConfig.reportingCurrency` bằng đơn vị tiền của tài khoản |
 | `IllegalArgumentException: Trackkit: …` trên production | `strictValidation` còn `true` ở bản release | nối nó với `BuildConfig.DEBUG` |
 

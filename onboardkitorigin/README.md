@@ -14,7 +14,7 @@ Tiếng Việt: **[README.vi.md](README.vi.md)** · हिन्दी: **[READM
 |---|---|
 | minSdk / compileSdk / JDK | 24 / 36 / 17 |
 | Namespace, resource prefix, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
-| Firebase | `google-services.json` + `com.google.gms.google-services`; without it every `ob_*` key stays at its default |
+| Firebase | `google-services.json` + `com.google.gms.google-services` to fetch hosted `ob_*` values |
 | Ad unit ids | `assets/ad_config.json` via `AdRemoteConfig`, or literals in `AdsConfig` |
 
 ## Installation
@@ -48,7 +48,7 @@ override fun onCreate() {
     initTracking()                                    // Tracker.install + Tracker.addSink
     AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
     AdConfig.install(FirebaseAdConfigSource())        // optional: remote ad config
-    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000, testDeviceHashedId = "…"))
+    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000))
     ERainAd.getInstance().init(this, buildERainAdConfig())   // see ../ads/README.md
     ERainTuning.install()                             // once, after ERainAd.init
 
@@ -84,18 +84,17 @@ private fun buildConfig() = onboardKitConfig {
 }.getOrThrow()
 ```
 
-`onboardKitConfig { }` returns a `Result` — it validates and rejects rather than crashing later.
+`onboardKitConfig { }` returns a `Result` containing the validated config or validation errors.
 `SplashConfig`, `LanguageConfig`, `BehaviorConfig`, `SystemBarConfig`, `QuestionConfig` and
-`AdsConfig` each carry their own knobs, documented field by field in KDoc; the defaults are a
-working flow, so set only what you want to change.
+`AdsConfig` document their options and defaults in KDoc. Configure the content and ad slots your
+flow needs.
 
 **Ad slots.** A `null` slot shows no ad. Every native and interstitial slot is a waterfall: ids
 ordered highest floor first, one request at a time, stopping at the first fill. `AdsConfig` lists
 every slot the flow can fill.
 
-To keep the ids in `ad_config.json` instead of hard-coding them, feed the slots from
-`AdRemoteConfig`. The SDK has no helper for this — these three are app-side glue, and they are all
-you need:
+To keep the ids in `ad_config.json` instead of hard-coding them, map `AdRemoteConfig` values into
+your slots with app-side helpers:
 
 ```kotlin
 private fun AdRemoteConfig?.native(baseKey: String): NativeAdUnit? =
@@ -110,12 +109,14 @@ private fun AdUnitConfig?.toBanner(): BannerAdUnit? =
 ```
 
 ```kotlin
-val ads = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
-ads = AdsConfig(
-    splashInterstitial = ads.interstitial("inter_splash"),
-    languageNative     = ads.native("native_lang"),
-    contentStepNative  = ads.native("native_ob1"),
-)
+val remoteAds = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
+val config = onboardKitConfig {
+    ads = AdsConfig(
+        splashInterstitial = remoteAds.interstitial("inter_splash"),
+        languageNative     = remoteAds.native("native_lang"),
+        contentStepNative  = remoteAds.native("native_ob1"),
+    )
+}.getOrThrow()
 ```
 
 **Steps.** Instead of `defaultSteps()`, list your own with `steps(vararg StepDefinition)` or
@@ -141,8 +142,9 @@ private fun AdRemoteConfig?.templateOf(
 
 ### 3. Splash
 
-Your launcher activity extends `ObSplashActivity`. Consent, billing, remote fetch, ad requests,
-minimum display, the interstitial and the navigation out are inside; you fill in hooks.
+Your launcher activity extends `ObSplashActivity`. The SDK handles consent, billing, remote fetch,
+ad loading, notification permission, minimum display time and navigation. Override hooks for your
+app-specific setup.
 
 ```kotlin
 class SplashActivity : ObSplashActivity() {
@@ -155,9 +157,27 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-Declare it with `android:exported="true"`, a MAIN/LAUNCHER filter, an
-AppCompat/MaterialComponents theme, and the orientation pair — `screenOrientation` plus
-`configChanges` — that every SDK screen already declares:
+`SplashConfig.notificationPermissionEnabled` defaults to `true`. On Android 13+ with target SDK
+33+, splash requests `POST_NOTIFICATIONS` after the consent step resolves. The library declares
+this permission. An existing grant, a previous automatic request result, or a removed manifest
+permission skips the prompt. Denial or cancellation does not block the flow and does not grant
+ad consent. To manage notification permission in your app, disable the automatic request in your
+config:
+
+```kotlin
+splash = SplashConfig(notificationPermissionEnabled = false)
+```
+
+Consent and remote fetch may run in parallel. Eligible splash banner/interstitial loads may
+continue while the notification prompt is open. Splash observes the configured banner/interstitial
+wait limits, minimum display time and any notification result. Before preloading the next destination's
+native ads, it waits for a resumed Activity with window focus, then starts those preloads before
+attempting the splash interstitial and handing off the flow. The banner wait defaults to `0`;
+the interstitial wait ends on load completion or its configured budget, so this does not require
+every ad to fill.
+
+Declare the launcher activity with `android:exported="true"`, a MAIN/LAUNCHER filter and an
+AppCompat/MaterialComponents theme. For a portrait splash, use:
 
 ```xml
 <activity
@@ -166,29 +186,33 @@ AppCompat/MaterialComponents theme, and the orientation pair — `screenOrientat
     android:exported="true"
     android:screenOrientation="portrait"
     android:theme="@style/Theme.Splash">
+    <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+    </intent-filter>
+</activity>
 ```
 
-Without `configChanges` the splash restarts from the top on every rotation — losing its ad
-requests and its minimum-display clock each time. `uiMode|fontScale` are two more than the SDK's
-own screens declare, and they belong here: a splash holds three seconds of nothing, so absorbing a
-dark-mode or text-size change costs it nothing, while an onboarding step re-inflates on purpose.
-See `BehaviorConfig.lockPortrait` for what the SDK does on its side and how to opt out.
+`configChanges` lets this Activity handle the listed changes without recreation. If you retain
+`uiMode|fontScale`, update any affected custom views yourself. Other causes can still recreate
+the Activity. For landscape or tablet support, review the manifest orientation and set
+`BehaviorConfig.lockPortrait = false`.
 
 - Do not call `OnboardingSdk.start()` here — it runs once the pipeline resolves.
-- Do not override `onConsentRequired()`; its default runs the UMP flow through `ConsentCenter` in
-  `:ads`. For a custom consent provider, publish its request and personalization decisions through
-  `ConsentCenter.setHostConsent(...)` before completing the override. Returning `true` alone no
-  longer grants permission; see [5.1.0 migration](../MIGRATION-5.1.0.md).
+- Keep the default `onConsentRequired()` for UMP through `ConsentCenter` in `:ads`. For a custom
+  consent provider, publish its request and personalization decisions through
+  `ConsentCenter.setHostConsent(...)` before completing the override. Returning `true` alone
+  does not authorize ad requests. `OnboardingSdk.setCanRequestAds(false)` remains a separate
+  restriction even when consent permits ads.
 - If you override `onDestroy()`, call `super.onDestroy()` — `ConsentCenter.detach(this)` lives there.
 
 Later, from anywhere: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
 
 ## Entering from a notification, widget or uninstall shortcut
 
-A tap that names a feature has to survive the whole first-open flow and then open that feature
-without covering the ad it just paid for. That wiring ships as `SplashEntry` (`NOTIFICATION`,
-`WIDGET`, `UNINSTALL`) — the entry intent, the ad unit it spends and the timing are answered for
-you. What stays yours is the extras that name a feature and the screen each entry lands on.
+`SplashEntry` (`NOTIFICATION`, `WIDGET`, `UNINSTALL`) routes feature launches through splash,
+selects an entry-specific interstitial unit and controls when the destination opens. Supply the
+feature extras and handle the destination in your listener.
 
 **1. Fire the entry's intent at the splash, not at your main screen.** The tap starts a session, so
 it takes the same route a launcher tap does. `SplashEntry.intent` tags the launch and already sets
@@ -224,11 +248,11 @@ listener = OnboardingListener { context, outcome ->
 }
 ```
 
-`NEW_TASK` only, never `CLEAR_TASK`: this can run while the ad is on screen, and clearing the task
-would finish the Activity hosting it. Read your extra in **both** `onCreate` and `onNewIntent` — a
-cold tap arrives in the first, a warm one in the second — and consume it as you read it.
+Use `NEW_TASK` without `CLEAR_TASK` for this handoff: it can run while the ad is on screen, and
+clearing the task would finish its host Activity. Handle extras in **both** `onCreate` and
+`onNewIntent`, since delivery depends on the destination's launch mode and task state.
 
-**4. The ad unit and the timing are answered for you.** A `SplashEntry` launch spends its entry's
+**4. Entry-specific ads and navigation timing.** A `SplashEntry` launch uses its entry's
 key (`inter_noti`, `inter_widget`, `inter_uninstall`), full waterfall included, falling back to the
 regular splash resolution when that key is missing or disabled. It also gets `AFTER_AD`, while a
 launcher tap keeps `UNDER_AD` — the same trade-off as `InterNextAction` in
@@ -260,7 +284,7 @@ Splash binds each id null-safely, so one you leave out is skipped. A content-ste
 
 For a screen of your own inside the flow, `showInterstitial(placement, onNext, onFinished)` is a
 public extension on `AppCompatActivity`: start the destination in `onNext` (under the ad), finish the
-current screen in `onFinished`. Both run at most once, `onNext` always first, on every path; never
+current screen in `onFinished`. Each callback runs at most once, with `onNext` before `onFinished`; never
 call `finish()` from `onNext`. There is no public native equivalent — render your own natives through
 `NativeAdHelper` in `:ads`.
 
@@ -282,10 +306,9 @@ and every checkpoint passes straight through. Shipping `:paykit`? Use its ready-
 
 ## Remote config
 
-Every `ob_*` key, its type and its default live in `io.onboardkit.remote.ObRemoteKeys` — one object,
-each key documented where it is declared. Publish nothing and the flow runs on those defaults;
-publish a key on the Firebase console to override it. Nothing here needs app code: the splash's
-remote fetch applies them.
+Find each `ob_*` key, type and default in `io.onboardkit.remote.ObRemoteKeys`. The SDK restores
+cached flags on startup and uses defaults when no cache exists. With Firebase configured, splash
+fetches and applies remote values automatically. Publish overrides in the Firebase console.
 
 ## Analytics
 
@@ -294,8 +317,8 @@ wired — see [`../trackkit/README.md`](../trackkit/README.md) for the event nam
 SDK's own events instead, add `analyticsPlugin { event -> log(event.name, event.params) }` inside
 `install`, or collect `OnboardingSdk.events` / `.state`.
 
-`isCompleted()`, `selectedLanguage()`, `answers()`, `markCompleted()` and `reset()` read and clear
-persisted progress.
+`isCompleted()`, `selectedLanguage()` and `answers()` read persisted progress. `markCompleted()`
+marks the flow complete; `reset()` clears its progress. These are suspend functions.
 
 ## Troubleshooting
 
@@ -304,7 +327,7 @@ persisted progress.
 | Flow never runs | `configure()` failed, or ran before `install()` | Log the `Result`; call `install()` first |
 | User never leaves the flow | No `OnboardingListener`, or it ignores `Skipped` | Handle all three outcomes |
 | Every placement says `no_provider` | `adProvider` left null | `adProvider = ERainAdProvider()` |
-| Every placement says `consent_not_granted` | The UMP form is still on screen unanswered, or there was no network to consult UMP with | Answer the form; set `ConsentOptions(testDeviceHashedId = …)` so it appears on a test device |
+| Every placement says `consent_not_granted` | Consent has not authorized requests, or the host disabled them | Check `ConsentCenter.canRequestAds()` and `OnboardingSdk.canRequestAds()`; complete UMP or publish the custom provider result |
 | Ad-only page never appears | No usable unit for `fullScreenStepNative` / `stepNatives[OB3]` | Configure one; the remote step flag alone is not enough |
 | Splash banner never shows | `ob_splash_ad_container` or the `layout_banner_control` include is missing | Add both to your splash layout |
 

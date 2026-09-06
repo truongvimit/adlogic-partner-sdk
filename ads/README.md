@@ -65,7 +65,7 @@ override fun onCreate() {
         facebookClientToken = getString(R.string.facebook_client_token)
         listDeviceTest = listOf("1E25A7D66221E2116062EA114AFE2982")
     }
-    // 6. Adjust, MobileAds.initialize, AppOpenManager, FacebookSdk. Never call MobileAds.initialize yourself.
+    // 6. Initializes Adjust, MobileAds, AppOpenManager and FacebookSdk.
     ERainAd.getInstance().init(this, adConfig)
 
     // Screens the app-open ad must never cover.
@@ -79,16 +79,17 @@ override fun onCreate() {
 | 2 | 6 | it binds ad unit ids to placements; paid events report `unknown` otherwise |
 | 4 | the first `ConsentCenter.request()` | `request()` reads the options set here |
 
-Use `ERainAdConfig.ENVIRONMENT_DEVELOP` on debug builds. `ERainAdConfig` carries the rest of the
-init knobs — read its KDoc for the current set. Selling IAP? Call `Billing.install(this)` from
-`:billingkit` before the first ad request; it plugs the premium signal into the ads gate.
+Use `ERainAdConfig.ENVIRONMENT_DEVELOP` on debug builds. `ERainAdConfig` documents the remaining
+initialization options. For IAP, initialize `AppPurchase` and then call
+`com.ads.module.billing.Billing.install(this)` from `:billingkit` before the first ad request;
+it connects the premium signal to the ads gate. See [billingkit setup](../billingkit/README.md).
 
 ## The ad config file
 
-Ship `app/src/main/assets/ad_config.json` — the name is fixed. Without it every placement is
-disabled silently: the SDK logs `No ad config found` and hands back a disabled `AdUnitConfig`. Root
-is an object, each key a placement name you choose. Unknown keys are skipped; a missing key never
-throws.
+Ship `app/src/main/assets/ad_config.json`, or install a document with
+`AdRemoteConfig.initializeFromJson(json)`. With no document loaded, placement lookups return a
+disabled `AdUnitConfig`. The JSON root is an object; each key is a placement name you choose.
+A missing placement also returns a disabled config.
 
 ```json
 {
@@ -106,14 +107,15 @@ documented field by field on `AdUnitConfig`; open it in the IDE for the current 
 dropping disabled floors, blanks and repeats. Those eleven keys are the ceiling; past that, list the
 ids in one key's `ids` array.
 
-**Remote refresh.** An installed source is read only when you ask. `AdConfig.refresh(timeoutMs)` is
-a suspend function that fetches, parses and swaps the active document; nothing else applies a remote
-one. Call it from the splash: `lifecycleScope.launch { AdConfig.refresh() }`.
+**Remote refresh.** `AdConfig.refresh(timeoutMs)` is a suspend function that fetches and applies
+the document from the installed source. `ObSplashActivity` calls it during splash; for a custom
+splash, call `lifecycleScope.launch { AdConfig.refresh() }` after installing the source.
 
-**Debug pin.** A debuggable build reads `assets/ad_config_debug.json` first, falling back to
-`ad_config.json`. Either way a debuggable build blocks remote overrides for the whole process, so a
-debug run can never spend live ad units — reverse that with
-`AdRemoteConfig.setAllowRemoteOverrideInDebug(true)`.
+**Debug config.** A debuggable build reads `assets/ad_config_debug.json` first, falling back to
+`ad_config.json`. A successfully loaded asset document blocks remote refresh overrides by default;
+`AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` permits them. This does not replace the ids
+inside either file with test ids. Supply test ad units in the debug document or configure the
+device for testing. Explicit `initializeFromJson(json)` calls are not blocked by this setting.
 
 ## Showing ads
 
@@ -144,7 +146,7 @@ declare. `BannerType` picks the AdMob request: `Normal`, `LargeAnchored`, `Colla
 each variant's KDoc states the exact request it makes.
 
 ```kotlin
-val cfg = BannerAdConfig(tiers, config.isUsable, true, BannerType.Collapsible())
+val cfg = BannerAdConfig(tiers, config.isUsable, false, BannerType.Collapsible())
 BannerAdHelper(activity, lifecycleOwner, cfg)
     .attachInto(binding.frBanner)
     .also { it.placement = "banner_home" }
@@ -152,6 +154,10 @@ BannerAdHelper(activity, lifecycleOwner, cfg)
 ```
 
 `Collapsible(gravity)` must match the slot's screen edge (`"top"` / `"bottom"`).
+The example leaves refresh to AdMob: `canReloadAds=false` and the default
+`enableAutoReload=false`. To use SDK resume/timer reload instead, disable console refresh for
+every tier and opt in through `BannerAdConfig`. `BannerAdParam.Reload` requests an ordinary
+anchored banner; an explicit `Request` keeps the configured type, including collapsible.
 
 **Interstitial** (`com.ads.module.helper.interstitial`) — one buffered ad per placement,
 single-use, main thread only. `onComplete()` fires once on every path: hang navigation there, not on
@@ -165,9 +171,14 @@ InterstitialAdManager.show(activity, "inter_back", object : InterShowCallback() 
 })
 ```
 
-A show the interval rule declines **keeps its buffer** — the ad is withheld, not spent. To branch
-without consuming it, ask first with `InterstitialAdManager.canShow(context, placement)`, or read
-`showSkipReason(...)` for why not.
+The interval gate keeps its buffer when it declines a show. To check eligibility, use
+`InterstitialAdManager.canShow(context, placement)` or `showSkipReason(...)`.
+A lifecycle rejection before vendor show returns `SHOW_IN_BACKGROUND` and restores a still-valid
+fill unless it was released or replaced; retry only at a new foreground trigger.
+
+For a trigger that may wait for a fill, use `InterstitialAdManager.loadAndShow(...)` with
+`InterLoadAndShowOptions`. Its default 8-second timeout bounds the caller's wait for loading,
+not show preparation or the time the ad remains visible.
 
 **Rewarded** (`com.ads.module.helper.reward`) — `loadAndShow` runs gate → load → show in one call;
 `onSuccess` fires only when the user earned the reward and the ad closed. `load` / `isReady` /
@@ -187,7 +198,7 @@ under the ad or after it.
 | Value | `onComplete` fires | Use it for |
 |---|---|---|
 | `AfterDismiss` | after the ad is gone | a destination that must not exist behind the ad — camera, audio, video, or one that opens another Activity on entry |
-| `UnderAd` | on the same tick as `show()` | everything else: the screen inflates under the ad and is painted when it closes |
+| `UnderAd` | on the same tick as `show()` | a destination that can prepare behind the ad without opening another Activity |
 
 `AfterDismiss` is the SDK default. Set the app-wide default once from `Application.onCreate`, and
 override per presentation where a placement needs the other one:
@@ -198,40 +209,32 @@ InterstitialAdManager.show(activity, "inter_camera", callback,
     nextAction = InterNextAction.AfterDismiss)                       // this show only
 ```
 
-`UnderAd` is the optimization and it is wrong in exactly one case: the destination issues a second
-`startActivity` on entry. GMA's ad Activity lives in your own task, so that launch is stacked *on
-top of* the ad and covers the impression. Two rules follow:
-
-- Start the next screen from `onComplete` and nothing else. Calling `finish()` there under `UnderAd`
-  tears the host out from under the ad and the module drops the impression.
-- The ad's window is translucent while the creative animates in, so a destination started under it
-  plays its entry transition in full view. Suppress that on the destination —
-  `overridePendingTransition(0, 0)` right after starting it, or `Intent.FLAG_ACTIVITY_NO_ANIMATION`
-  — rather than delaying the start, which would break the launch order the ad depends on.
+Start the next screen from `onComplete`. With `UnderAd`, that callback runs before dismissal:
+keep the showing host alive, and avoid launching another Activity from the destination's startup.
+Use `AfterDismiss` when the destination needs exclusive screen access. Check destination transitions
+with the ad formats and mediation adapters your app uses.
 
 ### Keeping interstitials buffered
 
-Opt-in. Keeps one ad buffered per placement on the frequency clock, so a screen no longer pays for
-a load it may never spend.
+Opt-in. Preloads one ad per placement according to its interval settings.
 
 ```kotlin
 InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf("inter_all", "inter_back")))
 InterstitialAutoBuffer.start(this)   // after AdRemoteConfig.initializeFromAssets and ERainAd.init
 ```
 
-It buys when the interval expires, not when an ad is shown. It shares one store with explicit `load`
-calls and never doubles them, takes its ids from `AdRemoteConfig.tiersFor` so a new `_high` floor
-needs no code change, waits for the UMP answer, skips premium users and pauses a placement that will
-not fill. `InterstitialBufferOptions` carries the timing knobs; `InterstitialAutoBuffer.reserve(...)`
-marks placements it must never touch.
+It shares the interstitial store with explicit `load` calls and reads ids through
+`AdRemoteConfig.tiersFor`. Requests remain subject to consent, premium and placement gates.
+`InterstitialBufferOptions` documents the interval and retry settings;
+`InterstitialAutoBuffer.reserve(...)` excludes placements from automatic buffering.
 
 ## Native ad layout contract
 
 Your native layout's root must be `com.google.android.gms.ads.nativead.NativeAdView`. The SDK binds
-by id; a missing id means that asset is not shown. `@id/ad_media` and `@id/ad_headline` are
-mandatory — AdMob policy. Optional: `@id/ad_body`, `@id/ad_call_to_action`, `@id/ad_app_icon`,
-`@id/ad_price`, `@id/ad_stars`, `@id/ad_advertiser`. The module declares every id; your layout only
-references them.
+assets by id: `@id/ad_media`, `@id/ad_headline`, `@id/ad_body`, `@id/ad_call_to_action`,
+`@id/ad_app_icon`, `@id/ad_price`, `@id/ad_stars` and `@id/ad_advertiser`.
+A missing id leaves that asset unbound. The module declares these ids; your layout references them.
+Use the supplied layouts as examples for the assets your chosen ad format requires.
 
 To let the config file reorder blocks, add a vertical `LinearLayout` `@id/ad_container` holding
 `@id/block_icon_headline`, `@id/ad_body`, `@id/ad_media` and `@id/ad_call_to_action`. Without
@@ -247,10 +250,14 @@ ConsentCenter.request(this, screen = "splash") { mayRequestAds ->               
 ConsentCenter.detach(this)   // onDestroy of every Activity that called request()
 ```
 
-`mayRequestAds = false` means "do not request yet" — form unanswered, or no network — not "the user
-refused". A refusal completes the step and ads still run non-personalized, with
-`ConsentCenter.canPersonalize()` carrying that verdict into the request extras. Hang restart logic on
-`onFormAnswered`, never `onCompleted`. Skipping `detach` leaks the Activity for the timeout window.
+`mayRequestAds` reports request authorization from UMP or an explicit host-managed decision.
+When false, do not request ads. A timeout, network error or personalization choice does not grant
+authorization. `ConsentCenter.canPersonalize()` is separate: when requests are authorized but
+personalization is not, the SDK applies non-personalized request extras.
+
+Use `onCompleted` for the request's completion and `onFormAnswered` only when you need to observe
+an answer to a form shown by that request. Call `detach` from the requesting Activity's `onDestroy`
+to release its pending callbacks. Helpers also block requests while a consent form is showing.
 
 Using `:onboardkitorigin`? `ObSplashActivity` runs this whole flow for you — do not call `request()`
 yourself.
@@ -279,9 +286,9 @@ Your app reads these and passes the values in; `:ads` does not fetch them itself
 
 `ads/consumer-rules.pro` applies to your build automatically — nothing to copy. It keeps the public
 API of `com.ads.module.{ads,helper,config,consent}` and `AdsMultiDexApplication`, the Adjust /
-advertising-id / install-referrer reflection targets, and the Pangle and Mintegral SDKs. AppLovin,
-Vungle, Unity Ads, ironSource and the Facebook SDK ship their own rules; R8 full mode can undercut
-them, so add `-dontwarn` where it reports.
+advertising-id / install-referrer reflection targets, and the Pangle and Mintegral SDKs. Mediation
+dependencies also supply consumer rules. For intentionally excluded adapters, follow the exclusion
+instructions in the [root README](../README.md).
 
 ## Troubleshooting
 
