@@ -1,337 +1,198 @@
 # OnboardKit
 
-> Luồng mở app lần đầu đóng gói thành thư viện: splash → chọn ngôn ngữ → các bước onboarding →
-> quảng cáo full-screen (tùy chọn) → câu hỏi khảo sát (tùy chọn) → app của bạn.
+Splash → chọn ngôn ngữ → onboarding → câu hỏi/paywall tùy chọn → app của bạn.
+SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình; app cung cấp nội dung và màn đích cuối cùng.
 
-Quảng cáo, remote config, lưu trạng thái và funnel analytics đều nằm bên trong. Bạn chỉ cung cấp ad
-unit id, nội dung hiển thị, và nơi cần đi tới khi luồng kết thúc.
+[English](README.md) · [हिन्दी](README.hi.md)
 
-English: **[README.md](README.md)** · हिन्दी: **[README.hi.md](README.hi.md)**
+## Trước khi tích hợp
 
-## Yêu cầu
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| Namespace, resource prefix, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
-| Firebase | `google-services.json` + `com.google.gms.google-services` để fetch giá trị `ob_*` từ server |
-| Ad unit id | qua `AdRemoteConfig` từ `assets/ad_config.json`, hoặc ghi thẳng trong `AdsConfig` |
-
-## Cài đặt
+- Dùng minSdk 24, compileSdk 36 và JDK 17. Làm theo [cấu hình build chung](../README.md) và dùng cùng một tag đã phát hành cho mọi module.
+- Với provider quảng cáo tích hợp sẵn, hoàn thành [hướng dẫn ads](../ads/README.md) trước: metadata AdMob/Meta, asset cấu hình quảng cáo và `ERainAd.init()` trong Application.
+- Nếu cần funnel, cài `Tracker` và sink trước OnboardKit; xem [Trackkit](../trackkit/README.md).
+- Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-// Thay <tag> bằng một tag tại https://github.com/truongvimit/adlogic-partner-sdk/tags
 def sdkVersion = '<tag>'
-
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-Phải khai báo `:ads` tường minh — bên trong module này nó là dependency `implementation`, nên
-`com.ads.module.*` sẽ không nằm trên compile classpath của bạn. `:trackkit` được export bằng `api`,
-`consumer-rules.pro` đi kèm module, và các activity của SDK đã nằm trong manifest thư viện — đừng
-khai báo lại.
+## 1. Install và configure trong Application
 
-## Tích hợp
-
-### 1. `Application.onCreate()`
-
-`Tracker.install()` trước tiên — event phát ra sớm hơn chỉ được buffer. `OnboardingSdk.install()`
-trước `configure()` — config truyền vào trước install sẽ bị bỏ, và khi đó toàn bộ luồng bị skip.
+Ghép đoạn này vào Application hiện có **sau bước khởi tạo ads bên trên**; không khởi tạo ERain hai lần.
+Ví dụ dùng ad unit test của Google. Thay bằng unit của bạn khi phát hành và dùng `MainActivity` của app.
+Import `R`, `BuildConfig` và `MainActivity` của app nếu khác package; `io.onboardkit.config.*` đã bao gồm mọi kiểu config bên dưới.
 
 ```kotlin
-override fun onCreate() {
-    super.onCreate()
-    initTracking()                                    // Tracker.install + Tracker.addSink
-    AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
-    AdConfig.install(FirebaseAdConfigSource())        // tùy chọn: remote ad config
-    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000))
-    ERainAd.getInstance().init(this, buildERainAdConfig())   // xem ../ads/README.md
-    ERainTuning.install()                             // một lần, sau ERainAd.init
+import android.app.Application
+import android.content.Intent
+import io.onboardkit.OnboardingSdk
+import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.config.*
+import io.onboardkit.core.OnboardingListener
+import io.onboardkit.core.OnboardingOutcome
 
-    OnboardingSdk.install(this) {
-        adProvider = ERainAdProvider()                // null nếu muốn luồng không quảng cáo
-        paywallGate = OnboardKitPaywallGate()         // tùy chọn, từ :paykit
-        listener = OnboardingListener { ctx, outcome -> goToMain(ctx, outcome) }
-    }
-    OnboardingSdk.configure(buildConfig()).onFailure { Log.e("OnboardKit", "rejected", it) }
-    OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)   // log OB_FLOW
-}
-```
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        // Complete ERainAd.init here; add Tracker/sinks if needed (ads guide).
+        ERainTuning.install()
 
-Listener phải điều hướng ở cả `OnboardingOutcome.Completed`, `Skipped` **và** `Aborted` — không đăng
-ký listener thì outcome bị bỏ qua. `Completed.selectedLanguage` mang theo ngôn ngữ đã chọn;
-`OnboardingSdk.selectedLanguage()` đọc lại nó về sau.
-
-### 2. Config
-
-```kotlin
-private fun buildConfig() = onboardKitConfig {
-    splash = SplashConfig(logoRes = R.drawable.ic_logo, minDisplayTimeMs = 3_000)
-    language = LanguageConfig(defaultCode = "en")
-    defaultSteps()                                    // OB1, OB2, OB3 (chỉ quảng cáo), OB4
-    question = QuestionConfig(options = listOf(QuestionOption("romance", "Romance")))
-    ads = AdsConfig(
-        splashBanner         = BannerAdUnit("ca-app-pub-…/1111"),
-        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/2222"),
-        languageNative       = NativeAdUnit.waterfall(highFloor = "…/3333", allPrice = "…/4444"),
-        contentStepNative    = NativeAdUnit("ca-app-pub-…/5555"),
-        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/6666"),
-    )
-}.getOrThrow()
-```
-
-`onboardKitConfig { }` trả về `Result` chứa config hợp lệ hoặc các lỗi validation.
-`SplashConfig`, `LanguageConfig`, `BehaviorConfig`, `SystemBarConfig`, `QuestionConfig` và
-`AdsConfig` ghi rõ tùy chọn và giá trị mặc định trong KDoc. Cấu hình nội dung và các slot quảng cáo
-mà luồng của bạn cần.
-
-**Slot quảng cáo.** Slot `null` thì không hiện quảng cáo. Mọi slot native và interstitial đều là
-waterfall: id xếp từ giá sàn cao nhất trước, gọi từng cái một, dừng ở lần fill đầu tiên. `AdsConfig`
-liệt kê đủ mọi slot mà luồng này có thể lấp.
-
-Muốn giữ id trong `ad_config.json` thay vì hard-code, dùng helper phía app để chuyển giá trị
-`AdRemoteConfig` thành các slot:
-
-```kotlin
-private fun AdRemoteConfig?.native(baseKey: String): NativeAdUnit? =
-    this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { NativeAdUnit(tiers = it) }
-
-private fun AdRemoteConfig?.interstitial(baseKey: String): InterstitialAdUnit? =
-    this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }
-
-// Banner ở đây không có waterfall — chỉ tier cao nhất là id dùng được.
-private fun AdUnitConfig?.toBanner(): BannerAdUnit? =
-    this?.takeIf { it.isUsable }?.let { BannerAdUnit(id = it.waterfallIds.first()) }
-```
-
-```kotlin
-val remoteAds = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
-val config = onboardKitConfig {
-    ads = AdsConfig(
-        splashInterstitial = remoteAds.interstitial("inter_splash"),
-        languageNative     = remoteAds.native("native_lang"),
-        contentStepNative  = remoteAds.native("native_ob1"),
-    )
-}.getOrThrow()
-```
-
-**Các bước (step).** Thay cho `defaultSteps()`, bạn có thể tự liệt kê bằng
-`steps(vararg StepDefinition)` hoặc `step(…)` — `ContentStepDefinition` cho trang nội dung,
-`AdFullScreenStepDefinition` cho trang chỉ có quảng cáo. Thứ tự trong danh sách là thứ tự hiển thị;
-remote config chỉ có thể tắt bớt một step. `id` là một `StepId` (`OB1`…`OB5`) — đó là **vị trí trong
-luồng**, không phải số thứ tự trang nội dung: OB3 là trang chỉ-quảng-cáo của template mặc định, nên
-trang *nội dung* thứ ba là `StepId.OB4`.
-
-**Native template.** Các màn hình này ship sẵn một layout cho mỗi vị trí CTA, nên `NativeTemplate`
-chọn layout chứ không dịch chuyển các block. Bạn có thể set thẳng, hoặc suy ra từ chính document
-config bằng một helper phía app nữa:
-
-```kotlin
-private fun AdRemoteConfig?.templateOf(
-    key: String,
-    default: NativeTemplate = NativeTemplate.CTA_BOTTOM,
-): NativeTemplate = when (this?.unit(key)?.positionCTA) {
-    "TOP" -> NativeTemplate.CTA_TOP
-    "BOTTOM" -> NativeTemplate.CTA_BOTTOM
-    else -> default
-}
-```
-
-### 3. Splash
-
-Launcher activity kế thừa `ObSplashActivity`. SDK xử lý consent, billing, remote fetch, tải quảng
-cáo, quyền thông báo, thời gian hiển thị tối thiểu và điều hướng. Override các hook để bổ sung
-phần khởi tạo riêng của app.
-
-```kotlin
-class SplashActivity : ObSplashActivity() {
-    override suspend fun onInitBilling() { myEntitlement.awaitReady() }  // xác định premium trước
-
-    override fun onRemoteFetched() {
-        // fetch các remote key riêng của app tại đây
-        OnboardingSdk.configure(buildConfig())   // dựng lại: remote có thể đã đổi ad unit id
+        OnboardingSdk.install(this) {
+            adProvider = ERainAdProvider()
+            listener = OnboardingListener { context, outcome ->
+                val extras = when (outcome) {
+                    is OnboardingOutcome.Completed -> outcome.passthrough
+                    is OnboardingOutcome.Skipped -> outcome.passthrough
+                    is OnboardingOutcome.Aborted -> null
+                }
+                context.startActivity(
+                    Intent(context, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .apply { extras?.let { putExtras(it) } },
+                )
+            }
+        }
+        val config = onboardKitConfig {
+            splash = SplashConfig(appNameRes = R.string.app_name)
+            defaultSteps()
+            ads = AdsConfig(
+                splashInterstitial = InterstitialAdUnit(
+                    "ca-app-pub-3940256099942544/1033173712",
+                ),
+                languageNative = NativeAdUnit(
+                    "ca-app-pub-3940256099942544/2247696110",
+                ),
+                contentStepNative = NativeAdUnit(
+                    "ca-app-pub-3940256099942544/2247696110",
+                ),
+            )
+        }.getOrThrow()
+        OnboardingSdk.configure(config).getOrThrow()
+        OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)
     }
 }
 ```
 
-`SplashConfig.notificationPermissionEnabled` mặc định là `true`. Trên Android 13+ khi target SDK
-33+, splash xin `POST_NOTIFICATIONS` sau khi bước consent hoàn tất. Thư viện đã khai báo quyền này.
-Không hiện prompt nếu quyền đã được cấp, lần hỏi tự động trước đã có kết quả, hoặc app đã gỡ quyền
-khỏi manifest. Từ chối hay hủy không chặn luồng và không cấp quyền request quảng cáo. Nếu app tự
-quản lý quyền thông báo, tắt lần hỏi tự động trong config:
+Gọi `install()` trước `configure()`. Cả bước tạo config và configure đều trả về `Result`; ví dụ dùng `getOrThrow()` để lỗi tích hợp hiện rõ.
+Listener xử lý đủ ba kết quả. `Completed.selectedLanguage` còn trả về ngôn ngữ đã chọn.
+Khi chuyển tới app, dùng `NEW_TASK` và không thêm `CLEAR_TASK`: quảng cáo splash có thể vẫn cần Activity đang giữ nó.
+
+## 2. Thêm splash làm launcher
 
 ```kotlin
-splash = SplashConfig(notificationPermissionEnabled = false)
+import io.onboardkit.ui.splash.ObSplashActivity
+
+class SplashActivity : ObSplashActivity()
 ```
-
-Remote fetch có thể chạy song song với consent. Luồng UMP do SDK quản lý không giới hạn thời gian
-người dùng trả lời. Sau consent và kết quả xin quyền thông báo nếu có, splash chờ Activity resumed
-và có window focus rồi mới bắt đầu tải banner/interstitial đủ điều kiện và tính thời gian hiển thị
-tối thiểu. Ngân sách chờ quảng cáo bắt đầu sau các prompt; thời gian đọc không tiêu ngân sách này.
-Sau các bước chờ ad splash và thời gian hiển thị tối thiểu, splash kiểm tra foreground/focus lần nữa,
-rồi bắt đầu preload native của màn đích trước khi thử hiện interstitial và chuyển luồng.
-Thời gian chờ banner mặc định là `0`; thời gian chờ interstitial kết thúc khi tải xong hoặc hết
-ngân sách cấu hình, nên không yêu cầu mọi quảng cáo đều fill.
-
-Khai báo launcher activity với `android:exported="true"`, intent-filter MAIN/LAUNCHER và theme
-AppCompat/MaterialComponents. Với splash dọc, dùng:
 
 ```xml
-<activity
-    android:name=".SplashActivity"
-    android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
-    android:exported="true"
-    android:screenOrientation="portrait"
-    android:theme="@style/Theme.Splash">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
-</activity>
+<application android:name=".App">
+    <activity android:name=".MainActivity" android:exported="false" />
+    <activity
+        android:name=".SplashActivity"
+        android:exported="true"
+        android:screenOrientation="portrait"
+        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:theme="@style/ob_Theme_OnboardKit">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
 ```
 
-`configChanges` cho phép Activity tự xử lý các thay đổi đã liệt kê mà không tạo lại. Nếu giữ
-`uiMode|fontScale`, hãy tự cập nhật các custom view bị ảnh hưởng. Activity vẫn có thể được tạo lại
-vì nguyên nhân khác. Với app ngang hoặc tablet, xem lại orientation trong manifest và đặt
-`BehaviorConfig.lockPortrait = false`.
+Ghép các khai báo vào manifest; giữ metadata và permission theo hướng dẫn ads. Thư viện đã khai báo các màn SDK.
+Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` quản lý luồng này.
 
-- Đừng gọi `OnboardingSdk.start()` ở đây — nó tự chạy khi pipeline hoàn tất.
-- Giữ `onConsentRequired()` mặc định để chạy UMP qua `ConsentCenter` trong `:ads`. Nếu dùng
-  consent provider riêng, gọi `ConsentCenter.setHostConsent(...)` với quyền request và lựa chọn
-  cá nhân hóa trước khi hoàn tất override. Chỉ `return true` không cấp quyền request quảng cáo.
-  `OnboardingSdk.setCanRequestAds(false)` vẫn là giới hạn riêng ngay cả khi consent cho phép.
-- Nếu override `onDestroy()`, nhớ gọi `super.onDestroy()` — `ConsentCenter.detach(this)` nằm ở đó.
+Các mặc định cần biết:
 
-Về sau, từ bất kỳ đâu: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`.
+- `notificationPermissionEnabled = true`: Android 13+ / target 33+ hỏi quyền thông báo sau consent. Đã cấp quyền hoặc đã ghi nhận kết quả hỏi tự động thì không hỏi lại; từ chối vẫn đi tiếp. Đặt `false` nếu app tự quản lý lời nhắc này.
+- `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
+- `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
+- `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
+- Request quảng cáo splash và đồng hồ hiển thị bắt đầu sau khi các hộp thoại kết thúc và splash lấy lại focus ở foreground. SDK tải trước màn kế tiếp trước khi điều hướng; không cần thêm một luồng load-and-show khác.
 
-## Vào app từ notification, widget hoặc uninstall shortcut
+## 3. Gắn quảng cáo và nội dung vào màn
 
-`SplashEntry` (`NOTIFICATION`, `WIDGET`, `UNINSTALL`) đưa các lần mở tính năng qua splash, chọn
-interstitial riêng cho từng entry và xác định thời điểm mở màn đích. Bạn cung cấp extra của tính
-năng và xử lý màn đích trong listener.
+Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự phòng, được mô tả trong [AdsConfig](src/main/java/io/onboardkit/config/AdsConfig.kt).
 
-**1. Bắn intent của entry vào splash, không phải vào màn hình chính.** Cú chạm mở một session mới,
-nên nó đi đúng con đường mà một cú chạm từ launcher đi. `SplashEntry.intent` gắn nhãn cho lần mở đó
-và đã set sẵn `NEW_TASK or CLEAR_TASK`; bạn chỉ thêm extra của tính năng lên trên.
-
-```kotlin
-SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
-    .putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
-```
-
-**2. Các extra đi xuyên luồng dưới dạng passthrough.** `ObSplashActivity` nạp nó từ chính
-`intent.extras` của mình, SDK mang nó qua mọi màn hình, và trả lại ở `Completed` và `Skipped` (không
-bao giờ ở `Aborted`). Extra của bạn là dữ liệu mờ đối với SDK.
-
-**3. Listener định tuyến outcome** — quyết định duy nhất mà mỗi app tự đưa ra:
-
-```kotlin
-listener = OnboardingListener { context, outcome ->
-    val extras = when (outcome) {
-        is OnboardingOutcome.Completed -> outcome.passthrough
-        is OnboardingOutcome.Skipped -> outcome.passthrough
-        is OnboardingOutcome.Aborted -> null
-    }
-    val destination = when (SplashEntry.from(extras)) {
-        SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
-        else -> MainActivity::class.java
-    }
-    context.startActivity(
-        Intent(context, destination)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .apply { extras?.let(::putExtras) },
-    )
-}
-```
-
-Dùng `NEW_TASK` và không thêm `CLEAR_TASK` khi chuyển màn này: quảng cáo có thể vẫn đang hiển
-thị, và xóa task sẽ finish Activity chứa nó. Xử lý extra ở **cả** `onCreate` lẫn `onNewIntent`,
-vì nơi nhận phụ thuộc launch mode của màn đích và trạng thái task.
-
-**4. Quảng cáo và thời điểm điều hướng theo entry.** Một lần mở qua `SplashEntry` dùng key
-của chính entry đó (`inter_noti`, `inter_widget`, `inter_uninstall`), đầy đủ waterfall, và quay về
-cách phân giải splash thông thường nếu key đó thiếu hoặc bị tắt. Nó cũng nhận `AFTER_AD`, trong khi
-cú chạm từ launcher giữ `UNDER_AD` — cùng một đánh đổi như `InterNextAction` trong
-[`../ads/README.md`](../ads/README.md#when-the-next-screen-starts). Chỉ override
-`nextScreenTiming()` hoặc `splashInterstitialOverride()` khi cần chia nhỏ hơn.
-
-## Layout tự viết
-
-Chỉ `SplashConfig.layoutRes` và `ContentStepDefinition.layoutRes` được màn hình đọc. Các knob
-`layoutRes` còn lại bị validation từ chối — hãy để chúng ở `0` và thay vào đó override layout cùng
-tên của SDK, giữ nguyên mọi id mà nó khai báo.
-
-| Thay vì | Hãy override layout này |
+| Cấu hình | Màn sử dụng |
 |---|---|
-| `LanguageConfig.layoutRes` / `.itemLayoutRes` | `ob_activity_language.xml` / `ob_item_language.xml` |
-| `QuestionConfig.layoutRes` / `.optionLayoutRes` | `ob_activity_question.xml` / `ob_item_question_option.xml` |
-| `AdFullScreenStepDefinition.layoutRes` | `ob_fragment_ad_step.xml` |
+| `splashBanner`, `splashInterstitial` | Banner / interstitial ở splash |
+| `languageNative`, `languageDupNative` | Native đầu / native thay thế ở màn ngôn ngữ |
+| `contentStepNative`, `stepNatives[StepId.OB1]` | Native chung cho trang nội dung / ghi đè riêng từng bước |
+| `fullScreenStepNative` | Bước chỉ có quảng cáo; bỏ qua nếu không có unit dùng được |
 
-Splash bind từng id theo kiểu null-safe, nên id nào bạn bỏ đi thì chỉ đơn giản là bị bỏ qua. Nhưng
-layout của một content step phải mang **đủ** id của nó, nếu không trang đó sẽ quay về layout của SDK
-kèm một dòng log.
+`defaultSteps()` tạo OB1, OB2, OB3 (chỉ quảng cáo), OB4. Để dùng nội dung và ảnh riêng, thay bằng `steps(ContentStepDefinition(...), ...)`; xem [định nghĩa bước](src/main/java/io/onboardkit/config/StepDefinition.kt).
+Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo thứ tự request; banner nhận một ID.
 
-| Màn hình | Id | Kiểu |
-|---|---|---|
-| Splash | `ob_splash_logo` / `ob_splash_app_name` / `ob_splash_progress` | `ImageView` / `TextView` / `ProgressBar` |
-| | `ob_splash_ad_container` | `FrameLayout`; đặt `<include layout="@layout/layout_banner_control" />` bên trong, nếu không banner splash không có chỗ để gắn |
-| Content step | `ob_step_image` / `ob_step_player` / `ob_step_card` | `ImageView` / `androidx.media3.ui.PlayerView` / `LinearLayout` |
-| | `ob_step_title` / `ob_step_subtitle` / `ob_step_indicator` / `ob_primary_cta` | `TextView` / `TextView` / `ObStepIndicator` / `ObPrimaryButton` |
-| | `ob_ad_block` / `ob_native_container` | `FrameLayout` (bị ẩn khi slot bị từ chối) / `FrameLayout` |
+Tên JSON như `inter_splash`, `native_lang` cần được app gắn vào `AdsConfig`; SDK không tự suy ra mọi ánh xạ từ tên trường.
+Dùng `AdRemoteConfig.getInstance().tiersFor(key)` và dựng lại config khi ID mới đã cập nhật trong `onRemoteFetched()`.
+[OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
 
-Với một màn hình của riêng bạn nằm trong luồng, `showInterstitial(placement, onNext, onFinished)` là
-extension public trên `AppCompatActivity`: mở màn đích trong `onNext` (nằm dưới quảng cáo), finish
-màn hiện tại trong `onFinished`. Mỗi callback chạy tối đa một lần, `onNext` trước `onFinished`;
-tuyệt đối đừng gọi `finish()` trong `onNext`. Không có API public tương đương cho native — hãy tự
-render native bằng `NativeAdHelper` trong `:ads`.
+## Tích hợp tùy chọn
 
-## Paywall gate
+- **Firebase:** splash fetch flag `ob_*` khi Firebase được cấu hình; nếu chưa có thì dùng cache/mặc định. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) liệt kê key hỗ trợ. Muốn remote JSON quảng cáo hoặc sink GA4, thêm [suite-firebase](../suite-firebase/README.md); chỉ cài nguồn ad config chưa thực hiện fetch.
+- **Paywall:** cài [PayKit](../paykit/README.md) trước, rồi đặt `paywallGate = OnboardKitPaywallGate()` trong `OnboardingSdk.install` (`io.paykit.integration`). Không đặt gate thì bỏ qua paywall. Nếu app có cả mua hàng và quảng cáo, làm thêm bước chờ billing bên dưới.
+- **Consent riêng:** giữ `onConsentRequired()` mặc định nếu dùng UMP. Nếu override bằng CMP riêng, công bố kết quả qua `ConsentCenter.setHostConsent(canRequestAds, personalized)` trước khi trả về. Chỉ trả `true` không cấp quyền request; `setCanRequestAds(false)` là giới hạn riêng của host, còn `true` chỉ gỡ giới hạn đó. Nếu override `onDestroy()`, luôn gọi `super.onDestroy()`.
+- **Giao diện / khảo sát:** xem [cấu hình màn](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) và [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Chỉ splash và bước nội dung hỗ trợ ghi đè `layoutRes`; trường layout chưa hỗ trợ sẽ báo lỗi validation. Giữ nguyên ID khi ghi đè resource SDK.
+
+**Mua hàng và quảng cáo:** `PayKit.install()` / khởi tạo BillingKit bắt đầu xác minh giao dịch bất đồng bộ; gọi xong chưa có nghĩa đã khôi phục premium. Hook `onInitBilling()` mặc định đang trống.
+Thay splash tối thiểu bên trên bằng override chờ `Billing.awaitReady()` trước giai đoạn quảng cáo splash.
+Gọi trực tiếp `Billing` còn cần thêm `implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` cùng tag; xem [BillingKit](../billingkit/README.md).
 
 ```kotlin
-class MyPaywallGate : PaywallGate {
-    override suspend fun shouldShow(placement: PaywallPlacement) =
-        placement == PaywallPlacement.AFTER_ONBOARDING && !myEntitlement.isPremium
+import com.ads.module.billing.Billing
+import io.onboardkit.ui.splash.ObSplashActivity
 
-    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome =
-        PaywallOutcome.Dismissed   // hoặc Purchased / ContinueWithAds
+class SplashActivity : ObSplashActivity() {
+    override suspend fun onInitBilling() {
+        val readiness = Billing.awaitReady()
+        // Apply your app's policy for ReadyResult.Timeout / ReadyResult.Error.
+    }
 }
 ```
 
-Các placement: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`. Không set `paywallGate`
-thì mọi checkpoint đi thẳng qua. Có ship `:paykit`? Dùng luôn `OnboardKitPaywallGate` có sẵn của nó —
-xem [`../paykit/README.md`](../paykit/README.md).
+`Billing.awaitReady()` trả `Ready`, `Timeout` hoặc `Error`; dùng kết quả theo chính sách xử lý lỗi của app. `SplashConfig.billingTimeoutMs` hiện có (mặc định 5.000 ms) cũng giới hạn toàn bộ hook, nên deadline splash có thể hủy hook trước khi có kết quả; timeout không xác định trạng thái mua hàng.
+Xem vị trí tích hợp trong [splash mẫu](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt).
 
-## Remote config
+Với entry từ thông báo/widget/uninstall, trỏ về splash bằng [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt):
 
-Xem từng key `ob_*`, kiểu dữ liệu và giá trị mặc định tại `io.onboardkit.remote.ObRemoteKeys`.
-SDK khôi phục các flag đã cache khi khởi động, dùng mặc định nếu chưa có cache. Khi Firebase đã
-được cấu hình, splash tự fetch và áp dụng giá trị remote. Publish giá trị ghi đè trên Firebase console.
+```kotlin
+import io.onboardkit.ui.splash.SplashEntry
 
-## Analytics
+val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
+    .putExtra("widget_action", "open_document")
+```
 
-Funnel được phát tự động một khi `Tracker.install()` và một `Tracker.addSink(...)` đã được nối — xem
-[`../trackkit/README.md`](../trackkit/README.md) để biết tên event. Nếu muốn nhận event nội bộ của
-SDK, thêm `analyticsPlugin { event -> log(event.name, event.params) }` bên trong `install`, hoặc
-collect `OnboardingSdk.events` / `.state`.
+Listener bên trên chuyển tiếp extras cho `Completed`/`Skipped`. Đọc chúng ở cả `onCreate` và `onNewIntent` của màn đích.
+Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`, dự phòng bằng unit splash thường; các entry này điều hướng sau quảng cáo, còn launcher thường mở màn tiếp theo ở dưới quảng cáo.
 
-`isCompleted()`, `selectedLanguage()` và `answers()` đọc tiến trình đã lưu. `markCompleted()`
-đánh dấu hoàn tất; `reset()` xóa tiến trình. Đây đều là hàm suspend.
+## Nâng cấp từ 5.0.0
 
-## Xử lý sự cố
+- Giữ cách tích hợp `install → configure → splash` và cập nhật mọi module cùng phiên bản.
+- Bỏ timeout tự đóng form UMP của SDK hoặc điều hướng khi form còn mở. Không cấp consent từ timeout hay boolean callback.
+- Kiểm tra app nào sở hữu lời nhắc thông báo và hành vi khóa dọc theo mặc định bên trên.
+- Native bind nay phát `fo_ad_bound`; dùng `ad_show` để đếm hiển thị quảng cáo thật. Cập nhật dashboard từng coi bind là impression.
+- Khi thay native ở ngôn ngữ/câu hỏi, ad hiện tại được giữ trong lúc chờ. OB5 đếm lại khi trở về foreground. App không cần thêm lời gọi mới.
 
-| Hiện tượng | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Luồng không bao giờ chạy | `configure()` thất bại, hoặc chạy trước `install()` | Log cái `Result`; gọi `install()` trước |
-| Người dùng không thoát khỏi luồng | Không có `OnboardingListener`, hoặc nó bỏ qua `Skipped` | Xử lý cả ba outcome |
-| Mọi placement báo `no_provider` | `adProvider` để null | `adProvider = ERainAdProvider()` |
-| Mọi placement báo `consent_not_granted` | Consent chưa cho phép request, hoặc host đã tắt quảng cáo | Kiểm tra `ConsentCenter.canRequestAds()` và `OnboardingSdk.canRequestAds()`; hoàn tất UMP hoặc công bố kết quả consent provider riêng |
-| Trang chỉ-quảng-cáo không xuất hiện | Không có unit dùng được cho `fullScreenStepNative` / `stepNatives[OB3]` | Cấu hình một cái; chỉ bật cờ remote của step là chưa đủ |
-| Banner splash không hiện | Thiếu `ob_splash_ad_container` hoặc thiếu include `layout_banner_control` | Thêm cả hai vào layout splash |
+## Xử lý lỗi tích hợp
 
-## License
+| Hiện tượng | Kiểm tra |
+|---|---|
+| Luồng bị bỏ qua ngay | `install()` chạy trước `configure()` và cả hai `Result` không lỗi |
+| Kết thúc luồng nhưng chưa vào app | Listener xử lý đủ `Completed`, `Skipped`, `Aborted` |
+| `no_provider` / `consent_not_granted` | Đã cài provider; xem `ConsentCenter.canRequestAds()` và giới hạn từ host |
+| Không có trang chỉ quảng cáo | `fullScreenStepNative` hoặc giá trị ghi đè trong `stepNatives` dùng được |
+| Banner splash tùy chỉnh không xuất hiện | Layout có `ob_splash_ad_container` chứa include `layout_banner_control` |
 
-MIT — xem [`../LICENSE`](../LICENSE).
+Bật `OnboardingSdk.setFlowLogging(true)` khi tích hợp (`OB_FLOW` trong Logcat).
+Để đổi ngôn ngữ về sau, gọi `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
+
+[Application mẫu](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Splash mẫu](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [Giấy phép MIT](../LICENSE)

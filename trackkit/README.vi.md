@@ -1,153 +1,101 @@
+**Language / Ngôn ngữ / भाषा:** [English](README.md) | [Tiếng Việt](README.vi.md) | [हिन्दी](README.hi.md)
+
 # Trackkit
 
-> Một facade analytics duy nhất mà mọi module báo cáo qua, và mỗi vendor là một sink.
+Dùng `Tracker` để gửi event của SDK và app tới Firebase hoặc backend analytics riêng.
 
-`io.trackkit.Tracker` xử lý analytics của SDK do `:ads`, `:onboardkitorigin`, `:paykit` và
-`:billingkit` phát ra. App có thể gửi event riêng qua cùng facade để áp dụng consent, tham số mặc
-định, kiểm tra tên theo chuẩn GA4, khử trùng lặp và cộng dồn doanh thu quảng cáo. Phần lõi không phụ
-thuộc SDK vendor; các sink kết nối nó với dịch vụ analytics.
+[Cấu hình build và chọn module](../README.vi.md) · minSdk 24+ · compileSdk 36+ · JDK 17
 
-English: [README.md](README.md) ·
-हिन्दी: [README.hi.md](README.hi.md)
+## 1. Thêm nơi nhận dữ liệu
 
-## Yêu cầu
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| Thêm gì vào build của bạn | không dependency vendor nào, không permission, không luật R8; `consumer-rules.pro` đã nằm trong AAR |
-
-## Cài đặt
+Với Firebase Analytics, thêm `suite-firebase`; module này đã cung cấp Trackkit. Hoàn tất [cấu hình Firebase](../suite-firebase/README.md) với `google-services.json` của app và Google Services plugin.
 
 ```groovy
-repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } }
-def sdkVersion = '<tag>' // https://github.com/truongvimit/adlogic-partner-sdk/tags
+// app/build.gradle
+def sdkVersion = '<tag>'
 dependencies {
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
-    // FirebaseSink nằm ở đây.
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-`:ads`, `:onboardkitorigin`, `:paykit`, `:billingkit` và `:suite-firebase` đều khai báo
-`api project(':trackkit')`, nên chỉ cần có một trong số đó là `Tracker` đã nằm trên classpath; chỉ tự
-khai báo khi bạn viết một `TrackSink` độc lập.
+Nếu dùng backend riêng, khai báo `com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion` và implement `TrackSink`. Ads, onboarding, billing và paywall đã cung cấp Trackkit nên không cần khai báo thêm dependency Trackkit.
 
-## Tích hợp
+## 2. Khởi tạo một lần
 
-Gọi `Tracker.install` sau `super.onCreate()` và trước khi khởi tạo các module phát event, rồi đăng
-ký các sink.
+Gộp đoạn này vào `Application.onCreate()` hiện tại, trước khi các kit khác phát event. Ví dụ dưới dành cho app chỉ có analytics; giữ class Application nền đang dùng nếu có ads. `BuildConfig` là class của app.
 
 ```kotlin
-override fun onCreate() {
-    super.onCreate()
-    Tracker.install(this, TrackerConfig(
-        appVersionCode = BuildConfig.VERSION_CODE.toLong(),
-        strictValidation = BuildConfig.DEBUG,
-    ))
-    Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
-    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+import android.app.Application
+import io.suite.firebase.FirebaseSink
+import io.trackkit.Tracker
+import io.trackkit.TrackerConfig
+
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Tracker.install(this, TrackerConfig(
+            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+            strictValidation = BuildConfig.DEBUG,
+        ))
+        Tracker.addSink(FirebaseSink())
+    }
+}
+```
+
+Đăng ký `App` vào `android:name` của thẻ `<application>` trong manifest. Nếu Application đã khởi tạo Tracker, chỉ thêm sink còn thiếu. Mỗi sink ID chỉ đăng ký một lần.
+
+## 3. Gửi event của app
+
+```kotlin
+Tracker.track("app_document_open", mapOf("file_type" to "pdf"))
+Tracker.screen("document_reader")
+```
+
+Dùng tên event cố định và truyền giá trị qua tham số; không đưa tên file hay dữ liệu người dùng vào tên event. Tên bắt đầu bằng chữ cái, chỉ gồm chữ, số, dấu gạch dưới và tối đa 40 ký tự.
+
+Ads, onboarding, billing và PayKit tự phát event SDK. Không gửi lặp lại từ callback của app. Tên và tham số có trong [TrackkitEvents](src/main/java/io/trackkit/TrackkitEvents.kt).
+
+## Nối consent
+
+Khi dùng `ConsentCenter` của module ads, consent tự được gửi sang Tracker. Mapping hiện tại là `analytics = true` và `ads = personalized`; đây không phải quyền request quảng cáo. Đọc quyền request bằng `ConsentCenter.canRequestAds()`.
+
+Nếu có flow consent riêng và không dùng `ConsentCenter`, gửi kết quả thực tế:
+
+```kotlin
+fun onConsentResolved(analyticsAllowed: Boolean, adsPersonalizationAllowed: Boolean) {
+    Tracker.setConsent(analytics = analyticsAllowed, ads = adsPersonalizationAllowed)
 }
 ```
 
-SDK báo cáo vòng đời và impression có doanh thu của các đối tượng quảng cáo do nó quản lý. Sink
-nhận các báo cáo đó mà không cần bọc callback của host. Với tích hợp quảng cáo riêng, cung cấp
-placement qua `PlacementRegistry` hoặc payload event của bạn.
+Không để hai nơi cập nhật consent ghi đè nhau. Lần cập nhật tiếp theo của `ConsentCenter` sẽ thay thế consent đã set trực tiếp cho Tracker.
 
-Event phát ra trước `install()` sẽ được buffer — 128 mục, sau đó những cái cũ nhất bị bỏ kèm cảnh
-báo. Lần `install()` thứ hai bị bỏ qua. Không có sink nào thì mọi event vẫn được validate rồi bỏ đi.
+`TrackerConfig.consentPolicy` mặc định `SEND_ALWAYS`. Nếu app cần giữ event tới khi consent được giải quyết, cấu hình `QUEUE_UNTIL_RESOLVED` trước khi install Tracker. Xem [TrackerConfig và ConsentPolicy](src/main/java/io/trackkit/TrackkitApi.kt) cùng [tùy chọn consent Firebase](../suite-firebase/README.md).
 
-`TrackerConfig` giữ phần còn lại — đơn vị tiền tệ báo cáo, chính sách consent, mức log, bộ cộng dồn
-doanh thu, tham số mặc định — mỗi thứ đều có KDoc. Giá trị mặc định đã dùng được; chỉ set thứ khác đi.
+## Kiểm tra tích hợp
 
-Ngoài ra trên `Tracker`: `track(name, params)`, `track(TrackEvent)`, `screen(name, screenClass)`,
-`adRevenue(impression)`, `setDefault`, `setDefaults`, `setUserProperty`, `setUserId`, `removeSink`,
-`flushPending()`, `sinkIds()`, cùng hai property `isInstalled` / `currentConsent`.
-
-## Consent
-
-Khi dùng `com.ads.module.consent.ConsentCenter`, mỗi lần cập nhật consent sẽ gọi
-`Tracker.setConsent(analytics = true, ads = personalized)`. Đây là cách ánh xạ hiện tại của SDK;
-trục ads mô tả cá nhân hóa, không phải quyền gửi request quảng cáo. Dùng
-`ConsentCenter.canRequestAds()` để kiểm tra quyền gửi request.
-
-Cần điều phối các lần cập nhật consent: lần cập nhật tiếp theo từ `ConsentCenter` sẽ ghi đè lời gọi
-`Tracker.setConsent` trực tiếp, kể cả giá trị analytics. Khi không dùng `ConsentCenter`, host cung
-cấp consent cho Tracker từ flow riêng. Consent analytics và cá nhân hóa quảng cáo là hai thiết
-lập riêng; chỉ từ chối ads không tắt analytics theo cách ánh xạ này.
-
-## Event
-
-`io.trackkit.TrackkitEvents` chứa mọi tên event mà bộ SDK phát ra, nhóm theo domain — quảng cáo,
-doanh thu, funnel mở app lần đầu, IAP, consent — và `TrackkitEvents.all()` trả về toàn bộ tập lúc
-runtime. Hãy mở nó trong IDE thay vì chép lại một danh sách sẽ cũ đi; mỗi class event đều tự mô tả ý
-nghĩa của nó.
-
-Event gửi qua `Tracker.track` còn mang theo `app_vc`, `sdk_ver`, `session_no`, `install_day`, và
-`consent_ads` sau khi consent được cập nhật.
-
-Dùng các hằng `PARAM_*` trên `TrackkitEvents` khi cấu hình custom dimension cho báo cáo GA4.
-`Tracker.screen()` gọi `TrackSink.onScreen`; `FirebaseSink` chuyển lời gọi này thành event
-`screen_view` của Firebase.
-
-## Event tự định nghĩa
+Mở Logcat, lọc `Trackkit`. Thêm console sink ở bản debug để xem event được phát:
 
 ```kotlin
-Tracker.track(SimpleEvent("app_widget_pinned", mapOf("source" to "home")))
+import io.trackkit.sink.ConsoleSink
+
+// Application.onCreate(), after Tracker.install(...)
+if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
 ```
 
-Hãy thêm hẳn một class vào `TrackkitEvents` khi có nhiều hơn một module phát event đó, khi một
-dashboard hay một Adjust token phụ thuộc vào nó, hoặc khi cách viết tham số của nó phải ổn định qua
-các bản phát hành.
+| Vấn đề | Kiểm tra |
+| --- | --- |
+| Không nhận được event | Xác nhận `Tracker.install` và sink đã được đăng ký trước khi phát event; xem `Tracker.sinkIds()`. |
+| Event bị giữ/bỏ | Xem `Tracker.currentConsent` và `consentPolicy` đang dùng. |
+| Event SDK bị lặp | Bỏ phần tự gửi lại trong callback ads/onboarding; mỗi nơi nhận chỉ đăng ký một lần. |
+| Validation ném lỗi | Dùng `strictValidation = BuildConfig.DEBUG`, không đặt `true` trong release. |
 
-| Quy tắc cho mọi tên và key tham số | Giới hạn | Khi vi phạm |
-|---|---|---|
-| Ngữ pháp | `[a-zA-Z][a-zA-Z0-9_]{0,39}` | event bị từ chối, key tham số bị bỏ |
-| Số tham số mỗi event | 25 | key thừa bị bỏ |
-| Giá trị tham số chuỗi / giá trị user property | 100 / 36 ký tự | bị cắt bớt |
-| Tiền tố dành riêng | `firebase_`, `google_`, `ga_` | bị từ chối |
-| Key PII / bí mật | purchase token, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | bị từ chối |
+## Nâng cấp từ 5.0.0
 
-Quy ước nằm trên bộ validator: `<domain>_<object>_<action>`, chữ thường `snake_case`, domain thuộc
-`ad_`, `fo_`, `iap_`, `consent_`, `app_`. Tuyệt đối đừng nhét biến vào tên — một `fo_step_complete`
-mang tham số `step`, chứ không phải `ob1_complete` cộng `ob2_complete`.
+Code khởi tạo giữ nguyên. Native bind chuyển sang `fo_ad_bound`, tách khỏi `ad_show` do vendor xác nhận. Sửa báo cáo nếu trước đây đang tính callback bind onboarding như impression thật.
 
-## Viết sink riêng
+## Backend riêng và tùy chọn khác
 
-Chỉ `id` và `onEvent` là bắt buộc — `onInstall`, `onScreen`, `onUserProperty`, `onUserId`,
-`onConsent` và `onAdRevenue` đều có mặc định rỗng, kể cả trong Java.
-
-```kotlin
-class MyBackendSink(private val api: MyApi) : TrackSink {
-    override val id: String = "my_backend"
-
-    override fun onEvent(name: String, params: Map<String, Any?>) {
-        api.enqueue(name, params)
-    }
-    // impression.value đã ở đúng impression.currency — đừng quy đổi.
-    override fun onAdRevenue(impression: AdImpression) {
-        api.enqueueRevenue(impression.value, impression.currency)
-    }
-}
-
-Tracker.addSink(MyBackendSink(api))
-```
-
-Mọi callback chạy trên thread của phía gọi và không được block. Một sink ném exception sẽ bị bắt và
-log kèm `id` của nó; các sink còn lại vẫn nhận được event. `addSink` bỏ qua `id` đã đăng ký. Tham số
-đến nơi đã được làm sạch: không có null, chuỗi cắt ở 100 ký tự, tối đa 25 key. Cho build debug,
-`io.trackkit.sink.ConsoleSink` log đúng payload đó.
-
-## Xử lý sự cố
-
-| Hiện tượng | Nguyên nhân | Cách xử lý |
-|---|---|---|
-| Không gì tới được vendor; logcat báo `install() ran with no sink` | chưa đăng ký sink nào | `Tracker.addSink(FirebaseSink())` hoặc `TrackSink` của bạn |
-| `N events were dropped before install (buffer overflow)` | hơn 128 event phát ra trước `install()` | cài Tracker trước khi các module bắt đầu phát event |
-| `install() called twice` hoặc `sink 'x' already registered` | gọi `install()` hai lần, hoặc hai sink trùng `id` | giữ một `install()`; cho mỗi sink một `id` riêng |
-| Mọi event ngừng ngay sau khi mở app | `consentPolicy = DROP_UNTIL_GRANTED` và consent analytics chưa được cấp | kiểm tra `Tracker.currentConsent` và nơi chịu trách nhiệm cập nhật consent |
-| `ad_revenue_total` đứng ở 0 dù `ad_impression` vẫn về | impression ở đơn vị tiền khác `reportingCurrency` | đặt `TrackerConfig.reportingCurrency` bằng đơn vị tiền của tài khoản |
-| `IllegalArgumentException: Trackkit: …` trên production | `strictValidation` còn `true` ở bản release | nối nó với `BuildConfig.DEBUG` |
+Với nơi nhận riêng, implement `TrackSink.id` và `onEvent`; thêm `onScreen` nếu dùng `Tracker.screen`. Callback sink chạy trên thread của bên gọi: đưa tác vụ mạng vào hàng đợi, không chặn thread. Xem [TrackSink](src/main/java/io/trackkit/TrackkitApi.kt), [ConsoleSink](src/main/java/io/trackkit/sink/ConsoleSink.kt) và [Tracker](src/main/java/io/trackkit/Tracker.kt) cho tham số mặc định, user property và API doanh thu.
 
 ## License
 

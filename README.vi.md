@@ -2,192 +2,101 @@
 
 # adlogic-partner-sdk
 
-> Bảy thư viện Android cho quảng cáo, onboarding, analytics, billing và paywall, phát hành chung từ
-> một repository.
+Bộ SDK Android cho quảng cáo, onboarding, analytics, billing và paywall. Chọn tính năng cần dùng, cấu hình build chung rồi làm theo quickstart của module tương ứng.
 
-Chỉ khai báo những module bạn thực sự ship. Trang này nói về cấu hình build và thứ tự khởi tạo;
-README của từng module là hướng dẫn tích hợp cho phần việc của nó.
+## Chọn module
 
-## Modules
+| App cần | Khai báo | Bắt đầu tại |
+| --- | --- | --- |
+| Quảng cáo AdMob | `ads` | [Ads](ads/README.md) |
+| Splash + ngôn ngữ + onboarding có quảng cáo | `ads + onboardkitorigin` | [OnboardKit](onboardkitorigin/README.vi.md) |
+| Mua hàng với UI riêng | `billingkit` | [BillingKit](billingkit/README.md) |
+| Màn paywall dựng sẵn | `paykit` | [PayKit](paykit/README.md) |
+| Firebase Analytics hoặc remote config cho ads/paywall | `suite-firebase` (thêm `ads`/`paykit` nếu dùng source config tương ứng) | [Firebase](suite-firebase/README.md) |
+| Analytics gửi về backend riêng | `trackkit` | [Trackkit](trackkit/README.vi.md) |
+| Dashboard debug quảng cáo | `adtracer (debugImplementation)` | [AdTracer](adtracer/README.md) |
 
-| Module | Làm gì | Tài liệu |
-|---|---|---|
-| `ads` | Load/show AdMob, ad config, UMP consent, chặn ad cho user premium | [ads/README.md](ads/README.md) |
-| `onboardkitorigin` | Luồng mở app lần đầu: splash, chọn ngôn ngữ, pager onboarding, survey | [onboardkitorigin/README.vi.md](onboardkitorigin/README.vi.md) |
-| `trackkit` | Hợp đồng analytics không phụ thuộc vendor (`Tracker`, `TrackSink`) | [trackkit/README.vi.md](trackkit/README.vi.md) |
-| `suite-firebase` | Adapter Firebase duy nhất: GA4 sink, nguồn ad config, nguồn paywall config | [suite-firebase/README.md](suite-firebase/README.md) |
-| `billingkit` | Engine Play Billing (`com.ads.module.billing`) | [billingkit/README.md](billingkit/README.md) |
-| `paykit` | UI paywall chạy trên engine `billingkit` | [paykit/README.md](paykit/README.md) |
-| `adtracer` | Dashboard vòng đời quảng cáo, chỉ dùng cho build debug | [adtracer/README.md](adtracer/README.md) |
+Chỉ thêm module cần dùng. Ads, onboarding, billing, paywall và Firebase đã cung cấp Trackkit. PayKit tự kéo billing engine lúc chạy; chỉ khai báo thêm `billingkit` nếu gọi API của nó trực tiếp. Firebase là tùy chọn. App chỉ dùng billing/paywall không kéo theo bộ quảng cáo.
 
-## Chọn module nào để khai báo
+## Cấu hình build
 
-| Bạn ship gì | Khai báo | Dependency các module này không kéo theo |
-|---|---|---|
-| Chỉ ads (IAA) | `ads` (+ `suite-firebase`) | Play Billing |
-| IAP + paywall dựng sẵn, không ads | `billingkit` + `paykit` | GMA/AdMob |
-| IAP với UI paywall tự viết | `billingkit` | Không có `paykit` lẫn `ads` |
-| Vừa ads vừa IAP | `ads` + `billingkit` (+ `paykit`) | — |
-| Chỉ analytics | `trackkit` (+ `suite-firebase` cho GA4) | `ads`, `billingkit`, `paykit` |
+Dùng JDK 17, `minSdk 24+` và `compileSdk 36+`. Repo đang build với Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 và targetSdk 36; các phiên bản toolchain này không đổi trong nhánh hiện tại.
 
-`onboardkitorigin` phụ thuộc `ads`, và `paykit` phụ thuộc `billingkit`, ở scope `implementation` —
-hãy khai báo chúng tường minh nếu bạn gọi API của chúng. Không cần khai báo riêng `trackkit` khi
-module đã chọn export nó bằng `api`; ứng dụng chỉ dùng analytics có thể khai báo trực tiếp.
-
-## Yêu cầu
-
-| | |
-|---|---|
-| JDK tối thiểu để build | 17 |
-| `minSdk` | 24 |
-| `compileSdk` / `targetSdk` | 36 |
-| AGP / Gradle | 8.12.0 / 8.13 |
-
-## Cài đặt
-
-Phiên bản **5.1.0 chưa phát hành**;
-ví dụ dependency bên dưới cần dùng một tag đã phát hành.
-
-Các mediation adapter mà `ads` đóng gói không nằm trên Maven Central — thiếu ba repository cuối,
-build sẽ không resolve được Pangle, ironSource và Mintegral.
+Gộp các repository sau vào cấu hình Gradle đang có; không tạo thêm một khối `dependencyResolutionManagement` thứ hai. Ba repository mediation chỉ cần khi dùng ads/onboarding.
 
 ```groovy
-repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
-    maven { url 'https://artifact.bytedance.com/repository/pangle/' }
-    maven { url 'https://android-sdk.is.com/' }
-    maven { url 'https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea' }
-}
+// settings.gradle
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
 
-// Thay <tag> bằng một tag tại https://github.com/truongvimit/adlogic-partner-sdk/tags
-def sdkVersion = '<tag>'
-
-dependencies {
-    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
-    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
-}
-```
-
-Group id là `com.github.truongvimit.adlogic-partner-sdk` — JitPack đặt namespace cho repo nhiều
-module theo dạng `com.github.<user>.<repo>`. Giữ mọi module ở cùng một tag; các tổ hợp khác phiên bản
-không được kiểm thử.
-
-## App của bạn phải tự cung cấp những gì
-
-**`AndroidManifest.xml`** — đặt bên trong `<application>`, khi bạn ship `ads`. Thiếu entry đầu tiên
-thì GMA sẽ throw ngay lúc init; hai entry Facebook là bắt buộc vì `ERainAd.init` luôn khởi tạo
-`FacebookSdk`:
-
-```xml
-<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${app_id}" />
-<meta-data android:name="com.facebook.sdk.ApplicationId"  android:value="@string/facebook_app_id" />
-<meta-data android:name="com.facebook.sdk.ClientToken"    android:value="@string/facebook_client_token" />
-```
-
-Khai báo `manifestPlaceholders = [app_id: "ca-app-pub-XXXX~YYYY"]` cho từng build type, và trỏ
-`android:name` trên thẻ `<application>` vào class `Application` của bạn.
-
-**String resources** (`translatable="false"`). `facebook_app_id` và `facebook_client_token` là bắt
-buộc khi dùng `ads`. `adjust_token`, `event_token` và `adjust_event_token_purchase` chỉ được đọc bởi
-`AdjustConfig` do chính bạn dựng — `adjust_token` để trống thì Adjust tắt.
-
-**File bạn phải tự tạo** — SDK không ship sẵn file nào trong số này:
-
-| Đường dẫn | Cần cho | Thiếu thì sao |
-|---|---|---|
-| `src/main/assets/ad_config.json` | Cấu hình placement quảng cáo cục bộ | Không có cấu hình placement cục bộ được tải |
-| `src/main/assets/ad_config_debug.json` | Tách ad unit thử nghiệm cho build debug | Dùng `ad_config.json` thay thế; file đó có thể chứa ad unit thật |
-| `google-services.json` + plugin `com.google.gms.google-services` | `suite-firebase` | Không có GA4 sink, không có remote ad config, không có paywall document |
-
-## Thứ tự khởi tạo
-
-Toàn bộ phần dưới chạy trong `Application.onCreate()`, đúng theo thứ tự này. Thứ tự có ý nghĩa:
-`Tracker` phải đầu tiên vì event phát ra trước đó chỉ được buffer, và ad config phải trước
-`ERainAd.init` vì đó là bước gắn ad unit id vào placement.
-
-```kotlin
-class App : AdsMultiDexApplication() {
-    override fun onCreate() {
-        super.onCreate()
-
-        // 1. Analytics — xem trackkit/README.md và suite-firebase/README.md
-        Tracker.install(this, TrackerConfig(appVersionCode = BuildConfig.VERSION_CODE.toLong()))
-        Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
-
-        // 2. Ads — xem ads/README.md
-        AdRemoteConfig.initializeFromAssets(this)
-        AdConfig.install(FirebaseAdConfigSource())
-        ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000L))
-        ERainAd.getInstance().init(this, buildERainAdConfig())
-        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
-
-        // 3. Billing và paywall — xem billingkit/README.md và paykit/README.md
-        PayKit.install(this, payKitConfig { /* … */ }.getOrThrow())
-        PayKit.configSource(FirebaseConfigSource())
-
-        // 4. Luồng mở app lần đầu — xem onboardkitorigin/README.md
-        ERainTuning.install()
-        OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
-            paywallGate = OnboardKitPaywallGate()
-            listener = OnboardingListener { context, _ ->
-                context.startActivity(
-                    Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
-        }
-        OnboardingSdk.configure(buildOnboardKitConfig())
+        // Only when ads or onboardkitorigin is included.
+        maven { url 'https://artifact.bytedance.com/repository/pangle/' }
+        maven { url 'https://android-sdk.is.com/' }
+        maven { url 'https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea' }
     }
 }
 ```
 
-Sau đó cho launcher activity kế thừa: `class SplashActivity : ObSplashActivity()`. Consent, bước xin
-quyền thông báo có thể bật/tắt, remote fetch, ad splash, thời gian hiển thị tối thiểu và điều hướng đều nằm bên trong nó —
-xem [onboardkitorigin/README.vi.md](onboardkitorigin/README.vi.md).
+Các thay đổi trong hướng dẫn này dành cho **5.1.0, chưa phát hành**. Khi dùng dependency đã phát hành, thay `<tag>` bằng [tag có sẵn](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó. Giữ mọi module cùng phiên bản.
 
-Chỉ giữ những bước ứng với module ứng dụng sử dụng. App chỉ có ads dùng bước 1 và 2.
-App chỉ có IAP dùng bước 1 và 3, đồng thời kế thừa `Application` hoặc lớp Application sẵn có
-thay cho `AdsMultiDexApplication`.
-
-## Giảm dung lượng APK
-
-`ads` đóng gói bảy mediation adapter của AdMob, làm tăng dung lượng APK. Hãy loại những mạng mà tài
-khoản AdMob của bạn không mediation, và loại trên `configurations` chứ không phải trên dependency
-`ads`: `onboardkitorigin` cũng phụ thuộc `ads`, nên loại trừ theo từng dependency sẽ để hở đường thứ
-hai đó.
+Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
-configurations.configureEach {
-    exclude group: 'com.google.ads.mediation', module: 'pangle'
-    exclude group: 'com.pangle.global'
+// app/build.gradle
+def sdkVersion = '<tag>'
+dependencies {
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
 }
 ```
 
-Mỗi mạng gồm một adapter cộng với SDK mà nó kéo theo; chỉ loại adapter thì SDK vẫn còn lại. Các cặp:
-`applovin`→`com.applovin`, `vungle`→`com.vungle`, `pangle`→`com.pangle.global`,
-`unity`→`com.unity3d.ads`, `mintegral`→`com.mbridge.msdk.oversea`,
-`ironsource`→`com.unity3d.ads-mediation`. `facebook` là ngoại lệ — loại module, tuyệt đối không loại
-cả group: `exclude group: 'com.facebook.android', module: 'audience-network-sdk'`. Group đó còn chứa
-`facebook-core`, thứ mà `ERainAd.init` cần.
+## Thứ tự tích hợp
 
-Nếu R8 báo `Missing class` cho một mạng đã loại, thêm `-dontwarn com.pangle.global.**` (và tương tự)
-vào `proguard-rules.pro`. Hãy đổi mediation group trên AdMob trước khi đụng tới phần exclude của
-Gradle.
+Khai báo class `Application` của app trong manifest. Trong `Application.onCreate()`, sau `super.onCreate()`, chỉ làm các bước tương ứng với module đã chọn:
 
-## Tra cứu chi tiết
+| Bước | Cần làm | Hướng dẫn |
+| --- | --- | --- |
+| 1 · Analytics | Nếu thu thập event SDK, khởi tạo `Tracker` và đăng ký nơi nhận trước khi các kit phát event. | [Trackkit](trackkit/README.vi.md) |
+| 2 · Ads | Cung cấp metadata AdMob/Meta và JSON quảng cáo, rồi khởi tạo `ERainAd`. | [Quickstart Ads](ads/README.md) |
+| 3 · Mua hàng | Cài `PayKit` hoặc khởi tạo `BillingKit` nếu dùng UI riêng. Khi dùng PayKit, để PayKit khởi tạo billing. | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
+| 4 · Onboarding | Install/configure `OnboardingSdk` rồi đăng ký Activity kế thừa `ObSplashActivity`. | [OnboardKit](onboardkitorigin/README.vi.md) |
 
-Các README này hướng dẫn tích hợp. Tra cứu giá trị mặc định và hành vi trong KDoc của kiểu dữ liệu
-tương ứng. Mỗi module publish kèm sources jar; dùng **Go to definition** trong IDE để xem đúng
-phiên bản ứng dụng đang sử dụng. Bắt đầu từ
-`AdUnitConfig` và `ConsentOptions` (ads), `OnboardKitConfig` và `ObRemoteKeys` (onboardkitorigin),
-`TrackerConfig` và `TrackkitEvents` (trackkit), `PayKitConfig` (paykit), `AppPurchase` (billingkit).
+Khi dùng OnboardKit, splash tự chạy consent và bước notification. Nếu chỉ dùng ads, gọi `ConsentCenter.request(...)` từ Activity trước khi request quảng cáo. Firebase cần `google-services.json` của app và Google Services plugin; xem [hướng dẫn Firebase](suite-firebase/README.md).
+
+## Giá trị app cần cung cấp
+
+| Phần | Cần làm |
+| --- | --- |
+| Ads | AdMob app ID, Meta app ID/client token, placement ID trong `assets/ad_config.json` và ID test trong `ad_config_debug.json`. Nếu thiếu file debug, SDK dùng file thường. |
+| Onboarding | Activity đích, ngôn ngữ/nội dung và các placement quảng cáo. |
+| Mua hàng | Product ID trên Play và cách xác định premium. PayKit cần thêm URL điều khoản/quyền riêng tư và JSON catalog của app. |
+| Firebase · tùy chọn | Cấu hình Firebase của app và các tham số Remote Config đã publish cho source cần dùng. |
+
+## Nâng cấp từ 5.0.0
+
+Dependency và API khởi tạo chính giữ nguyên. Khi dùng nhánh này, kiểm tra các thay đổi tích hợp sau:
+
+| Phần | Partner cần làm |
+| --- | --- |
+| Consent tùy biến | Trả `true` từ `onConsentRequired()` hoặc gọi `setCanRequestAds(true)` không còn tự cấp consent. Gửi quyết định thật của CMP qua `ConsentCenter.setHostConsent(...)`. Luồng UMP mặc định của `ObSplashActivity` không cần nối thêm. |
+| Quyền notification | `SplashConfig.notificationPermissionEnabled` mặc định `true`; OnboardKit merge `POST_NOTIFICATIONS`. Đặt `false` nếu app tự hỏi quyền hoặc không dùng notification. Splash chỉ tải ad sau khi consent/permission hoàn tất và có lại focus. |
+| Màn hình dọc | `BehaviorConfig.lockPortrait` mặc định `true`, áp dụng cả splash của app. Đặt `false` cho flow ngang/tablet; làm theo ví dụ manifest splash trong hướng dẫn OnboardKit. |
+| Refresh banner | Chọn AdMob hoặc SDK quản refresh. `Reload` của SDK dùng banner thường dù request ban đầu là collapsible. Xem hướng dẫn ads trước khi giữ timer reload riêng. |
+| Callback bỏ qua ad | Cập nhật `when` Kotlin vét cạn cho giá trị `AdSkipReason` mới: lý do consent trong ads và `SHOW_IN_BACKGROUND` trong ads/onboarding. |
+| Analytics | Native bind gửi `fo_ad_bound`. Tách event này khỏi `ad_show` do vendor xác nhận trên dashboard; không tự gửi thêm show từ callback bind. |
+
+Các sửa lỗi cache remote và lifecycle quảng cáo không cần cấu hình mới. Với điều hướng chức năng thông thường, giữ preload + show; API interstitial `loadAndShow` mới là tùy chọn và flow onboarding tích hợp sẵn không gọi nó.
+
+## Kiểm tra sau tích hợp
+
+- Mở bản debug dùng ID quảng cáo test; xác nhận khởi tạo và kết quả consent trước khi request ads.
+- Thử thao tác khi chưa có ad: điều hướng vẫn phải hoàn tất. Kiểm tra từ chối notification và Home/quay lại.
+- Nếu có mua hàng, kiểm tra khôi phục premium trước khi hiện ads và thử paywall với catalog trên Play của app.
+
+Khi cần tùy biến thêm, mở các link source trong hướng dẫn module hoặc Go to Definition trong IDE. Bắt đầu bằng quickstart, không cần cấu hình mọi tùy chọn.
 
 ## License
 

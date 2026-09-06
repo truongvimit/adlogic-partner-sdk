@@ -1,335 +1,198 @@
 # OnboardKit
 
-> First-open flow एक library के रूप में: splash → language → onboarding steps → वैकल्पिक full-screen ad
-> → वैकल्पिक question → आपकी app।
+Splash → भाषा चयन → onboarding → वैकल्पिक प्रश्न/paywall → आपकी app।
+SDK स्क्रीन बदलना, ads preload करना और प्रगति सहेजना संभालता है; आपकी app सामग्री और अंतिम स्क्रीन देती है।
 
-Ads, remote config, state persistence और analytics funnel — सब अंदर है। आपको सिर्फ़ ad unit ids, copy, और
-flow ख़त्म होने पर कहाँ जाना है, यह देना है।
+[English](README.md) · [Tiếng Việt](README.vi.md)
 
-English: **[README.md](README.md)** · Tiếng Việt: **[README.vi.md](README.vi.md)**
+## शुरू करने से पहले
 
-## आवश्यकताएँ
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| Namespace, resource prefix, entry point | `io.onboardkit`, `ob_`, `OnboardingSdk` |
-| Firebase | Hosted `ob_*` values fetch करने के लिए `google-services.json` + `com.google.gms.google-services` |
-| Ad unit ids | `AdRemoteConfig` के ज़रिए `assets/ad_config.json` से, या सीधे `AdsConfig` में |
-
-## Installation
+- minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
+- Built-in ad provider के लिए पहले [ads guide](../ads/README.md) पूरा करें: AdMob/Meta manifest values, ad config assets और Application में `ERainAd.init()`।
+- Funnel चाहिए तो OnboardKit से पहले `Tracker` और sink install करें; [Trackkit](../trackkit/README.md) देखें।
+- नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
 ```groovy
-// <tag> की जगह https://github.com/truongvimit/adlogic-partner-sdk/tags से कोई tag रखें
 def sdkVersion = '<tag>'
-
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-`:ads` को अलग से declare करें — इस module के भीतर वह `implementation` dependency है, इसलिए
-`com.ads.module.*` वरना आपके compile classpath पर नहीं होगा। `:trackkit` `api` से export होता है,
-`consumer-rules.pro` module के साथ आता है, और SDK की activities library manifest में हैं — उन्हें दोबारा
-declare न करें।
+## 1. Application में install और configure करें
 
-## Integration
-
-### 1. `Application.onCreate()`
-
-`Tracker.install()` सबसे पहले — उससे पहले निकले events सिर्फ़ buffer होते हैं। `OnboardingSdk.install()`
-`configure()` से पहले — install से पहले दिया गया config गिरा दिया जाता है और तब पूरा flow skip हो जाता है।
+इसे अपनी मौजूदा Application में **ऊपर दिए ads initialization के बाद** जोड़ें; ERain को दो बार initialize न करें।
+उदाहरण Google test ad units इस्तेमाल करता है। Release के लिए अपने units और अपनी `MainActivity` रखें।
+App के `R`, `BuildConfig` और `MainActivity` अलग packages में हों तो उन्हें import करें; नीचे के सभी config types `io.onboardkit.config.*` में शामिल हैं।
 
 ```kotlin
-override fun onCreate() {
-    super.onCreate()
-    initTracking()                                    // Tracker.install + Tracker.addSink
-    AdRemoteConfig.initializeFromAssets(this)         // assets/ad_config.json
-    AdConfig.install(FirebaseAdConfigSource())        // वैकल्पिक: remote ad config
-    ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000))
-    ERainAd.getInstance().init(this, buildERainAdConfig())   // देखें ../ads/README.md
-    ERainTuning.install()                             // एक बार, ERainAd.init के बाद
+import android.app.Application
+import android.content.Intent
+import io.onboardkit.OnboardingSdk
+import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.config.*
+import io.onboardkit.core.OnboardingListener
+import io.onboardkit.core.OnboardingOutcome
 
-    OnboardingSdk.install(this) {
-        adProvider = ERainAdProvider()                // ad-free flow के लिए null
-        paywallGate = OnboardKitPaywallGate()         // वैकल्पिक, :paykit से
-        listener = OnboardingListener { ctx, outcome -> goToMain(ctx, outcome) }
-    }
-    OnboardingSdk.configure(buildConfig()).onFailure { Log.e("OnboardKit", "rejected", it) }
-    OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)   // OB_FLOW logcat
-}
-```
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        // Complete ERainAd.init here; add Tracker/sinks if needed (ads guide).
+        ERainTuning.install()
 
-Listener को `OnboardingOutcome.Completed`, `Skipped` **और** `Aborted` — तीनों पर navigate करना ज़रूरी है;
-कोई listener न हो तो outcome गिर जाता है। `Completed.selectedLanguage` चुनी गई भाषा साथ लाता है;
-`OnboardingSdk.selectedLanguage()` उसे बाद में पढ़ लेता है।
-
-### 2. Config
-
-```kotlin
-private fun buildConfig() = onboardKitConfig {
-    splash = SplashConfig(logoRes = R.drawable.ic_logo, minDisplayTimeMs = 3_000)
-    language = LanguageConfig(defaultCode = "en")
-    defaultSteps()                                    // OB1, OB2, OB3 (सिर्फ़ ad), OB4
-    question = QuestionConfig(options = listOf(QuestionOption("romance", "Romance")))
-    ads = AdsConfig(
-        splashBanner         = BannerAdUnit("ca-app-pub-…/1111"),
-        splashInterstitial   = InterstitialAdUnit("ca-app-pub-…/2222"),
-        languageNative       = NativeAdUnit.waterfall(highFloor = "…/3333", allPrice = "…/4444"),
-        contentStepNative    = NativeAdUnit("ca-app-pub-…/5555"),
-        fullScreenStepNative = NativeAdUnit("ca-app-pub-…/6666"),
-    )
-}.getOrThrow()
-```
-
-`onboardKitConfig { }` एक `Result` लौटाता है, जिसमें validated config या validation errors होते हैं।
-`SplashConfig`, `LanguageConfig`, `BehaviorConfig`, `SystemBarConfig`, `QuestionConfig` और
-`AdsConfig` अपने options और defaults KDoc में बताते हैं। अपने flow के लिए ज़रूरी content और ad slots
-configure करें।
-
-**Ad slots.** `null` slot पर कोई ad नहीं दिखता। हर native और interstitial slot एक waterfall है: ids सबसे
-ऊँचे floor से शुरू, एक बार में एक request, पहली fill पर रुक जाना। `AdsConfig` में वे सारे slots हैं जिन्हें यह
-flow भर सकता है।
-
-ids को hard-code करने के बजाय `ad_config.json` में रखना है, तो app-side helpers से `AdRemoteConfig`
-के values को slots में बदलें:
-
-```kotlin
-private fun AdRemoteConfig?.native(baseKey: String): NativeAdUnit? =
-    this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { NativeAdUnit(tiers = it) }
-
-private fun AdRemoteConfig?.interstitial(baseKey: String): InterstitialAdUnit? =
-    this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }
-
-// यहाँ banners का waterfall नहीं होता — सिर्फ़ सबसे ऊपर वाला tier ही इस्तेमाल हो सकता है।
-private fun AdUnitConfig?.toBanner(): BannerAdUnit? =
-    this?.takeIf { it.isUsable }?.let { BannerAdUnit(id = it.waterfallIds.first()) }
-```
-
-```kotlin
-val remoteAds = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
-val config = onboardKitConfig {
-    ads = AdsConfig(
-        splashInterstitial = remoteAds.interstitial("inter_splash"),
-        languageNative     = remoteAds.native("native_lang"),
-        contentStepNative  = remoteAds.native("native_ob1"),
-    )
-}.getOrThrow()
-```
-
-**Steps.** `defaultSteps()` की जगह अपने steps `steps(vararg StepDefinition)` या `step(…)` से गिनाएँ —
-content page के लिए `ContentStepDefinition`, सिर्फ़-ad वाले page के लिए `AdFullScreenStepDefinition`। सूची
-का क्रम ही display क्रम है; remote config सिर्फ़ किसी step को बंद कर सकता है। `id` एक `StepId` है
-(`OB1`…`OB5`) — यह flow में **स्थान** है, content page की गिनती नहीं: default template में OB3 सिर्फ़-ad
-वाला page है, इसलिए तीसरा *content* page `StepId.OB4` है।
-
-**Native templates.** ये screens हर CTA position के लिए एक अलग layout ship करती हैं, इसलिए
-`NativeTemplate` blocks को इधर-उधर करने के बजाय layout चुनता है। इसे सीधे set करें, या उसी config document
-से एक और app-side helper के ज़रिए निकालें:
-
-```kotlin
-private fun AdRemoteConfig?.templateOf(
-    key: String,
-    default: NativeTemplate = NativeTemplate.CTA_BOTTOM,
-): NativeTemplate = when (this?.unit(key)?.positionCTA) {
-    "TOP" -> NativeTemplate.CTA_TOP
-    "BOTTOM" -> NativeTemplate.CTA_BOTTOM
-    else -> default
-}
-```
-
-### 3. Splash
-
-आपकी launcher activity `ObSplashActivity` को extend करती है। SDK consent, billing, remote fetch, ad loading,
-notification permission, न्यूनतम display time और navigation संभालता है। App-specific setup के लिए hooks
-override करें।
-
-```kotlin
-class SplashActivity : ObSplashActivity() {
-    override suspend fun onInitBilling() { myEntitlement.awaitReady() }  // पहले premium तय करें
-
-    override fun onRemoteFetched() {
-        // यहाँ अपनी app की remote keys fetch करें
-        OnboardingSdk.configure(buildConfig())   // दोबारा बनाएँ: remote ने ad unit ids बदले हो सकते हैं
+        OnboardingSdk.install(this) {
+            adProvider = ERainAdProvider()
+            listener = OnboardingListener { context, outcome ->
+                val extras = when (outcome) {
+                    is OnboardingOutcome.Completed -> outcome.passthrough
+                    is OnboardingOutcome.Skipped -> outcome.passthrough
+                    is OnboardingOutcome.Aborted -> null
+                }
+                context.startActivity(
+                    Intent(context, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .apply { extras?.let { putExtras(it) } },
+                )
+            }
+        }
+        val config = onboardKitConfig {
+            splash = SplashConfig(appNameRes = R.string.app_name)
+            defaultSteps()
+            ads = AdsConfig(
+                splashInterstitial = InterstitialAdUnit(
+                    "ca-app-pub-3940256099942544/1033173712",
+                ),
+                languageNative = NativeAdUnit(
+                    "ca-app-pub-3940256099942544/2247696110",
+                ),
+                contentStepNative = NativeAdUnit(
+                    "ca-app-pub-3940256099942544/2247696110",
+                ),
+            )
+        }.getOrThrow()
+        OnboardingSdk.configure(config).getOrThrow()
+        OnboardingSdk.setFlowLogging(BuildConfig.DEBUG)
     }
 }
 ```
 
-`SplashConfig.notificationPermissionEnabled` का default `true` है। Android 13+ और target SDK 33+ पर
-consent step पूरा होने के बाद splash `POST_NOTIFICATIONS` माँगता है। Library यह permission declare
-करती है। Permission पहले से मिली हो, पिछले automatic request का परिणाम आ चुका हो, या manifest से
-permission हटा दी गई हो तो prompt skip होता है। Denial या cancellation flow को नहीं रोकता और ad
-consent नहीं देता। App में notification permission स्वयं संभालने के लिए config में automatic request
-बंद करें:
+`configure()` से पहले `install()` बुलाएँ। Config बनाना और configure करना दोनों `Result` देते हैं; उदाहरण गलत setup को स्पष्ट दिखाने के लिए `getOrThrow()` इस्तेमाल करता है।
+Listener तीनों outcomes संभालता है। `Completed.selectedLanguage` चुनी गई भाषा भी देता है।
+अंतिम handoff में `NEW_TASK` रखें, `CLEAR_TASK` न जोड़ें: splash ad को अभी अपनी Activity की जरूरत हो सकती है।
+
+## 2. अपना launcher splash जोड़ें
 
 ```kotlin
-splash = SplashConfig(notificationPermissionEnabled = false)
+import io.onboardkit.ui.splash.ObSplashActivity
+
+class SplashActivity : ObSplashActivity()
 ```
-
-Remote fetch और consent साथ चल सकते हैं। SDK के UMP flow में उपयोगकर्ता के उत्तर की कोई समय-सीमा
-नहीं है। Consent और notification permission का परिणाम, यदि माँगा गया हो, मिलने के बाद splash resumed
-Activity और window focus का इंतज़ार करता है। तभी eligible banner/interstitial loads और minimum display
-period शुरू होते हैं। Ad wait budgets इन prompts के बाद शुरू होते हैं; उन्हें पढ़ने में लगा समय ad phase
-का budget नहीं घटाता। Splash ad waits और minimum display period के बाद foreground/focus फिर जाँचा
-जाता है। फिर अगले destination के native preloads शुरू होते हैं, उसके बाद interstitial दिखाने और flow
-आगे बढ़ाने का प्रयास होता है। Banner wait का default `0` है; interstitial wait load पूरा होने या configured
-budget समाप्त होने पर ख़त्म होता है, इसलिए हर ad का fill होना ज़रूरी नहीं है।
-
-Launcher activity में `android:exported="true"`, MAIN/LAUNCHER filter और AppCompat/MaterialComponents
-theme declare करें। Portrait splash के लिए:
 
 ```xml
-<activity
-    android:name=".SplashActivity"
-    android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
-    android:exported="true"
-    android:screenOrientation="portrait"
-    android:theme="@style/Theme.Splash">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
-</activity>
+<application android:name=".App">
+    <activity android:name=".MainActivity" android:exported="false" />
+    <activity
+        android:name=".SplashActivity"
+        android:exported="true"
+        android:screenOrientation="portrait"
+        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:theme="@style/ob_Theme_OnboardKit">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
 ```
 
-`configChanges` से Activity सूचीबद्ध बदलावों को recreation के बिना संभालती है। `uiMode|fontScale` रखने
-पर प्रभावित custom views को स्वयं update करें। अन्य कारणों से Activity फिर भी recreate हो सकती है।
-Landscape या tablet support के लिए manifest orientation की जाँच करें और
-`BehaviorConfig.lockPortrait = false` सेट करें।
+इन declarations को अपने manifest में मिलाएँ; ads guide की metadata और permissions रखें। SDK की screens library manifest में पहले से हैं।
+खुद `OnboardingSdk.start()` न बुलाएँ और splash को finish न करें; यह flow `ObSplashActivity` संभालता है।
 
-- यहाँ `OnboardingSdk.start()` न बुलाएँ — pipeline पूरा होते ही वह अपने आप चलता है।
-- UMP के लिए `onConsentRequired()` का default रखें; यह `:ads` के `ConsentCenter` से flow चलाता है।
-  Custom consent provider के लिए override पूरा करने से पहले request और personalization decisions
-  को `ConsentCenter.setHostConsent(...)` से publish करें। केवल `return true` ad requests की अनुमति
-  नहीं देता। Consent अनुमति दे तब भी `OnboardingSdk.setCanRequestAds(false)` अलग प्रतिबंध रहता है।
-- `onDestroy()` override करें तो `super.onDestroy()` ज़रूर बुलाएँ — `ConsentCenter.detach(this)` वहीं है।
+इन defaults का ध्यान रखें:
 
-बाद में, कहीं से भी: `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)`।
+- `notificationPermissionEnabled = true`: Android 13+ / target 33+ पर consent के बाद notification permission माँगी जाती है। Grant या पिछले automatic request का दर्ज परिणाम अगली prompt रोकता है; मना करने पर भी flow चलता है। App खुद prompt संभाले तो `false` रखें।
+- `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
+- `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
+- `consentTimeoutMs = 20_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
+- Prompts खत्म होने और splash के foreground focus वापस पाने के बाद ad requests और display clock शुरू होते हैं। SDK navigation से पहले अगली screen preload करता है; अलग load-and-show flow जोड़ने की जरूरत नहीं।
 
-## Notification, widget या uninstall shortcut से entry
+## 3. Ads और सामग्री को screens से जोड़ें
 
-`SplashEntry` (`NOTIFICATION`, `WIDGET`, `UNINSTALL`) feature launches को splash से route करता है,
-entry-specific interstitial unit चुनता है और destination खुलने का समय तय करता है। Feature extras दें और
-listener में destination संभालें।
+सिर्फ जरूरी optional slots configure करें; कुछ slots fallback units लेते हैं, जैसा [AdsConfig](src/main/java/io/onboardkit/config/AdsConfig.kt) में बताया गया है।
 
-**1. entry का intent splash पर दागें, अपनी main screen पर नहीं।** Tap एक session शुरू करता है, इसलिए वह वही
-रास्ता लेता है जो launcher tap लेता है। `SplashEntry.intent` उस launch को tag करता है और
-`NEW_TASK or CLEAR_TASK` पहले से सेट कर देता है; आप ऊपर से feature extras जोड़ें।
-
-```kotlin
-SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
-    .putExtra(EXTRA_WIDGET_ACTION, "merge_pdf")
-```
-
-**2. Extras passthrough बनकर साथ चलते हैं।** `ObSplashActivity` उसे अपने ही `intent.extras` से भरता है, SDK
-उसे हर screen के पार ले जाता है, और `Completed` तथा `Skipped` पर वापस सौंप देता है (`Aborted` पर कभी नहीं)।
-आपके feature extras SDK के लिए अपारदर्शी हैं।
-
-**3. Listener outcome को route करता है** — यही एक फ़ैसला हर app खुद लेती है:
-
-```kotlin
-listener = OnboardingListener { context, outcome ->
-    val extras = when (outcome) {
-        is OnboardingOutcome.Completed -> outcome.passthrough
-        is OnboardingOutcome.Skipped -> outcome.passthrough
-        is OnboardingOutcome.Aborted -> null
-    }
-    val destination = when (SplashEntry.from(extras)) {
-        SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
-        else -> MainActivity::class.java
-    }
-    context.startActivity(
-        Intent(context, destination)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .apply { extras?.let(::putExtras) },
-    )
-}
-```
-
-इस handoff में `NEW_TASK` रखें और `CLEAR_TASK` न जोड़ें: ad अभी स्क्रीन पर हो सकता है और task clear
-करने से उसकी host Activity finish हो जाएगी। Extras को `onCreate` **और** `onNewIntent` दोनों में संभालें;
-delivery destination के launch mode और task state पर निर्भर है।
-
-**4. Entry-specific ads और navigation timing।** `SplashEntry` launch अपनी entry की key इस्तेमाल करता है
-(`inter_noti`, `inter_widget`, `inter_uninstall`), पूरे waterfall सहित; वह key न हो या बंद हो तो सामान्य
-splash resolution पर लौट आता है। उसे `AFTER_AD` भी मिलता है, जबकि launcher tap `UNDER_AD` पर रहता है — वही
-trade-off जो [`../ads/README.md`](../ads/README.md#when-the-next-screen-starts) में `InterNextAction` का
-है। `nextScreenTiming()` या `splashInterstitialOverride()` सिर्फ़ और बारीक बँटवारे के लिए override करें।
-
-## अपने layouts
-
-सिर्फ़ `SplashConfig.layoutRes` और `ContentStepDefinition.layoutRes` किसी screen द्वारा पढ़े जाते हैं। बाकी
-`layoutRes` knobs validation में reject हो जाते हैं — उन्हें `0` पर छोड़ें और उसी नाम का SDK layout override
-करें, उसकी हर id बनाए रखते हुए।
-
-| इसके बजाय | यह layout override करें |
+| Configuration | Screen |
 |---|---|
-| `LanguageConfig.layoutRes` / `.itemLayoutRes` | `ob_activity_language.xml` / `ob_item_language.xml` |
-| `QuestionConfig.layoutRes` / `.optionLayoutRes` | `ob_activity_question.xml` / `ob_item_question_option.xml` |
-| `AdFullScreenStepDefinition.layoutRes` | `ob_fragment_ad_step.xml` |
+| `splashBanner`, `splashInterstitial` | Splash banner / interstitial |
+| `languageNative`, `languageDupNative` | भाषा स्क्रीन का पहला / replacement native |
+| `contentStepNative`, `stepNatives[StepId.OB1]` | Content pages का साझा native / प्रति-step override |
+| `fullScreenStepNative` | सिर्फ ad वाला step; usable unit न हो तो skip होता है |
 
-Splash हर id null-safely bind करता है, इसलिए जो id आप छोड़ देंगे वह बस skip हो जाएगी। पर content-step layout
-में उसकी **सारी** ids होनी चाहिए, वरना वह page एक log के साथ SDK layout पर लौट जाता है।
+`defaultSteps()` OB1, OB2, OB3 (सिर्फ ad), OB4 बनाता है। अपनी सामग्री और images के लिए इसे `steps(ContentStepDefinition(...), ...)` से बदलें; [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt) देखें।
+Native/interstitial waterfall में `tiers = listOf(highId, fallbackId)` request के क्रम में दें; banner एक ID लेता है।
 
-| Screen | Id | Type |
-|---|---|---|
-| Splash | `ob_splash_logo` / `ob_splash_app_name` / `ob_splash_progress` | `ImageView` / `TextView` / `ProgressBar` |
-| | `ob_splash_ad_container` | `FrameLayout`; इसके अंदर `<include layout="@layout/layout_banner_control" />` रखें, वरना splash banner के पास जुड़ने की जगह नहीं होगी |
-| Content step | `ob_step_image` / `ob_step_player` / `ob_step_card` | `ImageView` / `androidx.media3.ui.PlayerView` / `LinearLayout` |
-| | `ob_step_title` / `ob_step_subtitle` / `ob_step_indicator` / `ob_primary_cta` | `TextView` / `TextView` / `ObStepIndicator` / `ObPrimaryButton` |
-| | `ob_ad_block` / `ob_native_container` | `FrameLayout` (slot अस्वीकृत होने पर छिपा) / `FrameLayout` |
+`inter_splash` या `native_lang` जैसे JSON नामों को app को `AdsConfig` से जोड़ना होता है; SDK field name से हर mapping नहीं निकालता।
+`AdRemoteConfig.getInstance().tiersFor(key)` इस्तेमाल करें और refreshed IDs आने के बाद `onRemoteFetched()` में config दोबारा बनाएँ।
+Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) पूरी mapping और native templates दिखाता है।
 
-Flow के भीतर अपनी किसी screen के लिए, `showInterstitial(placement, onNext, onFinished)`
-`AppCompatActivity` पर एक public extension है: `onNext` में destination शुरू करें (ad के नीचे), `onFinished`
-में मौजूदा screen finish करें। हर callback अधिकतम एक बार चलता है, `onNext` पहले और `onFinished` बाद में; `onNext` से
-`finish()` कभी न बुलाएँ। Native के लिए ऐसा कोई public समकक्ष नहीं है — अपने natives `:ads` के
-`NativeAdHelper` से render करें।
+## वैकल्पिक integrations
 
-## Paywall gate
+- **Firebase:** Firebase configured हो तो splash `ob_*` flags fetch करता है; वरना cache/defaults इस्तेमाल होते हैं। [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) में supported keys हैं। Remote ad JSON या GA4 sink के लिए [suite-firebase](../suite-firebase/README.md) जोड़ें; सिर्फ ad config source install करने से fetch नहीं होता।
+- **Paywall:** पहले [PayKit](../paykit/README.md) install करें, फिर `OnboardingSdk.install` में `paywallGate = OnboardKitPaywallGate()` रखें (`io.paykit.integration`)। Gate unset हो तो paywall skip होता है। App में purchases और ads दोनों हों तो नीचे billing readiness वाला कदम भी पूरा करें।
+- **अपना consent provider:** UMP के लिए default `onConsentRequired()` रखें। Custom override में लौटने से पहले CMP का परिणाम `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें। सिर्फ `true` लौटाना ad request की अनुमति नहीं है; `setCanRequestAds(false)` host की अलग रोक है और `true` सिर्फ उस रोक को हटाता है। `onDestroy()` override करें तो `super.onDestroy()` जरूर बुलाएँ।
+- **Custom UI / प्रश्न:** [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) और [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt) देखें। सिर्फ splash और content-step के `layoutRes` overrides supported हैं; बाकी layout fields validation में fail होते हैं। SDK resources override करते समय IDs बनाए रखें।
+
+**Purchases और ads:** `PayKit.install()` / BillingKit initialization purchase verification को asynchronously शुरू करता है; इससे यह तय नहीं होता कि premium restore हो चुका है। Base `onInitBilling()` hook खाली है।
+ऊपर की minimal splash को ऐसे override से बदलें जो splash ad phase से पहले `Billing.awaitReady()` का इंतजार करे।
+`Billing` को सीधे बुलाने के लिए उसी tag पर `implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` भी जोड़ें; [BillingKit](../billingkit/README.md) देखें।
 
 ```kotlin
-class MyPaywallGate : PaywallGate {
-    override suspend fun shouldShow(placement: PaywallPlacement) =
-        placement == PaywallPlacement.AFTER_ONBOARDING && !myEntitlement.isPremium
+import com.ads.module.billing.Billing
+import io.onboardkit.ui.splash.ObSplashActivity
 
-    override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome =
-        PaywallOutcome.Dismissed   // या Purchased / ContinueWithAds
+class SplashActivity : ObSplashActivity() {
+    override suspend fun onInitBilling() {
+        val readiness = Billing.awaitReady()
+        // Apply your app's policy for ReadyResult.Timeout / ReadyResult.Error.
+    }
 }
 ```
 
-Placements: `SPLASH_INTER`, `AFTER_ONBOARDING`, `AFTER_QUESTION_OLD_USER`। `paywallGate` सेट न करें तो हर
-checkpoint सीधे पार हो जाता है। `:paykit` ship कर रहे हैं? उसका तैयार `OnboardKitPaywallGate` इस्तेमाल करें —
-देखें [`../paykit/README.md`](../paykit/README.md)।
+`Billing.awaitReady()` से `Ready`, `Timeout` या `Error` मिलता है; परिणाम के अनुसार अपनी app की error policy लागू करें। मौजूदा `SplashConfig.billingTimeoutMs` (default 5,000 ms) पूरे hook को भी सीमित करता है, इसलिए splash deadline परिणाम आने से पहले hook cancel कर सकती है; timeout purchase status तय नहीं करता।
+Integration point के लिए [sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) देखें।
 
-## Remote config
+Notification/widget/uninstall entry को [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt) से अपनी splash पर भेजें:
 
-हर `ob_*` key, type और default `io.onboardkit.remote.ObRemoteKeys` में देखें। SDK startup पर cached flags
-बहाल करता है और cache न होने पर defaults इस्तेमाल करता है। Firebase configured होने पर splash remote
-values अपने आप fetch और apply करता है। Overrides Firebase console में publish करें।
+```kotlin
+import io.onboardkit.ui.splash.SplashEntry
 
-## Analytics
+val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
+    .putExtra("widget_action", "open_document")
+```
 
-`Tracker.install()` और एक `Tracker.addSink(...)` जुड़ते ही funnel अपने आप निकलने लगता है — event नामों के लिए
-देखें [`../trackkit/README.md`](../trackkit/README.md)। इसके बजाय SDK के अपने events चाहिए तो `install` के
-भीतर `analyticsPlugin { event -> log(event.name, event.params) }` जोड़ें, या `OnboardingSdk.events` /
-`.state` collect करें।
+ऊपर का listener `Completed`/`Skipped` के extras आगे भेजता है। Destination के `onCreate` और `onNewIntent` दोनों में इन्हें पढ़ें।
+Entries `inter_noti`, `inter_widget` या `inter_uninstall` इस्तेमाल करती हैं; fallback सामान्य splash unit है। ये entries ad के बाद navigate करती हैं, जबकि launcher सामान्यतः अगली screen ad के नीचे खोलता है।
 
-`isCompleted()`, `selectedLanguage()` और `answers()` सहेजी गई progress पढ़ते हैं। `markCompleted()` flow
-को complete चिह्नित करता है; `reset()` progress साफ़ करता है। ये suspend functions हैं।
+## 5.0.0 से upgrade
 
-## समस्या-निवारण
+- मौजूदा `install → configure → splash` integration रखें और सभी modules के versions साथ बदलें।
+- SDK का UMP form बंद करने या खुले form के दौरान navigation करने वाला अपना timeout हटाएँ। Timeout या boolean callback से consent grant न करें।
+- ऊपर के defaults के अनुसार notification prompt का ownership और portrait behavior जाँचें।
+- Native bind अब `fo_ad_bound` देता है; वास्तविक ad display गिनने के लिए `ad_show` इस्तेमाल करें। Bind को impression मानने वाले dashboards बदलें।
+- भाषा/प्रश्न native बदलते समय मौजूदा creative इंतजार के दौरान बना रहता है। Foreground में लौटने पर OB5 countdown फिर शुरू करता है। नई host calls जरूरी नहीं हैं।
 
-| लक्षण | कारण | समाधान |
-|---|---|---|
-| Flow कभी चलता ही नहीं | `configure()` विफल, या `install()` से पहले चला | `Result` log करें; पहले `install()` बुलाएँ |
-| User flow से बाहर ही नहीं निकलता | कोई `OnboardingListener` नहीं, या वह `Skipped` को अनदेखा करता है | तीनों outcomes संभालें |
-| हर placement `no_provider` कहता है | `adProvider` null छोड़ा गया | `adProvider = ERainAdProvider()` |
-| हर placement `consent_not_granted` कहता है | Consent ने requests की अनुमति नहीं दी, या host ने उन्हें बंद किया है | `ConsentCenter.canRequestAds()` और `OnboardingSdk.canRequestAds()` जाँचें; UMP पूरा करें या custom provider का परिणाम publish करें |
-| सिर्फ़-ad वाला page कभी नहीं दिखता | `fullScreenStepNative` / `stepNatives[OB3]` के लिए कोई usable unit नहीं | एक configure करें; सिर्फ़ remote step flag काफ़ी नहीं |
-| Splash banner कभी नहीं दिखता | `ob_splash_ad_container` या `layout_banner_control` include गायब | दोनों अपने splash layout में जोड़ें |
+## समस्या निवारण
 
-## License
+| समस्या | जाँचें |
+|---|---|
+| Flow तुरंत skip होता है | `install()` पहले, फिर `configure()` चला और दोनों `Result` सफल हैं |
+| Flow खत्म होता है, app नहीं खुलती | Listener `Completed`, `Skipped`, `Aborted` तीनों संभालता है |
+| `no_provider` / `consent_not_granted` | Provider installed है; `ConsentCenter.canRequestAds()` और host की रोक देखें |
+| सिर्फ ad वाला page नहीं दिखता | `fullScreenStepNative` या उसका `stepNatives` override usable है |
+| Custom splash banner नहीं दिखता | Layout में `ob_splash_ad_container` के अंदर `layout_banner_control` include है |
 
-MIT — देखें [`../LICENSE`](../LICENSE)।
+Integration के दौरान `OnboardingSdk.setFlowLogging(true)` रखें (`OB_FLOW` in Logcat)।
+बाद में भाषा बदलने के लिए `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` बुलाएँ (`io.onboardkit.ui.language`)।
+
+[Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)

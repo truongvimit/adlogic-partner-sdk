@@ -1,153 +1,102 @@
+**Language / Ngôn ngữ / भाषा:** [English](README.md) | [Tiếng Việt](README.vi.md) | [हिन्दी](README.hi.md)
+
 # Trackkit
 
-> एक ही analytics facade जिससे हर module रिपोर्ट करता है, और हर vendor के लिए एक sink।
+SDK और ऐप के events को `Tracker` से Firebase या अपने analytics backend तक भेजें।
 
-`io.trackkit.Tracker`, `:ads`, `:onboardkitorigin`, `:paykit` और `:billingkit` के SDK analytics संभालता है।
-App अपने events भी इसी facade से भेज सकता है ताकि consent gating, default params, GA4 name validation,
-dedupe और cumulative ad revenue का उपयोग हो। Core में vendor SDK dependency नहीं है; sink implementations
-उसे analytics vendors से जोड़ते हैं।
+[Build setup और module चयन](../README.hi.md) · minSdk 24+ · compileSdk 36+ · JDK 17
 
-English: [README.md](README.md) ·
-Tiếng Việt: [README.vi.md](README.vi.md)
+## 1. डेटा का destination जोड़ें
 
-## आवश्यकताएँ
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| आपके build में क्या जुड़ता है | कोई vendor dependency नहीं, कोई permission नहीं, कोई R8 rule नहीं; `consumer-rules.pro` AAR के साथ आता है |
-
-## Installation
+Firebase Analytics के लिए `suite-firebase` जोड़ें; यह Trackkit पहले से उपलब्ध कराता है। ऐप की `google-services.json` और Google Services plugin के साथ [Firebase setup](../suite-firebase/README.md) पूरा करें।
 
 ```groovy
-repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } }
-def sdkVersion = '<tag>' // https://github.com/truongvimit/adlogic-partner-sdk/tags
+// app/build.gradle
+def sdkVersion = '<tag>'
 dependencies {
-    implementation "com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion"
-    // FirebaseSink यहाँ रहता है।
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-`:ads`, `:onboardkitorigin`, `:paykit`, `:billingkit` और `:suite-firebase` सभी
-`api project(':trackkit')` declare करते हैं, इसलिए इनमें से कोई एक होने पर भी `Tracker` classpath पर आ जाता
-है; इसे खुद सिर्फ़ तब declare करें जब आप कोई standalone `TrackSink` लिख रहे हों।
+अपने backend के लिए `com.github.truongvimit.adlogic-partner-sdk:trackkit:$sdkVersion` declare करें और `TrackSink` implement करें। Ads, onboarding, billing और paywall पहले से Trackkit उपलब्ध कराते हैं, इसलिए अलग Trackkit dependency नहीं चाहिए।
 
-## Integration
+## 2. एक बार initialize करें
 
-`Tracker.install` को `super.onCreate()` के बाद और events भेजने वाले modules को initialise करने से पहले
-बुलाएँ, फिर अपने sinks register करें।
+इसे मौजूदा `Application.onCreate()` में, दूसरे kits से events आने से पहले जोड़ें। नीचे का उदाहरण केवल analytics वाले ऐप के लिए है; ads होने पर अपनी मौजूदा Application base class रखें। `BuildConfig` आपके ऐप की class है।
 
 ```kotlin
-override fun onCreate() {
-    super.onCreate()
-    Tracker.install(this, TrackerConfig(
-        appVersionCode = BuildConfig.VERSION_CODE.toLong(),
-        strictValidation = BuildConfig.DEBUG,
-    ))
-    Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
-    if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
+import android.app.Application
+import io.suite.firebase.FirebaseSink
+import io.trackkit.Tracker
+import io.trackkit.TrackerConfig
+
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Tracker.install(this, TrackerConfig(
+            appVersionCode = BuildConfig.VERSION_CODE.toLong(),
+            strictValidation = BuildConfig.DEBUG,
+        ))
+        Tracker.addSink(FirebaseSink())
+    }
+}
+```
+
+Manifest के `<application>` में `android:name` को `App` पर सेट करें। Application में Tracker पहले से install हो तो केवल missing sink जोड़ें। हर sink ID एक बार register करें।
+
+## 3. ऐप के events भेजें
+
+```kotlin
+Tracker.track("app_document_open", mapOf("file_type" to "pdf"))
+Tracker.screen("document_reader")
+```
+
+Event के नाम स्थिर रखें और बदलने वाली जानकारी parameters में दें; file names या user data को event नाम में न डालें। नाम अक्षर से शुरू हो, केवल अक्षर, अंक और underscore हों, और अधिकतम 40 characters हों।
+
+Ads, onboarding, billing और PayKit अपने SDK events खुद भेजते हैं। ऐप callbacks से उनकी दूसरी copy न भेजें। नाम और parameters [TrackkitEvents](src/main/java/io/trackkit/TrackkitEvents.kt) में हैं।
+
+## Consent जोड़ें
+
+Ads module का `ConsentCenter` इस्तेमाल करने पर consent Tracker तक अपने आप पहुँचता है। वर्तमान mapping `analytics = true` और `ads = personalized` है; यह ad request की अनुमति नहीं है। Request की अनुमति `ConsentCenter.canRequestAds()` से पढ़ें।
+
+अपना consent flow हो और `ConsentCenter` इस्तेमाल न होता हो, तो वास्तविक परिणाम भेजें:
+
+```kotlin
+fun onConsentResolved(analyticsAllowed: Boolean, adsPersonalizationAllowed: Boolean) {
+    Tracker.setConsent(analytics = analyticsAllowed, ads = adsPersonalizationAllowed)
 }
 ```
 
-SDK अपने द्वारा प्रबंधित ad objects के lifecycle और paid impressions रिपोर्ट करता है। Sink इन reports को
-host callbacks wrap किए बिना प्राप्त करता है। Custom ad integrations के लिए `PlacementRegistry` या अपने
-event payloads से placement context दें।
+दो consent integrations को एक-दूसरे के परिणाम overwrite न करने दें। `ConsentCenter` का अगला update सीधे सेट किए गए Tracker consent को बदल देता है।
 
-`install()` से पहले निकले events buffer होते हैं — 128 items, उसके बाद सबसे पुराने एक warning के साथ गिरा
-दिए जाते हैं। दूसरा `install()` अनदेखा कर दिया जाता है। कोई sink न हो तो हर event validate होकर हटा दिया
-जाता है।
+`TrackerConfig.consentPolicy` का default `SEND_ALWAYS` है। Consent resolve होने तक events रोकने हों तो Tracker install करने से पहले `QUEUE_UNTIL_RESOLVED` configure करें। [TrackerConfig और ConsentPolicy](src/main/java/io/trackkit/TrackkitApi.kt) तथा [Firebase consent विकल्प](../suite-firebase/README.md) देखें।
 
-`TrackerConfig` में बाकी सब है — reporting currency, consent policy, log level, revenue accumulator,
-default params — हर एक KDoc में documented। Defaults काम करते हैं; सिर्फ़ वही बदलें जो अलग चाहिए।
+## Integration जाँचें
 
-`Tracker` पर और भी: `track(name, params)`, `track(TrackEvent)`, `screen(name, screenClass)`,
-`adRevenue(impression)`, `setDefault`, `setDefaults`, `setUserProperty`, `setUserId`, `removeSink`,
-`flushPending()`, `sinkIds()`, तथा `isInstalled` / `currentConsent` properties।
-
-## Consent
-
-`com.ads.module.consent.ConsentCenter` का हर consent update
-`Tracker.setConsent(analytics = true, ads = personalized)` बुलाता है। यह SDK की वर्तमान mapping है;
-ads axis personalization बताता है, ad request भेजने की अनुमति नहीं। Request की अनुमति जाँचने के लिए
-`ConsentCenter.canRequestAds()` का उपयोग करें।
-
-Consent updates को एक जगह समन्वित करें: अगला `ConsentCenter` update सीधे किए गए `Tracker.setConsent`
-call को, उसके analytics value सहित, overwrite करता है। `ConsentCenter` के बिना host अपने consent flow से
-Tracker को consent देता है। Analytics consent और ad personalization अलग settings हैं; इस mapping में
-केवल ads को deny करने से analytics बंद नहीं होता।
-
-## Events
-
-`io.trackkit.TrackkitEvents` में वे सारे नाम हैं जो यह suite emit करती है, domain के हिसाब से समूहबद्ध —
-ads, revenue, first-open funnel, IAP, consent — और `TrackkitEvents.all()` runtime पर पूरा set लौटाता है।
-ऐसी सूची कॉपी करने के बजाय जो पुरानी पड़ जाएगी, उसे IDE में खोलें; हर event class अपना अर्थ खुद बताती है।
-
-`Tracker.track` से भेजे events में `app_vc`, `sdk_ver`, `session_no`, `install_day` भी होते हैं, और consent
-update के बाद `consent_ads` होता है।
-
-GA4 reports के लिए custom dimensions configure करते समय `TrackkitEvents` के `PARAM_*` constants का
-उपयोग करें। `Tracker.screen()` calls को `TrackSink.onScreen` तक भेजता है; `FirebaseSink` इन्हें Firebase
-के `screen_view` event में बदलता है।
-
-## अपने custom events
+Logcat खोलकर `Trackkit` filter करें। Debug builds में events देखने के लिए console sink जोड़ें:
 
 ```kotlin
-Tracker.track(SimpleEvent("app_widget_pinned", mapOf("source" to "home")))
+import io.trackkit.sink.ConsoleSink
+
+// Application.onCreate(), after Tracker.install(...)
+if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
 ```
 
-`TrackkitEvents` में class तब जोड़ें जब एक से ज़्यादा module वह event emit करते हों, कोई dashboard या Adjust
-token उस पर निर्भर हो, या उसके param की वर्तनी releases के आर-पार स्थिर रहनी हो।
+| समस्या | क्या जाँचें |
+| --- | --- |
+| Events नहीं आते | Events भेजने से पहले `Tracker.install` और sink registration की पुष्टि करें; `Tracker.sinkIds()` देखें। |
+| Events रुके या drop हुए | `Tracker.currentConsent` और चुनी हुई `consentPolicy` देखें। |
+| SDK events दो बार आते हैं | Ads/onboarding callbacks से manual copies हटाएँ; हर destination एक बार register करें। |
+| Validation exception | `strictValidation = BuildConfig.DEBUG` रखें, release में `true` नहीं। |
 
-| हर name और param key पर नियम | सीमा | उल्लंघन पर |
-|---|---|---|
-| व्याकरण | `[a-zA-Z][a-zA-Z0-9_]{0,39}` | event अस्वीकृत, param key हटा दी जाती है |
-| प्रति event params | 25 | अतिरिक्त keys हटा दी जाती हैं |
-| String param value / user property value | 100 / 36 अक्षर | काट दिए जाते हैं |
-| आरक्षित prefixes | `firebase_`, `google_`, `ga_` | अस्वीकृत |
-| PII / गोपनीय keys | purchase tokens, `email`, `phone`, `device_id`, `android_id`, `gaid`, `idfa`, `advertising_id` | अस्वीकृत |
+## 5.0.0 से अपग्रेड
 
-Validator के ऊपर की convention: `<domain>_<object>_<action>`, lowercase `snake_case`, domain इनमें से एक —
-`ad_`, `fo_`, `iap_`, `consent_`, `app_`। नाम में कभी variable न घुसाएँ — एक ही `fo_step_complete` जो `step`
-param साथ ले, न कि `ob1_complete` और `ob2_complete` अलग-अलग।
+Initialization नहीं बदला है। Native bind अब `fo_ad_bound` है, vendor-confirmed `ad_show` से अलग। जिन reports में onboarding bind callbacks को वास्तविक impressions माना गया था, उन्हें अपडेट करें।
 
-## अपना sink लिखना
+## अपना backend और अन्य विकल्प
 
-सिर्फ़ `id` और `onEvent` अनिवार्य हैं — `onInstall`, `onScreen`, `onUserProperty`, `onUserId`, `onConsent`
-और `onAdRevenue` के no-op defaults हैं, Java में भी।
-
-```kotlin
-class MyBackendSink(private val api: MyApi) : TrackSink {
-    override val id: String = "my_backend"
-
-    override fun onEvent(name: String, params: Map<String, Any?>) {
-        api.enqueue(name, params)
-    }
-    // impression.value पहले से impression.currency में है — convert न करें।
-    override fun onAdRevenue(impression: AdImpression) {
-        api.enqueueRevenue(impression.value, impression.currency)
-    }
-}
-
-Tracker.addSink(MyBackendSink(api))
-```
-
-हर callback caller के thread पर चलता है और उसे block नहीं करना चाहिए। Exception फेंकने वाला sink पकड़ा
-जाता है और उसकी `id` के साथ log होता है; बाकी sinks को event फिर भी मिलता है। `addSink` पहले से registered
-`id` को अनदेखा कर देता है। Params साफ़ होकर पहुँचते हैं: कोई null नहीं, strings 100 अक्षरों पर सीमित, अधिकतम
-25 keys। Debug builds के लिए `io.trackkit.sink.ConsoleSink` वही payload log करता है।
-
-## समस्या-निवारण
-
-| लक्षण | कारण | समाधान |
-|---|---|---|
-| किसी vendor तक कुछ नहीं पहुँचता; logcat कहता है `install() ran with no sink` | कोई sink register नहीं हुआ | `Tracker.addSink(FirebaseSink())` या अपना `TrackSink` |
-| `N events were dropped before install (buffer overflow)` | `install()` से पहले 128 से ज़्यादा events निकले | modules के events भेजने से पहले Tracker install करें |
-| `install() called twice` या `sink 'x' already registered` | दो बार `install()`, या दो sinks की एक ही `id` | एक `install()` रखें; हर sink को अलग `id` दें |
-| Launch के बाद सारे events रुक जाते हैं | `consentPolicy = DROP_UNTIL_GRANTED` और analytics consent नहीं मिला | `Tracker.currentConsent` और consent publish करने वाले code को जाँचें |
-| `ad_impression` आते रहने पर भी `ad_revenue_total` 0 पर अटका है | impressions `reportingCurrency` से अलग currency में हैं | `TrackerConfig.reportingCurrency` को account की currency पर सेट करें |
-| Production में `IllegalArgumentException: Trackkit: …` | release में `strictValidation` `true` छूट गया | उसे `BuildConfig.DEBUG` से जोड़ें |
+Custom destination के लिए `TrackSink.id` और `onEvent` implement करें; `Tracker.screen` इस्तेमाल करने पर `onScreen` भी जोड़ें। Sink callbacks caller के thread पर चलते हैं: network work queue में डालें, thread block न करें। Default parameters, user properties और revenue APIs के लिए [TrackSink](src/main/java/io/trackkit/TrackkitApi.kt), [ConsoleSink](src/main/java/io/trackkit/sink/ConsoleSink.kt) और [Tracker](src/main/java/io/trackkit/Tracker.kt) देखें।
 
 ## License
 
-MIT — देखें [LICENSE](../LICENSE)।
+MIT — [LICENSE](../LICENSE) देखें।
