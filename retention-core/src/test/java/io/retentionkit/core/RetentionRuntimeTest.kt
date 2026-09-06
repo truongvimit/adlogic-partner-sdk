@@ -66,6 +66,17 @@ class RetentionRuntimeTest {
         assertEquals("08:00", restored.config.string("notifications.time"))
     }
 
+    @Test fun explicitConfigRemovalSurvivesRestartInsteadOfResurrectingInitialOverride() {
+        val options = RetentionOptions(store = testStore(), initialOverrides = mapOf("review.enabled" to "true"))
+        val runtime = installed(options)
+        assertTrue(runtime.updateConfig(emptyMap(), setOf("review.enabled")) is RetentionConfigResult.Applied)
+        assertNull(runtime.config.string("review.enabled"))
+        RetentionRuntime.uninstallForTests()
+        val restored = installed(options)
+        assertNull(restored.config.string("review.enabled"))
+        assertEquals(1, restored.config.revision)
+    }
+
     @Test fun failedConfigPersistenceKeepsOldSnapshotAndDoesNotSignalRevision() {
         val actual = testStore()
         var fail = false

@@ -16,7 +16,8 @@ class RetentionUiTest {
 
     @Test fun onePromptLeaseExpiresAndOldReleaseCannotAffectNewOwner() {
         val clock = TestClock()
-        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
         val ui = RetentionUiCoordinator(clock, ForegroundActivityProvider { activity }, { true }, { false })
         val first = (ui.acquire("review", 100) as RetentionUiLeaseResult.Acquired).lease
         assertSame(activity, first.activity())
@@ -31,6 +32,7 @@ class RetentionUiTest {
         assertTrue(second.isValid())
         second.close()
         assertEquals(RetentionEligibility.Allowed, ui.eligibility())
+        controller.pause().stop().destroy()
     }
 
     @Test fun lifecycleRemovesPausedOrDestroyedActivitiesAndInvalidatesLease() {

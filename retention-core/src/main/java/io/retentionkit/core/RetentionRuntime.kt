@@ -67,7 +67,8 @@ class RetentionRuntime private constructor(val application: Application, private
             restored
         }
         val saved = store.snapshot("core.config")
-        config = RetentionConfigSnapshot(saved.long("__revision"), options.initialOverrides + saved.entries().filterKeys { it != "__revision" })
+        config = RetentionConfigSnapshot(saved.long("__revision"),
+            if (saved.string("__revision") == null) options.initialOverrides else saved.entries().filterKeys { it != "__revision" })
         val errors = validateConfiguration(config)
         if (errors.isNotEmpty()) return errors
         // Publish cached configuration durably before attach. A receiver never observes default
