@@ -1,0 +1,9 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+    <TextView android:id="@+id/rk_notification_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:id="@+id/rk_notification_body" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification" android:maxLines="3" android:ellipsize="end" />
+    <ImageView android:id="@+id/rk_notification_image" android:layout_width="match_parent" android:layout_height="96dp" android:scaleType="centerCrop" android:visibility="gone" android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="false" style="?android:attr/buttonBarStyle">
+        <Button style="?android:attr/buttonBarButtonStyle" android:id="@+id/rk_notification_open" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" />
+        <Button style="?android:attr/buttonBarButtonStyle" android:id="@+id/rk_notification_close" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/rk_n_dismiss" />
+    </LinearLayout>
+</LinearLayout>

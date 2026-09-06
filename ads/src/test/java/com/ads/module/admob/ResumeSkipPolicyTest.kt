@@ -21,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import java.time.Duration
 
 /**
  * Public policy and framework callback contracts on real Android objects. These cases do not
@@ -186,5 +187,68 @@ class ResumeSkipPolicyTest {
             manager.removeFullScreenContentCallback()
             manager.setEnableScreenContentCallback(false)
         }
+    }
+
+    @Test
+    fun `owned hold gates both resume modes without replacing existing policy or changing mode`() {
+        manager.setResumeSkipPolicy(ResumeSkipPolicy { "onboarding_policy" })
+        val first = manager.suppressResume("feedback", "feedback_open", 5_000)
+        val second = manager.suppressResume("review", "review_open", 5_000)
+        try {
+            // Same shared query that the host WELCOME observer uses; OPEN is still disabled.
+            assertEquals("feedback_open", manager.resumeSkipReasonFor(host))
+            manager.onResume()
+            assertEquals(0, skipped.size)
+            manager.enableAppResume()
+            manager.onResume()
+            assertEquals(listOf("feedback_open"), skipped.map { it["reason"] })
+            first.close()
+            assertEquals("review_open", manager.resumeSkipReasonFor(host))
+            second.close()
+            assertEquals("onboarding_policy", manager.resumeSkipReasonFor(host))
+            manager.onResume()
+            assertEquals(listOf("feedback_open", "onboarding_policy"), skipped.map { it["reason"] })
+        } finally {
+            first.close()
+            second.close()
+        }
+    }
+
+    @Test
+    fun `failed external operation cancels only its lease and leaves legacy click intact`() {
+        val operation = manager.skipNextResume("widget", "widget_return", 5_000)
+        manager.disableAdResumeByClickAction()
+        operation.close()
+        assertEquals("returning_from_ad_click", manager.resumeSkipReasonFor(host))
+        manager.onActivityResumed(host)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(manager.resumeSkipReasonFor(host))
+    }
+
+    @Test
+    fun `owned system return survives legacy reset and is consumed once by real host`() {
+        val operation = manager.skipNextResume("widget", "widget_return", 5_000)
+        try {
+            manager.setDisableAdResumeByClickAction(false)
+            val vendor = Robolectric.buildActivity(AdActivity::class.java).get()
+            manager.onActivityResumed(vendor)
+            assertEquals("widget_return", manager.resumeSkipReasonFor(host))
+            manager.onActivityStarted(host)
+            manager.onActivityResumed(host)
+            assertEquals("widget_return", manager.resumeSkipReasonFor(host))
+            assertEquals("widget_return", manager.resumeSkipReasonFor(host))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(manager.resumeSkipReasonFor(host))
+        } finally {
+            operation.close()
+        }
+    }
+
+    @Test
+    fun `abandoned suppression expires without a return or owner callback`() {
+        manager.suppressResume("review", "review_open", 100)
+        assertEquals("review_open", manager.resumeSkipReasonFor(host))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(101))
+        assertNull(manager.resumeSkipReasonFor(host))
     }
 }

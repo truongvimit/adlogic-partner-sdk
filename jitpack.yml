@@ -27,4 +27,4 @@ jdk:
 # :billingkit joined the list when the billing engine left :ads: :paykit declares
 # `implementation project(':billingkit')`, so its POM points at the billingkit artifact.
 install:
-  - ./gradlew :trackkit:publishToMavenLocal :suite-firebase:publishToMavenLocal :ads:publishToMavenLocal :billingkit:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal :paykit:publishToMavenLocal -x test --no-daemon --stacktrace
+  - ./gradlew :trackkit:publishToMavenLocal :suite-firebase:publishToMavenLocal :ads:publishToMavenLocal :billingkit:publishToMavenLocal :adtracer:publishToMavenLocal :onboardkitorigin:publishToMavenLocal :paykit:publishToMavenLocal :retention-core:publishToMavenLocal :retention-notifications:publishToMavenLocal :retention-widgets:publishToMavenLocal :retention-feedback:publishToMavenLocal :retention-review:publishToMavenLocal :retentionkit:publishToMavenLocal -x test --no-daemon --stacktrace --max-workers=2
