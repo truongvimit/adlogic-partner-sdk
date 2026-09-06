@@ -25,3 +25,6 @@ APK paths: app/build/outputs/apk/debug/ITG_Base_Project_v1.0.0_v100_09.07.2026-d
 
 
 Root API36 instrumentation run1: 9/11 pass; evidence `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-1`. Pinned actions all reached destinations on the same Activity instance, but ActivityScenario ignored actual DESTROYED because setIntent changed its launch identity; test now asserts same Activity/task and restores harness identity just before teardown. Review counter test incorrectly inherited review.enabled=false; it now enables real review counter/dedupe with threshold1000 and asserts no Play attempt. Locale expectation now uses runtime's selected-locale catalogue. UI handles actual Blocked/Skipped outcomes without claiming a request was sent. These changes require compilation and targeted device rerun; no new pass is claimed yet.
+
+
+Added a twelfth device case for actual PlayReviewTransport with explicitly accelerated eligibility: real phrase translation, request and truthful failed/timeout/unknown terminal, released lease; no fake transport or rating/card assertion. Awaiting root targeted execution.

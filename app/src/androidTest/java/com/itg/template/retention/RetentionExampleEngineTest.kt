@@ -195,6 +195,42 @@ class RetentionExampleEngineTest {
         assertEquals(0L, kit.review!!.snapshot()!!.attempts)
         assertFalse(ExampleQa.events.any { it.name == "retention_review_requested" })
     }
+    @Test fun acceleratedEligibilityUsesRealPlayTransportAndReleasesLeaseAfterHonestTerminal() {
+        prepare()
+        // Drain older app work while review is disabled, then accelerate only this isolated case.
+        instrumentation.runOnMainSync {
+            RetentionExample.flushSuccesses(application)
+            val applied = kit.runtime.updateConfig(mapOf(
+                "review.enabled" to "true", "review.success_threshold" to "1",
+                "review.request_timeout_ms" to "5000", "review.flow_timeout_ms" to "5000",
+            ))
+            assertTrue(applied is RetentionConfigResult.Applied)
+        }
+        scenario!!.onActivity { activity ->
+            fun find(view: android.view.View): Button? {
+                if (view is Button && view.contentDescription == "feature:translate") return view
+                if (view is android.view.ViewGroup) repeat(view.childCount) { index ->
+                    find(view.getChildAt(index))?.let { return it }
+                }
+                return null
+            }
+            checkNotNull(find(activity.findViewById(android.R.id.content))).performClick()
+            activity.findViewById<Button>(R.id.rk_phrase_translate).performClick()
+            assertTrue(activity.findViewById<TextView>(R.id.rk_result).text.isNotBlank())
+        }
+        await { ExampleQa.events.any { it.name == "retention_review_requested" } }
+        val terminals = setOf("retention_review_failed", "retention_review_timeout", "retention_review_flow_unknown")
+        await(15_000) { ExampleQa.events.any { it.name in terminals } }
+        assertNull(kit.review!!.snapshot()!!.inFlightPhase)
+        await { kit.runtime.ui.eligibility() is RetentionEligibility.Allowed }
+        instrumentation.runOnMainSync {
+            val acquired = kit.runtime.ui.acquire("test.review.released", 1000)
+            assertTrue("Terminal must release the owned UI lease", acquired is RetentionUiLeaseResult.Acquired)
+            (acquired as RetentionUiLeaseResult.Acquired).lease.close()
+        }
+        // No card, submitted rating, or review acceptance is inferred from Play's callback.
+    }
+
     private fun cancelOwnedNotifications() {
         manager.activeNotifications.filter { it.tag == "io.retentionkit.notifications" }.forEach { manager.cancel(it.tag, it.id) }
     }

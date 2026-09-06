@@ -35,3 +35,5 @@ Local Firebase configuration remains ignored and supplied by the existing projec
 
 
 First API36 device run (root-owned): 9/11 passed. The two red cases identified harness errors: ActivityScenario ignored actual DESTROYED callbacks after required `setIntent` identity changes (all four action taps used the same Activity instance), and the review-dedupe case had explicitly disabled review before expecting its counter to increase. Regression assertions now require stable Activity/task ownership, restore only the harness launch Intent immediately before cleanup, and enable review only for the counter case with threshold1000 and zero-attempt assertions. Normal app behavior is unchanged; targeted device rerun is required before claiming these fixed.
+
+An additional accelerated-eligibility device smoke enables the real Play transport at threshold1 with five-second request/flow timeouts, completes a real phrase translation, and requires requested → failed/timeout/outcome-unknown plus released core UI lease. It never requires or infers a review card/rating. This is an isolated QA policy override, not a production default.
