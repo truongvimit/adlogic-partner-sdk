@@ -1,7 +1,7 @@
 # 01 Core and publication foundation
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: none
 
 Spec: ../spec.md
@@ -14,4 +14,4 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 
 ## Comments
 
-Implementation pending.
+Claimed by Ticket 01 implementer in `codex/retentionkit-core` on 2026-09-07. Core API and module publication foundation in progress.
