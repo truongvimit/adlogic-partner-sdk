@@ -88,7 +88,7 @@ The checker inspects all four evidence layers:
 
 Composition evidence is complete only when paired with real release/minify **consumer** build results. Do not mark isolated publication/compatibility checks passed just because the library AAR passes this scanner.
 
-The [consumer verification record](../../sample-retention-only/VERIFICATION.md) links the actual six project/six POM-only matrix at library version `retentionkit-qa-20260907-1d06439`. Maven graphs were additionally checked for the absence of all `project :` nodes so a required coordinate cannot conceal source substitution. It is local QA evidence, not a remote release.
+The [consumer verification record](../../sample-retention-only/VERIFICATION.md) links the actual six project/six POM-only matrix at library version `retentionkit-qa-20260907-bf68f1e`. Maven graphs were additionally checked for the absence of all `project :` nodes so a required coordinate cannot conceal source substitution. It is local QA evidence, not a remote release.
 
 ## 4. Root-owned device evidence capture
 

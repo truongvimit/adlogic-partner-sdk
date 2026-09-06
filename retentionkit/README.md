@@ -50,12 +50,18 @@ when (val accepted = kit.capture(intent)) {
 // When the final Activity is resumed and setup is complete:
 val token = pendingEntryToken ?: return
 when (val route = kit.dispatchPending(token)) {
-    is RetentionDispatchResult.Navigate -> openFeature(route.entry.destination)
+    is RetentionDispatchResult.Navigate -> {
+        pendingEntryToken = null
+        openFeature(route.entry.destination)
+    }
     RetentionDispatchResult.SdkHandled -> {
         // Scheduled SDK work can remain staged if its final gate blocks.
         if (kit.runtime.entries.pending(token) == null) pendingEntryToken = null
     }
-    is RetentionDispatchResult.Unavailable -> Unit // retain pending token for a later explicit retry
+    is RetentionDispatchResult.Unavailable -> {
+        // Retain a still-staged selection for a later bounded retry.
+        if (kit.runtime.entries.pending(token) == null) pendingEntryToken = null
+    }
 }
 ```
 
@@ -65,7 +71,7 @@ Facade helpers publish actual host state/events: `setupCompleted()`, `onboarding
 
 Modules are exposed as `kit.notifications`, `.widgets`, `.feedback`, `.review` (nullable when disabled). Typical explicit actions are `widgets?.showPinInvitation()`, `feedback?.show()` and `review?.openStore()`. Do not ask for a star rating before automatic Play review. Pin Requested/Unknown and review outcome-unknown are deliberate platform semantics; see each module's README.
 
-Save the pending token with Activity state and do not recapture the original Intent on recreation. Dispatch after core has observed the resumed Activity, for example from a posted callback after `onResume`; retry a blocked route when setup/UI state changes. A source SDK Activity can finish its external scope after the destination's first resume callback. The isolated consumer therefore uses a bounded five-second readiness retry while resumed, cancels on pause/consumption and retains the entry when still blocked. Do not poll indefinitely or treat SdkHandled as consumption.
+Save the pending token with Activity state and do not recapture the original Intent on recreation. Route only the latest explicitly captured token or the selection restored with that Activity; never choose an arbitrary older entry from the pending ledger after consuming the current selection. Dispatch after core has observed the resumed Activity, for example from a posted callback after `onResume`; retry a blocked route when setup/UI state changes. A source SDK Activity can finish its external scope after the destination's first resume callback. The isolated consumer therefore uses a bounded five-second readiness retry while resumed, cancels on pause/consumption and retains the entry when still blocked. Do not poll indefinitely or treat SdkHandled as consumption.
 
 ## Bundled behavior and when it starts
 
@@ -184,8 +190,8 @@ Choose a staged rollout/kill switch when old counters or scheduled state cannot 
 
 ## Validation scope
 
-Module tests cover config missing/invalid/stale/restart/timeout/source failure, shared-fetch concurrency/cancellation, facade cold/warm/reusable entry consumption, standard internal feedback routing, authoritative UI safety/lease cleanup, actual LifecycleRegistry core-first/ads-first OPEN/WELCOME return-reader orders, authoritative Billing transitions, and synchronous removable ad-click observers. Final suite run: 162 ads + 168 OnboardKit + 39 core + 4 Firebase + 12 facade tests passed with zero failures/errors/skips; retentionkit and suite-firebase release AAR assembly passed. Run `:retention-core:testDebugUnitTest :suite-firebase:testDebugUnitTest :retentionkit:testDebugUnitTest` plus existing ads/OnboardKit regressions with `--max-workers=2`.
+The final [product evidence](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/combined-product-tests.json) records 549 passing unit tests, zero failures/errors/skips: 532 unchanged non-app cases at SDK tree `bf68f1e` plus 17 freshly executed app cases at `2ff967a`. These are scoped results across recorded runs, not one invocation. Non-app counts: core 46, notifications 35, widgets 36, feedback 22, review 19, facade 12, Firebase 4, Billing 20, ads 162, OnboardKit 168 and Trackkit 8. Coverage includes reentrant/queued handoff cancellation, owned scope cleanup, routing, config persistence, Billing authority and existing OPEN/WELCOME/ad-click behavior.
 
-The isolated consumer matrix at source `1d06439` passed all six project and six POM-only Maven R8/resource-shrink builds, all 12 runtime graph/merged-manifest composition checks, and six matching local AAR/POM/Gradle metadata inspections. Standalone umbrella consumers did not pull the optional ads/OnboardKit/Billing/Firebase stack. See [consumer verification](../sample-retention-only/VERIFICATION.md) for immutable evidence including the widget return and consumer readiness corrections, and the boundary for any later fixes.
+At `bf68f1e`, all six project and six POM-only Maven consumers passed release R8/resource shrinking, all 12 actual runtime graph/merged-manifest composition checks passed, and all six matching local AAR/POM/Gradle metadata inspections passed using `retentionkit-qa-20260907-bf68f1e`. Standalone umbrella consumers did not pull the optional ads/OnboardKit/Billing/Firebase stack. The full example also passed debug/test APK and minified release assembly. See [consumer verification](../sample-retention-only/VERIFICATION.md) for exact artifacts, commands, historical checkpoints and source identity.
 
-Device smoke is recorded separately by the root validation owner. Neither these builds, unit tests nor a successful system API call claims a notification was seen, a widget was placed, a Play review was shown/rated, or an app was uninstalled. Retention artifacts remain unreleased.
+Root-owned [API 36 instrumentation](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-6-final-verification.json) passed 15/15 cases on the final app tree. The [final minified Maven umbrella smoke](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/final-bf68-maven-umbrella-verdict.json) passed cold launch/setup, immediate feedback rescue to word count, a real business result, Store handoff/return and Keep. Physical/OEM coverage is limited; no Play card/rating or uninstall success is inferred. Retention artifacts remain unreleased.
