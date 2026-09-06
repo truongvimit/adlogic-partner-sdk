@@ -36,6 +36,7 @@ class RetentionRuntime private constructor(val application: Application, private
     private val stateLock = Any()
     private val signalLock = Any()
     private val signalQueue = ArrayDeque<RetentionSignal>()
+    private val afterSignals = ArrayDeque<() -> Unit>()
     private var dispatching = false
     private val modules = CopyOnWriteArrayList<RetentionModule>()
     private data class Listener(val owner: String, val callback: (RetentionSignal) -> Unit)
@@ -138,12 +139,18 @@ class RetentionRuntime private constructor(val application: Application, private
         }
         try {
             while (true) {
+                var continuations: List<() -> Unit> = emptyList()
                 val next = synchronized(signalLock) {
                     if (closed || signalQueue.isEmpty()) {
                         dispatching = false
-                        return true
-                    }
-                    signalQueue.removeFirst()
+                        continuations = afterSignals.toList()
+                        afterSignals.clear()
+                        null
+                    } else signalQueue.removeFirst()
+                }
+                if (next == null) {
+                    continuations.forEach { diagnostics.guard("core.after_signal") { it() } }
+                    return true
                 }
                 if (!diagnostics.guard("core.signal_state") { applySignal(next) }) continue
                 val moduleSnapshot = modules.toList()
@@ -155,9 +162,19 @@ class RetentionRuntime private constructor(val application: Application, private
             }
         } catch (fatal: Throwable) {
             // Release the queue if a VM/programmer Error escapes; do not swallow the error.
-            synchronized(signalLock) { dispatching = false; signalQueue.clear() }
+            synchronized(signalLock) { dispatching = false; signalQueue.clear(); afterSignals.clear() }
             throw fatal
         }
+    }
+
+    /** Internal handoff barrier; never waits for, or calls clients under, the signal lock. */
+    internal fun afterSignalDispatch(action: () -> Unit): Boolean {
+        val deferred = synchronized(signalLock) {
+            if (closed || afterSignals.size >= 128) return false
+            if (dispatching) { afterSignals.addLast(action); true } else false
+        }
+        if (!deferred) action()
+        return true
     }
 
     fun reconcile(reason: String) {
@@ -268,6 +285,7 @@ class RetentionRuntime private constructor(val application: Application, private
             if (closed) return
             closed = true
             signalQueue.clear()
+            afterSignals.clear()
             modules.toList().asReversed().also { modules.clear(); listeners.clear() }
         }
         tracker.stop()

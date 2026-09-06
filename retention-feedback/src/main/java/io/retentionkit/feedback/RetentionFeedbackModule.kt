@@ -23,7 +23,7 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
     @Volatile internal var runtime: RetentionRuntime? = null; private set
     private var visible = WeakReference<Activity>(null)
     private var launchPending: String? = null
-    private val scopes = mutableMapOf<String, FeedbackHandoffScope>()
+    private val scopes = mutableMapOf<String, RetentionHandoffScope>()
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = buildList {
         for (key in listOf("feedback.enabled", "feedback.shortcut_enabled", "feedback.show_reasons")) {
@@ -68,7 +68,9 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
             if (acquired == null) { event("skipped", "ui_blocked"); return@onMain }
             val activity = acquired.lease.activity()
             if (activity == null) { acquired.lease.close(); return@onMain }
-            var scope: FeedbackHandoffScope? = null
+            val revision = rt.config.revision
+            var scope: RetentionHandoffScope? = null
+            var sessionToken: String? = null
             try {
                 val session = rt.store.transaction(STATE) { state ->
                     prune(state)
@@ -79,19 +81,36 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
                         }
                     }
                 }
-                if (entry != null && !rt.entries.consume(entry.token)) { event("skipped", "entry_consumed"); return@onMain }
+                sessionToken = session.token
                 launchPending = session.token
-                scope = beginScope(activity, "feedback.open.${session.token}")
-                val intent = Intent(activity, RetentionFeedbackActivity::class.java).putExtra(EXTRA_SESSION, session.token)
-                if (!options.launcher.launch(activity, intent)) {
-                    launchPending = null; scope?.close(); event("failed", "activity_unavailable")
-                } else {
-                    event("requested")
-                    main.postDelayed({ if (launchPending == session.token) { launchPending = null; scope?.close(); event("failed", "activity_start_timeout") } }, 10_000)
-                }
+                val ownedScope = createScope(rt, activity, "feedback.open.${session.token}")
+                scope = ownedScope
+                ownedScope.start()
+                ownedScope.dispatch { current -> onMain launch@{
+                    if (current == null || runtime !== rt || !enabled() || rt.config.revision != revision ||
+                        launchPending != session.token || session(session.token)?.phase != FeedbackPhase.OPEN) {
+                        cancelLaunch(rt, session.token, ownedScope); event("skipped", "launch_gate_changed"); return@launch
+                    }
+                    // Consume only after all synchronous handoff observers and the final UI gate.
+                    if (entry != null && !rt.entries.consume(entry.token)) {
+                        cancelLaunch(rt, session.token, ownedScope); event("skipped", "entry_consumed"); return@launch
+                    }
+                    val intent = Intent(current, RetentionFeedbackActivity::class.java).putExtra(EXTRA_SESSION, session.token)
+                    try {
+                        if (!options.launcher.launch(current, intent)) {
+                            cancelLaunch(rt, session.token, ownedScope); event("failed", "activity_unavailable")
+                        } else {
+                            event("requested")
+                            main.postDelayed({ if (launchPending == session.token) {
+                                cancelLaunch(rt, session.token, ownedScope); event("failed", "activity_start_timeout")
+                            } }, 10_000)
+                        }
+                    } catch (error: Exception) {
+                        cancelLaunch(rt, session.token, ownedScope); diagnostic("show", error); event("failed", "activity_exception")
+                    }
+                } }
             } catch (error: Exception) {
-                launchPending = null
-                scope?.close()
+                sessionToken?.let { cancelLaunch(rt, it, scope) } ?: scope?.close()
                 diagnostic("show", error)
                 event("failed", "activity_exception")
             } finally { acquired.lease.close() }
@@ -163,24 +182,58 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
     }
 
     private fun handoff(controller: FeedbackController, intent: Intent, phase: FeedbackPhase, eventName: String, finishSource: Boolean): FeedbackActionResult {
+        val rt = runtime ?: return FeedbackActionResult.Blocked("not_attached")
         val activity = controller.lease?.activity() ?: return FeedbackActionResult.Blocked("activity_unavailable")
+        val revision = rt.config.revision
         if (!terminal(controller.sessionToken, phase)) return FeedbackActionResult.Blocked("already_handled")
         // The final Activity was obtained before this signal intentionally revokes the lease.
-        val scope = beginScope(activity, "feedback.action.${UUID.randomUUID()}")
-        val submitted = try { options.launcher.launch(activity, intent) } catch (_: Exception) { false }
-        if (!submitted) {
-            scope.close()
-            runtime?.store?.transaction(STATE) { state ->
-                decode(state.string(controller.sessionToken))?.let { save(state, it.copy(phase = FeedbackPhase.OPEN)); state.put("active", it.token) }
+        val scope = createScope(rt, activity, "feedback.action.${UUID.randomUUID()}")
+        var outcome: FeedbackActionResult = FeedbackActionResult.Applied // Accepted if signal dispatch is still queued.
+        scope.start()
+        scope.dispatch { current ->
+            if (current == null || runtime !== rt || !enabled() || rt.config.revision != revision || session(controller.sessionToken)?.phase != phase) {
+                restoreHandoff(rt, controller, phase, scope)
+                event("skipped", "handoff_gate_changed")
+                outcome = FeedbackActionResult.Blocked("handoff_gate_changed")
+            } else {
+                val submitted = try { options.launcher.launch(current, intent) } catch (_: Exception) { false }
+                if (!submitted) {
+                    restoreHandoff(rt, controller, phase, scope)
+                    event("failed", "handoff_failed")
+                    outcome = FeedbackActionResult.Failed("handoff_failed")
+                } else {
+                    event(eventName)
+                    controller.pause()
+                    if (finishSource) current.finish()
+                }
             }
-            controller.activate()
-            event("failed", "handoff_failed")
-            return FeedbackActionResult.Failed("handoff_failed")
         }
-        event(eventName)
-        controller.pause()
-        if (finishSource) activity.finish()
-        return FeedbackActionResult.Applied
+        return outcome
+    }
+    private fun cancelLaunch(rt: RetentionRuntime, token: String, scope: RetentionHandoffScope?) {
+        try {
+            if (runtime !== rt) return
+            rt.store.transaction(STATE) { state ->
+                decode(state.string(token))?.takeIf { it.phase == FeedbackPhase.OPEN }?.let { save(state, it.copy(phase = FeedbackPhase.CANCELLED)) }
+                if (state.string("active") == token) state.remove("active")
+            }
+        } finally {
+            if (launchPending == token) launchPending = null
+            scope?.close()
+        }
+    }
+    private fun restoreHandoff(rt: RetentionRuntime, controller: FeedbackController, phase: FeedbackPhase, scope: RetentionHandoffScope) {
+        try {
+            if (runtime !== rt) return
+            rt.store.transaction(STATE) { state ->
+                decode(state.string(controller.sessionToken))?.takeIf { it.phase == phase }?.let { old ->
+                    val restored = if (runtime === rt && enabled()) FeedbackPhase.OPEN else FeedbackPhase.CANCELLED
+                    save(state, old.copy(phase = restored))
+                    if (restored == FeedbackPhase.OPEN) state.put("active", old.token)
+                }
+            }
+        } finally { scope.close() }
+        if (runtime === rt && enabled()) controller.activate()
     }
     private fun terminal(token: String, phase: FeedbackPhase): Boolean = runtime?.store?.transaction(STATE) { state ->
         val old = decode(state.string(token))
@@ -217,8 +270,12 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         manager.enableShortcuts(listOf(SHORTCUT_ID))
         if (!manager.addDynamicShortcuts(listOf(shortcut))) event("skipped", "shortcut_rejected")
     }
-    private fun beginScope(activity: Activity, token: String): FeedbackHandoffScope =
-        FeedbackHandoffScope(checkNotNull(runtime), activity, token, main) { scopes.remove(token) }.also { scopes[token] = it }
+    private fun createScope(rt: RetentionRuntime, activity: Activity, token: String): RetentionHandoffScope {
+        lateinit var scope: RetentionHandoffScope
+        scope = RetentionHandoffScope(rt, activity, token, "feedback_handoff", onClosed = { if (scopes[token] === scope) scopes.remove(token) })
+        scopes[token] = scope
+        return scope
+    }
     private fun enabled() = runtime?.config?.boolean("feedback.enabled", options.enabled) == true
     private fun event(suffix: String, reason: String? = null) { runtime?.emit(RetentionEvent("retention_feedback_$suffix", if (reason == null) emptyMap() else mapOf("reason" to reason))) }
     internal fun diagnostic(where: String, error: Exception) { runtime?.diagnostics?.record("feedback.$where", error.message ?: where, RetentionDiagnosticLevel.ERROR, error) }

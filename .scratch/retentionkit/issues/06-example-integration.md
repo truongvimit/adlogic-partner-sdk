@@ -1,7 +1,7 @@
 # 06 Full example integration
 
 Type: task
-Status: in-progress
+Status: claimed
 Blocked by: 02, 03, 04, 05
 
 Spec: ../spec.md
@@ -13,6 +13,8 @@ Own app/** and any standalone composition proof sample modules. Integrate umbrel
 Follow the shared implementation contract and acceptance ledger in spec.md. Commit only owned files; write implementation/test results under Answer and change Status to resolved when verified. Provide commit hashes and concise context pointers for the merger.
 
 ## Comments
+
+Review S1: aligned active ownership to `claimed`; final acceptance remains root-owned and pending its recorded checks.
 
 Implementation is prepared in app/**; see app/RETENTION_EXAMPLE.md. Four real EN/VI utilities, durable result/success outbox, shared catalogue, facade/suite adapters, post-resume pending routing, standard feedback/manual rate and known-ID-only shortcut migration are implemented. Debug-only engine profile and 11 instrumented cases cover all seven notification campaigns, action destinations and critical gates; release contains no fixture entry point.
 
