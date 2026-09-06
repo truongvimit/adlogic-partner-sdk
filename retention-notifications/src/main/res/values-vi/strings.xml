@@ -1,0 +1,18 @@
+<resources>
+    <string name="rk_n_daily_body">Một tính năng hữu ích cho hôm nay. Mở khi bạn cần.</string>
+    <string name="rk_n_winback_body">Các công cụ luôn sẵn sàng khi bạn cần dùng lại.</string>
+    <string name="rk_n_onboarding_body">Tiếp tục thiết lập để bắt đầu dùng các công cụ.</string>
+    <string name="rk_n_return_body">Quay lại khi bạn sẵn sàng tiếp tục.</string>
+    <string name="rk_n_reminder_body">Giữ một công cụ hữu ích trong tầm tay để dùng sau.</string>
+    <string name="rk_n_pinned_body">Mở công cụ ngay từ thông báo.</string>
+    <string name="rk_n_lockscreen_body">Công cụ hữu ích, sẵn sàng khi bạn cần.</string>
+    <string name="rk_n_later">Để sau</string>
+    <string name="rk_n_dismiss">Đóng</string>
+    <string name="rk_n_channel_daily">Mẹo hằng ngày</string>
+    <string name="rk_n_channel_winback">Nhắc dùng tính năng</string>
+    <string name="rk_n_channel_onboarding">Nhắc thiết lập</string>
+    <string name="rk_n_channel_ad_return">Nhắc quay lại</string>
+    <string name="rk_n_channel_reminder">Nhắc yên lặng</string>
+    <string name="rk_n_channel_pinned">Công cụ đã ghim</string>
+    <string name="rk_n_channel_lockscreen">Mẹo màn hình khóa</string>
+</resources>
