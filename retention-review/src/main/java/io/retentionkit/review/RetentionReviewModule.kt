@@ -131,14 +131,16 @@ class RetentionReviewModule @JvmOverloads constructor(
         val acquired = rt.ui.acquire("review.auto", policy.requestTimeoutMillis + policy.flowTimeoutMillis) as? RetentionUiLeaseResult.Acquired
         if (acquired == null) { event("skipped", mapOf("reason" to "ui_blocked")); return }
         val current = Flight(UUID.randomUUID().toString(), rt.config.revision, acquired.lease)
-        val claimed = rt.store.transaction(STATE) { values ->
-            if (values.string("flight_token") != null && values.long("flight_deadline") > rt.clock.wallTimeMillis()) false else {
-                values.put("flight_token", current.token)
-                values.put("flight_phase", "requesting")
-                values.put("flight_deadline", rt.clock.wallTimeMillis() + policy.requestTimeoutMillis)
-                true
+        val claimed = try {
+            rt.store.transaction(STATE) { values ->
+                if (values.string("flight_token") != null && values.long("flight_deadline") > rt.clock.wallTimeMillis()) false else {
+                    values.put("flight_token", current.token)
+                    values.put("flight_phase", "requesting")
+                    values.put("flight_deadline", rt.clock.wallTimeMillis() + policy.requestTimeoutMillis)
+                    true
+                }
             }
-        }
+        } catch (error: Exception) { acquired.lease.close(); throw error }
         if (!claimed) { acquired.lease.close(); return }
         flight = current
         setTimeout(current, policy.requestTimeoutMillis)

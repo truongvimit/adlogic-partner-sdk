@@ -27,7 +27,7 @@ review.openStore()
 | review.request_timeout_ms | 15000 |
 | review.flow_timeout_ms | 120000 |
 
-Update through `runtime.updateConfig(...)`, which validates the whole profile before publication. ReviewOptions supplies bundled defaults. Only strict booleans/bounded integers are accepted. Cooldown is measured from the last reserved launch attempt; backward wall-clock changes remain blocked. Success IDs are SHA-256 fingerprints in the module's `review.state.v1` namespace; feedback data is separate. The dedupe ledger retains at most4096 unique successes and fails closed at capacity rather than replaying old events; a diagnostic skipped reason identifies this unusual limit. No more successes are retained after the attempt cap. A launch consumes one threshold batch, preserving any additional successes recorded while ReviewInfo was pending.
+Update through `runtime.updateConfig(...)`, which validates the whole profile before publication. ReviewOptions supplies bundled defaults. Only strict booleans/bounded integers are accepted. Cooldown is measured from the last reserved launch attempt; backward wall-clock changes remain blocked. Success IDs are SHA-256 fingerprints in the module's `review.state.v1` namespace; feedback data is separate. The dedupe ledger retains at most 4096 unique successes and fails closed at capacity rather than replaying old events; a diagnostic skipped reason identifies this unusual limit. No more successes are retained after the attempt cap. A launch consumes one threshold batch, preserving any additional successes recorded while ReviewInfo was pending.
 
 ## Request and callback semantics
 
@@ -40,3 +40,5 @@ Immediately before handing off to Play/Store, the module obtains the final Activ
 `ReviewTransportFactory`/`ReviewTransport` is the test seam. Request returns `ReviewInfoResult.Ready(ReviewToken)` or Failed(reason); launch returns FinishedOutcomeUnknown or Failed(reason); manual openStore returns whether a system intent was submitted. Production PlayReviewTransport uses ReviewManagerFactory/requestReviewFlow/launchReviewFlow. Manual Store uses market:// with a Play HTTPS fallback when no market Activity exists. A fake transport proves state transitions only, never production Play card display or a user's rating.
 
 Events (all <=40 ASCII chars): `retention_review_success`, `_requested`, `_launch_attempt`, `_flow_unknown`, `_skipped`, `_failed`, `_timeout`, `_cancelled`, `_store_handoff`, `_recovered`. Observe actual outcomes through the shared RetentionEventSink; sink exceptions do not repeat a side effect.
+
+Automated coverage and platform limits: [VERIFICATION.md](VERIFICATION.md).
