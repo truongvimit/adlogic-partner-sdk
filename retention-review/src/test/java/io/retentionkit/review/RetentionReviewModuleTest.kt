@@ -30,6 +30,7 @@ class RetentionReviewModuleTest {
     private lateinit var runtime: RetentionRuntime
     private var host: ActivityController<Activity>? = null
     private val events = mutableListOf<RetentionEvent>()
+    private var eventHook: (RetentionEvent) -> Unit = {}
     @Before fun before() {
         RetentionRuntime.uninstallForTests()
         store = SharedPreferencesRetentionStore(app, "review_${UUID.randomUUID()}")
@@ -42,7 +43,7 @@ class RetentionReviewModuleTest {
         module = RetentionReviewModule(options, ReviewTransportFactory { transport })
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock,
             initialUserState = RetentionUserState(setupCompleted = true, entitlement = RetentionEntitlement.NON_SUBSCRIBER),
-            eventSink = RetentionEventSink { events.add(it) }))
+            eventSink = RetentionEventSink { events.add(it); eventHook(it) }))
         assertTrue(result.toString(), result is RetentionInstallResult.Installed)
         runtime = (result as RetentionInstallResult.Installed).runtime
         host = Robolectric.buildActivity(Activity::class.java).setup()
@@ -272,6 +273,59 @@ class RetentionReviewModuleTest {
             if ((intent.data?.scheme == "market" && noMarket) || (intent.data?.scheme == "https" && noBrowser)) throw android.content.ActivityNotFoundException()
             submitted.add(intent)
         }
+    }
+
+    @Test fun launchAttemptSinkCanDisableWithoutSpendingBudgetOrLaunching() {
+        install(); five()
+        eventHook = { if (it.name == "retention_review_launch_attempt") runtime.updateConfig(mapOf("review.enabled" to "false")) }
+        ready()
+        assertTrue(transport.launches.isEmpty())
+        assertEquals(0L, module.snapshot()!!.attempts)
+        assertEquals(5L, module.snapshot()!!.successesSinceAttempt)
+        assertNull(module.snapshot()!!.inFlightPhase)
+        assertEquals(RetentionEligibility.Allowed, runtime.ui.eligibility())
+    }
+
+    @Test fun transitionSubscriberCanDisableReviewBeforePlatformLaunchAndClosesPublishedScope() {
+        install(); five()
+        runtime.subscribe("test.disable") { if (it is RetentionSignal.ExternalTransitionStarted) runtime.updateConfig(mapOf("review.enabled" to "false")) }
+        ready()
+        assertTrue(transport.launches.isEmpty())
+        assertEquals(0L, module.snapshot()!!.attempts)
+        assertNull(module.snapshot()!!.inFlightPhase)
+        assertEquals(RetentionEligibility.Allowed, runtime.ui.eligibility())
+    }
+
+    @Test fun queuedReadyFromExistingSubscriberWaitsForHostFinishObserver() {
+        install(); five()
+        runtime.subscribe("test.ready") { if (it is RetentionSignal.AdClicked) transport.requests.single()(ReviewInfoResult.Ready(FakeToken)) }
+        runtime.subscribe("test.finish") { if (it is RetentionSignal.ExternalTransitionStarted) host!!.get().finish() }
+        runtime.signal(RetentionSignal.AdClicked("queued")); idle()
+        assertTrue(transport.launches.isEmpty())
+        assertEquals(0L, module.snapshot()!!.attempts)
+        assertNull(module.snapshot()!!.inFlightPhase)
+        assertFalse(runtime.marketingEligibility(0, false) == RetentionEligibility.Blocked(RetentionSuppressionReason.EXTERNAL_TRANSITION))
+    }
+
+    @Test fun manualStoreFromSubscriberHonorsNewHostUiButIgnoresAutomaticDisable() {
+        install(ReviewOptions(enabled = false))
+        runtime.subscribe("test.store") { if (it is RetentionSignal.AdClicked) module.openStore() }
+        runtime.subscribe("test.host") { if (it is RetentionSignal.ExternalTransitionStarted && it.kind == "review_or_store") runtime.signal(RetentionSignal.HostUiChanged("host.dialog", true)) }
+        runtime.signal(RetentionSignal.AdClicked("manual")); idle()
+        assertEquals(0, transport.stores)
+        assertEquals(0L, module.snapshot()!!.attempts)
+        assertTrue(runtime.ui.eligibility() is RetentionEligibility.Blocked)
+        runtime.signal(RetentionSignal.HostUiChanged("host.dialog", false))
+        assertEquals(RetentionEligibility.Allowed, runtime.ui.eligibility())
+    }
+
+    @Test fun manualStoreDoesNotOpenFromHostFinishedByTransitionSubscriber() {
+        install(ReviewOptions(enabled = false))
+        runtime.subscribe("test.finish.store") { if (it is RetentionSignal.ExternalTransitionStarted) host!!.get().finish() }
+        module.openStore(); idle()
+        assertEquals(0, transport.stores)
+        assertEquals(0L, module.snapshot()!!.attempts)
+        assertFalse(events.any { it.name == "retention_review_store_handoff" })
     }
 
     private inner class FakeTransport : ReviewTransport {

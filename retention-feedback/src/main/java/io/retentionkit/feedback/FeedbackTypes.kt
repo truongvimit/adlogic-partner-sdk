@@ -57,6 +57,7 @@ sealed class FeedbackShowResult {
     data class Unavailable(val reason: String) : FeedbackShowResult()
 }
 sealed class FeedbackActionResult {
+    /** Action accepted. Inside a core subscriber, handoff waits for queued observers; events report its outcome. */
     data object Applied : FeedbackActionResult()
     data class Blocked(val reason: String) : FeedbackActionResult()
     data class Failed(val reason: String) : FeedbackActionResult()

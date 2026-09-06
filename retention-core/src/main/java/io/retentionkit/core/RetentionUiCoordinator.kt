@@ -100,6 +100,13 @@ class RetentionUiCoordinator internal constructor(
     }
     internal fun removeBlock(owner: String) = locked { _ -> blocks.remove(owner); Unit }
     internal fun externalTransitionActive(): Boolean = locked { _ -> blocks.values.any { it.reason == RetentionSuppressionReason.EXTERNAL_TRANSITION } }
+    internal fun canContinueHandoff(token: String, activity: Activity): Boolean {
+        fun eligibleLocked(): Boolean = !closed && foreground() && !onboarding() &&
+            !activity.isFinishing && !activity.isDestroyed && activities.current() === activity &&
+            blocks["external:$token"] != null && blocks.keys.none { it != "external:$token" } && reservation == null
+        if (!locked { _ -> eligibleLocked() } || !hostAllows(activity)) return false
+        return locked { _ -> eligibleLocked() }
+    }
     internal fun shutdown() = locked { closing -> closed = true; detachLocked(closing); blocks.clear() }
 
     private fun reasonLocked(includeReservation: Boolean = true): RetentionSuppressionReason? = when {
