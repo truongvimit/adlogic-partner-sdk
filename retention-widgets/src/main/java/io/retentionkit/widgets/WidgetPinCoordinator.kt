@@ -13,6 +13,7 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
     private val runtime get() = module.runtime
     private var activeToken: String? = null
     private var wentBackground = false
+    private var returnObserver: WidgetPinReturnObserver? = null
     private val timeouts = mutableMapOf<String, Runnable>()
     private var invitation: WeakReference<AlertDialog>? = null
     private var invitationLease: RetentionUiLease? = null
@@ -62,6 +63,9 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
             }
             activeToken = token
             wentBackground = false
+            returnObserver = WidgetPinReturnObserver(runtime.application, activity, runtime.activities, module.main) { reason ->
+                module.guard("pin_return") { finishReturn(token, reason) }
+            }
             // This intentionally revokes the lease. The last lease/Activity check MUST precede it.
             runtime.signal(RetentionSignal.ExternalTransitionStarted(transitionToken(token), "widget_pin", timeout))
             // Guard synchronous host observers that changed config or navigated during the signal.
@@ -73,9 +77,8 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
             val accepted = module.platform.requestPin(module.provider, callback)
             // The local Activity variable is never captured by any callback/timer.
             if (!accepted) {
-                module.state.savePin(candidate.copy(status = "unsupported", reason = "launcher_rejected_request"))
-                finish(token)
-                callback.cancel()
+                try { module.state.savePin(candidate.copy(status = "unsupported", reason = "launcher_rejected_request")) }
+                finally { finish(token); callback.cancel() }
                 return WidgetPinResult.Unavailable("launcher_rejected_request")
             }
             module.event("pin_requested", mapOf("token" to token))
@@ -102,6 +105,10 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
     }
 
     fun confirm(token: String, widgetId: Int) {
+        try { confirmVerified(token, widgetId) }
+        catch (error: Exception) { finish(token); throw error }
+    }
+    private fun confirmVerified(token: String, widgetId: Int) {
         val record = module.state.pin(token) ?: return
         if (record.status !in setOf("pending", "unknown")) return
         val now = runtime.clock.wallTimeMillis()
@@ -112,8 +119,8 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
         }
         // A callback identifies an actual new instance of the requested provider. The request's
         // positive API return, widget update broadcast, or mere new instance never proves a pin.
-        module.state.savePin(record.copy(status = "confirmed", widgetId = widgetId))
-        finish(token)
+        try { module.state.savePin(record.copy(status = "confirmed", widgetId = widgetId)) }
+        finally { finish(token) }
         module.event("pin_confirmed", mapOf("token" to token, "widget_id" to widgetId.toString()))
         module.update(intArrayOf(widgetId))
     }
@@ -125,13 +132,17 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
     }
     fun onBackground() { if (activeToken != null) wentBackground = true }
     fun onForeground() {
-        if (wentBackground) {
-            activeToken?.let { token -> module.state.pin(token)?.takeIf { it.status == "pending" }?.let { unknown(it, "returned_without_callback") } }
-        }
+        if (wentBackground) activeToken?.let { finishReturn(it, "returned_without_callback") }
+    }
+    private fun finishReturn(token: String, reason: String) {
+        if (activeToken != token) return
+        try { module.state.pin(token)?.takeIf { it.status == "pending" }?.let { unknown(it, reason) } }
+        finally { finish(token) }
     }
     fun disable() {
         closeInvitation()
-        module.state.pins().filter { it.status == "pending" }.forEach { unknown(it, "disabled") }
+        try { module.state.pins().filter { it.status == "pending" }.forEach { unknown(it, "disabled") } }
+        finally { activeToken?.let(::finish) }
     }
     fun shutdown() {
         closeInvitation()
@@ -145,26 +156,34 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
         val timeout = Runnable {
             timeouts.remove(record.token)
             if (!module.closed) module.guard("pin_timeout") {
-                module.state.pin(record.token)?.takeIf { it.status == "pending" }?.let { unknown(it, "timeout") }
+                try { module.state.pin(record.token)?.takeIf { it.status == "pending" }?.let { unknown(it, "timeout") } }
+                finally { finish(record.token) }
             }
         }
         timeouts[record.token] = timeout
         module.main.postDelayed(timeout, (record.deadline - runtime.clock.wallTimeMillis()).coerceIn(1, 300_000))
     }
     private fun fail(record: PinRecord, reason: String) {
-        module.state.savePin(record.copy(status = "failed", reason = reason))
-        finish(record.token)
+        try { module.state.savePin(record.copy(status = "failed", reason = reason)) }
+        finally { finish(record.token) }
         module.event("pin_failed", mapOf("token" to record.token, "reason" to reason))
     }
     private fun unknown(record: PinRecord, reason: String) {
-        module.state.savePin(record.copy(status = "unknown", reason = reason))
-        finish(record.token)
+        try { module.state.savePin(record.copy(status = "unknown", reason = reason)) }
+        finally { finish(record.token) }
         module.event("pin_unknown", mapOf("token" to record.token, "reason" to reason))
     }
     private fun finish(token: String) {
         timeouts.remove(token)?.let { module.main.removeCallbacks(it) }
-        if (activeToken == token) { activeToken = null; wentBackground = false }
-        runtime.signal(RetentionSignal.ExternalTransitionFinished(transitionToken(token)))
+        if (activeToken != token) return
+        // Detach ownership before any observer/storage callback can reenter this coordinator. A
+        // late callback for an older request must never close the current request's observer/token.
+        activeToken = null
+        wentBackground = false
+        val observer = returnObserver
+        returnObserver = null
+        try { observer?.close() }
+        finally { runtime.signal(RetentionSignal.ExternalTransitionFinished(transitionToken(token))) }
     }
 
     fun showInvitation(): WidgetInvitationResult {

@@ -4,10 +4,12 @@ import android.content.Context
 import android.view.View
 import android.widget.RemoteViews
 
-/** A compact row when short, otherwise a two-column grid. Supports the usual 3–4 features. */
+/** A compact row only when short and wide enough; otherwise a two-column grid for 3–4 features. */
 class StandardWidgetRenderer : RetentionWidgetRenderer {
     override fun render(context: Context, instance: WidgetInstance, actions: List<WidgetAction>): RemoteViews {
-        val horizontal = instance.minHeightDp in 1..139
+        // Launcher minimum height can describe the landscape bound, not the current portrait
+        // surface. Height alone must not squeeze four columns into a narrow default 3-cell widget.
+        val horizontal = instance.minWidthDp >= 300 && instance.minHeightDp in 1..139
         val views = RemoteViews(context.packageName, if (horizontal) R.layout.rk_widget_row else R.layout.rk_widget_grid)
         val cells = intArrayOf(R.id.rk_action_1, R.id.rk_action_2, R.id.rk_action_3, R.id.rk_action_4)
         val labels = intArrayOf(R.id.rk_label_1, R.id.rk_label_2, R.id.rk_label_3, R.id.rk_label_4)
