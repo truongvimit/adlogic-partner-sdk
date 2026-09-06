@@ -27,6 +27,8 @@ import timber.log.Timber
 
 /** The partner seam: catalogue, chosen locale, one host bridge, shared configuration and tracking. */
 object RetentionExample {
+    @Volatile private var acknowledgementRuntime: RetentionRuntime? = null
+    private var acknowledgement: RetentionSubscription? = null
     var bridge: OnboardRetentionBridge? = null
         private set
     fun install(application: Application) {
@@ -47,6 +49,7 @@ object RetentionExample {
             clock = ExampleQa.clock(application),
             store = ExampleQa.store(application),
         ))
+        if (result is RetentionKitInstallResult.Installed) attachSuccessAcknowledgement(application, result.kit.runtime)
         if (result is RetentionKitInstallResult.Failed) Timber.e("Retention install failed: %s", result.reasons)
         com.itg.template.ui.component.uninstall.ShortcutManager.initShortCut(application)
     }
@@ -110,15 +113,29 @@ object RetentionExample {
         val result = RetentionKit.get()?.review?.openStore()
         Toast.makeText(activity, if (result is ReviewActionResult.Scheduled) R.string.rk_example_request_sent else R.string.rk_example_unavailable, Toast.LENGTH_SHORT).show()
     }
+    /** Core subscribers run only after the corresponding durable user-state mutation succeeds.
+     * This acknowledges dispatch; it does not promise each asynchronous module effect succeeded. */
+    @Synchronized fun attachSuccessAcknowledgement(context: Context, runtime: RetentionRuntime) {
+        if (acknowledgementRuntime === runtime) return
+        acknowledgement?.close()
+        acknowledgementRuntime = runtime
+        val data = ExampleDataStore(context.applicationContext)
+        acknowledgement = runtime.subscribe("example.business.outbox") { signal ->
+            if (acknowledgementRuntime === runtime && signal is RetentionSignal.BusinessSuccess) {
+                val pending = data.pendingSuccesses().firstOrNull { it.id == signal.eventId && it.featureId == signal.featureId }
+                // A thrown/failed local acknowledgement leaves the durable operation pending.
+                // Core isolates subscriber exceptions, and a later flush replays the same ID.
+                if (pending != null) data.markReported(pending.id)
+            }
+        }
+    }
+
     @Synchronized fun flushSuccesses(context: Context) {
         val kit = RetentionKit.get() ?: return
-        val store = ExampleDataStore(context)
-        for (operation in store.pendingSuccesses()) {
-            val accepted = kit.runtime.signal(RetentionSignal.BusinessSuccess(operation.featureId, operation.id))
-            // Accepted by core is not a rating result. Failed core persistence retains the outbox.
-            // A crash before this marker replays the stable ID for module deduplication.
-            if (!accepted) break
-            store.markReported(operation.id)
+        attachSuccessAcknowledgement(context, kit.runtime)
+        for (operation in ExampleDataStore(context).pendingSuccesses()) {
+            // The Boolean means queued, so only the owned subscriber above acknowledges delivery.
+            if (!kit.runtime.signal(RetentionSignal.BusinessSuccess(operation.featureId, operation.id))) break
         }
     }
 }

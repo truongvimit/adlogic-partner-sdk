@@ -66,6 +66,16 @@ class ExampleDataStore(context: Context) {
     fun input(): String = synchronized(lock) { read().optString("input") }
     private fun decode(id: String, value: JSONObject) = Operation(id, value.getString("feature"), value.getString("result"), value.getBoolean("reported"))
     private fun read(): JSONObject = preferences.getString("state", null)?.let(::JSONObject) ?: JSONObject()
-    private fun persist(state: JSONObject) { check(preferences.edit().putString("state", state.toString()).commit()) { "Could not save example data" } }
+    private fun persist(state: JSONObject) {
+        val previous = preferences.getString("state", null)
+        if (!preferences.edit().putString("state", state.toString()).commit()) {
+            // Android updates preference memory before returning a failed disk commit.
+            // Restore that memory too, otherwise an unpersisted outbox acknowledgement disappears.
+            val rollback = preferences.edit()
+            if (previous == null) rollback.remove("state") else rollback.putString("state", previous)
+            rollback.commit()
+            error("Could not save example data")
+        }
+    }
     private companion object { val lock = Any() }
 }
