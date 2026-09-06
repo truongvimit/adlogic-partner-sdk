@@ -54,7 +54,7 @@ Callbacks must be short/local and may be called from non-main threads. Modules o
 
 | Variant | Meaning / state effect |
 |---|---|
-| `SetupCompleted` | Persist setup=true, onboarding=false. |
+| `SetupCompleted` | Persist setup=true, onboarding=false and first setupCompletedAtMillis; repeated completion does not reset grace. |
 | `OnboardingChanged(active)` | Persist whether a host onboarding flow is currently active. |
 | `EntitlementChanged(UNKNOWN/NON_SUBSCRIBER/SUBSCRIBER)` | Persist entitlement snapshot; UNKNOWN suppresses marketing. No-IAP apps explicitly use NON_SUBSCRIBER. |
 | `BusinessSuccess(featureId, eventId = UUID)` | Business success; review module owns deduplication/threshold. Reuse eventId when replaying one business operation. |
@@ -65,7 +65,7 @@ Callbacks must be short/local and may be called from non-main threads. Modules o
 | `ProcessForeground` / `ProcessBackground` | Normally emitted by core lifecycle. Module tests may deliver them explicitly. |
 | `ConfigurationChanged(revision)` | Emitted after updateConfig commits; modules must read runtime.config, not trust an arbitrary stale signal revision. |
 
-Transient ad-click/external-transition/lease state is cleared on a new process. Module implementations must choose cancellation of delayed click tokens on attach (recommended) or explicit durable TTL recovery; no long-lived boolean adClicked. `RetentionUserState` exposes setupCompleted, onboardingActive, entitlement, installedAtMillis and lastActiveAtMillis. `runtime.isForeground` is transient and false on a cold background start.
+Transient ad-click/external-transition/lease state is cleared on a new process. Module implementations must choose cancellation of delayed click tokens on attach (recommended) or explicit durable TTL recovery; no long-lived boolean adClicked. `RetentionUserState` exposes setupCompleted, onboardingActive, entitlement, installedAtMillis, lastActiveAtMillis and setupCompletedAtMillis. Last-active advances on foreground, background and business success, so a long foreground session is not counted as inactivity. `runtime.isForeground` is transient and false on a cold background start.
 
 ## Persistent transactions and config
 
@@ -141,7 +141,7 @@ if (runtime.entries.consume(token)) openFeature(entry.destination)
 
 `ui.eligibility()` returns RetentionEligibility.Allowed or Blocked(reason, detail). `RetentionSuppressionReason` covers common unavailable/config/user/lifecycle/permission/channel/cooldown/cap/duplicate/expired reasons; modules may put specific machine-readable details in the detail field or event attributes. `RetentionCapability` is Available, Unavailable(reason), or Unknown(reason), so pin-request accepted and support-unknown are not coerced into success.
 
-`runtime.marketingEligibility(graceMillis = 86400000, requireBackground = true)` checks runtime, setup, onboarding, entitlement, grace, external transition and foreground. It applies to **marketing only**, never a host's functional notifications. Every notification module still checks its own enabled/campaign/user/permission/channel/inactivity/cooldown/cap/TTL/revision conditions immediately before posting. Core does not auto-create notification channels or request permission. A host permission/ads adapter remains the single owner.
+`runtime.marketingEligibility(graceMillis = 86400000, requireBackground = true)` checks runtime, setup, onboarding, entitlement, 24-hour grace measured from durable setupCompletedAtMillis, external transition and foreground. It applies to **marketing only**, never a host's functional notifications. Every notification module still checks its own enabled/campaign/user/permission/channel/inactivity/cooldown/cap/TTL/revision conditions immediately before posting. Core does not auto-create notification channels or request permission. A host permission/ads adapter remains the single owner.
 
 ## Diagnostics and evidence
 

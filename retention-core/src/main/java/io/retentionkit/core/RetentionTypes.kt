@@ -26,6 +26,7 @@ data class RetentionUserState @JvmOverloads constructor(
     val entitlement: RetentionEntitlement = RetentionEntitlement.UNKNOWN,
     val installedAtMillis: Long = 0,
     val lastActiveAtMillis: Long = 0,
+    val setupCompletedAtMillis: Long = 0,
 )
 
 data class RetentionFeature @JvmOverloads constructor(

@@ -58,6 +58,7 @@ class RetentionRuntime private constructor(val application: Application, private
                 val initial = options.initialUserState.copy(
                     installedAtMillis = options.initialUserState.installedAtMillis.takeIf { it > 0 } ?: now,
                     lastActiveAtMillis = options.initialUserState.lastActiveAtMillis.takeIf { it > 0 } ?: now,
+                    setupCompletedAtMillis = if (options.initialUserState.setupCompleted) options.initialUserState.setupCompletedAtMillis.takeIf { it > 0 } ?: now else 0,
                 )
                 writeUser(state, initial)
             }
@@ -173,7 +174,7 @@ class RetentionRuntime private constructor(val application: Application, private
             state.onboardingActive -> RetentionSuppressionReason.HOST_UI
             state.entitlement == RetentionEntitlement.UNKNOWN -> RetentionSuppressionReason.ENTITLEMENT_UNKNOWN
             state.entitlement == RetentionEntitlement.SUBSCRIBER -> RetentionSuppressionReason.SUBSCRIBER
-            clock.wallTimeMillis() < state.installedAtMillis || clock.wallTimeMillis() - state.installedAtMillis < graceMillis.coerceAtLeast(0) -> RetentionSuppressionReason.COOLDOWN
+            clock.wallTimeMillis() < state.setupCompletedAtMillis || clock.wallTimeMillis() - state.setupCompletedAtMillis < graceMillis.coerceAtLeast(0) -> RetentionSuppressionReason.COOLDOWN
             ui.externalTransitionActive() -> RetentionSuppressionReason.EXTERNAL_TRANSITION
             requireBackground && isForeground -> RetentionSuppressionReason.FOREGROUND
             else -> null
@@ -184,10 +185,12 @@ class RetentionRuntime private constructor(val application: Application, private
     private fun applySignal(signal: RetentionSignal) {
         synchronized(stateLock) {
             val changed = when (signal) {
-                RetentionSignal.SetupCompleted -> userState.copy(setupCompleted = true, onboardingActive = false)
+                RetentionSignal.SetupCompleted -> userState.copy(setupCompleted = true, onboardingActive = false,
+                    setupCompletedAtMillis = if (userState.setupCompleted) userState.setupCompletedAtMillis else clock.wallTimeMillis())
                 is RetentionSignal.OnboardingChanged -> userState.copy(onboardingActive = signal.active)
                 is RetentionSignal.EntitlementChanged -> userState.copy(entitlement = signal.entitlement)
-                RetentionSignal.ProcessForeground -> userState.copy(lastActiveAtMillis = maxOf(userState.lastActiveAtMillis, clock.wallTimeMillis()))
+                RetentionSignal.ProcessForeground, RetentionSignal.ProcessBackground -> userState.copy(lastActiveAtMillis = maxOf(userState.lastActiveAtMillis, clock.wallTimeMillis()))
+                is RetentionSignal.BusinessSuccess -> userState.copy(lastActiveAtMillis = maxOf(userState.lastActiveAtMillis, clock.wallTimeMillis()))
                 else -> userState
             }
             if (changed != userState) {
@@ -270,6 +273,7 @@ class RetentionRuntime private constructor(val application: Application, private
         }
         private fun writeUser(state: RetentionTransaction, user: RetentionUserState) {
             state.put("setup", user.setupCompleted)
+            state.put("setup_at", user.setupCompletedAtMillis)
             state.put("onboarding", user.onboardingActive)
             state.put("entitlement", user.entitlement.name)
             state.put("installed", user.installedAtMillis)
@@ -279,6 +283,7 @@ class RetentionRuntime private constructor(val application: Application, private
             setupCompleted = state.boolean("setup"), onboardingActive = state.boolean("onboarding"),
             entitlement = state.string("entitlement")?.let { runCatching { RetentionEntitlement.valueOf(it) }.getOrNull() } ?: RetentionEntitlement.UNKNOWN,
             installedAtMillis = state.long("installed"), lastActiveAtMillis = state.long("active"),
+            setupCompletedAtMillis = state.long("setup_at", if (state.boolean("setup")) state.long("installed") else 0),
         )
     }
 }
