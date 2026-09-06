@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.view.animation.LinearInterpolator
@@ -45,7 +46,6 @@ import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -61,9 +61,9 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Splash template. The app's launcher activity extends this and overrides the hooks it needs.
  *
- * Consent resolves before the optional notification prompt. Splash banner/interstitial loading
- * may overlap that prompt. Next-screen preloading and handoff wait for the splash ad barriers and
- * the permission result, so they do not run under system permission UI.
+ * Consent resolves before the optional notification prompt. Once both are settled and the host
+ * has focus, splash starts its ad requests and display clock. Next-screen preloading and handoff
+ * wait for the splash ad barriers, so time spent reading permission UI cannot consume that work.
  * System permission UI waits for the user; network and host hooks keep their own timeouts.
  */
 open class ObSplashActivity : BaseOnboardActivity() {
@@ -71,6 +71,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     override val screenName: String = "ob_splash"
 
     private var attemptStartedAtMs = System.currentTimeMillis()
+    private var adPhaseStartedAtMs = 0L
     private var progressAnimator: ObjectAnimator? = null
     private var noInternetDialog: ObNoInternetDialog? = null
     private val windowFocused = MutableStateFlow(false)
@@ -179,8 +180,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
             notificationPermissionResult.await()
             awaitSplashFocus()
         }
-        val notification = async(start = CoroutineStart.LAZY) { awaitNotificationPermission(cfg) }
-
         // The remote fetch requests no ads, so it may overlap consent; ad requests may not. A
         // request that goes out before the user has answered is a policy violation, not a race.
         coroutineScope {
@@ -189,7 +188,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
                     roundTripMs = cfg.splash.consentTimeoutMs,
                     isResolving = ConsentCenter::isResolving,
                     canRequestAds = ConsentCenter::canRequestAds,
-                    isVisible = { lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
                     request = ::onConsentRequired,
                 )
             }
@@ -204,7 +202,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Completing the step and authorizing requests are separate. The SDK reads current
             // authority at each gate, so a later answer can recover without overwriting host-off.
             val mayRequestAds = consent.await()
-            notification.start()
+            awaitNotificationPermission(cfg)
             if (!mayRequestAds) {
                 ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
             }
@@ -237,8 +235,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             delay(remaining.milliseconds)
         }
 
-        notification.await()
-        if (notificationPermissionRequested || decision is StartDecision.Start) awaitSplashFocus()
+        awaitSplashFocus()
         (decision as? StartDecision.Start)?.let {
             sdk.preload().onSplashRemoteReady(this@ObSplashActivity, it.destination, it.resumeStepIndex)
         }
@@ -307,10 +304,16 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * Fires both slots at most once. SAME_TIME may defer a closed consent/host gate without
      * consuming the latch; the final call after onRemoteFetched still settles every declined slot.
      */
-    private fun requestSplashAds(deferIfUnauthorized: Boolean = false) {
+    private suspend fun requestSplashAds(deferIfUnauthorized: Boolean = false) {
         if (adsRequested) return
+        // Billing or remote fetch can finish while the host is backgrounded. Check focus at the
+        // actual request boundary, then re-read authorization after that suspension.
+        awaitSplashFocus()
         if (deferIfUnauthorized && !OnboardingSdk.canRequestAds()) return
         adsRequested = true
+        // Time spent in UMP, permission UI or background waiting cannot consume the ad phase.
+        adPhaseStartedAtMs = SystemClock.elapsedRealtime()
+        progressAnimator?.start()
         requestSplashBanner()
         requestSplashInterstitial()
     }
@@ -520,7 +523,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private fun remainingMinDisplayMs(configured: Long): Long {
         val target = sdk.flags().splashMinDisplayMs.takeIf { it > 0 } ?: configured
-        val elapsed = System.currentTimeMillis() - attemptStartedAtMs
+        val elapsed = SystemClock.elapsedRealtime() - adPhaseStartedAtMs
         return (target - elapsed).coerceIn(0, target)
     }
 
@@ -544,7 +547,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
             progressAnimator = ObjectAnimator.ofInt(bar, "progress", 0, 100).apply {
                 duration = cfg.splash.minDisplayTimeMs.coerceAtLeast(1_000)
                 interpolator = LinearInterpolator()
-                start()
             }
         }
     }
@@ -570,8 +572,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * host wiring, and a host's explicit `OnboardingSdk.setCanRequestAds(false)` remains in force.
      *
      * The splash gives the default all the time it needs: `consentTimeoutMs` bounds only the round
-     * trip, and once the form is up the wait is the user's — up to a three-minute backstop for a
-     * form UMP has stopped answering for, which only runs while the screen is in front of them.
+     * trip. Once an SDK-owned consent flow is resolving, wait for its result without a deadline
+     * on the user's reading time. Destroying this Activity cancels its wait.
      * An override that resolves consent
      * without going through `ConsentCenter` has no flow for the splash to see, so that one is still
      * bounded by `consentTimeoutMs` — resolve promptly, or run the slow part elsewhere.

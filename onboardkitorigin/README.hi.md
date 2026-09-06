@@ -168,12 +168,14 @@ consent नहीं देता। App में notification permission स�
 splash = SplashConfig(notificationPermissionEnabled = false)
 ```
 
-Consent और remote fetch साथ चल सकते हैं। Notification prompt खुला होने पर eligible splash
-banner/interstitial loads जारी रह सकते हैं। Splash configured ad-loading waits, minimum display time
-और notification result, यदि कोई हो, की प्रतीक्षा करता है। अगले destination के native ads preload करने से
-पहले वह resumed Activity और window focus का इंतज़ार करता है। फिर preload शुरू करके splash interstitial
-दिखाने और flow आगे बढ़ाने का प्रयास करता है। Banner wait का default `0` है; interstitial wait load पूरा
-होने या configured budget समाप्त होने पर ख़त्म होता है, इसलिए हर ad का fill होना ज़रूरी नहीं है।
+Remote fetch और consent साथ चल सकते हैं। SDK के UMP flow में उपयोगकर्ता के उत्तर की कोई समय-सीमा
+नहीं है। Consent और notification permission का परिणाम, यदि माँगा गया हो, मिलने के बाद splash resumed
+Activity और window focus का इंतज़ार करता है। तभी eligible banner/interstitial loads और minimum display
+period शुरू होते हैं। Ad wait budgets इन prompts के बाद शुरू होते हैं; उन्हें पढ़ने में लगा समय ad phase
+का budget नहीं घटाता। Splash ad waits और minimum display period के बाद foreground/focus फिर जाँचा
+जाता है। फिर अगले destination के native preloads शुरू होते हैं, उसके बाद interstitial दिखाने और flow
+आगे बढ़ाने का प्रयास होता है। Banner wait का default `0` है; interstitial wait load पूरा होने या configured
+budget समाप्त होने पर ख़त्म होता है, इसलिए हर ad का fill होना ज़रूरी नहीं है।
 
 Launcher activity में `android:exported="true"`, MAIN/LAUNCHER filter और AppCompat/MaterialComponents
 theme declare करें। Portrait splash के लिए:

@@ -129,7 +129,7 @@ class SplashNotificationPermissionDeviceTest {
                     eventually("Expected the actual Android notification permission dialog") { permissionDialogVisible() }
                     assertEquals(0, fixture.results.get())
                     hold(4_500) { assertHeld() } // Beyond both configured 2s and default remote 3s minimum.
-                    assertTrue("Ad loading may proceed while permission UI is pending", fixture.loads.get() >= 2)
+                    assertEquals("Permission reading time must not consume splash ad requests", 0, fixture.loads.get())
                     if (phase == "recreate") {
                         val before = fixture.creates.get()
                         mark("RECREATE_WITH_REAL_PERMISSION_PENDING")

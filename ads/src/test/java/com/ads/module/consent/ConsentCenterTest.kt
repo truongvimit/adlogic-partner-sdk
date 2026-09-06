@@ -224,6 +224,35 @@ class ConsentCenterTest {
     }
 
     @Test
+    fun `visible UMP form held over ten minutes remains unresolved and unauthorized until grant`() {
+        val completions = mutableListOf<Boolean>()
+        val answers = mutableListOf<Boolean>()
+        ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
+        val form = showRequiredForm()
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(610))
+
+        assertTrue(ConsentCenter.isResolving())
+        assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(completions.isEmpty())
+        assertTrue(answers.isEmpty())
+        assertFalse(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.hasAnswered())
+        activity.getSharedPreferences(activity.packageName + "_preferences", Context.MODE_PRIVATE)
+            .edit().putString("IABTCF_PurposeConsents", "1".repeat(10))
+            .putString("IABTCF_VendorConsents", "1".repeat(755)).commit()
+        vendor.information.obtained()
+        form.dismiss(null)
+
+        assertEquals(listOf(true), completions)
+        assertEquals(listOf(true), answers)
+        assertTrue(ConsentCenter.canRequestAds())
+        assertTrue(ConsentCenter.canPersonalize())
+        assertFalse(ConsentCenter.isResolving())
+        assertFalse(ConsentCenter.isFormShowing())
+    }
+
+    @Test
     fun `form has no human timeout and refusal remains valid UMP consent`() {
         val completions = mutableListOf<Boolean>()
         val answers = mutableListOf<Boolean>()

@@ -168,12 +168,14 @@ quản lý quyền thông báo, tắt lần hỏi tự động trong config:
 splash = SplashConfig(notificationPermissionEnabled = false)
 ```
 
-Consent và remote fetch có thể chạy song song. Banner/interstitial của splash đủ điều kiện vẫn có
-thể tải khi prompt thông báo đang mở. Splash chờ các khoảng tải quảng cáo đã cấu hình, thời gian
-hiển thị tối thiểu và kết quả xin quyền nếu có. Trước khi preload native của màn đích, splash chờ
-Activity ở trạng thái resumed và có window focus, rồi bắt đầu preload trước khi thử hiện
-interstitial splash và chuyển luồng. Thời gian chờ banner mặc định là `0`; thời gian chờ
-interstitial kết thúc khi tải xong hoặc hết budget cấu hình, nên không yêu cầu mọi quảng cáo đều fill.
+Remote fetch có thể chạy song song với consent. Luồng UMP do SDK quản lý không giới hạn thời gian
+người dùng trả lời. Sau consent và kết quả xin quyền thông báo nếu có, splash chờ Activity resumed
+và có window focus rồi mới bắt đầu tải banner/interstitial đủ điều kiện và tính thời gian hiển thị
+tối thiểu. Ngân sách chờ quảng cáo bắt đầu sau các prompt; thời gian đọc không tiêu ngân sách này.
+Sau các bước chờ ad splash và thời gian hiển thị tối thiểu, splash kiểm tra foreground/focus lần nữa,
+rồi bắt đầu preload native của màn đích trước khi thử hiện interstitial và chuyển luồng.
+Thời gian chờ banner mặc định là `0`; thời gian chờ interstitial kết thúc khi tải xong hoặc hết
+ngân sách cấu hình, nên không yêu cầu mọi quảng cáo đều fill.
 
 Khai báo launcher activity với `android:exported="true"`, intent-filter MAIN/LAUNCHER và theme
 AppCompat/MaterialComponents. Với splash dọc, dùng:

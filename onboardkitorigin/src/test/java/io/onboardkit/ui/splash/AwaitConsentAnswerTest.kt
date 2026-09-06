@@ -2,7 +2,11 @@ package io.onboardkit.ui.splash
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
@@ -15,6 +19,35 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AwaitConsentAnswerTest {
+
+    @Test
+    fun `a visible form held over ten minutes cannot complete the splash step before its answer`() = runTest {
+        var mayRequestAds = false
+        var completedAt: Long? = null
+        val answer = CompletableDeferred<Boolean>()
+        val step = async {
+            awaitConsentAnswer(
+                roundTripMs = 20_000,
+                isResolving = { true },
+                canRequestAds = { mayRequestAds },
+                request = { answer.await() },
+            ).also { completedAt = testScheduler.currentTime }
+        }
+
+        advanceTimeBy(610_000)
+        runCurrent()
+        val completedBeforeAnswer = step.isCompleted
+        assertFalse(mayRequestAds)
+
+        mayRequestAds = true
+        answer.complete(true)
+        runCurrent()
+        val granted = step.await()
+
+        assertFalse("Splash step completed at ${completedAt}ms before the form answer at 610000ms", completedBeforeAnswer)
+        assertTrue(granted)
+        assertEquals(610_000L, completedAt)
+    }
 
     @Test
     fun `a successful callback cannot overrule authorization revoked before resuming`() = runTest {
@@ -105,47 +138,47 @@ class AwaitConsentAnswerTest {
         assertEquals(20_050, testScheduler.currentTime - startedAt)
     }
 
-    /**
-     * UMP can leave a non-cancelable form on screen with no terminal left to fire — a dead WebView
-     * renderer does exactly that. The wait has to end anyway, because finishing the splash is what
-     * destroys the window that orphaned dialog lives on.
-     */
     @Test
-    fun `a form that never answers is given up on at the ceiling`() = runTest {
-        val startedAt = testScheduler.currentTime
+    fun `an unanswered form waits until the owning scope cancels its request`() = runTest {
+        var requestCancelled = false
+        val step = async {
+            awaitConsentAnswer(
+                roundTripMs = 20_000,
+                isResolving = { true },
+                canRequestAds = { false },
+                request = {
+                    try {
+                        CompletableDeferred<Boolean>().await()
+                    } finally {
+                        requestCancelled = true
+                    }
+                },
+            )
+        }
 
-        val granted = awaitConsentAnswer(
-            roundTripMs = 20_000,
-            isResolving = { true },
-            canRequestAds = { false },
-            request = { CompletableDeferred<Boolean>().await() },
-        )
+        try {
+            advanceTimeBy(610_000)
+            runCurrent()
+            assertFalse(step.isCompleted)
+            assertFalse(requestCancelled)
+        } finally {
+            step.cancelAndJoin()
+        }
 
-        assertFalse(granted)
-        // The default ceiling, spelled out: 20s round trip + the 180s production ceiling.
-        assertEquals(200_000, testScheduler.currentTime - startedAt)
+        assertTrue(step.isCancelled)
+        assertTrue(requestCancelled)
     }
 
-    /**
-     * The ceiling is an escape from a form the user is stuck looking at. Out of sight there is
-     * nothing to escape, and handing off from the background would finish the splash without
-     * starting anything.
-     */
     @Test
-    fun `the ceiling does not fire while the screen is in the background`() = runTest {
+    fun `an answer after a long pause is still returned`() = runTest {
         val startedAt = testScheduler.currentTime
-        var visible = false
         val answered = CompletableDeferred<Boolean>()
-        // Away in a browser reading the privacy policy for well past the ceiling, then back to
-        // accept.
-        launch { delay(500_000); visible = true; answered.complete(true) }
+        launch { delay(500_000); answered.complete(true) }
 
         val granted = awaitConsentAnswer(
             roundTripMs = 20_000,
             isResolving = { true },
             canRequestAds = { true },
-            isVisible = { visible },
-            formWaitMs = 180_000,
             request = { answered.await() },
         )
 

@@ -168,13 +168,14 @@ config:
 splash = SplashConfig(notificationPermissionEnabled = false)
 ```
 
-Consent and remote fetch may run in parallel. Eligible splash banner/interstitial loads may
-continue while the notification prompt is open. Splash observes the configured banner/interstitial
-wait limits, minimum display time and any notification result. Before preloading the next destination's
-native ads, it waits for a resumed Activity with window focus, then starts those preloads before
-attempting the splash interstitial and handing off the flow. The banner wait defaults to `0`;
-the interstitial wait ends on load completion or its configured budget, so this does not require
-every ad to fill.
+Remote fetch may overlap consent. The SDK-owned UMP flow has no deadline for the user's answer.
+After consent and any notification permission result, splash waits for a resumed Activity with
+window focus before starting eligible banner/interstitial loads and the minimum display period.
+Ad wait budgets start after these prompts, so time spent reading them does not consume the ad phase.
+After the splash ad waits and minimum display period, splash checks foreground focus again and
+starts the next destination's native preloads before attempting the interstitial and handing off
+the flow. The banner wait defaults to `0`; the interstitial wait ends on load completion or its
+configured budget, so this does not require every ad to fill.
 
 Declare the launcher activity with `android:exported="true"`, a MAIN/LAUNCHER filter and an
 AppCompat/MaterialComponents theme. For a portrait splash, use:
