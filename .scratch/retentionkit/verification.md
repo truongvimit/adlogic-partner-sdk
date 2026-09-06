@@ -12,6 +12,13 @@
 
 - Branch pushed through existing owner SSH identity. Draft PR creation via gh failed: `must be a collaborator`; active gh account only has READ, owner token invalid. In-app browser has no logged-in GitHub session. User was asked asynchronously to restore the existing owner login; implementation continues.
 
+## Integrated bridge checkpoint
+
+- Root at `64ffcfb`: `./gradlew :onboardkitorigin:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.onboardkit.ads.AppOpenResumeHomeReturnDeviceTest --console=plain --max-workers=2`: PASS on Pixel5/API34, 1 test, 45 seconds build/run.
+- The test performs two actual Android Home/return cycles. Two process-lifecycle readers observe the same legacy click suppression on the first return; neither sees it on the next return. This is a physical regression check after the scoped-suppression changes, not proof of a real ad click or the new RetentionKit feature flows.
+- Actual JUnit XML independently checked with `scripts/retentionkit/verify.py tests`: 1 passed, zero failures/errors/skips. Captured output `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-bridge-device-home-return.log`; evidence hash/count record alongside it as `.json`.
+- Partial05 implementer checks: full ads 159 + OnboardKit 164 tests passed for suppression/no-splash changes; active-flow 4 + splash 10 targeted tests passed after active-state addition. Final combined rerun remains pending.
+
 ## Implementation acceptance
 
 Status values: PENDING, PASS, FAIL, PLATFORM LIMIT, HARDWARE UNAVAILABLE. Unit evidence and device evidence are independent; source inspection is not a device pass. Test counts are taken from completed JUnit XML, not console task names. Final checks run on the integrated branch.
