@@ -29,3 +29,5 @@ The initial state is UNKNOWN even if cached `isPremium` is true/false. An empty 
 Pending/rejected receipts, unknown product IDs, consumables and the simulated `grantDevPurchase` path do not verify an entitlement. `setPurchase(true)` is already documented as the host's explicit backend grant and verifies premium. Legacy `setPurchase(false)` and `updatePurchaseStatus()` do not prove a complete Play sweep and cannot verify free; use `verifyPurchased`/`Billing.restore` for fresh authoritative ownership evidence.
 
 This additive API does not change legacy `isPremium`, `isPurchased`, `awaitReady`, `verifyFinish`, restore results, callbacks or Java entry points. Those APIs retain their cached/compatibility behavior and must not be used as proof of successful verification. In particular, `awaitReady() == Ready` is not a replacement for this flow's evidence. Snapshot and publication derive from one atomic versioned source, with no host callback invoked under an engine lock. This module does not depend on RetentionKit.
+
+Automated validation and limits: [ENTITLEMENT_VERIFICATION.md](ENTITLEMENT_VERIFICATION.md).

@@ -1,7 +1,7 @@
 # 05a Authoritative Billing entitlement for Retention integration
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 01
 
 Spec: ../spec.md
@@ -17,3 +17,9 @@ This additive seam is required by the existing spec's unknown-entitlement gate a
 Inspection: AppPurchase.finishVerify sets verifyFinish for both successful and failed sweeps; verifiedThisProcess is private. Billing.awaitReady fast-path and its registration-race fallback synthesize Ready/OK from verifyFinish. Keep compatibility for existing callers and expose an explicitly authoritative separate API.
 
 Claimed in isolated `05a-billing`, branch `codex/retentionkit-billing`, 2026-09-07.
+
+## Answer
+
+Implemented an additive engine-owned authoritative state seam in315ec5e: `Billing.entitlement: StateFlow<BillingEntitlement>` with UNKNOWN / VERIFIED_NON_PREMIUM / VERIFIED_PREMIUM; Java static getter plus `AppPurchase.getEntitlement()` and `getEntitlementSnapshot()`. One atomic versioned source prevents registration races, stale overlapping sweeps and a pre-purchase query erasing a later grant. Failed/partial/null/disconnected queries do not create verified free. Current catalogue registration invalidates old evidence. Legacy readiness/cached APIs remain unchanged; no Retention dependency.
+
+Contracts: `billingkit/AUTHORITATIVE_ENTITLEMENT.md`. Verification: `billingkit/ENTITLEMENT_VERIFICATION.md`. Command PASS: `./gradlew :billingkit:testDebugUnitTest :billingkit:assembleRelease --max-workers=2`.20 tests:7 atomic/coherent-flow and13 actual AppPurchase transport tests, zero failures/errors/skips. Java8 output/API signatures and isolated runtime dependency graph verified. Only BillingKit and own05a issue changed. No ADB/push/merge/root edits.
