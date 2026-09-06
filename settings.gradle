@@ -26,3 +26,11 @@ include ':paykit'
 // Scenario proof, never published: :billingkit + :paykit with no :ads on the classpath must
 // compile and package. If this module breaks, the billing split has regressed.
 include ':sample-paywall-only'
+
+// Retention: independently consumable libraries, plus the optional umbrella facade.
+include ':retention-core'
+include ':retention-notifications'
+include ':retention-widgets'
+include ':retention-feedback'
+include ':retention-review'
+include ':retentionkit'

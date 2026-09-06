@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.retentionkit.core'
+    compileSdk compile_sdk_version
+    resourcePrefix 'rk_'
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += ['-Xjvm-default=all']
+    }
+    testOptions { unitTests.includeAndroidResources = true }
+    publishing { singleVariant('release') { withSourcesJar() } }
+}
+
+dependencies {
+    api "androidx.lifecycle:lifecycle-process:$androidx_lifecycle_version"
+    implementation "androidx.core:core-ktx:$androidx_core_ktx_version"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    testImplementation 'androidx.test:core:1.7.0'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create('release', MavenPublication) {
+                from components.release
+                artifactId = 'retention-core'
+            }
+        }
+    }
+}

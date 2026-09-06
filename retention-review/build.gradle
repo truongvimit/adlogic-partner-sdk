@@ -1,0 +1,40 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.retentionkit.review'
+    compileSdk compile_sdk_version
+    resourcePrefix 'rk_'
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += ['-Xjvm-default=all']
+    }
+    testOptions { unitTests.includeAndroidResources = true }
+    publishing { singleVariant('release') { withSourcesJar() } }
+}
+
+dependencies {
+    api project(':retention-core')
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create('release', MavenPublication) {
+                from components.release
+                artifactId = 'retention-review'
+            }
+        }
+    }
+}
