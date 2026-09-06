@@ -1,0 +1,8 @@
+<resources>
+    <item name="rk_proof_status" type="id" />
+    <item name="rk_proof_input" type="id" />
+    <item name="rk_proof_result" type="id" />
+    <item name="rk_proof_setup" type="id" />
+    <item name="rk_proof_run" type="id" />
+    <item name="rk_proof_entry" type="id" />
+</resources>
