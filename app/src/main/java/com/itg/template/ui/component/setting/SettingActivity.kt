@@ -16,7 +16,6 @@ import com.itg.template.databinding.ActivitySettingBinding
 import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
 
-import com.itg.template.ui.bases.ext.showRateDialog
 import com.itg.template.utils.Routes
 import dagger.hilt.android.AndroidEntryPoint
 import io.onboardkit.ui.language.LanguageScreenMode
@@ -35,6 +34,7 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
         val code = result.data?.getStringExtra(ObLanguageActivity.RESULT_LANGUAGE_CODE)
         if (result.resultCode == RESULT_OK && code != null) {
             appSharedPref.languageCode = code
+            io.retentionkit.RetentionKit.get()?.widgets?.refresh()
             Routes.startMainActivity(this)
             finish()
         }
@@ -53,7 +53,7 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
                 )
             }
             rltRate.click { initRate() }
-            rltFeedback.click { sendFeedback(BuildConfig.email_feedback) }
+            rltFeedback.click { com.itg.template.retention.RetentionExample.showFeedback(this@SettingActivity) }
             rltShare.click { shareApp(this@SettingActivity) }
             rltPolicy.click {
                 openPrivacyPolicy()
@@ -62,17 +62,7 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
     }
 
     private fun initRate() {
-        val isRate = appSharedPref.isRate
-        if (isRate) {
-            Toast.makeText(
-                this@SettingActivity,
-                this@SettingActivity.getString(R.string.txt_thanks_you_for_rating),
-                Toast.LENGTH_SHORT
-            ).show()
-        } else {
-            appSharedPref.isRate = true
-            showRateDialog(this@SettingActivity, false)
-        }
+        com.itg.template.retention.RetentionExample.manualRate(this)
     }
 
     private fun shareApp(context: Context) {
@@ -119,15 +109,6 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
             Log.e("SettingActivity", "Error opening privacy policy", e)
             Toast.makeText(this, "Unable to open Privacy Policy", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun sendFeedback(email: String) {
-        val intentFeedBack = Intent(Intent.ACTION_SEND)
-        intentFeedBack.setType("text/email")
-        intentFeedBack.putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
-        intentFeedBack.putExtra(Intent.EXTRA_SUBJECT, "Feedback")
-        intentFeedBack.putExtra(Intent.EXTRA_TEXT, "" + "")
-        startActivity(Intent.createChooser(intentFeedBack, "Send Feedback:"))
     }
 
     override fun onResume() {

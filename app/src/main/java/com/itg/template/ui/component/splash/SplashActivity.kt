@@ -19,6 +19,30 @@ import kotlinx.coroutines.launch
  * What remains here is this app's own product wiring.
  */
 class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
+    override fun onCreateSafe(savedInstanceState: android.os.Bundle?) {
+        com.itg.template.retention.RetentionExample.capture(this, intent)
+        if (forwardReadyEntry()) return
+        super.onCreateSafe(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.itg.template.retention.RetentionExample.capture(this, intent)
+        // Keep the existing splash/onboarding attempt; its terminal callback drains durable entries.
+        forwardReadyEntry()
+    }
+
+    private fun forwardReadyEntry(): Boolean {
+        val runtime = io.retentionkit.RetentionKit.get()?.runtime ?: return false
+        if (!runtime.userState.setupCompleted || runtime.userState.onboardingActive ||
+            runtime.entries.pending().isEmpty()) return false
+        startActivity(android.content.Intent(this, com.itg.template.retention.RetentionPlaygroundActivity::class.java)
+            .apply { intent.extras?.let(::putExtras) })
+        finish()
+        return true
+    }
+
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on

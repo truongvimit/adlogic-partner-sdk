@@ -164,6 +164,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     override fun onClickViews() {
         super.onClickViews()
 
+        mBinding.btnRetentionPlayground.click {
+            startActivity(android.content.Intent(this, com.itg.template.retention.RetentionPlaygroundActivity::class.java))
+        }
+
         // Utilities
         mBinding.buttonHello.click {
             ITGTrackingHelper.logEventClick(this::class.java.simpleName, "buttonHello", null)
@@ -593,7 +597,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         }
     }
 
+    private var retentionPermissionScope: AutoCloseable? = null
     private fun requestPermission() {
+        retentionPermissionScope?.close()
+        retentionPermissionScope = com.itg.template.retention.RetentionExample.beginExternal("notification_permission")
         xxPermissions {
             permissions(PermissionLists.getPostNotificationsPermission())
             onDoNotAskAgain { permissions, userResult ->
@@ -602,13 +609,19 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             onShouldShowRationale { shouldShowRationaleList, onUserResult ->
                 Timber.tag("Permission").d("Should show rationale")
             }
-            onResult { allGranted, grantedList, deniedList -> }
+            onResult { _, _, _ ->
+                retentionPermissionScope?.close()
+                retentionPermissionScope = null
+                io.retentionkit.RetentionKit.get()?.permissionChanged()
+            }
         }
     }
 
     // ─── Lifecycle ────────────────────────────────────────────
 
     override fun onDestroy() {
+        retentionPermissionScope?.close()
+        retentionPermissionScope = null
         ConsentCenter.detach(this)
         super.onDestroy()
         delayRunnable?.let {

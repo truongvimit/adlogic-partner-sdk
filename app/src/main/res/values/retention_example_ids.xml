@@ -1,0 +1,16 @@
+<resources>
+    <item name="rk_feature_title" type="id" />
+    <item name="rk_result" type="id" />
+    <item name="rk_phrase_spinner" type="id" />
+    <item name="rk_phrase_translate" type="id" />
+    <item name="rk_phrase_save" type="id" />
+    <item name="rk_text_input" type="id" />
+    <item name="rk_text_analyze" type="id" />
+    <item name="rk_document_analyze" type="id" />
+    <item name="rk_open_widget" type="id" />
+    <item name="rk_open_feedback" type="id" />
+    <item name="rk_open_rate" type="id" />
+    <item name="rk_open_permissions" type="id" />
+    <item name="rk_route_debug" type="id" />
+    <item name="rk_qa_panel" type="id" />
+</resources>

@@ -1,7 +1,7 @@
 # 06 Full example integration
 
 Type: task
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 02, 03, 04, 05
 
 Spec: ../spec.md
@@ -14,4 +14,6 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 
 ## Comments
 
-Implementation pending.
+Implementation is prepared in app/**; see app/RETENTION_EXAMPLE.md. Four real EN/VI utilities, durable result/success outbox, shared catalogue, facade/suite adapters, post-resume pending routing, standard feedback/manual rate and known-ID-only shortcut migration are implemented. Debug-only engine profile and 11 instrumented cases cover all seven notification campaigns, action destinations and critical gates; release contains no fixture entry point.
+
+Validation checkpoint: `:app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:testDebugUnitTest` passed (11 unit tests, 0 failures/errors) against the first compiling facade integration. Final05/authoritative Billing/ad-click dependencies synchronized at9bc12fc; Billing adapter and final routing normalization wired afterward. Final app APK/R8 assembly and rerun are pending the coordinated Gradle window. No ADB/device execution by this agent. Ticket remains open until final build and root-owned device evidence.
