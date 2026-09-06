@@ -1,7 +1,7 @@
 # 05 Suite integration and simple partner facade
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 Spec: ../spec.md
@@ -14,4 +14,11 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 
 ## Comments
 
-Implementation pending.
+Claimed for preliminary, independent ads/OnboardKit compatibility bridges. Ticket 01 remains a dependency for the Retention facade and adapters; this claim does not resolve that dependency or the whole ticket.
+
+## Answer — preliminary bridge increment
+
+- `AppOpenManager.suppressResume(owner, reason, timeoutMs)` and the three-argument `skipNextResume` return an idempotent `ResumeSuppression` handle. Holds and next-return snapshots are independent per handle, expire within 1–600000 ms and are queried by the existing shared OPEN/WELCOME gate. Cancellation does not clear legacy ad-click state, another owner's lease, the installed ResumeSkipPolicy or the durable enable mode. Commit: `29c5279`.
+- `SplashEntry.intentWithoutSplashAds` preserves the existing entry and passthrough while skipping splash banner/interstitial requests, interstitial display and SPLASH_INTER paywall checkpoint. Consent, permission and first-open onboarding continue under host policy. This is explicitly splash-only suppression; later onboarding ads are not silently changed. Existing `intent()` calls and enum entries retain their behavior.
+- Validation: `./gradlew :ads:testDebugUnitTest :onboardkitorigin:testDebugUnitTest --max-workers=2 --console=plain` passed: 159 ads tests + 164 OnboardKit tests, zero failures/errors/skips. New coverage includes overlapping owners, failed/canceled system launch, expiry, stale snapshot clearing, legacy click-policy compatibility, all three no-splash-ad entry sources, first-open setup, and the existing tagged ad/checkpoint path.
+- Remaining: final core/modules integration, umbrella install facade, Firebase/Trackkit/OnboardKit adapters and their tests. Status remains claimed; no device/packaging result is claimed for this increment.

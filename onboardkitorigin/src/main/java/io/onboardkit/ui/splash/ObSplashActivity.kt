@@ -92,6 +92,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private val bannerSettled = CompletableDeferred<Unit>()
     private val interstitialSettled = CompletableDeferred<Unit>()
     private var adsRequested = false
+    private var withoutSplashAds = false
 
     /**
      * Resolved before the ads are awaited so the handoff under the ad needs no suspension point.
@@ -101,6 +102,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private var startDecision: StartDecision? = null
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
+        // Snapshot the launch policy before any async work: later extras cannot turn a partially
+        // loaded launch into an ad-free one (or revive ads after it was explicitly suppressed).
+        withoutSplashAds = SplashEntry.withoutSplashAds(intent)
         notificationPermissionRequested = savedInstanceState?.getBoolean("ob_notification_requested") == true
         if (savedInstanceState?.getBoolean("ob_notification_finished") == true) {
             notificationPermissionResult.complete(Unit)
@@ -314,6 +318,15 @@ open class ObSplashActivity : BaseOnboardActivity() {
         // Time spent in UMP, permission UI or background waiting cannot consume the ad phase.
         adPhaseStartedAtMs = SystemClock.elapsedRealtime()
         progressAnimator?.start()
+        if (withoutSplashAds) {
+            ObLog.d(ObLog.Section.LOAD, "splash ads explicitly omitted for this entry")
+            AdPlacement.SplashBanner.trackSkipped(AdSkipReason.SUPPRESSED_BY_FLOW)
+            AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.SUPPRESSED_BY_FLOW)
+            findViewById<View?>(R.id.ob_splash_ad_container)?.visibility = View.GONE
+            bannerSettled.complete(Unit)
+            interstitialSettled.complete(Unit)
+            return
+        }
         requestSplashBanner()
         requestSplashInterstitial()
     }
@@ -412,6 +425,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * it is remote-tunable (`ob_splash_ad_budget_ms`) rather than a constant nobody can reach.
      */
     private suspend fun awaitInterstitial() {
+        if (withoutSplashAds) return
         val budgetMs = sdk.flags().splashAdBudgetMs
         val settled = withTimeoutOrNull(budgetMs.milliseconds) { interstitialSettled.await() } != null
         val ready = sdk.provider()?.isInterstitialReady(AdPlacement.SplashInterstitial) == true
@@ -472,6 +486,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private suspend fun proceed() {
         OnboardingSdk.track(AnalyticsEvent.SplashCompleted(System.currentTimeMillis() - attemptStartedAtMs))
+
+        if (withoutSplashAds) {
+            startFlow()
+            finish()
+            return
+        }
 
         // A purchase here removes the reason to show the interstitial at all
         if (sdk.presentPaywall(this, PaywallPlacement.SPLASH_INTER) == PaywallOutcome.Purchased) {
