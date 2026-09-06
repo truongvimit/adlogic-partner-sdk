@@ -1,1 +1,5 @@
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".RetentionFeedbackActivity" android:exported="false" android:theme="@style/rk_FeedbackTheme" />
+    </application>
+</manifest>
