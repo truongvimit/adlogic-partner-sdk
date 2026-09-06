@@ -54,7 +54,8 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         capture(intent)
-        window.decorView.post(::dispatchPending)
+        window.decorView.removeCallbacks(routeRetry)
+        window.decorView.post(routeRetry)
     }
     override fun onPostResume() {
         super.onPostResume()
@@ -205,6 +206,8 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         when (val accepted = RetentionKit.get()?.capture(intent)) {
             is RetentionEntryAcceptance.Accepted -> {
                 pendingToken = accepted.entry.token
+                routeRetries = 0
+                window.decorView.removeCallbacks(routeRetry)
                 lastRoute = "${accepted.entry.source} → ${accepted.entry.destination}\n${accepted.entry.token}"
                 ExampleQa.route(this, lastRoute)
             }
@@ -214,7 +217,9 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
     }
     private fun dispatchPending() {
         val kit = RetentionKit.get() ?: return
-        val token = pendingToken ?: kit.runtime.entries.pending().firstOrNull()?.token ?: return
+        // Only this Activity's captured/restored selection can navigate. An unrelated older entry
+        // in the durable ledger must not override a newer explicit Intent after it is consumed.
+        val token = pendingToken ?: return
         if (!kit.runtime.userState.setupCompleted) {
             result.text = getString(R.string.rk_example_pending_setup)
             if (featureBody.findViewWithTag<View>("continue_setup") == null) {
