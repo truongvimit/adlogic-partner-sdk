@@ -57,6 +57,7 @@ object ExampleQa {
             eventSink = RetentionEventSink { events.add(it) },
         ))
         check(installed is RetentionKitInstallResult.Installed) { installed.toString() }
+        RetentionExample.attachSuccessAcknowledgement(application, installed.kit.runtime)
         return installed.kit
     }
     fun restore(application: Application) {

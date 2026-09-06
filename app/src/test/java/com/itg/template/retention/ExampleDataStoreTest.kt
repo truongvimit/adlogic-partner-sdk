@@ -55,4 +55,33 @@ class ExampleDataStoreTest {
         assertEquals("unfinished text", restored.input())
         assertTrue(restored.pendingSuccesses().isEmpty())
     }
+    @Test fun failedAcknowledgementRestoresPendingAfterPreferencesMemoryWasAlreadyChanged() {
+        var failNextCommit = false
+        val real = context.getSharedPreferences("retention_example_data_v1", Context.MODE_PRIVATE)
+        val wrapped = object : android.content.SharedPreferences by real {
+            override fun edit(): android.content.SharedPreferences.Editor {
+                val editor = real.edit()
+                return object : android.content.SharedPreferences.Editor by editor {
+                    override fun putString(key: String?, value: String?): android.content.SharedPreferences.Editor = apply { editor.putString(key, value) }
+                    override fun remove(key: String?): android.content.SharedPreferences.Editor = apply { editor.remove(key) }
+                    override fun commit(): Boolean {
+                        val actual = editor.commit()
+                        return if (failNextCommit) { failNextCommit = false; false } else actual
+                    }
+                }
+            }
+        }
+        val wrappedContext = object : android.content.ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getSharedPreferences(name: String, mode: Int) = wrapped
+        }
+        val store = ExampleDataStore(wrappedContext)
+        store.record("failed-ack", "translate", "Xin chào")
+        failNextCommit = true
+        assertTrue(runCatching { store.markReported("failed-ack") }.isFailure)
+        assertEquals("failed-ack", ExampleDataStore(context).pendingSuccesses().single().id)
+        store.markReported("failed-ack")
+        assertTrue(ExampleDataStore(context).pendingSuccesses().isEmpty())
+    }
+
 }
