@@ -123,7 +123,8 @@ class ProofActivity : Activity() {
                 result.text = "Entry consumed once. Tool: $destination"
             }
             ProofRoute.SdkHandled -> {
-                pendingToken = null
+                // Accepted SDK work may still be blocked before it claims the staged entry.
+                if (rt.entries.pending(token) == null) pendingToken = null
                 result.text = "SDK route accepted; inspect its actual screen/outcome."
             }
             is ProofRoute.Blocked -> {
