@@ -7,6 +7,12 @@ import io.retentionkit.core.*
 class ProofApplication : Application() {
     internal lateinit var profile: ProofProfile
     internal var installStatus = "Not initialized"
+    private val events = ArrayDeque<String>()
+    @Synchronized internal fun recentEvents(): List<String> = events.toList()
+    @Synchronized private fun recordEvent(event: RetentionEvent) {
+        if (events.size >= 20) events.removeFirst()
+        events.addLast(event.name + (event.attributes["reason"]?.let { " ($it)" } ?: ""))
+    }
     override fun onCreate() {
         super.onCreate()
         profile = ProfileFactory.create()
@@ -16,6 +22,7 @@ class ProofApplication : Application() {
                 RetentionFeature("word_count", context.getString(R.string.rk_proof_words), R.drawable.rk_proof_tool),
             ) },
             router = RetentionRouter { context, _ -> Intent(context, ProofActivity::class.java) },
+            eventSink = RetentionEventSink(::recordEvent),
             // This proof app has no IAP. Setup remains false until its explicit UI action.
             initialUserState = RetentionUserState(entitlement = RetentionEntitlement.NON_SUBSCRIBER),
         ))
