@@ -1,7 +1,7 @@
 # 05a Authoritative Billing entitlement for Retention integration
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 01
 
 Spec: ../spec.md
@@ -15,3 +15,5 @@ This additive seam is required by the existing spec's unknown-entitlement gate a
 ## Comments
 
 Inspection: AppPurchase.finishVerify sets verifyFinish for both successful and failed sweeps; verifiedThisProcess is private. Billing.awaitReady fast-path and its registration-race fallback synthesize Ready/OK from verifyFinish. Keep compatibility for existing callers and expose an explicitly authoritative separate API.
+
+Claimed in isolated `05a-billing`, branch `codex/retentionkit-billing`, 2026-09-07.

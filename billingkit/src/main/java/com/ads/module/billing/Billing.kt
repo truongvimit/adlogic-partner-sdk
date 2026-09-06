@@ -26,6 +26,14 @@ object Billing {
 
     private const val RESTORE_TIMEOUT_MS = 10_000L
 
+    /**
+     * Authoritative current-process evidence. UNKNOWN includes cached values and failed/partial
+     * queries. This is the engine's own flow, so verification before install is never missed.
+     */
+    @get:JvmStatic
+    val entitlement: StateFlow<BillingEntitlement>
+        get() = AppPurchase.getInstance().entitlement
+
     private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
 
