@@ -37,6 +37,9 @@
 
         </activity>
 
+        <activity android:name=".retention.RetentionPlaygroundActivity"
+            android:exported="false" android:launchMode="singleTop" />
+
         <activity
             android:name="com.itg.template.ui.component.main.MainActivity"
             android:exported="true"

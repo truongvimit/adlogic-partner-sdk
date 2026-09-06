@@ -92,6 +92,7 @@ class GlobalApp : AdsMultiDexApplication() {
         // Before OnboardKit: its paywall gate calls straight into PayKit at the first checkpoint.
         initPayKit()
         initOnboardKit()
+        com.itg.template.retention.RetentionExample.install(this)
 
         // The welcome-resume observer. The activity it acts on comes from AppOpenManager, which
         // already tracks it from onActivityStarted — a second app-side tracker was a third copy of
@@ -176,6 +177,7 @@ class GlobalApp : AdsMultiDexApplication() {
         // app's own screens are listed here.
         // Both resume paths read this one list, so a screen listed here is off-limits to the
         // app-open ad and to the welcome-back screen alike.
+        AppOpenManager.getInstance().disableAppResumeWithActivity(com.itg.template.retention.RetentionPlaygroundActivity::class.java)
         AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
         AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
         AppOpenManager.getInstance().disableAppResumeWithActivity(WelcomeActivity::class.java)
@@ -218,26 +220,7 @@ class GlobalApp : AdsMultiDexApplication() {
                         AppSharedPreferencesApp(context).languageCode = it
                     }
                 }
-                // Aborted drops the passthrough on purpose: the user backed out of the flow the
-                // entry started, so its feature must not reopen.
-                val passthrough = when (outcome) {
-                    is OnboardingOutcome.Completed -> outcome.passthrough
-                    is OnboardingOutcome.Skipped -> outcome.passthrough
-                    is OnboardingOutcome.Aborted -> null
-                }
-                // The per-app part of an entry is only this: which screen it lands on. The intent,
-                // the ad key and the timing are the SDK's standard SplashEntry wiring.
-                val destination = when (SplashEntry.from(passthrough)) {
-                    SplashEntry.UNINSTALL -> ConfirmUninstallActivity::class.java
-                    else -> MainActivity::class.java
-                }
-                context.startActivity(
-                    // NEW_TASK only, never CLEAR_TASK — under UNDER_AD this runs while the ad is
-                    // on screen, and clearing the task would finish the Activity hosting it.
-                    Intent(context, destination)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .apply { passthrough?.let(::putExtras) },
-                )
+                com.itg.template.retention.RetentionExample.onOutcome(context, outcome)
             }
         }
         OnboardKitSetup.configure()

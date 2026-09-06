@@ -1,0 +1,34 @@
+# Working RetentionKit example
+
+The original Ad Showcase remains the launcher destination. Its **Everyday tools / Công cụ hằng ngày** button opens four genuine offline features: twelve EN↔VI travel phrase translations, a persistent saved phrase list, whitespace normalization with word/Unicode character counts, and a bundled document with reading-time calculation. These are small complete utilities, not a general translation or document SDK. The selected app language supplies one shared feature catalogue for screens, notifications, widget tiles, feedback suggestions and shortcuts.
+
+## Partner integration
+
+`GlobalApp` installs the existing Tracker/Firebase, ads/billing/paywall and OnboardKit first, then calls `RetentionExample.install` once. The Retention facade uses the shared Firebase config client and Trackkit event sink. The same Onboard bridge supplies routing, UI availability and adapters. The standard process starts with UNKNOWN entitlement; only the authoritative Billing adapter may supply verified premium/free status. Ordinary release uses all module defaults, including setup grace, campaign caps/cooldowns and review threshold 5 / cooldown 10 days / max 3 attempts. No startup network request is awaited by Retention installation.
+
+The host gate allows tools, Settings and SDK feedback, excluding the Ad Showcase's independent consent/update/dialog UI. The new utility screen is excluded from existing app-resume ads. The Onboard bridge owns actual suite ad-click observation; the app does not duplicate it through analytics or per-placement callbacks.
+
+Splash captures typed entries before starting async setup and retains the rewritten envelope. Ready users go to the utility Activity; unfinished users keep a durable pending entry through normal OnboardKit. A terminal Completed/Skipped outcome forwards to the resumed destination; Aborted discards only entries attached to that unfinished setup. `onNewIntent` calls `setIntent` and capture, never restarts `onCreateSafe`. The utility Activity dispatches after resume/decor-post, retries temporarily blocked entries for up to five seconds, and leaves still-blocked entries durable for a later resume. Facade dispatch validates destinations and claims once immediately before mapping to one of the four real feature views. A crash between claim and navigation remains an at-most-once limitation.
+
+Each completed operation is persisted together with a stable ID and an app outbox entry. SDK submission uses that ID. Only an accepted core signal acknowledges the outbox; failure leaves it pending. Replaying after a crash uses the same ID for review deduplication. Core acceptance does not prove every asynchronous subscriber completed, a review was shown, or a rating occurred. Opening/recreating a screen and no-op saves emit no business success. Raw user text stays in local app preferences, outside telemetry.
+
+Settings Feedback and the legacy uninstall compatibility target now open the SDK's optional standard feedback flow. Settings Rate opens the store directly and does not set a fabricated `isRate`. Migration removes only the known `ACTION_OPEN_UNINSTALL` dynamic shortcut. Other shortcut IDs remain untouched; pinned legacy Splash entries are translated to standard feedback.
+
+## Debug QA and evidence boundaries
+
+Debug contains an explicitly activated **isolated engine QA** panel. Standard debug startup still uses production defaults and system clock. Activating a fixture unregisters the ordinary runtime, clears only `retention_example_engine_qa_v1`, and installs the real facade/modules with an explicit synthetic entitlement/setup state and controllable wall clock. The real Android permission/channel gates, notification builder/notify, alarm receiver, PendingIntents, widget launcher and Play transport remain intact. Calendar QA reads an actual saved `schedule:` envelope, advances the fixture clock to its due time, and invokes the real receiver. This is engine-driven handling evidence; it does not prove AlarmManager wake, reboot, force-stop, Doze, OEM timing or screen wake. Delayed onboarding/ad-return tests use real process Home transitions and the production three-second callback; the QA ad click is explicitly synthetic.
+
+The panel can select completed or active unfinished setup, subscriber/free state, foreground reminder/pinned, calendar delivery and ad-return/onboarding. Its status shows the active profile, user state, config revision, foreground, actual tagged OS notification count and latest truthful SDK event. Notification settings use the existing scoped external transition and reconcile on return. Buttons report request/submission eligibility, never pin/review/uninstall success. **Restore production defaults** tears down the fixture and reinstalls the normal store, system clock and suite bridges. Process restart also starts standard mode. No release QA class implements fixture selection, synthetic clock, state reset or a test receiver; release has only harmless UI no-ops.
+
+## Validation
+
+Unit tests cover real computation, input bounds, durable result/outbox restoration, duplicate operations and no-op saved membership. `RetentionExampleEngineTest` is instrumented source only: all seven campaigns, four distinct pinned actions reaching actual feature screens, stale config/foreground/subscriber suppression, pending setup→resumed feature routing, replay rejection, and a real business outbox/review dedupe case. The device runner must grant POST_NOTIFICATIONS before this suite; absent permission is a failed precondition, not a skipped pass. Instrumentation cleans only this SDK's tagged notifications and restores the standard runtime in teardown. It must run on a disposable test installation because it intentionally produces and clears Retention notifications.
+
+Commands (parent owns connected device execution):
+
+```sh
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain --max-workers=2
+./gradlew :app:assembleRelease -x :app:uploadCrashlyticsMappingFileRelease --no-daemon --console=plain --max-workers=2
+```
+
+Local Firebase configuration remains ignored and supplied by the existing project environment. Final pass/fail counts and physical/API evidence belong in ticket06 and the root verification ledger. Successful compilation alone does not satisfy device acceptance; real cold notification→OnboardKit setup and launcher pin/review-system outcomes must be recorded separately from the isolated engine suite.

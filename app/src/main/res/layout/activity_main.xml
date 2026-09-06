@@ -73,6 +73,14 @@
                         tools:text="ERain Studio v3.2.0 • Ads SDK v23.0.0" />
                 </LinearLayout>
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_retention_playground"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="16dp"
+                    android:minHeight="56dp"
+                    android:text="@string/rk_example_open" />
+
                 <!-- ═══════════════════════════════════════ -->
                 <!-- SECTION 1: Interstitial Ads             -->
                 <!-- ═══════════════════════════════════════ -->

@@ -1,0 +1,124 @@
+package com.itg.template.retention
+
+import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.widget.Toast
+import com.itg.template.R
+import com.itg.template.ui.component.main.MainActivity
+import com.itg.template.ui.component.setting.SettingActivity
+import com.itg.template.ui.component.splash.SplashActivity
+import io.onboardkit.core.OnboardingOutcome
+import io.onboardkit.ui.splash.SplashEntry
+import io.retentionkit.*
+import io.retentionkit.core.*
+import io.retentionkit.feedback.FeedbackOptions
+import io.retentionkit.feedback.FeedbackShowResult
+import io.retentionkit.feedback.RetentionFeedbackActivity
+import io.retentionkit.integration.BillingRetentionBridge
+import io.retentionkit.integration.OnboardRetentionBridge
+import io.retentionkit.integration.TrackkitRetentionEventSink
+import io.retentionkit.review.ReviewActionResult
+import io.suite.firebase.FirebaseRetentionConfigSource
+import org.json.JSONArray
+import timber.log.Timber
+
+/** The partner seam: catalogue, chosen locale, one host bridge, shared configuration and tracking. */
+object RetentionExample {
+    var bridge: OnboardRetentionBridge? = null
+        private set
+    fun install(application: Application) {
+        val onboard = OnboardRetentionBridge(SplashActivity::class.java, hostCanPresent = {
+            it is RetentionPlaygroundActivity || it is SettingActivity || it is RetentionFeedbackActivity
+        })
+        bridge = onboard
+        val result = RetentionKit.install(application, RetentionKitOptions(
+            featureProvider = RetentionFeatureProvider(RetentionExampleContent::features),
+            localeProvider = RetentionLocaleProvider(RetentionExampleContent::localizedContext),
+            router = onboard.router,
+            uiHost = onboard,
+            adapters = listOf(onboard, BillingRetentionBridge()),
+            feedback = FeedbackOptions(featureIds = RetentionExampleContent.featureIds.toList(), appIconRes = R.mipmap.ic_launcher),
+            initialUserState = RetentionUserState(entitlement = RetentionEntitlement.UNKNOWN),
+            eventSink = TrackkitRetentionEventSink(),
+            configSource = FirebaseRetentionConfigSource(),
+            clock = ExampleQa.clock(application),
+            store = ExampleQa.store(application),
+        ))
+        if (result is RetentionKitInstallResult.Failed) Timber.e("Retention install failed: %s", result.reasons)
+        com.itg.template.ui.component.uninstall.ShortcutManager.initShortCut(application)
+    }
+
+    /** Capture once and retain the rewritten envelope. Pending entries survive setup/process death. */
+    fun capture(context: Context, intent: Intent?) {
+        val kit = RetentionKit.get() ?: return
+        if (intent != null && RetentionEntryCodec.read(intent) is RetentionEntryDecodeResult.Absent &&
+            SplashEntry.from(intent.extras) == SplashEntry.UNINSTALL) {
+            RetentionEntryCodec.write(intent, RetentionEntry(RetentionEntrySource.SHORTCUT,
+                "retention.feedback", "open_feedback", createdAtMillis = kit.runtime.clock.wallTimeMillis()))
+        }
+        val accepted = kit.capture(intent)
+        if (accepted is RetentionEntryAcceptance.Accepted) {
+            // Normalize legacy/raw typed launches through the same no-splash-ad host contract.
+            kit.runtime.createEntryIntent(accepted.entry)?.extras?.let { intent?.putExtras(it) }
+        }
+        if (accepted is RetentionEntryAcceptance.Accepted && !kit.runtime.userState.setupCompleted) {
+            val prefs = context.getSharedPreferences("retention_example_flow_v1", Context.MODE_PRIVATE)
+            val tokens = runCatching { JSONArray(prefs.getString("tokens", "[]")) }.getOrDefault(JSONArray())
+            val existing = (0 until tokens.length()).map { tokens.getString(it) }.toSet()
+            if (accepted.entry.token !in existing) { tokens.put(accepted.entry.token); prefs.edit().putString("tokens", tokens.toString()).commit() }
+        }
+    }
+
+    fun onOutcome(context: Context, outcome: OnboardingOutcome) {
+        val passthrough = bridge?.onOutcome(outcome)
+        val prefs = context.getSharedPreferences("retention_example_flow_v1", Context.MODE_PRIVATE)
+        if (outcome is OnboardingOutcome.Aborted) {
+            // Only cancel entries explicitly attached to this unfinished setup, never the backlog.
+            val tokens = runCatching { JSONArray(prefs.getString("tokens", "[]")) }.getOrDefault(JSONArray())
+            repeat(tokens.length()) { RetentionKit.get()?.runtime?.entries?.consume(tokens.getString(it)) }
+            prefs.edit().remove("tokens").commit()
+            return
+        }
+        prefs.edit().remove("tokens").commit()
+        val hasPending = RetentionKit.get()?.runtime?.entries?.pending()?.isNotEmpty() == true
+        context.startActivity(Intent(context, if (hasPending) RetentionPlaygroundActivity::class.java else MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply { passthrough?.let(::putExtras) })
+    }
+
+    fun continueSetup(activity: Activity, token: String) {
+        val runtime = RetentionKit.get()?.runtime ?: return
+        val entry = runtime.entries.pending(token) ?: return
+        runtime.createEntryIntent(entry)?.let(activity::startActivity)
+    }
+
+    fun beginExternal(kind: String): AutoCloseable? {
+        val runtime = RetentionKit.get()?.runtime ?: return null
+        val token = "example:" + java.util.UUID.randomUUID()
+        if (!runtime.signal(RetentionSignal.ExternalTransitionStarted(token, kind))) return null
+        // The active suite bridge reacts to these signals; QA may have replaced that bridge.
+        return AutoCloseable { runtime.signal(RetentionSignal.ExternalTransitionFinished(token)) }
+    }
+
+    fun showFeedback(activity: Activity) {
+        val result = RetentionKit.get()?.feedback?.show()
+        Toast.makeText(activity, if (result is FeedbackShowResult.Scheduled) R.string.rk_example_request_sent else R.string.rk_example_unavailable, Toast.LENGTH_SHORT).show()
+    }
+    fun manualRate(activity: Activity) {
+        val result = RetentionKit.get()?.review?.openStore()
+        Toast.makeText(activity, if (result is ReviewActionResult.Scheduled) R.string.rk_example_request_sent else R.string.rk_example_unavailable, Toast.LENGTH_SHORT).show()
+    }
+    @Synchronized fun flushSuccesses(context: Context) {
+        val kit = RetentionKit.get() ?: return
+        val store = ExampleDataStore(context)
+        for (operation in store.pendingSuccesses()) {
+            val accepted = kit.runtime.signal(RetentionSignal.BusinessSuccess(operation.featureId, operation.id))
+            // Accepted by core is not a rating result. Failed core persistence retains the outbox.
+            // A crash before this marker replays the stable ID for module deduplication.
+            if (!accepted) break
+            store.markReported(operation.id)
+        }
+    }
+}
