@@ -11,6 +11,16 @@ import org.junit.Test
 
 class OnboardKitConfigTest {
 
+    @Test
+    fun `splash notification permission defaults on and supports opting out`() {
+        assertTrue(SplashConfig().notificationPermissionEnabled)
+        val config = onboardKitConfig {
+            splash = SplashConfig(notificationPermissionEnabled = false)
+        }.getOrThrow()
+        assertEquals(false, config.splash.notificationPermissionEnabled)
+    }
+
+
     /**
      * Both numbers bound the same thing — the UMP round trip — from either side of the module
      * boundary, and the KDoc on each says so. They disagreed once, at 15s against 20s, and the

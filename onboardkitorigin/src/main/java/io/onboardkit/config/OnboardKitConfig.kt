@@ -38,6 +38,16 @@ data class SplashConfig(
      * prompt has no way past it other than getting one.
      */
     val noInternetPromptEnabled: Boolean = true,
+    /**
+     * Requests POST_NOTIFICATIONS on Android 13+ after consent, when the splash is foreground.
+     * Enabled by default. Ad loading may overlap the system prompt; ad presentation/navigation
+     * wait for its result and the splash to regain focus. Denial never blocks access to the app.
+     * Already granted, older Android/target SDK, or a removed manifest permission skip the prompt.
+     * After any result, app preferences remember this automatic request; denial is not re-prompted
+     * on later launches. The host may still request permission itself at a relevant user action.
+     * Set false when the host owns notification onboarding or does not send notifications.
+     */
+    val notificationPermissionEnabled: Boolean = true,
 )
 
 data class LanguageConfig(

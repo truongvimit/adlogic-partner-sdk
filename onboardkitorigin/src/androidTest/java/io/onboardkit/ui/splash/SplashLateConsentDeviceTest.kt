@@ -65,6 +65,7 @@ class SplashLateConsentDeviceTest {
                     remoteFetchTimeoutMs = 100,
                     adLoadStrategy = AdLoadStrategy.SAME_TIME,
                     noInternetPromptEnabled = false,
+                    notificationPermissionEnabled = false,
                 )
                 ads = AdsConfig(
                     splashBanner = BannerAdUnit("host-banner"),
