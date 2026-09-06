@@ -226,7 +226,10 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         }
         when (val dispatched = kit.dispatchPending(token)) {
             is RetentionDispatchResult.Navigate -> { pendingToken = null; showFeature(dispatched.entry.destination) }
-            RetentionDispatchResult.SdkHandled -> pendingToken = null
+            RetentionDispatchResult.SdkHandled -> {
+                // Scheduled internal UI can still be blocked/disabled before consuming the entry.
+                pendingToken = token.takeIf { kit.runtime.entries.pending(it) != null }
+            }
             is RetentionDispatchResult.Unavailable -> {
                 ExampleQa.route(this, "$lastRoute\nPending: ${dispatched.reason}")
                 // The Activity callback can precede core's resumed tracker or an owned dialog close.
