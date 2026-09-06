@@ -42,6 +42,8 @@ python3 scripts/retentionkit/verify.py gradle \
   --output /absolute/evidence/review-runtime
 ```
 
+The isolated consumer now lives in [`sample-retention-only`](../../sample-retention-only/README.md). Select it with repeated `--property NAME=VALUE` arguments: `retentionProfile`, `retentionDependencySource`, `retentionMavenVersion`, and `retentionMavenRepo` are the only supported keys. The capture tool validates enums, exact versions, duplicates and existing absolute local repository paths before executing Gradle. Property values stay individual argv entries, including repository paths containing spaces. See the sample README for the project/POM build matrix.
+
 Only one explicit `:module:dependencies` task is allowed with `--configuration`. No shell interpolation is used. A Gradle dependencies task can exit zero with `FAILED` nodes; the composition checker rejects those nodes.
 
 ## 3. Verify publication files and selective composition
@@ -69,7 +71,7 @@ python3 scripts/retentionkit/verify.py composition \
 
 For a Maven consumer, require its actual Maven coordinate instead, e.g. `--require 'com.github.truongvimit:retention-core'`. Repeat `--require` for every expected dependency, including `retention-review` when inspecting a review-only **consumer** graph. Do not pass a source manifest, compile classpath, full demo app graph, or a POM from a different version. This checker cannot infer which consumer produced files supplied by the operator.
 
-Profiles: `core`, `notifications`, `widgets`, `feedback`, `review`. Each permits itself plus core; unrelated retention modules, umbrella `retentionkit`, ads/MMP vendors, Firebase, Compose, billing/paywall, and OnboardKit are rejected by named coordinate/package rules. Core/review/feedback also reject WorkManager. Non-notification profiles reject notification/boot/foreground-service permissions; all profiles reject exact-alarm, full-screen-intent, overlay, and battery-exemption permissions. Exported receivers whose names indicate debug/test are rejected. This is a focused leakage check, not a complete manifest security audit.
+Profiles: `core`, `notifications`, `widgets`, `feedback`, `review`, `umbrella`. Each selective profile permits itself plus core; unrelated retention modules, umbrella `retentionkit`, ads/MMP vendors, Firebase, Compose, billing/paywall, and OnboardKit are rejected by named coordinate/package rules. The `umbrella` profile permits all RetentionKit modules and requires the real `retentionkit` POM; it still rejects the unrelated vendor/suite stack. Core/review/feedback also reject WorkManager. Profiles other than notifications/umbrella reject notification/boot permissions; all profiles reject foreground-service, wake-lock, exact-alarm, full-screen-intent, overlay, and battery-exemption permissions. Exported receivers whose names indicate debug/test are rejected. This is a focused leakage check, not a complete manifest security audit.
 
 The checker inspects all four evidence layers:
 
@@ -108,6 +110,6 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
   -s scripts/retentionkit -p 'test_*.py' -v
 ```
 
-The fixtures contain deliberately synthetic AAR/POM/XML/graph bytes in temporary directories and are labeled as parser tests. They do not generate product verification evidence. Coverage includes nested dependency leaks, unresolved graphs, wrong artifacts/versions, permission leakage, embedded vendor classes, malformed/missing reports, skipped tests, output preservation, and rejection of unsafe command arguments before subprocess execution.
+The fixtures contain deliberately synthetic AAR/POM/XML/graph bytes in temporary directories and are labeled as parser tests. They do not generate product verification evidence. Coverage includes nested dependency leaks, unresolved graphs, wrong artifacts/versions, permission leakage, embedded vendor classes, malformed/missing reports, skipped tests, output preservation, validated consumer profile/Maven argv, umbrella-versus-selective dependency rules, and rejection of unsafe command arguments before subprocess execution.
 
 Exit codes: `0` checks/capture succeeded within stated scope; `1` validation or captured command failed; `2` invalid/missing input or tool error. Every result retains explicit limitations. Never translate `not_evaluated`, unavailable, skipped, or failed into passed in the acceptance ledger.

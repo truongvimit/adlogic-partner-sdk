@@ -155,6 +155,60 @@ class EvidenceTests(unittest.TestCase):
             verify.make_directory(existing)
         self.assertEqual(marker.read_text(), "existing evidence")
 
+    def test_umbrella_allows_all_retention_modules_but_still_rejects_vendors(self):
+        values = ["project :retentionkit", "project :retention-notifications", "project :retention-review"]
+        self.assertEqual([], verify.forbidden_dependencies(values, "umbrella"))
+        self.assertTrue(verify.forbidden_dependencies(values + ["com.google.firebase:firebase-config:23"], "umbrella"))
+        self.assertTrue(verify.forbidden_dependencies(values, "review"))
+        manifest = verify.parse_manifest(MANIFEST.replace(b"<application/>", b'<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application/>'))
+        self.assertEqual([], verify.manifest_errors(manifest, "umbrella"))
+        manifest["permissions"].append("android.permission.FOREGROUND_SERVICE")
+        self.assertTrue(verify.manifest_errors(manifest, "umbrella"))
+
+    def test_umbrella_composition_requires_the_real_umbrella_pom(self):
+        args = self.args()
+        args.profile = "umbrella"
+        args.pom.write_bytes(POM.replace(b"<artifactId>retention-review</artifactId>", b"<artifactId>retentionkit</artifactId>"))
+        self.assertTrue(verify.composition(args)["ok"])
+        args.pom.write_bytes(POM)
+        self.assertFalse(verify.composition(args)["ok"])
+
+    def test_consumer_profile_and_maven_properties_are_exact_and_safe_argv(self):
+        self.assertEqual([], verify.consumer_properties([]))
+        self.assertEqual(["-PretentionProfile=review"], verify.consumer_properties(["retentionProfile=review"]))
+        directory = self.path / "local repo with spaces"
+        directory.mkdir()
+        values = ["retentionProfile=umbrella", "retentionDependencySource=maven", "retentionMavenVersion=1.0-proof", f"retentionMavenRepo={directory}"]
+        argv = verify.consumer_properties(values)
+        self.assertIn(f"-PretentionMavenRepo={directory.resolve()}", argv)
+        self.assertEqual(4, len(argv)) # path spaces remain one argument, never shell text
+
+    def test_invalid_consumer_modes_versions_paths_duplicates_and_unknown_properties_reject(self):
+        invalid = [
+            ["retentionProfile=review;touch x"], ["retentionProfile=review", "retentionProfile=core"],
+            ["retentionDependencySource=remote"], ["retentionDependencySource=maven"],
+            ["retentionMavenVersion=1.0"], ["init-script=untrusted.gradle"], ["retentionProfile"],
+            ["retentionProfile=review\n"],
+        ]
+        for version in ("1.+", "latest.release", "[1,2)", "$(touch bad)", "1.0\n"):
+            invalid.append(["retentionDependencySource=maven", f"retentionMavenVersion={version}", f"retentionMavenRepo={self.path}"])
+        for repository in ("relative", "https://example.com/repo", str(self.path / "missing")):
+            invalid.append(["retentionDependencySource=maven", "retentionMavenVersion=1.0", f"retentionMavenRepo={repository}"])
+        for values in invalid:
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                verify.consumer_properties(values)
+
+    def test_invalid_consumer_property_rejected_before_gradle_or_evidence_creation(self):
+        self.write("gradlew", "fixture")
+        output = self.path / "not_created"
+        args = argparse.Namespace(repo=self.path, task=[":sample-retention-only:assembleRelease"], configuration=None,
+                                  property=["retentionProfile=unknown"], output=output)
+        with mock.patch.object(verify.subprocess, "Popen") as popen:
+            with self.assertRaises(ValueError):
+                verify.run_gradle(args)
+            popen.assert_not_called()
+            self.assertFalse(output.exists())
+
     def test_bad_adb_package_rejected_before_any_command(self):
         args = argparse.Namespace(package="com.example;echo bad", device="pixel", repo=self.path, output=self.path / "output")
         with mock.patch.object(verify.subprocess, "Popen") as popen:

@@ -18,7 +18,7 @@ from pathlib import Path
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-PROFILES = ("core", "notifications", "widgets", "feedback", "review")
+PROFILES = ("core", "notifications", "widgets", "feedback", "review", "umbrella")
 VENDOR_RULES = {
     "Firebase": r"com[./]google[./]firebase|suite[-/]firebase|io[./]suite[./]firebase",
     "Compose": r"androidx[./]compose|org[./]jetbrains[./]compose",
@@ -28,6 +28,8 @@ VENDOR_RULES = {
     "Unrelated suite UI/billing": r"(?:project\s+:|[:/])(?:onboardkitorigin|paykit|billingkit)(?=[:/\s]|$)|io[./](?:onboardkit|paykit)|com[./]android[./]billingclient",
 }
 ALWAYS_FORBIDDEN_PERMISSIONS = {
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.WAKE_LOCK",
     "android.permission.SCHEDULE_EXACT_ALARM",
     "android.permission.USE_EXACT_ALARM",
     "android.permission.USE_FULL_SCREEN_INTENT",
@@ -72,11 +74,11 @@ def forbidden_dependencies(values, profile):
             if re.search(pattern, value, re.I):
                 errors.append(f"{label}: {value}")
         for other in PROFILES:
-            if other not in ("core", profile) and re.search(
+            if profile != "umbrella" and other not in ("core", profile) and re.search(
                 rf"retention(?:kit)?[-/]{other}(?=[:/\s]|$)", value, re.I
             ):
                 errors.append(f"Unrelated retention module: {value}")
-        if re.search(r"(?:project\s+:|:)retentionkit(?=[:\s]|$)", value):
+        if profile != "umbrella" and re.search(r"(?:project\s+:|:)retentionkit(?=[:\s]|$)", value):
             errors.append(f"Umbrella dependency in selective profile: {value}")
     if profile in ("core", "review", "feedback"):
         errors.extend(f"Unexpected background scheduler: {value}" for value in values
@@ -170,7 +172,7 @@ def parse_manifest(data):
 
 def manifest_errors(manifest, profile):
     denied = set(ALWAYS_FORBIDDEN_PERMISSIONS)
-    if profile != "notifications":
+    if profile not in ("notifications", "umbrella"):
         denied.update(NO_NOTIFICATION_PERMISSIONS)
     errors = [f"Forbidden permission: {p}" for p in manifest["permissions"] if p in denied]
     for component in manifest["components"]:
@@ -280,7 +282,7 @@ def composition(args):
     pom = parse_pom(args.pom.read_bytes())
     aar = inspect_aar(args.aar, args.profile)
     merged = parse_manifest(args.manifest.read_bytes())
-    expected_artifact = f"retention-{args.profile}"
+    expected_artifact = "retentionkit" if args.profile == "umbrella" else f"retention-{args.profile}"
     errors = dependencies["errors"] + pom["errors"] + aar["errors"] + manifest_errors(merged, args.profile)
     if pom["coordinates"]["artifactId"] != expected_artifact:
         errors.append(f"Expected POM artifactId {expected_artifact}")
@@ -346,6 +348,35 @@ def repo_context(repo):
             "working_tree_status": git("status", "--porcelain")}
 
 
+def consumer_properties(values):
+    """Validate only the isolated consumer's explicit properties; no arbitrary Gradle injection."""
+    allowed = {"retentionProfile", "retentionDependencySource", "retentionMavenVersion", "retentionMavenRepo"}
+    properties = {}
+    for raw in values:
+        if "=" not in raw:
+            raise ValueError("Gradle property must use NAME=VALUE")
+        name, value = raw.split("=", 1)
+        if name not in allowed or name in properties or not value or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError(f"Invalid, duplicate, or unsupported consumer property: {name}")
+        properties[name] = value
+    if properties.get("retentionProfile", "core") not in PROFILES:
+        raise ValueError("Invalid retentionProfile")
+    source = properties.get("retentionDependencySource", "project")
+    if source not in ("project", "maven"):
+        raise ValueError("retentionDependencySource must be project or maven")
+    version = properties.get("retentionMavenVersion")
+    repository = properties.get("retentionMavenRepo")
+    if source == "maven":
+        if not version or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", version) or version in ("latest.release", "latest.integration", "unspecified"):
+            raise ValueError("Maven consumer requires an explicit non-dynamic retentionMavenVersion")
+        if not repository or not Path(repository).is_absolute() or not Path(repository).is_dir():
+            raise ValueError("retentionMavenRepo must be an existing absolute local repository directory")
+        properties["retentionMavenRepo"] = str(Path(repository).resolve())
+    elif version is not None or repository is not None:
+        raise ValueError("Maven version/repository properties require the maven dependency source")
+    return [f"-P{name}={properties[name]}" for name in sorted(properties)]
+
+
 def run_gradle(args):
     repo = args.repo.resolve(strict=True)
     wrapper = repo / "gradlew"
@@ -356,8 +387,9 @@ def run_gradle(args):
             raise ValueError(f"Expected fully qualified Gradle task, got: {task}")
     if args.configuration and (len(args.task) != 1 or not args.task[0].endswith(":dependencies")):
         raise ValueError("--configuration requires one explicit :module:dependencies task")
+    properties = consumer_properties(getattr(args, "property", []))
     directory = make_directory(args.output)
-    argv = [str(wrapper), "--no-daemon", "--console=plain", "--max-workers=2", "--stacktrace", *args.task]
+    argv = [str(wrapper), "--no-daemon", "--console=plain", "--max-workers=2", "--stacktrace", *properties, *args.task]
     if args.configuration:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", args.configuration):
             raise ValueError("Invalid configuration name")
@@ -441,6 +473,7 @@ def build_parser():
     gradle.add_argument("--repo", type=Path, required=True)
     gradle.add_argument("--task", action="append", required=True)
     gradle.add_argument("--configuration")
+    gradle.add_argument("--property", action="append", default=[], help="Validated isolated-consumer NAME=VALUE property; repeatable")
     gradle.add_argument("--timeout", type=int, default=1800)
     gradle.add_argument("--output", type=Path, required=True, help="New evidence directory")
     adb = sub.add_parser("adb-evidence", help="Opt-in read-only ADB capture; does not evaluate test outcomes")

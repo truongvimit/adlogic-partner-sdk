@@ -34,3 +34,6 @@ include ':retention-widgets'
 include ':retention-feedback'
 include ':retention-review'
 include ':retentionkit'
+
+// Isolated R8/POM consumer proof; never published.
+include ':sample-retention-only'
