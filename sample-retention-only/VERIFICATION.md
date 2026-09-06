@@ -51,7 +51,19 @@ The [sample README](README.md) gives project/POM selection. The captured build c
 
 Consumer-only commit `5263826` preserves the pending token when an SDK route is accepted but the entry remains staged. For example, a final feedback configuration/UI gate may block before consumption; SdkHandled alone must not drop the route. The library and published QA version are unchanged. Affected feedback/umbrella project and Maven consumers require a scoped recheck; that recheck is pending in this documentation checkpoint. Other profile behavior and dependency configuration are unchanged.
 
-Root-owned API 36 follow-up also exposed a missing consumer readiness retry after feedback source destruction and a separate widget launcher-return case. The baseline above is historical evidence at its exact frozen source, not acceptance of subsequent fixes. Later library corrections require a new exact QA version and the affected consumer closure to be published/rechecked.
+Root-owned API 36 follow-up also exposed a missing consumer readiness retry after feedback source destruction and a separate widget launcher-return case. The baseline above is historical evidence at its exact frozen source, not acceptance of subsequent fixes. Later library corrections require a new exact QA version and the affected consumer closure to be published/rechecked. Final consumer release/publication follow-up remains held for that integration.
+
+## Readiness regression evidence
+
+Commit `da337928558e5646853654bd57f1656ec4de0da7` adds a resumed-only retry: 20 attempts at 250 ms, cancelled on pause and successful consumption. A new resume, setup completion, new entry or explicit refresh starts a fresh bounded window. This handles the source feedback Activity closing its external scope after the destination's initial resume attempt; it does not bypass core UI eligibility.
+
+The same command, `:sample-retention-only:testDebugUnitTest -PretentionProfile=core -PretentionDependencySource=project`, ran against clean, immutable red/green commits:
+
+- [Red capture](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retention-proof-readiness-red-cap/run.json), `ff26a8a`: three actual Activity/core cases, two failures. The word-count route stayed staged after scope completion and no retry occurred. Pause cancellation already passed.
+- [Green capture](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retention-proof-readiness-green/run.json), `da33792`: all three passed, zero failures/errors/skips; [inspected JUnit](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retention-proof-readiness-green/tests.json). Cases assert late readiness routes without another Home cycle, pause cancels effects until resume, and a persistent block stops retries while preserving the entry.
+- [Parser fixture run](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retention-proof-readiness-green/parser-tests/run.json): 25 passed. These fixtures verify evidence tooling only.
+
+The Activity tests exercise production capture, routing and core UI state under Robolectric API 34; the source scope completion is an explicit core signal. They do not substitute for the root's actual feedback/launcher flows on API 36.
 
 The Python verification fixtures test parser/command safety only; they are not SDK product tests. Device routing, API 36 insets, launcher confirmation, visible notification delivery, production Play review and full example acceptance are recorded separately by the root validation owner. No device command was used for this consumer/publication work. A submitted OS API request cannot prove widget placement, a displayed review card, a rating or uninstall.
 

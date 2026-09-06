@@ -65,7 +65,7 @@ Facade helpers publish actual host state/events: `setupCompleted()`, `onboarding
 
 Modules are exposed as `kit.notifications`, `.widgets`, `.feedback`, `.review` (nullable when disabled). Typical explicit actions are `widgets?.showPinInvitation()`, `feedback?.show()` and `review?.openStore()`. Do not ask for a star rating before automatic Play review. Pin Requested/Unknown and review outcome-unknown are deliberate platform semantics; see each module's README.
 
-Save the pending token with Activity state and do not recapture the original Intent on recreation. Dispatch after core has observed the resumed Activity, for example from a posted callback after `onResume`; retry a blocked route when setup/UI state changes. The isolated consumer demonstrates this ordering and preserves entries still staged after SdkHandled.
+Save the pending token with Activity state and do not recapture the original Intent on recreation. Dispatch after core has observed the resumed Activity, for example from a posted callback after `onResume`; retry a blocked route when setup/UI state changes. A source SDK Activity can finish its external scope after the destination's first resume callback. The isolated consumer therefore uses a bounded five-second readiness retry while resumed, cancels on pause/consumption and retains the entry when still blocked. Do not poll indefinitely or treat SdkHandled as consumption.
 
 ## Bundled behavior and when it starts
 
