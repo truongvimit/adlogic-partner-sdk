@@ -36,13 +36,12 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
     override fun onSignal(signal: RetentionSignal) {
         if (signal is RetentionSignal.ConfigurationChanged) onMain {
             if (!enabled()) {
-                visible.get()?.let { activity ->
-                    runtime?.store?.transaction(STATE) { state ->
-                        state.string("active")?.let { token -> decode(state.string(token))?.let { save(state, it.copy(phase = FeedbackPhase.CANCELLED)) } }
-                        state.remove("active")
-                    }
-                    activity.finish()
+                runtime?.store?.transaction(STATE) { state ->
+                    state.string("active")?.let { token -> decode(state.string(token))?.let { save(state, it.copy(phase = FeedbackPhase.CANCELLED)) } }
+                    state.remove("active")
                 }
+                launchPending = null
+                visible.get()?.finish()
                 scopes.values.toList().forEach { it.close() }
             }
         }
@@ -207,7 +206,7 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
             return
         }
         val entry = RetentionEntry(RetentionEntrySource.SHORTCUT, DESTINATION, "open_feedback", campaignId = "feedback", mode = RetentionEntryMode.REUSABLE, createdAtMillis = rt.clock.wallTimeMillis())
-        val intent = rt.createEntryIntent(entry) ?: return
+        val intent = rt.createEntryIntent(entry)?.apply { if (action == null) action = Intent.ACTION_VIEW } ?: return
         val launcher = rt.application.packageManager.getLaunchIntentForPackage(rt.application.packageName)?.component ?: intent.component ?: return
         val foreign = (manager.dynamicShortcuts + manager.manifestShortcuts).filter { it.id != SHORTCUT_ID && (it.activity == launcher || it.activity == null) }.distinctBy { it.id }
         if (foreign.size >= manager.maxShortcutCountPerActivity) { manager.removeDynamicShortcuts(listOf(SHORTCUT_ID)); event("skipped", "shortcut_quota"); return }
