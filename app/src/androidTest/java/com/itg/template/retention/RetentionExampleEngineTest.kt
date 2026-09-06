@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.NotificationChannel
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -20,6 +21,7 @@ import com.itg.template.R
 import io.retentionkit.RetentionKit
 import io.retentionkit.core.*
 import io.retentionkit.notifications.NotificationCampaign
+import io.retentionkit.notifications.RetentionNotificationOptions
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -36,6 +38,7 @@ class RetentionExampleEngineTest {
     private val manager get() = application.getSystemService(NotificationManager::class.java)
     private var scenario: ActivityScenario<RetentionPlaygroundActivity>? = null
     private lateinit var kit: RetentionKit
+    private val ownedChannels = mutableListOf<String>()
     @Before fun permissionPrecondition() {
         if (Build.VERSION.SDK_INT >= 33) assertEquals("Grant POST_NOTIFICATIONS to the example package before this suite", PackageManager.PERMISSION_GRANTED,
             application.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
@@ -46,10 +49,12 @@ class RetentionExampleEngineTest {
             scenario = null
             instrumentation.runOnMainSync { ExampleQa.restore(application) }
             cancelOwnedNotifications()
+            if (Build.VERSION.SDK_INT >= 26) ownedChannels.forEach(manager::deleteNotificationChannel)
         }
     }
-    private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null) {
-        instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra) }
+    private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null,
+        notifications: RetentionNotificationOptions = RetentionNotificationOptions()) {
+        instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra, notifications = notifications) }
         scenario = ActivityScenario.launch(launch ?: Intent(application, RetentionPlaygroundActivity::class.java))
         await { kit.runtime.isForeground && kit.runtime.activities.current() is RetentionPlaygroundActivity }
     }
@@ -148,6 +153,21 @@ class RetentionExampleEngineTest {
         instrumentation.runOnMainSync { ExampleQa.deliverSavedAlarm(application, stale) }
         assertNull(active(NotificationCampaign.DAILY))
     }
+    @Test fun realBlockedChannelSuppressesSavedAlarmWithoutChangingProductionChannels() {
+        assertTrue("This Android channel test requires API26+", Build.VERSION.SDK_INT >= 26)
+        val channel = "rk_example_qa_blocked_" + java.util.UUID.randomUUID()
+        ownedChannels.add(channel)
+        manager.createNotificationChannel(NotificationChannel(channel, "Blocked Retention QA", NotificationManager.IMPORTANCE_NONE))
+        assertEquals(NotificationManager.IMPORTANCE_NONE, manager.getNotificationChannel(channel).importance)
+        prepare(notifications = RetentionNotificationOptions(channelIds = mapOf(NotificationCampaign.DAILY to channel)))
+        val raw = ExampleQa.savedAlarm(NotificationCampaign.DAILY)
+        background()
+        instrumentation.runOnMainSync { ExampleQa.deliverSavedAlarm(application, raw) }
+        await { ExampleQa.events.any { it.name == "retention_noti_skipped" && it.attributes["campaign"] == "daily" && it.attributes["reason"] == "channel_blocked" } }
+        assertNull(active(NotificationCampaign.DAILY))
+        assertEquals(NotificationManager.IMPORTANCE_NONE, manager.getNotificationChannel(channel).importance)
+    }
+
     @Test fun subscriberCancelsFreshAdReturnBeforeHome() {
         prepare()
         instrumentation.runOnMainSync {

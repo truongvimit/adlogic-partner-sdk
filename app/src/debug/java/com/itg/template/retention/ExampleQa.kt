@@ -32,7 +32,8 @@ object ExampleQa {
     fun store(context: Context): RetentionStore? = null
 
     /** Explicit QA action only. Erases this harness's file, never normal SDK or business state. */
-    fun prepare(application: Application, setup: Boolean = true, extra: Map<String, String> = emptyMap(), clear: Boolean = true): RetentionKit {
+    fun prepare(application: Application, setup: Boolean = true, extra: Map<String, String> = emptyMap(), clear: Boolean = true,
+        notifications: RetentionNotificationOptions = RetentionNotificationOptions()): RetentionKit {
         handler.removeCallbacksAndMessages(null)
         RetentionRuntime.uninstallForTests()
         if (clear) check(application.getSharedPreferences(FIXTURE_FILE, Context.MODE_PRIVATE).edit().clear().commit())
@@ -52,6 +53,7 @@ object ExampleQa {
             initialUserState = RetentionUserState(setupCompleted = setup, onboardingActive = !setup,
                 entitlement = RetentionEntitlement.NON_SUBSCRIBER),
             initialOverrides = overrides,
+            notifications = notifications,
             clock = fixtureClock!!,
             store = SharedPreferencesRetentionStore(application, FIXTURE_FILE),
             eventSink = RetentionEventSink { events.add(it) },
