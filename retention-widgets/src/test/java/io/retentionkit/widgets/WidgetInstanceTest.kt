@@ -120,6 +120,59 @@ class WidgetInstanceTest {
         assertEquals(View.VISIBLE, views.findViewById<View>(R.id.rk_widget_empty).visibility)
     }
 
+    @Test fun narrowPortraitWidgetUsesTwoRowsDespiteLaunchersShortMinimumHeightBound() {
+        val labels = listOf("Phrase translation", "Saved phrases", "Text tools", "Travel documents")
+        val f = Fixture(featureProvider = RetentionFeatureProvider {
+            Fixture.features.mapIndexed { i, feature -> feature.copy(label = labels[i]) }
+        })
+        f.installWidget(6)
+        f.platform.sizes[6] = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 207)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 128)
+        }
+        f.module.refresh()
+        val remote = f.platform.rendered.getValue(6)
+        assertEquals(R.layout.rk_widget_grid, remote.layoutId)
+        val root = remote.apply(f.app, FrameLayout(f.app))
+        val density = f.app.resources.displayMetrics.density
+        val width = (206 * density).toInt()
+        val height = (222 * density).toInt()
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, width, height)
+        val first = root.findViewById<View>(R.id.rk_action_1)
+        val second = root.findViewById<View>(R.id.rk_action_2)
+        val third = root.findViewById<View>(R.id.rk_action_3)
+        assertSame(first.parent, second.parent)
+        assertNotSame(first.parent, third.parent)
+        assertTrue(first.width >= (80 * density).toInt())
+        intArrayOf(R.id.rk_label_1, R.id.rk_label_2, R.id.rk_label_3, R.id.rk_label_4).forEach { id ->
+            val label = root.findViewById<TextView>(id)
+            val textLayout = requireNotNull(label.layout)
+            assertTrue((0 until textLayout.lineCount).all { textLayout.getEllipsisCount(it) == 0 })
+        }
+    }
+
+    @Test fun widthAwareResizeSwitchesOnlyTheTargetInstanceAndUnknownWidthStaysGrid() {
+        val f = Fixture()
+        f.installWidget(7); f.installWidget(8)
+        f.platform.sizes[7] = Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 90) }
+        f.platform.sizes[8] = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 320)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 90)
+        }
+        f.module.refresh()
+        assertEquals(R.layout.rk_widget_grid, f.platform.rendered.getValue(7).layoutId)
+        assertEquals(R.layout.rk_widget_row, f.platform.rendered.getValue(8).layoutId)
+        f.platform.sizes[7]!!.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
+        RetentionWidgetProvider().onAppWidgetOptionsChanged(f.app, AppWidgetManager.getInstance(f.app), 7, f.platform.sizes.getValue(7))
+        assertEquals(R.layout.rk_widget_row, f.platform.rendered.getValue(7).layoutId)
+        assertEquals(R.layout.rk_widget_row, f.platform.rendered.getValue(8).layoutId)
+        f.platform.sizes[7]!!.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 220)
+        RetentionWidgetProvider().onAppWidgetOptionsChanged(f.app, AppWidgetManager.getInstance(f.app), 7, f.platform.sizes.getValue(7))
+        assertEquals(R.layout.rk_widget_grid, f.platform.rendered.getValue(7).layoutId)
+        assertEquals(R.layout.rk_widget_row, f.platform.rendered.getValue(8).layoutId)
+    }
+
     @Test fun rendererConfigMutationCannotPublishStaleActions() {
         lateinit var f: Fixture
         var mutate = false
