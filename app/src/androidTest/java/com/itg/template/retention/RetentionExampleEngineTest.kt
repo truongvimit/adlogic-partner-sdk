@@ -17,6 +17,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
+import io.retentionkit.feedback.RetentionFeedbackActivity
 import com.itg.template.R
 import io.retentionkit.RetentionKit
 import io.retentionkit.core.*
@@ -39,13 +42,14 @@ class RetentionExampleEngineTest {
     private var scenario: ActivityScenario<RetentionPlaygroundActivity>? = null
     private lateinit var kit: RetentionKit
     private val ownedChannels = mutableListOf<String>()
+    private var feedbackCleanup: (() -> Unit)? = null
     @Before fun permissionPrecondition() {
         if (Build.VERSION.SDK_INT >= 33) assertEquals("Grant POST_NOTIFICATIONS to the example package before this suite", PackageManager.PERMISSION_GRANTED,
             application.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
         cancelOwnedNotifications()
     }
     @After fun restoreNormalProfile() {
-        try { scenario?.close() } finally {
+        try { feedbackCleanup?.invoke(); scenario?.close() } finally {
             scenario = null
             instrumentation.runOnMainSync { ExampleQa.restore(application) }
             cancelOwnedNotifications()
@@ -249,6 +253,99 @@ class RetentionExampleEngineTest {
             (acquired as RetentionUiLeaseResult.Acquired).lease.close()
         }
         // No card, submitted rating, or review acceptance is inferred from Play's callback.
+    }
+
+    @Test fun actualFeedbackKeepAndRescueNeedNoReasonAndOpenUsableFeatureWithoutHome() {
+        prepare()
+        val host = installFeedbackCleanup()
+        openActualFeedback()
+        clickFeedback("rk_feedback_keep")
+        await { kit.runtime.activities.current() === host && kit.runtime.ui.eligibility() is RetentionEligibility.Allowed }
+        assertTrue(ExampleQa.events.any { it.name == "retention_feedback_kept" })
+        assertFalse(ExampleQa.events.any { it.name == "retention_feedback_reason" })
+
+        openActualFeedback()
+        clickFeedback("rk_feedback_feature_text_tools")
+        // No Home/restart workaround is allowed: this is the real internal handoff readiness boundary.
+        await(8000) {
+            var ready = false
+            instrumentation.runOnMainSync {
+                val current = kit.runtime.activities.current() as? RetentionPlaygroundActivity
+                ready = current?.findViewById<EditText>(R.id.rk_text_input) != null
+            }
+            ready
+        }
+        instrumentation.runOnMainSync {
+            val current = kit.runtime.activities.current() as RetentionPlaygroundActivity
+            assertEquals("Feedback rescue must stay in the host task", host.taskId, current.taskId)
+            val entry = (RetentionEntryCodec.read(current.intent) as RetentionEntryDecodeResult.Valid).entry
+            assertEquals(RetentionEntrySource.FEEDBACK, entry.source)
+            assertEquals("text_tools", entry.destination)
+            assertNull(kit.runtime.entries.pending(entry.token))
+            current.findViewById<EditText>(R.id.rk_text_input).setText("hello from feedback")
+            current.findViewById<Button>(R.id.rk_text_analyze).performClick()
+            assertTrue(current.findViewById<TextView>(R.id.rk_result).text.contains("3"))
+            assertTrue(kit.capture(Intent(current.intent)) is RetentionEntryAcceptance.Rejected)
+        }
+        assertFalse(ExampleQa.events.any { it.name == "retention_feedback_reason" })
+    }
+
+    @Test fun actualFeedbackContinueWithoutReasonOpensOwnAppInfoAndBackReleasesUi() {
+        prepare()
+        val host = installFeedbackCleanup()
+        openActualFeedback()
+        val expectedSettings = application.packageManager.resolveActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            android.net.Uri.fromParts("package", application.packageName, null)), PackageManager.MATCH_DEFAULT_ONLY)
+        assertNotNull("An actual App Info destination must resolve", expectedSettings)
+        clickFeedback("rk_feedback_continue")
+        val device = UiDevice.getInstance(instrumentation)
+        assertTrue("App Info must actually open", device.wait(Until.hasObject(By.pkg(expectedSettings!!.activityInfo.packageName)), 5000))
+        val appLabel = application.applicationInfo.loadLabel(application.packageManager).toString()
+        assertTrue("App Info must identify this application", device.wait(Until.hasObject(By.textContains(appLabel)), 5000))
+        assertTrue(ExampleQa.events.any { it.name == "retention_feedback_system_handoff" })
+        assertFalse(ExampleQa.events.any { it.name == "retention_feedback_reason" })
+        assertTrue(device.pressBack())
+        await(8000) { kit.runtime.activities.current() === host && kit.runtime.ui.eligibility() is RetentionEligibility.Allowed }
+        instrumentation.runOnMainSync {
+            val acquired = kit.runtime.ui.acquire("test.feedback.return", 1000)
+            assertTrue(acquired is RetentionUiLeaseResult.Acquired)
+            (acquired as RetentionUiLeaseResult.Acquired).lease.close()
+        }
+    }
+
+    private fun openActualFeedback() {
+        val before = ExampleQa.events.count { it.name == "retention_feedback_shown" }
+        instrumentation.runOnMainSync {
+            val host = kit.runtime.activities.current() as RetentionPlaygroundActivity
+            host.findViewById<Button>(R.id.rk_open_feedback).performClick()
+        }
+        await { kit.runtime.activities.current() is RetentionFeedbackActivity &&
+            ExampleQa.events.count { it.name == "retention_feedback_shown" } > before }
+    }
+    private fun clickFeedback(tag: String) {
+        instrumentation.runOnMainSync {
+            val feedback = kit.runtime.activities.current() as RetentionFeedbackActivity
+            val button = feedback.findViewById<android.view.ViewGroup>(android.R.id.content).findViewWithTag<Button>(tag)
+            assertNotNull("Actual standard feedback action must exist: $tag", button)
+            button.performClick()
+        }
+    }
+    private fun installFeedbackCleanup(): RetentionPlaygroundActivity {
+        lateinit var original: RetentionPlaygroundActivity
+        lateinit var launchIntent: Intent
+        scenario!!.onActivity { original = it; launchIntent = Intent(it.intent) }
+        feedbackCleanup = {
+            // Cleanup only Activities created by this bounded flow; never clear app data or a task.
+            val device = UiDevice.getInstance(instrumentation)
+            if (device.currentPackageName == "com.android.settings") device.pressBack()
+            instrumentation.runOnMainSync {
+                val current = kit.runtime.activities.current()
+                if (current !== original && (current is RetentionFeedbackActivity || current is RetentionPlaygroundActivity)) current.finish()
+                original.intent = launchIntent
+            }
+            instrumentation.waitForIdleSync()
+        }
+        return original
     }
 
     private fun cancelOwnedNotifications() {

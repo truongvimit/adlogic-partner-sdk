@@ -34,3 +34,11 @@ Added thirteenth device case: actual Android initially blocked channel in a uniq
 
 
 Validation at540d1e6: `:app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest` PASS; 14 unit tests, 0 failures/errors/skips; all13 instrumentation cases compile into actual test APK. Includes all scoped run1 fixture corrections, real Play smoke, real blocked-channel test and staged SDK token preservation. Root targeted/full device rerun and final release R8 remain pending. Gradle window released for consumer follow-up and root instrumentation.
+
+
+Prepared15-case package source: added real SDK feedback Keep/rescue and AppInfo+Back tests (no selected reasons, fake launcher, Home/restart workaround or mandatory survey). Not yet compiled/run; root13-case run remains frozen while this source is prepared.
+
+
+Integrated regression at immutable private06 code head `1ae2b275d14ac162a66587a124358370af48e976` PASS (2m11s). Verified its SDK/library/consumer tree equals delivery root `c407daddb7a40de44cac9a9b7e1bd9ee1f21620f`; only own06 ticket/app README/additional feedback instrumentation differed. Actual XML totals: core39, notifications35, widgets36, feedback18, review14, facade12, shared Firebase4, Billing20, ads162, OnboardKit168, app14 = **522 tests, 0 failures/errors/skips**. Debug application APK and15-case test APK assembled successfully. App SHA256 `198de54bb1dac3495c6586db38201960d126a371df53fbb36ce9dc292f67d422`; test SHA256 `d59558ed695a2061a6c8e676ec16c0bfa7241490205b16e6a39f276a3cc9824f`. Root15-case actual run and final app release R8 pending.
+
+Root-owned API36 evidence: prior13-case full real instrumentation PASS. Standard adapter/manual path also PASS: actual widget pin confirmed ID2; widget TextTools tap through consent/language/onboarding/PayKit reached a real three-word normalization; selected VI refreshed actual widget labels; warm widget Document tap opened real VI document. Evidence PNG/XML verified at `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/example-widget-business-after-full-setup.*`, `example-widget-vietnamese-refresh.*`, `example-widget-warm-document-route.*`. These standard-path checks used normal suite adapters/router, not the QA fixture. Physical Pixel remains root-reported PIN-locked; no physical-device pass is claimed.
