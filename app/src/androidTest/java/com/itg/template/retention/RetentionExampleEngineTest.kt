@@ -121,23 +121,39 @@ class RetentionExampleEngineTest {
         lateinit var launchIntent: Intent
         scenario!!.onActivity { original = it; launchIntent = Intent(it.intent) }
         val originalTask = original.taskId
+        val acknowledged = mutableSetOf<String>()
         try {
             for ((index, action) in actions.withIndex()) {
+                var previousToken: String? = null
+                instrumentation.runOnMainSync {
+                    previousToken = (RetentionEntryCodec.read(original.intent) as? RetentionEntryDecodeResult.Valid)?.entry?.token
+                }
                 action.actionIntent.send()
-                val expected = kit.runtime.features()[index].label
-                await {
+                val expected = kit.runtime.features()[index]
+                var observed = "No captured delivery yet"
+                await(diagnostic = { "Pinned action $index expected=${expected.id}; acknowledged=$acknowledged; $observed" }) {
                     var displayed = false
                     instrumentation.runOnMainSync {
                         val current = kit.runtime.activities.current() as? RetentionPlaygroundActivity
                         if (current != null) {
                             assertSame("Pinned taps must reuse the current destination Activity", original, current)
                             assertEquals(originalTask, current.taskId)
-                            displayed = current.findViewById<TextView>(R.id.rk_feature_title)?.text?.toString() == expected
+                            val entry = (RetentionEntryCodec.read(current.intent) as? RetentionEntryDecodeResult.Valid)?.entry
+                            val actualTitle = current.findViewById<TextView>(R.id.rk_feature_title)?.text?.toString()
+                            val receipt = entry?.let { kit.runtime.store.snapshot("core.entries").string("consumed:${it.token}") }
+                            observed = "token=${entry?.token}; source=${entry?.source}; destination=${entry?.destination}; mode=${entry?.mode}; consumed=${receipt != null}; title=$actualTitle; pending=${kit.runtime.entries.pending().map { it.token }}"
+                            displayed = entry != null && entry.token != previousToken && entry.token !in acknowledged &&
+                                entry.source == RetentionEntrySource.PINNED && entry.mode == RetentionEntryMode.ONCE &&
+                                entry.destination == expected.id && receipt != null && actualTitle == expected.label
+                            if (displayed) acknowledged.add(checkNotNull(entry).token)
+                        } else {
+                            observed = "Current Activity=${kit.runtime.activities.current()?.javaClass?.name}"
                         }
                     }
                     displayed
                 }
             }
+            assertEquals("Every action needs its own materialized and consumed token", 4, acknowledged.size)
         } finally {
             // ActivityScenario filters lifecycle callbacks by its original Intent identity. The
             // app correctly calls setIntent on each action, so restore only the harness identity
@@ -351,12 +367,13 @@ class RetentionExampleEngineTest {
     private fun cancelOwnedNotifications() {
         manager.activeNotifications.filter { it.tag == "io.retentionkit.notifications" }.forEach { manager.cancel(it.tag, it.id) }
     }
-    private fun await(timeout: Long = 5000, predicate: () -> Boolean) {
+    private fun await(timeout: Long = 5000, diagnostic: () -> String = { "" }, predicate: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + timeout
         while (SystemClock.elapsedRealtime() < deadline) {
             if (predicate()) return
             SystemClock.sleep(50)
         }
-        assertTrue("Timed out waiting for actual engine/Android state", predicate())
+        val passed = predicate()
+        assertTrue("Timed out waiting for actual engine/Android state. ${diagnostic()}", passed)
     }
 }
