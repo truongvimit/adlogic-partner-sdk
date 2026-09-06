@@ -1,7 +1,7 @@
 # 01 Core and publication foundation
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 
 Spec: ../spec.md
@@ -15,3 +15,14 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 ## Comments
 
 Claimed by Ticket 01 implementer in `codex/retentionkit-core` on 2026-09-07. Core API and module publication foundation in progress.
+
+
+## Answer
+
+Implemented production `io.retentionkit.core`: concurrent local-only singleton install and main-process guard; restored transactional namespaced state and validated configuration revisions; localized feature catalog; typed durable routing with reusable-surface identity and final consumption; weak foreground Activity access; bounded exclusive UI leases; explicit setup/onboarding/entitlement/success/ad/system/lifecycle signals; isolated diagnostics/events/modules. Callback dispatch uses a single queue drainer without holding queue locks around module code; config validates outside the state lock and commits by revision comparison. Each process supplies authoritative entitlement before module attach, while setup/install/last-active milestones restore durably.
+
+Added publishable scaffolds for `retention-notifications`, `retention-widgets`, `retention-feedback`, `retention-review`, `retentionkit`, with settings/JitPack registrations and selective dependency shape. No feature implementation is claimed for these scaffolds.
+
+Verified 29 passing Robolectric tests and core release assembly; all six release AARs; generated publication POMs; vendor-free core dependency tree. All Gradle invocations used at most two workers. No ADB, push or merge. See `retention-core/VERIFICATION.md` and `.scratch/retentionkit/verification.md` for commands and limitations.
+
+Downstream context pointer: `retention-core/CONTRACT.md`. Initial commits: `2fccadc`, `e0210b0`, `1151142`, `a665e00`, `03cfe00`; final verification/config-removal fix accompanies this answer. No app/ads/onboardkitorigin/suite-firebase files changed.

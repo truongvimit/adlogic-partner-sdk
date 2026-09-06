@@ -62,10 +62,13 @@ class RetentionRuntime private constructor(val application: Application, private
                 )
                 writeUser(state, initial)
             }
-            readUser(state)
+            val restored = readUser(state).copy(entitlement = options.initialUserState.entitlement)
+            writeUser(state, restored)
+            restored
         }
         val saved = store.snapshot("core.config")
-        config = RetentionConfigSnapshot(saved.long("__revision"), options.initialOverrides + saved.entries().filterKeys { it != "__revision" })
+        config = RetentionConfigSnapshot(saved.long("__revision"),
+            if (saved.string("__revision") == null) options.initialOverrides else saved.entries().filterKeys { it != "__revision" })
         val errors = validateConfiguration(config)
         if (errors.isNotEmpty()) return errors
         // Publish cached configuration durably before attach. A receiver never observes default
@@ -118,51 +121,78 @@ class RetentionRuntime private constructor(val application: Application, private
     fun subscribe(owner: String, listener: (RetentionSignal) -> Unit): RetentionSubscription {
         require(validId(owner))
         val subscription = Listener(owner, listener)
-        if (!closed) listeners.add(subscription)
+        synchronized(signalLock) { if (!closed) listeners.add(subscription) }
         return RetentionSubscription { listeners.remove(subscription) }
     }
 
-    /** Serialized dispatch, including reentrant signals. Durable user state is committed first. */
-    fun signal(signal: RetentionSignal): Boolean = synchronized(signalLock) {
-        if (closed) return false
-        signalQueue.addLast(signal)
-        if (dispatching) return true
-        dispatching = true
+    /** A single drainer serializes callbacks without holding the queue lock while invoking clients. */
+    fun signal(signal: RetentionSignal): Boolean {
+        synchronized(signalLock) {
+            if (closed) return false
+            signalQueue.addLast(signal)
+            if (dispatching) return true
+            dispatching = true
+        }
         try {
-            while (signalQueue.isNotEmpty() && !closed) {
-                val next = signalQueue.removeFirst()
+            while (true) {
+                val next = synchronized(signalLock) {
+                    if (closed || signalQueue.isEmpty()) {
+                        dispatching = false
+                        return true
+                    }
+                    signalQueue.removeFirst()
+                }
                 if (!diagnostics.guard("core.signal_state") { applySignal(next) }) continue
-                modules.toList().forEach { module -> diagnostics.guard("${module.id}.signal") { module.onSignal(next) } }
-                listeners.toList().forEach { listener -> diagnostics.guard("${listener.owner}.listener") { listener.callback(next) } }
+                val moduleSnapshot = modules.toList()
+                val listenerSnapshot = listeners.toList()
+                moduleSnapshot.forEach { module -> if (!closed) diagnostics.guard("${module.id}.signal") { module.onSignal(next) } }
+                listenerSnapshot.forEach { listener -> if (!closed) diagnostics.guard("${listener.owner}.listener") { listener.callback(next) } }
                 if (next is RetentionSignal.ConfigurationChanged || next is RetentionSignal.EntitlementChanged ||
                     next == RetentionSignal.SetupCompleted || next == RetentionSignal.ProcessForeground) reconcile(next.javaClass.simpleName)
             }
-        } finally { dispatching = false }
-        true
+        } catch (fatal: Throwable) {
+            // Release the queue if a VM/programmer Error escapes; do not swallow the error.
+            synchronized(signalLock) { dispatching = false; signalQueue.clear() }
+            throw fatal
+        }
     }
 
     fun reconcile(reason: String) {
         if (closed) return
-        modules.toList().forEach { module -> diagnostics.guard("${module.id}.reconcile") { module.reconcile(reason) } }
+        modules.toList().forEach { module -> if (!closed) diagnostics.guard("${module.id}.reconcile") { module.reconcile(reason) } }
     }
 
     /** Atomic PATCH semantics. Removing a key explicitly restores the module's built-in default. */
     @JvmOverloads fun updateConfig(overrides: Map<String, String>, removeKeys: Set<String> = emptySet()): RetentionConfigResult {
-        val result = synchronized(stateLock) {
+        val patch = overrides.toMap()
+        val removals = removeKeys.toSet()
+        repeat(16) {
             if (closed) return RetentionConfigResult.Rejected(listOf("Runtime is shut down"))
-            val values = config.values.toMutableMap().apply { removeKeys.forEach { remove(it) }; putAll(overrides) }
-            val candidate = RetentionConfigSnapshot(config.revision + 1, values)
+            val previous = config
+            val values = previous.values.toMutableMap().apply { removals.forEach { remove(it) }; putAll(patch) }
+            val candidate = RetentionConfigSnapshot(previous.revision + 1, values)
+            // Validators are partner code: never invoke them under the state lock. They may run
+            // again when another writer wins; they must be pure and must not perform effects.
             val errors = validateValues(values) + validateConfiguration(candidate)
             if (errors.isNotEmpty()) return RetentionConfigResult.Rejected(errors)
-            try { persistConfiguration(candidate) } catch (error: Exception) {
-                diagnostics.record("core.config", "Configuration persistence failed", RetentionDiagnosticLevel.ERROR, error)
-                return RetentionConfigResult.Rejected(listOf("Configuration persistence failed"))
+            val committed = synchronized(stateLock) {
+                if (closed) return RetentionConfigResult.Rejected(listOf("Runtime is shut down"))
+                if (config.revision != previous.revision) false
+                else {
+                    try { persistConfiguration(candidate) } catch (error: Exception) {
+                        diagnostics.record("core.config", "Configuration persistence failed", RetentionDiagnosticLevel.ERROR, error)
+                        return RetentionConfigResult.Rejected(listOf("Configuration persistence failed"))
+                    }
+                    config = candidate
+                    true
+                }
             }
-            config = candidate
-            RetentionConfigResult.Applied(candidate.revision)
+            if (committed) {
+                signal(RetentionSignal.ConfigurationChanged(candidate.revision))
+                return RetentionConfigResult.Applied(candidate.revision)
+            }
         }
-        signal(RetentionSignal.ConfigurationChanged(result.revision))
-        return result
+        return RetentionConfigResult.Rejected(listOf("Configuration changed concurrently; retry the patch"))
     }
 
     /** Common marketing gates. Modules must also check permission/channel/cap/TTL at commit time. */
@@ -224,15 +254,15 @@ class RetentionRuntime private constructor(val application: Application, private
         state.put("__revision", snapshot.revision)
     }
     private fun shutdown() {
-        synchronized(signalLock) {
+        val closing = synchronized(signalLock) {
+            if (closed) return
             closed = true
             signalQueue.clear()
-            tracker.stop()
-            ui.shutdown()
-            modules.toList().asReversed().forEach { module -> diagnostics.guard("${module.id}.shutdown") { module.shutdown() } }
-            modules.clear()
-            listeners.clear()
+            modules.toList().asReversed().also { modules.clear(); listeners.clear() }
         }
+        tracker.stop()
+        ui.shutdown()
+        closing.forEach { module -> diagnostics.guard("${module.id}.shutdown") { module.shutdown() } }
     }
 
     companion object {
