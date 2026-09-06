@@ -7,7 +7,7 @@
 định, kiểm tra tên theo chuẩn GA4, khử trùng lặp và cộng dồn doanh thu quảng cáo. Phần lõi không phụ
 thuộc SDK vendor; các sink kết nối nó với dịch vụ analytics.
 
-Phân tầng module: **[ARCHITECTURE.md](ARCHITECTURE.md)** · English: [README.md](README.md) ·
+English: [README.md](README.md) ·
 हिन्दी: [README.hi.md](README.hi.md)
 
 ## Yêu cầu

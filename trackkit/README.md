@@ -7,7 +7,7 @@ and `:billingkit`. Apps can send their own events through the same facade for co
 default params, GA4 name validation, dedupe and cumulative ad revenue. The core has no vendor SDK
 dependency; sink implementations connect it to analytics vendors.
 
-Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · Tiếng Việt: [README.vi.md](README.vi.md) ·
+Tiếng Việt: [README.vi.md](README.vi.md) ·
 हिन्दी: [README.hi.md](README.hi.md)
 
 ## Requirements

@@ -45,7 +45,7 @@ when another selected module exports it with `api`; declare it directly for stan
 
 ## Installation
 
-Version **5.1.0 is not yet published**. See the [migration guide](MIGRATION-5.1.0.md) for its changes;
+Version **5.1.0 is not yet published**;
 use a published tag in the dependency examples below.
 
 The mediation adapters `ads` bundles are not on Maven Central — without the last three

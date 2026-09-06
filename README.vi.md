@@ -45,7 +45,7 @@ module đã chọn export nó bằng `api`; ứng dụng chỉ dùng analytics c
 
 ## Cài đặt
 
-Phiên bản **5.1.0 chưa phát hành**. Xem các thay đổi trong [hướng dẫn migration](MIGRATION-5.1.0.md);
+Phiên bản **5.1.0 chưa phát hành**;
 ví dụ dependency bên dưới cần dùng một tag đã phát hành.
 
 Các mediation adapter mà `ads` đóng gói không nằm trên Maven Central — thiếu ba repository cuối,

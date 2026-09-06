@@ -7,7 +7,7 @@ App अपने events भी इसी facade से भेज सकता �
 dedupe और cumulative ad revenue का उपयोग हो। Core में vendor SDK dependency नहीं है; sink implementations
 उसे analytics vendors से जोड़ते हैं।
 
-Module layering: **[ARCHITECTURE.md](ARCHITECTURE.md)** · English: [README.md](README.md) ·
+English: [README.md](README.md) ·
 Tiếng Việt: [README.vi.md](README.vi.md)
 
 ## आवश्यकताएँ

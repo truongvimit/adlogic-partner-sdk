@@ -45,7 +45,7 @@
 
 ## Installation
 
-Version **5.1.0 अभी publish नहीं हुआ है**। बदलावों के लिए [migration guide](MIGRATION-5.1.0.md) देखें;
+Version **5.1.0 अभी publish नहीं हुआ है**;
 नीचे dependency examples में कोई प्रकाशित tag इस्तेमाल करें।
 
 `ads` जिन mediation adapters को bundle करता है वे Maven Central पर नहीं हैं — आख़िरी तीन repositories के
