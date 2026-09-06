@@ -1,0 +1,18 @@
+<resources>
+    <string name="rk_n_daily_body">A useful feature for your day. Open it when you need it.</string>
+    <string name="rk_n_winback_body">Your tools are ready whenever you need them again.</string>
+    <string name="rk_n_onboarding_body">Continue setup to start using your tools.</string>
+    <string name="rk_n_return_body">Return when you are ready to continue.</string>
+    <string name="rk_n_reminder_body">Keep a useful tool within reach for later.</string>
+    <string name="rk_n_pinned_body">Open a tool directly from your notifications.</string>
+    <string name="rk_n_lockscreen_body">A useful tool, ready when you need it.</string>
+    <string name="rk_n_later">Later</string>
+    <string name="rk_n_dismiss">Dismiss</string>
+    <string name="rk_n_channel_daily">Daily tips</string>
+    <string name="rk_n_channel_winback">Feature reminders</string>
+    <string name="rk_n_channel_onboarding">Setup reminders</string>
+    <string name="rk_n_channel_ad_return">Return reminders</string>
+    <string name="rk_n_channel_reminder">Quiet reminders</string>
+    <string name="rk_n_channel_pinned">Pinned tools</string>
+    <string name="rk_n_channel_lockscreen">Lock screen tips</string>
+</resources>
