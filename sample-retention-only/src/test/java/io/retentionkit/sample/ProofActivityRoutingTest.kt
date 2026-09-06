@@ -87,8 +87,9 @@ class ProofActivityRoutingTest {
 
     @Test fun persistentUiBlockStopsAutomaticRetryButPreservesTheEntry() {
         launchUnderExternalTransition()
+        val initialCalls = dispatches
         main.idleFor(Duration.ofSeconds(10))
-        assertTrue("Readiness is retried within a bounded window", dispatches in 2..21)
+        assertTrue("Readiness is retried within a bounded window", dispatches > initialCalls && dispatches <= 21)
         val boundedCalls = dispatches
         main.idleFor(Duration.ofSeconds(10))
         assertEquals("A blocked entry cannot poll indefinitely", boundedCalls, dispatches)
