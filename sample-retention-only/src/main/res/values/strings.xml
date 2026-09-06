@@ -1,0 +1,5 @@
+<resources>
+    <string name="rk_proof_name">Retention consumer proof</string>
+    <string name="rk_proof_uppercase">Uppercase text</string>
+    <string name="rk_proof_words">Count words</string>
+</resources>

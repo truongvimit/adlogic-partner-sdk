@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Common source declares no notification, network, ads, billing or vendor permission. -->
+    <application android:name=".ProofApplication" android:label="@string/rk_proof_name"
+        android:allowBackup="false" android:supportsRtl="true" android:icon="@drawable/rk_proof_tool"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".ProofActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
