@@ -2,7 +2,7 @@
 
 `verify.py` uses Python 3.9+ and the standard library. It checks **existing evidence** or captures explicitly requested commands. It does not create a consumer app, guess SDK APIs/tasks, infer device outcomes, update the verification ledger, or publish a remote release.
 
-Run from the checkout being verified. Evidence directories/files must be new: earlier evidence is never overwritten. Keep outputs outside Git because build logs, package dumps, and optional screenshots can contain local paths or app content. JSON records retain the exact commands, timestamps, return codes, file paths, and SHA-256 hashes. A Git commit/status snapshot is attached to command captures; the operator must keep the checkout/artifacts unchanged during capture.
+Run from the checkout being verified. Evidence directories/files must be new: earlier evidence is never overwritten. Keep outputs outside Git because build logs, package dumps, and optional screenshots can contain local paths or app content. JSON records retain the exact commands, timestamps, return codes, file paths, and SHA-256 hashes. Git commit/status snapshots are taken before and after each Gradle capture; a changed checkout fails the capture even when Gradle exits zero. Keep source and artifacts unchanged during each run.
 
 ## 1. Inspect test XML
 
@@ -29,6 +29,8 @@ python3 scripts/retentionkit/verify.py gradle \
   --task :retention-review:publishToMavenLocal \
   --output /absolute/evidence/review-build
 ```
+
+For local publication, pass `--publication-version retentionkit-qa-YYYYMMDD-COMMITHASH` with a new exact version that includes the final library commit. The tool passes it as the child process's `VERSION` environment and records it in `run.json`; it does not change the shell environment. The actual Maven POM/metadata must match. Use a new version after any library correction to avoid fixed-version cache reuse.
 
 This **executes** Gradle, including local publication when requested. It does not invoke remote publish tasks automatically. It passes `--no-daemon --console=plain --max-workers=2 --stacktrace`, preserves stdout/stderr, and fails on command failure/timeout. Default timeout is 1,800 seconds; set `--timeout` explicitly when needed. Do not run concurrently with another root/agent Gradle build. A timeout terminates the launched process group on macOS/Linux; check for any detached Gradle daemon before retrying.
 

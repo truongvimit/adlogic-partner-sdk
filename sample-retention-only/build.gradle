@@ -84,6 +84,7 @@ if (dependencySource == 'maven') {
 }
 
 dependencies {
+    implementation "androidx.core:core-ktx:$androidx_core_ktx_version"
     if (dependencySource == 'project') {
         implementation project(":${artifact}")
     } else {
