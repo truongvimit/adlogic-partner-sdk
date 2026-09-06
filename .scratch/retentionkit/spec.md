@@ -66,6 +66,8 @@ Minimum scenarios: denied/granted-later permission; disabled channel; premium/un
 
 {02,03,04,05} → 06 example integration → 07 device validation and docs → 08 code review and final fixes.
 
+Additive Ticket05a provides authoritative Billing entitlement needed by T05/T06: cached false or verification completion after a failed sweep is insufficient evidence for NON_SUBSCRIBER. Existing Billing APIs stay source-compatible.
+
 T05 may inspect while other modules are being implemented but must verify against their final public APIs. T07 may prepare tests earlier. Each implementer uses a private worktree/branch and commits only its ticket-owned files. A merger agent merges completed work onto `codex/retentionkit`. Only root uses the physical ADB device unless explicitly delegated. Gradle concurrency max two workers per invocation; avoid multiple memory-heavy full-app builds.
 
 ## PR and local issues

@@ -19,6 +19,14 @@
 - Actual JUnit XML independently checked with `scripts/retentionkit/verify.py tests`: 1 passed, zero failures/errors/skips. Captured output `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-bridge-device-home-return.log`; evidence hash/count record alongside it as `.json`.
 - Partial05 implementer checks: full ads 159 + OnboardKit 164 tests passed for suppression/no-splash changes; active-flow 4 + splash 10 targeted tests passed after active-state addition. Final combined rerun remains pending.
 
+## Selective consumer preflight
+
+- Before final05 core/adapter integration, isolated project consumers for core, notifications and widgets each passed `assembleRelease` with R8/resource shrinking and no broad keep/dontwarn rules. These checks detect early packaging/API issues; the final publication/project/POM matrix remains pending.
+- Exact captured commands and source commits: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-consumers-preflight/{core,notifications,widgets}-project/run.json` (core at35ee9c6; notifications/widgets atbb78c64). Durations46/42/41 seconds respectively.
+- Core minified preflight APK installed and launched on an API36 Google Play arm64 emulator. Real UI showed setup-incomplete entry waiting, then completed setup and executed word count (`A useful text tool` → `4 words`). Separate asserted ADB scenarios passed cold typed entry, warm replay rejection and process-restart replay rejection. Evidence `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/core-api36-routing-preflight/` plus `core-api36-*.xml`/PNG.
+- Emulator was launched read-only/no snapshot save from existing Pixel_4_2 AVD. Boot initially showed a System UI ANR under build load; after Wait, UI checks passed and crash log was empty. Emulator stopped after this preflight to release RAM. This is emulator evidence, not physical API36 hardware coverage.
+- Widget minified preflight APK installed on physical Pixel5; `am start` succeeded. UI inspection then found the device locked behind PIN, so no pin outcome is claimed. User was asked asynchronously to unlock; no credentials requested or attempted. Full physical feature UI acceptance is pending unlock.
+
 ## Ticket 01 — core/publication foundation
 
 Status: **PASS** for Ticket 01 scope, 2026-09-07.
