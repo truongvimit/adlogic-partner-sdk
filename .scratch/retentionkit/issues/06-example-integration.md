@@ -28,3 +28,9 @@ Root API36 instrumentation run1: 9/11 pass; evidence `/Users/Shared/Panacea/Docu
 
 
 Added a twelfth device case for actual PlayReviewTransport with explicitly accelerated eligibility: real phrase translation, request and truthful failed/timeout/unknown terminal, released lease; no fake transport or rating/card assertion. Awaiting root targeted execution.
+
+
+Added thirteenth device case: actual Android initially blocked channel in a unique QA namespace, actual saved alarm and channel_blocked/no-post assertion, cleanup only that channel. Root covers widget launcher/feedback UI manually on the minified umbrella consumer; no duplicate UI fixture suite added.
+
+
+Validation at540d1e6: `:app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest` PASS; 14 unit tests, 0 failures/errors/skips; all13 instrumentation cases compile into actual test APK. Includes all scoped run1 fixture corrections, real Play smoke, real blocked-channel test and staged SDK token preservation. Root targeted/full device rerun and final release R8 remain pending. Gradle window released for consumer follow-up and root instrumentation.
