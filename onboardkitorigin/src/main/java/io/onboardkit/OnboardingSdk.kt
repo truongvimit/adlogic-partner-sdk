@@ -41,7 +41,8 @@ import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import com.ads.module.consent.ConsentCenter
-import io.trackkit.ConsentState
+import com.ads.module.admob.AppOpenManager
+import com.ads.module.admob.ResumeSkipPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -133,8 +134,15 @@ object OnboardingSdk {
         remote = ObRemote(app)
         adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
         appResumeGuard = ObAppResume(adsGuard, adProvider)
+        // Same transient/master policy for both entry paths; OPEN retains its own slot checks.
+        AppOpenManager.getInstance().setResumeSkipPolicy(object : ResumeSkipPolicy {
+            override fun skipReasonFor(activity: Activity): String? =
+                appResumeGuard.sharedSkipReason(activity)?.key
+
+            override fun appOpenSkipReasonFor(activity: Activity): String? =
+                appResumeGuard.skipReason(activity)?.key
+        })
         preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
-        observeConsent()
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }
 
@@ -168,42 +176,22 @@ object OnboardingSdk {
     }
 
     /**
-     * Whether an ad request may go out at all — the app's consent answer, in one switch.
+     * Host policy for onboarding ads, AND-ed with the current consent authority.
      *
-     * [io.onboardkit.ui.splash.ObSplashActivity] sets it from `onConsentRequired`, so an app that
-     * runs consent through the splash needs nothing else. Set it directly only when consent is
-     * resolved somewhere the splash cannot see.
+     * `false` disables requests even if consent is later granted. `true` removes only this host
+     * restriction; it cannot grant consent. Defaults to `true` so UMP controls the standard flow.
      *
-     * `false` blocks every placement with [io.onboardkit.ads.AdSkipReason.CONSENT_NOT_GRANTED];
-     * the flow still runs, just without ads. Defaults to `true` so an app with no consent step
-     * behaves as before.
+     * A host that runs another CMP must publish its result with [ConsentCenter.setHostConsent]
+     * before completing `ObSplashActivity.onConsentRequired`. Step completion is not authorization.
      */
     fun setCanRequestAds(allowed: Boolean) {
         if (adsAllowed == allowed) return
         adsAllowed = allowed
-        ObLog.d(ObLog.Section.GATE, "canRequestAds=$allowed")
+        ObLog.d(ObLog.Section.GATE, "hostAllowsAds=$allowed")
     }
 
-    fun canRequestAds(): Boolean = adsAllowed
-
-    /**
-     * Opens the ad gate as soon as the consent flow resolves, from wherever it resolves.
-     *
-     * The splash also reports the answer, but it does so through a step with its own timeout: a
-     * user who takes longer than that to read the form had their acceptance dropped, and the gate
-     * stayed shut for the rest of the process with nothing left to reopen it. Watching the state
-     * directly means a late answer still counts.
-     *
-     * Anything other than UNKNOWN means the step finished — a refusal included, since a refusal
-     * downgrades ads to non-personalized rather than stopping them.
-     */
-    private fun observeConsent() {
-        sdkScope.launch {
-            ConsentCenter.state.collect { state ->
-                if (state != ConsentState.UNKNOWN) setCanRequestAds(true)
-            }
-        }
-    }
+    /** Reads current authority directly, including revocation and later consent recovery. */
+    fun canRequestAds(): Boolean = adsAllowed && ConsentCenter.canRequestAds()
 
     fun addAnalyticsPlugin(plugin: AnalyticsPlugin) = AnalyticsHub.addPlugin(plugin)
 

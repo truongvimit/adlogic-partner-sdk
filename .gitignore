@@ -104,3 +104,13 @@ img.png
 .Trashes
 Thumbs.db
 desktop.ini
+
+# Local analysis, agent instructions and unreleased design notes
+/CLAUDE.md
+/AGENTS.md
+/CONTEXT.md
+/docs/
+/.scratch/
+/SDK_ACTION_PLAN.md
+/MIGRATION-*.md
+**/ARCHITECTURE.md

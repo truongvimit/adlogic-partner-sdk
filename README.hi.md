@@ -2,186 +2,102 @@
 
 # adlogic-partner-sdk
 
-> Ads, onboarding, analytics, billing और paywalls के लिए सात Android libraries — एक ही repository से एक साथ
-> publish होती हैं।
+विज्ञापन, onboarding, analytics, billing और paywall के लिए Android SDK। पहले ज़रूरी सुविधा चुनें, साझा build setup करें और फिर उस module की quickstart पढ़ें।
 
-सिर्फ़ वही modules declare करें जो आप वाकई ship कर रहे हैं। यह पेज build setup और initialization क्रम बताता है;
-हर module का README उसकी अपनी integration guide है।
+## अपना मॉड्यूल चुनें
 
-## Modules
+| ऐप को क्या चाहिए | Dependency | गाइड |
+| --- | --- | --- |
+| AdMob विज्ञापन | `ads` | [Ads](ads/README.md) |
+| विज्ञापनों के साथ splash, भाषा चयन और onboarding | `ads + onboardkitorigin` | [OnboardKit](onboardkitorigin/README.hi.md) |
+| अपने UI के साथ खरीदारी | `billingkit` | [BillingKit](billingkit/README.md) |
+| तैयार paywall UI | `paykit` | [PayKit](paykit/README.md) |
+| Firebase Analytics या ads/paywall का remote config | `suite-firebase` (config sources के लिए `ads`/`paykit` जोड़ें) | [Firebase](suite-firebase/README.md) |
+| अपने backend को analytics भेजना | `trackkit` | [Trackkit](trackkit/README.hi.md) |
+| विज्ञापन debug dashboard | `adtracer (debugImplementation)` | [AdTracer](adtracer/README.md) |
 
-| Module | यह क्या करता है | Guide |
-|---|---|---|
-| `ads` | AdMob load/show, ad config, UMP consent, premium gating | [ads/README.md](ads/README.md) |
-| `onboardkitorigin` | First-open flow: splash, language, onboarding pager, survey | [onboardkitorigin/README.md](onboardkitorigin/README.md) |
-| `trackkit` | Vendor-free analytics contract (`Tracker`, `TrackSink`) | [trackkit/README.md](trackkit/README.md) |
-| `suite-firebase` | एकमात्र Firebase adapter: GA4 sink, ad config source, paywall config source | [suite-firebase/README.md](suite-firebase/README.md) |
-| `billingkit` | Play Billing engine (`com.ads.module.billing`) | [billingkit/README.md](billingkit/README.md) |
-| `paykit` | `billingkit` engine के ऊपर paywall UI | [paykit/README.md](paykit/README.md) |
-| `adtracer` | Debug-only ad lifecycle dashboard | [adtracer/README.md](adtracer/README.md) |
+केवल इस्तेमाल होने वाले modules जोड़ें। Ads, onboarding, billing, paywall और Firebase पहले से Trackkit उपलब्ध कराते हैं। PayKit billing engine को runtime पर लाता है; उसके API सीधे बुलाने पर ही `billingkit` अलग से जोड़ें। Firebase वैकल्पिक है। केवल billing/paywall वाला ऐप ads stack नहीं लाता।
 
-## कौन-से modules declare करें
+## Build setup
 
-| आप क्या ship कर रहे हैं | क्या declare करें | APK में निश्चित रूप से क्या नहीं होगा |
-|---|---|---|
-| सिर्फ़ ads (IAA) | `ads` (+ `suite-firebase`) | एक भी Play Billing class नहीं |
-| IAP + prebuilt paywall, ads नहीं | `billingkit` + `paykit` | एक भी GMA/AdMob class नहीं |
-| IAP, paywall UI अपनी | `billingkit` | न `paykit`, न `ads` |
-| ads और IAP दोनों | `ads` + `billingkit` (+ `paykit`) | — |
+JDK 17, `minSdk 24+` और `compileSdk 36+` इस्तेमाल करें। यह repo Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 और targetSdk 36 से build होता है; इस branch में ये toolchain versions नहीं बदले हैं।
 
-`onboardkitorigin` `ads` पर और `paykit` `billingkit` पर निर्भर है, पर `implementation` scope में — अगर आप
-उनकी API कॉल करते हैं तो उन्हें अलग से declare करें। `trackkit` कभी declare न करें: जो भी module उसे इस्तेमाल
-करता है, वह उसे `api` से export करता है।
-
-## आवश्यकताएँ
-
-| | |
-|---|---|
-| JDK / Kotlin `jvmTarget` | 17 |
-| `minSdk` | 24 |
-| `compileSdk` / `targetSdk` | 36 |
-| AGP / Gradle | 8.12.0 / 8.13 |
-
-## Installation
-
-`ads` जिन mediation adapters को bundle करता है वे Maven Central पर नहीं हैं — आख़िरी तीन repositories के
-बिना build Pangle, ironSource और Mintegral को resolve नहीं कर पाएगा।
+इन repositories को मौजूदा Gradle configuration में मिलाएँ; दूसरा `dependencyResolutionManagement` block न बनाएँ। अंतिम तीन mediation repositories केवल ads/onboarding के लिए चाहिए।
 
 ```groovy
-repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
-    maven { url 'https://artifact.bytedance.com/repository/pangle/' }
-    maven { url 'https://android-sdk.is.com/' }
-    maven { url 'https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea' }
-}
+// settings.gradle
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
 
-// <tag> की जगह https://github.com/truongvimit/adlogic-partner-sdk/tags से कोई tag रखें
-def sdkVersion = '<tag>'
-
-dependencies {
-    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
-    debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
-}
-```
-
-Group id `com.github.truongvimit.adlogic-partner-sdk` है — JitPack multi-module repo को
-`com.github.<user>.<repo>` के रूप में namespace करता है। सभी modules एक ही tag पर रखें; अलग-अलग versions के
-combination test नहीं किए गए हैं।
-
-## आपकी app को क्या देना होगा
-
-**`AndroidManifest.xml`** — `<application>` के अंदर, जब आप `ads` ship करें। पहली entry के बिना GMA init पर ही
-throw करता है; दोनों Facebook entries ज़रूरी हैं क्योंकि `ERainAd.init` हमेशा `FacebookSdk` initialize करता है:
-
-```xml
-<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${app_id}" />
-<meta-data android:name="com.facebook.sdk.ApplicationId"  android:value="@string/facebook_app_id" />
-<meta-data android:name="com.facebook.sdk.ClientToken"    android:value="@string/facebook_client_token" />
-```
-
-हर build type के लिए `manifestPlaceholders = [app_id: "ca-app-pub-XXXX~YYYY"]` सेट करें, और
-`<application>` tag के `android:name` को अपनी `Application` class पर point करें।
-
-**String resources** (`translatable="false"`)। `ads` के साथ `facebook_app_id` और `facebook_client_token`
-अनिवार्य हैं। `adjust_token`, `event_token` और `adjust_event_token_purchase` सिर्फ़ उस `AdjustConfig` से पढ़े
-जाते हैं जो आप खुद बनाते हैं — `adjust_token` खाली हो तो Adjust बंद रहता है।
-
-**जो files आपको बनानी हैं** — इनमें से कोई भी SDK के साथ नहीं आती:
-
-| Path | किसके लिए ज़रूरी | न होने पर |
-|---|---|---|
-| `src/main/assets/ad_config.json` | `ads` | हर placement चुपचाप बंद, कोई crash नहीं |
-| `src/main/assets/ad_config_debug.json` | debug builds | debug run आपके **live** ad units खर्च करेगा |
-| `google-services.json` + `com.google.gms.google-services` plugin | `suite-firebase` | न GA4 sink, न remote ad config, न paywall document |
-
-## Initialization क्रम
-
-नीचे का सब कुछ `Application.onCreate()` में, इसी क्रम में चलता है। क्रम मायने रखता है: `Tracker` सबसे पहले,
-क्योंकि उससे पहले निकले events सिर्फ़ buffer होते हैं; और ad config `ERainAd.init` से पहले, क्योंकि वही ad unit
-ids को placements से जोड़ता है।
-
-```kotlin
-class App : AdsMultiDexApplication() {
-    override fun onCreate() {
-        super.onCreate()
-
-        // 1. Analytics — देखें trackkit/README.md और suite-firebase/README.md
-        Tracker.install(this, TrackerConfig(appVersionCode = BuildConfig.VERSION_CODE.toLong()))
-        Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
-
-        // 2. Ads — देखें ads/README.md
-        AdRemoteConfig.initializeFromAssets(this)
-        AdConfig.install(FirebaseAdConfigSource())
-        ConsentCenter.configure(ConsentOptions(timeoutMs = 20_000L))
-        ERainAd.getInstance().init(this, buildERainAdConfig())
-        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
-
-        // 3. Billing और paywall — देखें billingkit/README.md और paykit/README.md
-        PayKit.install(this, payKitConfig { /* … */ }.getOrThrow())
-        PayKit.configSource(FirebaseConfigSource())
-
-        // 4. First-open flow — देखें onboardkitorigin/README.md
-        ERainTuning.install()
-        OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
-            paywallGate = OnboardKitPaywallGate()
-            listener = OnboardingListener { context, _ ->
-                context.startActivity(
-                    Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
-        }
-        OnboardingSdk.configure(buildOnboardKitConfig())
+        // Only when ads or onboardkitorigin is included.
+        maven { url 'https://artifact.bytedance.com/repository/pangle/' }
+        maven { url 'https://android-sdk.is.com/' }
+        maven { url 'https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea' }
     }
 }
 ```
 
-फिर अपनी launcher activity को `class SplashActivity : ObSplashActivity()` बनाएँ। Consent, remote fetch,
-splash ads, न्यूनतम display समय और आगे का navigation — सब उसी के अंदर है; देखें
-[onboardkitorigin/README.md](onboardkitorigin/README.md)।
+यह गाइड **5.1.0 के बदलाव बताती है; यह version अभी प्रकाशित नहीं है**। Published dependency के लिए `<tag>` को उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) से बदलें और उसी tag की README पढ़ें। सभी modules का version एक रखें।
 
-जिस module को आप ship नहीं करते, उसका step हटा दें: सिर्फ़ ads वाली app step 2 पर रुक जाती है, सिर्फ़ IAP वाली
-app केवल 1 और 3 रखती है।
-
-## APK का आकार घटाना
-
-`ads` सात AdMob mediation adapters bundle करता है — APK की सबसे भारी चीज़। जिन networks को आपका AdMob
-account mediate नहीं करता, उन्हें हटा दें — और `ads` dependency पर नहीं, `configurations` पर, क्योंकि
-`onboardkitorigin` भी `ads` पर निर्भर है और per-dependency exclude वह दूसरा रास्ता खुला छोड़ देता:
+उदाहरण: ads और onboarding वाला ऐप। दूसरी ज़रूरत के लिए ऊपर की तालिका के अनुसार artifact नाम बदलें।
 
 ```groovy
-configurations.configureEach {
-    exclude group: 'com.google.ads.mediation', module: 'pangle'
-    exclude group: 'com.pangle.global'
+// app/build.gradle
+def sdkVersion = '<tag>'
+dependencies {
+    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
+    implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
 }
 ```
 
-हर network = एक adapter + वह SDK जो वह खींचता है; सिर्फ़ adapter हटाने पर SDK रह जाता है। जोड़े:
-`applovin`→`com.applovin`, `vungle`→`com.vungle`, `pangle`→`com.pangle.global`,
-`unity`→`com.unity3d.ads`, `mintegral`→`com.mbridge.msdk.oversea`,
-`ironsource`→`com.unity3d.ads-mediation`। `facebook` अपवाद है — module हटाएँ, पूरा group कभी नहीं:
-`exclude group: 'com.facebook.android', module: 'audience-network-sdk'`। उसी group में `facebook-core` भी
-है, जिसकी `ERainAd.init` को ज़रूरत होती है।
+## Integration order
 
-अगर R8 किसी हटाए गए network के लिए `Missing class` बताए, तो `proguard-rules.pro` में
-`-dontwarn com.pangle.global.**` (और वैसे ही बाकी) जोड़ें। Gradle exclusions से पहले अपने AdMob mediation
-groups बदलें।
+Manifest में अपनी `Application` class दर्ज करें। `Application.onCreate()` में `super.onCreate()` के बाद केवल चुने गए modules के चरण पूरे करें:
 
-## विस्तृत जानकारी कहाँ है
+| चरण | क्या करें | गाइड |
+| --- | --- | --- |
+| 1 · Analytics | SDK events लेने हों तो दूसरे kits से events आने से पहले `Tracker` install करें और destination जोड़ें। | [Trackkit](trackkit/README.hi.md) |
+| 2 · Ads | AdMob/Meta metadata और अपनी ad JSON दें, फिर `ERainAd` initialize करें। | [Ads quickstart](ads/README.md) |
+| 3 · खरीदारी | `PayKit` install करें, या अपने UI के लिए `BillingKit` initialize करें। PayKit इस्तेमाल होने पर billing initialization उसी को करने दें। | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
+| 4 · Onboarding | `OnboardingSdk` install/configure करें और `ObSplashActivity` की अपनी subclass दर्ज करें। | [OnboardKit](onboardkitorigin/README.hi.md) |
 
-ये READMEs सिर्फ़ integration कवर करते हैं। हर option, default और behaviour flag उसी type पर KDoc में
-documented है जो उसका मालिक है, और हर module sources jar के साथ publish होता है — यानी पूरा और हमेशा
-अद्यतन reference IDE में एक **Go to definition** दूर है। शुरुआत करें `AdUnitConfig` और `ConsentOptions`
-(ads), `OnboardKitConfig` और `ObRemoteKeys` (onboardkitorigin), `TrackerConfig` और `TrackkitEvents`
-(trackkit), `PayKitConfig` (paykit), `AppPurchase` (billingkit) से।
+OnboardKit का splash consent और notification चरण चलाता है। केवल ads इस्तेमाल करने पर ad request से पहले Activity से `ConsentCenter.request(...)` बुलाएँ। Firebase के लिए ऐप की `google-services.json` और Google Services plugin भी चाहिए; [Firebase गाइड](suite-firebase/README.md) देखें।
+
+## ऐप की अपनी जानकारी दें
+
+| हिस्सा | क्या करें |
+| --- | --- |
+| Ads | AdMob app ID, Meta app ID/client token, `assets/ad_config.json` में placement IDs और `ad_config_debug.json` में test IDs। Debug file न होने पर सामान्य file इस्तेमाल होती है। |
+| Onboarding | Destination Activity, भाषा/पेज content और ad placements। |
+| खरीदारी | Play product IDs और premium entitlement mapping। PayKit को terms/privacy URLs और अपना catalog JSON भी दें। |
+| Firebase · वैकल्पिक | ऐप का Firebase configuration और इस्तेमाल होने वाले sources के published Remote Config parameters। |
+
+## 5.0.0 से अपग्रेड
+
+Dependencies और मुख्य install APIs नहीं बदले हैं। इस branch को अपनाते समय ये integration बदलाव जाँचें:
+
+| हिस्सा | Partner को क्या करना है |
+| --- | --- |
+| Custom consent | `onConsentRequired()` से `true` लौटाना या `setCanRequestAds(true)` बुलाना अब consent नहीं देता। CMP का वास्तविक निर्णय `ConsentCenter.setHostConsent(...)` से दें। `ObSplashActivity` के सामान्य UMP flow में नई wiring नहीं चाहिए। |
+| Notification permission | `SplashConfig.notificationPermissionEnabled` का default `true` है; OnboardKit `POST_NOTIFICATIONS` merge करता है। ऐप खुद permission माँगता हो या notifications न भेजता हो तो `false` रखें। Splash ads consent/permission पूरा होने और focus लौटने के बाद load होते हैं। |
+| Portrait | `BehaviorConfig.lockPortrait` का default `true` है, ऐप के splash पर भी। Landscape/tablet flow के लिए `false` करें; OnboardKit गाइड का splash manifest उदाहरण देखें। |
+| Banner refresh | Refresh का मालिक AdMob या SDK में से एक रखें। SDK का `Reload` सामान्य banner लाता है, भले पहली request collapsible हो। अपना reload timer रखने से पहले ads गाइड देखें। |
+| Skip callbacks | Kotlin के exhaustive `when` में नए `AdSkipReason` cases जोड़ें: ads में consent reasons और ads/onboarding में `SHOW_IN_BACKGROUND`। |
+| Analytics | Native bind अब `fo_ad_bound` भेजता है। Dashboard में इसे vendor-confirmed `ad_show` से अलग रखें; bind callback से अतिरिक्त show event न भेजें। |
+
+Remote cache और ad lifecycle fixes के लिए नई configuration नहीं चाहिए। सामान्य feature navigation में preload + show रखें; नया interstitial `loadAndShow` API वैकल्पिक है और built-in onboarding इसे नहीं बुलाता।
+
+## Integration की जाँच
+
+- Test ad IDs वाला debug build खोलें; ad requests से पहले initialization और consent result की जाँच करें।
+- Ad तैयार न होने पर भी feature navigation पूरा होना चाहिए। Notification denial और Home/return जाँचें।
+- खरीदारी होने पर ads दिखाने से पहले premium restore जाँचें और अपने Play catalog से paywall test करें।
+
+अतिरिक्त विकल्पों के लिए module गाइड के source links या IDE में Go to Definition इस्तेमाल करें। पहले quickstart पूरा करें; हर विकल्प configure करना ज़रूरी नहीं है।
 
 ## License
 
-MIT — देखें [LICENSE](LICENSE)।
+MIT — [LICENSE](LICENSE) देखें।

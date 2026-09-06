@@ -6,8 +6,8 @@ package com.ads.module.consent
  *
  * @param timeoutMs how long to wait for UMP to answer before carrying on. It bounds the network
  *   round trip only — it is cancelled once a form is actually on screen, so a user reading the
- *   form is never rushed. Expiring lets the flow continue rather than blocking ads: a slow
- *   network is not a refusal.
+ *   form is never rushed. Expiring lets the flow continue using UMP's current request eligibility;
+ *   it does not grant consent or enable personalization.
  * @param debug forces the EEA form to appear on a test device regardless of real geography. `null`
  *   follows the host's own debuggable flag, which is what the module this replaced did with
  *   `BuildConfig.DEBUG`; pass `true`/`false` to override.

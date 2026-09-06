@@ -99,6 +99,8 @@ class RemoteConfigSyncer internal constructor(
         )
         put(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key, snapshot.languageSupportedCodes)
         put(ObRemoteKeys.REUSE_SPLASH_INTER.key, snapshot.reuseSplashInter.toString())
+        put(ObRemoteKeys.ADS_SPLASH_BANNER.key, snapshot.adsSplashBanner.toString())
+        put(ObRemoteKeys.ADS_SPLASH_INTER.key, snapshot.adsSplashInter.toString())
         put(ObRemoteKeys.ADS_LANGUAGE_NATIVE.key, snapshot.adsLanguageNative.toString())
         put(
             ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.key,
@@ -108,7 +110,10 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.ADS_FULLSCREEN_NATIVE.key, snapshot.adsFullScreenNative.toString())
         put(ObRemoteKeys.ADS_QUESTION_NATIVE.key, snapshot.adsQuestionNative.toString())
         put(ObRemoteKeys.ADS_QUESTION_INTER.key, snapshot.adsQuestionInter.toString())
+        put(ObRemoteKeys.ADS_APP_RESUME.key, snapshot.adsAppResume.toString())
         put(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.key, snapshot.splashMinDisplayMs.toString())
+        put(ObRemoteKeys.SPLASH_AD_BUDGET_MS.key, snapshot.splashAdBudgetMs.toString())
+        put(ObRemoteKeys.SPLASH_BANNER_WAIT_MS.key, snapshot.splashBannerWaitMs.toString())
         put(ObRemoteKeys.SKIP_BUTTON_DELAY_SEC.key, snapshot.skipButtonDelaySec.toString())
         put(
             ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC.key,

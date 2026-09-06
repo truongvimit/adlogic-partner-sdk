@@ -14,9 +14,11 @@ import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -33,6 +35,12 @@ import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.AdType;
 import com.ads.module.helper.AdGate;
+import com.ads.module.tracking.AdTracking;
+
+import io.trackkit.AdFormat;
+import io.trackkit.PlacementRegistry;
+import com.ads.module.helper.AdSkipReason;
+import com.ads.module.consent.ConsentCenter;
 import com.google.android.gms.ads.AdActivity;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
@@ -46,6 +54,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.Objects;
 
 public class AppOpenManager implements Application.ActivityLifecycleCallbacks, LifecycleObserver {
     private static final String TAG = "AppOpenManager";
@@ -55,6 +65,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private AppOpenAd appResumeAd = null;
     private AppOpenAd splashAd = null;
     private AppOpenAd.AppOpenAdLoadCallback loadCallback;
+
+    // Resume fetch state only; raw splash requests retain their own callbacks and buffer.
+    private static final long RESUME_FETCH_TIMEOUT_MS = 30_000L;
+    private static final long[] RESUME_FAILURE_BACKOFF_MS = {5_000L, 30_000L, 120_000L};
+    private final Handler resumeFetchHandler = new Handler(Looper.getMainLooper());
+    private long resumeFetchGeneration;
+    private boolean resumeFetchPending;
+    private long resumeFetchDeadlineMs;
+    private int resumeFailureStreak;
+    private long resumeRetryAfterMs;
+    private Runnable resumeFetchTimeout;
 
     private AppOpenAd.AppOpenAdLoadCallback loadCallbackHigh;
     private AppOpenAd.AppOpenAdLoadCallback loadCallbackMedium;
@@ -67,6 +88,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private String splashAdId;
 
     private Activity currentActivity;
+    private Activity resumedActivity;
+    private long resumeHostGeneration;
+    private Object activeResumeAttempt;
 
     private Application myApplication;
 
@@ -75,24 +99,15 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private long splashLoadTime = 0;
     private int splashTimeout = 0;
 
-    /**
-     * How long a full-screen ad may hold the suppression flags before they are assumed stuck.
-     * Longer than any real interstitial, including a 30s rewarded video plus its end card.
-     */
-    private static final long INTERSTITIAL_SHOWING_TIMEOUT_MS = 90_000;
-
-    private final Handler interstitialWatchdogHandler = new Handler(Looper.getMainLooper());
-    private Runnable interstitialWatchdogRunnable;
-
-    private static final Handler showingAdWatchdogHandler = new Handler(Looper.getMainLooper());
-    private static Runnable showingAdWatchdogRunnable;
-
     private boolean isInitialized = false;// on  - off ad resume on app
     private boolean lifecycleHooksAttached = false;
     private boolean isAppResumeEnabled = true;
     private boolean isInterstitialShowing = false;
     private boolean enableScreenContentCallback = false; // default =  true when use splash & false after show splash
-    private boolean disableAdResumeByClickAction = false;
+    private final AtomicReference<String> pendingResumeSkipReason = new AtomicReference<>();
+    private volatile String currentReturnSkipReason;
+    private long resumeReturnGeneration;
+    private ResumeSkipPolicy resumeSkipPolicy;
     private final List<Class> disabledAppOpenList;
     private Class splashActivity;
     private boolean isTimeout = false;
@@ -151,8 +166,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Starts observing the process lifecycle so the app-open ad can show on resume.
      */
     public void init(Application application, String appOpenAdId) {
-        disableAdResumeByClickAction = false;
-        this.appResumeAdId = appOpenAdId;
+        setAppResumeAdId(appOpenAdId);
         // Register unconditionally, even with a blank id: the id usually only arrives later, from
         // remote config via setAppResumeAdId. Gating registration on it left the hooks unattached
         // for the whole process, so app-resume never fired. Requests stay gated in fetchAd.
@@ -175,8 +189,14 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     public void setInitialized(boolean initialized) {
         isInitialized = initialized;
+        if (!initialized) cancelResumeFetch(false);
     }
 
+    /**
+     * Controls shown/dismissed/failed forwarding. Resume captures this flag when its attempt
+     * starts; changes affect the next attempt. Click/impression forwarding remains independent.
+     * Raw splash paths retain their existing live flag checks.
+     */
     public void setEnableScreenContentCallback(boolean enableScreenContentCallback) {
         this.enableScreenContentCallback = enableScreenContentCallback;
     }
@@ -186,55 +206,112 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Marks whether a full-screen ad (or its loading dialog) owns the screen.
-     * <p>
-     * Raising it arms a watchdog. The flag is set from several places — the loading dialog, the
-     * GMA show callback — while only some of the failure paths lowered it again, so one dropped
-     * callback used to suppress every resume ad for the rest of the process. The watchdog bounds
-     * that to {@link #INTERSTITIAL_SHOWING_TIMEOUT_MS} instead of forever; the normal terminal
-     * callbacks still lower it immediately and cancel the watchdog.
+     * Marks whether an interstitial/reward presentation or its preparation owns the screen.
+     * Only its real completion may clear this bit: elapsed time cannot prove an ad has closed.
      */
     public void setInterstitialShowing(boolean interstitialShowing) {
         isInterstitialShowing = interstitialShowing;
-        if (interstitialShowing) {
-            armInterstitialWatchdog();
+    }
+
+    /** Marks the next host return as coming from an ad click; does not enable app-open mode. */
+    public void disableAdResumeByClickAction() {
+        skipNextResume("returning_from_ad_click");
+    }
+
+    /** Compatibility setter. False clears both the pending skip and the current-return snapshot. */
+    public void setDisableAdResumeByClickAction(boolean disabled) {
+        if (disabled) {
+            disableAdResumeByClickAction();
         } else {
-            cancelInterstitialWatchdog();
-        }
-    }
-
-    private void armInterstitialWatchdog() {
-        cancelInterstitialWatchdog();
-        interstitialWatchdogRunnable = () -> {
-            if (!isInterstitialShowing) {
-                return;
-            }
-            Log.w(TAG, "interstitial-showing flag stuck for "
-                    + INTERSTITIAL_SHOWING_TIMEOUT_MS + "ms — clearing it. "
-                    + "A show path raised it and never reported a terminal callback.");
-            isInterstitialShowing = false;
-            interstitialWatchdogRunnable = null;
-        };
-        interstitialWatchdogHandler.postDelayed(
-                interstitialWatchdogRunnable, INTERSTITIAL_SHOWING_TIMEOUT_MS);
-    }
-
-    private void cancelInterstitialWatchdog() {
-        if (interstitialWatchdogRunnable != null) {
-            interstitialWatchdogHandler.removeCallbacks(interstitialWatchdogRunnable);
-            interstitialWatchdogRunnable = null;
+            pendingResumeSkipReason.set(null);
+            currentReturnSkipReason = null;
+            resumeReturnGeneration++;
         }
     }
 
     /**
-     * Call disable ad resume when click a button, auto enable ad resume in next start
+     * Suppresses the next host return, without changing OPEN/WELCOME/NONE mode.
+     * A host return consumes the pending reason even while an interstitial or another gate blocks
+     * resume. AdActivity is not a host return. An overlay return can be an Activity resume without
+     * a process restart; no timer is needed. Repeated calls before a return keep the latest reason.
      */
-    public void disableAdResumeByClickAction() {
-        disableAdResumeByClickAction = true;
+    public void skipNextResume(@NonNull String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new IllegalArgumentException("Resume skip reason must not be blank");
+        }
+        pendingResumeSkipReason.set(reason);
     }
 
-    public void setDisableAdResumeByClickAction(boolean disableAdResumeByClickAction) {
-        this.disableAdResumeByClickAction = disableAdResumeByClickAction;
+    /**
+     * Pure read: repeated queries do not spend the one-shot. Both process observers see the same
+     * captured reason during this main-thread lifecycle dispatch. A posted clear ends that
+     * snapshot so a later explicit show or overlay return in the same foreground is not blocked.
+     */
+    @Nullable
+    public String getResumeReturnSkipReason() {
+        String pending = pendingResumeSkipReason.get();
+        return pending != null ? pending : currentReturnSkipReason;
+    }
+
+    /** Installs the optional host policy; null removes it. Call from Application setup on main. */
+    public void setResumeSkipPolicy(@Nullable ResumeSkipPolicy policy) {
+        resumeSkipPolicy = policy;
+    }
+
+    /**
+     * Pure eligibility shared by app-open and a host's alternate welcome flow. It never consumes
+     * a return or emits telemetry. Callers retain their entry mode, Activity exclusions, fullscreen
+     * busy and placement/UA checks. App-open's durable switch and unit flag are deliberately absent.
+     * An extension failure preserves the previous fail-open behavior; core consent still applies.
+     */
+    @Nullable
+    public String resumeSkipReasonFor(@NonNull Activity activity) {
+        if (activity instanceof AdActivity) return "ad_activity";
+        String returnReason = getResumeReturnSkipReason();
+        if (returnReason != null) return returnReason;
+        com.ads.module.helper.AdSkipReason core = AdGate.skipReason(activity, true, true, false);
+        if (core != null) return core.getKey();
+        ResumeSkipPolicy policy = resumeSkipPolicy;
+        if (policy == null) return null;
+        try {
+            return policy.skipReasonFor(activity);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Resume policy failed; keeping prior extension fallback", error);
+            return null;
+        }
+    }
+
+    @Nullable
+    private String appOpenPolicySkipReasonFor(@NonNull Activity activity) {
+        ResumeSkipPolicy policy = resumeSkipPolicy;
+        if (policy == null) return null;
+        try {
+            return policy.appOpenSkipReasonFor(activity);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "App-open policy failed; keeping prior extension fallback", error);
+            return null;
+        }
+    }
+
+    private void captureResumeReturn(@Nullable Activity activity) {
+        if (activity == null || activity instanceof AdActivity) return;
+        String reason = pendingResumeSkipReason.getAndSet(null);
+        if (reason != null) {
+            currentReturnSkipReason = reason;
+            long generation = ++resumeReturnGeneration;
+            // Both synchronous process observers (or Activity resume observers for an overlay)
+            // can read the snapshot. It must not suppress the rest of the foreground session.
+            resumeFetchHandler.post(() -> {
+                if (resumeReturnGeneration == generation) currentReturnSkipReason = null;
+            });
+            Log.d(TAG, "resume skip consumed by host return: " + reason);
+        }
+    }
+
+    private void reportResumePolicySkip(String reason) {
+        // The registry may not know a blank/late-config unit yet; keep the known placement stable.
+        String placement = PlacementRegistry.placementOf(appResumeAdId, "app_resume");
+        AdTracking.skipped(placement, AdFormat.APP_OPEN, reason);
     }
 
     /**
@@ -244,33 +321,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         return isShowingAd;
     }
 
-    /**
-     * Marks whether an app-open ad owns the screen.
-     * <p>
-     * Static and process-wide, and it gates every later resume ad at
-     * {@link #showAdIfAvailable(boolean)}. It used to be cleared only by the dismiss and
-     * fail-to-show callbacks, so a show that reported neither blocked resume ads permanently. Same
-     * watchdog as the interstitial flag.
-     */
+    /** A dispatched ad stays busy until its actual terminal callback, without a time-based unlock. */
     private static void setShowingAd(boolean showing) {
         isShowingAd = showing;
-        if (showingAdWatchdogRunnable != null) {
-            showingAdWatchdogHandler.removeCallbacks(showingAdWatchdogRunnable);
-            showingAdWatchdogRunnable = null;
-        }
-        if (!showing) {
-            return;
-        }
-        showingAdWatchdogRunnable = () -> {
-            if (!isShowingAd) {
-                return;
-            }
-            Log.w(TAG, "app-open showing flag stuck for " + INTERSTITIAL_SHOWING_TIMEOUT_MS
-                    + "ms — clearing it. A show path raised it and never reported a terminal callback.");
-            isShowingAd = false;
-            showingAdWatchdogRunnable = null;
-        };
-        showingAdWatchdogHandler.postDelayed(showingAdWatchdogRunnable, INTERSTITIAL_SHOWING_TIMEOUT_MS);
     }
 
     /**
@@ -327,11 +380,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public void disableAppResume() {
         isAppResumeEnabled = false;
+        cancelResumeFetch(false);
     }
 
-    /** @see #disableAppResume() — same ownership rule; this is not an "undo my suppression". */
+    /**
+     * Enables resume ads and warms the buffer through the request gate/backoff, on main.
+     * @see #disableAppResume() — this is not an "undo my suppression".
+     */
     public void enableAppResume() {
         isAppResumeEnabled = true;
+        fetchAd(false);
     }
 
     public void setSplashActivity(Class splashActivity, String adId, int timeoutInMillis) {
@@ -340,14 +398,25 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.splashTimeout = timeoutInMillis;
     }
 
+    /** Changes the unit on main; pending results for the previous unit cannot fill this buffer. */
     public void setAppResumeAdId(String appResumeAdId) {
+        if (Objects.equals(this.appResumeAdId, appResumeAdId)) return;
+        cancelResumeFetch(true);
+        appResumeAd = null;
         this.appResumeAdId = appResumeAdId;
     }
 
+    /**
+     * Registers the listener for future resume attempts. Each resume keeps its captured listener
+     * through completion; replacing/removing it does not reroute an in-progress attempt.
+     * RuntimeExceptions from that listener are logged without treating them as vendor failures.
+     * Raw splash paths retain their existing live listener behavior.
+     */
     public void setFullScreenContentCallback(FullScreenContentCallback callback) {
         this.fullScreenContentCallback = callback;
     }
 
+    /** Clears registration for future resume attempts; an active attempt retains its listener. */
     public void removeFullScreenContentCallback() {
         this.fullScreenContentCallback = null;
     }
@@ -357,6 +426,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * before they paid is still shown to them.
      */
     public void releaseCachedAds() {
+        cancelResumeFetch(true);
         appResumeAd = null;
         splashAd = null;
         splashAdHigh = null;
@@ -367,10 +437,24 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Request an ad
+     * Requests an ad. Resume requires initialization, enabled mode, application-context
+     * entitlement, network, current consent authority, and no visible UMP form. A ready buffer
+     * or pending request is reused. Vendor failures/timeouts back off for 5s, 30s, then 120s.
+     * No timer retries or shows an ad. Resume dispatch runs on main; mutate its configuration
+     * and release the cache on main too. Raw splash fetch adds only the network guard; it does
+     * not inherit resume mode or consent gates.
      */
     public void fetchAd(final boolean isSplash) {
+        if (!isSplash && Looper.myLooper() != Looper.getMainLooper()) {
+            resumeFetchHandler.post(() -> fetchAd(false));
+            return;
+        }
         Log.d(TAG, "fetchAd: isSplash = " + isSplash);
+        final long observedGeneration = resumeFetchGeneration;
+        if (!isSplash && !canFetchResume(true)) {
+            if (resumeFetchGeneration == observedGeneration) cancelResumeFetch(false);
+            return;
+        }
         if (isAdAvailable(isSplash)) {
             return;
         }
@@ -381,7 +465,42 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
-        loadCallback =
+        if (isSplash) {
+            Context networkContext = currentActivity != null ? currentActivity : myApplication;
+            if (networkContext != null && !AdGate.isNetworkAvailable(networkContext)) {
+                Log.d(TAG, "fetchAd: raw splash gate=offline");
+                return;
+            }
+        }
+
+        if (!isSplash) {
+            if (resumeFetchPending && SystemClock.elapsedRealtime() >= resumeFetchDeadlineMs) {
+                failResumeFetch(resumeFetchGeneration, "timeout");
+            }
+            if (resumeFetchPending) {
+                Log.d(TAG, "fetchAd: resume already in flight");
+                return;
+            }
+            if (SystemClock.elapsedRealtime() < resumeRetryAfterMs) {
+                Log.d(TAG, "fetchAd: resume backoff");
+                return;
+            }
+        }
+        final Application requestApplication = myApplication;
+        final boolean personalized = ConsentCenter.canPersonalize();
+        final long generation = isSplash ? 0 : ++resumeFetchGeneration;
+        if (!isSplash) {
+            resumeFetchPending = true;
+            resumeFetchDeadlineMs = SystemClock.elapsedRealtime() + RESUME_FETCH_TIMEOUT_MS;
+            resumeFetchTimeout = () -> {
+                if (!ownsResumeFetch(generation)) return;
+                if (!canFetchResume(false)) {
+                    if (ownsResumeFetch(generation)) cancelResumeFetch(false);
+                } else failResumeFetch(generation, "timeout");
+            };
+            resumeFetchHandler.postDelayed(resumeFetchTimeout, RESUME_FETCH_TIMEOUT_MS);
+        }
+        final AppOpenAd.AppOpenAdLoadCallback requestCallback =
                 new AppOpenAd.AppOpenAdLoadCallback() {
 
                     /**
@@ -395,15 +514,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     public void onAdLoaded(AppOpenAd ad) {
                         Log.d(TAG, "onAppOpenAdLoaded: isSplash = " + isSplash);
                         if (!isSplash) {
-                            AppOpenManager.this.appResumeAd = ad;
-                            AppOpenManager.this.appResumeAd.setOnPaidEventListener(adValue -> {
-                                ERainLogEventManager.logPaidAdImpression(myApplication.getApplicationContext(),
+                            if (!canContinueResumeFetch(generation, adUnitId, personalized)) return;
+                            ad.setOnPaidEventListener(adValue -> {
+                                ERainLogEventManager.logPaidAdImpression(requestApplication.getApplicationContext(),
                                         adValue,
                                         ad.getAdUnitId(),
                                         ad.getResponseInfo()
                                                 .getMediationAdapterClassName(), AdType.APP_OPEN);
                             });
+                            AppOpenManager.this.appResumeAd = ad;
                             AppOpenManager.this.appResumeLoadTime = (new Date()).getTime();
+                            cancelResumeFetch(true);
                         } else {
                             AppOpenManager.this.splashAd = ad;
 
@@ -432,20 +553,93 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     @Override
                     public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
                         Log.d(TAG, "onAppOpenAdFailedToLoad: isSplash" + isSplash + " message " + loadAdError.getMessage());
+                        if (!isSplash && ownsResumeFetch(generation)) {
+                            if (!canFetchResume(false)) {
+                                if (ownsResumeFetch(generation)) cancelResumeFetch(false);
+                            } else failResumeFetch(generation, "vendor_code=" + loadAdError.getCode());
+                        }
                     }
 
 
                 };
+        if (isSplash) loadCallback = requestCallback;
         if (currentActivity != null) {
-            if (AdGate.isPurchased(currentActivity))
+            if (AdGate.isPurchased(currentActivity)) {
+                if (!isSplash && ownsResumeFetch(generation)) cancelResumeFetch(false);
                 return;
-            if (Arrays.asList(currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(isSplash ? splashAdId : appResumeAdId)) {
-                showTestIdAlert(currentActivity, isSplash, isSplash ? splashAdId : appResumeAdId);
             }
-
+            if (Arrays.asList(currentActivity.getResources().getStringArray(R.array.list_id_test)).contains(adUnitId)) {
+                try {
+                    showTestIdAlert(currentActivity, isSplash, adUnitId);
+                } catch (RuntimeException error) {
+                    if (isSplash) throw error;
+                    Log.w(TAG, "resume test-id notification unavailable", error);
+                }
+            }
         }
-        AdRequest request = getAdRequest();
-        AppOpenAd.load(myApplication, isSplash ? splashAdId : appResumeAdId, request, loadCallback);
+        try {
+            AdRequest request = getAdRequest();
+            if (!isSplash) {
+                if (!canContinueResumeFetch(generation, adUnitId, personalized)) return;
+                if (!canFetchResume(true)) {
+                    if (ownsResumeFetch(generation)) cancelResumeFetch(false);
+                    return;
+                }
+                if (!ownsResumeFetch(generation)) return;
+                Log.d(TAG, "resume load dispatch generation=" + generation);
+            }
+            AppOpenAd.load(requestApplication, adUnitId, request, requestCallback);
+        } catch (RuntimeException error) {
+            if (isSplash) throw error;
+            failResumeFetch(generation, "dispatch_error=" + error.getClass().getSimpleName());
+        }
+    }
+
+    private boolean canFetchResume(boolean checkNetwork) {
+        if (myApplication == null || !isInitialized) return false;
+        AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled, true, checkNetwork);
+        if (reason != null) Log.d(TAG, "fetchAd: resume gate=" + reason.getKey());
+        return reason == null;
+    }
+
+    private boolean ownsResumeFetch(long generation) {
+        return resumeFetchPending && resumeFetchGeneration == generation;
+    }
+
+    private boolean canContinueResumeFetch(long generation, String adUnitId, boolean personalized) {
+        if (!ownsResumeFetch(generation)) return false;
+        if (SystemClock.elapsedRealtime() >= resumeFetchDeadlineMs) {
+            failResumeFetch(generation, "timeout");
+            return false;
+        }
+        if (!Objects.equals(appResumeAdId, adUnitId) || !canFetchResume(false)
+                || ConsentCenter.canPersonalize() != personalized) {
+            if (ownsResumeFetch(generation)) cancelResumeFetch(false);
+            return false;
+        }
+        return ownsResumeFetch(generation);
+    }
+
+    private void cancelResumeFetch(boolean resetBackoff) {
+        resumeFetchGeneration++;
+        resumeFetchPending = false;
+        resumeFetchDeadlineMs = 0;
+        if (resumeFetchTimeout != null) resumeFetchHandler.removeCallbacks(resumeFetchTimeout);
+        resumeFetchTimeout = null;
+        if (resetBackoff) {
+            resumeFailureStreak = 0;
+            resumeRetryAfterMs = 0;
+        }
+    }
+
+    private void failResumeFetch(long generation, String reason) {
+        if (!ownsResumeFetch(generation)) return;
+        long delayMs = RESUME_FAILURE_BACKOFF_MS[
+                Math.min(resumeFailureStreak, RESUME_FAILURE_BACKOFF_MS.length - 1)];
+        resumeFailureStreak = Math.min(resumeFailureStreak + 1, RESUME_FAILURE_BACKOFF_MS.length);
+        cancelResumeFetch(false);
+        resumeRetryAfterMs = SystemClock.elapsedRealtime() + delayMs;
+        Log.w(TAG, "resume load failed " + reason + "; retry after " + delayMs + "ms");
     }
 
     @SuppressLint("MissingPermission")
@@ -507,7 +701,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     @Override
     public void onActivityResumed(Activity activity) {
         currentActivity = activity;
+        resumedActivity = activity;
         Log.d(TAG, "onActivityResumed: " + currentActivity);
+        captureResumeReturn(activity);
         if (splashActivity == null) {
             if (!activity.getClass().getName().equals(AdActivity.class.getName())) {
                 Log.d(TAG, "onActivityResumed 1: with " + activity.getClass().getName());
@@ -527,6 +723,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @Override
     public void onActivityPaused(Activity activity) {
+        if (resumedActivity == activity) {
+            resumedActivity = null;
+            resumeHostGeneration++;
+        }
     }
 
     @Override
@@ -535,6 +735,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @Override
     public void onActivityDestroyed(Activity activity) {
+        if (resumedActivity == activity) {
+            resumedActivity = null;
+            resumeHostGeneration++;
+        }
         // Only forget the activity we are actually tracking: destroys arrive after the next
         // activity has already started, and clearing unconditionally left the manager believing
         // no activity existed mid-session.
@@ -550,6 +754,19 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 fullScreenContentCallback.onAdDismissedFullScreenContent();
             }
             return;
+        }
+
+        if (!isSplash) {
+            String reason = !isAppResumeEnabled ? "disabled_config" : resumeSkipReasonFor(currentActivity);
+            if (reason == null) reason = appOpenPolicySkipReasonFor(currentActivity);
+            if (reason != null) {
+                Log.d(TAG, "showAdIfAvailable: resume policy blocked " + reason);
+                reportResumePolicySkip(reason);
+                if (fullScreenContentCallback != null && enableScreenContentCallback) {
+                    fullScreenContentCallback.onAdDismissedFullScreenContent();
+                }
+                return;
+            }
         }
 
         Log.d(TAG, "showAdIfAvailable: " + ProcessLifecycleOwner.get().getLifecycle().getCurrentState());
@@ -652,97 +869,123 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     Dialog dialog = null;
 
+    /** Live admission for the resume path only; raw splash retains its existing flow. */
+    private boolean canShowResumeOn(Activity host) {
+        return isInitialized && isAppResumeEnabled && !isInterstitialShowing
+                && host != null && host == currentActivity && host == resumedActivity
+                && !host.isFinishing() && !host.isDestroyed() && !(host instanceof AdActivity)
+                && ProcessLifecycleOwner.get().getLifecycle().getCurrentState()
+                        .isAtLeast(Lifecycle.State.RESUMED)
+                && !isResumeSuppressedFor(host)
+                && resumeSkipReasonFor(host) == null && appOpenPolicySkipReasonFor(host) == null;
+    }
+
     private void showResumeAds() {
-        if (appResumeAd == null || currentActivity == null || AdGate.isPurchased(currentActivity)) {
-            return;
-        }
-        if (ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
+        final Activity host = currentActivity;
+        final AppOpenAd ad = appResumeAd;
+        if (isShowingAd || activeResumeAttempt != null || ad == null
+                || !isAdAvailable(false) || !canShowResumeOn(host)) return;
 
+        final String unit = appResumeAdId;
+        final long generation = resumeFetchGeneration;
+        final FullScreenContentCallback delegate = fullScreenContentCallback;
+        final boolean forwardContent = enableScreenContentCallback;
+        final Object attempt = new Object();
+        activeResumeAttempt = attempt;
+        setShowingAd(true);
+
+        Dialog loading = null;
+        try {
+            loading = new ResumeLoadingDialog(host);
+            dialog = loading;
+            loading.show();
+        } catch (RuntimeException error) {
+            // The loading indicator is cosmetic; a usable vendor ad does not depend on it.
+            Log.w(TAG, "Resume loading dialog unavailable", error);
+        }
+        final Dialog ownedDialog = loading;
+        final FullScreenContentCallback callback = new FullScreenContentCallback() {
+            private boolean shown;
+
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                if (!finishResumeAttempt(attempt, ownedDialog)) return;
+                fetchAd(false);
+                if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdDismissedFullScreenContent());
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(AdError error) {
+                if (!finishResumeAttempt(attempt, ownedDialog)) return;
+                fetchAd(false);
+                if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdFailedToShowFullScreenContent(error));
+            }
+
+            @Override
+            public void onAdShowedFullScreenContent() {
+                if (activeResumeAttempt != attempt || shown) return;
+                shown = true;
+                // GMA may already have paused the host; only this attempt's identity matters now.
+                if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdShowedFullScreenContent());
+            }
+
+            @Override
+            public void onAdClicked() {
+                if (activeResumeAttempt != attempt) return;
+                disableAdResumeByClickAction();
+                ERainLogEventManager.logClickAdsEvent(host, unit);
+                if (delegate != null) forwardResumeCallback(() -> delegate.onAdClicked());
+            }
+
+            @Override
+            public void onAdImpression() {
+                if (activeResumeAttempt == attempt && delegate != null) forwardResumeCallback(() -> delegate.onAdImpression());
+            }
+        };
+        try {
+            ad.setFullScreenContentCallback(callback);
             try {
-                dismissDialogLoading();
-                dialog = new ResumeLoadingDialog(currentActivity);
-                try {
-                    dialog.show();
-                } catch (Exception e) {
-                    if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                        fullScreenContentCallback.onAdDismissedFullScreenContent();
-
-                    }
-                    return;
+                ad.setImmersiveMode(true);
+            } catch (RuntimeException error) {
+                Log.w(TAG, "Resume immersive mode unavailable", error);
+            }
+            // Dialog/vendor setup may synchronously change the host, policy, unit or cache.
+            // Its own dialog takes focus, so host window focus alone is not a rejection here.
+            if (activeResumeAttempt != attempt || !canShowResumeOn(host)
+                    || appResumeAd != ad || !isAdAvailable(false) || generation != resumeFetchGeneration
+                    || !Objects.equals(unit, appResumeAdId)) {
+                if (finishResumeAttempt(attempt, ownedDialog) && delegate != null && forwardContent) {
+                    forwardResumeCallback(() -> delegate.onAdDismissedFullScreenContent());
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
+                return;
             }
-            if (appResumeAd != null) {
-                appResumeAd.setFullScreenContentCallback(new FullScreenContentCallback() {
-                    @Override
-                    public void onAdDismissedFullScreenContent() {
-                        appResumeAd = null;
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdDismissedFullScreenContent();
-                        }
-                        setShowingAd(false);
-                        fetchAd(false);
-
-                        dismissDialogLoading();
-                    }
-
-                    @Override
-                    public void onAdFailedToShowFullScreenContent(AdError adError) {
-                        Log.e(TAG, "onAdFailedToShowFullScreenContent: " + adError.getMessage());
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdFailedToShowFullScreenContent(adError);
-                        }
-
-                        if (currentActivity != null && !currentActivity.isDestroyed() && dialog != null && dialog.isShowing()) {
-                            Log.d(TAG, "dismiss dialog loading ad open: ");
-                            try {
-                                dialog.dismiss();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                        appResumeAd = null;
-                        setShowingAd(false);
-                        fetchAd(false);
-                    }
-
-                    @Override
-                    public void onAdShowedFullScreenContent() {
-                        if (fullScreenContentCallback != null && enableScreenContentCallback) {
-                            fullScreenContentCallback.onAdShowedFullScreenContent();
-                        }
-                        setShowingAd(true);
-                        appResumeAd = null;
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        if (currentActivity != null) {
-                            ERainLogEventManager.logClickAdsEvent(currentActivity, appResumeAdId);
-                            if (fullScreenContentCallback != null) {
-                                fullScreenContentCallback.onAdClicked();
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onAdImpression() {
-                        super.onAdImpression();
-                        if (currentActivity != null) {
-                            if (fullScreenContentCallback != null) {
-                                fullScreenContentCallback.onAdImpression();
-                            }
-                        }
-                    }
-                });
-                appResumeAd.setImmersiveMode(true);
-                appResumeAd.show(currentActivity);
-            } else {
-                dismissDialogLoading();
-            }
+            appResumeAd = null;
+            ad.show(host);
+        } catch (RuntimeException error) {
+            callback.onAdFailedToShowFullScreenContent(
+                    new AdError(0, "App-open show threw: " + error.getClass().getSimpleName(), "ERainStudio"));
+        } finally {
+            // A missing GMA callback must not leave a cosmetic dialog blocking the application.
+            // This never releases a dispatched ad or touches another attempt's dialog.
+            dismissResumeDialog(ownedDialog);
         }
+    }
+
+    private void forwardResumeCallback(Runnable callback) {
+        try {
+            callback.run();
+        } catch (RuntimeException error) {
+            // Host code is not a vendor show failure and cannot release a visible ad.
+            Log.w(TAG, "App-open host callback failed", error);
+        }
+    }
+
+    private boolean finishResumeAttempt(Object attempt, Dialog ownedDialog) {
+        if (activeResumeAttempt != attempt) return false;
+        activeResumeAttempt = null;
+        setShowingAd(false);
+        dismissResumeDialog(ownedDialog);
+        return true;
     }
 
     public void loadSplashOpenHighFloor(Class splashActivity, Activity activity, String idOpenHigh, String idOpenMedium, String idOpenAll, int timeOutOpen, AdCallback adListener) {
@@ -785,7 +1028,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             @Override
                             public void onAdClicked() {
                                 super.onAdClicked();
-                                disableAdResumeByClickAction = true;
+                                disableAdResumeByClickAction();
 
                                 if (adListener != null) {
                                     adListener.onAdClickedHigh();
@@ -901,7 +1144,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             @Override
                             public void onAdClicked() {
                                 super.onAdClicked();
-                                disableAdResumeByClickAction = true;
+                                disableAdResumeByClickAction();
 
                                 if (adListener != null) {
                                     adListener.onAdClickedMedium();
@@ -1001,7 +1244,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             @Override
                             public void onAdClicked() {
                                 super.onAdClicked();
-                                disableAdResumeByClickAction = true;
+                                disableAdResumeByClickAction();
 
                                 if (adListener != null) {
                                     adListener.onAdClickedAll();
@@ -1130,7 +1373,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             @Override
                             public void onAdClicked() {
                                 super.onAdClicked();
-                                disableAdResumeByClickAction = true;
+                                disableAdResumeByClickAction();
 
                                 if (adListener != null) {
                                     adListener.onAdClickedHigh();
@@ -1441,7 +1684,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        disableAdResumeByClickAction = true;
+                        disableAdResumeByClickAction();
                         if (adListener != null) {
                             adListener.onAdClickedHigh();
                         }
@@ -1531,7 +1774,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             @Override
                             public void onAdClicked() {
                                 super.onAdClicked();
-                                disableAdResumeByClickAction = true;
+                                disableAdResumeByClickAction();
                                 if (adListener != null) {
                                     adListener.onAdClickedAll();
                                 }
@@ -1649,6 +1892,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @OnLifecycleEvent(Lifecycle.Event.ON_START)
     public void onResume() {
+        captureResumeReturn(currentActivity);
         if (!isAppResumeEnabled) {
             Log.d(TAG, "onResume: app resume is disabled");
             return;
@@ -1659,16 +1903,15 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
-        if (disableAdResumeByClickAction) {
-            Log.d(TAG, "onResume:ad resume disable ad by action");
-            disableAdResumeByClickAction = false;
-            return;
-        }
-
         // Foreground can be reported before any activity has started, and the checks below all
         // dereference it.
         if (currentActivity == null) {
             Log.d(TAG, "onResume: no current activity");
+            return;
+        }
+
+        if (currentActivity instanceof AdActivity) {
+            Log.d(TAG, "onResume: vendor ad Activity is not a host return");
             return;
         }
 
@@ -1677,6 +1920,12 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         // suppressed one path and not the other.
         if (isResumeSuppressedFor(currentActivity)) {
             Log.d(TAG, "onStart: activity is disabled");
+            return;
+        }
+
+        String sharedReason = resumeSkipReasonFor(currentActivity);
+        if (sharedReason != null) {
+            reportResumePolicySkip(sharedReason);
             return;
         }
 
@@ -1690,13 +1939,35 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
-        Log.d(TAG, "onStart: show resume ads :" + currentActivity.getClass().getName());
-        showAdIfAvailable(false);
+        String appOpenReason = appOpenPolicySkipReasonFor(currentActivity);
+        if (appOpenReason != null) {
+            reportResumePolicySkip(appOpenReason);
+            return;
+        }
+
+        if (!isInitialized) return;
+        if (!isAdAvailable(false)) {
+            fetchAd(false);
+            return;
+        }
+        final Activity host = currentActivity;
+        final AppOpenAd candidate = appResumeAd;
+        final long hostGeneration = resumeHostGeneration;
+        final long fetchGeneration = resumeFetchGeneration;
+        // ON_START precedes Activity/process RESUMED. Only this already-eligible return is
+        // deferred; a blocked one-shot above cannot become eligible after its snapshot clears.
+        resumeFetchHandler.post(() -> {
+            if (host == currentActivity && hostGeneration == resumeHostGeneration
+                    && fetchGeneration == resumeFetchGeneration && appResumeAd == candidate) {
+                showAdIfAvailable(false);
+            }
+        });
     }
 
     @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
     public void onStop() {
         Log.d(TAG, "onStop: app stop");
+        currentReturnSkipReason = null;
 
     }
 
@@ -1705,13 +1976,13 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         Log.d(TAG, "onPause");
     }
 
-    private void dismissDialogLoading() {
-        if (dialog != null && dialog.isShowing()) {
-            try {
-                dialog.dismiss();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+    private void dismissResumeDialog(Dialog ownedDialog) {
+        if (dialog == ownedDialog) dialog = null;
+        if (ownedDialog == null) return;
+        try {
+            if (ownedDialog.isShowing()) ownedDialog.dismiss();
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Resume loading dialog could not be dismissed", error);
         }
     }
 
@@ -1873,4 +2144,3 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         return cm.getActiveNetworkInfo() != null && cm.getActiveNetworkInfo().isConnected();
     }
 }
-

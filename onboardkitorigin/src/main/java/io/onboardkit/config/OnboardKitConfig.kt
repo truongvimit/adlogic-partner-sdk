@@ -20,7 +20,16 @@ data class SplashConfig(
     @StringRes val appNameRes: Int = 0,
     val minDisplayTimeMs: Long = 3_000,
     val remoteFetchTimeoutMs: Long = 10_000,
-    val consentTimeoutMs: Long = 15_000,
+    /**
+     * Bounds the initial wait for consent. ConsentCenter separately bounds its own UMP round trip.
+     * A custom consent hook with no SDK-owned flow still resolving is limited to this wait.
+     *
+     * If an SDK-owned flow remains open, splash waits a further 180-second window. At its end,
+     * a background splash waits another whole window; a visible splash may continue using current
+     * authorization. These are wall-time windows, not accumulated foreground time. A timeout
+     * never grants consent. Set this consistently with ConsentOptions.timeoutMs for the host.
+     */
+    val consentTimeoutMs: Long = 20_000,
     val billingTimeoutMs: Long = 5_000,
     val adLoadStrategy: AdLoadStrategy = AdLoadStrategy.ALTERNATE,
     /**
@@ -29,14 +38,25 @@ data class SplashConfig(
      * prompt has no way past it other than getting one.
      */
     val noInternetPromptEnabled: Boolean = true,
+    /**
+     * Requests POST_NOTIFICATIONS on Android 13+ after consent, when the splash is foreground.
+     * Enabled by default. Splash ad requests and their display clock start after the result and
+     * the splash regains focus. Next-screen preloading follows the configured splash ad waits,
+     * before fullscreen presentation and navigation. Denial never blocks access to the app.
+     * Already granted, older Android/target SDK, or a removed manifest permission skip the prompt.
+     * After any result, app preferences remember this automatic request; denial is not re-prompted
+     * on later launches. The host may still request permission itself at a relevant user action.
+     * Set false when the host owns notification onboarding or does not send notifications.
+     */
+    val notificationPermissionEnabled: Boolean = true,
 )
 
 data class LanguageConfig(
     val languages: List<ObLanguage> = ObLanguages.ALL,
     val defaultCode: String? = null,
     /**
-     * On the first language tap, swaps the LFO's first native for a second one preloaded on
-     * entry. Same screen, second impression — no duplicated Activity, no lost scroll position.
+     * On the first language tap, requests a swap to the second native preloaded on entry.
+     * The first stays visible until the replacement binds; selection and scroll position remain.
      */
     val secondNativeOnSelectEnabled: Boolean = true,
     /**
@@ -48,12 +68,12 @@ data class LanguageConfig(
     /**
      * Whether the confirm button is on screen before the user has picked anything.
      *
-     * `true` (default) keeps it visible but dimmed, so the way out of the screen is obvious from
-     * the start. `false` hides it until the first tap, which makes selecting a language the only
-     * thing the screen offers. AND-ed with the `ob_show_language_confirm_before_select` remote
+     * `false` (default) hides it until the first tap, which makes selecting a language the only
+     * thing the screen offers. `true` keeps it visible but dimmed, so the way out of the screen
+     * is obvious from the start. AND-ed with the `ob_show_language_confirm_before_select` remote
      * flag; either side turning it off hides the button.
      */
-    val confirmVisibleBeforeSelect: Boolean = true,
+    val confirmVisibleBeforeSelect: Boolean = false,
     /**
      * Back on the first-open language screen never leaves the flow. When a language is already
      * picked, this also reveals a full-width Save button above the ad — the way out the screen
@@ -98,6 +118,29 @@ data class BehaviorConfig(
      * step ads count; a click on the language or question screen never moves the pager.
      */
     val adClickReturnCompletesStep: Boolean = true,
+    /**
+     * Pins **every** screen that extends `BaseOnboardActivity` to portrait — the app's own splash
+     * included, not just the pager. The rest of this class is about the pager and the onboarding
+     * steps; this one is not.
+     *
+     * The SDK's four screens are already portrait in its manifest. The splash cannot be, because
+     * it is a base class the app registers its own subclass of, so it was the one screen that
+     * rotated — and every rotation recreates it: the min-display clock restarts and the consent
+     * flow has to be handed back and re-run. Locking it removes the commonest source of that.
+     *
+     * It does not remove the recreate itself. A dark-mode switch, a font-scale change and process
+     * death all still recreate the splash, which is why the consent flow survives one on its own.
+     *
+     * **Declare `configChanges` on your splash Activity or this costs you a recreate.** Setting
+     * the orientation from `onCreate` while the device is in landscape *is* a configuration change,
+     * so a first launch held sideways pays for one `runSplash` before the lock takes hold. The
+     * SDK's own screens declare `orientation|screenSize|keyboardHidden` to absorb it; a splash
+     * holds three seconds of nothing, so it can afford two more:
+     * `android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"`.
+     *
+     * Set `false` for a landscape or tablet app.
+     */
+    val lockPortrait: Boolean = true,
 )
 
 class ObConfigException(val errors: List<String>) :

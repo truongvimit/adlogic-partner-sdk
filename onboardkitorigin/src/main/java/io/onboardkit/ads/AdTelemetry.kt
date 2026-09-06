@@ -13,9 +13,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * got anything. Wrapping the listener keeps that reporting in one place — the screens used to
  * duplicate it, or more often skip it.
  *
- * Impression and failure are latched. A bound native reaches the screen twice on the common path
- * (once synchronously from `bindNative`'s own listener notification, once from the caller's
- * post-bind branch), which is exactly how `ob_ad_impression` came to be double-counted on OB3.
+ * The native bind signal and failure are latched for flow analytics. The legacy
+ * `ob_ad_impression` event maps to `fo_ad_bound`; vendor-counted `ad_show` remains owned by `:ads`.
+ * Listener forwarding is unchanged for screens and partner providers.
  */
 internal class TrackedAdListener(
     private val placementKey: String,
@@ -57,7 +57,7 @@ internal class TrackedAdListener(
     }
 }
 
-/** Wraps [listener] so this placement's load outcome and first impression reach analytics. */
+/** Wraps [listener] so this placement's load outcome and first native bind reach flow analytics. */
 internal fun AdPlacement.tracked(
     listener: AdEventListener? = null,
 ): AdEventListener = TrackedAdListener(key, format, listener)

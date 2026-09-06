@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.consent.ConsentCenter
 import com.ads.module.ads.ERainAd
 import com.ads.module.helper.adnative.NativeAdPreload
 import com.ads.module.helper.interstitial.InterstitialAdManager
@@ -38,6 +39,8 @@ object AdGate {
         isPurchased(context) -> AdSkipReason.PURCHASED
         checkNetwork && !isNetworkAvailable(context) -> AdSkipReason.OFFLINE
         !passesUaGate -> AdSkipReason.UA_GATE
+        !ConsentCenter.canRequestAds() -> AdSkipReason.CONSENT_NOT_GRANTED
+        ConsentCenter.isFormShowing() -> AdSkipReason.CONSENT_FORM_SHOWING
         else -> null
     }
 

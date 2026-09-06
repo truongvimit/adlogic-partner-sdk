@@ -26,7 +26,9 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
             isDisable -> "disabled_activity"
             !ResumeAdsEntryRule.shouldShowWelcomeOnResume() -> "mode_not_welcome"
             AppOpenManager.getInstance().isInterstitialShowing -> "interstitial_showing"
-            AdGate.isPurchased(currentActivity.applicationContext) -> "purchased"
+            else -> AppOpenManager.getInstance().resumeSkipReasonFor(currentActivity)
+        } ?: when {
+            !AdRemoteConfig.inter_welcome.isUsable -> "no_ad_unit"
             !AdGate.passesUaGate(AdRemoteConfig.inter_welcome.enableUaCheck) -> "ua_gate"
             else -> null
         }

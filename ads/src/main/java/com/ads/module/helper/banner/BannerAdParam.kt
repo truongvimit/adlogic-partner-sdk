@@ -5,9 +5,9 @@ import com.ads.module.helper.IAdsParam
 /** Command parameter for [BannerAdHelper.requestAds]. */
 sealed interface BannerAdParam : IAdsParam {
 
-    /** First load. */
+    /** Explicit request using the configured type, including collapsible intent. */
     data object Request : BannerAdParam
 
-    /** Re-load an already-active placement (resume / auto-reload path). */
+    /** Resume/timer refresh. A collapsible placement requests an ordinary anchored banner. */
     data object Reload : BannerAdParam
 }

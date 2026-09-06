@@ -1,135 +1,107 @@
 # AdTracer
 
-> Debug-only ad lifecycle tracker with an embedded dashboard.
+A local dashboard for ad requests, fills, shows and failures during development. AdTracer only
+records events sent to it; connect the sample Trackkit sink to observe this SDK's events.
+No Firebase account or analytics service is needed.
 
-AdTracer records what happens to every ad opportunity — requested, skipped, filled, shown, clicked,
-dismissed — journals it to disk and serves a live dashboard over loopback HTTP. Zero dependencies,
-and `debugImplementation` keeps every byte of it out of release builds.
+## Requirements and installation
 
-## Requirements
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| Permission | `INTERNET`, declared by the module — merges only into builds that include it |
-
-## Installation
+Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add JitPack using the [root setup](../README.md).
 
 ```groovy
-// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
+// app/build.gradle — same published tag as the other SDK modules.
 def sdkVersion = '<tag>'
 dependencies {
-    // Debug builds only — never `implementation`
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
 ```
 
-## Integration
+The current 5.1.0 work is not published; use an available
+[repository tag](https://github.com/truongvimit/adlogic-partner-sdk/tags).
+`debugImplementation` keeps this dashboard out of release builds. The module supplies its
+`INTERNET` permission. The bridge below also needs `trackkit`, already exported by `ads`;
+for a standalone bridge, declare `trackkit` explicitly at the same tag.
 
-`io.adtracer` can only be imported from `src/debug`, so put the wiring behind a variant seam: one
-function in `src/debug` that does the work, and a twin in `src/release` — same package, same
-signature — that does nothing.
+## Connect SDK events
 
-**1. Bridge Trackkit into AdTracer.** Every ad event `:ads` and `:onboardkitorigin` emit already goes
-through `Tracker`, so no call site needs wrapping. Write this as a `TrackSink` in
-`app/src/debug/java/.../AdTracerSink.kt`; the sample app's copy is
-[`AdTracerSink.kt`](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt) — copy it
-verbatim.
+**1. Copy the complete [AdTracerSink.kt](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt)**
+into `app/src/debug/java/com/example/app/debug/AdTracerSink.kt`. Change its package to
+`com.example.app.debug` (or your own package). Keep its event and format mappings: they translate
+Trackkit events into the names the dashboard counts.
+
+**2. Add a debug entry point**, `app/src/debug/java/com/example/app/debug/DebugTracing.kt`:
 
 ```kotlin
-class AdTracerSink : TrackSink {
-    override val id: String = "adtracer"
-    override fun onInstall(context: Context) = AdTracer.start(context)
+package com.example.app.debug
 
-    override fun onEvent(name: String, params: Map<String, Any?>) {
-        val placement = params[TrackkitEvents.PARAM_PLACEMENT] as? String
-        if (placement == null) {
-            // Funnel / IAP / consent events: on the timeline, out of every ad aggregate
-            AdTracer.event(name, "_tracer", TracerFormat.OTHER)
-            return
-        }
-        val format = formatOf(params[TrackkitEvents.PARAM_AD_FORMAT] as? String)
-        val adUnitId = params[TrackkitEvents.PARAM_AD_UNIT_ID] as? String
-        val code = (params[TrackkitEvents.PARAM_ERROR_CODE] as? Number)?.toInt()
-        val reason = params[TrackkitEvents.PARAM_REASON] as? String
-        when (name) {
-            TrackkitEvents.AD_REQUEST -> AdTracer.loadRequested(placement, format, adUnitId)
-            TrackkitEvents.AD_LOADED -> AdTracer.loaded(placement, format)
-            TrackkitEvents.AD_LOAD_FAILED -> AdTracer.loadFailed(placement, format, code)
-            TrackkitEvents.AD_SHOW -> AdTracer.shown(placement, format)
-            TrackkitEvents.AD_SHOW_FAILED -> AdTracer.showFailed(placement, format, code)
-            TrackkitEvents.AD_IMPRESSION -> AdTracer.impression(placement, format)
-            TrackkitEvents.AD_CLICK -> AdTracer.clicked(placement, format)
-            TrackkitEvents.AD_CLOSED -> AdTracer.dismissed(placement, format)
-            TrackkitEvents.AD_REWARD_EARNED -> AdTracer.event("reward_earned", placement, format)
-            TrackkitEvents.AD_SKIPPED -> AdTracer.loadSkipped(placement, format, reason ?: "unknown")
-            else -> AdTracer.event(name, placement, format, adUnitId, reason, code)
-        }
-    }
-    // formatOf maps io.trackkit.AdFormat to io.adtracer.AdFormat — see the sample file.
+import io.trackkit.Tracker
+
+fun installAdTracing() {
+    Tracker.addSink(AdTracerSink()) // The sink starts AdTracer in onInstall.
 }
 ```
 
-Keep every branch. An ad event that lands in `else` is journalled under its raw Trackkit name, and
-the dashboard counts only the canonical AdTracer types.
-
-**2. Register it from the variant seam** — `app/src/debug/java/.../DebugSinks.kt`:
+**3. Add the release counterpart**, `app/src/release/java/com/example/app/debug/DebugTracing.kt`:
 
 ```kotlin
-fun installDebugSinks() { Tracker.addSink(AdTracerSink()) }
+package com.example.app.debug
+
+fun installAdTracing() = Unit
 ```
 
-`app/src/release/java/.../DebugSinks.kt`, same package and signature:
+Use the same package and signature in both files. Keep `io.adtracer` imports in `src/debug`;
+a `BuildConfig.DEBUG` check in `src/main` does not make those imports compile in release.
+Give any additional build types the appropriate implementation of this entry point.
+
+**4. Call it once from your Application**, after Tracker installation and before ad requests:
 
 ```kotlin
-fun installDebugSinks() = Unit
+import com.example.app.debug.installAdTracing
+import io.trackkit.Tracker
+
+// Inside Application.onCreate(), after super.onCreate():
+Tracker.install(this) // Keep your existing TrackerConfig if already configured.
+installAdTracing()
 ```
 
-**3. Call `installDebugSinks()`** in `Application.onCreate()`, after `Tracker.install(...)`.
+If ads setup already calls `Tracker.install`, add only `installAdTracing()` immediately after it.
+Your release build calls the empty function and has no AdTracer dependency.
 
-**Not using Trackkit?** Call `AdTracer.start(context)` once, then report from your own ad callbacks.
-`AdTracer` exposes one function per lifecycle moment — `loadRequested` / `loadSkipped`, `loaded` /
-`loadFailed`, `showRequested` / `showStarted` / `shown`, `showBlocked` / `showFailed`, `impression` /
-`clicked` / `dismissed`, `rendered` / `reRendered` / `discarded`, and `event(...)` as the escape
-hatch. Each is a no-op until `start` runs, and none of them throw. `format` is `io.adtracer.AdFormat`:
-`NATIVE`, `INTERSTITIAL`, `BANNER`, `REWARDED`, `APP_OPEN`, `OTHER`.
+## Open the dashboard
 
-## Viewing the dashboard
-
-Install the **debug** build, forward the port, open it in a browser:
+Launch the debug app on a device/emulator connected through ADB, then run:
 
 ```bash
 adb forward tcp:8686 tcp:8686
 ```
 
-Open **http://localhost:8686**. If 8686 is taken the server tries 8687–8695 and logs the bound port
-(`adb logcat -s AdTracer`); `AdTracer.dashboardPort` holds it, or `-1` when none was free. The server
-binds `127.0.0.1` only, so it is never reachable from the LAN.
+Open [localhost:8686](http://localhost:8686), then exercise an ad placement in the app.
+If it does not open, run `adb logcat -s AdTracer`: startup logs the actual port and forwarding
+command. The server tries 8686–8695; `AdTracer.dashboardPort` is `-1` if none is available.
+Preview placements appear after enabling the dashboard's `Ads test (preview_*)` toggle.
 
-## What it records
+## Optional: trace your own ad callbacks
 
-One event per observation: `seq`, `sessionId`, wall-clock and `elapsedRealtime` timestamps, type,
-placement, format, plus optional ad unit id, reason, error code and message.
+For a loader outside this SDK, call `io.adtracer.AdTracer.start(context)` from debug-only code,
+then report its callbacks with `loadRequested`, `loaded`, `shown`, `loadFailed`, and so on.
+Use `io.adtracer.AdFormat` for the format; signatures are in
+[AdTracer](src/main/java/io/adtracer/AdTracer.kt). Do not also report events sent by the bridge,
+or they count twice. Up to 10 session journals are retained; pending events can be lost when the
+process stops.
 
-- `(sessionId, seq)` is gapless per session, so a browser reconnect never duplicates or drops.
-- Events reach `filesDir/adtracer/s-<sessionId>.ndjson` **before** the browser, so killing the app
-  keeps the history; the 10 newest sessions are kept and browsable.
-- Emitting is a bounded, non-blocking hand-off; under overload it drops events and reports how many
-  as a `tracer_overflow` event rather than growing the queue.
-- Placements starting with `preview_` stay hidden until the `Ads test (preview_*)` toggle is on.
-- `/api/sessions` lists the journals as JSON, `/api/session/<file>` returns one as raw NDJSON, and
-  `GET /events` streams the same records live as SSE frames.
+## Moving from the main / 5.0 setup
+
+The integration is unchanged: debug dependency, Trackkit sink and a release no-op. No new
+initialization step is needed. Keep the full sample sink instead of forwarding raw event names.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Unresolved reference: io.adtracer` | Imported from `src/main` | Import only from `src/debug`, behind a variant seam |
-| Release build fails to compile | The two `DebugSinks.kt` twins drifted | Same package, same signature in both |
-| Dashboard does not open | `adb forward` not run, or another port | Run the forward; check `adb logcat -s AdTracer` |
-| Dashboard opens but stays empty | Sink never registered | Confirm `installDebugSinks()` runs after `Tracker.install` |
-| Every placement reads `unknown` | Ad unit ids not mapped | `io.trackkit.PlacementRegistry.register(adUnitId, placement)` |
+| Symptom | Check |
+|---|---|
+| Release cannot resolve `io.adtracer` | Move imports/code to `src/debug`; add the matching release entry point. |
+| Browser cannot connect | Launch the app, check the logged port, then forward that port with ADB. |
+| No ad events | Register the sink after `Tracker.install` and before requesting ads. |
+| Counts differ from callbacks | Preserve the sample mappings; remove duplicate reporting. This measures received events, not independent ad delivery. |
+| Placement is `unknown` | Initialize placement config before ads; custom loaders can register IDs through `PlacementRegistry`. |
 
-## License
-
-MIT — see [LICENSE](../LICENSE).
+License: [MIT](../LICENSE).

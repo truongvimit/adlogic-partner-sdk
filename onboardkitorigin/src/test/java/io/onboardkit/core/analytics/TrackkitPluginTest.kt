@@ -226,13 +226,27 @@ class TrackkitPluginTest {
     }
 
     @Test
-    fun `a full screen native impression becomes ad_show with its placement`() {
-        TrackkitPlugin.execute(AnalyticsEvent.AdImpression("fullscreen_ob3"))
+    fun `native bind emits only fo_ad_bound while preserving the partner event contract`() {
+        val fullScreen = AnalyticsEvent.AdImpression("fullscreen_ob3")
+        val inline = AnalyticsEvent.AdImpression("language1", AdFormat.NATIVE)
 
-        assertEquals(listOf("ad_show"), sink.names())
-        val params = sink.paramsOf("ad_show")
-        assertEquals("fullscreen_ob3", params["placement"])
-        assertEquals("native_full_screen", params["ad_format"])
+        // Partner plugins retain the same class, default format, wire name and payload.
+        assertEquals("ob_ad_impression", fullScreen.name)
+        assertEquals(mapOf("placement" to "fullscreen_ob3"), fullScreen.params)
+        assertEquals(AdFormat.NATIVE_FULL_SCREEN, fullScreen.format)
+        assertEquals("ob_ad_impression", inline.name)
+        assertEquals(mapOf("placement" to "language1"), inline.params)
+
+        TrackkitPlugin.execute(fullScreen)
+        TrackkitPlugin.execute(inline)
+
+        assertEquals(listOf("fo_ad_bound", "fo_ad_bound"), sink.names())
+        assertFalse(sink.names().contains("ad_show"))
+        val params = sink.allParamsOf("fo_ad_bound")
+        assertEquals("fullscreen_ob3", params[0]["placement"])
+        assertEquals("native_full_screen", params[0]["ad_format"])
+        assertEquals("language1", params[1]["placement"])
+        assertEquals("native", params[1]["ad_format"])
     }
 
     @Test

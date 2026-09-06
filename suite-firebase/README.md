@@ -1,116 +1,111 @@
 # suite-firebase
 
-> The suite's single Firebase adapter: GA4 sink, ad-config source, paywall-config source, and the
-> one Remote Config client the two sources share.
+Connects SDK analytics to Firebase Analytics and optionally reads ad/paywall JSON from Firebase
+Remote Config. Use only the integrations your app needs; this module does not include ads or PayKit.
 
-`:trackkit`, `:ads` and `:paykit` are all vendor-free. This module supplies their Firebase
-implementations; the app wires each one in a single line.
+## Install
 
-## Requirements
-
-| | |
-|---|---|
-| minSdk / JDK | 24 / 17 |
-| `app/google-services.json` | required |
-| Plugin on the app module | `com.google.gms.google-services` |
-| Root `buildscript` classpath | `com.google.gms:google-services:4.4.3` |
-| For `FirebaseAdConfigSource` | `:ads` on the app classpath (`compileOnly` here) |
-| For `FirebaseConfigSource` | `:paykit` on the app classpath (`compileOnly` here) |
-
-**Consent Mode defaults are yours to declare.** Put the `google_analytics_default_allow_*`
-`<meta-data>` entries in the **app** manifest, one per consent type the sink sets
-(`ANALYTICS_STORAGE`, `AD_STORAGE`, `AD_USER_DATA`, `AD_PERSONALIZATION`). This module's manifest
-declares none, so it cannot override yours — and without them the sink's resolved UMP decision has
-nothing to sit on.
-
-`firebase-bom`, `firebase-analytics` and `firebase-config` are exported as `api` — do not declare
-them again unless you want a different BOM version.
-
-## Installation
+Follow the [root build setup](../README.md). Add `google-services.json` for your app to `app/`,
+then configure the plugin if your project does not already have it:
 
 ```groovy
-// root build.gradle
-buildscript { dependencies { classpath "com.google.gms:google-services:4.4.3" } }
-```
-
-```groovy
-// app/build.gradle
-plugins { id 'com.google.gms.google-services' }
-
-// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
-def sdkVersion = '<tag>'
-
-dependencies {
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
-
-    // Declare the kits you actually use — suite-firebase does not pull them in.
-    implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
+// Root build.gradle
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath "com.google.gms:google-services:4.4.3" }
 }
 ```
 
-## Integration
+```groovy
+// app/build.gradle: keep your existing Android/Kotlin plugins.
+plugins { id 'com.google.gms.google-services' }
 
-Three lines, each next to the kit it serves.
+def sdkVersion = '<tag>' // Use the same published tag for every SDK module.
+dependencies {
+    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
+}
+```
+
+Requires minSdk 24 and JDK 17. Firebase Analytics, Remote Config and their BOM are included.
+Add `ads` only for `FirebaseAdConfigSource`, or `paykit` for `FirebaseConfigSource`.
+
+## Send analytics
+
+After [Tracker installation](../trackkit/README.md) in `Application.onCreate`, register one sink:
 
 ```kotlin
-// 1. GA4 — after Tracker.install(...)
-Tracker.addSink(FirebaseSink(collectionFollowsConsent = false))
+import io.suite.firebase.FirebaseSink
+import io.trackkit.Tracker
 
-// 2. Ad units — after AdRemoteConfig.initializeFromAssets(this)
+Tracker.addSink(FirebaseSink())
+```
+
+The sink forwards events routed through `Tracker`.
+
+## Configure consent
+
+Set initial consent values in your app manifest according to your consent flow and the
+[Firebase consent defaults guide](https://developers.google.com/tag-platform/security/guides/app-consent?platform=android). For example,
+an app that starts with all four values denied puts this inside `<application>`:
+
+```xml
+<meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false" />
+<meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
+<meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
+<meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
+```
+
+The library declares no defaults. While both Tracker consent values are unknown, the sink
+leaves the app's initial values unchanged.
+
+`FirebaseSink()` defaults to `collectionFollowsConsent = true`: consent updates also enable or
+disable analytics collection according to Tracker's **analytics** value. With
+`FirebaseSink(collectionFollowsConsent = false)`, the sink still updates Firebase consent but
+leaves the collection-enabled setting to your app. Choose this deliberately; it does not grant consent.
+
+When you use `ConsentCenter`, its mapping grants the analytics axis and maps ad personalization
+separately. Apps with another consent flow must publish their own Tracker consent; see
+[Trackkit consent setup](../trackkit/README.md).
+
+## Optional: load remote ad or paywall configuration
+
+Complete the [ads setup](../ads/README.md) or [PayKit setup](../paykit/README.md) first, then add
+the matching source in `Application.onCreate`:
+
+```kotlin
+import com.ads.module.config.AdConfig
+import io.paykit.PayKit
+import io.suite.firebase.FirebaseAdConfigSource
+import io.suite.firebase.FirebaseConfigSource
+
+// With ads, after local ad configuration is initialized:
 AdConfig.install(FirebaseAdConfigSource())
-
-// 3. Paywall document — after PayKit.install(...)
+// With PayKit, after PayKit.install:
 PayKit.configSource(FirebaseConfigSource())
 ```
 
-Installing a source does not fetch. The fetch happens when the host calls `AdConfig.refresh(...)`
-and `PayKit.sync(...)`, normally on the splash screen. Both go through `RemoteConfigClient`, which
-runs one `fetchAndActivate` and hands the same result to every caller.
+Keep only the imports and lines for modules your app uses. Installing a source does not fetch.
+From a coroutine, call `AdConfig.refresh()` or `PayKit.sync()` before using its remote config.
+`ObSplashActivity` already calls `AdConfig.refresh()`; do not add a duplicate call there.
 
-`collectionFollowsConsent = true` (the default) also calls `setAnalyticsCollectionEnabled(false)` on
-denial; pass `false` to keep pure Consent Mode, where Firebase still sends consent-less pings —
-which is what keeps `first_open` and retention intact after a UMP refusal.
+Publish these **String** parameters on Firebase Console → Remote Config:
 
-Both sources take the Remote Config parameter name as a constructor argument, so
-`FirebaseAdConfigSource(key = "…")` and `FirebaseConfigSource(key = "…")` work if you name yours
-differently.
+| Parameter | Content |
+|---|---|
+| `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. |
+| `paywall_config` | Your paywall JSON, including product IDs and optional placements. |
 
-### Default event parameters
-
-`setDefaultEventParameters` is an instance member, so keep the sink in a variable. The params ride on
-every Firebase event, including `first_open`, `session_start` and `screen_view`. Safe to call before
-`Tracker.install`; pass `null` to clear.
-
-```kotlin
-val sink = FirebaseSink(collectionFollowsConsent = false)
-sink.setDefaultEventParameters(mapOf("build_channel" to "play"))
-Tracker.addSink(sink)
-```
-
-## Remote Config parameters
-
-Create these on the Firebase console. Both are one String parameter holding a whole JSON document.
-
-| Parameter | Read by | Content |
-|---|---|---|
-| `ad_remote_config` | `FirebaseAdConfigSource` | The same document as `assets/ad_config.json` |
-| `paywall_config` | `FirebaseConfigSource` | The paywall document |
-
-Only values published on the console are read — an in-app default or a blank string is ignored.
+Both sources accept a custom name through `key = "your_key"`. Blank values and in-app Firebase
+defaults are ignored. The two sources share a pending fetch and keep a successful result for
+the process; a failure permits a later retry. A failed refresh leaves the kit's existing config.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Log `Firebase Remote Config unavailable — is Firebase initialised?` | No `google-services.json`, or the plugin is not applied | Add both, then rebuild |
-| Log `Remote config fetch failed: …` | Network, throttling, or a wrong project | Retry; console fetch intervals apply |
-| Parameter set, `AdConfig.refresh()` still returns false | The value is an in-app default, is blank, or the document has no placements | Publish the value on the console |
-| `AdConfig.refresh()` returns false on a debug build | Any debuggable build is pinned to its assets by `AdRemoteConfig.initializeFromAssets` | Expected; use a release build, or `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` |
-| Warning `sink 'firebase' already registered` | `Tracker.addSink(FirebaseSink())` called twice | Register it once |
-| `first_open` and retention drop after users decline the UMP form | `collectionFollowsConsent = true` | Pass `false` |
-| A `Boolean` param reads as `1` / `0` in GA4 | GA4 stores String, long and double only | Expected; the sink encodes rather than drops it |
+| Problem | Check |
+|---|---|
+| Firebase is unavailable | Matching `app/google-services.json`, app plugin and a rebuilt APK. |
+| Remote values are ignored | Publish the parameter; check its name, nonblank JSON and the module's parser requirements. |
+| Debug ads keep local configuration | A successfully loaded debug asset is pinned by default; see [ads debug setup](../ads/README.md). |
+| Analytics stops after a consent update | `Tracker.currentConsent` and your selected collection policy. |
 
-## License
-
-MIT — see [LICENSE](../LICENSE).
+Existing Firebase integration can stay the same when upgrading from 5.0.0.

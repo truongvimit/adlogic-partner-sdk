@@ -1,10 +1,17 @@
 package com.ads.module.helper.interstitial
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.ads.module.admob.Admob
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.funtion.AdCallback
+import com.ads.module.dialog.PrepareLoadingAdsDialog
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
@@ -25,6 +32,20 @@ class InterLoadOptions @JvmOverloads constructor(
     val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
     /** Off when the caller owns request/skip analytics itself (OnboardKit's AdTelemetry). */
     val reportTelemetry: Boolean = true,
+)
+
+/** Options for an explicit partner trigger that may wait for an interstitial fill. */
+class InterLoadAndShowOptions @JvmOverloads constructor(
+    /** UI wait only; expiry does not cancel a shared load or bound the waterfall's lifetime. */
+    val timeoutMs: Long = 8_000L,
+    /** Off skips even when this placement already has a ready fill. */
+    val enabled: Boolean = true,
+    /** Pre-resolved UA/organic gate, applied before using either a buffer or a new request. */
+    val passesUaGate: Boolean = true,
+    /** Whether this invocation reports request/skip telemetry. */
+    val reportTelemetry: Boolean = true,
+    /** Captured for this invocation; load time cannot change the eventual navigation mode. */
+    val nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
 )
 
 /**
@@ -93,8 +114,13 @@ object InterstitialAdManager {
 
     private val cache = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
+    // A release invalidates restoration of a fill already removed for an in-progress show.
+    // This does not cancel or change the existing background load behavior.
+    private val releaseTokens = ConcurrentHashMap<String, Any>()
     // One observer per placement; a list here would re-report against dead screens
     private val listeners = ConcurrentHashMap<String, AdCallback>()
+    // Temporary UI subscribers never replace the placement's persistent load/click listener.
+    private val loadWaiters = ConcurrentHashMap<String, MutableSet<(AdSkipReason?) -> Unit>>()
 
     /**
      * Fire-and-forget waterfall load for [placement]. Idempotent: a ready buffer or an
@@ -110,21 +136,35 @@ object InterstitialAdManager {
         listener: AdCallback? = null,
     ) {
         listener?.let { listeners[placement] = it }
+        loadInternal(context, placement, adUnitIds, options, extra = null)
+    }
+
+    private fun loadInternal(
+        context: Context,
+        placement: String,
+        adUnitIds: List<String>,
+        options: InterLoadOptions,
+        extra: ((AdSkipReason?) -> Unit)?,
+    ) {
         // Re-requesting over a ready ad burns a request and the fill
         cache[placement]?.takeIf { it.isFresh && it.ad.isReady }?.let { cached ->
             notifyListener(placement) { it.onApInterstitialLoad(cached.ad) }
+            extra?.let { runCatching { it(null) } }
             return
         }
         val ids = AdWaterfall.usableIds(adUnitIds)
         val skipReason =
             AdGate.skipReason(context, options.enabled && ids.isNotEmpty(), options.passesUaGate)
         if (skipReason != null) {
-            if (options.reportTelemetry) {
+            // A temporary waiter owns its terminal skip; do not report it twice here.
+            if (options.reportTelemetry && extra == null) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, skipReason.key)
             }
             notifyListener(placement) { it.onAdFailedToLoad(null) }
+            extra?.let { runCatching { it(skipReason) } }
             return
         }
+        extra?.let { loadWaiters.getOrPut(placement) { linkedSetOf() }.add(it) }
         if (!inFlight.add(placement)) return
         // After the guard, not before: a de-duplicated no-op load used to re-point the registry,
         // so a shared ad unit id was attributed to whichever placement called load() last rather
@@ -141,19 +181,128 @@ object InterstitialAdManager {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     inFlight.remove(placement)
                     if (apInterstitialAd == null) {
-                        notifyListener(placement) { it.onAdFailedToLoad(null) }
+                        notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(null) }
                         return
                     }
                     cache[placement] = CachedAd(apInterstitialAd)
-                    notifyListener(placement) { it.onApInterstitialLoad(apInterstitialAd) }
+                    notifyLoadResult(placement, null) { it.onApInterstitialLoad(apInterstitialAd) }
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
                     inFlight.remove(placement)
-                    notifyListener(placement) { it.onAdFailedToLoad(adError) }
+                    notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(adError) }
                 }
             },
         )
+    }
+
+    /**
+     * Explicit partner trigger: use a ready fill, or join/start one load and wait for it.
+     *
+     * [InterLoadAndShowOptions.timeoutMs] limits only waiting for a fill, not the waterfall,
+     * the existing 800ms show preparation, or an ad awaiting dismissal. Timeout/destroy removes
+     * this caller's waiter; a later valid fill can remain buffered but never auto-shows for it.
+     * A fill arriving while the host is in the background is likewise retained for a new trigger.
+     * The existing [show] path still owns presentation and [InterNextAction] completion timing.
+     * Main-thread only, like [load] and [show].
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun loadAndShow(
+        activity: AppCompatActivity,
+        placement: String,
+        adUnitIds: List<String>,
+        callback: InterShowCallback,
+        options: InterLoadAndShowOptions = InterLoadAndShowOptions(),
+    ) {
+        fun reportSkipped(reason: AdSkipReason) {
+            if (options.reportTelemetry) {
+                runCatching { AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key) }
+            }
+            runCatching { callback.onSkipped(reason) }
+            runCatching { callback.onComplete() }
+        }
+
+        // A ready fill can show offline, but does not bypass placement or authority gates.
+        val entryGate = AdGate.skipReason(activity, options.enabled, options.passesUaGate, checkNetwork = false)
+        if (entryGate != null) {
+            if (entryGate == AdSkipReason.PURCHASED) cache.remove(placement)
+            reportSkipped(entryGate)
+            return
+        }
+        if (isReady(placement)) {
+            show(activity, placement, callback, options.reportTelemetry, options.nextAction)
+            return
+        }
+        val blockReason = showSkipReason(activity, placement)
+            ?.takeUnless { it == AdSkipReason.NOT_READY }
+            ?: AdGate.skipReason(activity, AdWaterfall.usableIds(adUnitIds).isNotEmpty(), options.passesUaGate)
+        if (blockReason != null) {
+            reportSkipped(blockReason)
+            return
+        }
+        fun hostCanShow() = !activity.isFinishing && !activity.isDestroyed &&
+            activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        if (!hostCanShow()) {
+            reportSkipped(AdSkipReason.SHOW_IN_BACKGROUND)
+            return
+        }
+
+        val releaseToken = releaseTokens.getOrPut(placement) { Any() }
+        val handler = Handler(Looper.getMainLooper())
+        val settled = AtomicBoolean(false)
+        var dialog: PrepareLoadingAdsDialog? = null
+        lateinit var timeout: Runnable
+        lateinit var observer: LifecycleEventObserver
+        lateinit var waiter: (AdSkipReason?) -> Unit
+
+        fun detach(): Boolean {
+            if (!settled.compareAndSet(false, true)) return false
+            loadWaiters[placement]?.let { subscribers ->
+                subscribers.remove(waiter)
+                if (subscribers.isEmpty()) loadWaiters.remove(placement, subscribers)
+            }
+            handler.removeCallbacks(timeout)
+            activity.lifecycle.removeObserver(observer)
+            runCatching { dialog?.dismiss() }
+            dialog = null
+            return true
+        }
+        fun finishSkipped(reason: AdSkipReason) {
+            if (detach()) reportSkipped(reason)
+        }
+        timeout = Runnable { finishSkipped(AdSkipReason.NOT_READY) }
+        observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) finishSkipped(AdSkipReason.SHOW_IN_BACKGROUND)
+        }
+        waiter = { reason ->
+            when {
+                // The persistent load listener can release A and preload B before this callback.
+                releaseTokens[placement] !== releaseToken -> finishSkipped(AdSkipReason.NOT_READY)
+                reason != null -> finishSkipped(reason)
+                !hostCanShow() -> finishSkipped(AdSkipReason.SHOW_IN_BACKGROUND)
+                detach() -> show(activity, placement, callback, options.reportTelemetry, options.nextAction)
+                else -> Unit
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        handler.postDelayed(timeout, options.timeoutMs.coerceAtLeast(0))
+        // Cosmetic only. This captured dialog cannot dismiss a later invocation's UI.
+        dialog = runCatching {
+            PrepareLoadingAdsDialog(activity).apply {
+                setCancelable(false)
+                show()
+            }
+        }.getOrNull()
+        if (settled.get()) {
+            runCatching { dialog?.dismiss() }
+            return
+        }
+        loadInternal(activity, placement, adUnitIds, InterLoadOptions(
+            enabled = options.enabled,
+            passesUaGate = options.passesUaGate,
+            reportTelemetry = options.reportTelemetry,
+        ), extra = waiter)
     }
 
     /** True when a fresh, showable ad is buffered for [placement]. */
@@ -170,12 +319,12 @@ object InterstitialAdManager {
      * — hide a loading dialog, take a different route — without spending the ad it asked about.
      */
     @JvmStatic
-    fun showSkipReason(context: Context, placement: String): AdSkipReason? = when {
-        AdGate.isPurchased(context) -> AdSkipReason.PURCHASED
-        !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
-        !isReady(placement) -> AdSkipReason.NOT_READY
-        else -> null
-    }
+    fun showSkipReason(context: Context, placement: String): AdSkipReason? =
+        AdGate.skipReason(context, enabled = true, checkNetwork = false) ?: when {
+            !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
+            !isReady(placement) -> AdSkipReason.NOT_READY
+            else -> null
+        }
 
     /** True when [show] would put an ad on screen. See [showSkipReason] for the reason it would not. */
     @JvmStatic
@@ -185,7 +334,8 @@ object InterstitialAdManager {
     /**
      * Shows the buffered ad for [placement].
      *
-     * Single-use: the buffer is dropped before `show()` so one fill can never show twice.
+     * The buffer is removed while showing. A lifecycle rejection before GMA show restores the
+     * original fresh fill unless released or replaced; the next trigger decides whether to retry.
      * The module's interval/counter caps surface as [AdSkipReason.CAPPED_BY_MODULE] — it
      * answers those with a bare `onNextAction`, told apart by the commit marker.
      *
@@ -221,7 +371,9 @@ object InterstitialAdManager {
         }
         // Committed to showing: single-use, so the buffer is dropped before show() to make one
         // fill impossible to show twice.
-        val ad = takeFresh(placement) ?: run {
+        val releaseToken = releaseTokens.getOrPut(placement) { Any() }
+        val spent = cache.remove(placement)
+        val ad = spent?.takeIf { it.isFresh && it.ad.isReady }?.ad ?: run {
             if (reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, AdSkipReason.NOT_READY.key)
             }
@@ -229,8 +381,8 @@ object InterstitialAdManager {
             callback.onComplete()
             return
         }
-        cache.remove(placement)
         val committed = AtomicBoolean(false)
+        val terminal = AtomicBoolean(false)
         val completed = AtomicBoolean(false)
         val complete = { if (completed.compareAndSet(false, true)) callback.onComplete() }
         ERainAd.getInstance().forceShowInterstitial(
@@ -245,6 +397,7 @@ object InterstitialAdManager {
                 override fun onNextAction() {
                     when (meaningOfNextAction(nextAction, committed.get(), completed.get())) {
                         NextActionMeaning.MODULE_CAP -> {
+                            if (!terminal.compareAndSet(false, true)) return
                             if (reportTelemetry) {
                                 AdTracking.skipped(
                                     placement,
@@ -263,17 +416,27 @@ object InterstitialAdManager {
                 }
 
                 override fun onAdClosed() {
+                    if (!terminal.compareAndSet(false, true)) return
                     callback.onClosed()
                     complete()
                 }
 
                 override fun onAdFailedToShow(adError: AdError?) {
-                    if (reportTelemetry) {
-                        AdTracking.skipped(
-                            placement, AdFormat.INTERSTITIAL, AdSkipReason.FAILED_TO_SHOW.key,
-                        )
+                    if (!terminal.compareAndSet(false, true)) return
+                    val lifecycleRejected = Admob.isShowInBackgroundError(adError)
+                    if (lifecycleRejected && spent != null && spent.isFresh && spent.ad.isReady &&
+                        releaseTokens[placement] === releaseToken &&
+                        AdGate.skipReason(context, enabled = true, checkNetwork = false) == null
+                    ) {
+                        // Keep the original arrival timestamp; a newer fill always wins.
+                        cache.putIfAbsent(placement, spent)
                     }
-                    callback.onSkipped(AdSkipReason.FAILED_TO_SHOW)
+                    val reason = if (lifecycleRejected) AdSkipReason.SHOW_IN_BACKGROUND
+                        else AdSkipReason.FAILED_TO_SHOW
+                    if (reportTelemetry) {
+                        AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key)
+                    }
+                    callback.onSkipped(reason)
                     complete()
                 }
 
@@ -290,19 +453,27 @@ object InterstitialAdManager {
 
     @JvmStatic
     fun release(placement: String) {
+        releaseTokens.remove(placement)
         cache.remove(placement)
         // inFlight is deliberately left alone: the walk it marks is not cancellable, and clearing
         // it here let the very next load() start a second concurrent request for the same
         // placement — the duplicate the guard exists to prevent. The in-flight fill still lands
         // and repopulates the cache.
         listeners.remove(placement)
+        loadWaiters.remove(placement)?.toList()?.forEach { waiter ->
+            runCatching { waiter(AdSkipReason.NOT_READY) }
+        }
     }
 
     @JvmStatic
     fun releaseAll() {
+        val waiting = loadWaiters.values.flatMap { it.toList() }
+        loadWaiters.clear()
+        releaseTokens.clear()
         cache.clear()
         inFlight.clear()
         listeners.clear()
+        waiting.forEach { waiter -> runCatching { waiter(AdSkipReason.NOT_READY) } }
     }
 
     /** Drops an expired buffer so a caller never shows a stale wrapper that no-ops. */
@@ -313,6 +484,13 @@ object InterstitialAdManager {
             return null
         }
         return cached.ad.takeIf { it.isReady }
+    }
+
+    private fun notifyLoadResult(placement: String, reason: AdSkipReason?, block: (AdCallback) -> Unit) {
+        // Detach A's subscribers before a persistent callback can start B at this placement.
+        val waiting = loadWaiters.remove(placement)?.toList().orEmpty()
+        notifyListener(placement, block)
+        waiting.forEach { waiter -> runCatching { waiter(reason) } }
     }
 
     private fun notifyListener(placement: String, block: (AdCallback) -> Unit) {

@@ -1,208 +1,148 @@
 # PayKit
 
-> A prebuilt Play-billing paywall screen driven by a remote JSON document.
+PayKit provides a purchase screen backed by Google Play Billing. You supply your product
+catalogue, legal links and the places where it may appear. Firebase, ads and onboarding are optional.
 
-PayKit ships the purchase screen, the placement gate that decides where it may appear, and the IAP
-analytics funnel. You supply product ids, two legal URLs, and the moment you want it shown. The Play
-`BillingClient` itself lives in `:billingkit`; PayKit registers your catalogue with it for you.
+## Install
 
-## Requirements
-
-| | |
-|---|---|
-| minSdk / compileSdk / JDK | 24 / 36 / 17 |
-| Namespace, resource prefix | `io.paykit`, `pw_` |
-| Required module | `:billingkit` |
-| Optional modules | `:suite-firebase` (remote document), `:onboardkitorigin` (gate), `:ads` |
-
-`PaywallActivity` is declared `android:exported="false"` in the library manifest and merges
-automatically; that manifest declares no permissions.
-
-## Installation
-
-Add `maven { url 'https://jitpack.io' }` to your repositories, then:
+Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
 ```groovy
-// Replace <tag> with a tag from https://github.com/truongvimit/adlogic-partner-sdk/tags
-def sdkVersion = '<tag>'
-
+def sdkVersion = '<tag>' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
-    implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
-
-    // Only if the paywall document comes from Firebase Remote Config.
-    implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
 ```
 
-`:paykit` exposes `:trackkit`, `kotlinx-coroutines-android` and `kotlinx-serialization-json` as `api`
-dependencies — do not declare them yourself. Events only reach a dashboard once `Tracker.install()`
-and a sink are wired: [`../trackkit/README.md`](../trackkit/README.md).
+Requires minSdk 24. PayKit brings BillingKit at runtime and registers its Activity through the
+merged manifest. Add `billingkit` explicitly only if your app also calls `Billing` or `AppPurchase`.
 
-## Integration
+## 1. Create your catalogue
 
-**1. `Application.onCreate()` — build the config, install, name a source.**
-
-```kotlin
-payKitConfig {
-    termsUrl = "https://example.com/terms"
-    privacyUrl = "https://example.com/privacy"
-    defaultPlacements = setOf(PaywallPlacement.AFTER_ONBOARDING, PaywallPlacement.SETTING)
-    fallbackConfigRes = R.raw.paywall_config
-    logLevel = if (BuildConfig.DEBUG) PayKitLogLevel.DEBUG else PayKitLogLevel.WARN
-}.onSuccess { config ->
-    PayKit.install(this, config)
-    PayKit.configSource(FirebaseConfigSource())   // optional, from :suite-firebase
-}.onFailure {
-    Log.e(TAG, "PayKit config rejected — the paywall stays off", it)
-}
-```
-
-`payKitConfig { }` returns `Result<PayKitConfig>`; on failure it carries a `PayKitConfigException`
-listing every problem at once. `install` is idempotent, synchronous and offline.
-
-Three fields decide whether anything shows at all, so they are worth stating plainly:
-
-- `termsUrl` and `privacyUrl` must be non-blank `http(s)` URLs with a host, or the config is
-  rejected.
-- `defaultPlacements` is empty by default, which shows no paywall anywhere until a fetched document
-  names its own placements.
-- `fallbackConfigRes` points at your own catalogue JSON in `res/raw`. Left unset, PayKit runs on its
-  own sample ids and every price is blank.
-
-The remaining knobs (exit-button delay, the double-tap window, log level) are documented on
-`PayKitConfigBuilder`.
-
-**2. Splash — fetch once, inside a coroutine.**
-
-```kotlin
-lifecycleScope.launch { PayKit.sync(timeoutMs = 3_000) }
-```
-
-`sync` is the only call that fetches. It never throws and returns `false` on timeout, on error, or
-when no `configSource` was installed; the snapshot already in place keeps working. Sync before the
-first paywall — a document that changes the package list re-registers the catalogue with Play. If
-you run your own remote config, skip `configSource` and `sync` and call `PayKit.applySnapshot(json)`.
-
-**3. Launch.**
-
-```kotlin
-PayKit.launch(activity, PaywallPlacement.SETTING)
-```
-
-## Showing a paywall
-
-```kotlin
-PayKit.launch(this, PaywallPlacement.HOME, object : PaywallListener() {
-    override fun onFinished(placement: PaywallPlacement, result: PaywallResult) {
-        if (result is PaywallResult.Purchased) refreshUi()
-    }
-})
-```
-
-`onFinished` fires exactly once per presentation on every exit path, after the specific callback
-(`onShown`, `onPurchased`, `onContinueWithAds`, `onDismissed`, `onError`). `PaywallResult` is
-`Purchased(productId)`, `ContinueWithAds`, `Dismissed` or `Error(code, message)`.
-
-`launch` refuses — and reports `onDismissed` + `onFinished(Dismissed)` to that listener — when PayKit
-is not installed, the user is already premium, the placement is not enabled, or a second call lands
-inside the double-tap window. Global listeners are not told, because nothing was shown.
-
-For a result instead of a listener, use `PaywallContract`. It builds the intent directly, so the
-premium and placement checks are yours to make:
-
-```kotlin
-private val paywall = registerForActivityResult(PaywallContract()) { result -> … }
-
-if (!PayKit.isPremium() && PayKit.isEnabled(PaywallPlacement.FEATURE_LOCK)) {
-    paywall.launch(PaywallPlacement.FEATURE_LOCK)
-}
-```
-
-Also on `PayKit`: `isReady()` (a usable **config document** is loaded, not that billing answered),
-`state` (`Idle`, `Syncing`, `Ready`, `Error`), `addListener` / `removeListener` for a global
-`PaywallListener`, and `renderer(...)` to replace the default screen with your own
-`PaywallRenderer`.
-
-## The paywall document
-
-One JSON document drives the whole screen — which plans to sell, the copy, the colours, which
-placements are allowed. `paykit/src/main/res/raw/pw_default_config.json` is a complete working
-example; copy it into your own `res/raw` as the starting point for `fallbackConfigRes`.
+Create `app/src/main/res/raw/paywall_config.json`. Replace the product and base-plan IDs with
+your Google Play catalogue; these example IDs do not create products in Play.
 
 ```json
 {
   "config_version": 1,
-  "placements": ["after_onboarding", "setting"],
   "packages": [
-    { "id": "sub.yearly", "type": "subs", "base_plan_id": "yearly", "offer_id": "freetrial",
-      "title_key": "pw_plan_yearly", "discount_percent": 40, "preselected": true },
-    { "id": "iap.lifetime", "type": "inapp", "title_key": "pw_plan_lifetime" }
+    { "id": "premium_monthly", "type": "subs", "base_plan_id": "monthly-base",
+      "title": "Monthly", "preselected": true },
+    { "id": "premium_lifetime", "type": "inapp", "title": "Lifetime" }
   ],
-  "restore": { "enabled": true },
-  "continue_with_ads": { "enabled": true }
+  "exit_button": { "enabled": true, "delay_ms": 0 },
+  "restore": { "enabled": true }
 }
 ```
 
-- `packages` needs at least one usable row or the whole document is rejected. `id` must match the
-  Play console exactly, `type` is `subs`, `inapp` or `consumable`, and subscriptions price the base
-  plan unless an `offer_id` names an offer.
-- A broken row is dropped on its own so the rest of the document survives; unknown keys are ignored.
-- Any `*_key` field is looked up as a string resource name in **your** app, so the copy stays
-  localised; a literal field wins over its `*_key`, and a name that resolves to nothing falls back to
-  PayKit's bundled default.
-- The optional `copy`, `tokens`, `exit_button`, `continue_with_ads` and `restore` blocks are
-  documented on the parser alongside the sample file above. A block that is absent is off.
+Use `inapp` for a lifetime unlock. `consumable` products are consumed and do not grant premium.
+Add `offer_id` to select a subscription offer; invalid coordinates can fall back to another
+available offer, so verify the selected plan with your Play catalogue.
 
-Use `inapp`, not `consumable`, for a lifetime unlock — a consumable is consumed and never sets the
-entitlement.
+For localized labels, replace `title` with `title_key`, naming a string resource in your app.
+See the [full JSON example](src/main/res/raw/pw_default_config.json) for copy, colors and
+Continue with ads. At least one valid package is required.
 
-## Integrating with OnboardKit
-
-`OnboardKitPaywallGate` implements OnboardKit's `PaywallGate` SPI. Install PayKit **before**
-OnboardKit — the gate answers from PayKit's state at the first checkpoint.
+## 2. Install in your Application
 
 ```kotlin
-OnboardingSdk.install(this) {
-    paywallGate = OnboardKitPaywallGate()
+import android.app.Application
+import android.util.Log
+import io.paykit.PayKit
+import io.paykit.PaywallPlacement
+import io.paykit.payKitConfig
+
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        payKitConfig {
+            termsUrl = "https://example.com/terms"     // Your real legal pages.
+            privacyUrl = "https://example.com/privacy"
+            defaultPlacements = setOf(PaywallPlacement.SETTING)
+            fallbackConfigRes = R.raw.paywall_config
+        }.onSuccess { config ->
+            PayKit.install(this, config)
+        }.onFailure { error ->
+            Log.e("PayKit", "Invalid configuration", error)
+        }
+    }
 }
 ```
 
-OnboardKit's `SPLASH_INTER` maps to `PaywallPlacement.SPLASH`, `AFTER_ONBOARDING` to
-`AFTER_ONBOARDING`, and `AFTER_QUESTION_OLD_USER` to `OTHER`. `PaywallResult.Error` arrives as
-`PaywallOutcome.Dismissed`, so a failed paywall never strands the user mid-flow.
+Register the Application with `android:name` in your manifest, or add this to your existing
+Application. Both legal URLs must be nonblank `http(s)` URLs with a host.
 
-`:paykit` depends on `:onboardkitorigin` at `compileOnly` scope. Reference this class only when
-`:onboardkitorigin` is on your runtime classpath.
+`PayKit.install` initializes BillingKit with this catalogue; do not initialize a second
+catalogue with `AppPurchase.initBilling`. No `sync()` call is needed for this local setup.
 
-## Remote config key
+`defaultPlacements` is empty by default, which disables the paywall. Set it in code for local
+configuration: a `placements` array in bundled JSON does not enable slots. A nonempty array
+from remote config or its cache overrides this set.
 
-Only with `:suite-firebase`. Create the parameter in Firebase Console → Remote Config.
+## 3. Open from your Activity
 
-| Key | Type | What it holds |
-|---|---|---|
-| `paywall_config` | String (JSON) | The whole paywall document. Pass another name to `FirebaseConfigSource(key = "…")` |
+```kotlin
+import android.util.Log
+import io.paykit.PayKit
+import io.paykit.PaywallListener
+import io.paykit.PaywallPlacement
+import io.paykit.PaywallResult
 
-Only a value published on the console counts; an in-app default is rejected. A missing or empty
-value leaves PayKit on its cache, then on `fallbackConfigRes`.
+PayKit.launch(this, PaywallPlacement.SETTING, object : PaywallListener() {
+    override fun onFinished(placement: PaywallPlacement, result: PaywallResult) {
+        Log.d("PayKit", "Finished: $result") // Update your UI or continue navigation here.
+    }
+})
+```
+
+Use the same enabled placement as your configuration. The result is `Purchased`,
+`ContinueWithAds`, `Dismissed` or `Error`. Already-premium users, disabled placements and
+duplicate launch attempts return a dismissal to this listener. For current entitlement, read
+`PayKit.isPremium()`; `PayKit.isReady()` describes the config, not Play Billing readiness.
+
+## Optional: Firebase Remote Config
+
+Add [suite-firebase](../suite-firebase/README.md) and complete its Firebase setup. Publish a
+String parameter named `paywall_config` containing your JSON. Include, for example,
+`"placements": ["setting", "after_onboarding"]` to control allowed locations remotely.
+
+```kotlin
+import io.suite.firebase.FirebaseConfigSource
+
+// After PayKit.install, in Application.onCreate:
+PayKit.configSource(FirebaseConfigSource())
+```
+
+Before the first paywall, call `PayKit.sync()` in a coroutine; its default timeout is 5 seconds.
+A failed fetch keeps the current configuration. Startup uses a valid cached document before
+your bundled catalogue. If your app fetches JSON itself, call `PayKit.applySnapshot(json)`
+after install instead of adding a Firebase source.
+
+## Optional: OnboardKit, ads and analytics
+
+With [OnboardKit](../onboardkitorigin/README.md), install PayKit first and add this inside
+your existing `OnboardingSdk.install(this) { ... }` block:
+
+```kotlin
+paywallGate = io.paykit.integration.OnboardKitPaywallGate()
+```
+
+Enable `AFTER_ONBOARDING` in PayKit to use that checkpoint. Add `onboardkitorigin` explicitly
+before referencing this gate; PayKit alone does not include it.
+
+With ads, BillingKit connects premium state to the ads gate. See
+[BillingKit's optional integrations](../billingkit/README.md) for releasing preloaded ads and
+controlling simulated purchases. For analytics, [install Tracker and a sink](../trackkit/README.md)
+before PayKit.
 
 ## Troubleshooting
 
-Set `logLevel = PayKitLogLevel.DEBUG` and read logcat tag `PayKit`. PayKit logs install, config
-resolution and every `launch` refusal under that tag; the paywall screen itself reports through
-`PayKit.state` and the `PaywallResult` error code instead.
+| Problem | Check |
+|---|---|
+| Paywall does not open | Successful install, enabled placement and `PayKit.isPremium()`. |
+| Prices are empty or purchase fails | Your own product IDs, available Play products/offers and billing readiness. |
+| Wrong catalogue after changing local JSON | A previously fetched document is cached and takes priority. |
+| Configuration is rejected | Legal URLs and at least one valid `packages` row; read the `PayKit` log. |
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Paywall never shows, `isEnabled` is false | `defaultPlacements` is empty and no fetched document names the placement | Name the placement in `payKitConfig`, or publish it in `placements` |
-| Paywall opens then closes, code `2` | Every rung of the config chain was rejected | Read `PayKit.state`; `Error(message)` names the rung and the reason |
-| Paywall opens then closes, code `3` | Billing was not ready in time | Play Store signed in, build on a test track, and nothing called `AppPurchase.initBilling` after PayKit |
-| Prices blank, log says "running on PayKit's own sample catalogue" | `fallbackConfigRes` was never set | Point it at your own `res/raw` document, or land a `sync()` |
-| One row priced, the rest blank | Play returned no product details for those ids | Ids must match the console exactly, including `base_plan_id` and `offer_id` |
-| Purchase succeeds, ads keep showing | The product is `consumable` | Use `inapp` for a lifetime unlock |
-| Restore or continue-with-ads row missing | The block is absent, which means `false` | Add `"restore": { "enabled": true }` |
-| Copy is English on a translated device | `*_key` resolved against your default `values/` | Ship the same string name in `values-<lang>/` |
-
-## License
-
-MIT — see [LICENSE](../LICENSE).
+For more UI options, see [PayKitConfig](src/main/java/io/paykit/PayKitConfig.kt).
+Existing PayKit initialization can stay the same when upgrading from 5.0.0.

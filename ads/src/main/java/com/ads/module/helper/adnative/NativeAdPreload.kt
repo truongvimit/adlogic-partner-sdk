@@ -69,9 +69,9 @@ class NativeAdPreload private constructor() {
         return preloadWithKey(key, activity, config, 1)
     }
 
-    /** Purchased or offline users never spend a preload request. */
+    /** Uses the same request eligibility as the visible ad helpers. */
     fun canRequestLoad(context: Context): Boolean =
-        !AdGate.isPurchased(context) && AdGate.isNetworkAvailable(context)
+        AdGate.skipReason(context, enabled = true) == null
 
     /** Peeks the freshest buffered ad without consuming it. */
     fun getAdNative(key: String): ApNativeAd? = executors[key]?.peek()

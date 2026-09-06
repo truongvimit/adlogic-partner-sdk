@@ -1,6 +1,7 @@
 package io.onboardkit.ui.base
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -46,6 +47,7 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
             finish()
             return
         }
+        lockPortraitIfConfigured()
         configureEdgeToEdge()
         applySystemBars()
         // Every SDK screen is off-limits to app-resume ads: they all either show a full-screen ad
@@ -64,6 +66,24 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
                 }
             },
         )
+    }
+
+    /**
+     * Reaches the one screen the SDK's manifest cannot: the app's own splash, which subclasses
+     * [io.onboardkit.ui.splash.ObSplashActivity] and is therefore declared by the app.
+     *
+     * Read through `configOrNull` rather than `requireConfig`: the readiness guard above has
+     * already returned for a null config, but a screen reached during a restart should not crash
+     * over an orientation.
+     *
+     * `runCatching` because Android 12 throws when an Activity in a translucent theme asks for a
+     * fixed orientation — a splash theme is a common place for one, and losing the lock there is
+     * better than losing the launch.
+     */
+    private fun lockPortraitIfConfigured() {
+        if (OnboardingSdk.configOrNull()?.behavior?.lockPortrait != true) return
+        runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+            .onFailure { ObLog.w(ObLog.Section.SCREEN, "portrait lock refused: ${it.message}") }
     }
 
     /**
