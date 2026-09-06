@@ -166,15 +166,17 @@ class RetentionRuntime private constructor(val application: Application, private
     }
 
     /** Common marketing gates. Modules must also check permission/channel/cap/TTL at commit time. */
-    @JvmOverloads fun marketingEligibility(graceMillis: Long = 86_400_000, requireBackground: Boolean = true): RetentionEligibility {
+    @JvmOverloads fun marketingEligibility(graceMillis: Long = 86_400_000, requireBackground: Boolean = true, phase: RetentionMarketingPhase = RetentionMarketingPhase.AFTER_SETUP): RetentionEligibility {
         val state = userState
+        val graceStart = if (phase == RetentionMarketingPhase.ONBOARDING) state.installedAtMillis else state.setupCompletedAtMillis
         val reason = when {
             closed -> RetentionSuppressionReason.NOT_INSTALLED
-            !state.setupCompleted -> RetentionSuppressionReason.SETUP_INCOMPLETE
-            state.onboardingActive -> RetentionSuppressionReason.HOST_UI
+            phase == RetentionMarketingPhase.AFTER_SETUP && !state.setupCompleted -> RetentionSuppressionReason.SETUP_INCOMPLETE
+            phase == RetentionMarketingPhase.AFTER_SETUP && state.onboardingActive -> RetentionSuppressionReason.HOST_UI
+            phase == RetentionMarketingPhase.ONBOARDING && (state.setupCompleted || !state.onboardingActive) -> RetentionSuppressionReason.WRONG_PHASE
             state.entitlement == RetentionEntitlement.UNKNOWN -> RetentionSuppressionReason.ENTITLEMENT_UNKNOWN
             state.entitlement == RetentionEntitlement.SUBSCRIBER -> RetentionSuppressionReason.SUBSCRIBER
-            clock.wallTimeMillis() < state.setupCompletedAtMillis || clock.wallTimeMillis() - state.setupCompletedAtMillis < graceMillis.coerceAtLeast(0) -> RetentionSuppressionReason.COOLDOWN
+            clock.wallTimeMillis() < graceStart || clock.wallTimeMillis() - graceStart < graceMillis.coerceAtLeast(0) -> RetentionSuppressionReason.COOLDOWN
             ui.externalTransitionActive() -> RetentionSuppressionReason.EXTERNAL_TRANSITION
             requireBackground && isForeground -> RetentionSuppressionReason.FOREGROUND
             else -> null
