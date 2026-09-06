@@ -1,0 +1,9 @@
+<resources>
+    <string name="rk_widget_title">Quick actions</string>
+    <string name="rk_widget_description">Open your favourite features from the home screen</string>
+    <string name="rk_widget_unavailable">Open the app to set up quick actions</string>
+    <string name="rk_widget_invitation_title">Add quick actions to your home screen</string>
+    <string name="rk_widget_invitation_message">Open your favourite features directly from a widget.</string>
+    <string name="rk_widget_add">Add widget</string>
+    <string name="rk_widget_not_now">Not now</string>
+</resources>
