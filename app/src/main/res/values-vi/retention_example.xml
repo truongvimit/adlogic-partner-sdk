@@ -39,4 +39,5 @@
     <string name="rk_example_unknown_route">Không có màn hình đích này.</string>
     <string name="rk_example_language">English</string>
     <string name="rk_example_request_sent">Đã gửi yêu cầu. Làm theo màn hình hệ thống nếu có.</string>
+    <string name="rk_example_notification_submitted">Đã gửi lời nhắc tới mục thông báo.</string>
 </resources>

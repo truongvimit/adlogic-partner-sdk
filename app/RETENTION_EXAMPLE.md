@@ -32,3 +32,6 @@ Commands (parent owns connected device execution):
 ```
 
 Local Firebase configuration remains ignored and supplied by the existing project environment. Final pass/fail counts and physical/API evidence belong in ticket06 and the root verification ledger. Successful compilation alone does not satisfy device acceptance; real cold notification→OnboardKit setup and launcher pin/review-system outcomes must be recorded separately from the isolated engine suite.
+
+
+First API36 device run (root-owned): 9/11 passed. The two red cases identified harness errors: ActivityScenario ignored actual DESTROYED callbacks after required `setIntent` identity changes (all four action taps used the same Activity instance), and the review-dedupe case had explicitly disabled review before expecting its counter to increase. Regression assertions now require stable Activity/task ownership, restore only the harness launch Intent immediately before cleanup, and enable review only for the counter case with threshold1000 and zero-attempt assertions. Normal app behavior is unchanged; targeted device rerun is required before claiming these fixed.

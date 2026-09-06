@@ -104,11 +104,12 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         content.addView(label(getString(R.string.rk_example_actions), 22f))
         button(content, R.string.rk_example_widget, R.id.rk_open_widget) {
             val outcome = RetentionKit.get()?.widgets?.showPinInvitation()
-            message(if (outcome == null) R.string.rk_example_unavailable else R.string.rk_example_request_sent)
+            if (outcome !is io.retentionkit.widgets.WidgetInvitationResult.Shown) message(R.string.rk_example_unavailable)
         }
         button(content, R.string.rk_example_reminder) {
             val outcome = RetentionKit.get()?.notifications?.refreshForegroundNotifications()
-            message(if (outcome == null) R.string.rk_example_unavailable else R.string.rk_example_request_sent)
+            message(if (outcome?.values?.any { it is io.retentionkit.notifications.NotificationOutcome.PostSubmitted } == true)
+                R.string.rk_example_notification_submitted else R.string.rk_example_unavailable)
         }
         button(content, R.string.rk_example_feedback, R.id.rk_open_feedback) { RetentionExample.showFeedback(this) }
         button(content, R.string.rk_example_rate, R.id.rk_open_rate) { RetentionExample.manualRate(this) }
