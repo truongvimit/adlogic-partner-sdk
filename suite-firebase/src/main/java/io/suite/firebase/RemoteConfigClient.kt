@@ -50,45 +50,49 @@ object RemoteConfigClient {
      *
      * @return true when values were fetched and activated.
      */
-    suspend fun fetchOnce(timeoutMs: Long): Boolean {
-        inFlight?.let { pending ->
-            return withTimeoutOrNull(timeoutMs.milliseconds) { pending.await() } ?: false
-        }
-        val deferred = CompletableDeferred<Boolean>()
-        inFlight = deferred
-
+    suspend fun fetchOnce(timeoutMs: Long): Boolean = fetchShared(timeoutMs) {
         val remote = remoteConfig()
         if (remote == null) {
             Log.w(TAG, "Firebase Remote Config unavailable — is Firebase initialised?")
-            deferred.complete(false)
-            inFlight = null
-            return false
+            return@fetchShared false
         }
+        val awaited = CompletableDeferred<Boolean>()
+        try {
+            remote.fetchAndActivate()
+                // Task boolean means values changed, not whether the fetch succeeded.
+                .addOnSuccessListener { awaited.complete(true) }
+                .addOnFailureListener {
+                    Log.w(TAG, "Remote config fetch failed: ${it.message}")
+                    awaited.complete(false)
+                }
+        } catch (error: Exception) {
+            Log.w(TAG, "Remote config fetch threw: ${error.message}")
+            awaited.complete(false)
+        }
+        awaited.await()
+    }
 
-        val result = withTimeoutOrNull(timeoutMs.milliseconds) {
-            val awaited = CompletableDeferred<Boolean>()
-            try {
-                remote.fetchAndActivate()
-                    // The task's boolean only reports whether values changed, not success.
-                    .addOnSuccessListener { awaited.complete(true) }
-                    .addOnFailureListener {
-                        Log.w(TAG, "Remote config fetch failed: ${it.message}")
-                        awaited.complete(false)
-                    }
-            } catch (e: Exception) {
-                Log.w(TAG, "Remote config fetch threw: ${e.message}")
-                awaited.complete(false)
+    private val fetchLock = Any()
+
+    /** Atomic leader election shared by all suite sources; cancellation cannot strand followers. */
+    internal suspend fun fetchShared(timeoutMs: Long, operation: suspend () -> Boolean): Boolean {
+        require(timeoutMs > 0)
+        val (pending, leader) = synchronized(fetchLock) {
+            inFlight?.let { it to false } ?: CompletableDeferred<Boolean>().let {
+                inFlight = it
+                it to true
             }
-            awaited.await()
-        } ?: false
-
-        deferred.complete(result)
-        // Only a success is memoised for the launch. Pinning a failure let the shortest-tempered
-        // caller decide for everyone: the paywall syncs with 3s and the ad config with 10s, so a
-        // paywall timeout used to hand the ad config an instant `false` and the ad units were
-        // never refreshed that session. Clearing it lets the next caller run its own fetch.
-        if (!result) inFlight = null
-        return result
+        }
+        if (!leader) return withTimeoutOrNull(timeoutMs.milliseconds) { pending.await() } ?: false
+        var result = false
+        try {
+            result = withTimeoutOrNull(timeoutMs.milliseconds) { operation() } ?: false
+            return result
+        } finally {
+            pending.complete(result)
+            // Preserve a newer fetch installed by reset/retry; success stays memoized this launch.
+            if (!result) synchronized(fetchLock) { if (inFlight === pending) inFlight = null }
+        }
     }
 
     /**
@@ -106,6 +110,6 @@ object RemoteConfigClient {
     /** Test seam: forget the memoised instance and any in-flight fetch. */
     fun reset() {
         cached = null
-        inFlight = null
+        synchronized(fetchLock) { inFlight = null }
     }
 }
