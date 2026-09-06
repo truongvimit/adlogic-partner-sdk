@@ -39,4 +39,5 @@
     <string name="rk_example_unknown_route">This destination is unavailable.</string>
     <string name="rk_example_language">Tiếng Việt</string>
     <string name="rk_example_request_sent">Request sent. Follow the system screen if one opens.</string>
+    <string name="rk_example_notification_submitted">Reminder sent to notifications.</string>
 </resources>

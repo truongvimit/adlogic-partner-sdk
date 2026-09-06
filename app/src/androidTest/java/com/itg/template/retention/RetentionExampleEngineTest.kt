@@ -42,9 +42,11 @@ class RetentionExampleEngineTest {
         cancelOwnedNotifications()
     }
     @After fun restoreNormalProfile() {
-        scenario?.close(); scenario = null
-        instrumentation.runOnMainSync { ExampleQa.restore(application) }
-        cancelOwnedNotifications()
+        try { scenario?.close() } finally {
+            scenario = null
+            instrumentation.runOnMainSync { ExampleQa.restore(application) }
+            cancelOwnedNotifications()
+        }
     }
     private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null) {
         instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra) }
@@ -106,17 +108,35 @@ class RetentionExampleEngineTest {
         val actions = active(NotificationCampaign.PINNED)!!.notification.actions.toList()
         assertEquals(4, actions.size)
         assertEquals(4, actions.map { it.actionIntent }.toSet().size)
-        for ((index, action) in actions.withIndex()) {
-            action.actionIntent.send()
-            val expected = RetentionExampleContent.features(application)[index].label
-            await {
-                var displayed = false
-                instrumentation.runOnMainSync { displayed = (kit.runtime.activities.current() as? RetentionPlaygroundActivity)
-                    ?.findViewById<TextView>(R.id.rk_feature_title)?.text?.toString() == expected }
-                displayed
+        lateinit var original: RetentionPlaygroundActivity
+        lateinit var launchIntent: Intent
+        scenario!!.onActivity { original = it; launchIntent = Intent(it.intent) }
+        val originalTask = original.taskId
+        try {
+            for ((index, action) in actions.withIndex()) {
+                action.actionIntent.send()
+                val expected = kit.runtime.features()[index].label
+                await {
+                    var displayed = false
+                    instrumentation.runOnMainSync {
+                        val current = kit.runtime.activities.current() as? RetentionPlaygroundActivity
+                        if (current != null) {
+                            assertSame("Pinned taps must reuse the current destination Activity", original, current)
+                            assertEquals(originalTask, current.taskId)
+                            displayed = current.findViewById<TextView>(R.id.rk_feature_title)?.text?.toString() == expected
+                        }
+                    }
+                    displayed
+                }
             }
+        } finally {
+            // ActivityScenario filters lifecycle callbacks by its original Intent identity. The
+            // app correctly calls setIntent on each action, so restore only the harness identity
+            // after every real route assertion, immediately before teardown. Production is unchanged.
+            instrumentation.runOnMainSync { original.intent = launchIntent }
         }
     }
+
     @Test fun calendarForegroundAndStaleConfigCannotPost() {
         prepare()
         val foreground = ExampleQa.savedAlarm(NotificationCampaign.DAILY)
@@ -158,20 +178,59 @@ class RetentionExampleEngineTest {
         assertTrue(kit.capture(intent) is RetentionEntryAcceptance.Rejected)
     }
     @Test fun realBusinessOutboxReplayDoesNotAddReviewSuccessTwice() {
-        prepare()
+        prepare(extra = mapOf("review.enabled" to "true", "review.success_threshold" to "1000"))
         val data = ExampleDataStore(application)
         val id = "instrumented-" + java.util.UUID.randomUUID()
         instrumentation.runOnMainSync { RetentionExample.flushSuccesses(application) }
         val before = kit.review!!.snapshot()!!.successesSinceAttempt
         data.record(id, "translate", "Xin chào")
         instrumentation.runOnMainSync {
-            // Simulate a crash after SDK submission but before the app outbox acknowledgement.
+            // Replay the same durable operation ID through the real review module.
+            kit.businessSuccess("translate", id)
             kit.businessSuccess("translate", id)
             RetentionExample.flushSuccesses(application)
         }
         await { kit.review!!.snapshot()!!.successesSinceAttempt == before + 1 }
         assertFalse(data.pendingSuccesses().any { it.id == id })
+        assertEquals(0L, kit.review!!.snapshot()!!.attempts)
+        assertFalse(ExampleQa.events.any { it.name == "retention_review_requested" })
     }
+    @Test fun acceleratedEligibilityUsesRealPlayTransportAndReleasesLeaseAfterHonestTerminal() {
+        prepare()
+        // Drain older app work while review is disabled, then accelerate only this isolated case.
+        instrumentation.runOnMainSync {
+            RetentionExample.flushSuccesses(application)
+            val applied = kit.runtime.updateConfig(mapOf(
+                "review.enabled" to "true", "review.success_threshold" to "1",
+                "review.request_timeout_ms" to "5000", "review.flow_timeout_ms" to "5000",
+            ))
+            assertTrue(applied is RetentionConfigResult.Applied)
+        }
+        scenario!!.onActivity { activity ->
+            fun find(view: android.view.View): Button? {
+                if (view is Button && view.contentDescription == "feature:translate") return view
+                if (view is android.view.ViewGroup) repeat(view.childCount) { index ->
+                    find(view.getChildAt(index))?.let { return it }
+                }
+                return null
+            }
+            checkNotNull(find(activity.findViewById(android.R.id.content))).performClick()
+            activity.findViewById<Button>(R.id.rk_phrase_translate).performClick()
+            assertTrue(activity.findViewById<TextView>(R.id.rk_result).text.isNotBlank())
+        }
+        await { ExampleQa.events.any { it.name == "retention_review_requested" } }
+        val terminals = setOf("retention_review_failed", "retention_review_timeout", "retention_review_flow_unknown")
+        await(15_000) { ExampleQa.events.any { it.name in terminals } }
+        assertNull(kit.review!!.snapshot()!!.inFlightPhase)
+        await { kit.runtime.ui.eligibility() is RetentionEligibility.Allowed }
+        instrumentation.runOnMainSync {
+            val acquired = kit.runtime.ui.acquire("test.review.released", 1000)
+            assertTrue("Terminal must release the owned UI lease", acquired is RetentionUiLeaseResult.Acquired)
+            (acquired as RetentionUiLeaseResult.Acquired).lease.close()
+        }
+        // No card, submitted rating, or review acceptance is inferred from Play's callback.
+    }
+
     private fun cancelOwnedNotifications() {
         manager.activeNotifications.filter { it.tag == "io.retentionkit.notifications" }.forEach { manager.cancel(it.tag, it.id) }
     }
