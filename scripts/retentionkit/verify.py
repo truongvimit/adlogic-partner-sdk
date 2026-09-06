@@ -312,13 +312,13 @@ def make_directory(path):
     return path
 
 
-def run_command(argv, repo, directory, name, timeout=300):
+def run_command(argv, repo, directory, name, timeout=300, env=None):
     started = utc_now()
     stdout_path, stderr_path = directory / f"{name}.stdout", directory / f"{name}.stderr"
     timed_out = False
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         process = subprocess.Popen(argv, cwd=repo, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-                                   start_new_session=(os.name == "posix"))
+                                   start_new_session=(os.name == "posix"), env=env)
         try:
             code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -388,15 +388,26 @@ def run_gradle(args):
     if args.configuration and (len(args.task) != 1 or not args.task[0].endswith(":dependencies")):
         raise ValueError("--configuration requires one explicit :module:dependencies task")
     properties = consumer_properties(getattr(args, "property", []))
+    version = getattr(args, "publication_version", None) or os.environ.get("VERSION")
+    if version is not None and (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", version)
+                                or version in ("latest.release", "latest.integration", "unspecified")):
+        raise ValueError("Publication VERSION must be an exact non-dynamic version")
+    environment = os.environ.copy()
+    if version is not None:
+        environment["VERSION"] = version
+    before = repo_context(repo)
     directory = make_directory(args.output)
     argv = [str(wrapper), "--no-daemon", "--console=plain", "--max-workers=2", "--stacktrace", *properties, *args.task]
     if args.configuration:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", args.configuration):
             raise ValueError("Invalid configuration name")
         argv.extend(["--configuration", args.configuration])
-    result = run_command(argv, repo, directory, "gradle", args.timeout)
-    payload = {"ok": result["exit_code"] == 0 and not result["timed_out"], "kind": "gradle-run",
-               **repo_context(repo), "command": result, "recorded_at": utc_now()}
+    result = run_command(argv, repo, directory, "gradle", args.timeout, env=environment)
+    after = repo_context(repo)
+    unchanged = before == after
+    payload = {"ok": result["exit_code"] == 0 and not result["timed_out"] and unchanged, "kind": "gradle-run",
+               **after, "source_before": before, "source_unchanged": unchanged,
+               "publication_version": version, "command": result, "recorded_at": utc_now()}
     (directory / "run.json").write_text(json.dumps(payload, indent=2) + "\n")
     return payload
 
@@ -474,6 +485,7 @@ def build_parser():
     gradle.add_argument("--task", action="append", required=True)
     gradle.add_argument("--configuration")
     gradle.add_argument("--property", action="append", default=[], help="Validated isolated-consumer NAME=VALUE property; repeatable")
+    gradle.add_argument("--publication-version", help="Exact VERSION environment for local publication/consumer proof, recorded in evidence")
     gradle.add_argument("--timeout", type=int, default=1800)
     gradle.add_argument("--output", type=Path, required=True, help="New evidence directory")
     adb = sub.add_parser("adb-evidence", help="Opt-in read-only ADB capture; does not evaluate test outcomes")

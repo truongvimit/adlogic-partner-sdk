@@ -224,6 +224,41 @@ class EvidenceTests(unittest.TestCase):
                 verify.run_gradle(args)
             popen.assert_not_called()
 
+    def test_publication_version_rejects_dynamic_or_shell_values_before_capture(self):
+        self.write("gradlew", "fixture")
+        for version in ("1.+", "latest.release", "$(touch bad)", "1.0\n"):
+            args = argparse.Namespace(repo=self.path, task=[":retentionkit:publishToMavenLocal"], configuration=None,
+                                      publication_version=version, output=self.path / "not-created")
+            with mock.patch.object(verify.subprocess, "Popen") as popen, self.assertRaises(ValueError):
+                verify.run_gradle(args)
+            popen.assert_not_called()
+            self.assertFalse(args.output.exists())
+
+    def test_explicit_version_is_child_environment_and_evidence_not_shell_text(self):
+        self.write("gradlew", "fixture")
+        args = argparse.Namespace(repo=self.path, task=[":retentionkit:publishToMavenLocal"], configuration=None,
+                                  publication_version="retentionkit-qa-20260907-abc1234", timeout=1, output=self.path / "capture")
+        source = {"repo": str(self.path), "commit": "abc1234", "working_tree_status": ""}
+        with mock.patch.object(verify, "repo_context", return_value=source), mock.patch.object(verify, "run_command", return_value={"exit_code": 0, "timed_out": False}) as run:
+            result = verify.run_gradle(args)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["source_unchanged"])
+        self.assertEqual(args.publication_version, run.call_args.kwargs["env"]["VERSION"])
+        self.assertEqual(args.publication_version, result["publication_version"])
+        self.assertNotIn("VERSION", " ".join(run.call_args.args[0]))
+
+    def test_checkout_change_during_capture_cannot_pass_even_if_gradle_passed(self):
+        self.write("gradlew", "fixture")
+        args = argparse.Namespace(repo=self.path, task=[":retentionkit:assembleRelease"], configuration=None,
+                                  timeout=1, output=self.path / "capture")
+        before = {"commit": "first", "working_tree_status": ""}
+        after = {"commit": "second", "working_tree_status": ""}
+        with mock.patch.object(verify, "repo_context", side_effect=[before, after]), mock.patch.object(verify, "run_command", return_value={"exit_code": 0, "timed_out": False}):
+            result = verify.run_gradle(args)
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["source_unchanged"])
+        self.assertEqual(before, result["source_before"])
+
 
 if __name__ == "__main__":
     unittest.main()

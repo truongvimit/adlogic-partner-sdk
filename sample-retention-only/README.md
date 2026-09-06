@@ -2,7 +2,7 @@
 
 This small application proves selective dependency composition, public API linkage and R8 packaging separately from the full SDK demo. It is not published, has no Google Services plugin, and contains no ad/Firebase/OnboardKit/billing dependency. Common source imports only core. Each build includes exactly one profile's source directory and one selected SDK artifact.
 
-**Preparation status:** source and configuration are prepared; Gradle builds are deliberately pending the final Ticket04/05 API integration. No APK, minify, dependency, POM or device pass is claimed by this commit. The umbrella source calls the Ticket05-specified facade API and must be compiled against its final implementation before acceptance.
+**Preparation status:** source and configuration are prepared; Gradle builds are deliberately pending the final Ticket04/05 API integration. No APK, minify, dependency, POM or device pass is claimed by this commit. The umbrella source installs and dispatches entries through the real facade API; the final build matrix is still required before acceptance.
 
 ## Select a profile and dependency source
 
@@ -70,7 +70,7 @@ After actual builds, locate the merged **release** manifest inside the printed p
 
 ## Runtime smoke surface
 
-The launcher Activity shows profile/dependency/version, initialization status, real setup/config state, the active text tool and pending entry state. The common manifest adds no permissions; selected SDK manifests supply their own permissions/components. Default `core` is harmless and contains no marketing surface. A no-IAP entitlement is explicitly non-subscriber; setup is incomplete until the user taps **Complete setup**. Ordinary notification grace remains the real 24-hour default.
+The launcher Activity shows profile/dependency/version, initialization status, real setup/config/entitlement state, the active text tool, pending entry and recent actual SDK event names. System bars and IME insets surround density-aware content padding. Input, result, selected tool and pending token survive recreation. The common manifest adds no permissions; selected SDK manifests supply their own permissions/components. Default `core` is harmless and contains no marketing surface. A no-IAP entitlement is explicitly non-subscriber; setup is incomplete until the user taps **Complete setup**. Ordinary notification grace remains the real 24-hour default.
 
 - **Run text tool** performs uppercase conversion or a real word count and signals BusinessSuccess only after a nonblank operation completes. It does not invent review success.
 - **Open word-count typed entry** starts an explicit Activity Intent through core routing. Cold/warm/onNewIntent capture is staged, retained through setup and consumed once at the allowed destination. Saved state retains the pending token and selected tool.
@@ -78,7 +78,7 @@ The launcher Activity shows profile/dependency/version, initialization status, r
 - Widget profile links real pin-capability/request/refresh calls; automatic shortcuts are disabled in this proof app. A request is not pin confirmation.
 - Feedback profile opens the actual optional exit-feedback UI; automatic feedback shortcut creation is disabled here. Opening Settings never claims uninstall.
 - Review profile links actual eligibility request and manual Play Store APIs; automatic review remains driven by completed text operations and the module's standard gates/limits. Flow completion does not prove a card or rating.
-- Umbrella profile installs using `RetentionKit.install`/`RetentionKitOptions`, rather than manually constructing modules and avoiding the facade. Final facade integration/build is still required at preparation time.
+- Umbrella profile installs using `RetentionKit.install`/`RetentionKitOptions`, captures through `kit.capture`, and routes through `kit.dispatchPending`, including the standard feedback destination. Navigation waits until setup is complete and the final Activity is resumed. It also exposes actual widget, notification, feedback and Store actions.
 
 Stable common view IDs `rk_proof_status`, `rk_proof_input`, `rk_proof_result`, `rk_proof_setup`, `rk_proof_run`, `rk_proof_entry` support the root-owned instrumentation/device smoke. There is no exported test receiver, hidden backdoor, debug timestamp bypass or fake-success toggle. Only the root/device owner may install/launch this app through ADB and add observed evidence to the ledger.
 

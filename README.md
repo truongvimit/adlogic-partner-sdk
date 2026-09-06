@@ -15,6 +15,8 @@ Android SDKs for ads, onboarding, analytics, billing and paywalls. Choose the fe
 | Firebase Analytics or remote ads/paywall config | `suite-firebase` (add `ads`/`paykit` for their config sources) | [Firebase](suite-firebase/README.md) |
 | Analytics sent to your own backend | `trackkit` | [Trackkit](trackkit/README.md) |
 | Ad debugging dashboard | `adtracer (debugImplementation)` | [AdTracer](adtracer/README.md) |
+| Shared notification/widget/feedback/review flows · unreleased branch | `retentionkit` | [RetentionKit](retentionkit/README.md) |
+| Only selected retention features · unreleased branch | `retention-core`, `retention-notifications`, `retention-widgets`, `retention-feedback`, or `retention-review` | [Selective consumer](sample-retention-only/README.md) |
 
 Add only the modules you use. Trackkit is already exposed by ads, onboarding, billing, paywall and Firebase. PayKit brings the billing engine at runtime; add `billingkit` explicitly only if you call its APIs. Firebase is optional. An app using only billing/paywall does not pull in the ads stack.
 
@@ -40,7 +42,7 @@ dependencyResolutionManagement {
 }
 ```
 
-The current published version is **5.1.1**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+The existing SDK examples below target **5.1.1**. The new `retention-*` and `retentionkit` artifacts in this branch are **unreleased**; 5.1.1 does not include them. Use project dependencies or the explicit local QA publication described in the RetentionKit guide until a release containing these artifacts exists. Keep every released module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
@@ -63,6 +65,7 @@ Register your existing `Application` class in the manifest. In `Application.onCr
 | 2 · Ads | Provide AdMob/Meta metadata and your ad JSON, then initialize `ERainAd`. | [Ads quickstart](ads/README.md) |
 | 3 · Purchases | Install `PayKit`, or initialize `BillingKit` for your own UI. PayKit owns billing initialization when used. | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
 | 4 · Onboarding | Install and configure `OnboardingSdk`, then register your `ObSplashActivity` subclass. | [OnboardKit](onboardkitorigin/README.md) |
+| 5 · Retention · unreleased | Install once in Application with localized features, the host entry Activity and current entitlement. Optional adapters reuse the existing kits above. | [RetentionKit](retentionkit/README.md) |
 
 With OnboardKit, the splash runs consent and the notification step automatically. With ads alone, run `ConsentCenter.request(...)` from an Activity before requesting ads. Firebase setup also needs your app's `google-services.json` and Google Services plugin; see the [Firebase guide](suite-firebase/README.md).
 
@@ -74,6 +77,7 @@ With OnboardKit, the splash runs consent and the notification step automatically
 | Onboarding | Destination Activity, language/content configuration and ad placements. |
 | Purchases | Play product IDs and entitlement mapping. PayKit also needs terms/privacy URLs and your catalog JSON. |
 | Firebase · optional | Firebase app configuration and published Remote Config parameters for the sources you use. |
+| Retention · unreleased | Stable feature IDs, localized labels/icons, one entry router, real setup/purchase state and business-success events. Permission retains one host owner. |
 
 ## Upgrading from 5.0.0
 

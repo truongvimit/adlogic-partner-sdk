@@ -1,4 +1,5 @@
 <resources>
+    <item name="rk_proof_insets" type="id" />
     <item name="rk_proof_status" type="id" />
     <item name="rk_proof_input" type="id" />
     <item name="rk_proof_result" type="id" />
