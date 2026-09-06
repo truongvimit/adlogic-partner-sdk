@@ -15,13 +15,14 @@ class RetentionReviewModule @JvmOverloads constructor(
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var runtime: RetentionRuntime? = null
     private lateinit var transport: ReviewTransport
+    private enum class FlightPhase { REQUESTING, PREPARING, LAUNCHING }
     private class Flight(val token: String, val revision: Long, val lease: RetentionUiLease) {
-        var phase = "requesting"
+        var phase = FlightPhase.REQUESTING
         var timeout: Runnable? = null
-        var scope: ReviewHandoffScope? = null
+        var scope: RetentionHandoffScope? = null
     }
     private var flight: Flight? = null
-    private val scopes = mutableMapOf<String, ReviewHandoffScope>()
+    private val scopes = mutableMapOf<String, RetentionHandoffScope>()
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> {
         val errors = defaults.validation().toMutableList()
@@ -52,11 +53,11 @@ class RetentionReviewModule @JvmOverloads constructor(
         if (runtime == null) return@onMain
         when (signal) {
             is RetentionSignal.BusinessSuccess -> { recordSuccess(signal); attempt() }
-            is RetentionSignal.ConfigurationChanged -> if (flight?.phase == "requesting") finish("cancelled", "config_changed", backoff = true)
-            RetentionSignal.ProcessBackground -> if (flight?.phase == "requesting") finish("cancelled", "background", backoff = true)
-            is RetentionSignal.HostUiChanged -> if (signal.visible && flight?.phase == "requesting") finish("cancelled", "host_ui", backoff = true)
-            is RetentionSignal.ExternalTransitionStarted -> if (!signal.token.startsWith("review." ) && flight?.phase == "requesting") finish("cancelled", "external_transition", backoff = true)
-            is RetentionSignal.OnboardingChanged -> if (signal.active && flight?.phase == "requesting") finish("cancelled", "onboarding", backoff = true)
+            is RetentionSignal.ConfigurationChanged -> if (beforeLaunch()) finish("cancelled", "config_changed", backoff = true)
+            RetentionSignal.ProcessBackground -> if (beforeLaunch()) finish("cancelled", "background", backoff = true)
+            is RetentionSignal.HostUiChanged -> if (signal.visible && beforeLaunch()) finish("cancelled", "host_ui", backoff = true)
+            is RetentionSignal.ExternalTransitionStarted -> if (signal.token != flight?.scope?.token && beforeLaunch()) finish("cancelled", "external_transition", backoff = true)
+            is RetentionSignal.OnboardingChanged -> if (signal.active && beforeLaunch()) finish("cancelled", "onboarding", backoff = true)
             else -> Unit
         }
     }
@@ -78,11 +79,21 @@ class RetentionReviewModule @JvmOverloads constructor(
             val activity = acquired.lease.activity()
             if (activity == null) { acquired.lease.close(); return@onMain }
             val token = "review.store.${UUID.randomUUID()}"
+            val revision = rt.config.revision
             // Check the lease first. Beginning this scope intentionally revokes it.
-            val scope = beginScope(rt, activity, token)
+            val scope = createScope(rt, activity, token)
             try {
-                if (transport.openStore(activity)) event("store_handoff")
-                else { scope.close(); event("failed", mapOf("reason" to "store_unavailable")) }
+                scope.start()
+                scope.dispatch { current -> onMain {
+                    // Manual Store deliberately does not depend on automatic review.enabled.
+                    if (runtime !== rt || current == null || rt.config.revision != revision) {
+                        scope.close(); event("skipped", mapOf("reason" to "manual_handoff_changed")); return@onMain
+                    }
+                    try {
+                        if (transport.openStore(current)) event("store_handoff")
+                        else { scope.close(); event("failed", mapOf("reason" to "store_unavailable")) }
+                    } catch (error: Exception) { scope.close(); diagnostic("manual_store", error); event("failed", mapOf("reason" to "store_exception")) }
+                } }
             } catch (error: Exception) { scope.close(); diagnostic("manual_store", error); event("failed", mapOf("reason" to "store_exception")) }
             finally { acquired.lease.close() }
         }
@@ -152,12 +163,29 @@ class RetentionReviewModule @JvmOverloads constructor(
 
     private fun onInfo(token: String, info: ReviewInfoResult) {
         val rt = runtime ?: return
-        val current = flight?.takeIf { it.token == token && it.phase == "requesting" } ?: return
+        val current = flight?.takeIf { it.token == token && it.phase == FlightPhase.REQUESTING } ?: return
         if (info is ReviewInfoResult.Failed) { finish("failed", info.reason, backoff = true); return }
         val activity = current.lease.activity()
         if (activity == null || !rt.isForeground || !options().enabled || rt.config.revision != current.revision || !rt.userState.setupCompleted || rt.userState.onboardingActive) {
             finish("cancelled", "launch_gate_changed", backoff = true); return
         }
+        current.phase = FlightPhase.PREPARING
+        event("launch_attempt")
+        if (!currentBeforeLaunch(rt, current)) { cancelBeforeLaunch(current); return }
+        val scope = createScope(rt, activity, "review.flow.$token")
+        current.scope = scope // Publish ownership before start's synchronous observers can cancel.
+        scope.start()
+        scope.dispatch { resumed -> onMain {
+            if (resumed == null || !currentBeforeLaunch(rt, current)) {
+                scope.close(); cancelBeforeLaunch(current); return@onMain
+            }
+            launchReserved(rt, current, resumed, info)
+        } }
+    }
+
+    private fun launchReserved(rt: RetentionRuntime, current: Flight, activity: android.app.Activity, info: ReviewInfoResult) {
+        val token = current.token
+        // No partner sink/signal callback between this durable reservation and transport.launch.
         val reserved = rt.store.transaction(STATE) { state ->
             if (state.string("flight_token") != token || state.long("attempts") >= options().maxAttempts) false
             else {
@@ -170,13 +198,11 @@ class RetentionReviewModule @JvmOverloads constructor(
             }
         }
         if (!reserved) { finish("cancelled", "reservation_lost", backoff = false); return }
-        current.phase = "launching"
+        current.phase = FlightPhase.LAUNCHING
         setTimeout(current, options().flowTimeoutMillis)
-        event("launch_attempt")
-        current.scope = beginScope(rt, activity, "review.flow.$token")
         try {
             transport.launch(activity, (info as ReviewInfoResult.Ready).token) { result -> onMain {
-                if (flight?.token != token || flight?.phase != "launching") return@onMain
+                if (flight?.token != token || flight?.phase != FlightPhase.LAUNCHING) return@onMain
                 when (result) {
                     ReviewFlowResult.FinishedOutcomeUnknown -> finish("flow_unknown", "finished_outcome_unknown", backoff = false)
                     is ReviewFlowResult.Failed -> finish("failed", result.reason, backoff = false)
@@ -187,7 +213,7 @@ class RetentionReviewModule @JvmOverloads constructor(
 
     private fun setTimeout(current: Flight, delay: Long) {
         current.timeout?.let(main::removeCallbacks)
-        val timeout = Runnable { if (flight?.token == current.token) finish("timeout", current.phase, backoff = current.phase == "requesting") }
+        val timeout = Runnable { if (flight?.token == current.token) finish("timeout", current.phase.name.lowercase(), backoff = current.phase != FlightPhase.LAUNCHING) }
         current.timeout = timeout
         main.postDelayed(timeout, delay)
     }
@@ -206,8 +232,19 @@ class RetentionReviewModule @JvmOverloads constructor(
         }
         event(outcome, mapOf("reason" to reason))
     }
-    private fun beginScope(rt: RetentionRuntime, activity: android.app.Activity, token: String): ReviewHandoffScope =
-        ReviewHandoffScope(rt, activity, token, main) { scopes.remove(token) }.also { scopes[token] = it }
+    private fun beforeLaunch() = flight?.let { it.phase != FlightPhase.LAUNCHING } == true
+    private fun currentBeforeLaunch(rt: RetentionRuntime, current: Flight) = runtime === rt && flight === current &&
+        current.phase == FlightPhase.PREPARING && options().enabled && rt.config.revision == current.revision &&
+        rt.userState.setupCompleted && !rt.userState.onboardingActive
+    private fun cancelBeforeLaunch(current: Flight) {
+        if (flight === current) finish("cancelled", "launch_gate_changed", backoff = true)
+    }
+    private fun createScope(rt: RetentionRuntime, activity: android.app.Activity, token: String): RetentionHandoffScope {
+        lateinit var scope: RetentionHandoffScope
+        scope = RetentionHandoffScope(rt, activity, token, "review_or_store", onClosed = { if (scopes[token] === scope) scopes.remove(token) })
+        scopes[token] = scope
+        return scope
+    }
     private fun options(): ReviewOptions = runtime?.let { defaults.resolved(it.config) } ?: defaults
     private fun event(suffix: String, attributes: Map<String, String> = emptyMap()) { runtime?.emit(RetentionEvent("retention_review_$suffix", attributes)) }
     private fun diagnostic(where: String, error: Exception) { runtime?.diagnostics?.record("review.$where", error.message ?: where, RetentionDiagnosticLevel.ERROR, error) }

@@ -99,6 +99,52 @@ class RetentionFeedbackModuleTest {
     }
     private fun view(tag: String): View = screen!!.get().findViewById<ViewGroup>(android.R.id.content).findViewWithTag(tag)
 
+    @Test fun queuedShowDisabledByTransitionObserverKeepsEntryPendingAndReleasesScope() {
+        install()
+        val entry = RetentionEntry(RetentionEntrySource.SHORTCUT, RetentionFeedbackModule.DESTINATION, "feedback", createdAtMillis = clock.wallTimeMillis())
+        runtime.subscribe("test.show") { if (it is RetentionSignal.AdClicked) module.handleEntry(entry) }
+        runtime.subscribe("test.disable") { if (it is RetentionSignal.ExternalTransitionStarted) runtime.updateConfig(mapOf("feedback.enabled" to "false")) }
+        runtime.signal(RetentionSignal.AdClicked("show")); idle()
+        assertTrue(launches.isEmpty())
+        assertNotNull(runtime.entries.pending(entry.token))
+        assertEquals(RetentionEligibility.Allowed, runtime.ui.eligibility())
+        assertFalse(events.any { it.name == "retention_feedback_requested" })
+    }
+
+    @Test fun feedbackShowDoesNotLaunchWhenTransitionSubscriberFinishesHost() {
+        install()
+        runtime.subscribe("test.finish") { if (it is RetentionSignal.ExternalTransitionStarted) host!!.get().finish() }
+        module.show(); idle()
+        assertTrue(launches.isEmpty())
+        assertFalse(events.any { it.name == "retention_feedback_requested" })
+    }
+
+    @Test fun disabledRescueCannotNavigateOrLeaveFalseHandoffSession() {
+        install(); show()
+        runtime.subscribe("test.disable") { if (it is RetentionSignal.ExternalTransitionStarted && it.token.startsWith("feedback.action.")) runtime.updateConfig(mapOf("feedback.enabled" to "false")) }
+        assertTrue(customController!!.tryFeature("translate") is FeedbackActionResult.Blocked)
+        assertEquals(1, launches.size)
+        assertEquals(FeedbackPhase.CANCELLED, module.session(token)!!.phase)
+        assertFalse(events.any { it.name == "retention_feedback_feature_handoff" })
+    }
+
+    @Test fun queuedAppInfoHandoffWaitsForOnboardingObserverAndPreservesForeignOwner() {
+        install(); show()
+        runtime.subscribe("test.action") { if (it is RetentionSignal.AdClicked) customController!!.continueToAppManagement() }
+        runtime.subscribe("test.block") { if (it is RetentionSignal.ExternalTransitionStarted && it.token.startsWith("feedback.action.")) {
+            runtime.signal(RetentionSignal.OnboardingChanged(true))
+            runtime.signal(RetentionSignal.ExternalTransitionStarted("foreign", "host"))
+        } }
+        runtime.signal(RetentionSignal.AdClicked("settings")); idle()
+        assertEquals(1, launches.size)
+        assertEquals(FeedbackPhase.OPEN, module.session(token)!!.phase)
+        assertFalse(events.any { it.name == "retention_feedback_system_handoff" })
+        runtime.signal(RetentionSignal.OnboardingChanged(false))
+        assertTrue(runtime.ui.eligibility() is RetentionEligibility.Blocked)
+        runtime.signal(RetentionSignal.ExternalTransitionFinished("foreign"))
+        assertEquals(RetentionEligibility.Allowed, runtime.ui.eligibility())
+    }
+
     @Test fun optionalSurveyAllowsDirectSystemAppInfoAndOnlyReportsHandoff() {
         install(); show()
         assertTrue(blockedDuringLaunch)

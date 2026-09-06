@@ -17,6 +17,8 @@ review.openStore()
 
 ## Defaults and validated overrides
 
+Before platform launch, the module drains queued handoff observers and rechecks the original runtime/config plus current resumed Activity, onboarding and host UI. The `launch_attempt` event describes preparing an attempt; a synchronous sink/observer may still cancel it. The durable attempt budget and cooldown are reserved only after these callbacks pass, immediately before invoking Play's transport. A cancelled preparation retains successes and spends no attempt. Manual Store uses the same safe handoff boundary while remaining independent of automatic review eligibility/enabled policy.
+
 | Core config key | Default |
 |---|---:|
 | review.enabled | true |

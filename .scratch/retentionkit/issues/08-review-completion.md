@@ -1,7 +1,7 @@
 # 08 Code review fixes and ready PR
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 07
 
 Spec: ../spec.md
@@ -13,5 +13,7 @@ Run code-review skill against fixed base632df43 with Standards and Spec agents. 
 Follow the shared implementation contract and acceptance ledger in spec.md. Commit only owned files; write implementation/test results under Answer and change Status to resolved when verified. Provide commit hashes and concise context pointers for the merger.
 
 ## Comments
+
+Review S1: claimed for the single implementer handling Standards S1/S2 and the Spec P2 handoff finding. Final review acceptance and PR completion remain root-owned.
 
 Implementation pending.

@@ -1,7 +1,7 @@
 # 07 Device QA packaging and partner documentation
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 06
 
 Spec: ../spec.md
@@ -13,5 +13,7 @@ Own retentionkit/README.md plus other module READMEs as needed, README module ta
 Follow the shared implementation contract and acceptance ledger in spec.md. Commit only owned files; write implementation/test results under Answer and change Status to resolved when verified. Provide commit hashes and concise context pointers for the merger.
 
 ## Comments
+
+Review S1: aligned this active validation ticket to `claimed`. Root will record the final acceptance Answer; this status change does not claim a passing result.
 
 Implementation pending.
