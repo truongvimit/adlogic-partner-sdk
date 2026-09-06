@@ -14,7 +14,7 @@ import io.onboardkit.remote.RemoteFlags
 /**
  * The n+1 preload chain: while the user reads screen n, the ad for screen n+1 loads.
  *
- *   splash fetched   → only the ads of the screen the flow is actually about to open
+ *   splash ready     → only the ads of the screen the flow is actually about to open
  *   LFO shown        → language native slot 2 (when the second slot is on)
  *   step n selected  → ad of step n+1
  *   last step shown  → OB5 and question
@@ -28,7 +28,8 @@ class PreloadChain internal constructor(
 ) {
 
     /**
-     * Splash finished fetching remote. Only the ads of [destination] are requested — a returning
+     * Splash has settled remote, its configured ad waits and its permission prompt, and is ready to proceed.
+     * Only the ads of [destination] are requested — a returning
      * user whose flow is already completed gets `null` and therefore no request at all, instead of
      * paying for an LFO and an OB native that will never be shown.
      */

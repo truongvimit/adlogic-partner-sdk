@@ -61,9 +61,9 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Splash template. The app's launcher activity extends this and overrides the hooks it needs.
  *
- * Consent resolves before the optional notification prompt. Billing, remote config and ad loading
- * keep their existing ordering; ad loading may overlap that prompt. Handoff waits for both the ad
- * barriers and the permission result, so show/navigation do not run under system permission UI.
+ * Consent resolves before the optional notification prompt. Splash banner/interstitial loading
+ * may overlap that prompt. Next-screen preloading and handoff wait for the splash ad barriers and
+ * the permission result, so they do not run under system permission UI.
  * System permission UI waits for the user; network and host hooks keep their own timeouts.
  */
 open class ObSplashActivity : BaseOnboardActivity() {
@@ -226,10 +226,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
         val decision = OnboardingSdk.shouldStart()
         startDecision = decision
         ObLog.d(ObLog.Section.SPLASH, "start_decision=${describe(decision)} returning=${isReturningUser()}")
-        (decision as? StartDecision.Start)?.let {
-            sdk.preload().onSplashRemoteReady(this@ObSplashActivity, it.destination, it.resumeStepIndex)
-        }
-
         requestSplashAds()
 
         awaitBanner()
@@ -242,7 +238,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
 
         notification.await()
-        if (notificationPermissionRequested) awaitSplashFocus()
+        if (notificationPermissionRequested || decision is StartDecision.Start) awaitSplashFocus()
+        (decision as? StartDecision.Start)?.let {
+            sdk.preload().onSplashRemoteReady(this@ObSplashActivity, it.destination, it.resumeStepIndex)
+        }
         proceed()
     }
 
