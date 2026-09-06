@@ -13,7 +13,7 @@ adapters are bundled; [build.gradle](build.gradle) lists versions and dependenci
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '<tag>'
+def sdkVersion = '5.1.1'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -23,9 +23,6 @@ dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
 }
 ```
-
-The current 5.1.0 work is not published; choose an available
-[repository tag](https://github.com/truongvimit/adlogic-partner-sdk/tags).
 
 Add these entries to your app's `AndroidManifest.xml`. Use your existing Application class if
 you have one; the `PartnerApp` below is an example.

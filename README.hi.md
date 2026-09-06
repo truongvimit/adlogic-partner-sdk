@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-यह गाइड **5.1.0 के बदलाव बताती है; यह version अभी प्रकाशित नहीं है**। Published dependency के लिए `<tag>` को उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) से बदलें और उसी tag की README पढ़ें। सभी modules का version एक रखें।
+मौजूदा प्रकाशित version **5.1.1** है। सभी modules का version एक रखें। बाद में upgrade करते समय उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) चुनें और उसी tag की README पढ़ें।
 
 उदाहरण: ads और onboarding वाला ऐप। दूसरी ज़रूरत के लिए ऊपर की तालिका के अनुसार artifact नाम बदलें।
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '<tag>'
+def sdkVersion = '5.1.1'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

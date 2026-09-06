@@ -10,14 +10,12 @@ Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add JitPack using the [root setup
 
 ```groovy
 // app/build.gradle — same published tag as the other SDK modules.
-def sdkVersion = '<tag>'
+def sdkVersion = '5.1.1'
 dependencies {
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
 ```
 
-The current 5.1.0 work is not published; use an available
-[repository tag](https://github.com/truongvimit/adlogic-partner-sdk/tags).
 `debugImplementation` keeps this dashboard out of release builds. The module supplies its
 `INTERNET` permission. The bridge below also needs `trackkit`, already exported by `ads`;
 for a standalone bridge, declare `trackkit` explicitly at the same tag.
