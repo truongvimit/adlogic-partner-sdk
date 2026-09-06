@@ -1,6 +1,7 @@
 package com.ads.module.helper.adnative
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Looper
@@ -53,11 +54,17 @@ object NativeAdShimmer {
             .recoverCatching { staticFallback(context) }
             .getOrElse { flatBlock(context) }
             .apply {
+                if (background == null) background = rounded(this, CONTAINER_COLOR)
                 // Transparent-text placeholders must not be announced by TalkBack
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 // Shimmer 0.5.0 auto-(re)starts on attach by default, which would animate
                 // behind GONE — the helper alone starts and stops the animation
-                setShimmer(Shimmer.AlphaHighlightBuilder().setAutoStart(false).build())
+                // dispatchDraw isolates the mask itself; a hardware layer around the entire
+                // view would include the opaque backdrop and is unnecessary.
+                setShimmer(Shimmer.AlphaHighlightBuilder()
+                    .setClipToChildren(false)
+                    .setAutoStart(false)
+                    .build())
             }
 
     /**
@@ -73,7 +80,7 @@ object NativeAdShimmer {
     }
 
     private fun buildFromAdLayout(context: Context, @LayoutRes adLayoutId: Int): ShimmerFrameLayout {
-        val shimmer = ShimmerFrameLayout(context).apply {
+        val shimmer = OpaqueShimmerLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -182,13 +189,25 @@ object NativeAdShimmer {
         cornerRadius = CORNER_RADIUS_DP * view.resources.displayMetrics.density
     }
 
-    private fun staticFallback(context: Context): ShimmerFrameLayout =
+    private fun staticFallback(context: Context): ShimmerFrameLayout {
         // Inflate against a throwaway parent so the root's XML width/height survive
-        LayoutInflater.from(context)
+        val inflated = LayoutInflater.from(context)
             .inflate(R.layout.load_fb_native, FrameLayout(context), false) as ShimmerFrameLayout
+        return OpaqueShimmerLayout(context).apply {
+            id = inflated.id
+            layoutParams = inflated.layoutParams
+            background = inflated.background
+            setPadding(inflated.paddingLeft, inflated.paddingTop, inflated.paddingRight, inflated.paddingBottom)
+            while (inflated.childCount > 0) {
+                val child = inflated.getChildAt(0)
+                inflated.removeView(child)
+                addView(child)
+            }
+        }
+    }
 
     private fun flatBlock(context: Context): ShimmerFrameLayout =
-        ShimmerFrameLayout(context).apply {
+        OpaqueShimmerLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -198,6 +217,18 @@ object NativeAdShimmer {
                 ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(FALLBACK_HEIGHT_DP)),
             )
         }
+
+    /** Keep the card background outside the alpha mask that animates its skeleton children. */
+    private class OpaqueShimmerLayout(context: Context) : ShimmerFrameLayout(context) {
+        override fun dispatchDraw(canvas: Canvas) {
+            val layer = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
+            try {
+                super.dispatchDraw(canvas)
+            } finally {
+                canvas.restoreToCount(layer)
+            }
+        }
+    }
 
     private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
