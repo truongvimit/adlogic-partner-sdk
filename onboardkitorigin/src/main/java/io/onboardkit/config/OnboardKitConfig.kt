@@ -68,12 +68,12 @@ data class LanguageConfig(
     /**
      * Whether the confirm button is on screen before the user has picked anything.
      *
-     * `true` (default) keeps it visible but dimmed, so the way out of the screen is obvious from
-     * the start. `false` hides it until the first tap, which makes selecting a language the only
-     * thing the screen offers. AND-ed with the `ob_show_language_confirm_before_select` remote
+     * `false` (default) hides it until the first tap, which makes selecting a language the only
+     * thing the screen offers. `true` keeps it visible but dimmed, so the way out of the screen
+     * is obvious from the start. AND-ed with the `ob_show_language_confirm_before_select` remote
      * flag; either side turning it off hides the button.
      */
-    val confirmVisibleBeforeSelect: Boolean = true,
+    val confirmVisibleBeforeSelect: Boolean = false,
     /**
      * Back on the first-open language screen never leaves the flow. When a language is already
      * picked, this also reveals a full-width Save button above the ad — the way out the screen
