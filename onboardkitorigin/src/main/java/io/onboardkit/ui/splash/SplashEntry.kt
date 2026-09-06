@@ -34,9 +34,24 @@ enum class SplashEntry(val interKey: String) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
 
+    /**
+     * Preserves this entry's routing and extras while omitting the splash banner, interstitial
+     * and SPLASH_INTER paywall checkpoint. Consent, permissions and first-open setup still run;
+     * ads on subsequent onboarding screens remain the host's existing policy.
+     *
+     * Unlike returning null from splashInterstitialOverride, this cannot fall back to a regular
+     * splash ad unit. The ordinary [intent] method keeps its previous behavior.
+     */
+    fun intentWithoutSplashAds(context: Context, splashActivity: Class<out ObSplashActivity>): Intent =
+        intent(context, splashActivity).putExtra(EXTRA_WITHOUT_SPLASH_ADS, true)
+
     companion object {
         /** Namespaced so it cannot collide with a feature extra the app puts on the same intent. */
         private const val EXTRA_ENTRY = "ob_splash_entry"
+        private const val EXTRA_WITHOUT_SPLASH_ADS = "ob_without_splash_ads"
+
+        internal fun withoutSplashAds(intent: Intent?): Boolean =
+            intent?.getBooleanExtra(EXTRA_WITHOUT_SPLASH_ADS, false) == true
 
         /** The entry a launch came through, or `null` for a plain launcher tap. */
         fun from(intent: Intent?): SplashEntry? = from(intent?.extras)

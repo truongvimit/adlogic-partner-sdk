@@ -47,6 +47,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Options for one flow run. */
@@ -85,6 +88,16 @@ object OnboardingSdk {
     private var adsAllowed: Boolean = true
 
     private val eventBus = EventBus()
+    private val _isFlowActive = MutableStateFlow(false)
+
+    /**
+     * Whether an actual onboarding UI flow has started and has not reached a terminal outcome.
+     * Unlike FlowStarted telemetry (also emitted for skipped launches), this never becomes true
+     * for a skip. Published false before the outcome listener runs, so async adapters can collect
+     * the current state without replaying a stale start event after a synchronous completion.
+     * This is process state, not persisted setup completion; read [state] for completed progress.
+     */
+    val isFlowActive: StateFlow<Boolean> = _isFlowActive.asStateFlow()
     internal val session = OnboardingSession()
     private val sdkScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -214,6 +227,7 @@ object OnboardingSdk {
     suspend fun reset() {
         stateStore?.reset()
         session.reset()
+        _isFlowActive.value = false
     }
 
     /** Marks onboarding done without running it. */
@@ -306,18 +320,26 @@ object OnboardingSdk {
                 OnboardingOutcome.Skipped(decision.reason, options.passthrough),
             )
 
-            is StartDecision.Start -> when (decision.destination) {
-                FlowDestination.LANGUAGE ->
-                    ObLanguageActivity.start(activity, LanguageScreenMode.FIRST_OPEN)
+            is StartDecision.Start -> {
+                _isFlowActive.value = true
+                try {
+                    when (decision.destination) {
+                        FlowDestination.LANGUAGE ->
+                            ObLanguageActivity.start(activity, LanguageScreenMode.FIRST_OPEN)
 
-                FlowDestination.ONBOARDING ->
-                    ObOnboardingHostActivity.start(activity, decision.resumeStepIndex)
+                        FlowDestination.ONBOARDING ->
+                            ObOnboardingHostActivity.start(activity, decision.resumeStepIndex)
 
-                FlowDestination.QUESTION_NEW_USER ->
-                    ObQuestionActivity.start(activity, QuestionSource.NEW_USER)
+                        FlowDestination.QUESTION_NEW_USER ->
+                            ObQuestionActivity.start(activity, QuestionSource.NEW_USER)
 
-                FlowDestination.QUESTION_OLD_USER ->
-                    ObQuestionActivity.start(activity, QuestionSource.OLD_USER)
+                        FlowDestination.QUESTION_OLD_USER ->
+                            ObQuestionActivity.start(activity, QuestionSource.OLD_USER)
+                    }
+                } catch (error: RuntimeException) {
+                    _isFlowActive.value = false
+                    throw error
+                }
             }
         }
     }
@@ -435,6 +457,7 @@ object OnboardingSdk {
     }
 
     internal fun deliverOutcome(context: Context, outcome: OnboardingOutcome) {
+        _isFlowActive.value = false
         listener?.onFinished(context, outcome)
             ?: Log.w(TAG, "No OnboardingListener registered — outcome dropped: $outcome")
     }

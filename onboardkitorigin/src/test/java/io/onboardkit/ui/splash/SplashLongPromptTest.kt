@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Looper
@@ -32,6 +33,11 @@ import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.SplashConfig
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
+import io.onboardkit.core.OnboardingListener
+import io.onboardkit.core.OnboardingOutcome
+import io.onboardkit.paywall.PaywallGate
+import io.onboardkit.paywall.PaywallOutcome
+import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.AnalyticsPlugin
 import kotlinx.coroutines.CompletableDeferred
@@ -70,6 +76,14 @@ class SplashLongPromptTest {
         ConsentCenter.configure(ConsentOptions(debug = false, timeoutMs = 20_000))
         OnboardingSdk.install(app) {
             adProvider = LongPromptFixture.provider
+            listener = OnboardingListener { _, outcome -> LongPromptFixture.outcomes += outcome }
+            paywallGate = object : PaywallGate {
+                override suspend fun shouldShow(placement: PaywallPlacement): Boolean {
+                    if (placement == PaywallPlacement.SPLASH_INTER) LongPromptFixture.splashPaywallChecks++
+                    return true
+                }
+                override suspend fun present(activity: Activity, placement: PaywallPlacement) = PaywallOutcome.ContinueWithAds
+            }
             trackkitAutoTracking(false)
             analyticsPlugin(AnalyticsPlugin {
                 if (it is AnalyticsEvent.FlowStarted) LongPromptFixture.flowStarts++
@@ -114,6 +128,61 @@ class SplashLongPromptTest {
         assertTrue(LongPromptFixture.provider.order.isEmpty())
         main.idleFor(Duration.ofSeconds(5))
         completeInterstitialAndAssertNormalHandoff()
+    }
+
+    @Test
+    fun notificationWithoutSplashAdsKeepsEntryAndDestinationWhileSkippingAllSplashMonetization() {
+        assertEntryWithoutSplashAds(SplashEntry.NOTIFICATION)
+    }
+
+    @Test
+    fun widgetWithoutSplashAdsKeepsEntryAndDestinationWhileSkippingAllSplashMonetization() {
+        assertEntryWithoutSplashAds(SplashEntry.WIDGET)
+    }
+
+    @Test
+    fun uninstallWithoutSplashAdsKeepsEntryAndDestinationWhileSkippingAllSplashMonetization() {
+        assertEntryWithoutSplashAds(SplashEntry.UNINSTALL)
+    }
+
+    private fun assertEntryWithoutSplashAds(entry: SplashEntry) {
+        runBlocking { OnboardingSdk.markCompleted() }
+        launch(notification = false, launchIntent = entry.intentWithoutSplashAds(app, LongPromptSplashActivity::class.java)
+            .putExtra("feature_id", "translate").putExtra("entry_id", "one-entry"))
+        drainUntil("Ad-free entry must still run the splash initialization") { LongPromptFixture.remoteHookCalled }
+        main.idleFor(Duration.ofSeconds(30))
+        drainUntil("Returning user must reach the existing outcome listener") { LongPromptFixture.outcomes.size == 1 }
+        val outcome = LongPromptFixture.outcomes.single() as OnboardingOutcome.Skipped
+        assertEquals(entry, SplashEntry.from(outcome.passthrough))
+        assertEquals("translate", outcome.passthrough?.getString("feature_id"))
+        assertEquals("one-entry", outcome.passthrough?.getString("entry_id"))
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+        assertEquals(0, LongPromptFixture.splashPaywallChecks)
+        main.idleFor(Duration.ofMinutes(1))
+        assertEquals("No ad timeout callback may produce a second handoff", 1, LongPromptFixture.outcomes.size)
+    }
+
+    @Test
+    fun adFreeSplashStillStartsRequiredOnboardingAndKeepsItsExistingAdPolicy() {
+        launch(notification = false, launchIntent = SplashEntry.WIDGET.intentWithoutSplashAds(app, LongPromptSplashActivity::class.java))
+        drainUntil("Initialization must finish") { LongPromptFixture.remoteHookCalled }
+        main.idleFor(Duration.ofSeconds(30))
+        drainUntil("First-open setup must still start") { LongPromptFixture.flowStarts == 1 }
+        assertTrue("Setup was not falsely completed/skipped", LongPromptFixture.outcomes.isEmpty())
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.splashPaywallChecks)
+    }
+
+    @Test
+    fun existingTaggedEntryRetainsSplashLoadsShowAndPaywallCheckpoint() {
+        launch(notification = false, launchIntent = SplashEntry.NOTIFICATION.intent(app, LongPromptSplashActivity::class.java))
+        drainUntil("Legacy tagged entry must still load its splash ad") { LongPromptFixture.provider.interstitialLoads == 1 }
+        completeInterstitialAndAssertNormalHandoff()
+        assertEquals(1, LongPromptFixture.splashPaywallChecks)
     }
 
     @Test
@@ -175,7 +244,7 @@ class SplashLongPromptTest {
         completeInterstitialAndAssertNormalHandoff(verifyFreshMinimum = verifyFreshMinimum)
     }
 
-    private fun launch(notification: Boolean) {
+    private fun launch(notification: Boolean, launchIntent: Intent? = null) {
         OnboardingSdk.configure(onboardKitConfig {
             splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = notification,
                 minDisplayTimeMs = 0, remoteFetchTimeoutMs = 100)
@@ -184,7 +253,7 @@ class SplashLongPromptTest {
                 splashInterstitial = InterstitialAdUnit("host-interstitial"),
                 languageNative = NativeAdUnit("host-language"))
         }.getOrThrow()).getOrThrow()
-        controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java).setup().visible()
+        controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java, launchIntent).setup().visible()
         requireNotNull(controller).get().onWindowFocusChanged(true)
         main.idle()
     }
@@ -246,7 +315,11 @@ private object LongPromptFixture {
     var billing: CompletableDeferred<Unit>? = null
     var billingEntered = false
     var remoteHookCalled = false
+    var splashPaywallChecks = 0
+    val outcomes = mutableListOf<OnboardingOutcome>()
     fun reset() {
+        splashPaywallChecks = 0
+        outcomes.clear()
         billing = null
         billingEntered = false
         remoteHookCalled = false
