@@ -2,7 +2,7 @@
 
 This small application proves selective dependency composition, public API linkage and R8 packaging separately from the full SDK demo. It is not published, has no Google Services plugin, and contains no ad/Firebase/OnboardKit/billing dependency. Common source imports only core. Each build includes exactly one profile's source directory and one selected SDK artifact.
 
-**Build validation:** all six project and six POM-only Maven release builds passed R8/resource shrinking at `723a57c`, with all 12 actual runtime graph/merged-manifest composition checks and six local AAR/POM/metadata inspections passing. See [VERIFICATION.md](VERIFICATION.md) for the frozen source, exact QA version, evidence and the subsequent scoped pending-route correction. This is local publication/build evidence; device validation is owned separately by the root task. The artifacts are unreleased and are not part of the existing 5.1.1 release.
+**Build validation:** all six project and six POM-only Maven release builds passed R8/resource shrinking at `1d06439`, with all 12 actual runtime graph/merged-manifest composition checks and six local AAR/POM/metadata inspections passing. See [VERIFICATION.md](VERIFICATION.md) for the frozen source, exact QA version, evidence, including the widget return and consumer route readiness corrections. This is local publication/build evidence; device validation is owned separately by the root task. The artifacts are unreleased and are not part of the existing 5.1.1 release.
 
 ## Select a profile and dependency source
 
@@ -90,4 +90,4 @@ The Python tooling tests validate profile/property parsing, safety and umbrella 
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/retentionkit -p 'test_*.py' -v
 ```
 
-The baseline project/POM matrix and publication inspections are complete. Three actual ProofActivity/core routing regressions now pass after reproducing the late-source-readiness bug; the 25 Python parser fixtures also pass separately. Final consumer minify/publication follow-up waits for the widget return correction and a new QA version, as recorded in [VERIFICATION.md](VERIFICATION.md). Root-owned runtime routing/device and full example acceptance remain separate. Ticket07 stays open until the root validation owner completes that broader acceptance.
+The full project/POM matrix and publication inspections at `1d06439` are complete, including the widget return and consumer route readiness corrections. Three actual ProofActivity/core routing regressions and 25 separate Python parser fixtures pass. See [VERIFICATION.md](VERIFICATION.md) for exact evidence. Later code-review corrections require their own affected recheck; root-owned device/full example acceptance remains separate. Ticket07 stays open until the root validation owner completes that broader acceptance.

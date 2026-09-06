@@ -1,36 +1,36 @@
 # Retention consumer and publication verification
 
-The immutable baseline passed **12 release builds with R8/resource shrinking, 12 resolved runtime graph/composition checks and six publication inspections**. This verifies real selective and umbrella consumers, including optional suite dependencies being absent from standalone umbrella use. It does not establish device behavior or remote publication.
+The captured matrix at `1d06439` passed **12 release builds with R8/resource shrinking, 12 resolved runtime graph/composition checks and six publication inspections**. It includes the widget return correction and bounded consumer route readiness retry. This proves actual selective/umbrella consumer linkage and packaging; device behavior and code-review correctness have separate evidence.
 
 ## Frozen source and local publication
 
-- Library and baseline consumer commit: `723a57c1cd6508ef394107f82c6e6755a9a5957d`.
-- Explicit local QA version: `retentionkit-qa-20260907-723a57c`.
+- Library and consumer commit: `1d06439b0606edfa3585c357b986014ee0e4d01a`.
+- Explicit local QA version: `retentionkit-qa-20260907-1d06439`.
 - Maven group: `com.github.truongvimit`; repository: `/Users/duongkhai/.m2/repository`.
 - Six published artifacts: `retention-core`, `retention-notifications`, `retention-widgets`, `retention-feedback`, `retention-review`, `retentionkit`. This application is not published.
-- [Machine-readable baseline summary](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/matrix-summary.json).
-- [Publication build capture](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/publication-build/run.json).
+- [Machine-readable matrix summary](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-1d06439/matrix-summary.json).
+- [Publication build capture](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-1d06439/publication-build/run.json).
 
-Every Gradle capture reports a clean, unchanged source checkout before/after execution, the exact argv and VERSION environment, timestamps, exit code, and log hashes. AAR/POM/.module copies, APKs, merged release manifests and R8 mappings are retained with hashes in the external evidence directory. All six publication coordinate/integrity checks passed.
+Every Gradle capture reports a clean, unchanged source checkout before/after execution, the exact argv and VERSION environment, timestamps, exit code, and log hashes. AAR/POM/.module copies, APKs, merged release manifests and R8 mappings are retained with hashes in the external evidence directory. All six publication coordinate/integrity checks passed; recorded log/artifact hashes were rechecked when aggregating the matrix.
 
-## Baseline matrix
+## Matrix
 
 Each row passed the actual release assembly, `releaseRuntimeClasspath` graph, and matching AAR/POM/merged release manifest composition check:
 
 | Profile | Dependency source | Result | APK bytes | Retention dependency closure |
 |---|---|---|---:|---|
-| core | project | PASS | 108938 | core |
-| core | Maven POM | PASS | 108934 | core |
-| notifications | project | PASS | 144326 | core, notifications |
-| notifications | Maven POM | PASS | 144318 | core, notifications |
-| widgets | project | PASS | 134030 | core, widgets |
-| widgets | Maven POM | PASS | 134026 | core, widgets |
-| feedback | project | PASS | 131042 | core, feedback |
-| feedback | Maven POM | PASS | 131050 | core, feedback |
-| review | project | PASS | 138163 | core, review |
-| review | Maven POM | PASS | 138151 | core, review |
-| umbrella | project | PASS | 198019 | all six artifacts |
-| umbrella | Maven POM | PASS | 198031 | all six artifacts |
+| core | project | PASS | 109126 | core |
+| core | Maven POM | PASS | 109130 | core |
+| notifications | project | PASS | 144574 | core, notifications |
+| notifications | Maven POM | PASS | 144562 | core, notifications |
+| widgets | project | PASS | 135062 | core, widgets |
+| widgets | Maven POM | PASS | 135062 | core, widgets |
+| feedback | project | PASS | 131182 | core, feedback |
+| feedback | Maven POM | PASS | 131186 | core, feedback |
+| review | project | PASS | 138407 | core, review |
+| review | Maven POM | PASS | 138439 | core, review |
+| umbrella | project | PASS | 199427 | all six artifacts |
+| umbrella | Maven POM | PASS | 199431 | all six artifacts |
 
 The APK sizes describe this tiny signed proof app, not an SDK size benchmark. Different application IDs and resources can change APK bytes; use the recorded hashes to identify artifacts.
 
@@ -45,13 +45,13 @@ For every profile/source pair, the evidence directory contains:
 - `<profile>-<source>-artifacts/artifacts.json`, APK, merged manifest and mapping.
 - `<profile>-<source>-composition.json`; publication reports are `<artifact>-publication.json`, with exact published files under `published/<artifact>/`.
 
-The [sample README](README.md) gives project/POM selection. The captured build command runs `:sample-retention-only:printRetentionConsumerConfiguration` and `:sample-retention-only:assembleRelease`; the separate graph command runs `:sample-retention-only:dependencies --configuration releaseRuntimeClasspath`. Both use the actual profile/source properties and `--no-daemon --console=plain --max-workers=2 --stacktrace`. Maven captures add the exact version/repository properties. The [verification tool](../scripts/retentionkit/README.md) records these arguments without a shell and verifies matching evidence.
+The [sample README](README.md) gives project/POM selection. The captured build command runs `:sample-retention-only:printRetentionConsumerConfiguration` and `:sample-retention-only:assembleRelease`; the separate graph command runs `:sample-retention-only:dependencies --configuration releaseRuntimeClasspath`. Both use the actual profile/source properties and `--no-daemon --console=plain --max-workers=2 --stacktrace`. Maven captures add the exact version/repository properties. The [verification tool](../scripts/retentionkit/README.md) passes the explicit publication version into Gradle, records arguments without a shell and verifies matching evidence.
 
-## Subsequent consumer correction and scope
+## Earlier baseline and follow-up scope
 
-Consumer-only commit `5263826` preserves the pending token when an SDK route is accepted but the entry remains staged. For example, a final feedback configuration/UI gate may block before consumption; SdkHandled alone must not drop the route. The library and published QA version are unchanged. Affected feedback/umbrella project and Maven consumers require a scoped recheck; that recheck is pending in this documentation checkpoint. Other profile behavior and dependency configuration are unchanged.
+The [earlier 723a57c matrix](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/matrix-summary.json) also passed at its own immutable source. Later consumer commits `5263826` and `da33792` preserve staged SDK entries and retry readiness after source destruction. Widget correction `1239bd3` handles temporary launcher return and narrow widget layout. All are integrated into the `1d06439` source used by the full new matrix above; the earlier QA artifacts were not reused.
 
-Root-owned API 36 follow-up also exposed a missing consumer readiness retry after feedback source destruction and a separate widget launcher-return case. The baseline above is historical evidence at its exact frozen source, not acceptance of subsequent fixes. Later library corrections require a new exact QA version and the affected consumer closure to be published/rechecked. Final consumer release/publication follow-up remains held for that integration.
+Any subsequent library correction needs a new exact QA version and the affected consumer closure to be rechecked. These build results alone do not close separate code-review findings or the root-owned overall acceptance.
 
 ## Readiness regression evidence
 
