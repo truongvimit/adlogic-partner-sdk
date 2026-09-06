@@ -97,6 +97,16 @@ public class AppPurchase {
      * refunded user staying premium forever.
      */
     private volatile boolean verifiedThisProcess = false;
+    private final AuthoritativeEntitlement authoritativeEntitlement = new AuthoritativeEntitlement();
+
+    /** Replays current-process evidence, never inferred from cached premium or verifyFinish. */
+    public kotlinx.coroutines.flow.StateFlow<BillingEntitlement> getEntitlement() {
+        return authoritativeEntitlement.getState();
+    }
+
+    public BillingEntitlement getEntitlementSnapshot() {
+        return authoritativeEntitlement.getState().getValue();
+    }
 
     private boolean isUpdateInapps = false;
     private boolean isUpdateSubs = false;
@@ -410,6 +420,8 @@ public class AppPurchase {
             endConnection();
         }
         appContext = application.getApplicationContext();
+        // A newly registered catalogue needs its own complete verification.
+        authoritativeEntitlement.resetForCatalog();
 
         purchaseItems.clear();
         List<String> inAppIdList = new ArrayList<>();
@@ -546,6 +558,9 @@ public class AppPurchase {
     public void setPurchase(boolean purchase) {
         isPurchase = purchase;
         PurchasePrefs.write(appContext, purchase, "manual");
+        // An explicit backend grant can safely verify premium. A legacy false setter is not
+        // evidence that Play successfully queried every configured ownership type.
+        if (purchase) authoritativeEntitlement.grantPremium();
         notifyVerifyCompletion(BillingClient.BillingResponseCode.OK);
     }
 
@@ -596,7 +611,7 @@ public class AppPurchase {
         final List<String> productIdsINAP = new ArrayList<>(inAppIds);
         final List<String> productIdsSUBS = new ArrayList<>(subsIds);
         final VerifySweep sweep =
-                new VerifySweep(isCallback, !productIdsINAP.isEmpty(), !productIdsSUBS.isEmpty());
+                new VerifySweep(isCallback, !productIdsINAP.isEmpty(), !productIdsSUBS.isEmpty(), authoritativeEntitlement.beginSweep());
 
         if (!sweep.issuedAnyQuery()) {
             finishVerify(sweep);
@@ -610,6 +625,7 @@ public class AppPurchase {
                         sweep.record(billingResult.getResponseCode());
                         if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK && list != null) {
                             collectInapp(sweep, list, productIdsINAP);
+                            sweep.inapPayloadValid = true;
                         }
                         sweep.inapDone = true;
                         finishVerify(sweep);
@@ -624,6 +640,7 @@ public class AppPurchase {
                         sweep.record(billingResult.getResponseCode());
                         if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK && list != null) {
                             collectSubs(sweep, list, productIdsSUBS);
+                            sweep.subsPayloadValid = true;
                         }
                         sweep.subsDone = true;
                         finishVerify(sweep);
@@ -704,6 +721,9 @@ public class AppPurchase {
             Log.e(TAG, "verifyPurchased: keeping previous entitlement, worst code " + sweep.worstCode);
         }
 
+        authoritativeEntitlement.completeSweep(sweep.entitlementSweep,
+                sweep.isTrustworthy() && sweep.inapPayloadValid && sweep.subsPayloadValid,
+                sweep.purchased);
         notifyVerifyCompletion(sweep.worstCode);
 
         if (billingListener != null && sweep.isCallback && initCallbackDelivered.compareAndSet(false, true)) {
@@ -734,15 +754,21 @@ public class AppPurchase {
         final boolean queryInap;
         final boolean querySubs;
         final AtomicBoolean finished = new AtomicBoolean(false);
+        final AuthoritativeEntitlement.Sweep entitlementSweep;
         final List<String> inappIds = new CopyOnWriteArrayList<>();
         final List<PurchaseResult> inappPurchases = new CopyOnWriteArrayList<>();
         final List<PurchaseResult> subs = new CopyOnWriteArrayList<>();
         volatile boolean inapDone;
         volatile boolean subsDone;
         volatile boolean purchased;
+        volatile boolean inapPayloadValid;
+        volatile boolean subsPayloadValid;
         volatile int worstCode = BillingClient.BillingResponseCode.OK;
 
-        VerifySweep(boolean isCallback, boolean queryInap, boolean querySubs) {
+        VerifySweep(boolean isCallback, boolean queryInap, boolean querySubs, AuthoritativeEntitlement.Sweep entitlementSweep) {
+            this.entitlementSweep = entitlementSweep;
+            this.inapPayloadValid = !queryInap;
+            this.subsPayloadValid = !querySubs;
             this.isCallback = isCallback;
             this.queryInap = queryInap;
             this.querySubs = querySubs;
@@ -1279,6 +1305,12 @@ public class AppPurchase {
             isPurchase = true;
             idPurchased = productId;
             PurchasePrefs.write(appContext, true, "purchase");
+            // Grant only configured entitlement products after PURCHASED and optional verifier
+            // success. Simulated grants use grantDevPurchase and never reach this path.
+            if (purchaseItems.stream().anyMatch(item -> item.getItemId().equals(productId)
+                    && item.getType() != TYPE_IAP.CONSUMABLE)) {
+                authoritativeEntitlement.grantPremium();
+            }
         }
 
         BillingTracking.trackPurchaseSuccess(

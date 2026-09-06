@@ -20,6 +20,7 @@ data class RetentionOptions @JvmOverloads constructor(
     val store: RetentionStore? = null,
     val initialUserState: RetentionUserState = RetentionUserState(),
     val initialOverrides: Map<String, String> = emptyMap(),
+    val uiHost: RetentionUiHost = RetentionUiHost.NONE,
 )
 
 sealed class RetentionInstallResult {
@@ -45,7 +46,9 @@ class RetentionRuntime private constructor(val application: Application, private
     @Volatile var isForeground: Boolean = false; private set
     private val tracker = RetentionActivityTracker(application, { signal(it) }, { ui.invalidate() }, diagnostics)
     val activities: ForegroundActivityProvider = tracker
-    val ui = RetentionUiCoordinator(clock, activities, { isForeground && !closed }, { userState.onboardingActive })
+    val ui = RetentionUiCoordinator(clock, activities, { isForeground && !closed }, { userState.onboardingActive }, options.uiHost) {
+        diagnostics.record("core.ui_host", "Host UI adapter failed", RetentionDiagnosticLevel.ERROR, it)
+    }
 
     private fun initialize(): List<String> {
         if (options.modules.map { it.id }.distinct().size != options.modules.size) return listOf("Duplicate module ID")
@@ -163,12 +166,19 @@ class RetentionRuntime private constructor(val application: Application, private
     }
 
     /** Atomic PATCH semantics. Removing a key explicitly restores the module's built-in default. */
-    @JvmOverloads fun updateConfig(overrides: Map<String, String>, removeKeys: Set<String> = emptySet()): RetentionConfigResult {
+    @JvmOverloads fun updateConfig(overrides: Map<String, String>, removeKeys: Set<String> = emptySet()): RetentionConfigResult =
+        updateConfigInternal(overrides, removeKeys, null)
+
+    internal fun updateConfigAtRevision(overrides: Map<String, String>, removeKeys: Set<String>, expectedRevision: Long): RetentionConfigResult =
+        updateConfigInternal(overrides, removeKeys, expectedRevision)
+
+    private fun updateConfigInternal(overrides: Map<String, String>, removeKeys: Set<String>, expectedRevision: Long?): RetentionConfigResult {
         val patch = overrides.toMap()
         val removals = removeKeys.toSet()
         repeat(16) {
             if (closed) return RetentionConfigResult.Rejected(listOf("Runtime is shut down"))
             val previous = config
+            if (expectedRevision != null && expectedRevision != previous.revision) return RetentionConfigResult.Rejected(listOf("stale_revision"))
             val values = previous.values.toMutableMap().apply { removals.forEach { remove(it) }; putAll(patch) }
             val candidate = RetentionConfigSnapshot(previous.revision + 1, values)
             // Validators are partner code: never invoke them under the state lock. They may run
