@@ -19,7 +19,7 @@ Existing XML may be stale. First capture the relevant real Gradle test tasks, th
 
 ## 2. Capture real Gradle tasks
 
-The caller selects task names verified in the current checkout (`./gradlew tasks --all`). The following task names follow the repository's release publication convention; use them only once those RetentionKit modules/tasks exist:
+The caller selects task names verified in the current checkout (`./gradlew tasks --all`). These RetentionKit tasks implement the repository's release publication convention:
 
 ```sh
 python3 scripts/retentionkit/verify.py gradle \
@@ -87,6 +87,8 @@ The checker inspects all four evidence layers:
 `publication` also works for umbrella `retentionkit`: it checks integrity/coordinates without applying a selective profile. Run it per published artifact. It does not contact Maven/JitPack or claim remote availability. AAR resources are allowed and expected; this script imposes no “zero resources” restriction. Android binary AXML is rejected: supply decoded AAR/AGP manifest XML, not an APK's binary manifest.
 
 Composition evidence is complete only when paired with real release/minify **consumer** build results. Do not mark isolated publication/compatibility checks passed just because the library AAR passes this scanner.
+
+The [consumer verification record](../../sample-retention-only/VERIFICATION.md) links the actual six project/six POM-only matrix at library version `retentionkit-qa-20260907-723a57c`. Maven graphs were additionally checked for the absence of all `project :` nodes so a required coordinate cannot conceal source substitution. It is local QA evidence, not a remote release.
 
 ## 4. Root-owned device evidence capture
 

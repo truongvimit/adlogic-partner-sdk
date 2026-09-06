@@ -1,8 +1,8 @@
 # 05 Suite integration and simple partner facade
 
 Type: task
-Status: claimed
-Blocked by: 07 (optional-dependency minified consumer acceptance)
+Status: resolved
+Blocked by: none
 
 Spec: ../spec.md
 
@@ -14,7 +14,7 @@ Follow the shared implementation contract and acceptance ledger in spec.md. Comm
 
 ## Comments
 
-Claimed for preliminary, independent ads/OnboardKit compatibility bridges. Ticket 01 remains a dependency for the Retention facade and adapters; this claim does not resolve that dependency or the whole ticket.
+Originally claimed for preliminary ads/OnboardKit compatibility bridges. The final core/modules integration, facade/adapters, regression suite and optional-dependency consumer acceptance are now complete; see the final acceptance below.
 
 ## Answer — preliminary bridge increment
 
@@ -33,4 +33,12 @@ Claimed for preliminary, independent ads/OnboardKit compatibility bridges. Ticke
 - Final bridge increment: optional `BillingRetentionBridge` maps only the authoritative engine enum (UNKNOWN / VERIFIED_NON_PREMIUM / VERIFIED_PREMIUM), including a verified snapshot produced before bridge install. It does not infer from cached/default `isPremium`, `awaitReady`, or initialize another Billing client. The ads module now offers `ERainLogEventManager.observeAdClicks(owner, observer)` at its existing synchronous vendor-click point. Owner replacement/close is isolated; no buffered replay; Tracker emission and daily cap counting remain intact. Onboard forwards this seam automatically and unregisters only its own observation.
 - Onboard registers the SDK feedback Activity in the existing resume exclusion seam before its first start; synchronous host safety includes actual fullscreen ads and authoritative active onboarding state. Splash-only no-ad entry behavior retains first-open setup and later host onboarding policy. SDK UI and external transitions own independent bounded resume handles; finished external cleanup is deferred one main turn so OPEN and WELCOME see the same return snapshot in either real LifecycleRegistry observer order. Failed handoff without departure cannot poison a later return or clear another owner. No adapter overwrites ResumeSkipPolicy, toggles global enable flags, replaces the existing listener or launches duplicate notification permission UI.
 - Validation (after final core, widgets, notifications, feedback/review and Billing API merged): `./gradlew :ads:testDebugUnitTest :onboardkitorigin:testDebugUnitTest :retention-core:testDebugUnitTest :suite-firebase:testDebugUnitTest :retentionkit:testDebugUnitTest :retentionkit:assembleRelease :suite-firebase:assembleRelease --max-workers=2 --console=plain` passed in 49 seconds: ads 162 + OnboardKit 168 + core 39 + Firebase 4 + facade 12 = 385 tests, zero failures/errors/skips. Both release AAR tasks passed. Log: `/tmp/retentionkit-05-final.log`.
-- Source implementation and regression validation are complete. Status remains claimed pending ticket 07's minified selective/umbrella consumers, specifically absence of optional Onboard/Billing/Trackkit dependencies in the standalone umbrella. No broad keep/dontwarn rules or device outcome claims were added. Device/consumer evidence belongs to the shared acceptance ledger.
+- Source implementation and regression validation completed in `ac8c7d5`; the only remaining ticket 05 condition was standalone umbrella optional-dependency/minified consumer acceptance. That condition is now verified below. Device outcomes and the broader remaining ticket 07 matrix stay in their separate acceptance ledgers.
+
+
+## Answer — final acceptance
+
+- Ticket 07 verified the frozen integrated source `723a57c1cd6508ef394107f82c6e6755a9a5957d`, publication version `retentionkit-qa-20260907-723a57c`. All Retention modules and related adapter source trees in the current delivery commit `2dcb845450ec61c26ddccbc62001b13ae66fe813` are unchanged from this verified source.
+- Both standalone umbrella consumers executed `:sample-retention-only:minifyReleaseWithR8` and `assembleRelease` successfully: project dependency mode in 40 seconds and POM-only local Maven mode in 38 seconds. Exact command arguments, source-unchanged assertions, exit codes and hashed output are in [project run](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/umbrella-project-build/run.json) and [Maven run](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/umbrella-maven-build/run.json). The Maven consumer uses the exact local QA version and no project substitutions.
+- Independent `releaseRuntimeClasspath` captures and matching AAR/POM/merged-manifest scans passed with `ok=true`, `errors=[]`; the graph contains no optional ads, OnboardKit, BillingKit, Trackkit or Firebase stack. Both scans include all six required Retention artifacts. Evidence: [project composition](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/umbrella-project-composition.json), [Maven composition](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/umbrella-maven-composition.json), [publication integrity](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-consumers-20260907-723a57c/retentionkit-publication.json). This acceptance reread the records and verified their source identity and referenced SHA-256 hashes.
+- No keep/dontwarn rule was needed. Ticket 05 is resolved on its 385-test regression suite, release AAR assembly and verified optional-dependency R8 composition. This is local publication/packaging evidence; it does not claim remote publication, device visibility or a Play review result. Remaining example/device/selective-matrix work stays under tickets 06–07.
