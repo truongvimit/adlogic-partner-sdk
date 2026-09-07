@@ -241,4 +241,31 @@ class RetentionSuiteTest {
         assertNotNull("An ordinary terminal outcome must never select the pending backlog", kit.runtime.entries.pending(selected.token))
     }
 
+    @Test fun failedRestoredMainBindingCannotLeaveAnUnownedNavigationCallback() {
+        val durable = SharedPreferencesRetentionStore(app, "failed_bind_${UUID.randomUUID()}")
+        var failEntryRead = false
+        val store = object : RetentionStore by durable {
+            override fun <T> transaction(namespace: String, block: (RetentionTransaction) -> T): T {
+                if (namespace == "core.entries" && failEntryRead) {
+                    failEntryRead = false
+                    throw RetentionStorageException("Read failed during restored binding")
+                }
+                return durable.transaction(namespace, block)
+            }
+        }
+        val kit = install(options(customize = { it.copy(store = store) }))
+        val selected = entry()
+        val original = Robolectric.buildActivity(Main::class.java, Intent(intent(selected)).setClass(app, Main::class.java)).create().start()
+        val saved = Bundle()
+        original.saveInstanceState(saved).stop().destroy()
+        failEntryRead = true
+        val recreated = Robolectric.buildActivity(Main::class.java, Intent(intent(selected)).setClass(app, Main::class.java)).create(saved)
+        screens.add(recreated)
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        recreated.start().resume(); idle()
+        assertTrue(kit.runtime.diagnostics.snapshot().any { it.message == "Activity integration failed" })
+        assertNull("A failed binding must not leave an Application listener able to navigate", shadowOf(recreated.get()).nextStartedActivity)
+        assertNotNull(kit.runtime.entries.pending(selected.token))
+    }
+
 }

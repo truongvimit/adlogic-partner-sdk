@@ -40,9 +40,13 @@ class RetentionSuite private constructor(
     /** Delegate once from the existing OnboardingListener; never replaces that listener. */
     fun onOutcome(context: Context, outcome: OnboardingOutcome) {
         val intent = bridge.mainIntent(context, options.mainActivity, outcome)
-        val tokens = kit.runtime.store.snapshot(FLOW).entries().keys
-        if (outcome is OnboardingOutcome.Aborted) tokens.forEach { kit.runtime.entries.consume(it) }
-        kit.runtime.store.transaction(FLOW) { it.clear() }
+        try {
+            val tokens = kit.runtime.store.snapshot(FLOW).entries().keys
+            if (outcome is OnboardingOutcome.Aborted) tokens.forEach { kit.runtime.entries.consume(it) }
+            kit.runtime.store.transaction(FLOW) { it.clear() }
+        } catch (error: Exception) {
+            kit.runtime.diagnostics.record("suite.flow", "Setup selection cleanup failed", RetentionDiagnosticLevel.ERROR, error)
+        }
         intent?.let(context::startActivity)
     }
     /** Explicit user action. SDK registers the launcher and owns result/return/timeout cleanup. */

@@ -74,6 +74,7 @@ internal class RetentionSuiteActivities(private val options: RetentionSuiteOptio
             session.binding = false
             session.initialDelivery?.let { session.listener?.accept(it) }
             session.initialDelivery = null
+            if (closed || RetentionKit.get() !== kit) { remove(session); return }
             session.permission = activity.activityResultRegistry.register("io.retentionkit.notifications.permission", activity,
                 ActivityResultContracts.RequestPermission()) {
                 val permission = session.permissionScope

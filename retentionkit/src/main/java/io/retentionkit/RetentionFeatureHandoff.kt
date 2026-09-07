@@ -38,11 +38,13 @@ internal class RetentionFeatureHandoff(
     }
 
     init {
-        kit.runtime.application.registerActivityLifecycleCallbacks(this)
-        observer.get()?.addOnWindowFocusChangeListener(focus)
-        val restored = RetentionEntryCodec.decode(saved?.getString(STATE_ENTRY))
-        if (restored is RetentionEntryDecodeResult.Valid) RetentionEntryCodec.write(activity.intent, restored.entry)
-        capture(activity.intent)
+        try {
+            kit.runtime.application.registerActivityLifecycleCallbacks(this)
+            observer.get()?.addOnWindowFocusChangeListener(focus)
+            val restored = RetentionEntryCodec.decode(saved?.getString(STATE_ENTRY))
+            if (restored is RetentionEntryDecodeResult.Valid) RetentionEntryCodec.write(activity.intent, restored.entry)
+            capture(activity.intent)
+        } catch (error: Exception) { close(); throw error }
     }
 
     fun onNewIntent(intent: Intent) {
