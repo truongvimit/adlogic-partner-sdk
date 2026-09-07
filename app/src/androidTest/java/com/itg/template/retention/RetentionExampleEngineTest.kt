@@ -417,7 +417,7 @@ class RetentionExampleEngineTest {
     private fun openActualFeedback() {
         // Keep returns to the real Main back stack. Use its real navigation control to reopen tools.
         instrumentation.runOnMainSync {
-            (kit.runtime.activities.current() as? MainActivity)?.findViewById<Button>(R.id.btnRetentionPlayground)?.performClick()
+            (kit.runtime.activities.current() as? MainActivity)?.findViewById<Button>(R.id.btn_retention_playground)?.performClick()
         }
         await { kit.runtime.activities.current() is RetentionPlaygroundActivity }
         val before = ExampleQa.events.count { it.name == "retention_feedback_shown" }
