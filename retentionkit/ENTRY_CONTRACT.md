@@ -14,13 +14,17 @@ Correction ticket10 SDK contract; affected SDK tests and release AARs are verifi
 
 `feedback.openViaEntry(): FeedbackShowResult` is the standard menu/button entry. It routes through configured Splash; only Main-ready `handleEntry(materializedEntry)` launches the SDK session Activity. `show()` remains an advanced direct PROMPT API. A blocked explicit entry stays pending; consumption occurs only immediately before the final survey launch. Accepted platform start followed by failure/process death remains at-most-once, not guaranteed exactly-once navigation.
 
-`FeedbackOptions` appends `systemAction = UNINSTALL_CONFIRMATION`, `appManagementFallback = true`, and `nativeContent: FeedbackNativeContent? = null`. Default Continue uses Android `ACTION_UNINSTALL_PACKAGE` and the merged `REQUEST_DELETE_PACKAGES` permission. Android/user owns confirmation. Failed launch can fall back to App Info after rechecking the same scope/config/session. `APP_MANAGEMENT` selects App Info explicitly; existing `controller.continueToAppManagement()` remains. No action/event claims successful uninstall.
+`FeedbackOptions` appends `systemAction = UNINSTALL_CONFIRMATION`, `appManagementFallback = true`, `nativeContent: FeedbackNativeContent? = null`, and independent `shortcutIconRes` (bundled red trash). Default launcher text is Uninstall/Gỡ cài đặt; `appIconRes` still brands only the survey header. Default Continue uses Android `ACTION_UNINSTALL_PACKAGE` and the merged `REQUEST_DELETE_PACKAGES` permission. Android/user owns confirmation. Failed launch can fall back to App Info after rechecking the same scope/config/session. `APP_MANAGEMENT` selects App Info explicitly; existing `controller.continueToAppManagement()` remains. No action/event claims successful uninstall.
 
 The existing `FeedbackUiFactory.create(activity, controller, content): View` stays source compatible. `RetentionFeedbackActivity` is a `LifecycleOwner`. `FeedbackNativeContent.bind(activity, lifecycleOwner, container: ViewGroup): AutoCloseable` is vendor-free. Default UI creates a slot; a custom factory calls `controller.bindNative(itsContainer)` once per slot. Controller owns native bindings until destroy, including recreation; `controller.lifecycleOwner` exposes lifecycle for other custom content. Use controller actions `selectReason`, `keep`, `tryFeature`, `continueToSystem`, and optional explicit `continueToAppManagement`; never replace the state machine. Reasons remain optional. The custom Activity retains system/IME insets and durable session restoration.
 
 Construct a **new bridge per new runtime install** (including tests calling uninstallForTests); shutdown cancels its subscriptions. Do not reuse a detached singleton adapter. Repeated install without teardown still returns the original facade.
 
-## Verified SDK scope
+## Current verification
+
+All nine affected modules passed279 fresh cases in one invocation at69d0f71, including core49/facade30/widgets37/review20/feedback31. Physical17 and genuine first-open API36 results use identical production source at86048d6. Final R8 and project/POM-only consumer acceptance are recorded in [the current ledger](../.scratch/retentionkit/correction-acceptance.md); supplementary device restoration/cleanup remains separate. Earlier counts below retain their original scope and are not added to279.
+
+## Historical SDK regression checkpoints
 
 At the initial correction checkpoint `ef94857ad869bd7345c10f24e66dde318cf08396`, one actual Gradle invocation passed **162/162** tests, zero failures/errors/skips: core49, feedback28, facade28 (including composite legacy config3), widgets37 and review20. The same invocation assembled all five release AARs in1m49. [Immutable result, XML and AAR hashes](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/sdk-full-ef94857/result.json).
 

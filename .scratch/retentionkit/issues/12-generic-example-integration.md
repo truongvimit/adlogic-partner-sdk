@@ -1,7 +1,7 @@
 # 12 Generic example using the complete standard SDK flow
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 10, 11
 
 Spec: ../spec.md, Corrected acceptance
@@ -16,7 +16,7 @@ Feedback entry actions route through Splash. Use ticket10 controller/native seam
 
 Work in private worktree with scoped incremental commits. One build owner by root; no ADB.
 
-## Comments
+## Comments — historical checkpoints
 
 Claimed by audit_caller_translator. Source audit at retentionkit-correction/translate-flow-audit.md.
 
@@ -25,3 +25,9 @@ Implementation checkpoint `5206487` integrates standard SDK entry APIs through `
 Status remains claimed while the device owner runs the corrected17 cases and the SDK-owned Main focus follow-up is integrated. Follow-up debug callback logging and semantic ad-close instrumentation retain actual transport callbacks; no product flow or ad-policy override is introduced. No ADB was run by this implementer.
 
 Final source checkpoint `6cd46e1` includes SDK focus `7c3470d`. App29/29 actual cases and debug/test APKs passed36s at clean unchanged source; evidence `SDKOptimize/retentionkit-correction/evidence/example-focus-clock-6cd46e1/result.json`. Two deterministic actual QA-clock regressions went RED at `70a7e02` and GREEN at `0c54bc7`; a real Splash Activity callback test verifies reusable materialization. The unassisted Pixel `5206487` baseline is retained honestly as15/17; its clock/premature-token harness causes are fixed in this checkpoint. Status remains claimed pending the root's two-case/full17 rerun and final affected packaging acceptance.
+
+## Answer
+
+Resolved for generic example integration at69d0f71/production86048d6. Notes/Saved items/Text tools/Guide perform real offline work with atomic legacy migration and stable success IDs. Production and QA use actual Splash→Onboard terminal→Main-resumed→selected feature/feedback, medium native keys and exact materialized consumption. Absent/rejected new deliveries cannot revive old backlog; recreation preserves the selected token. Genuine long onboarding now survives notification display expiry.
+
+All32 app cases passed freshly within279; physical Pixel5/API34 passed17/17 unassisted with final app/test hashes; first-install API36 defaultrevision0 reaches Notes with actual native_noti loaded/impression. Full app release R8 and all12 consumers pass. [Fresh unit result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-units-69d0f71/result.json) · [Pixel17](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/pixel-86048d6-full/result.json) · [First install](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-first-install-api36.json) · [R8](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/example-release-69d0f71/result.json). QA/OS/ad boundaries are documented in app/RETENTION_EXAMPLE.md. Root owns supplementary smoke/restoration/cleanup in13 and external PR status in08.

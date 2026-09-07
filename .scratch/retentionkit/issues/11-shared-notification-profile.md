@@ -1,7 +1,7 @@
 # 11 Shared notification profile and common document mapping
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by:
 
 Spec: ../spec.md, Corrected acceptance
@@ -14,7 +14,7 @@ Cover campaign-specific content, stable family identity, priority/guard windows,
 
 Work in private worktree, commit scoped parts. Build only when root grants ownership. No ADB.
 
-## Comments
+## Comments — historical checkpoints
 
 Claimed by platform_research; source audit is outside repo at retentionkit-correction/noti-spec-audit.md.
 
@@ -32,3 +32,9 @@ Notification-owned implementation is complete at `b695be5`; integration acceptan
 Validation actually executed: `:retention-notifications:testDebugUnitTest :retention-notifications:assembleRelease --no-daemon --console=plain --max-workers=2`, JBR21. Final actual XML **56 tests,0 failures/errors/skips**:26 existing behavior,20 new common-profile,5 calendar,5 Android adapter. Both production variants compile and release AAR assembly passes. First run had only a fixture compile error constructing an internal config snapshot; fixed by installing the real runtime. Final run3 is green.
 
 Immutable logs, actual JUnit, AAR and hashes: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/notification-validation/b695be5/verification.json`. Canonical complete-source audit: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/noti-spec-audit.md`. No ADB or physical timing run was performed by this agent. Shared-core/facade integration and full entry-chain device acceptance must be reported separately.
+
+## Answer — final integrated acceptance
+
+Resolved at tested source69d0f71/production86048d6. Canonical COMMON_PLAN, shared Firebase legacy mapping, entry route lifetime and generic example are integrated. All61 notification and10 Firebase cases passed freshly in the279-case run;12 consumer R8 graphs/compositions and the full app release pass. Physical notification gates/Later/pinned/action routes and genuine default-revision0 first-install ONBOARD to Notes are recorded separately from injected calendar timing. Old display envelopes and explicit core expiry remain honored; no OS wake SLA is claimed.
+
+Evidence: [Fresh unit result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-units-69d0f71/result.json) · [Matrix](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/consumers-69d0f71/matrix-summary.json) · [First-install OS proof](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-first-install-api36.json). Restoration/extra smoke and external release/PR are tracked by13/08, not hidden completion prerequisites for this implemented profile.

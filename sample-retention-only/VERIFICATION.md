@@ -1,4 +1,16 @@
-# Retention consumer and publication verification
+# Selective consumer verification
+
+## Current correction — 69d0f71
+
+All six core/notifications/widgets/feedback/review/umbrella profiles passed release R8 as both project dependencies and exact-version POM-only Maven dependencies: **12/12** actual build/runtime graph/manifest/composition checks. Six artifacts were freshly published locally at `retentionkit-qa-20260907-69d0f71`; Maven graphs contain no project substitutions. [Matrix](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/consumers-69d0f71/matrix-summary.json) · [Independent artifact/permission inspection](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/consumers-69d0f71/inspection-summary.json).
+
+The core-project consumer's9 actual Activity cases passed freshly within the single279-test correction invocation (`--rerun-tasks`); parser fixtures are not product tests. Source remained69d0f71 with a clean checkout throughout the recorded executions. [Actual XML/command](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-units-69d0f71/result.json). This includes absent/rejected new-delivery replacement and saved materialized identity, while the visible ProofSplash remains the vendor-free front door.
+
+Full app R8 and device evidence belong to the [root correction ledger](../.scratch/retentionkit/correction-acceptance.md). No actual installation/OS behavior of every consumer flavor is inferred from build success. Existing5.1.1 does not include RetentionKit; local QA is not remote publication. Supplementary restoration/cleanup and external PR completion are root-owned.
+
+## Historical verification before the corrected common entry flow
+
+The following records are retained with their original source scope. Historical15-case emulator/bf68f1e results do not replace current69d0f71 packaging or the corrected full app's device acceptance.
 
 The captured matrix at `bf68f1e` passed **12 release builds with R8/resource shrinking, 12 resolved runtime graph/composition checks and six publication inspections**. It includes the reviewed shared handoff scope, post-callback launch checks, widget return correction and bounded consumer route readiness retry. This proves actual selective/umbrella consumer linkage and packaging; device behavior and code-review correctness have separate evidence.
 

@@ -10,6 +10,10 @@ The full [partner example](../app/RETENTION_EXAMPLE.md) demonstrates the standar
 
 Partners supply three things: localized feature identities/content, one explicit entry Activity, and truthful lifecycle/business state. The SDK supplies the repeated retention mechanics. An IAP app keeps entitlement UNKNOWN until verified; an app without IAP explicitly sets NON_SUBSCRIBER.
 
+## Verified corrected integration
+
+Frozen source69d0f71 passed279 fresh tests across nine affected modules, full example release R8, six fresh local QA publications and all12 project/POM-only consumer graph/manifest/R8 checks at `retentionkit-qa-20260907-69d0f71`. Identical production source86048d6 passed17 physical Pixel cases and a genuine first-install API36 long-onboarding route. See [current acceptance](../.scratch/retentionkit/correction-acceptance.md) for exact commands, APK hashes, OS/QA/ad limits and pending restoration/cleanup; [Vietnamese report](CORRECTION_REPORT.vi.md) gives partner steps. These are local QA artifacts, not a remote release.
+
 ## Minimal partner install
 
 Call from `Application.onCreate`, including cold starts for receivers/providers. Supply the localized feature catalogue and one explicit host entry Activity:
