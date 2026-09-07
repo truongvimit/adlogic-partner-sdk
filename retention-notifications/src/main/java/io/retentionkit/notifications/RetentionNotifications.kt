@@ -50,7 +50,8 @@ class RetentionNotifications internal constructor(
     private val lastOutcomes = mutableMapOf<NotificationCampaign, NotificationOutcome>()
 
     fun status(): NotificationStatus = synchronized(lock) {
-        val config = if (::runtime.isInitialized) runtime.config else RetentionConfigSnapshot(0, emptyMap())
+        if (!::runtime.isInitialized) return@synchronized NotificationStatus(false, 0, false, emptyList())
+        val config = runtime.config
         val profile = NotificationProfile.read(config, options.preset)
         val state = if (!closed) runtime.store.snapshot(STATE) else null
         val alarms = state?.entries()?.filterKeys { it.startsWith("schedule:") }?.values?.map(ScheduledNotification::decode).orEmpty()
@@ -60,7 +61,7 @@ class RetentionNotifications internal constructor(
                     campaign in foregroundPending, lastOutcomes[campaign],
                     alarms.filter { it.campaign == campaign }.minOfOrNull { alarm ->
                         if (runtime.userState.entitlement == RetentionEntitlement.UNKNOWN)
-                            DeferredCalendarRetry.trigger(state!!, alarm, runtime.clock.wallTimeMillis()) else alarm.due
+                            state?.let { DeferredCalendarRetry.trigger(it, alarm, runtime.clock.wallTimeMillis()) } ?: alarm.due else alarm.due
                     })
             })
     }
