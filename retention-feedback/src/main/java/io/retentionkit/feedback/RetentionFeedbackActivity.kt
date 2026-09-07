@@ -97,7 +97,9 @@ class RetentionFeedbackActivity : Activity(), LifecycleOwner {
         if (attached == null || session == null || attached.session(session) == null) { finish(); return }
         module = attached
         token = session
-        readinessDeadline = savedInstanceState?.getLong("readiness_deadline") ?: 0L
+        // An elapsed deadline from a previous boot must not extend the bounded wait.
+        readinessDeadline = (savedInstanceState?.getLong("readiness_deadline") ?: 0L)
+            .coerceAtMost(SystemClock.elapsedRealtime() + READINESS_TIMEOUT)
         attached.trackUi(this)
         readinessSubscription = attached.runtime?.subscribe("feedback.ui.$session") { signal ->
             when (signal) {

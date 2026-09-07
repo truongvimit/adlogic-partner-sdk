@@ -207,9 +207,13 @@ class RetentionFeedbackModuleTest {
 
     @Test fun waitingDeadlineSurvivesRecreationAndCancelsWithoutHoldingAUiLease() {
         install(uiHost = focusHost()); startUnfocusedEntrySurvey()
+        // Robolectric recreation briefly restores focus. A real shared host dialog keeps the
+        // readiness condition continuously blocked through the whole rotation.
+        runtime.signal(RetentionSignal.HostUiChanged("host.dialog", true))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(35))
         val oldController = customController!!
         screen!!.recreate().windowFocusChanged(false); idle()
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
         assertTrue(oldController.keep() is FeedbackActionResult.Blocked)
         assertFalse(screen!!.get().isFinishing)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(26))
