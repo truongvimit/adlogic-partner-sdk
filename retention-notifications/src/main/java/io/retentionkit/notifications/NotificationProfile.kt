@@ -39,7 +39,7 @@ internal data class NotificationProfile(
         val defaults: Map<String, String> get() = defaults(NotificationPreset.COMMON_PLAN)
         fun defaults(preset: NotificationPreset): Map<String, String> = buildMap {
             val common = preset == NotificationPreset.COMMON_PLAN
-            put("profile_version", "1"); put("enabled", "true"); put("setup_grace_ms", DAY.toString())
+            put("profile_version", "1"); put("enabled", "true"); put("setup_grace_ms", if (common) "0" else DAY.toString())
             put("new_user_days", "2"); put("winback.inactivity_ms", ((if (common) 14 else 2) * DAY).toString())
             put("winback.max_inactivity_ms", (if (common) 45 * DAY else 0L).toString())
             put("onboarding.grace_ms", (if (common) DAY else 0L).toString()); put("background_delay_ms", "3000")
