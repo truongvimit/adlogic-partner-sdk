@@ -22,7 +22,7 @@ internal object ProfileFactory {
             }
         }
         override fun actions(activity: Activity, runtime: RetentionRuntime) = listOf(
-            ProofAction("Open exit feedback") { feedback.show().toString() },
+            ProofAction("Open exit feedback") { feedback.openViaEntry().toString() },
         )
     }
 }

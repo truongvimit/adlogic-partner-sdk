@@ -3,7 +3,8 @@
     <application android:name=".ProofApplication" android:label="@string/rk_proof_name"
         android:allowBackup="false" android:supportsRtl="true" android:icon="@drawable/rk_proof_tool"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <activity android:name=".ProofActivity" android:exported="true" android:launchMode="singleTop">
+        <activity android:name=".ProofActivity" android:exported="false" android:launchMode="singleTop" />
+        <activity android:name=".ProofSplashActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
