@@ -8,6 +8,40 @@ plugins {
     id 'com.google.firebase.crashlytics'
 }
 
+// The host's complete dependency graph can remove permissions declared by a feature AAR.
+// Validate the actual merged application artifact, including when Ads contributes manifest rules.
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def capitalized = variant.name.capitalize()
+    def mergedManifest = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST.INSTANCE)
+    def report = layout.buildDirectory.file("reports/retention-host/${variant.name}-manifest.json")
+    def verifyManifest = tasks.register("verify${capitalized}RetentionHostManifest") {
+        inputs.file(mergedManifest)
+        outputs.file(report)
+        doLast {
+            def input = mergedManifest.get().asFile
+            def document = new XmlParser(false, false).parse(input)
+            def hasBoot = document.'uses-permission'.any {
+                it.attribute('android:name') == 'android.permission.RECEIVE_BOOT_COMPLETED' &&
+                    it.attribute('android:maxSdkVersion') == null
+            }
+            def restore = document.application.receiver.find {
+                it.attribute('android:name') == 'io.retentionkit.notifications.NotificationRestoreReceiver'
+            }
+            def hasReceiver = restore != null && restore.attribute('android:enabled') != 'false' &&
+                restore.'intent-filter'.action.any { it.attribute('android:name') == 'android.intent.action.BOOT_COMPLETED' }
+            def result = [variant: variant.name, manifest: input.absolutePath,
+                sha256: java.security.MessageDigest.getInstance('SHA-256').digest(input.bytes).encodeHex().toString(),
+                bootPermission: hasBoot, bootReceiver: hasReceiver]
+            report.get().asFile.parentFile.mkdirs()
+            report.get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(result))
+            if (!hasBoot || !hasReceiver) {
+                throw new GradleException("Merged ${variant.name} application cannot restore Retention schedules after BOOT: ${result}. Check host permission overrides and the manifest-merger report.")
+            }
+        }
+    }
+    tasks.matching { it.name == "assemble${capitalized}" }.configureEach { dependsOn verifyManifest }
+}
+
 android {
     compileSdk compile_sdk_version
 

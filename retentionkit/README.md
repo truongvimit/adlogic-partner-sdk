@@ -188,6 +188,20 @@ A custom widget renderer receives `WidgetAction.pendingIntent`; use that supplie
 
 The following classes are optional; declare their existing SDKs explicitly. They are never loaded by the default facade.
 
+### Host manifest and reboot recovery
+
+Verify the **full application's merged manifest**, including vendor libraries. Google Mobile Ads25.3.0 can contribute a `tools:node="remove"` rule for `RECEIVE_BOOT_COMPLETED`, overriding the permission declared by the notifications library. A host using notification schedule recovery must explicitly retain it in its higher-priority manifest:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="merge" />
+</manifest>
+```
+
+The example's `verifyDebugRetentionHostManifest` and `verifyReleaseRetentionHostManifest` tasks read AGP's actual merged manifest artifact, require the unrestricted BOOT permission and enabled restore receiver/action, and run with their corresponding assemble task. Reports retain the manifest SHA under `app/build/reports/retention-host`. Selective consumers without Ads do not validate this host composition. BOOT reception still requires Android delivery, available credential storage and Application installation of the SDK; current-process UNKNOWN entitlement does not authorize a new marketing post. Actual reboot-before-launcher behavior needs device verification separately from these manifest checks.
+
 ```kotlin
 val bridge = OnboardRetentionBridge(
     SplashActivity::class.java,
