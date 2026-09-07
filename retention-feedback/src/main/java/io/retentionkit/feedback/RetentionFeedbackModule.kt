@@ -162,22 +162,40 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
     }
     internal fun features(): List<RetentionFeature> = runtime?.features().orEmpty().filter { options.featureIds.isEmpty() || it.id in options.featureIds }.take(4)
 
-    internal fun activate(controller: FeedbackController): Boolean {
-        val rt = runtime ?: return false
-        val activity = controller.activity() ?: return false
-        scopes["feedback.open.${controller.sessionToken}"]?.close()
-        launchPending = null
-        val current = session(controller.sessionToken) ?: return false
-        if (!enabled() || current.phase != FeedbackPhase.OPEN || rt.activities.current() !== activity) return false
+    internal fun trackUi(activity: Activity) { visible = WeakReference(activity) }
+    internal fun releaseUi(activity: Activity) { if (visible.get() === activity) visible.clear() }
+
+    internal fun cancelReadiness(controller: FeedbackController) {
         controller.pause()
-        val acquired = rt.ui.acquire("feedback.session", 60_000, current.uiPurpose) as? RetentionUiLeaseResult.Acquired ?: return false
+        val rt = runtime ?: return
+        cancelLaunch(rt, controller.sessionToken, scopes["feedback.open.${controller.sessionToken}"])
+        event("failed", "ui_readiness_timeout")
+    }
+
+    internal fun activate(controller: FeedbackController): FeedbackActivation {
+        val rt = runtime ?: return FeedbackActivation.TERMINAL
+        val activity = controller.activity() ?: return FeedbackActivation.TERMINAL
+        scopes["feedback.open.${controller.sessionToken}"]?.close()
+        if (launchPending == controller.sessionToken) launchPending = null
+        val current = session(controller.sessionToken) ?: return FeedbackActivation.TERMINAL
+        if (!enabled() || current.phase != FeedbackPhase.OPEN) return FeedbackActivation.TERMINAL
+        if (rt.activities.current() !== activity) return FeedbackActivation.WAITING
+        // Readiness signals may arrive while an existing lease is still valid. Do not replace its
+        // host resource or recursively acquire another lease just to acknowledge such a signal.
+        if (controller.lease?.activity() === activity) return FeedbackActivation.READY
+        controller.pause()
+        val acquired = rt.ui.acquire("feedback.session", 60_000, current.uiPurpose) as? RetentionUiLeaseResult.Acquired
+            ?: return FeedbackActivation.WAITING
+        if (runtime !== rt || !enabled() || session(current.token)?.phase != FeedbackPhase.OPEN) {
+            acquired.lease.close()
+            return FeedbackActivation.TERMINAL
+        }
         controller.lease = acquired.lease
-        visible = WeakReference(activity)
         if (!current.shown) {
             rt.store.transaction(STATE) { state -> decode(state.string(current.token))?.let { save(state, it.copy(shown = true)) } }
             event("shown")
         }
-        return true
+        return FeedbackActivation.READY
     }
 
     internal fun selectReason(controller: FeedbackController, reason: String, selected: Boolean): FeedbackActionResult = action(controller) {

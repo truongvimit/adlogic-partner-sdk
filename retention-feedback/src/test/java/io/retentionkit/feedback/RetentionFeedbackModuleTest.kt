@@ -65,7 +65,7 @@ class RetentionFeedbackModuleTest {
         host?.pause()?.stop()?.destroy(); host = null
         RetentionRuntime.uninstallForTests()
     }
-    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true, configure: (FeedbackOptions) -> FeedbackOptions = { it }) {
+    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true, uiHost: RetentionUiHost = RetentionUiHost.NONE, configure: (FeedbackOptions) -> FeedbackOptions = { it }) {
         val factory = if (custom) FeedbackUiFactory { activity, controller, _ ->
             customController = controller
             TextView(activity).apply { text = "Custom content" }
@@ -79,6 +79,7 @@ class RetentionFeedbackModuleTest {
             })))
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock,
             initialUserState = RetentionUserState(setupCompleted = true, entitlement = RetentionEntitlement.NON_SUBSCRIBER),
+            uiHost = uiHost,
             localeProvider = RetentionLocaleProvider { context -> context.createConfigurationContext(Configuration(context.resources.configuration).apply { setLocale(selectedLocale) }) },
             featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", R.drawable.rk_ic_feedback)) },
             router = RetentionRouter { context, _ -> Intent().setComponent(ComponentName(context.packageName, Activity::class.java.name)) },
@@ -101,6 +102,173 @@ class RetentionFeedbackModuleTest {
         assertFalse(screen!!.get().isFinishing)
     }
     private fun view(tag: String): View = screen!!.get().findViewById<ViewGroup>(android.R.id.content).findViewWithTag(tag)
+
+    @Test fun resumedSurveyWaitsForActualWindowFocusBeforeShowingAndAllowingActions() {
+        install(uiHost = object : RetentionUiHost {
+            override fun canPresent(activity: Activity) =
+                activity !is RetentionFeedbackActivity || activity.window.decorView.hasWindowFocus()
+        })
+        module.show(); idle()
+        val intent = launches.single()
+        token = intent.getStringExtra(RetentionFeedbackModule.EXTRA_SESSION)!!
+        host!!.pause()
+        screen = Robolectric.buildActivity(RetentionFeedbackActivity::class.java, intent)
+            .create().start().resume().visible().windowFocusChanged(false)
+        idle()
+        assertFalse("An unfocused first resume must retain the accepted survey", screen!!.get().isFinishing)
+        assertSame(screen!!.get(), runtime.activities.current())
+        assertFalse(screen!!.get().hasWindowFocus())
+        assertEquals(FeedbackPhase.OPEN, customController!!.state()!!.phase)
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(customController!!.keep() is FeedbackActionResult.Blocked)
+        screen!!.windowFocusChanged(true); idle()
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+    }
+
+    private fun startUnfocusedEntrySurvey() {
+        val entry = RetentionEntry(RetentionEntrySource.SHORTCUT, RetentionFeedbackModule.DESTINATION,
+            "open_feedback", createdAtMillis = clock.now)
+        module.handleEntry(entry); idle()
+        assertNull(runtime.entries.pending(entry.token))
+        val intent = launches.single()
+        token = intent.getStringExtra(RetentionFeedbackModule.EXTRA_SESSION)!!
+        host!!.pause()
+        screen = Robolectric.buildActivity(RetentionFeedbackActivity::class.java, intent)
+            .create().start().resume().visible().windowFocusChanged(false)
+        idle()
+    }
+    private fun focusHost() = object : RetentionUiHost {
+        override fun canPresent(activity: Activity) =
+            activity !is RetentionFeedbackActivity || activity.window.decorView.hasWindowFocus()
+    }
+
+    @Test fun actualFocusGainAfterBriefPollingEndsStillOpensTheSameEntrySurvey() {
+        var readinessReads = 0
+        install(uiHost = object : RetentionUiHost {
+            override fun canPresent(activity: Activity): Boolean {
+                readinessReads++
+                return activity !is RetentionFeedbackActivity || activity.hasWindowFocus()
+            }
+        })
+        startUnfocusedEntrySurvey()
+        val original = token
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(12))
+        val settledReads = readinessReads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(13))
+        assertEquals("Readiness cannot poll indefinitely", settledReads, readinessReads)
+        assertFalse(screen!!.get().isFinishing)
+        screen!!.windowFocusChanged(true); idle()
+        assertEquals(original, customController!!.sessionToken)
+        assertEquals(RetentionUiPurpose.ENTRY, customController!!.state()!!.uiPurpose)
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+    }
+
+    @Test fun focusedSurveyWaitsForEveryForeignUiOwnerToFinish() {
+        install(uiHost = focusHost()); startUnfocusedEntrySurvey()
+        runtime.signal(RetentionSignal.ExternalTransitionStarted("host.ad", "ad"))
+        runtime.signal(RetentionSignal.HostUiChanged("host.dialog", true))
+        screen!!.windowFocusChanged(true); idle()
+        assertFalse(screen!!.get().isFinishing)
+        assertTrue(customController!!.tryFeature("notes") is FeedbackActionResult.Blocked)
+        runtime.signal(RetentionSignal.ExternalTransitionFinished("host.ad")); idle()
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(customController!!.keep() is FeedbackActionResult.Blocked)
+        runtime.signal(RetentionSignal.HostUiChanged("host.dialog", false)); idle()
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+    }
+
+    @Test fun pausedSurveyCannotActivateFromFocusOrCoreSignalsButResumesNormally() {
+        install(uiHost = focusHost()); startUnfocusedEntrySurvey()
+        screen!!.pause()
+        screen!!.windowFocusChanged(true)
+        runtime.signal(RetentionSignal.HostUiChanged("dialog", false)); idle()
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(customController!!.keep() is FeedbackActionResult.Blocked)
+        screen!!.resume(); idle()
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+    }
+
+    @Test fun configDisableTerminatesWaitingSurveyAndDoesNotReleaseForeignScope() {
+        install(uiHost = focusHost()); startUnfocusedEntrySurvey()
+        runtime.signal(RetentionSignal.ExternalTransitionStarted("host.payment", "billing"))
+        runtime.updateConfig(mapOf("feedback.enabled" to "false")); idle()
+        assertTrue(screen!!.get().isFinishing)
+        assertEquals(FeedbackPhase.CANCELLED, customController!!.state()!!.phase)
+        screen!!.windowFocusChanged(true)
+        runtime.signal(RetentionSignal.HostUiChanged("dialog", false)); idle()
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(customController!!.continueToSystem() is FeedbackActionResult.Blocked)
+        assertTrue(runtime.ui.eligibility() is RetentionEligibility.Blocked)
+    }
+
+    @Test fun waitingDeadlineSurvivesRecreationAndCancelsWithoutHoldingAUiLease() {
+        install(uiHost = focusHost()); startUnfocusedEntrySurvey()
+        // Robolectric recreation briefly restores focus. A real shared host dialog keeps the
+        // readiness condition continuously blocked through the whole rotation.
+        runtime.signal(RetentionSignal.HostUiChanged("host.dialog", true))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(35))
+        val oldController = customController!!
+        screen!!.recreate().windowFocusChanged(false); idle()
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(oldController.keep() is FeedbackActionResult.Blocked)
+        assertFalse(screen!!.get().isFinishing)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(26))
+        assertTrue(screen!!.get().isFinishing)
+        assertEquals(FeedbackPhase.CANCELLED, module.session(token)!!.phase)
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertEquals(1, events.count { it.name == "retention_feedback_failed" && it.attributes["reason"] == "ui_readiness_timeout" })
+    }
+
+    @Test fun shutdownWhileWaitingFinishesUiAndDestructionClosesNativeBindingAndObservers() {
+        var closed = 0; var readinessReads = 0
+        install(uiHost = object : RetentionUiHost {
+            override fun canPresent(activity: Activity): Boolean {
+                readinessReads++
+                return activity !is RetentionFeedbackActivity || activity.hasWindowFocus()
+            }
+        }, configure = { it.copy(
+            uiFactory = FeedbackUiFactory { activity, control, _ ->
+                customController = control
+                FrameLayout(activity).also { slot -> control.bindNative(slot) }
+            },
+            nativeContent = FeedbackNativeContent { _, _, _ -> AutoCloseable { closed++ } },
+        ) })
+        startUnfocusedEntrySurvey()
+        RetentionRuntime.uninstallForTests(); idle()
+        assertTrue(screen!!.get().isFinishing)
+        screen!!.pause().stop().destroy(); screen = null
+        val readsAfterDestroy = readinessReads
+        runtime.signal(RetentionSignal.HostUiChanged("dialog", false))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(2))
+        assertEquals(readsAfterDestroy, readinessReads)
+        assertEquals(1, closed)
+        assertTrue(customController!!.keep() is FeedbackActionResult.Blocked)
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+    }
+
+    @Test fun readinessSignalsDoNotPostponeLeaseRenewalOrRepeatShown() {
+        var sessionLeases = 0; var sessionClosed = 0
+        install(uiHost = object : RetentionUiHost {
+            override fun onLeaseAcquired(owner: String, token: String, durationMillis: Long): AutoCloseable {
+                if (owner == "feedback.session") sessionLeases++
+                return AutoCloseable { if (owner == "feedback.session") sessionClosed++ }
+            }
+        })
+        show()
+        clock.advance(30_000); shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+        runtime.signal(RetentionSignal.HostUiChanged("already.closed", false)); idle()
+        assertEquals(1, sessionLeases)
+        clock.advance(16_000); shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(16))
+        assertEquals(2, sessionLeases)
+        assertEquals(1, sessionClosed)
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+        assertEquals(2, sessionClosed)
+    }
 
     @Test fun queuedShowDisabledByTransitionObserverKeepsEntryPendingAndReleasesScope() {
         install()
