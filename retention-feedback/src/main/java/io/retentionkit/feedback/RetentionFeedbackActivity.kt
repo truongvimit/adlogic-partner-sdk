@@ -38,8 +38,9 @@ class RetentionFeedbackActivity : Activity(), LifecycleOwner {
     private val resumeWork = Runnable { activateWhenReady() }
     private val readinessTimeout = Runnable {
         if (resumed && !isFinishing && !isDestroyed) {
-            controller?.let { module?.cancelReadiness(it) }
-            finish()
+            try { controller?.let { module?.cancelReadiness(it) } }
+            catch (error: Exception) { module?.diagnostic("readiness_timeout", error) }
+            finally { finish() }
         }
     }
     private val renewLease = Runnable {
