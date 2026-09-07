@@ -223,8 +223,9 @@ class RetentionMainHandoffTest {
     }
 
     @Test fun actualWindowFocusGainAfterRetryBudgetResumesPendingEntryWithoutActivityResume() {
+        var eligibilityReads = 0
         val host = object : RetentionUiHost {
-            override fun canPresentEntry(activity: Activity) = activity.hasWindowFocus()
+            override fun canPresentEntry(activity: Activity): Boolean { eligibilityReads++; return activity.hasWindowFocus() }
         }
         val kit = install(host)
         val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
@@ -236,6 +237,9 @@ class RetentionMainHandoffTest {
         assertSame(activity.get(), kit.runtime.activities.current())
         assertTrue(helper.hasPendingEntry)
         assertNull(shadowOf(activity.get()).nextStartedActivity)
+        val stoppedReads = eligibilityReads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertEquals(stoppedReads, eligibilityReads) // No unbounded polling while focus stays lost.
         activity.windowFocusChanged(true); idle()
         assertTrue(activity.get().hasWindowFocus())
         assertNotNull(shadowOf(activity.get()).nextStartedActivity)
