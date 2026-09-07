@@ -25,8 +25,7 @@ internal class RetentionFeatureHandoff(
 ) : Application.ActivityLifecycleCallbacks, AutoCloseable {
     private val source = WeakReference(activity)
     private val main = Handler(Looper.getMainLooper())
-    private val view = WeakReference(activity.window.decorView)
-    private val observer = WeakReference(activity.window.decorView.viewTreeObserver)
+    private var focusRegistration: WindowFocusRegistration? = null
     private var token: String? = null
     private var generation = 0L
     private var resumed = false
@@ -40,7 +39,7 @@ internal class RetentionFeatureHandoff(
     init {
         try {
             kit.runtime.application.registerActivityLifecycleCallbacks(this)
-            observer.get()?.addOnWindowFocusChangeListener(focus)
+            focusRegistration = WindowFocusRegistration(activity.window.decorView, focus)
             val restored = RetentionEntryCodec.decode(saved?.getString(STATE_ENTRY))
             if (restored is RetentionEntryDecodeResult.Valid) RetentionEntryCodec.write(activity.intent, restored.entry)
             capture(activity.intent)
@@ -112,11 +111,9 @@ internal class RetentionFeatureHandoff(
         if (closed) return
         closed = true
         main.removeCallbacksAndMessages(null)
-        val live = view.get()?.viewTreeObserver
-        live?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focus)
-        observer.get()?.takeIf { it !== live && it.isAlive }?.removeOnWindowFocusChangeListener(focus)
+        focusRegistration?.close(); focusRegistration = null
         kit.runtime.application.unregisterActivityLifecycleCallbacks(this)
-        source.clear(); view.clear(); observer.clear()
+        source.clear()
     }
     private companion object { const val STATE_ENTRY = "retention.feature.entry" }
 }
