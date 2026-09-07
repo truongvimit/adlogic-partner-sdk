@@ -39,6 +39,9 @@ class RetentionNotifications internal constructor(
     private val delayed = mutableMapOf<NotificationCampaign, AutoCloseable>()
     private val pendingDelayIds = mutableMapOf<NotificationCampaign, String>()
     private val hostBlocks = mutableMapOf<String, Long>()
+    private data class ForegroundRequest(val occurrence: String, val created: Long)
+    private val foregroundPending = linkedMapOf<NotificationCampaign, ForegroundRequest>()
+    private var refreshingForeground = false
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config, options.preset) + buildList {
         if (options.smallIconRes <= 0) add("A small notification icon is required")
@@ -68,7 +71,10 @@ class RetentionNotifications internal constructor(
                         click = Click(signal.clickId, runtime.clock.elapsedRealtimeMillis() + profile().clickTtl)
                     }
                 }
-                RetentionSignal.ProcessBackground -> armBackground()
+                RetentionSignal.ProcessBackground -> {
+                    foregroundPending.clear()
+                    armBackground()
+                }
                 RetentionSignal.ProcessForeground -> {
                     exitArmedThisDeparture = false
                     invalidateDelayed()
@@ -84,7 +90,9 @@ class RetentionNotifications internal constructor(
                         hostBlocks[signal.owner] = runtime.clock.elapsedRealtimeMillis() + signal.durationMillis
                         invalidateDelayed()
                     } else hostBlocks.remove(signal.owner)
+                    phaseChanged = true
                 }
+                is RetentionSignal.ExternalTransitionFinished -> phaseChanged = true
                 is RetentionSignal.OnboardingChanged -> {
                     if (!signal.active) invalidateDelayed()
                     phaseChanged = true
@@ -96,18 +104,39 @@ class RetentionNotifications internal constructor(
                 else -> Unit
             }
         }
-        if (phaseChanged) reconcile("onboarding_changed")
+        if (phaseChanged) reconcile("eligibility_changed")
         if (foregroundRefresh) refreshForegroundNotifications()
     }
 
     /** Intentional quiet foreground surfaces. Other marketing families require real background triggers. */
-    fun refreshForegroundNotifications(): Map<NotificationCampaign, NotificationOutcome> =
-        listOf(NotificationCampaign.REMINDER, NotificationCampaign.PINNED).associateWith { campaign ->
-            if (closed) NotificationOutcome.Skipped("not_installed") else {
-                val now = runtime.clock.wallTimeMillis()
-                deliver(campaign, "${campaign.key}:${UUID.randomUUID()}", profile().revision, now, now + profile()[campaign].ttl)
-            }
+    fun refreshForegroundNotifications(): Map<NotificationCampaign, NotificationOutcome> {
+        synchronized(lock) {
+            if (closed) return foregroundCampaigns.associateWith { NotificationOutcome.Skipped("not_installed") }
+            val now = runtime.clock.wallTimeMillis()
+            foregroundCampaigns.forEach { foregroundPending[it] = ForegroundRequest("${it.key}:${UUID.randomUUID()}", now) }
         }
+        return retryForegroundNotifications()
+    }
+
+    private fun retryForegroundNotifications(): Map<NotificationCampaign, NotificationOutcome> {
+        val requests = synchronized(lock) {
+            if (closed || !runtime.isForeground || refreshingForeground) return emptyMap()
+            refreshingForeground = true
+            foregroundPending.toMap()
+        }
+        try {
+            return requests.mapValues { (campaign, request) ->
+                val current = synchronized(lock) { profile() to generation }
+                val outcome = deliver(campaign, request.occurrence, current.first.revision,
+                    request.created, request.created + current.first[campaign].ttl, current.second)
+                synchronized(lock) {
+                    if (foregroundPending[campaign] == request && (outcome is NotificationOutcome.PostSubmitted ||
+                            outcome == NotificationOutcome.Skipped("still_active"))) foregroundPending.remove(campaign)
+                }
+                outcome
+            }
+        } finally { synchronized(lock) { refreshingForeground = false } }
+    }
 
     /** Optional host hook after entries.capture returns Accepted. Dedupe survives Activity recreation. */
     fun recordOpened(entry: RetentionEntry): Boolean = try {
@@ -135,7 +164,15 @@ class RetentionNotifications internal constructor(
         return first
     }
 
-    override fun reconcile(reason: String) = synchronized(lock) {
+    override fun reconcile(reason: String) {
+        reconcileSchedules(reason)
+        // Setup/Billing/config and explicit permission reconciliation can complete after the one
+        // process-foreground event. Preserve that open until it can post; callbacks do not invent
+        // another open after successful submission. Partner renderers run outside our state lock.
+        retryForegroundNotifications()
+    }
+
+    private fun reconcileSchedules(reason: String) = synchronized(lock) {
         if (closed) return
         val profile = profile()
         val now = runtime.clock.wallTimeMillis()
@@ -187,8 +224,8 @@ class RetentionNotifications internal constructor(
                 else state.remove("schedule:${alarm.key}")
             }
             if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
-            reconcile("alarm_received") // Keep the next slot even when this occurrence is blocked/fails.
         }
+        reconcile("alarm_received") // Keep the next slot even when this occurrence is blocked/fails.
         return deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires)
     }
 
@@ -215,6 +252,7 @@ class RetentionNotifications internal constructor(
         closed = true
         invalidateDelayed(cancelDurableExit = false)
         hostBlocks.clear()
+        foregroundPending.clear()
         telemetryHandler.removeCallbacksAndMessages(null)
         if (active === this) active = null
         // OS calendar alarms stay durable for the next Application install. No background timer survives.
@@ -465,6 +503,7 @@ class RetentionNotifications internal constructor(
     private inline fun safe(stage: String, action: () -> Unit): Boolean = try { action(); true } catch (error: Exception) { report(stage, error); false }
 
     internal companion object {
+        private val foregroundCampaigns = listOf(NotificationCampaign.REMINDER, NotificationCampaign.PINNED)
         @Volatile var active: RetentionNotifications? = null
         fun source(campaign: NotificationCampaign): RetentionEntrySource = when (campaign) {
             NotificationCampaign.DAILY -> RetentionEntrySource.DAILY
