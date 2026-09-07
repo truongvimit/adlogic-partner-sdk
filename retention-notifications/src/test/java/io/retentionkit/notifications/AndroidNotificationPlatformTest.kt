@@ -40,6 +40,25 @@ class AndroidNotificationPlatformTest {
         assertEquals("channel_missing", platform.blocked("not_created"))
     }
 
+    @Test fun commonChannelGroupsUseCanonicalImportanceAndPreserveLegacyOptInIds() {
+        val platform = AndroidNotificationPlatform(app)
+        val common = RetentionNotificationOptions()
+        platform.createChannels(common)
+        val manager = app.getSystemService(NotificationManager::class.java)
+        assertEquals("lock_screen_alerts", common.channel(NotificationCampaign.LOCKSCREEN))
+        assertEquals("updates_news", common.channel(NotificationCampaign.WINBACK))
+        assertEquals(common.channel(NotificationCampaign.WINBACK), common.channel(NotificationCampaign.APP_EXIT))
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel("updates_news").importance)
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel("lock_screen_alerts").importance)
+        assertEquals(Notification.VISIBILITY_PUBLIC, manager.getNotificationChannel("lock_screen_alerts").lockscreenVisibility)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel("daily_tips").importance)
+        assertNull(manager.getNotificationChannel("daily_tips").sound)
+        val legacy = common.copy(preset = NotificationPreset.LEGACY_SDK)
+        platform.createChannels(legacy)
+        assertEquals("rk_retention_winback", legacy.channel(NotificationCampaign.WINBACK))
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel("rk_retention_winback").importance)
+    }
+
     @Test fun inexactAlarmIdentityReplacesRevisionAndCancellationRemovesOnlyOwnedSlot() {
         val platform = AndroidNotificationPlatform(app)
         val old = ScheduledNotification(NotificationCampaign.DAILY, "0800", "20260907", 1_900_000_000_000, 1_900_003_600_000, 1)

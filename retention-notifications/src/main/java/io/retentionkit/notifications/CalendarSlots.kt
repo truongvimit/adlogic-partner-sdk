@@ -36,7 +36,8 @@ internal data class ScheduledNotification(
             val j = JSONObject(raw)
             val result = ScheduledNotification(NotificationCampaign.valueOf(j.getString("campaign")), j.getString("slot"),
                 j.getString("date"), j.getLong("due"), j.getLong("expires"), j.getLong("revision"))
-            require(result.campaign.calendar && result.slot.matches(Regex("[0-9]{4}")) && result.localDate.matches(Regex("[0-9]{8}")))
+            require(if (result.campaign.calendar) result.slot.matches(Regex("[0-9]{4}")) && result.localDate.matches(Regex("[0-9]{8}"))
+                else result.campaign in setOf(NotificationCampaign.APP_EXIT, NotificationCampaign.AD_RETURN) && result.slot == "exit" && idPattern.matches(result.localDate))
             require(result.due > 0 && result.expires > result.due && result.revision >= 0)
             return result
         }
