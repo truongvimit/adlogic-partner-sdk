@@ -42,6 +42,7 @@ class RetentionNotifications internal constructor(
     private data class ForegroundRequest(val occurrence: String, val created: Long)
     private val foregroundPending = linkedMapOf<NotificationCampaign, ForegroundRequest>()
     private var refreshingForeground = false
+    private var foregroundReadinessChanged = false
     private var retryingDeferred = false
     private val foregroundGuardRetries = mutableSetOf<String>()
     private var foregroundRetry: AutoCloseable? = null
@@ -117,31 +118,46 @@ class RetentionNotifications internal constructor(
         synchronized(lock) {
             if (closed) return foregroundCampaigns.associateWith { NotificationOutcome.Skipped("not_installed") }
             clearForegroundRequests()
+            if (!runtime.isForeground) return foregroundCampaigns.associateWith { NotificationOutcome.Skipped("background") }
             val now = runtime.clock.wallTimeMillis()
             foregroundCampaigns.forEach { foregroundPending[it] = ForegroundRequest("${it.key}:${UUID.randomUUID()}", now) }
         }
         return retryForegroundNotifications()
     }
 
-    private fun retryForegroundNotifications(): Map<NotificationCampaign, NotificationOutcome> {
+    private fun retryForegroundNotifications(allowCoalescedRetry: Boolean = true): Map<NotificationCampaign, NotificationOutcome> {
         val requests = synchronized(lock) {
-            if (closed || !runtime.isForeground || refreshingForeground) return emptyMap()
+            if (closed || !runtime.isForeground) return emptyMap()
+            if (refreshingForeground) { foregroundReadinessChanged = true; return emptyMap() }
             refreshingForeground = true
+            foregroundReadinessChanged = false
             foregroundPending.toMap()
         }
+        val outcomes = linkedMapOf<NotificationCampaign, NotificationOutcome>()
+        var readinessChanged = false
         try {
-            return requests.mapValues { (campaign, request) ->
+            for ((campaign, request) in requests) {
                 val current = synchronized(lock) { profile() to generation }
                 val outcome = deliver(campaign, request.occurrence, current.first.revision,
                     request.created, request.created + current.first[campaign].ttl, current.second)
+                outcomes[campaign] = outcome
                 synchronized(lock) {
                     if (foregroundPending[campaign] == request && (outcome is NotificationOutcome.PostSubmitted ||
                             outcome == NotificationOutcome.Skipped("still_active"))) foregroundPending.remove(campaign)
                 }
                 if (outcome == NotificationOutcome.Skipped("guard_window")) scheduleForegroundGuardRetry(request)
-                outcome
+                // Re-check changed readiness before a lower-priority surface can spend the guard.
+                if (synchronized(lock) { foregroundReadinessChanged }) break
             }
-        } finally { synchronized(lock) { refreshingForeground = false } }
+        } finally { synchronized(lock) {
+            refreshingForeground = false
+            readinessChanged = foregroundReadinessChanged
+            foregroundReadinessChanged = false
+        } }
+        // One extra pass coalesces reentrant host/config signals. A callback that changes state on
+        // every invocation cannot create an unbounded loop; the next independent ready event retries.
+        if (readinessChanged && allowCoalescedRetry) outcomes.putAll(retryForegroundNotifications(false))
+        return outcomes
     }
 
     private fun scheduleForegroundGuardRetry(request: ForegroundRequest) {
