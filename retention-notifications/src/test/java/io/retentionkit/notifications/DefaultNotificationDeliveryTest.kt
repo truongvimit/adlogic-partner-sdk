@@ -113,4 +113,19 @@ class DefaultNotificationDeliveryTest {
         assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
         assertEquals(1, platform.posts.size)
     }
+
+    @Test fun pinnedAutomaticallyFollowsGuardAndRestoresAfterOsRemovalWithoutMarketingCaps() {
+        install()
+        repeat(3) { open ->
+            runtime.signal(RetentionSignal.ProcessForeground)
+            clock.advance(31_000)
+            delays.fire()
+            assertEquals("A missing permanent surface restores on each eligible open", open + 1,
+                platform.posts.count { it.first == NotificationCampaign.PINNED })
+            runtime.reconcile("already_visible")
+            assertEquals(open + 1, platform.posts.count { it.first == NotificationCampaign.PINNED })
+            platform.cancel(NotificationCampaign.PINNED) // OS removed the surface, outside the SDK.
+            runtime.signal(RetentionSignal.ProcessBackground)
+        }
+    }
 }
