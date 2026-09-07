@@ -6,6 +6,9 @@ import android.os.Looper
 import java.lang.ref.WeakReference
 import java.util.UUID
 
+/** ENTRY is for an explicit user-selected route; automatic prompts always use PROMPT. */
+enum class RetentionUiPurpose { PROMPT, ENTRY }
+
 sealed class RetentionUiLeaseResult {
     data class Acquired(val lease: RetentionUiLease) : RetentionUiLeaseResult()
     data class Blocked(val reason: RetentionSuppressionReason) : RetentionUiLeaseResult()
@@ -27,7 +30,8 @@ class RetentionUiCoordinator internal constructor(
     private val report: (Exception) -> Unit = {},
 ) {
     private data class Reservation(val token: String, val owner: String, val expires: Long,
-        val activity: WeakReference<Activity>, var resource: AutoCloseable? = null, var timeout: Runnable? = null)
+        val activity: WeakReference<Activity>, val purpose: RetentionUiPurpose,
+        var resource: AutoCloseable? = null, var timeout: Runnable? = null)
     private data class Block(val reason: RetentionSuppressionReason, val expires: Long)
     private val lock = Any()
     private val handler = Handler(Looper.getMainLooper())
@@ -35,26 +39,27 @@ class RetentionUiCoordinator internal constructor(
     private var reservation: Reservation? = null
     private var closed = false
 
-    fun eligibility(): RetentionEligibility {
+    @JvmOverloads fun eligibility(purpose: RetentionUiPurpose = RetentionUiPurpose.PROMPT): RetentionEligibility {
         val snapshot = locked { _ -> reasonLocked() to activities.current() }
         snapshot.first?.let { return RetentionEligibility.Blocked(it) }
         val activity = snapshot.second ?: return RetentionEligibility.Blocked(RetentionSuppressionReason.NO_ACTIVITY)
-        if (!hostAllows(activity)) return RetentionEligibility.Blocked(RetentionSuppressionReason.HOST_UI)
+        if (!hostAllows(activity, purpose)) return RetentionEligibility.Blocked(RetentionSuppressionReason.HOST_UI)
         // Host callback can synchronously navigate or report new UI. Recheck after it returns.
         val reason = locked { _ -> reasonLocked() ?: if (activities.current() !== activity) RetentionSuppressionReason.NO_ACTIVITY else null }
         return if (reason == null) RetentionEligibility.Allowed else RetentionEligibility.Blocked(reason)
     }
 
-    @JvmOverloads fun acquire(owner: String, durationMillis: Long = 60_000): RetentionUiLeaseResult {
+    @JvmOverloads fun acquire(owner: String, durationMillis: Long = 60_000,
+        purpose: RetentionUiPurpose = RetentionUiPurpose.PROMPT): RetentionUiLeaseResult {
         require(validId(owner)) { "Invalid prompt owner" }
         require(durationMillis in 1..300_000) { "UI lease must expire within five minutes" }
-        val eligibility = eligibility()
+        val eligibility = eligibility(purpose)
         if (eligibility is RetentionEligibility.Blocked) return RetentionUiLeaseResult.Blocked(eligibility.reason)
         val token = UUID.randomUUID().toString()
         val blocked = locked { _ ->
             reasonLocked()?.let { return@locked it }
             val activity = activities.current() ?: return@locked RetentionSuppressionReason.NO_ACTIVITY
-            reservation = Reservation(token, owner, deadline(durationMillis), WeakReference(activity))
+            reservation = Reservation(token, owner, deadline(durationMillis), WeakReference(activity), purpose)
             null
         }
         if (blocked != null) return RetentionUiLeaseResult.Blocked(blocked)
@@ -81,14 +86,14 @@ class RetentionUiCoordinator internal constructor(
             val activity = entry.activity.get()
             if (reasonLocked(includeReservation = false) != null || activity == null || activities.current() !== activity) {
                 detachLocked(closing); null
-            } else activity
+            } else activity to entry.purpose
         } ?: return null
-        val allowed = hostAllows(snapshot)
+        val allowed = hostAllows(snapshot.first, snapshot.second)
         return locked { closing ->
             if (reservation?.token != token) return@locked null
-            if (!allowed || reasonLocked(includeReservation = false) != null || activities.current() !== snapshot) {
+            if (!allowed || reasonLocked(includeReservation = false) != null || activities.current() !== snapshot.first) {
                 detachLocked(closing); null
-            } else snapshot
+            } else snapshot.first
         }
     }
 
@@ -100,11 +105,12 @@ class RetentionUiCoordinator internal constructor(
     }
     internal fun removeBlock(owner: String) = locked { _ -> blocks.remove(owner); Unit }
     internal fun externalTransitionActive(): Boolean = locked { _ -> blocks.values.any { it.reason == RetentionSuppressionReason.EXTERNAL_TRANSITION } }
-    internal fun canContinueHandoff(token: String, activity: Activity): Boolean {
+    internal fun canContinueHandoff(token: String, activity: Activity,
+        purpose: RetentionUiPurpose = RetentionUiPurpose.PROMPT): Boolean {
         fun eligibleLocked(): Boolean = !closed && foreground() && !onboarding() &&
             !activity.isFinishing && !activity.isDestroyed && activities.current() === activity &&
             blocks["external:$token"] != null && blocks.keys.none { it != "external:$token" } && reservation == null
-        if (!locked { _ -> eligibleLocked() } || !hostAllows(activity)) return false
+        if (!locked { _ -> eligibleLocked() } || !hostAllows(activity, purpose)) return false
         return locked { _ -> eligibleLocked() }
     }
     internal fun shutdown() = locked { closing -> closed = true; detachLocked(closing); blocks.clear() }
@@ -118,7 +124,13 @@ class RetentionUiCoordinator internal constructor(
         includeReservation && reservation != null -> RetentionSuppressionReason.PROMPT_BUSY
         else -> null
     }
-    private fun hostAllows(activity: Activity): Boolean = try { host.canPresent(activity) }
+    private fun hostAllows(activity: Activity, purpose: RetentionUiPurpose): Boolean = try {
+        if (activity.isFinishing || activity.isDestroyed) false
+        else {
+            val allowed = if (purpose == RetentionUiPurpose.ENTRY) host.canPresentEntry(activity) else host.canPresent(activity)
+            allowed && !activity.isFinishing && !activity.isDestroyed
+        }
+    }
         catch (error: Exception) { report(error); false }
     private fun close(resource: AutoCloseable) { try { resource.close() } catch (error: Exception) { report(error) } }
     private fun deadline(duration: Long): Long = clock.elapsedRealtimeMillis().let { now -> if (now > Long.MAX_VALUE - duration) Long.MAX_VALUE else now + duration }
