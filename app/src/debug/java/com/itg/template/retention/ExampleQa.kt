@@ -68,7 +68,15 @@ object ExampleQa {
         nativeEvents.add(NativeObservation(placement, phase))
         android.util.Log.i("RetentionNativeEvidence", "placement=$placement actual_phase=$phase")
     }
-    class QaClock(var now: Long = System.currentTimeMillis()) : RetentionClock {
+    class QaClock(initialTimeMillis: Long = System.currentTimeMillis()) : RetentionClock {
+        private var wallAnchor = initialTimeMillis
+        private var elapsedAnchor = SystemClock.elapsedRealtime()
+        var now: Long
+            @Synchronized get() = wallAnchor + (SystemClock.elapsedRealtime() - elapsedAnchor).coerceAtLeast(0)
+            @Synchronized set(value) {
+                wallAnchor = value
+                elapsedAnchor = SystemClock.elapsedRealtime()
+            }
         override fun wallTimeMillis() = now
         override fun elapsedRealtimeMillis() = SystemClock.elapsedRealtime()
     }
