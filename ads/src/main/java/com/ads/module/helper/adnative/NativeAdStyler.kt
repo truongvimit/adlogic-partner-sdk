@@ -128,8 +128,11 @@ object NativeAdStyler {
             applyLayout(adView, style)
             applyAppearance(adView, style)
         }
+        val previous = (0 until container.childCount).map { container.getChildAt(it) }
+            .filterIsInstance<NativeAdView>()
         container.removeAllViews()
         container.addView(adView)
+        previous.forEach { it.destroy() }
     }
 
     private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

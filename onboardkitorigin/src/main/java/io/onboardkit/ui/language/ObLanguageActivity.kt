@@ -409,7 +409,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         confirmDialog = null
         // Only now is the kept ad really finished with; the release below destroys it.
         confirmAdSlot.clear()
-        if (mode != LanguageScreenMode.SETTINGS) {
+        if (!isChangingConfigurations && mode != LanguageScreenMode.SETTINGS) {
             sdk.provider()?.releaseNative(AdPlacement.Language1)
             sdk.provider()?.releaseNative(AdPlacement.Language2)
             sdk.provider()?.releaseNative(AdPlacement.LanguageConfirm)

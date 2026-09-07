@@ -60,7 +60,7 @@ interface OnboardingAdProvider {
         listener: AdEventListener? = null,
     ): Boolean
 
-    /** Cancels the pending request and drops the buffer for [placement]. */
+    /** Ends this screen's presentation; unused fills and shared pending loads survive departure. */
     fun releaseNative(placement: AdPlacement)
 
     fun loadInterstitial(

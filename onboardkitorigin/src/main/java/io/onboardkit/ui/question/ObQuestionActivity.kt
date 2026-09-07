@@ -220,7 +220,7 @@ class ObQuestionActivity : BaseOnboardActivity() {
     override fun onDestroy() {
         pendingReplacement = null
         nativeLoadPending = false
-        sdk.provider()?.releaseNative(AdPlacement.QuestionNative)
+        if (!isChangingConfigurations) sdk.provider()?.releaseNative(AdPlacement.QuestionNative)
         super.onDestroy()
     }
 

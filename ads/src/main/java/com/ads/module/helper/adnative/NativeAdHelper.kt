@@ -8,7 +8,9 @@ import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import com.ads.module.ads.AdWaterfall
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import com.google.android.gms.ads.nativead.NativeAdView
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -110,20 +112,35 @@ class NativeAdHelper(
     private val resumeCount = AtomicInteger(0)
     private var timeShowAdRecent = 0L
     private var reloadByTimeMs = 0L
+    private var nextReloadAtMs = 0L
+    private var restoring = false
+    private var restoreChecked = false
+    private var pendingRestoration: NativePresentationStore.Presentation? = null
+    private var awaitingHost = false
+    private var restartOnResume = false
+    private var requestVersion = 0L
+    /** Disable when a containing integration owns request analytics. */
+    var reportTelemetry: Boolean = true
+    /** A consumed presentation awaiting its recreated host; it must not trigger a preload. */
+    val isRestoringPresentation: Boolean get() = pendingRestoration != null
+    private val presentationStore by lazy {
+        (activity as? ViewModelStoreOwner)?.let { ViewModelProvider(it)[NativePresentationStore::class.java] }
+    }
 
     private val resumeReloadRunnable = Runnable {
+        if (reloadByTimeMs > 0) {
+            armReload()
+            return@Runnable
+        }
         if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && isActiveState()) {
             requestAds(NativeAdParam.Reload)
         }
     }
 
-    // Preload-consumed ads report through the executor, not the waterfall, so every moment a
-    // listener can observe has to be forwarded here too — impressions alone left a bound ad
-    // looking as though it were never clicked.
+    // Follow the consumed ad itself; another preload at this placement must not redirect its events.
     private val preloadObserver = object : AdCallback() {
         override fun onAdImpression() {
             if (isActiveState() && nativeAd != null) {
-                onAdImpressionInternal()
                 listeners.forEach { it.onAdImpression() }
             }
         }
@@ -141,8 +158,13 @@ class NativeAdHelper(
         }
     }
 
-    private val reloadByTimeRunnable = Runnable {
-        if (conditionReloadAdAvailable() && isResumed()) requestAds(NativeAdParam.Reload)
+    private val reloadByTimeRunnable = Runnable { reloadWhenVisible() }
+
+    private fun reloadWhenVisible() {
+        if (!isResumed() || !isActiveState() || !canReloadAd()) return
+        if (contentView?.isShown != true) {
+            mainHandler.postDelayed(reloadByTimeRunnable, reloadByTimeMs.coerceAtLeast(maxValueDebounceAdLoaded))
+        } else if (conditionReloadAdAvailable()) requestAds(NativeAdParam.Reload)
     }
 
     init {
@@ -157,7 +179,8 @@ class NativeAdHelper(
         // would get wrong offline
         if (_nativeAdState.value is AdNativeState.Loading) applyState(AdNativeState.Loading)
         // A view attached after the fill would otherwise stay blank until the next reload
-        (nativeAdState.value as? AdNativeState.Loaded)?.let { bindLoadedAd(it.nativeAd) }
+        nativeAd?.takeIf { it.isUsable }?.let { bindLoadedAd(it) }
+        if (awaitingHost && isActiveState() && isResumed() && !restorePresentation()) requestSharedAd()
         return this
     }
 
@@ -214,11 +237,8 @@ class NativeAdHelper(
 
     @JvmOverloads
     fun setEnablePreload(isEnable: Boolean, key: String = preloadKey): NativeAdHelper {
-        val preload = NativeAdPreload.getInstance()
-        preload.unregisterAdCallback(preloadKey, preloadObserver)
         isEnablePreload = isEnable
         preloadKey = key
-        if (isEnable) preload.registerAdCallback(key, preloadObserver)
         return this
     }
 
@@ -247,11 +267,24 @@ class NativeAdHelper(
         listeners.clear()
     }
 
+    /** Explicit show: after a successful bind, calling again requests a different ad. */
+    fun show() = requestAds(NativeAdParam.Request)
+
+    /** Binds only an unused cache entry or a configuration-restored presentation. */
+    fun bindAvailable(): Boolean {
+        if (_nativeAdState.value is AdNativeState.Loading) return false
+        if (!canShowAds() || !AdGate.passesUaGate(config.forceUaCheck)) return false
+        flagActive.set(true)
+        if (restorePresentation()) return nativeAd != null
+        val ad = NativeAdManager.poll(storeKey) ?: return false
+        onLoadedAd(ad)
+        return nativeAd === ad
+    }
+
     override fun requestAds(param: NativeAdParam) {
         if (_nativeAdState.value is AdNativeState.Loading) return
         val passesUaGate = AdGate.passesUaGate(config.forceUaCheck)
-        val preloadHit = param is NativeAdParam.Request && isEnablePreload &&
-            NativeAdPreload.getInstance().isPreloadAvailable(preloadKey)
+        val preloadHit = NativeAdPreload.getInstance().isPreloadAvailable(storeKey)
         // canShowAds() (not the raw config flag): Ready/preload waive the network
         // requirement only — a purchased user must never get a buffered ad bound
         val accepted = canShowAds() && config.adUnitIds.isNotEmpty() && passesUaGate &&
@@ -260,43 +293,51 @@ class NativeAdHelper(
             reportSkip(passesUaGate)
             val offline = !AdGate.isNetworkAvailable(context)
             if (offline) listeners.forEach { it.onAdFailedToLoad(null) }
-            // Offline with nothing on screen is a dead slot; otherwise keep what is shown
-            if (offline && nativeAd == null) cancel()
-            else setState(AdNativeState.Fail)
+            if (offline && nativeAd?.isUsable == true && canShowAds() && passesUaGate) onFailedToLoad()
+            else cancel()
             return
         }
         when (param) {
             is NativeAdParam.Request -> {
                 flagActive.set(true)
-                createOrConsumePreload()
+                if (!restorePresentation()) requestSharedAd()
             }
 
             is NativeAdParam.Reload -> {
                 if (!conditionReloadAdAvailable()) return
-                if (isEnablePreload && preloadClientOption.preloadOnResume) {
-                    createOrConsumePreload()
-                } else {
-                    loadFromNetwork()
-                }
+                requestSharedAd()
             }
 
             is NativeAdParam.Ready -> {
                 flagActive.set(true)
+                NativeAdManager.claim(param.nativeAd)
                 onLoadedAd(param.nativeAd)
             }
         }
     }
 
     override fun cancel() {
+        requestVersion++
+        pendingRestoration?.ad?.let(::destroyNative)
+        pendingRestoration = null
+        awaitingHost = false
+        restartOnResume = false
+        loadSubscription?.cancel()
+        eventSubscription?.cancel()
         flagActive.compareAndSet(true, false)
         mainHandler.removeCallbacks(reloadByTimeRunnable)
+        mainHandler.removeCallbacks(resumeReloadRunnable)
+        nativeAd?.let(::destroyNative)
+        nativeAd = null
+        detachAdViews()
+        dropGeneratedShimmer()
         setState(AdNativeState.Cancel)
     }
 
     /** Reload is allowed only after the last bind has been visible for a minimum time. */
     fun conditionReloadAdAvailable(): Boolean =
         _nativeAdState.value !is AdNativeState.Loading &&
-            System.currentTimeMillis() - timeShowAdRecent > maxValueDebounceAdLoaded &&
+            android.os.SystemClock.elapsedRealtime() - timeShowAdRecent > maxValueDebounceAdLoaded &&
             canReloadAd() &&
             isActiveState()
 
@@ -309,17 +350,45 @@ class NativeAdHelper(
                     cancel()
                     return
                 }
+                if (restartOnResume) {
+                    restartOnResume = false
+                    show()
+                } else if (awaitingHost && isActiveState() && contentView != null) {
+                    if (!restorePresentation()) requestSharedAd()
+                } else if (nativeAd != null) armReload()
                 resumeCount.incrementAndGet()
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.postDelayed(resumeReloadRunnable, config.timeDebounceResume)
             }
 
+            Lifecycle.Event.ON_PAUSE -> mainHandler.removeCallbacks(reloadByTimeRunnable)
+
+            Lifecycle.Event.ON_STOP -> {
+                if (!activity.isChangingConfigurations) {
+                    val restart = isActiveState()
+                    cancel()
+                    restartOnResume = restart
+                }
+            }
+
             Lifecycle.Event.ON_DESTROY -> {
-                // Deactivate first: a late fill must hit the !isActiveState() path and die
+                if (activity.isChangingConfigurations && isActiveState()) {
+                    presentationStore?.let { store ->
+                        store.retain(storeKey, pendingRestoration ?: NativePresentationStore.Presentation(
+                            nativeAd, timeShowAdRecent, nextReloadAtMs,
+                            _nativeAdState.value is AdNativeState.Loading))
+                        nativeAd = null
+                        pendingRestoration = null
+                    }
+                }
+                requestVersion++
+                detachAdViews()
+                loadSubscription?.cancel()
+                eventSubscription?.cancel()
+                // Any callback already being dispatched must return its unbound fill to the store.
                 flagActive.set(false)
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.removeCallbacks(reloadByTimeRunnable)
-                NativeAdPreload.getInstance().unregisterAdCallback(preloadKey, preloadObserver)
                 listeners.clear()
                 nativeAd?.let { destroyNative(it) }
                 nativeAd = null
@@ -332,91 +401,127 @@ class NativeAdHelper(
         }
     }
 
-    private fun createOrConsumePreload() {
-        if (!isEnablePreload) {
-            loadFromNetwork()
-            return
-        }
-        val preload = NativeAdPreload.getInstance()
-        val buffered = preload.pollAdNative(preloadKey)
-        when {
-            // Buffered ad binds without a round trip — straight to Loaded, no Loading flash
-            buffered != null -> onLoadedAd(buffered)
+    private var loadSubscription: NativeAdManager.Subscription? = null
+    private var eventSubscription: NativeAdManager.Subscription? = null
+    private val storeKey: String get() = if (isEnablePreload) preloadKey else placement ?: preloadKey
 
-            preload.isPreloadInProgress(preloadKey) -> {
-                setState(AdNativeState.Loading)
-                preload.awaitNext(preloadKey) { ad ->
-                    if (ad != null) onLoadedAd(ad) else onFailedToLoad()
+    private fun requestSharedAd() {
+        awaitingHost = false
+        setState(AdNativeState.Loading)
+        loadSubscription?.cancel()
+        val version = ++requestVersion
+        val key = storeKey
+        val subscription = NativeAdManager.acquire(activity, key, config, reportTelemetry && placement != null) { ad ->
+            when {
+                version != requestVersion || !isActiveState() -> ad?.let { NativeAdManager.returnUnused(key, it) }
+                ad != null -> onLoadedAd(ad)
+                else -> {
+                    onFailedToLoad()
+                    listeners.toList().forEach { runCatching { it.onAdFailedToLoad(null) } }
                 }
             }
-
-            else -> loadFromNetwork()
         }
+        if (version == requestVersion) loadSubscription = subscription else subscription.cancel()
     }
 
-    private fun loadFromNetwork() {
-        if (!canRequestAds()) {
-            if (!AdGate.isNetworkAvailable(context) && nativeAd == null) cancel()
-            else setState(AdNativeState.Fail)
+    private fun restorePresentation(): Boolean {
+        val saved = pendingRestoration ?: run {
+            if (restoreChecked) return false
+            restoreChecked = true
+            presentationStore?.take(storeKey) ?: return false
+        }
+        if (!isResumed() || contentView == null) {
+            pendingRestoration = saved
+            awaitingHost = true
+            setState(AdNativeState.Loading)
+            return true
+        }
+        pendingRestoration = null
+        awaitingHost = false
+        timeShowAdRecent = saved.shownAtMs
+        nextReloadAtMs = saved.refreshAtMs
+        saved.ad?.let { ad ->
+            if (ad.isUsable) {
+                restoring = true
+                try { onLoadedAd(ad) } finally { restoring = false }
+            } else destroyNative(ad)
+        }
+        if (saved.awaiting || nativeAd == null) requestSharedAd()
+        return true
+    }
+
+    /** A successful new bind anchors refresh; reattaching the same presentation preserves it. */
+    private fun onAdImpressionInternal() {
+        if (restoring) {
+            armReload()
             return
         }
-        setState(AdNativeState.Loading)
-        placement?.let { key ->
-            config.adUnitIds.forEach { AdTracking.registerPlacement(it, key) }
-            AdTracking.request(key, AdFormat.NATIVE, config.idAds)
-        }
-        AdWaterfall.loadNative(
-            activity,
-            config.adUnitIds,
-            config.layoutId,
-            config.tierTimeoutMs,
-            object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    onLoadedAd(nativeAd)
-                }
-
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    onFailedToLoad()
-                    listeners.forEach { it.onAdFailedToLoad(adError) }
-                }
-
-                override fun onAdClicked() {
-                    listeners.forEach { it.onAdClicked() }
-                }
-
-                override fun onAdImpression() {
-                    onAdImpressionInternal()
-                    listeners.forEach { it.onAdImpression() }
-                }
-            },
-        )
+        timeShowAdRecent = android.os.SystemClock.elapsedRealtime()
+        nextReloadAtMs = if (reloadByTimeMs > 0) timeShowAdRecent + reloadByTimeMs else 0L
+        armReload()
     }
 
-    /** GMA counted the impression — the reload timers anchor here, not on bind. */
-    private fun onAdImpressionInternal() {
-        timeShowAdRecent = System.currentTimeMillis()
-        if (reloadByTimeMs > 0) {
-            mainHandler.removeCallbacks(reloadByTimeRunnable)
-            mainHandler.postDelayed(reloadByTimeRunnable, reloadByTimeMs)
+    private fun armReload() {
+        mainHandler.removeCallbacks(reloadByTimeRunnable)
+        if (reloadByTimeMs <= 0 || !isResumed() || !isActiveState() || !canReloadAd()) return
+        val due = maxOf(nextReloadAtMs, timeShowAdRecent + maxValueDebounceAdLoaded + 1)
+        val delay = (due - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0)
+        mainHandler.postDelayed(reloadByTimeRunnable, delay)
+    }
+
+    private fun detachAdViews() {
+        contentView?.let { container ->
+            (0 until container.childCount).map { container.getChildAt(it) }
+                .filterIsInstance<NativeAdView>().forEach { it.destroy() }
+            container.removeAllViews()
         }
     }
 
     private fun onLoadedAd(ad: ApNativeAd) {
-        if (!isActiveState()) {
+        if (isActiveState() && canShowAds() && ad.isUsable && (contentView == null || !isResumed())) {
+            NativeAdManager.returnUnused(storeKey, ad)
+            awaitingHost = true
+            setState(AdNativeState.Loading)
+            return
+        }
+        if (!canShowAds()) {
             destroyNative(ad)
+            cancel()
+            return
+        }
+        if (!isActiveState() || !ad.isUsable) {
+            destroyNative(ad)
+            onFailedToLoad()
             return
         }
         val previous = nativeAd
+        if (!bindLoadedAd(ad)) {
+            if (previous !== ad) destroyNative(ad)
+            onFailedToLoad()
+            listeners.forEach { it.onAdFailedToShow(null) }
+            return
+        }
         nativeAd = ad
-        // Bind first, destroy after: the outgoing ad backs the view on screen until the
-        // new one replaces it, so the slot never blanks between the two
+        eventSubscription?.cancel()
+        eventSubscription = NativeAdManager.observe(ad, preloadObserver)
         setState(AdNativeState.Loaded(ad))
+        onAdImpressionInternal()
         if (previous != null && previous !== ad) destroyNative(previous)
+        refillAfterShow()
         listeners.forEach { it.onNativeAdLoaded(ad) }
     }
 
     private fun onFailedToLoad() {
         if (!isActiveState()) return
+        if (reloadByTimeMs > 0 && isResumed() && canReloadAd()) {
+            nextReloadAtMs = android.os.SystemClock.elapsedRealtime() + reloadByTimeMs
+            armReload()
+        }
+        nativeAd?.takeUnless { it.isUsable }?.let { expired ->
+            destroyNative(expired)
+            nativeAd = null
+            detachAdViews()
+        }
         val survivor = nativeAd
         if (survivor == null) {
             setState(AdNativeState.Fail)
@@ -448,18 +553,15 @@ class NativeAdHelper(
                 shimmer.visibility = View.GONE
             }
         }
-        if (state is AdNativeState.Loaded) bindLoadedAd(state.nativeAd)
     }
 
-    private fun bindLoadedAd(ad: ApNativeAd) {
-        val container = contentView ?: return
-        runCatching { binder.bind(activity, ad, container, shimmerView) }
-        // The binder's removeAllViews detached a generated skeleton (or it serves a
-        // replaced container); drop the refs so the next Loading regenerates a fresh one
+    private fun bindLoadedAd(ad: ApNativeAd): Boolean {
+        val container = contentView ?: return false
+        ad.layoutCustomNative = config.layoutId
+        if (runCatching { binder.bind(activity, ad, container, shimmerView) }
+                .onFailure { android.util.Log.w("NativeAdHelper", "Cannot bind $storeKey", it) }.isFailure) return false
         if (generatedShimmer != null && generatedShimmer?.parent !== contentView) dropGeneratedShimmer()
-        // Bind is the baseline anchor; the impression callback re-anchors when it lands
-        onAdImpressionInternal()
-        refillAfterShow()
+        return true
     }
 
     /**
@@ -554,7 +656,7 @@ class NativeAdHelper(
     }
 
     private fun destroyNative(ad: ApNativeAd) {
-        runCatching { ad.admobNativeAd?.destroy() }
+        NativeAdManager.dispose(ad)
     }
 
     companion object {

@@ -19,7 +19,11 @@ import com.ads.module.helper.adnative.NativeAdPreload
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.adnative.NativeAdStyle
-import com.ads.module.helper.adnative.NativeAdStyler
+import com.ads.module.helper.adnative.NativeAdHelper
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
@@ -82,8 +86,18 @@ class ERainAdProvider(
     private val nativeBridges = ConcurrentHashMap<String, AdCallback>()
     private val interKeys = ConcurrentHashMap.newKeySet<String>()
 
-    // GMA requires destroy() on every consumed NativeAd; the buffer only owns unpolled ones
-    private val boundNatives = ConcurrentHashMap<String, ApNativeAd>()
+    private class NativeBinding(
+        val activity: Activity,
+        val owner: LifecycleOwner,
+        val container: FrameLayout,
+        val helper: NativeAdHelper,
+    ) {
+        var inBind = false
+        var justBound = false
+    }
+    private val nativeBindings = mutableMapOf<String, NativeBinding>()
+    private val nativeConfigs = mutableMapOf<String, NativeAdConfig>()
+    private val nativeOwners = mutableMapOf<String, LifecycleOwner>()
 
     /**
      * Presentation style per placement, resolved from the ad config at request time.
@@ -100,6 +114,7 @@ class ERainAdProvider(
 
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
+        if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
             ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
@@ -110,9 +125,11 @@ class ERainAdProvider(
         ids.forEach { PlacementRegistry.register(it, key) }
         ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
             ?.let { nativeStyles[key] = it.toNativeStyle() }
+        val config = nativeConfig(ids, request.layoutRes)
+        nativeConfigs[key] = config
         ensureNativeBridge(key)
         val covered =
-            preload.preloadWithKeyIfEmpty(key, activity, nativeConfig(ids, request.layoutRes))
+            preload.preloadWithKeyIfEmpty(key, activity, config)
         // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
         if (!covered && !isNativeReady(request.placement)) {
             notifyListener(key) { it.onFailedToLoad() }
@@ -132,31 +149,77 @@ class ERainAdProvider(
         shimmer: View?,
         listener: AdEventListener?,
     ): Boolean {
-        listener?.let { listeners[placement.key] = it }
+        val key = placement.key
+        listener?.let { listeners[key] = it }
         val frame = container as? FrameLayout ?: return false
-        val ad = preload.pollAdNative(placement.key) ?: return false
-        NativeAdStyler.populate(
-            activity,
-            ad,
-            nativeStyles[placement.key],
-            frame,
-            shimmer as? ShimmerFrameLayout,
-        )
-        boundNatives.put(placement.key, ad)?.let { previous ->
-            if (previous !== ad) destroyNative(previous)
+        val owner = frame.findViewTreeLifecycleOwner() ?: activity as? LifecycleOwner ?: return false
+        if (nativeOwners[key] !== owner) {
+            nativeOwners[key] = owner
+            var observing = false
+            owner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+                if (nativeOwners[key] === owner) {
+                    if (event == Lifecycle.Event.ON_DESTROY) {
+                        nativeOwners.remove(key)
+                        listeners.remove(key)
+                    } else if (observing && event == Lifecycle.Event.ON_RESUME && nativeBindings[key] == null &&
+                        preload.getAdNative(key) != null) {
+                        notifyListener(key) { it.onLoaded() }
+                    }
+                }
+            })
+            observing = true
         }
-        // GMA counts the impression once the view tree is bound and visible
-        notifyListener(placement.key) { it.onImpression() }
-        return true
+        val current = nativeBindings[key]
+        val binding = if (current?.activity === activity && current.container === frame) current else {
+            current?.helper?.cancel()
+            val config = nativeConfigs[key] ?: return false
+            val helper = NativeAdHelper(activity, owner, config)
+                .setNativeContentView(frame)
+                .setNativeStyle(nativeStyles[key])
+                .also { it.placement = key; it.reportTelemetry = false }
+            (shimmer as? ShimmerFrameLayout)?.let(helper::setShimmerLayoutView)
+            NativeBinding(activity, owner, frame, helper).also { created ->
+                nativeBindings[key] = created
+                helper.registerAdListener(object : AdCallback() {
+                    override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                        created.justBound = true
+                        if (!created.inBind) notifyListener(key) { it.onLoaded() }
+                        // Existing onboarding dwell timers use this bind signal, not paid analytics.
+                        notifyListener(key) { it.onImpression() }
+                    }
+                    override fun onAdFailedToLoad(error: LoadAdError?) {
+                        notifyListener(key) { it.onFailedToLoad() }
+                    }
+                    override fun onAdClicked() { notifyListener(key) { it.onClicked() } }
+                    override fun onAdOpened() { notifyListener(key) { it.onAdOpened() } }
+                })
+                owner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_DESTROY && nativeBindings[key] === created) {
+                        nativeBindings.remove(key)
+                        listeners.remove(key)
+                    }
+                })
+            }
+        }
+        // A helper may finish an in-flight load on resume before the legacy onLoaded callback
+        // asks bindNative again. Acknowledge that bind instead of consuming another ad.
+        if (binding.justBound) {
+            binding.justBound = false
+            return true
+        }
+        binding.inBind = true
+        return try {
+            binding.helper.bindAvailable().also { if (it) binding.justBound = false }
+        } finally { binding.inBind = false }
     }
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
-        nativeBridges.remove(key)
-        nativeStyles.remove(key)
-        preload.release(key)
-        boundNatives.remove(key)?.let(::destroyNative)
+        nativeBindings.remove(key)?.helper?.cancel()
+        nativeOwners.remove(key)
+        nativeBridges.remove(key)?.let { preload.unregisterAdCallback(key, it) }
         listeners.remove(key)
+        // A screen departure cannot cancel the process-owned request or drop its unused fill.
     }
 
     override fun loadInterstitial(
@@ -273,10 +336,13 @@ class ERainAdProvider(
 
     override fun releaseAll() {
         // Per-key release: the stores are process-wide and the host app owns keys of its own
-        nativeBridges.keys.forEach { preload.release(it) }
+        (nativeBridges.keys + nativeConfigs.keys).toSet().forEach { preload.release(it) }
         nativeBridges.clear()
-        boundNatives.values.forEach(::destroyNative)
-        boundNatives.clear()
+        nativeBindings.values.forEach { it.helper.cancel() }
+        nativeBindings.clear()
+        nativeOwners.clear()
+        nativeConfigs.clear()
+        nativeStyles.clear()
         interKeys.forEach { InterstitialAdManager.release(it) }
         interKeys.clear()
         listeners.clear()
@@ -326,10 +392,6 @@ class ERainAdProvider(
         // "nothing buffered" hid the two causes a funnel actually needs to tell apart.
         SdkAdSkipReason.OFFLINE -> AdSkipReason.OFFLINE
         SdkAdSkipReason.UA_GATE -> AdSkipReason.UA_GATE
-    }
-
-    private fun destroyNative(ad: ApNativeAd) {
-        runCatching { ad.admobNativeAd?.destroy() }
     }
 
     private fun notifyListener(key: String, block: (AdEventListener) -> Unit) {

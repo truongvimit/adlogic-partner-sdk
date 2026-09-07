@@ -157,7 +157,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     override fun onDestroy() {
         skipJob?.cancel()
         autoDismissJob?.cancel()
-        sdk.provider()?.releaseNative(AdPlacement.Ob5)
+        if (!isChangingConfigurations) sdk.provider()?.releaseNative(AdPlacement.Ob5)
         super.onDestroy()
     }
 

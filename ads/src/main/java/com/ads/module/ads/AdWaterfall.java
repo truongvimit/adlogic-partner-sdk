@@ -70,17 +70,27 @@ public final class AdWaterfall {
             int layoutRes,
             long tierTimeoutMs,
             @NonNull AdCallback callback) {
+        loadNative((Context) activity, adUnitIds, layoutRes, tierTimeoutMs, callback);
+    }
+
+    /** A process-owned preload must not retain a departed Activity. */
+    public static void loadNative(
+            @NonNull Context context,
+            @Nullable List<String> adUnitIds,
+            int layoutRes,
+            long tierTimeoutMs,
+            @NonNull AdCallback callback) {
         List<String> tiers = usableIds(adUnitIds);
         if (tiers.isEmpty()) {
             Log.w(TAG, "loadNative: no usable ad unit id");
             callback.onAdFailedToLoad(null);
             return;
         }
-        loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, 0, callback);
+        loadNativeTier(context, tiers, layoutRes, tierTimeoutMs, 0, callback);
     }
 
     private static void loadNativeTier(
-            Activity activity,
+            Context activity,
             List<String> tiers,
             int layoutRes,
             long tierTimeoutMs,

@@ -190,6 +190,53 @@ Native includes a generated loading skeleton. To customize it, copy the
 `canReloadAds=false` and `enableAutoReload=false`. SDK refresh requires disabling console refresh
 for every tier; see [BannerAdConfig](src/main/java/com/ads/module/helper/banner/BannerAdConfig.kt).
 
+## Native preload, repeated show, and refresh
+
+`NativeAdManager` owns one unused native and one pending load per placement across screens.
+Use a distinct placement for each slot, even when two slots use the same AdMob unit. Requests
+from `NativeAdHelper` always share this store; enabling preload on the helper is no longer required.
+
+```kotlin
+// Optional: start earlier, after consent. Repeat calls do not append load batches.
+NativeAdManager.preload(applicationContext, "native_home", nativeConfig)
+
+// In the destination Activity; for a Fragment use viewLifecycleOwner.
+val nativeHelper = NativeAdHelper(this, this, nativeConfig)
+    .setNativeContentView(binding.frAds)
+    .also { it.placement = "native_home" }
+nativeHelper.show()
+```
+
+`show()` consumes a ready ad, joins its pending load, or starts one. Calls while this helper is
+loading coalesce. Once binding succeeds the ad is out of the unused cache, so a later explicit
+`show()` requests another ad and replaces the current one when ready. Removing it from the cache
+does not destroy the ad backing the visible view. Failed replacement loads/binds keep a valid
+current ad. Gate denial and expired ads cannot be used as survivors.
+
+For a slot that refreshes while visible, use the same helper with `canReloadAds = true` in
+`NativeAdConfig`, then call `applyReloadByTime(intervalMs)` before `show()`. The old native stays
+visible while its replacement loads. Failure retries use the configured interval, not an immediate
+request loop. Hidden/stopped slots do not issue timed refresh requests.
+
+A real departure stops the helper's timer and ends the displayed ad. The shared request and any
+unused fill survive: returning uses that fill or joins that request. A retained helper automatically
+starts a fresh visit on resume. With an `AppCompatActivity`/`ViewModelStoreOwner` host, configuration
+recreation (including rotation) instead restores the current presentation and remaining refresh
+time. Recreate the helper with the same placement and call `show()` as usual, including in
+`onCreate`; it binds when resumed. This does not return the consumed ad to the preload cache.
+Use one active helper per slot. Ads are held only in memory and cannot survive process death.
+
+`cancel()` detaches the current helper and disposes its presentation; it does not cancel the shared
+network request. `NativeAdManager.release(placement)` explicitly invalidates unused/pending fills.
+Call `ApNativeAd.destroy()` when disposing an ad obtained through the low-level polling API.
+
+The old `NativeAdPreload` entry points delegate to this same store. `preloadWithKey()` now skips
+when covered, just like `preloadWithKeyIfEmpty()`; their Boolean return meanings remain distinct
+(started versus covered). Legacy `buffer`/`preloadBuffer` values no longer request batches: capacity
+is one unused native per placement. `preloadOnResume` no longer selects a separate network path.
+`preloadAfterShow` remains an optional request for the next unused ad; it does not replace the
+current ad until another show/refresh trigger.
+
 ## Optional integrations
 
 | Need | Add or configure |

@@ -517,6 +517,11 @@ public class ERainAd {
 
     public void loadNativeAdResultCallback(final Activity activity, String id,
                                            int layoutCustomNative, AdCallback callback) {
+        loadNativeAdResultCallback((Context) activity, id, layoutCustomNative, callback);
+    }
+
+    public void loadNativeAdResultCallback(final Context activity, String id,
+                                           int layoutCustomNative, AdCallback callback) {
         Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
             @Override
             public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
