@@ -15,3 +15,8 @@ Evidence must distinguish ordinary production defaults from explicit synthetic e
 ## Coordination
 
 Parent tracker checkpoint after ticket16 merge:15 is resolved for module implementation (126 passing selected cases and release AAR),16 is resolved for scoped facade/example implementation (75 passing cases and debug/test APKs),17 remains in progress. This ticket retains the final normal-device, screen-wake, optional-vendor R8/consumer and independent review acceptance. Its dependency on16 is one-way;16 does not remain open waiting for18. Root's early normal-device observations and the historical corrected279/17/matrix records do not constitute completion of this final-source acceptance.
+
+
+## Feedback readiness correction — claimed
+
+audit_pdf owns the bounded feedback module/test correction in private feedback-readiness at base78545de. Actual Suite16 launcher-Uninstall path creates RetentionFeedbackActivity then closes before survey shown/native loaded; source/evidence investigation and real lifecycle/focus RED→GREEN are required. Agreed seams: SDK Activity lifecycle/focus plus core host gating, real default/custom survey and lease cleanup. Root retains actual devices and overall18 acceptance; this subtask does not resolve18. No ADB/root/other implementation worktree edits. Exclusive Gradle lease transferred from17 for targeted/full feedback checks.
