@@ -112,6 +112,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
         lifecycleScope.launch { runSplash() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Android can preserve the focused window during recreation without replaying
+        // onWindowFocusChanged(true) to the new Activity instance.
+        windowFocused.value = hasWindowFocus()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         windowFocused.value = hasFocus

@@ -70,7 +70,7 @@ class SplashNotificationPermissionDeviceTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = ApplicationProvider.getApplicationContext<Application>()
         val phase = InstrumentationRegistry.getArguments().getString("notificationPhase") ?: "deny"
-        require(phase in setOf("allow", "deny", "recreate", "off", "granted", "home_after_result", "handled", "preload", "preload_granted_home"))
+        require(phase in setOf("allow", "deny", "recreate", "off", "granted", "home_after_result", "handled", "preload", "preload_granted_home", "dismiss", "home_prompt"))
         assumeTrue(Build.VERSION.SDK_INT >= 33 && app.applicationInfo.targetSdkVersion >= 33)
         val granted = app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         val initiallyGranted = phase in setOf("granted", "preload_granted_home")
@@ -78,8 +78,8 @@ class SplashNotificationPermissionDeviceTest {
         val fixture = NotificationFixture
         fixture.parallel = phase == "preload" && InstrumentationRegistry.getArguments().getString("lfoParallel") == "true"
         fixture.requiresResult = phase !in setOf("off", "granted", "handled", "preload_granted_home")
-        fixture.holdInterstitial = phase in setOf("home_after_result", "preload", "preload_granted_home")
-        fixture.checkPreloadOrder = phase in setOf("preload", "preload_granted_home")
+        fixture.holdInterstitial = phase in setOf("home_after_result", "preload", "preload_granted_home", "home_prompt")
+        fixture.checkPreloadOrder = phase in setOf("preload", "preload_granted_home", "home_prompt")
         val handoffs = { if (fixture.checkPreloadOrder) fixture.flowStarts.get() else fixture.completions.get() }
         instrumentation.runOnMainSync {
             assertFalse("Fresh instrumentation process required", OnboardingSdk.isReady())
@@ -133,6 +133,26 @@ class SplashNotificationPermissionDeviceTest {
                     if (fixture.parallel) eventually("Parallel LFO1 must start while notification is open") { fixture.splashNativeCalls.get() == 1 }
                     hold(4_500) { assertHeld() } // Beyond both configured 2s and default remote 3s minimum.
                     assertEquals("Visible splash must load under its own notification prompt exactly once", 2, fixture.loads.get())
+                    if (phase == "home_prompt") {
+                        lateinit var host: NotificationSplashDeviceActivity
+                        scenario.onActivity { host = it }
+                        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
+                        eventually("Home must stop splash even while its permission is pending") { scenario.state == Lifecycle.State.CREATED }
+                        instrumentation.runOnMainSync {
+                            fixture.interstitialReady = true
+                            requireNotNull(fixture.pendingInterstitial).onLoaded()
+                        }
+                        hold(1_000) {
+                            assertTrue("Prompt-open alone must not allow background LFO requests", fixture.nativeCalls.isEmpty())
+                            assertEquals(0, fixture.shows.get())
+                            assertEquals(0, handoffs())
+                        }
+                        instrumentation.runOnMainSync {
+                            app.getSystemService(ActivityManager::class.java).appTasks.single { it.taskInfo.taskId == host.taskId }.moveToFront()
+                        }
+                        eventually("Permission dialog must still be pending on return") { permissionDialogVisible() }
+                        eventually("Retained inter result now permits LFO preload under visible prompt") { fixture.splashNativeCalls.get() == 1 }
+                    }
                     if (phase == "recreate") {
                         val before = fixture.creates.get()
                         mark("RECREATE_WITH_REAL_PERMISSION_PENDING")
@@ -150,7 +170,10 @@ class SplashNotificationPermissionDeviceTest {
                         if (fixture.results.get() == 0) hold(1_000) { assertHeld() }
                     }
                     mark("ANSWER_NOW phase=$phase; use the real Android ${if (phase == "deny") "Don't allow" else "Allow"} button")
-                    if (phase in setOf("preload", "recreate") && fixture.results.get() == 0) clickActualPermissionAllow()
+                    if (fixture.results.get() == 0) {
+                        if (phase == "dismiss") instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                        else clickActualPermissionButton(deny = phase == "deny")
+                    }
                     eventually("Waiting for actual onRequestPermissionsResult; operator must answer real UI", 120_000) {
                         fixture.results.get() == 1
                     }
@@ -253,19 +276,19 @@ class SplashNotificationPermissionDeviceTest {
     }
 
     /** Actual visible system button click; never substitutes for the Android result callback. */
-    private fun clickActualPermissionAllow() {
+    private fun clickActualPermissionButton(deny: Boolean = false) {
         val root = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow)
         try {
             val pkg = root.packageName?.toString().orEmpty()
             check(pkg.contains("permissioncontroller")) { "PermissionController must still own the visible UI" }
             val buttons = setOf(pkg, "com.android.permissioncontroller", "com.google.android.permissioncontroller")
-                .flatMap { root.findAccessibilityNodeInfosByViewId("$it:id/permission_allow_button") }
+                .flatMap { root.findAccessibilityNodeInfosByViewId("$it:id/${if (deny) "permission_deny_button" else "permission_allow_button"}") }
             try {
                 val allow = requireNotNull(buttons.firstOrNull { it.isVisibleToUser && it.isEnabled && it.isClickable }) {
                     "The actual Allow button must be visible and enabled"
                 }
                 assertTrue("Android rejected the real Allow UI action", allow.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                mark("ACTUAL_PERMISSION_ALLOW_CLICK")
+                mark("ACTUAL_PERMISSION_BUTTON_CLICK deny=$deny")
             } finally { buttons.forEach { it.recycle() } }
         } finally { root.recycle() }
     }
@@ -286,7 +309,7 @@ class SplashNotificationPermissionDeviceTest {
 class NotificationSplashDeviceActivity : ObSplashActivity() {
     override fun onRemoteFetched() {
         OnboardingSdk.remoteOrNull()?.applySnapshot(io.onboardkit.remote.RemoteFlags(
-            splashLfoParallelPreloadEnabled = NotificationFixture.parallel))
+            splashLfoParallelPreloadEnabled = NotificationFixture.parallel, splashAdBudgetMs = 2_000))
     }
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         NotificationFixture.creates.incrementAndGet()
