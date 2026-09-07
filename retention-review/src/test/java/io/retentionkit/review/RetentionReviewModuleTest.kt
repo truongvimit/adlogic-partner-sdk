@@ -38,10 +38,10 @@ class RetentionReviewModuleTest {
         transport = FakeTransport()
     }
     @After fun after() { host?.pause()?.stop()?.destroy(); RetentionRuntime.uninstallForTests() }
-    private fun install(options: ReviewOptions = ReviewOptions(), restore: Boolean = false) {
+    private fun install(options: ReviewOptions = ReviewOptions(), restore: Boolean = false, uiHost: RetentionUiHost = RetentionUiHost.NONE) {
         if (restore) { host?.pause()?.stop()?.destroy(); host = null; RetentionRuntime.uninstallForTests() }
         module = RetentionReviewModule(options, ReviewTransportFactory { transport })
-        val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock,
+        val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock, uiHost = uiHost,
             initialUserState = RetentionUserState(setupCompleted = true, entitlement = RetentionEntitlement.NON_SUBSCRIBER),
             eventSink = RetentionEventSink { events.add(it); eventHook(it) }))
         assertTrue(result.toString(), result is RetentionInstallResult.Installed)
@@ -50,12 +50,25 @@ class RetentionReviewModuleTest {
         runtime.signal(RetentionSignal.ProcessForeground)
         idle()
     }
-    private fun success(id: String) { runtime.signal(RetentionSignal.BusinessSuccess("translate", id)); idle() }
+    private fun success(id: String) { runtime.signal(RetentionSignal.BusinessSuccess("notes", id)); idle() }
     private fun five(prefix: String = "success") { (1..5).forEach { success("$prefix-$it") } }
     private fun idle() { shadowOf(Looper.getMainLooper()).idle() }
     private fun advance(millis: Long) { clock.advance(millis); shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis)) }
     private fun ready(index: Int = transport.requests.lastIndex) { transport.requests[index](ReviewInfoResult.Ready(FakeToken)); idle() }
     private fun finish(index: Int = transport.launches.lastIndex) { transport.launches[index](ReviewFlowResult.FinishedOutcomeUnknown); idle() }
+
+    @Test fun automaticReviewCannotUseExplicitEntryHostPermission() {
+        install(uiHost = object : RetentionUiHost {
+            override fun canPresent(activity: Activity) = false
+            override fun canPresentEntry(activity: Activity) = true
+        })
+        five()
+        assertTrue(transport.requests.isEmpty())
+        assertEquals(0L, module.snapshot()!!.attempts)
+        val entry = runtime.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) as RetentionUiLeaseResult.Acquired
+        assertSame(host!!.get(), entry.lease.activity())
+        entry.lease.close()
+    }
 
     @Test fun defaultsDedupeAndSingleFlightReserveOnlyAtLaunchWithUnknownOutcome() {
         install()
@@ -197,7 +210,7 @@ class RetentionReviewModuleTest {
         install()
         val pool = Executors.newFixedThreadPool(4)
         try {
-            (1..20).map { pool.submit { runtime.signal(RetentionSignal.BusinessSuccess("translate", "parallel-${it % 5}")) } }.forEach { it.get() }
+            (1..20).map { pool.submit { runtime.signal(RetentionSignal.BusinessSuccess("notes", "parallel-${it % 5}")) } }.forEach { it.get() }
             idle()
             assertEquals(1, transport.requests.size)
             assertEquals(5L, module.snapshot()!!.successesSinceAttempt)

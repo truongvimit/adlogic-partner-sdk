@@ -34,11 +34,11 @@ class FeatureShortcutsTest {
     @Test fun quotaIncludesManifestAndForeignIdsAndKeepsReservedSlot() {
         prepareLauncher()
         shadowOf(manager).setMaxShortcutCountPerActivity(5)
-        manager.addDynamicShortcuts(listOf(shortcut("partner_camera")))
+        manager.addDynamicShortcuts(listOf(shortcut("partner_tools")))
         shadowOf(manager).setManifestShortcuts(listOf(shortcut("partner_static")))
         val f = Fixture(options = WidgetOptions())
         val ids = manager.dynamicShortcuts.map { it.id }
-        assertTrue(ids.contains("partner_camera"))
+        assertTrue(ids.contains("partner_tools"))
         assertEquals(2, ids.count { it.startsWith(FeatureShortcuts.PREFIX) })
         assertEquals(listOf("partner_static"), manager.manifestShortcuts.map { it.id })
         assertEquals(5, manager.maxShortcutCountPerActivity)
@@ -50,19 +50,19 @@ class FeatureShortcutsTest {
 
     @Test fun disablingRemovesOnlyLedgerOwnedDynamicIdsAcrossProcessRestart() {
         prepareLauncher()
-        manager.addDynamicShortcuts(listOf(shortcut("partner_camera")))
+        manager.addDynamicShortcuts(listOf(shortcut("partner_tools")))
         val before = Fixture(options = WidgetOptions())
         assertTrue(manager.dynamicShortcuts.any { it.id.startsWith(FeatureShortcuts.PREFIX) })
         RetentionRuntime.uninstallForTests()
         val after = Fixture(store = before.store, options = WidgetOptions())
         after.runtime.updateConfig(mapOf("widgets.enabled" to "false"))
-        assertEquals(listOf("partner_camera"), manager.dynamicShortcuts.map { it.id })
+        assertEquals(listOf("partner_tools"), manager.dynamicShortcuts.map { it.id })
     }
 
     @Test fun occupiedQuotaAndReservedPrefixCollisionNeverOverwriteForeignShortcut() {
         prepareLauncher()
         shadowOf(manager).setMaxShortcutCountPerActivity(3)
-        val collision = FeatureShortcuts.PREFIX + "translate"
+        val collision = FeatureShortcuts.PREFIX + "notes"
         manager.addDynamicShortcuts(listOf(shortcut(collision), shortcut("host")))
         val f = Fixture(options = WidgetOptions())
         assertEquals(setOf(collision, "host"), manager.dynamicShortcuts.map { it.id }.toSet())
@@ -72,16 +72,16 @@ class FeatureShortcutsTest {
 
     @Test fun shortcutRouteHasReusableTypedEnvelopeAndUpdatesLocalizedLabelInPlace() {
         prepareLauncher()
-        var label = "Translate"
+        var label = "Notes"
         val f = Fixture(options = WidgetOptions(), featureProvider = RetentionFeatureProvider {
-            Fixture.features.map { if (it.id == "translate") it.copy(label = label) else it }
+            Fixture.features.map { if (it.id == "notes") it.copy(label = label) else it }
         })
-        val id = FeatureShortcuts.PREFIX + "translate"
+        val id = FeatureShortcuts.PREFIX + "notes"
         val initial = manager.dynamicShortcuts.first { it.id == id }
         val entry = (RetentionEntryCodec.read(initial.intent) as RetentionEntryDecodeResult.Valid).entry
         assertEquals(RetentionEntryMode.REUSABLE, entry.mode)
         assertEquals(RetentionEntrySource.SHORTCUT, entry.source)
-        assertEquals("translate", entry.destination)
+        assertEquals("notes", entry.destination)
         label = "Dịch"
         f.module.refresh()
         assertEquals("Dịch", manager.dynamicShortcuts.first { it.id == id }.shortLabel.toString())

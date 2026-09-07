@@ -164,6 +164,8 @@ class OnboardBridgeTest {
             assertEquals(key, io.onboardkit.ui.splash.SplashEntry.from(normal)?.interKey)
             assertTrue(normal.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK != 0)
         }
+        val uninstallShortcut = RetentionEntry(RetentionEntrySource.SHORTCUT, io.retentionkit.feedback.RetentionFeedbackModule.DESTINATION, "open")
+        assertEquals("inter_uninstall", io.onboardkit.ui.splash.SplashEntry.from(standard.router.createIntent(app, uninstallShortcut))?.interKey)
     }
 
     @Test fun configuredMainAllowsOnlySelectedEntryAndHonorsHostModalGateAtFinalRecheck() {
@@ -183,6 +185,7 @@ class OnboardBridgeTest {
         ready = true
         val terminal = bridge.mainIntent(app, Main::class.java, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, activity.get().intent.extras))!!
         assertEquals(entry, (RetentionEntryCodec.read(terminal) as RetentionEntryDecodeResult.Valid).entry)
+        assertNull(bridge.mainIntent(app, Main::class.java, OnboardingOutcome.Aborted(null)))
         rt.entries.consume(entry.token)
         assertFalse(bridge.canPresentEntry(activity.get()))
         activity.pause().stop().destroy()

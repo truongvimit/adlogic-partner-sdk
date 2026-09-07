@@ -150,4 +150,28 @@ class RetentionMainHandoffTest {
         assertTrue(kit.runtime.entries.pending().isEmpty())
         activity.pause().stop().destroy()
     }
+    @Test fun failedFactoryRetriesSameSelectionAndRepeatedOnceDeliveryDoesNotForwardAgain() {
+        val kit = install()
+        val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
+        var calls = 0
+        val helper = bind(kit, activity.get(), router = RetentionRouter { context, _ ->
+            if (calls++ == 0) error("temporary route failure") else Intent(context, Feature::class.java)
+        })
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        activity.start().resume(); idle()
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250))
+        assertNotNull(shadowOf(activity.get()).nextStartedActivity)
+        helper.onNewIntent(Intent(activity.get().intent)); idle()
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        assertEquals(2, calls)
+        val saved = Bundle(); helper.onSaveInstanceState(saved)
+        val sameIntent = Intent(activity.get().intent)
+        activity.pause().stop().destroy()
+        val recreated = Robolectric.buildActivity(Main::class.java, sameIntent).create(saved)
+        bind(kit, recreated.get(), saved); recreated.start().resume(); idle()
+        assertNull(shadowOf(recreated.get()).nextStartedActivity)
+        recreated.pause().stop().destroy()
+    }
+
 }
