@@ -64,7 +64,10 @@ object ExampleQa {
     val events = CopyOnWriteArrayList<RetentionEvent>()
     data class NativeObservation(val placement: String, val phase: String)
     val nativeEvents = CopyOnWriteArrayList<NativeObservation>()
-    fun nativeEvent(placement: String, phase: String) { nativeEvents.add(NativeObservation(placement, phase)) }
+    fun nativeEvent(placement: String, phase: String) {
+        nativeEvents.add(NativeObservation(placement, phase))
+        android.util.Log.i("RetentionNativeEvidence", "placement=$placement actual_phase=$phase")
+    }
     class QaClock(var now: Long = System.currentTimeMillis()) : RetentionClock {
         override fun wallTimeMillis() = now
         override fun elapsedRealtimeMillis() = SystemClock.elapsedRealtime()
