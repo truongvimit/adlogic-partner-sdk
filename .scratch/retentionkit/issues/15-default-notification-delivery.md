@@ -1,7 +1,7 @@
 # Fix normal common-plan notification delivery
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: none
 Base: 2865f6d
 
@@ -10,3 +10,7 @@ Remove undocumented post-setup default24h wait while retaining first-day unfinis
 ## Acceptance
 
 Evidence must distinguish ordinary production defaults from explicit synthetic engine fixtures. Prior corrected acceptance is historical and does not prove this reopened request.
+
+## Comments
+
+audit_pdf claims ticket15 in private default-delivery. Canonical audit rejects the undocumented post-setup24h default. Agreed seams: actual module runtime signals/foreground publication and real saved calendar receiver envelopes with transient entitlement; preserve subscriber, permission/channel, foreground and opt-out gates. Root retains device execution and integration ownership.
