@@ -32,7 +32,7 @@ internal object ProfileFactory {
             return listOf(
                 ProofAction("Refresh quiet notifications") { kit.notifications?.refreshForegroundNotifications().toString() },
                 ProofAction("Ask to pin widget") { kit.widgets?.requestPin().toString() },
-                ProofAction("Open exit feedback") { kit.feedback?.show().toString() },
+                ProofAction("Open exit feedback") { kit.feedback?.openViaEntry().toString() },
                 ProofAction("Open Play Store") { kit.review?.openStore().toString() },
             )
         }
