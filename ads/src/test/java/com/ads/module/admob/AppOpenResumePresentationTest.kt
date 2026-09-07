@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.os.Looper
+import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
@@ -126,9 +127,147 @@ class AppOpenResumePresentationTest {
     }
 
     @Test
-    fun `resume loading covers vendor opening even when shown arrives before its first frame`() {
+    fun `automatic return lets loading run before a cached ad can show`() {
+        val ad = load()
+        var loadingAt = 0L
+        ResumePresentationDialogShadow.afterShow = { loadingAt = SystemClock.uptimeMillis() }
+        leaveProcess()
+        controller.restart().start().resume().visible()
+        main.idle()
+        assertTrue("Automatic return must show the loading window first", latestDialogShowing())
+        assertTrue("A cached ad must not pop up in the same frame as loading", ad.hosts.isEmpty())
+        main.idleFor(loadingAt + 799 - SystemClock.uptimeMillis(), TimeUnit.MILLISECONDS)
+        assertTrue("Keep the short loading interval even for an immediately ready ad", ad.hosts.isEmpty())
+        assertTrue(latestDialogShowing())
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(listOf(host), ad.hosts)
+    }
+
+    @Test
+    fun `repeated show calls during loading dispatch the cached ad only once`() {
         val ad = load()
         manager.showAdIfAvailable(false)
+        val loading = ShadowDialog.getLatestDialog()
+        repeat(3) { manager.showAdIfAvailable(false) }
+        assertSame(loading, ShadowDialog.getLatestDialog())
+        assertTrue(ad.hosts.isEmpty())
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(listOf(host), ad.hosts)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `pause during loading cancels the queued show and preserves its fill for a new request`() {
+        val ad = load()
+        val events = Events()
+        manager.setFullScreenContentCallback(events)
+        manager.showAdIfAvailable(false)
+        main.idleFor(400, TimeUnit.MILLISECONDS)
+        controller.pause()
+        assertFalse(latestDialogShowing())
+        assertFalse(manager.isShowingAd)
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        controller.resume().visible()
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        assertTrue("An old loading timer must not replay after returning", ad.hosts.isEmpty())
+        assertTrue(manager.isAdAvailable(false))
+        assertEquals(1, events.closed)
+        showAfterLoading()
+        assertEquals(listOf(host), ad.hosts)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `Back cancels loading but cannot release a vendor ad after dispatch`() {
+        val ad = load()
+        manager.showAdIfAvailable(false)
+        ShadowDialog.getLatestDialog().cancel()
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertTrue(ad.hosts.isEmpty())
+        assertTrue(manager.isAdAvailable(false))
+        assertFalse(manager.isShowingAd)
+        showAfterLoading()
+        ShadowDialog.getLatestDialog().cancel()
+        main.idle()
+        assertEquals(listOf(host), ad.hosts)
+        assertTrue("Only a vendor terminal releases a dispatched ad", manager.isShowingAd)
+    }
+
+    @Test
+    fun `live gates are rechecked when the loading interval ends without consuming the fill`() {
+        val gates = listOf<Pair<String, () -> Unit>>(
+            "premium" to { premium = true },
+            "consent" to { ConsentCenter.setHostConsent(false, false) },
+            "disabled" to { manager.disableAppResume() },
+            "initialization" to { manager.setInitialized(false) },
+            "interstitial" to { manager.setInterstitialShowing(true) },
+            "excluded host" to { manager.disableAppResumeWithActivity(Int02Activity::class.java) },
+            "shared policy" to { manager.setResumeSkipPolicy { "flow_opened" } },
+            "open policy" to { manager.setResumeSkipPolicy(object : ResumeSkipPolicy {
+                override fun skipReasonFor(activity: Activity): String? = null
+                override fun appOpenSkipReasonFor(activity: Activity) = "open_disabled"
+            }) },
+        )
+        for ((name, block) in gates) {
+            manager.releaseCachedAds()
+            val ad = load()
+            manager.showAdIfAvailable(false)
+            main.idleFor(400, TimeUnit.MILLISECONDS)
+            block()
+            main.idleFor(400, TimeUnit.MILLISECONDS)
+            assertTrue("$name must block the queued show", ad.hosts.isEmpty())
+            assertTrue("$name must preserve the unspent fill", manager.isAdAvailable(false))
+            assertFalse("$name must release the pending attempt", manager.isShowingAd)
+            assertFalse("$name must close loading", latestDialogShowing())
+            premium = false
+            ConsentCenter.setHostConsent(true, false)
+            manager.setInitialized(true)
+            manager.setInterstitialShowing(false)
+            manager.enableAppResumeWithActivity(Int02Activity::class.java)
+            manager.setResumeSkipPolicy(null)
+        }
+    }
+
+    @Test
+    fun `a retention suppression acquired during loading blocks the pending show`() {
+        val ad = load()
+        manager.showAdIfAvailable(false)
+        val hold = manager.suppressResume("retention", "feedback_open", 10_000L)
+        try {
+            main.idleFor(800, TimeUnit.MILLISECONDS)
+            assertTrue(ad.hosts.isEmpty())
+            assertTrue(manager.isAdAvailable(false))
+            assertFalse(manager.isShowingAd)
+            assertFalse(latestDialogShowing())
+        } finally {
+            hold.close()
+        }
+    }
+
+    @Test
+    fun `release or unit replacement during loading cannot dispatch the old cached ad`() {
+        val released = load()
+        manager.showAdIfAvailable(false)
+        manager.releaseCachedAds()
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertTrue(released.hosts.isEmpty())
+        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isShowingAd)
+        assertFalse(latestDialogShowing())
+
+        val replaced = load()
+        manager.showAdIfAvailable(false)
+        manager.setAppResumeAdId("another-resume-unit")
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertTrue(replaced.hosts.isEmpty())
+        assertFalse(manager.isShowingAd)
+        assertFalse(latestDialogShowing())
+    }
+
+    @Test
+    fun `resume loading covers vendor opening even when shown arrives before its first frame`() {
+        val ad = load()
+        showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
         assertTrue("Loading must survive the show call so Android can draw it before the ad opens", latestDialogShowing())
         main.idleFor(200, TimeUnit.MILLISECONDS)
@@ -144,14 +283,14 @@ class AppOpenResumePresentationTest {
     @Test
     fun `no vendor callback leaves no loading dialog but keeps dispatched ad busy beyond90 seconds`() {
         val ad = load()
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
         assertTrue(latestDialogShowing())
         main.idleFor(3_000, TimeUnit.MILLISECONDS)
         assertFalse("Cosmetic dialog must not depend on GMA callbacks", latestDialogShowing())
         assertTrue(manager.isShowingAd)
         main.idleFor(91_000, TimeUnit.MILLISECONDS)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue("A live presentation has no 90-second lifetime guarantee", manager.isShowingAd)
         assertEquals(1, ad.hosts.size)
         ad.content!!.onAdDismissedFullScreenContent()
@@ -164,10 +303,10 @@ class AppOpenResumePresentationTest {
         manager.setInterstitialShowing(true)
         main.idleFor(91_000, TimeUnit.MILLISECONDS)
         assertTrue(manager.isInterstitialShowing)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
         manager.setInterstitialShowing(false)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(1, ad.hosts.size)
     }
 
@@ -185,10 +324,10 @@ class AppOpenResumePresentationTest {
                 assertFalse(latestDialogShowing())
                 manager.setFullScreenContentCallback(bEvents)
                 b = load()
-                manager.showAdIfAvailable(false)
+                showAfterLoading()
             }
         })
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         val aCallback = a.content!!
         main.idleFor(2_000, TimeUnit.MILLISECONDS)
         aCallback.onAdShowedFullScreenContent()
@@ -219,7 +358,7 @@ class AppOpenResumePresentationTest {
         val original = Events()
         val replacement = Events()
         manager.setFullScreenContentCallback(original)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         manager.setFullScreenContentCallback(replacement)
         a.content!!.onAdShowedFullScreenContent()
         a.content!!.onAdFailedToShowFullScreenContent(error())
@@ -235,7 +374,7 @@ class AppOpenResumePresentationTest {
     fun `pause during dialog attachment preserves fill and does not dispatch on paused host`() {
         val ad = load()
         ResumePresentationDialogShadow.afterShow = { controller.pause() }
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
         assertTrue(manager.isAdAvailable(false))
         assertFalse(manager.isShowingAd)
@@ -244,7 +383,7 @@ class AppOpenResumePresentationTest {
         controller.resume().visible()
         main.idle()
         assertTrue(ad.hosts.isEmpty())
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
         assertEquals(1, requests.size)
     }
@@ -253,7 +392,7 @@ class AppOpenResumePresentationTest {
     fun `release inside dialog attachment cannot restore or show the released fill`() {
         val ad = load()
         ResumePresentationDialogShadow.afterShow = { manager.releaseCachedAds() }
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
         assertFalse(manager.isAdAvailable(false))
         assertFalse(manager.isShowingAd)
@@ -264,12 +403,12 @@ class AppOpenResumePresentationTest {
     fun `initialization disabled inside dialog rejects without consuming a valid fill`() {
         val ad = load()
         ResumePresentationDialogShadow.afterShow = { manager.setInitialized(false) }
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
         assertTrue(manager.isAdAvailable(false))
         assertFalse(manager.isShowingAd)
         manager.setInitialized(true)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
     }
 
@@ -277,7 +416,7 @@ class AppOpenResumePresentationTest {
     fun `cosmetic dialog and immersive failures do not spend a valid ad without showing it`() {
         val ad = load().apply { immersiveFailure = true }
         ResumePresentationDialogShadow.throwOnShow = true
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
         assertTrue(manager.isShowingAd)
         assertFalse(latestDialogShowing())
@@ -296,7 +435,7 @@ class AppOpenResumePresentationTest {
         controller.restart().start()
         assertTrue("Process ON_START alone is not a RESUMED show host", ad.hosts.isEmpty())
         controller.resume().visible()
-        main.idle()
+        main.idleFor(800, TimeUnit.MILLISECONDS)
         assertEquals(listOf(host), ad.hosts)
     }
 
@@ -317,7 +456,7 @@ class AppOpenResumePresentationTest {
     @Test
     fun `Home during vendor opening dismisses loading without releasing the dispatched ad`() {
         val ad = load()
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertTrue(latestDialogShowing())
         controller.pause().stop()
         assertFalse("A stopped host must not retain a loading window", latestDialogShowing())
@@ -333,7 +472,7 @@ class AppOpenResumePresentationTest {
         val events = Events()
         val ad = load()
         manager.setFullScreenContentCallback(events)
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         controller.pause()
         ad.content!!.onAdShowedFullScreenContent()
         ad.content!!.onAdShowedFullScreenContent()
@@ -343,7 +482,7 @@ class AppOpenResumePresentationTest {
         controller.resume().visible()
         main.idle()
         val failing = load().apply { showFailure = true }
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
         assertEquals(1, failing.hosts.size)
         assertEquals(1, events.failed)
         assertFalse(manager.isShowingAd)
@@ -368,7 +507,7 @@ class AppOpenResumePresentationTest {
         })
         val requestCount = requests.size
 
-        manager.showAdIfAvailable(false)
+        showAfterLoading()
 
         assertEquals(listOf(host), ad.hosts)
         assertEquals(1, shown)
@@ -387,6 +526,11 @@ class AppOpenResumePresentationTest {
         assertEquals(1, closed)
         assertEquals(0, failed)
         assertEquals(requestCount + 1, requests.size)
+    }
+
+    private fun showAfterLoading() {
+        manager.showAdIfAvailable(false)
+        main.idleFor(800, TimeUnit.MILLISECONDS)
     }
 
     private fun load(): ResumePresentationAd {
