@@ -47,6 +47,23 @@ class RetentionNotifications internal constructor(
     private val foregroundGuardRetries = mutableSetOf<String>()
     private var foregroundRetry: AutoCloseable? = null
     private var foregroundRetryId: String? = null
+    private val lastOutcomes = mutableMapOf<NotificationCampaign, NotificationOutcome>()
+
+    fun status(): NotificationStatus = synchronized(lock) {
+        val config = if (::runtime.isInitialized) runtime.config else RetentionConfigSnapshot(0, emptyMap())
+        val profile = NotificationProfile.read(config, options.preset)
+        val state = if (!closed) runtime.store.snapshot(STATE) else null
+        val alarms = state?.entries()?.filterKeys { it.startsWith("schedule:") }?.values?.map(ScheduledNotification::decode).orEmpty()
+        NotificationStatus(!closed, config.revision, !closed && runtime.isForeground,
+            NotificationCampaign.entries.map { campaign ->
+                NotificationCampaignStatus(campaign, profile.enabled && profile[campaign].enabled,
+                    campaign in foregroundPending, lastOutcomes[campaign],
+                    alarms.filter { it.campaign == campaign }.minOfOrNull { alarm ->
+                        if (runtime.userState.entitlement == RetentionEntitlement.UNKNOWN)
+                            DeferredCalendarRetry.trigger(state!!, alarm, runtime.clock.wallTimeMillis()) else alarm.due
+                    })
+            })
+    }
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config, options.preset) + buildList {
         if (options.smallIconRes <= 0) add("A small notification icon is required")
@@ -461,6 +478,13 @@ class RetentionNotifications internal constructor(
 
     internal fun deliver(campaign: NotificationCampaign, occurrence: String, revision: Long, due: Long, expires: Long,
                          expectedGeneration: Long? = null): NotificationOutcome {
+        val outcome = deliverSafely(campaign, occurrence, revision, due, expires, expectedGeneration)
+        synchronized(lock) { lastOutcomes[campaign] = outcome }
+        return outcome
+    }
+
+    private fun deliverSafely(campaign: NotificationCampaign, occurrence: String, revision: Long, due: Long, expires: Long,
+                              expectedGeneration: Long?): NotificationOutcome {
         try {
             synchronized(lock) {
                 gate(campaign, revision, due, expires, expectedGeneration)?.let { return skipped(campaign, it) }
@@ -573,8 +597,10 @@ class RetentionNotifications internal constructor(
     }
 
     private fun skipped(campaign: NotificationCampaign, reason: String): NotificationOutcome.Skipped {
+        val outcome = NotificationOutcome.Skipped(reason)
+        synchronized(lock) { lastOutcomes[campaign] = outcome }
         event("skipped", campaign, mapOf("reason" to reason))
-        return NotificationOutcome.Skipped(reason)
+        return outcome
     }
     private fun event(name: String, campaign: NotificationCampaign, attributes: Map<String, String> = emptyMap()) {
         // Sink callbacks may call core.signal/updateConfig. Dispatch outside module/store locks to
