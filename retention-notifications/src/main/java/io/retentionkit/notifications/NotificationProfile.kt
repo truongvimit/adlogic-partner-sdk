@@ -39,7 +39,7 @@ internal data class NotificationProfile(
         val defaults: Map<String, String> get() = defaults(NotificationPreset.COMMON_PLAN)
         fun defaults(preset: NotificationPreset): Map<String, String> = buildMap {
             val common = preset == NotificationPreset.COMMON_PLAN
-            put("profile_version", "1"); put("enabled", "true"); put("setup_grace_ms", DAY.toString())
+            put("profile_version", "1"); put("enabled", "true"); put("setup_grace_ms", if (common) "0" else DAY.toString())
             put("new_user_days", "2"); put("winback.inactivity_ms", ((if (common) 14 else 2) * DAY).toString())
             put("winback.max_inactivity_ms", (if (common) 45 * DAY else 0L).toString())
             put("onboarding.grace_ms", (if (common) DAY else 0L).toString()); put("background_delay_ms", "3000")
@@ -52,6 +52,7 @@ internal data class NotificationProfile(
                 put("$key.enabled", (common || campaign != NotificationCampaign.APP_EXIT).toString())
                 put("$key.ttl_ms", (if (campaign.foreground) 6 * HOUR else if (campaign.calendar) HOUR else 5 * MINUTE).toString())
                 put("$key.cooldown_ms", when (campaign) {
+                    NotificationCampaign.PINNED -> if (common) 0L else 15 * MINUTE
                     NotificationCampaign.DAILY -> HOUR
                     NotificationCampaign.WINBACK -> if (common) HOUR else 12 * HOUR
                     NotificationCampaign.ONBOARDING -> DAY
@@ -61,7 +62,8 @@ internal data class NotificationProfile(
                 put("$key.daily_cap", when (campaign) {
                     NotificationCampaign.WINBACK -> if (common) "2" else "1"
                     NotificationCampaign.ONBOARDING -> "1"
-                    NotificationCampaign.REMINDER -> "4"
+                    NotificationCampaign.REMINDER -> if (common) "0" else "4"
+                    NotificationCampaign.PINNED, NotificationCampaign.AD_RETURN, NotificationCampaign.APP_EXIT -> if (common) "0" else "2"
                     NotificationCampaign.LOCKSCREEN -> "3"
                     else -> "2"
                 })
@@ -80,7 +82,7 @@ internal data class NotificationProfile(
                     key.endsWith(".slots") || key.endsWith("_slots") -> LocalSlot.parse(value) != null
                     key.endsWith("profile_version") -> value == "1"
                     key.endsWith("new_user_days") -> value.toLongOrNull() in 0L..365L
-                    key.endsWith("daily_cap") -> value.toLongOrNull() in 1L..50L
+                    key.endsWith("daily_cap") -> value.toLongOrNull() in (if (preset == NotificationPreset.COMMON_PLAN) 0L else 1L)..50L
                     key.endsWith("lifetime_cap") -> value.toLongOrNull() in 0L..10_000L
                     key.endsWith("background_delay_ms") -> value.toLongOrNull() in 1L..60_000L
                     key.endsWith("token_ttl_ms") -> value.toLongOrNull() in 1L..300_000L
