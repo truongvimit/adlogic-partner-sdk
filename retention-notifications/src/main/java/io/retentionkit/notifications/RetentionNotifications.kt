@@ -608,7 +608,8 @@ class RetentionNotifications internal constructor(
                 // Claim is durable before notify. Recheck after the storage boundary as well.
                 val blocked = gate(campaign, revision, due, expires, expectedGeneration)
                 if (blocked != null) {
-                    delivery.finish(campaign, occurrence, false)
+                    // No notify call occurred: UNKNOWN/new revision can retry without a poisoned duplicate key.
+                    delivery.abortBeforeNotify(campaign, occurrence)
                     return@synchronized skipped(campaign, blocked)
                 }
                 try { platform.post(campaign, notification) } catch (error: Exception) {
