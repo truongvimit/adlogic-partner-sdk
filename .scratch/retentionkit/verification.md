@@ -1,8 +1,24 @@
 # RetentionKit verification
 
+## Current corrected-source acceptance — 69d0f71
+
+The authoritative current ledger is [correction-acceptance.md](correction-acceptance.md), with [Vietnamese partner report](../../retentionkit/CORRECTION_REPORT.vi.md). Build source `69d0f71ec970205902d8ca666b2876df3f938690` and device source `86048d619dfadb3371a8d7448f629d897b449d68` have identical production/config/tests; documentation-only successors retain these source references.
+
+- **279 fresh tests in one invocation**, `--rerun-tasks`,393 tasks executed,0 failures/errors/skips: core49/facade30/widgets37/review20/feedback31/notifications61/Firebase10/core-project consumer9/app32. [Actual XML/command/source](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-units-69d0f71/result.json). This selected correction scope does not relabel old Ads/Onboard/Billing/Trackkit tests as newly run.
+- **17/17 physical Pixel5/API34 cases**, unassisted, same final debug/test hashes before/after. [Actual protocol](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/pixel-86048d6-full/result.json). Saved-envelope/QA clock cases establish engine+adapter behavior; only lifecycle assertions establish the full Splash/Main/destination chain.
+- **Genuine first-install API36 flow passed** at revision0: actual notification permission deny/allow, ONBOARD7103 visible, same selected token through >5min genuine setup to Notes, actual native_noti loaded/impression. Emulator OS+25h reached install grace before entry; the accepted journey used normal elapsed time. [First-open result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-first-install-api36.json).
+- **Six fresh local QA publications + all12 R8/project/POM-only Maven consumers**, graph/manifest/composition checks; exact version `retentionkit-qa-20260907-69d0f71`. **Full app R8 passed7m53s**. [Aggregate hashes and artifacts](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-packaging-69d0f71.json). Release APK `43e972c58c87c8c92a104d49d5c86b4291d188fdbc34c9a70bc2476e1e802aa5`; mapping hash in aggregate. Repository debug signing; mapping upload excluded.
+- **Review0 remaining actionable findings** in independent Standards22c7fcb/Spec860 follow-ups. Selection, accepted-route TTL, catalogue/discriminator compatibility and Uninstall icon fixes have recorded RED/GREEN. [Fix evidence](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/review-fixes-summary.md).
+
+Supplementary release/reboot/manual pinned-X smoke and device/worktree restoration remain root-owned ticket13 closure. External PR readiness remains ticket08. No new pass for these pending operations is implied. Local QA publishing is not a remote release. Platform-controlled wake/Play/OS uninstall limitations remain explicit in the current ledger.
+
+## Historical evidence before the common-flow correction
+
+Everything below retains its original source/device scope for audit. Its “final”, “current” or pending language describes that historical checkpoint, not current acceptance. Direct ready-feature/no-entry-ad routes below were superseded by the corrected standard Splash/Onboard/Main flow above.
+
 Implementation base: `632df43026b6f880deb84d478c71d22188ce093a`. Delivery branch: `codex/retentionkit`. Final SDK checkpoint: `bf68f1e6b11e0c15e2e1f8ad64670b516529de33`. Final app implementation: `2ff967a909cf043bf6e66b3424258a78efe67947`; the four changed app files do not change any library, tooling or consumer tree. The later physical follow-up adds debug QA/test correction95181844 and separately authored Ads corrections through7cb23c3; main app/Retention sources remain unchanged. Current results and unfinished physical work are in physical-acceptance.md.
 
-## Physical follow-up (current)
+## Historical physical follow-up before the common-flow correction
 
 The unlocked Pixel5 recorded15/15 actual Android cases at4356938 after the debug QA clock correction. Additional manual widget/feedback checks ran, but concurrent Home/Back/launcher/ad actions interrupted the remaining matrix. The final physical rerun/manual work is **pending**, and the installed4356938 APK is not the latest7cb23c3 build. See [physical acceptance](physical-acceptance.md) and ticket09. Latest affected unit checks at7cb23c3 pass360 cases; the scoped total is562 with202 retained unchanged-module cases, not one invocation.
 

@@ -1,57 +1,59 @@
-# RetentionKit — chỉnh theo tài liệu Noti chung
+# RetentionKit — báo cáo bàn giao
 
-Trạng thái: đang triển khai và kiểm thử; chưa phải biên bản nghiệm thu. Mốc trước sửa: `543de03`, nhánh giao: `codex/retentionkit`.
+**SDK đã gom được các flow lặp lại thành module dùng chung, với facade cho partner tích hợp ít cấu hình.** Example đã chuyển sang nghiệp vụ generic và chạy entry qua Splash, OnboardKit, Main rồi đúng destination. Các finding review đã được sửa; **279 unit mới, 17 ca Pixel, first-open API36, 12 consumer và full example R8 đã đạt**. Smoke bổ sung và khôi phục tài nguyên test do chủ nhiệm chốt riêng.
 
-## Lỗi đã xác định
+Root: `69d0f71ec970205902d8ca666b2876df3f938690`. Production/config/tests khớp bản kiểm thử `86048d619dfadb3371a8d7448f629d897b449d68`; khác biệt chỉ ở tài liệu. [Đối chiếu source](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/review-86048d6/merge-freeze.json).
 
-Example trước đây có hai nhánh bỏ qua luồng yêu cầu: adapter dùng `intentWithoutSplashAds`, còn Splash chuyển thẳng đến tính năng khi setup đã xong. Sau onboarding, example cũng bỏ qua Main; màn tính năng không có native ad. QA dùng router riêng đi thẳng đến tính năng, nên các test cũ không chứng minh được luồng Splash đầy đủ. Danh mục và nhiều fixture mang nội dung dịch ngôn ngữ khiến mẫu tích hợp trông như một app Translate.
+## Thiết kế và hành vi
 
-## Hành vi cần đạt
+Sáu artifact: core, notifications, widgets, feedback, review và facade `retentionkit`. Partner chọn từng module hoặc toàn bộ; adapter Onboard/Ads/Billing/Firebase là phần tích hợp tùy chọn. Tắt module trong facade không tự loại dependency; muốn dependency nhỏ cần chọn artifact riêng.
 
-| Điểm vào | Chuỗi chuẩn | Phần partner quyết định |
-|---|---|---|
-| Notification body/CTA, widget, feature shortcut | Splash → entry interstitial kết thúc hoặc được SDK Ads bỏ qua hợp lệ → Main → tính năng đã chọn | Nội dung, icon/ảnh, destination, native placement |
-| Uninstall/feedback entry | Splash → entry interstitial kết thúc/bỏ qua hợp lệ → survey SDK có native | Nhãn/lý do/màu, custom View nếu cần |
-| Thử tính năng từ survey | Quay qua Splash rồi đến đúng tính năng | Danh mục tính năng gợi ý |
-| X, Later, swipe notification | Dismiss và cập nhật trạng thái; không mở Activity | Nhãn được bản địa hóa |
-| Rate tự động | Business success thật → threshold/cooldown/cap → Play review | Sự kiện thành công, cấu hình tần suất |
-
-SDK dùng một envelope/token xuyên suốt; warm entry cũng chạy Splash. Chỉ entry đang được chọn được tiếp tục, không tự mở một entry cũ còn trong hàng đợi. OnboardKit và Ads giữ quyền xử lý consent, Billing, giới hạn quảng cáo, entry key và callback; RetentionKit không tạo thêm bộ tải quảng cáo/config/quyền thứ hai.
-
-Example đổi sang Notes, Saved items, Text tools và Guide. Đây là các thao tác offline thật để minh họa success event và destination; nội dung cũ được di chuyển có kiểm soát, không xóa dữ liệu app. Các thông số debug chỉ đổi điều kiện/thời gian test; đường đi qua Activity phải dùng cùng cấu hình tích hợp chuẩn.
-
-## Cách đối chiếu tài liệu
-
-Nguồn chính là [Test Plan](</Users/Shared/Panacea/Documents/Noti/Notification System Implementation & Test Plan.docx>), [đặc tả lockscreen](</Users/Shared/Panacea/Documents/Noti/Notification System Implementation & Test Plan/Images_attachments/260817_-_MO_-_Lockscreen_Noti_Logic_Spec_EN_(1).docx>), [Noti.pdf](</Users/Shared/Panacea/Documents/Noti/Notification System Implementation & Test Plan/Images_attachments/Noti.pdf>) và [Notification Guide](</Users/Shared/Panacea/Documents/Noti/Notification System Implementation & Test Plan/Images_attachments/NOTIFICATION_GUIDE.pdf>). Reference code Translate được đọc ở `63a2958`.
-
-Thứ tự xử lý mâu thuẫn: yêu cầu mới của người dùng → Test Plan chung → đặc tả lockscreen cho chi tiết riêng → thông số/template PDF chưa được quy định ở trên → reference code → giá trị SDK tự chọn được ghi rõ. Không đưa các tên Camera/Translate/PDF trong ví dụ nội dung thành yêu cầu của mọi partner.
-
-| Nội dung | Quy tắc đối chiếu |
+| Flow | Hành vi chung |
 |---|---|
-| Lịch local | Daily 08:00/19:00; Winback 11:00/14:00; Lockscreen 11:30/17:00/20:00, có lịch cohort mới riêng |
-| Thông báo chưa xử lý | Lockscreen không tự mất vì delivery TTL; `replace=false` giữ và bỏ qua slot tiếp theo, kể cả sang ngày; `true` thay thế |
-| Chống spam | Shared guard, priority, một thông báo mỗi family, budget lưu bền; Winback common tối đa 3 lần toàn campaign |
-| Winback dormancy | 14–45 ngày từ Noti.pdf; 48 giờ của bản SDK trước là lựa chọn cũ, không phải điều kiện đã xác minh trong Translate |
-| Daily sound | Tài liệu mâu thuẫn; chọn channel DEFAULT nhưng nội dung yên lặng theo Guide. Không tuyên bố đồng thời silent và heads-up |
-| Setup/subscriber | Không marketing khi còn setup trong ngày đầu; subscriber và entitlement chưa xác định đều bị chặn |
-| Giá trị reference | Cohort mới 2 ngày, xác nhận background 3 giây, Reminder 15 phút, Review 5 success/10 ngày/tối đa 3 lần |
-| Giá trị SDK chọn | Grace sau setup, thời hạn click token và độ dài shared guard phải được phân biệt với số do tài liệu quy định |
+| Notification/widget/shortcut | Cold/warm → Splash → entry interstitial kết thúc/bỏ qua hợp lệ → Main resumed → tính năng. Giữ đúng token; entry mới không làm backlog cũ tự mở. |
+| Uninstall | Shortcut **Uninstall/Gỡ cài đặt**, icon thùng rác đỏ → Splash → Main → survey/native → Keep, thử tính năng hoặc xác nhận gỡ của Android. |
+| Review | Success nghiệp vụ thật → threshold/cooldown/cap → Play Review; mở Store thủ công độc lập. |
 
-## Giới hạn cần báo đúng
+Example có **Notes, Saved items, Text tools, Guide** với thao tác offline thật. Migration giữ dữ liệu/success ID cũ; alias cũ chỉ dùng để tương thích.
 
-Đặc tả lockscreen yêu cầu dev kiểm tra tính khả thi của bật màn hình 20 giây. `ACQUIRE_CAUSES_WAKEUP` đã deprecated và API mới có điều kiện quyền; `TURN_SCREEN_ON` dành cho home automation và không phải quyền thông thường của mọi app. Notification được gửi không chứng minh màn hình sáng; mẫu không dùng Activity mở ngầm để giả đạt yêu cầu này. [PowerManager](https://developer.android.com/reference/android/os/PowerManager.html), [quyền TURN_SCREEN_ON](https://developer.android.com/reference/android/Manifest.permission#TURN_SCREEN_ON), [khai báo quyền AOSP](https://android.googlesource.com/platform/frameworks/base/+/main/core/res/AndroidManifest.xml).
+Đã tách TTL gửi/hiển thị notification khỏi thời hạn route: entry mới được tap hợp lệ vẫn sống qua onboarding dài, giới hạn core tối đa bảy ngày. Alarm quá hạn vẫn bị từ chối; timeout Android không đổi. Envelope đã post/stage trước sửa giữ expiry cũ. [Hợp đồng notification](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/retention-notifications/CONTRACT.md).
 
-FGS tiến độ tác vụ và hướng dẫn battery trong tài liệu thuộc tác vụ thật của host, ví dụ dọn dẹp/chuyển đổi file; chúng không phải một campaign giữ chân người dùng. SDK không khởi chạy tác vụ giả để giữ notification sống. Force-stop, thời điểm alarm trên từng OEM, việc Play có hiện thẻ review và gỡ app thực sự đều phải được báo theo bằng chứng riêng.
+## Năm bước tích hợp
 
-## Kiểm thử của đợt sửa
+1. Trong Application, gọi `RetentionKit.install(..., RetentionKitOptions(...))`; cung cấp `featureProvider`, `localeProvider`, router và trạng thái entitlement có căn cứ. Xử lý `Installed`/`Failed`. [API](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/retentionkit/README.md).
+2. Với OnboardKit, tạo `OnboardRetentionBridge(..., mainActivity=...)`, gắn `router`, `uiHost`, `adapters`. Capture ở Splash, lưu envelope đã materialize qua recreation; listener dùng `bridge.mainIntent(...)`. Main gắn `kit.mainHandoff(...)` trước `onStart`, chuyển tiếp `onNewIntent`/saved state. Màn cuối gọi `kit.capture` và `dispatchPending` cho token được chọn. [Entry contract](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/retentionkit/ENTRY_CONTRACT.md).
+3. Dùng chung Firebase: `FirebaseRetentionConfigSource(legacyKeys=RetentionLegacyConfig.keys, legacyMapper=RetentionLegacyConfig::overrides)`. Một fetch chung; JSON override/removal ưu tiên, key vắng giữ mặc định, dữ liệu sai giữ cấu hình hợp lệ trước đó.
+4. Giữ một chủ thể xin quyền, báo `permissionChanged()`; nối Billing đã xác minh và `businessSuccess(featureId, stableOperationId)`. UNKNOWN/subscriber chặn marketing. Bridge nhận ad click trực tiếp, tránh gửi lặp từ analytics.
+5. Nối medium native qua Ads hiện có: `native_noti`, `native_widget`, `native_uninstall`; entry inter dùng `inter_noti`, `inter_widget`, `inter_uninstall`. Survey tùy biến bằng `FeedbackUiFactory`/controller, native bằng `FeedbackNativeContent`; `shortcutIconRes` độc lập với icon header `appIconRes`. Menu mở `feedback.openViaEntry()`. [Example](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/app/RETENTION_EXAMPLE.md), [feedback](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/retention-feedback/README.md).
 
-| Nhóm | Bằng chứng cần có | Trạng thái |
-|---|---|---|
-| SDK entry/UI | Exact token, Main resumed, lifecycle/rapid tap, prompt và explicit entry không tranh quyền | Chờ test bản sửa |
-| Notification | Profile/RC, shared guard/priority, cap bền, giữ lockscreen xuyên ngày, content/locale | Chờ test bản sửa |
-| Example | Dữ liệu generic/migration, business success, cùng router trong debug/production | Chờ test bản sửa |
-| Pixel 5 Android 14 | Notification/widget/shortcut/uninstall cold/warm; thực sự qua Splash; native/inter callback; quyền và recovery | Chờ APK bản sửa |
-| Packaging | Unit/regression, full example R8 và consumer selective/Maven bị ảnh hưởng | Chờ source hợp nhất |
-| Review | Hai lượt độc lập Standards/Spec; sửa tất cả finding có căn cứ | Chờ triển khai |
+## Thông số chuẩn
 
-Mọi số test và bằng chứng trước đợt sửa chỉ là lịch sử. Nghiệm thu đợt này phải gắn với commit và hash APK mới. Device baseline đã ghi nhận APK cũ `dce485fb…`, model Pixel 5/API34, cùng các setting cần khôi phục. Không dùng hướng dẫn “clear data” trong tài liệu như quyền xóa dữ liệu thiết bị hiện tại.
+`COMMON_PLAN` là mặc định; `LEGACY_SDK` dành cho tương thích. Ưu tiên Test Plan chung và đặc tả lockscreen; giá trị SDK tự chọn được phân biệt với reference. [Audit nguồn](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/noti-spec-audit.md).
+
+| Nhóm | Mặc định |
+|---|---|
+| Daily | 08:00/19:00 local; channel DEFAULT, yên lặng. |
+| Winback | 11:00/14:00; dormant 14–45 ngày; tối đa ba reservation toàn campaign. |
+| Lockscreen | 11:30/17:00/20:00; HIGH/PUBLIC; không timeout sau post; `replace=false` giữ thông báo chưa xử lý. |
+| Onboarding | Còn unfinished/active, sau 24 giờ từ cài đặt, background xác nhận ba giây. |
+| Ad return/App exit | Background ba giây; click đủ điều kiện ưu tiên ad-return. App exit không phải callback OS kill. |
+| Reminder/Review | Reminder 15 phút; review 5 success/10 ngày/tối đa 3 attempt. |
+| Chống spam | Guard 30 giây, priority/shared Updates, cap lưu bền. Guard30s và grace sau setup24h là giá trị SDK chọn. |
+
+Calendar delivery TTL một giờ; onboarding/ad-return/app-exit năm phút. Channel, key RC, cohort và từng cap đầy đủ ở [notification guide](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/retention-notifications/README.md).
+
+## Nghiệm thu
+
+Review độc lập còn **0 finding Standards** tại `22c7fcb`, **0 finding Spec** sau `86048d6`. [Standards](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/review-22c7fcb/standards.md), [Spec](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/review-86048d6/spec.md). Regression RED/GREEN của selection, TTL và shortcut được lưu riêng; toàn bộ chín module đã chạy lại trên source cuối. [Evidence sửa lỗi](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/review-fixes-summary.md).
+
+| Hạng mục | Kết quả có bằng chứng |
+|---|---|
+| Unit tại69d0f71 | **279/279**, một invocation `--rerun-tasks`, 393 tasks thực chạy; 0 failure/error/skip. [XML/source](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-units-69d0f71/result.json) |
+| Pixel5/API34, APK860 | **17/17 thực chạy**, không hỗ trợ thao tác, hash app/test trước/sau khớp. [Runner](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/pixel-86048d6-full/result.json) |
+| API36 cài mới | Config revision0, permission deny/allow thật; notification7103 → cùng token → Notes sau hơn10phút. Native_noti có loaded/impression. Chỉ chỉnh giờ OS+25h trước đó để đạt grace; không tăng tốc onboarding đã nhận entry. [OS proof](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-first-install-api36.json) |
+| Sáu publication QA, 12 consumer | **Đạt** toàn bộ R8/runtime graph/manifest/composition, project và POM-only Maven. Version `retentionkit-qa-20260907-69d0f71`. [Matrix](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/consumers-69d0f71/matrix-summary.json) |
+| Full example release R8 | **Đạt**,7m53s; APK/mapping có SHA256. [Release](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/example-release-69d0f71/result.json) |
+| Manual Pixel | Uninstall đỏ/thùng rác → survey; rescue tới Guide; Store báo không tìm thấy app chưa phát hành, Back trở lại. Không suy diễn đã rate. [Shortcut](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/manual/093-final-shortcut-menu.png) · [Rescue](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/pixel-final-manual/actual-rescue-guide-retry.xml) |
+| Smoke bổ sung/khôi phục/dọn tài nguyên | **Chủ nhiệm còn chốt riêng**; không gộp vào PASS ở trên. |
+
+Unit/receiver với clock fixture không chứng minh OS wake; lifecycle/receipt chứng minh route, không chứng minh mọi ad impression. Callback/native và thao tác OS được ghi riêng. SDK không ép sáng màn hình, vượt force-stop/OEM, chặn uninstall hệ thống hoặc khẳng định đã rate/gỡ app. Local QA publication chưa phải phát hành remote; bản SDK5.1.1 hiện có không chứa RetentionKit.

@@ -1,5 +1,7 @@
 # RetentionKit — Báo cáo bàn giao triển khai
 
+> **Báo cáo lịch sử trước đợt chỉnh flow chung.** Kết quả và hướng dẫn hiện hành ở [CORRECTION_REPORT.vi.md](CORRECTION_REPORT.vi.md), nguồn69d0f71/86048d6. Các số test, route và trạng thái dưới đây chỉ áp dụng cho checkpoint cũ; không phải nghiệm thu bản sửa.
+
 **Ngày 07/09/2026 · Nhánh `codex/retentionkit` · SDK `bf68f1e`, app mẫu `2ff967a`.**
 
 Đã hoàn tất mã SDK, app mẫu, sửa các lỗi tìm qua review/ADB và các kiểm tra trong phạm vi khả dụng. Hai phần còn lại được ghi rõ: nghiệm thu UI đầy đủ khi Pixel5 được dùng riêng và tạo PR bằng tài khoản GitHub có quyền ghi. Pixel đã mở khóa và ghi nhận15/15 ca Android tại4356938; thao tác Home/Back/mở app đồng thời đã làm gián đoạn phần manual còn lại. Xem [báo cáo physical hiện tại](../.scratch/retentionkit/physical-acceptance.md). Các số liệu dưới đây là checkpoint trước đợt này; bản7cb23c3 có360 test chạy mới và562 test trong phạm vi tổng hợp, tách rõ với APK4356938 đang trên máy.
