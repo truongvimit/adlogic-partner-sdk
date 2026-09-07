@@ -126,10 +126,28 @@ class AppOpenResumePresentationTest {
     }
 
     @Test
+    fun `resume loading covers vendor opening even when shown arrives before its first frame`() {
+        val ad = load()
+        manager.showAdIfAvailable(false)
+        assertEquals(listOf(host), ad.hosts)
+        assertTrue("Loading must survive the show call so Android can draw it before the ad opens", latestDialogShowing())
+        main.idleFor(200, TimeUnit.MILLISECONDS)
+        assertTrue("Loading covers the asynchronous vendor opening transition", latestDialogShowing())
+        ad.content!!.onAdShowedFullScreenContent()
+        assertTrue("GMA shown may precede its content frame; keep the loading backdrop", latestDialogShowing())
+        assertTrue(manager.isShowingAd)
+        ad.content!!.onAdDismissedFullScreenContent()
+        assertFalse(latestDialogShowing())
+        assertFalse(manager.isShowingAd)
+    }
+
+    @Test
     fun `no vendor callback leaves no loading dialog but keeps dispatched ad busy beyond90 seconds`() {
         val ad = load()
         manager.showAdIfAvailable(false)
         assertEquals(listOf(host), ad.hosts)
+        assertTrue(latestDialogShowing())
+        main.idleFor(3_000, TimeUnit.MILLISECONDS)
         assertFalse("Cosmetic dialog must not depend on GMA callbacks", latestDialogShowing())
         assertTrue(manager.isShowingAd)
         main.idleFor(91_000, TimeUnit.MILLISECONDS)
@@ -172,14 +190,20 @@ class AppOpenResumePresentationTest {
         })
         manager.showAdIfAvailable(false)
         val aCallback = a.content!!
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
         aCallback.onAdShowedFullScreenContent()
         aCallback.onAdDismissedFullScreenContent()
         assertEquals(1, b!!.hosts.size)
-        b!!.content!!.onAdShowedFullScreenContent()
+        assertTrue("B owns a new loading dialog", latestDialogShowing())
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        assertTrue("A's loading timeout must not dismiss B's loading", latestDialogShowing())
         aCallback.onAdFailedToShowFullScreenContent(error())
         aCallback.onAdDismissedFullScreenContent()
         aCallback.onAdShowedFullScreenContent()
         aCallback.onAdImpression()
+        assertTrue("Late A callbacks must not dismiss B's loading", latestDialogShowing())
+        b!!.content!!.onAdShowedFullScreenContent()
+        assertTrue(latestDialogShowing())
         assertEquals(1, aClosed)
         assertEquals(1, bEvents.shown)
         assertEquals(0, bEvents.closed + bEvents.failed + bEvents.impressions)
@@ -291,6 +315,20 @@ class AppOpenResumePresentationTest {
     }
 
     @Test
+    fun `Home during vendor opening dismisses loading without releasing the dispatched ad`() {
+        val ad = load()
+        manager.showAdIfAvailable(false)
+        assertTrue(latestDialogShowing())
+        controller.pause().stop()
+        assertFalse("A stopped host must not retain a loading window", latestDialogShowing())
+        assertTrue("A dispatched vendor ad still owns the presentation", manager.isShowingAd)
+        main.idleFor(3_000, TimeUnit.MILLISECONDS)
+        assertTrue(manager.isShowingAd)
+        ad.content!!.onAdDismissedFullScreenContent()
+        assertFalse(manager.isShowingAd)
+    }
+
+    @Test
     fun `actual shown after host pause still forwards once and synchronous vendor throw releases once`() {
         val events = Events()
         val ad = load()
@@ -337,7 +375,9 @@ class AppOpenResumePresentationTest {
         assertEquals("Host callback failure is not a vendor show failure", 0, failed)
         assertEquals("A live presentation must not trigger a failure refill", requestCount, requests.size)
         assertTrue(manager.isShowingAd)
+        main.idleFor(3_000, TimeUnit.MILLISECONDS)
         assertFalse(latestDialogShowing())
+        assertTrue("Loading cleanup must not release the shown ad", manager.isShowingAd)
 
         ad.content!!.onAdDismissedFullScreenContent()
         assertEquals(1, closed)

@@ -68,6 +68,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     // Resume fetch state only; raw splash requests retain their own callbacks and buffer.
     private static final long RESUME_FETCH_TIMEOUT_MS = 30_000L;
+    private static final long RESUME_LOADING_TIMEOUT_MS = 3_000L;
     private static final long[] RESUME_FAILURE_BACKOFF_MS = {5_000L, 30_000L, 120_000L};
     private final Handler resumeFetchHandler = new Handler(Looper.getMainLooper());
     private long resumeFetchGeneration;
@@ -719,6 +720,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @Override
     public void onActivityStopped(Activity activity) {
+        if (dialog != null && dialog.getOwnerActivity() == activity) {
+            dismissResumeDialog(dialog);
+        }
     }
 
     @Override
@@ -897,6 +901,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         Dialog loading = null;
         try {
             loading = new ResumeLoadingDialog(host);
+            loading.setOwnerActivity(host);
             dialog = loading;
             loading.show();
         } catch (RuntimeException error) {
@@ -925,6 +930,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             public void onAdShowedFullScreenContent() {
                 if (activeResumeAttempt != attempt || shown) return;
                 shown = true;
+                // GMA can report shown before its content paints. Keep the loading backdrop
+                // until the host stops, the ad ends, or the cosmetic timeout expires.
                 // GMA may already have paused the host; only this attempt's identity matters now.
                 if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdShowedFullScreenContent());
             }
@@ -965,9 +972,12 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             callback.onAdFailedToShowFullScreenContent(
                     new AdError(0, "App-open show threw: " + error.getClass().getSimpleName(), "ERainStudio"));
         } finally {
-            // A missing GMA callback must not leave a cosmetic dialog blocking the application.
-            // This never releases a dispatched ad or touches another attempt's dialog.
-            dismissResumeDialog(ownedDialog);
+            // show() returns before GMA opens its window. Keep loading visible through that
+            // transition; only the cosmetic window times out if the vendor sends no callback.
+            // Ownership of a dispatched ad still lasts until its terminal callback.
+            if (ownedDialog != null && dialog == ownedDialog && ownedDialog.isShowing()) {
+                resumeFetchHandler.postDelayed(() -> dismissResumeDialog(ownedDialog), RESUME_LOADING_TIMEOUT_MS);
+            }
         }
     }
 
