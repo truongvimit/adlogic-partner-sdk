@@ -504,5 +504,48 @@
       "cta"
     ],
     "enable_ua_check": false
+  },
+  "inter_noti": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "inter_widget": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "inter_uninstall": {
+    "id": "ca-app-pub-7208941695689653/1200371069",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "native_noti": {
+    "id": "ca-app-pub-7208941695689653/9849017274",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": null,
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
+  },
+  "native_widget": {
+    "id": "ca-app-pub-7208941695689653/9849017274",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 45,
+    "positionCTA": null,
+    "components": [
+      "icon_headline",
+      "body",
+      "media",
+      "cta"
+    ],
+    "enable_ua_check": false
   }
 }

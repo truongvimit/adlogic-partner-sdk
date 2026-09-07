@@ -40,4 +40,12 @@ class ExampleDataMigrationTest {
         assertTrue(ExampleDataStore(context).pendingSuccesses().isEmpty())
         assertEquals("notes", ExampleDataStore(context).lastFeature())
     }
+    @Test fun migratedCollectionKeepsExistingTextAndSupportsGenericRemovalOnce() {
+        val store = ExampleDataStore(context)
+        assertEquals(setOf("Hello\nXin chào", "Thank you\nCảm ơn"), store.savedItems().map { it.text }.toSet())
+        assertNotNull(store.removeItem("legacy:hello", "remove-migrated"))
+        assertNull(store.removeItem("legacy:hello", "remove-again"))
+        assertEquals(listOf("Thank you\nCảm ơn"), ExampleDataStore(context).savedItems().map { it.text })
+        assertEquals(setOf("old-pending", "remove-migrated"), store.pendingSuccesses().map { it.id }.toSet())
+    }
 }

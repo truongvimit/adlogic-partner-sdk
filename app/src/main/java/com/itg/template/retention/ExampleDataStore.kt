@@ -1,7 +1,6 @@
 package com.itg.template.retention
 
 import android.content.Context
-import org.json.JSONArray
 import org.json.JSONObject
 
 /** Durable local results and an outbox. No user text is sent to telemetry. Main app process only. */
@@ -9,27 +8,48 @@ class ExampleDataStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences("retention_example_data_v1", Context.MODE_PRIVATE)
     data class Operation(val id: String, val featureId: String, val result: String, val reported: Boolean)
 
-    fun savedPhrases(): List<ExamplePhrase> = synchronized(lock) {
-        val saved = read().optJSONArray("saved") ?: JSONArray()
-        (0 until saved.length()).mapNotNull { index -> ExampleUtilities.phrases.firstOrNull { it.id == saved.getString(index) } }
+    data class Note(val id: String, val text: String)
+    data class SavedItem(val id: String, val text: String)
+    fun notes(): List<Note> = synchronized(lock) {
+        val notes = read().optJSONObject("notes") ?: return@synchronized emptyList()
+        notes.keys().asSequence().map { Note(it, notes.getString(it)) }.toList()
     }
-    fun savePhrase(id: String, operationId: String): Operation? = updateSaved(id, operationId, true)
-    fun removePhrase(id: String, operationId: String): Operation? = updateSaved(id, operationId, false)
-    private fun updateSaved(id: String, operationId: String, save: Boolean): Operation? = synchronized(lock) {
-        ExampleUtilities.phrase(id)
+    /** Editing without a content change is not a new business success. */
+    fun saveNote(id: String, text: String, operationId: String): Operation? = synchronized(lock) {
+        require(id.matches(Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")))
+        require(text.isNotBlank() && text.length <= 10_000)
         val state = read()
-        val ids = state.optJSONArray("saved")?.let { a -> (0 until a.length()).map(a::getString).toMutableSet() } ?: mutableSetOf()
-        val changed = if (save) ids.add(id) else ids.remove(id)
-        if (!changed) return@synchronized null
-        state.put("saved", JSONArray(ids.sorted()))
-        record(state, operationId, "saved_phrases", "${if (save) "saved" else "removed"}:$id")
+        val notes = state.optJSONObject("notes") ?: JSONObject().also { state.put("notes", it) }
+        if (notes.optString(id) == text) return@synchronized null
+        notes.put(id, text)
+        record(state, operationId, "notes", text)
+    }
+    fun savedItems(): List<SavedItem> = synchronized(lock) {
+        val saved = read().optJSONObject("saved_items") ?: return@synchronized emptyList()
+        saved.keys().asSequence().map { SavedItem(it, saved.getString(it)) }.toList()
+    }
+    fun saveItem(noteId: String, operationId: String): Operation? = synchronized(lock) {
+        val state = read()
+        val text = state.optJSONObject("notes")?.optString(noteId)?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("Choose a saved note")
+        val saved = state.optJSONObject("saved_items") ?: JSONObject().also { state.put("saved_items", it) }
+        if (saved.optString(noteId) == text) return@synchronized null
+        saved.put(noteId, text)
+        record(state, operationId, "saved_items", "saved:$noteId")
+    }
+    fun removeItem(id: String, operationId: String): Operation? = synchronized(lock) {
+        val state = read()
+        val saved = state.optJSONObject("saved_items") ?: return@synchronized null
+        if (!saved.has(id)) return@synchronized null
+        saved.remove(id)
+        record(state, operationId, "saved_items", "removed:$id")
     }
     fun record(operationId: String, featureId: String, result: String): Operation = synchronized(lock) {
         record(read(), operationId, featureId, result)
     }
     private fun record(state: JSONObject, operationId: String, featureId: String, result: String): Operation {
         require(operationId.matches(Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")))
-        require(featureId in setOf("translate", "saved_phrases", "text_tools", "document"))
+        require(featureId in RetentionExampleContent.featureIds)
         require(result.length <= 12_000)
         val operations = state.optJSONObject("operations") ?: JSONObject().also { state.put("operations", it) }
         operations.optJSONObject(operationId)?.let { previous ->
@@ -67,10 +87,19 @@ class ExampleDataStore(context: Context) {
     private fun decode(id: String, value: JSONObject) = Operation(id, value.getString("feature"), value.getString("result"), value.getBoolean("reported"))
     private fun read(): JSONObject {
         val state = preferences.getString("state", null)?.let(::JSONObject) ?: JSONObject()
-        if (state.optInt("version") < 2) {
+        if (state.optInt("version") < 3) {
             // Existing outbox entries retain feature/result/event IDs: a replay is the same work.
             state.put("last_feature", canonicalFeature(state.optString("last_feature", "notes")))
-            state.put("version", 2)
+            val items = state.optJSONObject("saved_items") ?: JSONObject().also { state.put("saved_items", it) }
+            state.optJSONArray("saved")?.let { old ->
+                for (index in 0 until old.length()) {
+                    val id = old.getString(index)
+                    val key = "legacy:$id"
+                    if (!items.has(key)) items.put(key, ExampleLegacyData.text(id))
+                }
+            }
+            state.remove("saved")
+            state.put("version", 3)
             persist(state)
         }
         return state
@@ -89,11 +118,6 @@ class ExampleDataStore(context: Context) {
     companion object {
         private val lock = Any()
         /** Only compatibility input accepts retired IDs; new business operations use the catalogue. */
-        fun canonicalFeature(id: String): String = when (id) {
-            "translate" -> "notes"
-            "saved_phrases" -> "saved_items"
-            "document" -> "guide"
-            else -> id
-        }
+        fun canonicalFeature(id: String): String = ExampleLegacyData.destination(id)
     }
 }
