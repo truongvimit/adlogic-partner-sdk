@@ -69,6 +69,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     // Resume fetch state only; raw splash requests retain their own callbacks and buffer.
     private static final long RESUME_FETCH_TIMEOUT_MS = 30_000L;
     private static final long RESUME_LOADING_TIMEOUT_MS = 3_000L;
+    private static final long RESUME_PRE_SHOW_DELAY_MS = 800L;
     private static final long[] RESUME_FAILURE_BACKOFF_MS = {5_000L, 30_000L, 120_000L};
     private final Handler resumeFetchHandler = new Handler(Looper.getMainLooper());
     private long resumeFetchGeneration;
@@ -92,6 +93,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private Activity resumedActivity;
     private long resumeHostGeneration;
     private Object activeResumeAttempt;
+    private Runnable pendingResumeShow;
+    private Runnable pendingResumeCancellation;
 
     private Application myApplication;
 
@@ -730,6 +733,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (resumedActivity == activity) {
             resumedActivity = null;
             resumeHostGeneration++;
+            if (pendingResumeCancellation != null) pendingResumeCancellation.run();
         }
     }
 
@@ -892,6 +896,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         final String unit = appResumeAdId;
         final long generation = resumeFetchGeneration;
+        final long hostGeneration = resumeHostGeneration;
         final FullScreenContentCallback delegate = fullScreenContentCallback;
         final boolean forwardContent = enableScreenContentCallback;
         final Object attempt = new Object();
@@ -949,6 +954,35 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 if (activeResumeAttempt == attempt && delegate != null) forwardResumeCallback(() -> delegate.onAdImpression());
             }
         };
+        final Runnable cancelBeforeShow = () -> {
+            if (finishResumeAttempt(attempt, ownedDialog) && delegate != null && forwardContent) {
+                forwardResumeCallback(() -> delegate.onAdDismissedFullScreenContent());
+            }
+        };
+        final Runnable dispatch = () -> {
+            if (activeResumeAttempt != attempt) return;
+            pendingResumeShow = null;
+            pendingResumeCancellation = null;
+            try {
+                // Recheck after the loading interval; never spend a fill on a stale return.
+                if (!canShowResumeOn(host) || hostGeneration != resumeHostGeneration
+                        || appResumeAd != ad || !isAdAvailable(false) || generation != resumeFetchGeneration
+                        || !Objects.equals(unit, appResumeAdId)) {
+                    cancelBeforeShow.run();
+                    return;
+                }
+                appResumeAd = null;
+                ad.show(host);
+            } catch (RuntimeException error) {
+                callback.onAdFailedToShowFullScreenContent(
+                        new AdError(0, "App-open show threw: " + error.getClass().getSimpleName(), "ERainStudio"));
+            } finally {
+                // GMA opens asynchronously. Bound only the cosmetic window, never ad ownership.
+                if (ownedDialog != null && dialog == ownedDialog && ownedDialog.isShowing()) {
+                    resumeFetchHandler.postDelayed(() -> dismissResumeDialog(ownedDialog), RESUME_LOADING_TIMEOUT_MS);
+                }
+            }
+        };
         try {
             ad.setFullScreenContentCallback(callback);
             try {
@@ -959,25 +993,25 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             // Dialog/vendor setup may synchronously change the host, policy, unit or cache.
             // Its own dialog takes focus, so host window focus alone is not a rejection here.
             if (activeResumeAttempt != attempt || !canShowResumeOn(host)
+                    || hostGeneration != resumeHostGeneration
                     || appResumeAd != ad || !isAdAvailable(false) || generation != resumeFetchGeneration
                     || !Objects.equals(unit, appResumeAdId)) {
-                if (finishResumeAttempt(attempt, ownedDialog) && delegate != null && forwardContent) {
-                    forwardResumeCallback(() -> delegate.onAdDismissedFullScreenContent());
-                }
+                cancelBeforeShow.run();
                 return;
             }
-            appResumeAd = null;
-            ad.show(host);
+            if (ownedDialog != null && ownedDialog.isShowing()) {
+                ownedDialog.setOnCancelListener(ignored -> {
+                    if (pendingResumeShow == dispatch) cancelBeforeShow.run();
+                });
+                pendingResumeShow = dispatch;
+                pendingResumeCancellation = cancelBeforeShow;
+                resumeFetchHandler.postDelayed(dispatch, RESUME_PRE_SHOW_DELAY_MS);
+            } else {
+                dispatch.run();
+            }
         } catch (RuntimeException error) {
             callback.onAdFailedToShowFullScreenContent(
                     new AdError(0, "App-open show threw: " + error.getClass().getSimpleName(), "ERainStudio"));
-        } finally {
-            // show() returns before GMA opens its window. Keep loading visible through that
-            // transition; only the cosmetic window times out if the vendor sends no callback.
-            // Ownership of a dispatched ad still lasts until its terminal callback.
-            if (ownedDialog != null && dialog == ownedDialog && ownedDialog.isShowing()) {
-                resumeFetchHandler.postDelayed(() -> dismissResumeDialog(ownedDialog), RESUME_LOADING_TIMEOUT_MS);
-            }
         }
     }
 
@@ -992,6 +1026,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private boolean finishResumeAttempt(Object attempt, Dialog ownedDialog) {
         if (activeResumeAttempt != attempt) return false;
+        if (pendingResumeShow != null) resumeFetchHandler.removeCallbacks(pendingResumeShow);
+        pendingResumeShow = null;
+        pendingResumeCancellation = null;
         activeResumeAttempt = null;
         setShowingAd(false);
         dismissResumeDialog(ownedDialog);
