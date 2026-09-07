@@ -32,6 +32,7 @@ class RetentionNotifications internal constructor(
     private lateinit var delivery: NotificationDeliveryState
     @Volatile private var closed = true
     private var generation = 0L
+    private var exitArmedThisDeparture = false
     private data class Click(val id: String, val expires: Long)
     private var click: Click? = null
     private val seenClicks = LinkedHashSet<String>()
@@ -39,7 +40,7 @@ class RetentionNotifications internal constructor(
     private val pendingDelayIds = mutableMapOf<NotificationCampaign, String>()
     private val hostBlocks = mutableMapOf<String, Long>()
 
-    override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config) + buildList {
+    override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config, options.preset) + buildList {
         if (options.smallIconRes <= 0) add("A small notification icon is required")
         if (options.channelIds.values.any { it.isBlank() || it.length > 128 }) add("Invalid notification channel ID")
     }
@@ -50,7 +51,7 @@ class RetentionNotifications internal constructor(
         delays = suppliedDelays ?: MainNotificationDelays()
         delivery = NotificationDeliveryState(runtime.store)
         platform.createChannels(options)
-        // Short ad/onboarding delays intentionally do not survive a new process.
+        // Onboarding stays session-bound; common exit campaigns also keep a durable inexact fallback.
         closed = false
         active = this
     }
@@ -68,7 +69,15 @@ class RetentionNotifications internal constructor(
                     }
                 }
                 RetentionSignal.ProcessBackground -> armBackground()
-                RetentionSignal.ProcessForeground -> { invalidateDelayed(); foregroundRefresh = true }
+                RetentionSignal.ProcessForeground -> {
+                    exitArmedThisDeparture = false
+                    invalidateDelayed()
+                    if (profile().persistentLockscreen) safe("opened_app_cancel_lock") {
+                        platform.cancel(NotificationCampaign.LOCKSCREEN)
+                        runtime.store.transaction(STATE) { it.remove("active:lockscreen") }
+                    }
+                    foregroundRefresh = true
+                }
                 is RetentionSignal.ExternalTransitionStarted -> invalidateDelayed()
                 is RetentionSignal.HostUiChanged -> {
                     if (signal.visible) {
@@ -80,8 +89,10 @@ class RetentionNotifications internal constructor(
                     if (!signal.active) invalidateDelayed()
                     phaseChanged = true
                 }
-                is RetentionSignal.ConfigurationChanged, is RetentionSignal.EntitlementChanged,
-                RetentionSignal.SetupCompleted -> invalidateDelayed()
+                is RetentionSignal.EntitlementChanged -> {
+                    if (signal.entitlement != RetentionEntitlement.NON_SUBSCRIBER) invalidateDelayed()
+                }
+                is RetentionSignal.ConfigurationChanged, RetentionSignal.SetupCompleted -> invalidateDelayed()
                 else -> Unit
             }
         }
@@ -131,7 +142,8 @@ class RetentionNotifications internal constructor(
         val zone = runtime.clock.timeZone()
         val state = runtime.store.snapshot(STATE)
         val previous = state.entries().filterKeys { it.startsWith("schedule:") }.values.map(ScheduledNotification::decode)
-        val desired = mutableListOf<ScheduledNotification>()
+        val desired = previous.filter { !it.campaign.calendar && profile.durableExit && profile.enabled && profile[it.campaign].enabled &&
+            it.revision == profile.revision && now < it.expires }.toMutableList()
         if (profile.enabled) NotificationCampaign.entries.filter { it.calendar && profile[it].enabled }.forEach { campaign ->
             val installed = runtime.userState.installedAtMillis
             val newUser = now >= installed && now - installed < profile.newUserDays * DAY
@@ -170,8 +182,10 @@ class RetentionNotifications internal constructor(
                 return skipped(alarm.campaign, "not_due")
             }
             runtime.store.transaction(STATE) { state ->
-                state.put("handled:${alarm.key}", maxOf(alarm.localDate, state.string("handled:${alarm.key}", alarm.localDate)!!))
+                if (alarm.campaign.calendar) state.put("handled:${alarm.key}", maxOf(alarm.localDate, state.string("handled:${alarm.key}", alarm.localDate)!!))
+                else state.remove("schedule:${alarm.key}")
             }
+            if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
             reconcile("alarm_received") // Keep the next slot even when this occurrence is blocked/fails.
         }
         return deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires)
@@ -198,21 +212,28 @@ class RetentionNotifications internal constructor(
     override fun shutdown() = synchronized(lock) {
         if (closed) return
         closed = true
-        invalidateDelayed()
+        invalidateDelayed(cancelDurableExit = false)
         hostBlocks.clear()
         telemetryHandler.removeCallbacksAndMessages(null)
         if (active === this) active = null
         // OS calendar alarms stay durable for the next Application install. No background timer survives.
     }
 
-    private fun profile() = NotificationProfile.read(runtime.config)
+    private fun profile() = NotificationProfile.read(runtime.config, options.preset)
 
-    private fun invalidateDelayed() {
+    private fun invalidateDelayed(cancelDurableExit: Boolean = true) {
         generation++
         click = null
         delayed.values.forEach { it.close() }
         delayed.clear()
         pendingDelayIds.clear()
+        if (cancelDurableExit) {
+            val exits = runtime.store.transaction(STATE) { state ->
+                state.entries().filterKeys { it.startsWith("schedule:") }.values.map(ScheduledNotification::decode)
+                    .filter { !it.campaign.calendar }.onEach { state.remove("schedule:${it.key}") }
+            }
+            exits.forEach { safe("cancel_exit_alarm") { platform.cancelAlarm(it) } }
+        }
     }
 
     private fun armBackground() {
@@ -220,12 +241,39 @@ class RetentionNotifications internal constructor(
         val profile = profile()
         val click = this.click
         this.click = null
+        if (runtime.userState.setupCompleted && profile.durableExit) {
+            if (exitArmedThisDeparture) return
+            exitArmedThisDeparture = true
+        }
         if (click != null && runtime.clock.elapsedRealtimeMillis() < click.expires) {
-            armDelay(NotificationCampaign.AD_RETURN, click.id, click.expires, profile)
+            if (profile.durableExit && runtime.userState.setupCompleted) armDurableExit(NotificationCampaign.AD_RETURN, click.id, profile, click.expires)
+            else armDelay(NotificationCampaign.AD_RETURN, click.id, click.expires, profile)
+        } else if (runtime.userState.setupCompleted) {
+            if (profile.durableExit) armDurableExit(NotificationCampaign.APP_EXIT, UUID.randomUUID().toString(), profile)
+            else armDelay(NotificationCampaign.APP_EXIT, UUID.randomUUID().toString(), runtime.clock.elapsedRealtimeMillis() + profile[NotificationCampaign.APP_EXIT].ttl, profile)
         }
         if (runtime.userState.onboardingActive && !runtime.userState.setupCompleted) {
             armDelay(NotificationCampaign.ONBOARDING, UUID.randomUUID().toString(), runtime.clock.elapsedRealtimeMillis() + profile.onboardingTtl, profile)
         }
+    }
+
+    private fun armDurableExit(campaign: NotificationCampaign, token: String, profile: NotificationProfile, tokenExpiry: Long? = null) {
+        if (!profile.enabled || !profile[campaign].enabled) return
+        // Persist BEFORE scheduling: receivers reject stale/replaced/revoked exits after process death.
+        val now = runtime.clock.wallTimeMillis()
+        val due = now + profile.backgroundDelay
+        val expires = now + minOf(profile[campaign].ttl, tokenExpiry?.minus(runtime.clock.elapsedRealtimeMillis()) ?: profile[campaign].ttl)
+        if (expires <= due) return
+        val alarm = ScheduledNotification(campaign, "exit", UUID.nameUUIDFromBytes(token.toByteArray(Charsets.UTF_8)).toString(), due, expires, profile.revision)
+        val old = runtime.store.transaction(STATE) { state ->
+            val previous = state.entries().filterKeys { it.startsWith("schedule:") }.values.map(ScheduledNotification::decode).filter { !it.campaign.calendar }
+            previous.forEach { state.remove("schedule:${it.key}") }
+            state.put("schedule:${alarm.key}", alarm.encode())
+            previous
+        }
+        old.forEach { safe("cancel_exit_alarm") { platform.cancelAlarm(it) }; delayed.remove(it.campaign)?.close() }
+        safe("schedule_exit") { platform.schedule(alarm) }
+        delayed[campaign] = delays.post(profile.backgroundDelay) { receiveAlarm(alarm) }
     }
 
     private fun armDelay(campaign: NotificationCampaign, token: String, tokenExpiry: Long, profile: NotificationProfile) {
@@ -264,6 +312,7 @@ class RetentionNotifications internal constructor(
         if (campaign == NotificationCampaign.WINBACK) {
             val lastActive = runtime.userState.lastActiveAtMillis
             if (lastActive <= 0 || now < lastActive || now - lastActive < profile.winbackInactivity) return "not_inactive"
+            if (profile.winbackMaxInactivity > 0 && now - lastActive > profile.winbackMaxInactivity) return "outside_inactivity_window"
         }
         platform.blocked(options.channel(campaign))?.let { return it }
         if (campaign == NotificationCampaign.LOCKSCREEN && !profile.replaceLockscreen && platform.active(campaign)) return "still_active"
@@ -271,29 +320,69 @@ class RetentionNotifications internal constructor(
         return null
     }
 
+    private fun arbitration(campaign: NotificationCampaign, availableHigherContent: Set<NotificationCampaign>): String? {
+        val profile = profile()
+        if (!profile.arbitration) return null
+        if (campaign.updates && NotificationCampaign.entries.any { it.updates && platform.active(it) }) return "group_visible"
+        val now = runtime.clock.wallTimeMillis()
+        // Calendar/exit callbacks may race. An eligible higher-priority due occurrence wins,
+        // regardless of receiver ordering; a blocked/capped campaign must not starve others.
+        val pending = runtime.store.snapshot(STATE).entries().filterKeys { it.startsWith("schedule:") }.values.map(ScheduledNotification::decode)
+        if (pending.any { candidate ->
+                candidate.campaign in availableHigherContent && candidate.campaign.priority > campaign.priority && candidate.due <= now &&
+                    gate(candidate.campaign, candidate.revision, candidate.due, candidate.expires, null) == null &&
+                    !(candidate.campaign.updates && NotificationCampaign.entries.any { it.updates && platform.active(it) }) &&
+                    delivery.budgetBlocked(candidate.campaign, now, CalendarSlots.date(now, runtime.clock.timeZone()), profile[candidate.campaign]) == null
+            }) return "higher_priority_pending"
+        return null
+    }
+
     internal fun deliver(campaign: NotificationCampaign, occurrence: String, revision: Long, due: Long, expires: Long,
                          expectedGeneration: Long? = null): NotificationOutcome {
         try {
-            synchronized(lock) { gate(campaign, revision, due, expires, expectedGeneration)?.let { return skipped(campaign, it) } }
+            synchronized(lock) {
+                gate(campaign, revision, due, expires, expectedGeneration)?.let { return skipped(campaign, it) }
+            }
             val features = runtime.features()
             val allowed = features.map { it.id }.toSet()
-            val content = options.contentProvider.content(runtime.localizedContext(), campaign, features).map { it.copy(actions = it.actions.toList()) }
+            fun prepareContent(candidate: NotificationCampaign): List<NotificationContent> {
+                val values = options.contentProvider.content(runtime.localizedContext(), candidate, features).map { it.copy(actions = it.actions.toList()) }
+                require(values.size <= 100 && values.map { it.id }.distinct().size == values.size) { "Invalid content catalogue" }
+                values.forEach { item ->
+                    require(idPattern.matches(item.id) && item.title.isNotBlank() && item.title.length <= 200 && item.body.length <= 1000 && item.expandedTitle.isNotBlank() && item.expandedTitle.length <= 200)
+                    require(item.destination in allowed && item.actions.size <= 4 && item.actions.map { it.id }.distinct().size == item.actions.size)
+                    require(item.actions.all { idPattern.matches(it.id) && it.label.isNotBlank() && it.label.length <= 200 && it.destination in allowed })
+                }
+                return values
+            }
+            val content = prepareContent(campaign)
             if (content.isEmpty()) return skipped(campaign, "empty_content")
-            require(content.size <= 100 && content.map { it.id }.distinct().size == content.size) { "Invalid content catalogue" }
-            content.forEach { item ->
-                require(idPattern.matches(item.id) && item.title.isNotBlank() && item.title.length <= 200 && item.body.length <= 1000)
-                require(item.destination in allowed && item.actions.size <= 4 && item.actions.map { it.id }.distinct().size == item.actions.size)
-                require(item.actions.all { idPattern.matches(it.id) && it.label.isNotBlank() && it.label.length <= 200 && it.destination in allowed })
+            val dueHigher = synchronized(lock) {
+                if (!profile().arbitration) emptySet() else runtime.store.snapshot(STATE).entries()
+                    .filterKeys { it.startsWith("schedule:") }.values.map(ScheduledNotification::decode)
+                    .filter { it.campaign.priority > campaign.priority && it.due <= runtime.clock.wallTimeMillis() && runtime.clock.wallTimeMillis() < it.expires }
+                    .map { it.campaign }.toSet()
+            }
+            // Partner content callbacks remain outside locks. Invalid/empty higher-priority content
+            // is not an eligible pending notification and must not starve a valid lower one.
+            val availableHigherContent = dueHigher.filter { higher ->
+                try { prepareContent(higher).isNotEmpty() } catch (error: Exception) { report("priority_content", error); false }
+            }.toSet()
+            synchronized(lock) {
+                gate(campaign, revision, due, expires, expectedGeneration)?.let { return skipped(campaign, it) }
+                arbitration(campaign, availableHigherContent)?.let { return skipped(campaign, it) }
             }
             val last = delivery.lastContent(campaign)
             val index = content.indexOfFirst { it.id == last }
-            val chosen = content[(index + 1).mod(content.size)]
+            val chosen = if (campaign == NotificationCampaign.LOCKSCREEN && options.preset == NotificationPreset.COMMON_PLAN && content.size > 1)
+                content.filter { it.id != last }.random() else content[(index + 1).mod(content.size)]
+            val persistentLockscreen = campaign == NotificationCampaign.LOCKSCREEN && profile().persistentLockscreen
             val context = runtime.localizedContext()
             fun entryIntent(action: String, destination: String): PendingIntent {
                 val entry = RetentionEntry(source(campaign), destination, action,
                     token = UUID.nameUUIDFromBytes("$occurrence:$action:$destination".toByteArray(Charsets.UTF_8)).toString(),
-                    campaignId = campaign.key, instanceId = occurrence, createdAtMillis = due, expiresAtMillis = expires,
-                    mode = if (campaign == NotificationCampaign.PINNED) RetentionEntryMode.REUSABLE else RetentionEntryMode.ONCE)
+                    campaignId = campaign.key, instanceId = occurrence, createdAtMillis = due, expiresAtMillis = if (persistentLockscreen) null else expires,
+                    mode = if (campaign == NotificationCampaign.PINNED || persistentLockscreen) RetentionEntryMode.REUSABLE else RetentionEntryMode.ONCE)
                 val intent = runtime.createEntryIntent(entry) ?: error("No valid explicit host route")
                 return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             }
@@ -311,11 +400,16 @@ class RetentionNotifications internal constructor(
                 .setContentIntent(main).setDeleteIntent(dismiss).setActions(*nativeActions.toTypedArray())
                 .setAutoCancel(campaign != NotificationCampaign.PINNED)
                 .setOngoing(campaign == NotificationCampaign.PINNED).setOnlyAlertOnce(campaign.foreground)
-                .setPriority(if (campaign.foreground) Notification.PRIORITY_LOW else Notification.PRIORITY_DEFAULT)
-                .setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(Notification.CATEGORY_RECOMMENDATION)
+                .setPriority(when {
+                    campaign.foreground -> Notification.PRIORITY_LOW
+                    options.preset == NotificationPreset.COMMON_PLAN && (campaign.updates || campaign == NotificationCampaign.LOCKSCREEN) -> Notification.PRIORITY_HIGH
+                    else -> Notification.PRIORITY_DEFAULT
+                })
+                .setVisibility(if (persistentLockscreen) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE).setCategory(Notification.CATEGORY_RECOMMENDATION)
                 .setWhen(due).setShowWhen(true)
-            if (Build.VERSION.SDK_INT >= 26) builder.setChannelId(options.channel(campaign)).setTimeoutAfter((expires - runtime.clock.wallTimeMillis()).coerceAtLeast(1))
-            if (campaign.foreground) builder.setSound(null).setVibrate(null).setDefaults(0)
+            if (Build.VERSION.SDK_INT >= 26) builder.setChannelId(options.channel(campaign)).setTimeoutAfter(if (persistentLockscreen) 0L else (expires - runtime.clock.wallTimeMillis()).coerceAtLeast(1))
+            if (campaign.foreground || options.preset == NotificationPreset.COMMON_PLAN && campaign == NotificationCampaign.DAILY) builder.setSound(null).setVibrate(null).setDefaults(0)
+            else if (options.preset == NotificationPreset.COMMON_PLAN) builder.setDefaults(Notification.DEFAULT_ALL)
             val notification = builder.build().apply {
                 // Clear any custom renderer full-screen capability without requesting its permission.
                 fullScreenIntent = null
@@ -327,7 +421,8 @@ class RetentionNotifications internal constructor(
                 if (content.size > 1 && delivery.lastContent(campaign) != last && delivery.lastContent(campaign) == chosen.id) {
                     return@synchronized skipped(campaign, "rotation_changed")
                 }
-                delivery.claim(campaign, occurrence, now, CalendarSlots.date(now, runtime.clock.timeZone()), profile()[campaign], chosen.id)
+                arbitration(campaign, availableHigherContent)?.let { return@synchronized skipped(campaign, it) }
+                delivery.claim(campaign, occurrence, now, CalendarSlots.date(now, runtime.clock.timeZone()), profile()[campaign], chosen.id, profile().guardWindow)
                     ?.let { return@synchronized skipped(campaign, it) }
                 // Claim is durable before notify. Recheck after the storage boundary as well.
                 val blocked = gate(campaign, revision, due, expires, expectedGeneration)
@@ -342,7 +437,7 @@ class RetentionNotifications internal constructor(
                     return@synchronized NotificationOutcome.Failed("post")
                 }
                 val persisted = safe("persist_receipt") { delivery.finish(campaign, occurrence, true) }
-                event("post_submitted", campaign, mapOf("receipt_persisted" to persisted.toString()))
+                event("post_submitted", campaign, mapOf("receipt_persisted" to persisted.toString()) + if (campaign == NotificationCampaign.LOCKSCREEN) mapOf("wake_capability" to "os_controlled") else emptyMap())
                 NotificationOutcome.PostSubmitted(campaign.notificationId, persisted)
             }
         } catch (error: Exception) {
@@ -375,6 +470,7 @@ class RetentionNotifications internal constructor(
             NotificationCampaign.REMINDER -> RetentionEntrySource.REMINDER
             NotificationCampaign.PINNED -> RetentionEntrySource.PINNED
             NotificationCampaign.LOCKSCREEN -> RetentionEntrySource.LOCKSCREEN
+            NotificationCampaign.APP_EXIT -> RetentionEntrySource.OTHER
         }
     }
 }

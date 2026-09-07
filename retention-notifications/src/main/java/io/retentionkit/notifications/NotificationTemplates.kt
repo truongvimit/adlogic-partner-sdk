@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.view.View
 import android.widget.RemoteViews
@@ -14,6 +16,8 @@ data class NotificationAction @JvmOverloads constructor(val id: String, val labe
 data class NotificationContent @JvmOverloads constructor(
     val id: String, val title: String, val body: String, val destination: String,
     val actions: List<NotificationAction> = emptyList(), val imageRes: Int? = null,
+    /** Optional expanded headline; collapsed title remains independently configurable. */
+    val expandedTitle: String = title,
 )
 fun interface NotificationContentProvider {
     fun content(context: Context, campaign: NotificationCampaign, features: List<RetentionFeature>): List<NotificationContent>
@@ -35,6 +39,7 @@ data class RetentionNotificationOptions @JvmOverloads constructor(
     val channelIds: Map<NotificationCampaign, String> = emptyMap(),
     val contentProvider: NotificationContentProvider = StandardNotificationContent,
     val renderer: NotificationRenderer = StandardNotificationRenderer,
+    val preset: NotificationPreset = NotificationPreset.COMMON_PLAN,
 )
 
 object StandardNotificationContent : NotificationContentProvider {
@@ -43,17 +48,29 @@ object StandardNotificationContent : NotificationContentProvider {
             NotificationCampaign.DAILY -> R.string.rk_n_daily_body
             NotificationCampaign.WINBACK -> R.string.rk_n_winback_body
             NotificationCampaign.ONBOARDING -> R.string.rk_n_onboarding_body
-            NotificationCampaign.AD_RETURN -> R.string.rk_n_return_body
+            NotificationCampaign.AD_RETURN, NotificationCampaign.APP_EXIT -> R.string.rk_n_return_body
             NotificationCampaign.REMINDER -> R.string.rk_n_reminder_body
             NotificationCampaign.PINNED -> R.string.rk_n_pinned_body
             NotificationCampaign.LOCKSCREEN -> R.string.rk_n_lockscreen_body
         }
+        val heading = when (campaign) {
+            NotificationCampaign.DAILY -> R.string.rk_n_daily_title
+            NotificationCampaign.WINBACK -> R.string.rk_n_winback_title
+            NotificationCampaign.ONBOARDING -> R.string.rk_n_onboarding_title
+            NotificationCampaign.AD_RETURN, NotificationCampaign.APP_EXIT -> R.string.rk_n_before_you_go
+            NotificationCampaign.REMINDER -> R.string.rk_n_reminder_title
+            NotificationCampaign.PINNED -> R.string.rk_n_pinned_title
+            NotificationCampaign.LOCKSCREEN -> R.string.rk_n_lockscreen_title
+        }
         return features.map { feature ->
-            NotificationContent(feature.id, feature.label,
-                feature.description.ifBlank { context.getString(body) }, feature.id,
+            val title = context.getString(heading, feature.label).take(200)
+            val detail = listOf(context.getString(body), feature.description).filter { it.isNotBlank() }.joinToString(" ")
+            NotificationContent(feature.id, title, detail.take(1000), feature.id,
                 (if (campaign == NotificationCampaign.PINNED) features.take(4) else listOf(feature)).map {
-                    NotificationAction(it.id, it.label, it.id, it.iconRes)
-                }, feature.imageRes)
+                    NotificationAction(it.id, if (campaign == NotificationCampaign.PINNED) it.label else context.getString(R.string.rk_n_action_now), it.id, it.iconRes)
+                }, feature.imageRes ?: if (campaign.updates || campaign == NotificationCampaign.LOCKSCREEN) R.drawable.rk_notification_feature else null,
+                if (campaign == NotificationCampaign.AD_RETURN || campaign == NotificationCampaign.APP_EXIT)
+                    context.getString(R.string.rk_n_return_expanded, feature.label).take(200) else title)
         }
     }
 }
@@ -62,7 +79,7 @@ object StandardNotificationContent : NotificationContentProvider {
 object StandardNotificationRenderer : NotificationRenderer {
     override fun decorate(request: NotificationRenderRequest, builder: Notification.Builder) {
         val (context, campaign, content) = request
-        builder.setStyle(Notification.BigTextStyle().bigText(content.body))
+        builder.setStyle(Notification.BigTextStyle().setBigContentTitle(content.expandedTitle).bigText(content.body))
         if (campaign == NotificationCampaign.PINNED) {
             val views = RemoteViews(context.packageName, R.layout.rk_notification_tiles)
             views.setTextViewText(R.id.rk_notification_title, content.title)
@@ -92,19 +109,23 @@ object StandardNotificationRenderer : NotificationRenderer {
                 views.setViewVisibility(R.id.rk_notification_image, View.VISIBLE)
             }
             builder.setStyle(Notification.DecoratedCustomViewStyle()).setCustomBigContentView(views)
-        } else if (campaign == NotificationCampaign.WINBACK && content.imageRes != null) {
+        } else if (campaign.updates && content.imageRes != null) {
             // Bundled image only; bound decode dimensions and avoid allocating a full-size photograph.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeResource(context.resources, content.imageRes, bounds)
-            if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+            val bitmap = if (bounds.outWidth > 0 && bounds.outHeight > 0) {
                 val decode = BitmapFactory.Options().apply {
                     inSampleSize = 1
                     while (bounds.outWidth / inSampleSize > 768 || bounds.outHeight / inSampleSize > 768) inSampleSize *= 2
                 }
-                BitmapFactory.decodeResource(context.resources, content.imageRes, decode)?.let {
-                    builder.setStyle(Notification.BigPictureStyle().bigPicture(it).setSummaryText(content.body))
+                BitmapFactory.decodeResource(context.resources, content.imageRes, decode)
+            } else context.getDrawable(content.imageRes)?.let { drawable ->
+                Bitmap.createBitmap(768, 384, Bitmap.Config.ARGB_8888).also {
+                    drawable.setBounds(0, 0, it.width, it.height)
+                    drawable.draw(Canvas(it))
                 }
             }
+            bitmap?.let { builder.setStyle(Notification.BigPictureStyle().bigPicture(it).setBigContentTitle(content.expandedTitle).setSummaryText(content.body)) }
         }
         // No network image loading, Activity references, custom click trampoline, or async renderer.
     }

@@ -33,7 +33,14 @@ internal interface NotificationPlatform {
     fun schedule(alarm: ScheduledNotification)
     fun cancelAlarm(alarm: ScheduledNotification)
 }
-internal fun RetentionNotificationOptions.channel(campaign: NotificationCampaign) = channelIds[campaign] ?: "rk_retention_${campaign.key}"
+internal fun RetentionNotificationOptions.channel(campaign: NotificationCampaign): String = channelIds[campaign] ?: when {
+    preset == NotificationPreset.LEGACY_SDK -> "rk_retention_${campaign.key}"
+    campaign.updates -> "updates_news"
+    campaign == NotificationCampaign.LOCKSCREEN -> "lock_screen_alerts"
+    campaign == NotificationCampaign.DAILY -> "daily_tips"
+    campaign == NotificationCampaign.REMINDER -> "reminders"
+    else -> "rk_retention_${campaign.key}"
+}
 
 internal class AndroidNotificationPlatform(private val context: Context) : NotificationPlatform {
     private val manager = context.getSystemService(NotificationManager::class.java)
@@ -42,19 +49,23 @@ internal class AndroidNotificationPlatform(private val context: Context) : Notif
         if (Build.VERSION.SDK_INT < 26) return
         NotificationCampaign.entries.forEach { campaign ->
             if (manager.getNotificationChannel(options.channel(campaign)) != null) return@forEach
-            val label = when (campaign) {
+            val label = if (options.preset == NotificationPreset.COMMON_PLAN && campaign.updates && options.channel(campaign) == "updates_news") R.string.rk_n_channel_updates else when (campaign) {
                 NotificationCampaign.DAILY -> R.string.rk_n_channel_daily
                 NotificationCampaign.WINBACK -> R.string.rk_n_channel_winback
                 NotificationCampaign.ONBOARDING -> R.string.rk_n_channel_onboarding
-                NotificationCampaign.AD_RETURN -> R.string.rk_n_channel_ad_return
+                NotificationCampaign.AD_RETURN, NotificationCampaign.APP_EXIT -> R.string.rk_n_channel_ad_return
                 NotificationCampaign.REMINDER -> R.string.rk_n_channel_reminder
                 NotificationCampaign.PINNED -> R.string.rk_n_channel_pinned
                 NotificationCampaign.LOCKSCREEN -> R.string.rk_n_channel_lockscreen
             }
             val channel = NotificationChannel(options.channel(campaign), context.getString(label),
-                if (campaign.foreground) NotificationManager.IMPORTANCE_LOW else NotificationManager.IMPORTANCE_DEFAULT)
-            if (campaign.foreground) { channel.setSound(null, null); channel.enableVibration(false) }
-            channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                when {
+                    campaign.foreground -> NotificationManager.IMPORTANCE_LOW
+                    options.preset == NotificationPreset.COMMON_PLAN && (campaign.updates || campaign == NotificationCampaign.LOCKSCREEN) -> NotificationManager.IMPORTANCE_HIGH
+                    else -> NotificationManager.IMPORTANCE_DEFAULT
+                })
+            if (campaign.foreground || options.preset == NotificationPreset.COMMON_PLAN && campaign == NotificationCampaign.DAILY) { channel.setSound(null, null); channel.enableVibration(false) }
+            channel.lockscreenVisibility = if (campaign == NotificationCampaign.LOCKSCREEN && options.preset == NotificationPreset.COMMON_PLAN) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE
             // Android preserves existing importance/sound and user overrides. Never delete/recreate.
             manager.createNotificationChannel(channel)
         }

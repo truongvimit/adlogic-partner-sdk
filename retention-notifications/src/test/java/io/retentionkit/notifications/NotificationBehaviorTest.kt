@@ -40,12 +40,12 @@ class NotificationBehaviorTest {
         platform = FakePlatform(); delays = FakeDelays(); events.clear()
     }
     @After fun after() { RetentionRuntime.uninstallForTests() }
-    private fun install(overrides: Map<String, String> = emptyMap(), options: RetentionNotificationOptions = RetentionNotificationOptions(),
+    private fun install(overrides: Map<String, String> = emptyMap(), options: RetentionNotificationOptions = RetentionNotificationOptions(preset = NotificationPreset.LEGACY_SDK),
                         user: RetentionUserState = user(), eventSink: RetentionEventSink = RetentionEventSink { events += it }) {
         module = RetentionNotifications(options, platform, delays)
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), clock = clock, store = store,
             initialOverrides = overrides, initialUserState = user,
-            featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("translate", "Translate", R.drawable.rk_ic_notification), RetentionFeature("history", "History", R.drawable.rk_ic_notification)) },
+            featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", R.drawable.rk_ic_notification), RetentionFeature("saved_items", "Saved items", R.drawable.rk_ic_notification)) },
             router = RetentionRouter { _, _ -> Intent().setComponent(ComponentName(app.packageName, "PartnerActivity")) }, eventSink = eventSink))
         assertTrue(result.toString(), result is RetentionInstallResult.Installed)
         runtime = (result as RetentionInstallResult.Installed).runtime
@@ -59,7 +59,7 @@ class NotificationBehaviorTest {
 
     @Test fun defaultsAreCompleteAndInvalidPatchKeepsLastGoodProfile() {
         install()
-        val profile = NotificationProfile.read(runtime.config)
+        val profile = NotificationProfile.read(runtime.config, NotificationPreset.LEGACY_SDK)
         assertEquals(listOf(LocalSlot(8, 0), LocalSlot(19, 0)), profile[NotificationCampaign.DAILY].slots)
         assertEquals(listOf(LocalSlot(11, 0), LocalSlot(14, 0)), profile[NotificationCampaign.WINBACK].slots)
         assertEquals(listOf(LocalSlot(11, 30), LocalSlot(17, 0), LocalSlot(20, 0)), profile[NotificationCampaign.LOCKSCREEN].slots)
@@ -70,7 +70,7 @@ class NotificationBehaviorTest {
         }
         assertEquals(revision, runtime.config.revision)
         assertTrue(runtime.updateConfig(mapOf("notifications.daily.enabled" to "false")) is RetentionConfigResult.Applied)
-        assertEquals(profile[NotificationCampaign.WINBACK], NotificationProfile.read(runtime.config)[NotificationCampaign.WINBACK])
+        assertEquals(profile[NotificationCampaign.WINBACK], NotificationProfile.read(runtime.config, NotificationPreset.LEGACY_SDK)[NotificationCampaign.WINBACK])
     }
 
     @Test fun separateUserPermissionChannelAndForegroundGatesDoNotSpendBudget() {
@@ -124,7 +124,7 @@ class NotificationBehaviorTest {
         assertFalse(first.filterEquals(second))
         val one = (RetentionEntryCodec.read(first) as RetentionEntryDecodeResult.Valid).entry
         val two = (RetentionEntryCodec.read(second) as RetentionEntryDecodeResult.Valid).entry
-        assertEquals("translate", one.destination); assertEquals("history", two.destination)
+        assertEquals("notes", one.destination); assertEquals("saved_items", two.destination)
         assertEquals(RetentionEntryMode.REUSABLE, one.mode)
         assertNotNull(pinned.bigContentView)
         assertNull(pinned.fullScreenIntent)
@@ -143,7 +143,7 @@ class NotificationBehaviorTest {
         install(user = user().copy(setupCompleted = false, onboardingActive = true, setupCompletedAtMillis = 0))
         runtime.signal(RetentionSignal.ProcessBackground)
         clock.advance(3_000); delays.fire()
-        assertEquals(NotificationCampaign.entries.toSet(), platform.posts.map { it.first }.toSet())
+        assertEquals(NotificationCampaign.entries.filter { it != NotificationCampaign.APP_EXIT }.toSet(), platform.posts.map { it.first }.toSet())
         platform.posts.forEach { (campaign, notification) ->
             val entry = (RetentionEntryCodec.read(shadowOf(notification.contentIntent).savedIntent) as RetentionEntryDecodeResult.Valid).entry
             assertEquals(RetentionNotifications.source(campaign), entry.source)
@@ -189,7 +189,7 @@ class NotificationBehaviorTest {
             RetentionRuntime.uninstallForTests()
             store = SharedPreferencesRetentionStore(app, "render_${UUID.randomUUID()}")
             platform = FakePlatform()
-            install(options = RetentionNotificationOptions(renderer = NotificationRenderer { _, _ ->
+            install(options = RetentionNotificationOptions(preset = NotificationPreset.LEGACY_SDK, renderer = NotificationRenderer { _, _ ->
                 when (change) {
                     "disabled" -> runtime.updateConfig(mapOf("notifications.daily.enabled" to "false"))
                     "channel" -> platform.block = "channel_blocked"
@@ -205,7 +205,7 @@ class NotificationBehaviorTest {
 
     @Test fun delayedRendererCanCompleteAfterConcurrentConfigUpdateWithoutPosting() {
         val entered = CountDownLatch(1); val release = CountDownLatch(1)
-        install(options = RetentionNotificationOptions(renderer = NotificationRenderer { _, _ ->
+        install(options = RetentionNotificationOptions(preset = NotificationPreset.LEGACY_SDK, renderer = NotificationRenderer { _, _ ->
             entered.countDown(); check(release.await(3, TimeUnit.SECONDS))
         }))
         val executor = Executors.newSingleThreadExecutor()
@@ -226,12 +226,12 @@ class NotificationBehaviorTest {
         assertNull(NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
         platform.failPost = false
         assertTrue(send() is NotificationOutcome.PostSubmitted)
-        assertEquals("translate", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
+        assertEquals("notes", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
         RetentionRuntime.uninstallForTests()
         clock.advance(2 * HOUR)
-        install(options = RetentionNotificationOptions(renderer = NotificationRenderer { _, _ -> error("bad renderer") }))
+        install(options = RetentionNotificationOptions(preset = NotificationPreset.LEGACY_SDK, renderer = NotificationRenderer { _, _ -> error("bad renderer") }))
         assertTrue(send() is NotificationOutcome.Failed)
-        assertEquals("translate", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
+        assertEquals("notes", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
     }
 
     @Test fun duplicateClaimAndRotationPersistAcrossProcessRestore() {
@@ -242,14 +242,14 @@ class NotificationBehaviorTest {
         RetentionRuntime.uninstallForTests(); clock.advance(2 * HOUR); install()
         assertEquals(NotificationOutcome.Skipped("duplicate"), send(occurrence = occurrence))
         assertTrue(send() is NotificationOutcome.PostSubmitted)
-        assertEquals("history", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
+        assertEquals("saved_items", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
         assertEquals(NotificationOutcome.Skipped("daily_cap"), send())
     }
 
     @Test fun pendingCrashClaimReservesBudgetWithoutInventingSuccessfulSubmission() {
         install(overrides = mapOf("notifications.daily.daily_cap" to "1"))
         val delivery = NotificationDeliveryState(store)
-        assertNull(delivery.claim(NotificationCampaign.DAILY, "crash", clock.now, CalendarSlots.date(clock.now, clock.zone), NotificationProfile.read(runtime.config)[NotificationCampaign.DAILY], "translate"))
+        assertNull(delivery.claim(NotificationCampaign.DAILY, "crash", clock.now, CalendarSlots.date(clock.now, clock.zone), NotificationProfile.read(runtime.config, NotificationPreset.LEGACY_SDK)[NotificationCampaign.DAILY], "notes"))
         RetentionRuntime.uninstallForTests(); install()
         assertEquals(NotificationOutcome.Skipped("daily_cap"), send())
         assertNull(NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
@@ -277,7 +277,7 @@ class NotificationBehaviorTest {
         assertEquals(NotificationOutcome.Skipped("still_active"), send(NotificationCampaign.LOCKSCREEN))
         runtime.updateConfig(mapOf("notifications.lockscreen.replace" to "true"))
         assertTrue(send(NotificationCampaign.LOCKSCREEN) is NotificationOutcome.PostSubmitted)
-        assertEquals("history", NotificationDeliveryState(store).lastContent(NotificationCampaign.LOCKSCREEN))
+        assertEquals("saved_items", NotificationDeliveryState(store).lastContent(NotificationCampaign.LOCKSCREEN))
         assertEquals(1, platform.activeCampaigns.size)
     }
 
@@ -419,8 +419,8 @@ class NotificationBehaviorTest {
         install()
         send()
         RetentionRuntime.uninstallForTests(); clock.advance(2 * HOUR)
-        install(options = RetentionNotificationOptions(contentProvider = NotificationContentProvider { _, _, _ ->
-            listOf(NotificationContent("new_content", "History", "Find your work", "history"))
+        install(options = RetentionNotificationOptions(preset = NotificationPreset.LEGACY_SDK, contentProvider = NotificationContentProvider { _, _, _ ->
+            listOf(NotificationContent("new_content", "Saved items", "Find your work", "saved_items"))
         }))
         assertTrue(send() is NotificationOutcome.PostSubmitted)
         assertEquals("new_content", NotificationDeliveryState(store).lastContent(NotificationCampaign.DAILY))
