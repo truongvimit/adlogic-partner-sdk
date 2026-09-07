@@ -72,7 +72,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     override val screenName: String = "ob_splash"
 
-    private val attempt by lazy { ViewModelProvider(this)[SplashAttempt::class.java] }
+    private val attempt by lazy {
+        ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[SplashAttempt::class.java]
+    }
     private var progressAnimator: ObjectAnimator? = null
     private var noInternetDialog: ObNoInternetDialog? = null
     private val windowFocused = MutableStateFlow(false)
@@ -515,6 +517,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             if (remaining > 0) delay(remaining.milliseconds)
             // UNDER_AD explicitly permits preparing the destination beneath the visible ad.
             // Failed/no-ad and AFTER_AD paths still require a focused foreground splash.
+            if (!attempt.showFinished.isCompleted) attempt.foreground.first { it }
             if (attempt.showFinished.isCompleted) awaitSplashFocus()
             startFlow()
         }

@@ -47,6 +47,7 @@ class PreloadChain internal constructor(
      * user whose flow is already completed gets `null` and therefore no request at all, instead of
      * paying for an LFO and an OB native that will never be shown.
      */
+    @JvmOverloads
     fun onSplashRemoteReady(activity: Activity, destination: FlowDestination?, resumeIndex: Int, language1AlreadyScheduled: Boolean = false) {
         ObLog.d(ObLog.Section.PRELOAD, "splash_ready destination=$destination resumeIndex=$resumeIndex")
         config() ?: return
@@ -68,6 +69,7 @@ class PreloadChain internal constructor(
     }
 
     /** Only LFO1 belongs to the splash ordering experiment; OB1 keeps its handoff trigger. */
+    @JvmOverloads
     fun preloadLanguage1(activity: Activity, allowWhileVisible: Boolean = false) {
         language1HandoffPending = true
         preloadNative(activity, AdPlacement.Language1, allowWhileVisible)

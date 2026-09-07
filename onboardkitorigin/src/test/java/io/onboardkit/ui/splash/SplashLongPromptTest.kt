@@ -81,6 +81,7 @@ class SplashLongPromptTest {
 
     @After
     fun tearDown() {
+        LongPromptFixture.provider.presentation?.onAdClosed()
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.reset(app)
         main.idle()
@@ -319,6 +320,34 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun homeDuringUnderAdMinimumWaitCannotNavigateUntilTheAdReturnsToForeground() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashMinDisplayMs = 10_000)
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        requireNotNull(controller).get().onWindowFocusChanged(false)
+        requireNotNull(controller).pause().stop()
+        val ad = Robolectric.buildActivity(LongPromptVendorActivity::class.java).setup().visible()
+        try {
+            main.idleFor(Duration.ofSeconds(2))
+            ad.pause().stop() // Home while the vendor Activity still owns the presentation.
+            main.idleFor(Duration.ofSeconds(11))
+            assertEquals("UNDER_AD cannot navigate from Home when minimum expires", 0, LongPromptFixture.flowStarts)
+            ad.restart().start().resume().visible()
+            main.idle()
+            assertEquals(1, LongPromptFixture.flowStarts)
+            requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+            main.idle()
+        } finally {
+            LongPromptFixture.provider.presentation?.onAdClosed()
+            ad.pause().stop().destroy()
+        }
+    }
+
+    @Test
     fun afterAdWaitsForCloseWithoutRepeatingAnAlreadyElapsedMinimum() {
         LongPromptFixture.timing = io.onboardkit.ads.NextScreenTiming.AFTER_AD
         LongPromptFixture.provider.successfulShow = true
@@ -457,6 +486,8 @@ class SplashLongPromptTest {
         assertTrue(message, condition())
     }
 }
+
+class LongPromptVendorActivity : Activity()
 
 class LongPromptSplashActivity : ObSplashActivity() {
     override fun nextScreenTiming() = LongPromptFixture.timing

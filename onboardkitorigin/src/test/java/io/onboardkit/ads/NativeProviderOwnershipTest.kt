@@ -113,6 +113,28 @@ class NativeProviderOwnershipTest {
         }
     }
 
+    @Test fun `a queued request rechecks host authorization at actual dispatch`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(languageNative = request.unit)
+        }.getOrThrow())
+        io.onboardkit.OnboardingSdk.setCanRequestAds(true)
+        controller.pause().stop()
+        provider.preloadNative(host, request)
+        io.onboardkit.OnboardingSdk.setCanRequestAds(false)
+        try {
+            controller.restart().start().resume().visible().windowFocusChanged(true)
+            main.idle()
+            assertEquals("A formerly allowed queue must not bypass the current host gate", 0, requests.size)
+            assertFalse(provider.isNativeLoading(placement))
+            assertTrue(provider.isNativeLoadFailed(placement))
+        } finally {
+            io.onboardkit.OnboardingSdk.setCanRequestAds(true)
+        }
+    }
+
     @Test fun `language handoff reports failed preload without requesting the same ad again`() {
         val host = controller.get()
         io.onboardkit.OnboardingSdk.install(host.application) {

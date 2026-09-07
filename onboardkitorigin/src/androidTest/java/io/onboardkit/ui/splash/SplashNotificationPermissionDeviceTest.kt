@@ -57,7 +57,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Run notificationPhase=allow|deny|recreate|off|granted|home_after_result|preload with fresh data.
- * preload_granted_home starts granted; preload clicks the real Allow UI after its hold window.
+ * preload_granted_home starts granted; preload/recreate click the real Allow UI after their hold window.
+ * Pass lfoParallel=true with phase=preload to check group B under the actual permission prompt.
  * Phase handled instead uses a new process after deny, retaining that test APK's data and denial.
  * Root prepares permission externally; do not click until NOTIFICATION_DEVICE says ANSWER_NOW.
  * This proves Android permission/lifecycle ordering, not GMA display or a cross-process retry policy.
@@ -75,6 +76,7 @@ class SplashNotificationPermissionDeviceTest {
         val initiallyGranted = phase in setOf("granted", "preload_granted_home")
         assertEquals("Prepare only this test APK's permission before running phase=$phase", initiallyGranted, granted)
         val fixture = NotificationFixture
+        fixture.parallel = phase == "preload" && InstrumentationRegistry.getArguments().getString("lfoParallel") == "true"
         fixture.requiresResult = phase !in setOf("off", "granted", "handled", "preload_granted_home")
         fixture.holdInterstitial = phase in setOf("home_after_result", "preload", "preload_granted_home")
         fixture.checkPreloadOrder = phase in setOf("preload", "preload_granted_home")
@@ -128,6 +130,7 @@ class SplashNotificationPermissionDeviceTest {
                 if (fixture.requiresResult) {
                     eventually("Expected the actual Android notification permission dialog") { permissionDialogVisible() }
                     assertEquals(0, fixture.results.get())
+                    if (fixture.parallel) eventually("Parallel LFO1 must start while notification is open") { fixture.splashNativeCalls.get() == 1 }
                     hold(4_500) { assertHeld() } // Beyond both configured 2s and default remote 3s minimum.
                     assertEquals("Visible splash must load under its own notification prompt exactly once", 2, fixture.loads.get())
                     if (phase == "recreate") {
@@ -147,18 +150,18 @@ class SplashNotificationPermissionDeviceTest {
                         if (fixture.results.get() == 0) hold(1_000) { assertHeld() }
                     }
                     mark("ANSWER_NOW phase=$phase; use the real Android ${if (phase == "deny") "Don't allow" else "Allow"} button")
-                    if (phase == "preload") clickActualPermissionAllow()
+                    if (phase in setOf("preload", "recreate") && fixture.results.get() == 0) clickActualPermissionAllow()
                     eventually("Waiting for actual onRequestPermissionsResult; operator must answer real UI", 120_000) {
                         fixture.results.get() == 1
                     }
                 }
                 if (phase == "preload") {
                     hold(1_000) {
-                        assertTrue("Permission result alone must not preload before splash interstitial settles", fixture.nativeCalls.isEmpty())
+                        assertEquals("Notification result must not change the group preload order", if (fixture.parallel) 1 else 0, fixture.nativeCalls.size)
                         assertEquals(0, fixture.shows.get())
                         assertEquals(0, handoffs())
                     }
-                    mark("RELEASE_SPLASH_INTERSTITIAL nativeCalls=0 permissionCallbacks=1")
+                    mark("RELEASE_SPLASH_INTERSTITIAL parallel=${fixture.parallel} nativeCalls=${fixture.nativeCalls.size} permissionCallbacks=1")
                     instrumentation.runOnMainSync {
                         fixture.interstitialReady = true
                         requireNotNull(fixture.pendingInterstitial).onLoaded()
@@ -233,7 +236,7 @@ class SplashNotificationPermissionDeviceTest {
         assertEquals("No provider show under permission UI", 0, NotificationFixture.shows.get())
         assertEquals("No navigation under permission UI", 0, NotificationFixture.completions.get())
         if (NotificationFixture.checkPreloadOrder) {
-            assertTrue("No destination native preload while actual notification result is pending", NotificationFixture.nativeCalls.isEmpty())
+            assertEquals("Only parallel may preload before the interstitial settles", if (NotificationFixture.parallel) 1 else 0, NotificationFixture.nativeCalls.size)
             assertEquals(0, NotificationFixture.flowStarts.get())
         }
     }
@@ -281,6 +284,10 @@ class SplashNotificationPermissionDeviceTest {
 
 /** Supported host hooks and the actual Android callback, without replacing ActivityResultRegistry. */
 class NotificationSplashDeviceActivity : ObSplashActivity() {
+    override fun onRemoteFetched() {
+        OnboardingSdk.remoteOrNull()?.applySnapshot(io.onboardkit.remote.RemoteFlags(
+            splashLfoParallelPreloadEnabled = NotificationFixture.parallel))
+    }
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         NotificationFixture.creates.incrementAndGet()
         super.onCreateSafe(savedInstanceState)
@@ -303,6 +310,7 @@ class NotificationSplashDeviceActivity : ObSplashActivity() {
 }
 
 private object NotificationFixture {
+    var parallel = false
     var requiresResult = true
     var checkPreloadOrder = false
     var holdInterstitial = false
