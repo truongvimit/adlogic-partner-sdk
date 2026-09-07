@@ -31,3 +31,7 @@ Exact commands, source checkpoints, actual JUnit hashes, failed runs/fixes and l
 Final closure: ticket13 resolved; [Final physical/restore proof](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-physical-manual-and-restore.json) and [Task worktree cleanup](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/task-worktree-cleanup.json). All corrected implementation/verification tickets10–14 are accepted. Ticket09’s physical follow-up is superseded by this corrected acceptance; ticket08 remains external PR authentication only.
 
 External08 confirmation: branch push succeeded; actual draft PR creation after3801f74 returned `GraphQL: must be a collaborator (createPullRequest)`. [PR attempt](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-pr-attempt.json). No PR exists/readiness claimed; all code, validation, report and resource-cleanup work is complete.
+
+## Reopened frontier — current
+
+15 default delivery and16 simple integration ready independently;17 wake/recovery follows15;18 physical default validation and two-axis review follows15–17. Prior closure above is historical. External08 PR remains separately blocked by GitHub permissions.
