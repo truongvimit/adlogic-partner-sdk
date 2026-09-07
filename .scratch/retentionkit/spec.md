@@ -1,5 +1,8 @@
 # RetentionKit implementation specification
 
+
+Current corrected delivery: implementation, source review,279 fresh tests,17 actual Pixel cases, default API36 long-onboarding route,12 consumer R8 checks, full example R8 and final restoration/worktree cleanup are accepted at production source69d0f71 (device86048d6). See [correction acceptance](correction-acceptance.md). Historical checkpoint counts below remain historical; only external write-authorized PR step08 is open.
+
 Status: active
 Implementation: reopened by user correction; previous acceptance is historical and does not satisfy the corrected shared entry flow.
 Base: main at 632df43026b6f880deb84d478c71d22188ce093a

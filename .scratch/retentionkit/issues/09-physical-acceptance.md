@@ -1,7 +1,7 @@
 # 09 Physical Pixel acceptance follow-up
 
 Type: task
-Status: claimed
+Status: resolved — superseded by corrected acceptance13
 Blocked by: none (requires exclusive unlocked device for remaining UI work)
 
 Spec: ../spec.md
@@ -12,4 +12,8 @@ Run the existing and manual RetentionKit example flows on the attached unlocked 
 
 ## Answer
 
-See `../physical-acceptance.md`. The first physical run exposed a debug QA clock rollback, fixed at95181844 and merged993c376 with four RED/GREEN regressions. Physical4356938 recorded15/15 passing Android cases and additional widget/feedback manual checks. Source7cb23c3 now includes another user task's Ads correction; its affected unit/build checks are separate from the still-installed4356938 APK. Concurrent Home/Back/launcher/ad input interrupted manual feedback; one original driver PASS was explicitly excluded. Final exclusive-device install/rerun/manual matrix remains pending. This ticket is not resolved and no full physical acceptance is claimed.
+See `../physical-acceptance.md`. The first physical run exposed a debug QA clock rollback, fixed at95181844 and merged993c376 with four RED/GREEN regressions. Physical4356938 recorded15/15 passing Android cases and additional widget/feedback manual checks. Source7cb23c3 now includes another user task's Ads correction; its affected unit/build checks are separate from the still-installed4356938 APK. Concurrent Home/Back/launcher/ad input interrupted manual feedback; one original driver PASS was explicitly excluded. That historical run did not complete full physical acceptance. The later exclusive-device corrected verification in ticket13 supersedes it: final17/17 actual Pixel cases and separately recorded manual/restoration checks passed.
+
+## Answer
+
+Superseded and closed by [13 corrected validation](13-corrected-validation.md) and [current acceptance](../correction-acceptance.md); the historical15-case run is not added to final17. No OS uninstall completion or universal OEM/Play guarantee is inferred.
