@@ -1,7 +1,9 @@
 package io.retentionkit
 
 import android.app.Application
+import android.app.Activity
 import android.content.Intent
+import android.os.Bundle
 import io.retentionkit.core.*
 import io.retentionkit.feedback.FeedbackOptions
 import io.retentionkit.feedback.FeedbackShowResult
@@ -54,7 +56,11 @@ class RetentionKit private constructor(
     val feedback: RetentionFeedbackModule?,
     val review: RetentionReviewModule?,
     private val remoteConfig: RetentionRemoteConfig?,
+    private val uiHost: RetentionUiHost,
 ) {
+    /** Bind in Main.onCreate; forward the returned handle's new-Intent/save callbacks. */
+    fun mainHandoff(activity: Activity, savedInstanceState: Bundle?, featureRouter: RetentionRouter): RetentionMainHandoff =
+        RetentionMainHandoff(this, activity, savedInstanceState, featureRouter, uiHost)
     /** Call for onCreate AND onNewIntent. Forward the rewritten Intent extras through setup. */
     fun capture(intent: Intent?): RetentionEntryAcceptance = runtime.entries.capture(intent).also { accepted ->
         if (accepted is RetentionEntryAcceptance.Accepted) notifications?.recordOpened(accepted.entry)
@@ -116,7 +122,7 @@ class RetentionKit private constructor(
                     clock = options.clock, store = options.store, uiHost = options.uiHost,
                 ))) {
                     is RetentionInstallResult.Failed -> RetentionKitInstallResult.Failed(result.reasons)
-                    is RetentionInstallResult.Installed -> RetentionKit(result.runtime, notifications, widgets, feedback, review, remote).let {
+                    is RetentionInstallResult.Installed -> RetentionKit(result.runtime, notifications, widgets, feedback, review, remote, options.uiHost).let {
                         installed = it
                         RetentionKitInstallResult.Installed(it)
                     }
