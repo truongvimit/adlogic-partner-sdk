@@ -115,7 +115,8 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
         if (intent.action != ALARM_ACTION) return
         receiveSafely("alarm") {
             val raw = intent.getStringExtra(ALARM_EXTRA) ?: return@receiveSafely
-            RetentionNotifications.active?.receiveAlarm(ScheduledNotification.decode(raw))
+            val alarm = ScheduledNotification.decode(raw)
+            withAlarmExecution(intent) { execution -> RetentionNotifications.active?.receiveAlarm(alarm, execution) }
         }
     }
 }
