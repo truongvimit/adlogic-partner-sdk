@@ -35,6 +35,8 @@ class NotificationRouteLifetimeTest {
         runtime = (RetentionRuntime.install(app, RetentionOptions(
             modules = listOf(module), clock = clock,
             store = SharedPreferencesRetentionStore(app, "route_lifetime_${UUID.randomUUID()}"),
+            // Isolate PINNED's lifetime from the common foreground reminder/guard arbitration.
+            initialOverrides = mapOf("notifications.reminder.enabled" to "false"),
             initialUserState = RetentionUserState(false, true, RetentionEntitlement.NON_SUBSCRIBER,
                 clock.now - 2 * DAY, clock.now - DAY, 0),
             featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", R.drawable.rk_ic_notification)) },
