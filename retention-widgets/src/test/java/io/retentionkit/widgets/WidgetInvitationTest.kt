@@ -57,4 +57,22 @@ class WidgetInvitationTest {
         assertEquals(0, f.platform.requests)
         controller.stop().destroy()
     }
+    @Test fun disablingOnlyInvitationClosesVisiblePromptButPreservesExistingWidgetAndDirectPin() {
+        val f = Fixture()
+        f.foreground()
+        f.installWidget(17)
+        f.module.update(intArrayOf(17))
+        assertEquals(WidgetInvitationResult.Shown, f.module.showPinInvitation())
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        f.runtime.updateConfig(mapOf("widgets.invitation.enabled" to "false"))
+        assertFalse(dialog.isShowing)
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        assertEquals(0, f.platform.requests)
+        assertEquals(WidgetInvitationResult.Unavailable("invitation_disabled"), f.module.showPinInvitation())
+        assertEquals(listOf(17), f.module.instances().map { it.appWidgetId })
+        assertEquals(RetentionCapability.Available, f.module.pinCapability())
+        assertTrue(f.module.requestPin() is WidgetPinResult.Requested)
+        assertEquals(1, f.platform.requests)
+    }
+
 }

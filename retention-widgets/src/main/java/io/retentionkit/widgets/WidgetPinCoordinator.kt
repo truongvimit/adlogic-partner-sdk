@@ -187,6 +187,7 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
     }
 
     fun showInvitation(): WidgetInvitationResult {
+        if (!module.invitationEnabled()) return WidgetInvitationResult.Unavailable("invitation_disabled")
         when (val capability = module.pinCapability()) {
             is RetentionCapability.Unavailable -> return WidgetInvitationResult.Unavailable(capability.reason)
             is RetentionCapability.Unknown -> return WidgetInvitationResult.Failed(capability.reason)
@@ -205,8 +206,10 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
                 .setTitle(localized.getString(R.string.rk_widget_invitation_title))
                 .setMessage(localized.getString(R.string.rk_widget_invitation_message))
                 .setPositiveButton(localized.getString(R.string.rk_widget_add)) { _, _ ->
-                    accepted = true
-                    module.guard("invitation_accept") { handoff(lease, revision) }
+                    if (module.invitationEnabled()) {
+                        accepted = true
+                        module.guard("invitation_accept") { handoff(lease, revision) }
+                    } else closeInvitation()
                 }
                 .setNegativeButton(localized.getString(R.string.rk_widget_not_now), null)
                 .create()
@@ -239,7 +242,7 @@ internal class WidgetPinCoordinator(private val module: RetentionWidgets) {
             return WidgetInvitationResult.Failed("dialog_error")
         }
     }
-    private fun closeInvitation() {
+    fun closeInvitation() {
         invitation?.get()?.let { dialog -> module.guard("dialog_dismiss") { dialog.dismiss() } }
         invitationLease?.close()
         clearInvitationReferences()

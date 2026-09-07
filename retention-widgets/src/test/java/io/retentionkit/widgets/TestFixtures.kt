@@ -68,7 +68,7 @@ internal class Fixture(
     }
     fun installWidget(id: Int) { platform.providers[id] = module.provider }
     companion object {
-        val features = listOf("translate", "camera", "conversation", "history").map {
+        val features = listOf("notes", "saved_items", "text_tools", "guide").map {
             RetentionFeature(it, it.replaceFirstChar(Char::uppercase), android.R.drawable.ic_menu_search)
         }
     }
