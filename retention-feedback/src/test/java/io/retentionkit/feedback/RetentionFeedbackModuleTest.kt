@@ -301,7 +301,7 @@ class RetentionFeedbackModuleTest {
         val own = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
             .single { it.id == RetentionFeedbackModule.SHORTCUT_ID }
         val template = (RetentionEntryCodec.read(own.intent) as RetentionEntryDecodeResult.Valid).entry
-        assertEquals(Activity::class.java.name, own.intent.component!!.className)
+        assertEquals(Activity::class.java.name, own.intent!!.component!!.className)
         assertEquals(RetentionEntrySource.SHORTCUT, template.source)
         assertEquals(RetentionFeedbackModule.DESTINATION, template.destination)
         assertEquals(RetentionEntryMode.REUSABLE, template.mode)
