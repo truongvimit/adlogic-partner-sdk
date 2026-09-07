@@ -91,3 +91,5 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/retentionkit -
 ```
 
 The full project/POM matrix and publication inspections at `bf68f1e` are complete, including the reviewed handoff, widget return and consumer route readiness corrections. Historical consumer regressions comprise three Activity tests and 25 separate parser fixtures. Final integrated evidence records 549 scoped product unit tests, 15 root-owned API 36 cases and the minified Maven umbrella handoff smoke passing. See [VERIFICATION.md](VERIFICATION.md) for exact provenance and physical/Play/OEM limits. Ticket07 packaging/documentation is resolved within that scope; overall acceptance and release status remain with the root owner.
+
+Physical follow-up: the unlocked Pixel recorded15/15 Android cases at4356938 and additional manual checks. The latest7cb23c3 build/source and unfinished exclusive-device matrix are recorded in [the current physical ledger](../.scratch/retentionkit/physical-acceptance.md). Earlier counts on this page remain checkpoint evidence.
