@@ -62,4 +62,25 @@ class DefaultNotificationDeliveryTest {
         assertEquals(0, reminder.defaults)
         assertFalse(platform.active(NotificationCampaign.DAILY))
     }
+
+    @Test fun firstOpenWaitsForSetupBillingPermissionAndHostThenPublishesWithoutAnotherOpen() {
+        install(user().copy(setupCompleted = false, onboardingActive = true,
+            entitlement = RetentionEntitlement.UNKNOWN, setupCompletedAtMillis = 0))
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        runtime.signal(RetentionSignal.HostUiChanged("consent", true))
+        runtime.signal(RetentionSignal.SetupCompleted)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertTrue(platform.posts.isEmpty())
+        runtime.signal(RetentionSignal.HostUiChanged("consent", false))
+        assertTrue("Permission denial still wins", platform.posts.isEmpty())
+        platform.block = null
+        runtime.reconcile("notification_permission_result")
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.REMINDER })
+        runtime.reconcile("repeated_permission_result")
+        runtime.signal(RetentionSignal.SetupCompleted)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("The same open is not replayed by ready callbacks", 1,
+            platform.posts.count { it.first == NotificationCampaign.REMINDER })
+    }
 }
