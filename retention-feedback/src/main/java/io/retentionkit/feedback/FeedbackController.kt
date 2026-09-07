@@ -36,7 +36,7 @@ class FeedbackController internal constructor(
     /** Explicit legacy App Info choice; default Continue uses continueToSystem(). */
     fun continueToAppManagement(): FeedbackActionResult = module.continueToAppManagement(this)
     internal fun activity(): Activity? = source.get()?.takeUnless { it.isFinishing || it.isDestroyed }
-    internal fun activate(): Boolean = module.activate(this)
+    internal fun activate(): FeedbackActivation = module.activate(this)
     internal fun pause() { lease?.close(); lease = null }
     internal fun detach() {
         detached = true
@@ -47,3 +47,6 @@ class FeedbackController internal constructor(
         source.clear()
     }
 }
+
+/** A live session may be temporarily blocked by focus, host UI or Activity lifecycle. */
+internal enum class FeedbackActivation { READY, WAITING, TERMINAL }

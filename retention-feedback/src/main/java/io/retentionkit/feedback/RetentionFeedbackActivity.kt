@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -18,6 +19,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import io.retentionkit.core.RetentionSignal
+import io.retentionkit.core.RetentionSubscription
 
 /** Internal host for both default and custom views; state survives recreation in the module store. */
 class RetentionFeedbackActivity : Activity(), LifecycleOwner {
@@ -28,18 +31,61 @@ class RetentionFeedbackActivity : Activity(), LifecycleOwner {
     private var module: RetentionFeedbackModule? = null
     private var token: String? = null
     private var backCallback: android.window.OnBackInvokedCallback? = null
-    private val resumeWork = Runnable {
-        val control = controller ?: return@Runnable
-        if (isFinishing || isDestroyed) return@Runnable
-        if (control.state()?.phase != FeedbackPhase.OPEN || !control.activate()) { finish(); return@Runnable }
-        main.postDelayed(renewLease, 45_000)
-    }
-    private val renewLease = object : Runnable {
-        override fun run() {
-            if (isFinishing || isDestroyed) return
-            if (controller?.activate() != true) { finish(); return }
-            main.postDelayed(this, 45_000)
+    private var resumed = false
+    private var readinessDeadline = 0L
+    private var renewalPending = false
+    private var readinessSubscription: RetentionSubscription? = null
+    private val resumeWork = Runnable { activateWhenReady() }
+    private val readinessTimeout = Runnable {
+        if (resumed && !isFinishing && !isDestroyed) {
+            controller?.let { module?.cancelReadiness(it) }
+            finish()
         }
+    }
+    private val renewLease = Runnable {
+        renewalPending = false
+        controller?.pause()
+        requestActivation()
+    }
+
+    private fun requestActivation() {
+        main.removeCallbacks(resumeWork)
+        main.post(resumeWork)
+    }
+
+    private fun activateWhenReady() {
+        if (!resumed || isFinishing || isDestroyed) return
+        val control = controller ?: return
+        if (readinessDeadline != 0L && SystemClock.elapsedRealtime() >= readinessDeadline) {
+            readinessTimeout.run()
+            return
+        }
+        try {
+            when (control.activate()) {
+                FeedbackActivation.TERMINAL -> finish()
+                FeedbackActivation.READY -> {
+                    readinessDeadline = 0
+                    main.removeCallbacks(readinessTimeout)
+                    if (!renewalPending) {
+                        renewalPending = true
+                        main.postDelayed(renewLease, 45_000)
+                    }
+                }
+                FeedbackActivation.WAITING -> {
+                    main.removeCallbacks(renewLease)
+                    renewalPending = false
+                    if (readinessDeadline == 0L) readinessDeadline = SystemClock.elapsedRealtime() + READINESS_TIMEOUT
+                    main.removeCallbacks(readinessTimeout)
+                    main.postDelayed(readinessTimeout, (readinessDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+                    // Briefly cover host state settling without a signal. Later focus/core changes
+                    // still retry until the deadline, without an unbounded foreground poll.
+                    if (SystemClock.elapsedRealtime() < readinessDeadline - READINESS_TIMEOUT + 10_000) {
+                        main.removeCallbacks(resumeWork)
+                        main.postDelayed(resumeWork, 250)
+                    }
+                }
+            }
+        } catch (error: Exception) { module?.diagnostic("activate", error); finish() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +96,17 @@ class RetentionFeedbackActivity : Activity(), LifecycleOwner {
         if (attached == null || session == null || attached.session(session) == null) { finish(); return }
         module = attached
         token = session
+        readinessDeadline = savedInstanceState?.getLong("readiness_deadline") ?: 0L
+        attached.trackUi(this)
+        readinessSubscription = attached.runtime?.subscribe("feedback.ui.$session") { signal ->
+            when (signal) {
+                is RetentionSignal.ConfigurationChanged, is RetentionSignal.HostUiChanged,
+                is RetentionSignal.ExternalTransitionStarted, is RetentionSignal.ExternalTransitionFinished,
+                is RetentionSignal.OnboardingChanged, RetentionSignal.SetupCompleted,
+                RetentionSignal.ProcessForeground, RetentionSignal.ProcessBackground -> requestActivation()
+                else -> Unit
+            }
+        }
         val control = FeedbackController(attached, session, this).also { controller = it }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         try {
@@ -77,24 +134,46 @@ class RetentionFeedbackActivity : Activity(), LifecycleOwner {
         super.onResume()
         registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         // Application.ActivityLifecycleCallbacks updates the core's resumed Activity after onResume.
-        main.post(resumeWork)
+        resumed = true
+        requestActivation()
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) controller?.pause()
+        requestActivation()
     }
     override fun onPause() {
+        resumed = false
+        main.removeCallbacks(readinessTimeout)
         main.removeCallbacks(resumeWork)
         main.removeCallbacks(renewLease)
+        renewalPending = false
         controller?.pause()
         registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         super.onPause()
     }
-    override fun onSaveInstanceState(outState: Bundle) { outState.putString("session", token); super.onSaveInstanceState(outState) }
-    override fun onDestroy() {
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("session", token)
+        outState.putLong("readiness_deadline", readinessDeadline)
+        super.onSaveInstanceState(outState)
+    }
+    override fun finish() {
+        readinessSubscription?.close(); readinessSubscription = null
         main.removeCallbacksAndMessages(null)
+        controller?.pause()
+        super.finish()
+    }
+    override fun onDestroy() {
+        readinessSubscription?.close(); readinessSubscription = null
+        main.removeCallbacksAndMessages(null)
+        module?.releaseUi(this)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         controller?.detach(); controller = null
         if (Build.VERSION.SDK_INT >= 33) backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
         backCallback = null
         super.onDestroy()
     }
+    private companion object { const val READINESS_TIMEOUT = 60_000L }
     @Deprecated("Legacy back dispatch") override fun onBackPressed() = leave()
     private fun leave() { controller?.keep(); finish() }
 
