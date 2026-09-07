@@ -32,6 +32,7 @@ internal data class NotificationProfile(
     val campaigns: Map<NotificationCampaign, CampaignProfile>,
     val winbackMaxInactivity: Long, val guardWindow: Long, val arbitration: Boolean,
     val persistentLockscreen: Boolean, val durableExit: Boolean,
+    val wakeEnabled: Boolean, val wakeDurationMillis: Long,
 ) {
     operator fun get(campaign: NotificationCampaign) = campaigns.getValue(campaign)
 
@@ -45,6 +46,7 @@ internal data class NotificationProfile(
             put("onboarding.grace_ms", (if (common) DAY else 0L).toString()); put("background_delay_ms", "3000")
             put("ad_return.token_ttl_ms", "300000"); put("onboarding.token_ttl_ms", "300000")
             put("lockscreen.replace", "false"); put("lockscreen.persistent", common.toString())
+            put("lockscreen.wake.enabled", common.toString()); put("lockscreen.wake_duration_ms", "20000")
             put("guard_window_ms", (if (common) 30_000L else 0L).toString())
             put("arbitration.enabled", common.toString()); put("app_exit.durable", common.toString())
             NotificationCampaign.entries.forEach { campaign ->
@@ -84,6 +86,7 @@ internal data class NotificationProfile(
                     key.endsWith("new_user_days") -> value.toLongOrNull() in 0L..365L
                     key.endsWith("daily_cap") -> value.toLongOrNull() in (if (preset == NotificationPreset.COMMON_PLAN) 0L else 1L)..50L
                     key.endsWith("lifetime_cap") -> value.toLongOrNull() in 0L..10_000L
+                    key.endsWith("wake_duration_ms") -> value.toLongOrNull() in 1L..MAX_WAKE_MILLIS
                     key.endsWith("background_delay_ms") -> value.toLongOrNull() in 1L..60_000L
                     key.endsWith("token_ttl_ms") -> value.toLongOrNull() in 1L..300_000L
                     key.endsWith("ttl_ms") -> value.toLongOrNull() in 1L..7 * DAY
@@ -116,7 +119,7 @@ internal data class NotificationProfile(
                     if (c == NotificationCampaign.LOCKSCREEN) LocalSlot.parse(str("lockscreen.new_user_slots"))!! else emptyList(),
                     num("${c.key}.ttl_ms"), num("${c.key}.cooldown_ms"), num("${c.key}.daily_cap").toInt(), num("${c.key}.lifetime_cap").toInt()) },
                 num("winback.max_inactivity_ms"), num("guard_window_ms"), bool("arbitration.enabled"),
-                bool("lockscreen.persistent"), bool("app_exit.durable"))
+                bool("lockscreen.persistent"), bool("app_exit.durable"), bool("lockscreen.wake.enabled"), num("lockscreen.wake_duration_ms"))
         }
     }
 }
@@ -129,11 +132,18 @@ object NotificationLegacyConfig {
             "notiLockscreenEnabled" to "lockscreen.enabled", "noti_lockscreen_slots" to "lockscreen.slots",
             "noti_lockscreen_slots_new" to "lockscreen.new_user_slots", "notiLockscreenReplace" to "lockscreen.replace",
             "notiClickedAdsEnabled" to "ad_return.enabled", "notiOnOpenEnabled" to "reminder.enabled",
-            "noti_new_user_days" to "new_user_days")
+            "noti_new_user_days" to "new_user_days", "noti_lockscreen_wake_seconds" to "lockscreen.wake_duration_ms")
     /** Exact legacy fetch keys. Returned copy cannot mutate the canonical alias table. */
     @get:JvmStatic val keys: Set<String> get() = names.keys.toSet()
     @JvmStatic fun map(values: Map<String, String>): NotificationConfigMigration {
-        return NotificationConfigMigration(values.filterKeys { it in names }.mapKeys { "notifications.${names.getValue(it.key)}" }, values.keys - names.keys)
+        val mapped = values.filterKeys { it in names }.map { (key, value) ->
+            val normalized = if (key == "noti_lockscreen_wake_seconds") {
+                // Reject invalid remote values instead of silently clamping into an enabled policy.
+                value.toLongOrNull()?.takeIf { it in 1..20 }?.times(1000)?.toString() ?: "invalid"
+            } else value
+            "notifications.${names.getValue(key)}" to normalized
+        }.toMap()
+        return NotificationConfigMigration(mapped, values.keys - names.keys)
     }
     /** Source-compatible alias for the existing Translate migration entry point. */
     @JvmStatic fun translate(values: Map<String, String>): NotificationConfigMigration = map(values)

@@ -20,6 +20,7 @@ class RetentionNotifications internal constructor(
     options: RetentionNotificationOptions,
     private val suppliedPlatform: NotificationPlatform?,
     private val suppliedDelays: NotificationDelays?,
+    private val suppliedWakePlatform: NotificationWakePlatform? = null,
 ) : RetentionModule {
     @JvmOverloads constructor(options: RetentionNotificationOptions = RetentionNotificationOptions()) : this(options, null, null)
     override val id = "notifications"
@@ -30,6 +31,7 @@ class RetentionNotifications internal constructor(
     private lateinit var platform: NotificationPlatform
     private lateinit var delays: NotificationDelays
     private lateinit var delivery: NotificationDeliveryState
+    private lateinit var wake: LockscreenWakeController
     @Volatile private var closed = true
     private var generation = 0L
     private var exitArmedThisDeparture = false
@@ -76,6 +78,9 @@ class RetentionNotifications internal constructor(
         platform = suppliedPlatform ?: AndroidNotificationPlatform(runtime.localizedContext())
         delays = suppliedDelays ?: MainNotificationDelays()
         delivery = NotificationDeliveryState(runtime.store)
+        wake = LockscreenWakeController(lock, runtime.store, runtime.clock, platform,
+            suppliedWakePlatform ?: AndroidNotificationWakePlatform(runtime.application), delays, ::profile,
+            ::wakeBlocked, { name, attributes -> event(name, NotificationCampaign.LOCKSCREEN, attributes) }, ::report)
         platform.createChannels(options)
         // Onboarding stays session-bound; common exit campaigns also keep a durable inexact fallback.
         closed = false
@@ -99,6 +104,7 @@ class RetentionNotifications internal constructor(
                     armBackground()
                 }
                 RetentionSignal.ProcessForeground -> {
+                    wake.cancel(reason = "app_opened")
                     exitArmedThisDeparture = false
                     invalidateDelayed()
                     if (profile().persistentLockscreen) safe("opened_app_cancel_lock") {
@@ -121,6 +127,7 @@ class RetentionNotifications internal constructor(
                     phaseChanged = true
                 }
                 is RetentionSignal.EntitlementChanged -> {
+                    if (signal.entitlement == RetentionEntitlement.SUBSCRIBER) wake.cancel(reason = "subscriber")
                     if (signal.entitlement != RetentionEntitlement.NON_SUBSCRIBER) invalidateDelayed()
                 }
                 is RetentionSignal.ConfigurationChanged, RetentionSignal.SetupCompleted -> invalidateDelayed()
@@ -234,6 +241,7 @@ class RetentionNotifications internal constructor(
 
     override fun reconcile(reason: String) {
         reconcileSchedules(reason)
+        wake.reconcile()
         retryDeferredCalendars()
         // Setup/Billing/config and explicit permission reconciliation can complete after the one
         // process-foreground event. Preserve that open until it can post; callbacks do not invent
@@ -277,11 +285,16 @@ class RetentionNotifications internal constructor(
                 DeferredCalendarRetry.trigger(state, alarm, now) else alarm.due)
         } }
         NotificationCampaign.entries.filter { campaign ->
-            !profile.enabled || !profile[campaign].enabled || runtime.marketingEligibility(
+            val eligibility = runtime.marketingEligibility(
                 graceMillis = if (campaign == NotificationCampaign.ONBOARDING) profile.onboardingGrace else profile.grace,
                 requireBackground = false,
                 phase = if (campaign == NotificationCampaign.ONBOARDING) RetentionMarketingPhase.ONBOARDING else RetentionMarketingPhase.AFTER_SETUP
-            ) is RetentionEligibility.Blocked
+            )
+            val preserveUnknownLock = campaign == NotificationCampaign.LOCKSCREEN &&
+                eligibility == RetentionEligibility.Blocked(RetentionSuppressionReason.ENTITLEMENT_UNKNOWN) &&
+                wake.matchesPending(platform.activeOccurrence(campaign)) && !runtime.isForeground &&
+                platform.blocked(options.channel(campaign)) == null
+            !profile.enabled || !profile[campaign].enabled || eligibility is RetentionEligibility.Blocked && !preserveUnknownLock
         }.forEach { safe("cancel_ineligible") { platform.cancel(it) } }
         runtime.diagnostics.record("notifications.reconcile", "$reason: ${desired.size} desired inexact alarms, revision ${profile.revision}")
     }
@@ -332,6 +345,7 @@ class RetentionNotifications internal constructor(
 
     internal fun dismiss(campaign: NotificationCampaign, occurrence: String) = synchronized(lock) {
         if (closed) return@synchronized
+        if (campaign == NotificationCampaign.LOCKSCREEN) wake.cancel(occurrence, "dismissed")
         // OS metadata is authoritative even if the receipt failed after notify. An old delete
         // callback must not cancel a newer replacement merely because disk still names the old one.
         if (platform.activeOccurrence(campaign) == occurrence) {
@@ -351,6 +365,7 @@ class RetentionNotifications internal constructor(
     override fun shutdown() = synchronized(lock) {
         if (closed) return
         closed = true
+        wake.close()
         invalidateDelayed(cancelDurableExit = false)
         hostBlocks.clear()
         clearForegroundRequests()
@@ -360,6 +375,21 @@ class RetentionNotifications internal constructor(
     }
 
     private fun profile() = NotificationProfile.read(runtime.config, options.preset)
+
+    internal fun wakeCheckpoint(occurrence: String, atMillis: Long) = wake.checkpoint(occurrence, atMillis)
+
+    /** Already-posted message eligibility: no send TTL, frequency claim or still_active rejection. */
+    private fun wakeBlocked(): String? {
+        if (closed) return "not_installed"
+        val profile = profile()
+        if (!profile.enabled || !profile[NotificationCampaign.LOCKSCREEN].enabled || !profile.wakeEnabled) return "disabled"
+        if (runtime.isForeground) return "foreground"
+        hostBlocks.entries.removeAll { runtime.clock.elapsedRealtimeMillis() >= it.value }
+        if (hostBlocks.isNotEmpty()) return "host_ui"
+        platform.blocked(options.channel(NotificationCampaign.LOCKSCREEN))?.let { return it }
+        val eligibility = runtime.marketingEligibility(graceMillis = profile.grace, requireBackground = true)
+        return (eligibility as? RetentionEligibility.Blocked)?.reason?.name?.lowercase()
+    }
 
     private fun invalidateDelayed(cancelDurableExit: Boolean = true) {
         generation++
@@ -587,7 +617,8 @@ class RetentionNotifications internal constructor(
                     return@synchronized NotificationOutcome.Failed("post")
                 }
                 val persisted = safe("persist_receipt") { delivery.finish(campaign, occurrence, true) }
-                event("post_submitted", campaign, mapOf("receipt_persisted" to persisted.toString()) + if (campaign == NotificationCampaign.LOCKSCREEN) mapOf("wake_capability" to "os_controlled") else emptyMap())
+                if (campaign == NotificationCampaign.LOCKSCREEN) wake.posted(occurrence)
+                event("post_submitted", campaign, mapOf("receipt_persisted" to persisted.toString()) + if (campaign == NotificationCampaign.LOCKSCREEN) mapOf("wake_policy" to if (profile().wakeEnabled) "bounded_legacy_attempt" else "disabled") else emptyMap())
                 NotificationOutcome.PostSubmitted(campaign.notificationId, persisted)
             }
         } catch (error: Exception) {
