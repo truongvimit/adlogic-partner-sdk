@@ -318,6 +318,33 @@ class RetentionFeedbackModuleTest {
         assertEquals(headerIcon, shadowOf(header.drawable).createdFromResId)
     }
 
+    @Test fun uninstallShortcutUsesSelectedVietnameseAppLanguage() {
+        selectedLocale = Locale.forLanguageTag("vi")
+        install(shortcut = true)
+        val own = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
+            .single { it.id == RetentionFeedbackModule.SHORTCUT_ID }
+        assertEquals("Gỡ cài đặt", own.shortLabel.toString())
+    }
+
+    @Test fun partnerCanReplaceShortcutLabelAndIconIndependently() {
+        val customIcon = android.R.drawable.ic_menu_delete
+        install(shortcut = true, configure = { base -> base.copy(
+            appIconRes = android.R.drawable.ic_menu_info_details,
+            shortcutIconRes = customIcon,
+            contentProvider = FeedbackContentProvider { context ->
+                base.contentProvider.content(context).copy(shortcutLabel = "Remove this app")
+            },
+        ) })
+        val own = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
+            .single { it.id == RetentionFeedbackModule.SHORTCUT_ID }
+        val icon = ReflectionHelpers.callInstanceMethod<Icon>(own, "getIcon")
+        assertEquals("Remove this app" to customIcon, own.shortLabel.toString() to icon.resId)
+        val entry = (RetentionEntryCodec.read(own.intent) as RetentionEntryDecodeResult.Valid).entry
+        assertEquals(RetentionFeedbackModule.DESTINATION, entry.destination)
+        assertEquals(RetentionEntryMode.REUSABLE, entry.mode)
+        assertEquals(Activity::class.java.name, own.intent!!.component!!.className)
+    }
+
     @Test fun shortcutUpdateAndDisablePreserveForeignDynamicEntries() {
         val manager = app.getSystemService(ShortcutManager::class.java)
         val target = ComponentName(app.packageName, Activity::class.java.name)
