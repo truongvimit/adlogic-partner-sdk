@@ -1,7 +1,7 @@
 # 10 Standard entry handoff and uninstall framework
 
 Type: task
-Status: resolved
+Status: claimed
 Blocked by:
 
 Spec: ../spec.md, Corrected acceptance
@@ -29,3 +29,5 @@ Added widgets.invitation.enabled as a strict invitation-only switch; disabling i
 Production checkpoints:07cc390 (core/entry/feedback API),1e02926 (invitation switch),e598dab (ordinary Main explicit start),ef94857 (reentrant latest-selection and final dispatch purpose corrections). Separate test/documentation commits preserve the implementation trail.
 
 Validation: actual targeted RED15 at9984e98 produced four expected failures; identical GREEN15 at ef94857 passed. Full affected invocation at clean ef94857 passed162/162 (core49,feedback28,facade28,widgets37,review20), no failures/errors/skips, and all five release AARs in1m49. Commands, module trees, XML/log/AAR SHA256 are in [immutable result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/sdk-full-ef94857/result.json). This resolves ticket10 SDK scope only. No ADB/remote publish; final app/device/minified consumer acceptance remains tickets12–13.
+
+Follow-up: root found a long-dialog readiness gap after the bounded retry window. Preparing real window-focus regression and SDK-owned focus listener; source/test acceptance will be updated before resolution.

@@ -222,4 +222,42 @@ class RetentionMainHandoffTest {
         activity.pause().stop().destroy()
     }
 
+    @Test fun actualWindowFocusGainAfterRetryBudgetResumesPendingEntryWithoutActivityResume() {
+        val host = object : RetentionUiHost {
+            override fun canPresentEntry(activity: Activity) = activity.hasWindowFocus()
+        }
+        val kit = install(host)
+        val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
+        val helper = bind(kit, activity.get())
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        activity.start().resume().visible().windowFocusChanged(false)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(10_500))
+        assertFalse(activity.get().hasWindowFocus())
+        assertSame(activity.get(), kit.runtime.activities.current())
+        assertTrue(helper.hasPendingEntry)
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        activity.windowFocusChanged(true); idle()
+        assertTrue(activity.get().hasWindowFocus())
+        assertNotNull(shadowOf(activity.get()).nextStartedActivity)
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        activity.pause().stop().destroy()
+    }
+
+    @Test fun closingHelperBeforeFocusReturnCannotRestartTimedOutSelection() {
+        val host = object : RetentionUiHost {
+            override fun canPresentEntry(activity: Activity) = activity.hasWindowFocus()
+        }
+        val kit = install(host)
+        val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
+        val helper = bind(kit, activity.get())
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        activity.start().resume().visible().windowFocusChanged(false)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(10_500))
+        helper.close()
+        activity.windowFocusChanged(true); idle()
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        assertFalse(helper.hasPendingEntry)
+        activity.pause().stop().destroy()
+    }
+
 }
