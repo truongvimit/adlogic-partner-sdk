@@ -25,11 +25,13 @@ import io.retentionkit.RetentionKit
 import io.retentionkit.core.*
 import io.retentionkit.notifications.NotificationCampaign
 import io.retentionkit.notifications.RetentionNotificationOptions
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.Calendar
 
 /** Real Android adapter tests with an explicitly synthetic engine clock/state.
  * Calendar tests deliver the actual saved alarm to its actual receiver; they do not test OS wake timing.
@@ -57,8 +59,9 @@ class RetentionExampleEngineTest {
         }
     }
     private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null,
-        notifications: RetentionNotificationOptions = RetentionNotificationOptions()) {
-        instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra, notifications = notifications) }
+        notifications: RetentionNotificationOptions = RetentionNotificationOptions(),
+        initialTimeMillis: Long = System.currentTimeMillis()) {
+        instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra, notifications = notifications, initialTimeMillis = initialTimeMillis) }
         scenario = ActivityScenario.launch(launch ?: Intent(application, RetentionPlaygroundActivity::class.java))
         await { kit.runtime.isForeground && kit.runtime.activities.current() is RetentionPlaygroundActivity }
     }
@@ -70,7 +73,7 @@ class RetentionExampleEngineTest {
         it.tag == "io.retentionkit.notifications" && it.id == campaign.notificationId
     }
     private fun assertSubmitted(campaign: NotificationCampaign) {
-        await(8000) { active(campaign) != null }
+        await(8000, diagnostic = { notificationDiagnostic(campaign) }) { active(campaign) != null }
         val notification = active(campaign)!!.notification
         assertNull("No full-screen marketing", notification.fullScreenIntent)
         assertEquals(Notification.VISIBILITY_PRIVATE, notification.visibility)
@@ -78,9 +81,27 @@ class RetentionExampleEngineTest {
         assertFalse(notification.extras.getString("io.retentionkit.notifications.occurrence.v1").isNullOrEmpty())
         await { ExampleQa.events.any { it.name == "retention_noti_post_submitted" && it.attributes["campaign"] == campaign.key } }
     }
+    private fun notificationDiagnostic(campaign: NotificationCampaign) =
+        "campaign=${campaign.key}; now=${kit.runtime.clock.wallTimeMillis()}; setupAt=${kit.runtime.userState.setupCompletedAtMillis}; foreground=${kit.runtime.isForeground}; revision=${kit.runtime.config.revision}; active=${active(campaign) != null}; recentEvents=${ExampleQa.events.takeLast(8)}"
+
+    private fun dailyCatchUpTime(): Long = Calendar.getInstance().apply {
+        // Always exercise due < fixtureNow < expiry at 08:56 local, even after the real clock
+        // passes 09:00. Tomorrow keeps real AlarmManager delivery outside this bounded test.
+        add(Calendar.DATE, 1)
+        set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 56); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    private fun assertDailyCatchUp(raw: String) {
+        val alarm = JSONObject(raw)
+        val now = kit.runtime.clock.wallTimeMillis()
+        assertEquals("Regression requires a real saved 08:00 DAILY envelope", 56 * 60_000L, now - alarm.getLong("due"))
+        assertEquals(4 * 60_000L, alarm.getLong("expires") - now)
+        assertEquals(now, kit.runtime.userState.setupCompletedAtMillis)
+    }
     private fun calendar(campaign: NotificationCampaign) {
-        prepare()
+        prepare(initialTimeMillis = if (campaign == NotificationCampaign.DAILY) dailyCatchUpTime() else System.currentTimeMillis())
         val raw = ExampleQa.savedAlarm(campaign)
+        if (campaign == NotificationCampaign.DAILY) assertDailyCatchUp(raw)
         background()
         instrumentation.runOnMainSync { ExampleQa.deliverSavedAlarm(application, raw) }
         assertSubmitted(campaign)
@@ -179,11 +200,15 @@ class RetentionExampleEngineTest {
         ownedChannels.add(channel)
         manager.createNotificationChannel(NotificationChannel(channel, "Blocked Retention QA", NotificationManager.IMPORTANCE_NONE))
         assertEquals(NotificationManager.IMPORTANCE_NONE, manager.getNotificationChannel(channel).importance)
-        prepare(notifications = RetentionNotificationOptions(channelIds = mapOf(NotificationCampaign.DAILY to channel)))
+        prepare(notifications = RetentionNotificationOptions(channelIds = mapOf(NotificationCampaign.DAILY to channel)),
+            initialTimeMillis = dailyCatchUpTime())
         val raw = ExampleQa.savedAlarm(NotificationCampaign.DAILY)
+        assertDailyCatchUp(raw)
         background()
         instrumentation.runOnMainSync { ExampleQa.deliverSavedAlarm(application, raw) }
-        await { ExampleQa.events.any { it.name == "retention_noti_skipped" && it.attributes["campaign"] == "daily" && it.attributes["reason"] == "channel_blocked" } }
+        await(diagnostic = { notificationDiagnostic(NotificationCampaign.DAILY) }) {
+            ExampleQa.events.any { it.name == "retention_noti_skipped" && it.attributes["campaign"] == "daily" && it.attributes["reason"] == "channel_blocked" }
+        }
         assertNull(active(NotificationCampaign.DAILY))
         assertEquals(NotificationManager.IMPORTANCE_NONE, manager.getNotificationChannel(channel).importance)
     }
