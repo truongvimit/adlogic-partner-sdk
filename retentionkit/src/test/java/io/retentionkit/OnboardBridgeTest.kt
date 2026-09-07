@@ -164,9 +164,11 @@ class OnboardBridgeTest {
             assertEquals(key, io.onboardkit.ui.splash.SplashEntry.from(normal)?.interKey)
             assertTrue(normal.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK != 0)
         }
+        val uninstallShortcut = RetentionEntry(RetentionEntrySource.SHORTCUT, io.retentionkit.feedback.RetentionFeedbackModule.DESTINATION, "open")
+        assertEquals("inter_uninstall", io.onboardkit.ui.splash.SplashEntry.from(standard.router.createIntent(app, uninstallShortcut))?.interKey)
     }
 
-    @Test fun configuredMainAllowsOnlySelectedEntryAndHonorsHostModalGateAtFinalRecheck() {
+    @Test fun configuredMainAllowsExplicitEntryButNeverPromptsAndHonorsHostModalGateAtFinalRecheck() {
         var ready = true
         val bridge = OnboardRetentionBridge(Splash::class.java, hostCanPresent = { ready }, mainActivity = Main::class.java)
         val rt = (RetentionRuntime.install(app, RetentionOptions(modules = listOf(bridge), uiHost = bridge,
@@ -174,7 +176,8 @@ class OnboardBridgeTest {
         val activity = Robolectric.buildActivity(Main::class.java).setup()
         rt.signal(RetentionSignal.ProcessForeground)
         assertTrue(rt.ui.acquire("review") is RetentionUiLeaseResult.Blocked)
-        assertTrue(rt.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) is RetentionUiLeaseResult.Blocked)
+        val startLease = (rt.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) as RetentionUiLeaseResult.Acquired).lease
+        startLease.close()
         val entry = RetentionEntry(RetentionEntrySource.FEEDBACK, "notes", "rescue")
         rt.entries.capture(RetentionEntryCodec.write(activity.get().intent, entry))
         val lease = (rt.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) as RetentionUiLeaseResult.Acquired).lease
@@ -183,8 +186,32 @@ class OnboardBridgeTest {
         ready = true
         val terminal = bridge.mainIntent(app, Main::class.java, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, activity.get().intent.extras))!!
         assertEquals(entry, (RetentionEntryCodec.read(terminal) as RetentionEntryDecodeResult.Valid).entry)
+        assertNull(bridge.mainIntent(app, Main::class.java, OnboardingOutcome.Aborted(null)))
         rt.entries.consume(entry.token)
-        assertFalse(bridge.canPresentEntry(activity.get()))
+        assertFalse(bridge.canPresent(activity.get())) // Consumption never enables automatic prompts.
+        activity.pause().stop().destroy()
+    }
+
+    @Test fun ordinaryMainCanStartFeedbackViaSplashButBlockedHostCannotStartIt() {
+        var ready = false
+        val launches = mutableListOf<Intent>()
+        val feedback = io.retentionkit.feedback.RetentionFeedbackModule(io.retentionkit.feedback.FeedbackOptions(
+            shortcutEnabled = false, launcher = io.retentionkit.feedback.FeedbackLauncher { _, intent -> launches.add(intent); true }))
+        val bridge = OnboardRetentionBridge(Splash::class.java, hostCanPresent = { ready }, mainActivity = Main::class.java)
+        val rt = (RetentionRuntime.install(app, RetentionOptions(modules = listOf(bridge, feedback), router = bridge.router,
+            uiHost = bridge, store = SharedPreferencesRetentionStore(app, "feedback_start_${UUID.randomUUID()}"))) as RetentionInstallResult.Installed).runtime
+        val activity = Robolectric.buildActivity(Main::class.java).setup()
+        rt.signal(RetentionSignal.ProcessForeground)
+        feedback.openViaEntry(); shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(launches.isEmpty())
+        ready = true
+        assertFalse(bridge.canPresent(activity.get()))
+        feedback.openViaEntry(); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, launches.size)
+        assertEquals(Splash::class.java.name, launches.single().component!!.className)
+        assertEquals(io.onboardkit.ui.splash.SplashEntry.UNINSTALL, io.onboardkit.ui.splash.SplashEntry.from(launches.single()))
+        assertFalse(launches.single().getBooleanExtra("ob_without_splash_ads", false))
+        assertTrue(rt.entries.pending().isEmpty()) // No fabricated Main selection/session; Splash captures this new entry.
         activity.pause().stop().destroy()
     }
 

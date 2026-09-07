@@ -75,7 +75,7 @@ class RetentionKit private constructor(
     fun dispatchPending(token: String): RetentionDispatchResult {
         val entry = runtime.entries.pending(token) ?: return RetentionDispatchResult.Unavailable("missing_or_consumed")
         if (!runtime.userState.setupCompleted) return RetentionDispatchResult.Unavailable("setup_incomplete")
-        val eligibility = runtime.ui.eligibility()
+        val eligibility = runtime.ui.eligibility(RetentionUiPurpose.ENTRY)
         if (eligibility is RetentionEligibility.Blocked) return RetentionDispatchResult.Unavailable(eligibility.reason.name.lowercase())
         if (entry.destination == RetentionFeedbackModule.DESTINATION) {
             val module = feedback ?: return RetentionDispatchResult.Unavailable("feedback_disabled")
@@ -85,7 +85,7 @@ class RetentionKit private constructor(
             }
         }
         if (runtime.features().none { it.id == entry.destination }) return RetentionDispatchResult.Unavailable("unknown_destination")
-        if (!runtime.userState.setupCompleted || runtime.ui.eligibility() is RetentionEligibility.Blocked) {
+        if (!runtime.userState.setupCompleted || runtime.ui.eligibility(RetentionUiPurpose.ENTRY) is RetentionEligibility.Blocked) {
             return RetentionDispatchResult.Unavailable("ui_changed")
         }
         return consume(token)?.let(RetentionDispatchResult::Navigate) ?: RetentionDispatchResult.Unavailable("already_consumed")

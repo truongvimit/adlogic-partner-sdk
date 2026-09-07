@@ -44,7 +44,7 @@ class WidgetInstanceTest {
         val intent = Intent(shadowOf(first).savedIntent)
         val accepted = f.runtime.entries.capture(intent) as RetentionEntryAcceptance.Accepted
         assertEquals("10", accepted.entry.instanceId)
-        assertEquals("translate", accepted.entry.destination)
+        assertEquals("notes", accepted.entry.destination)
         assertTrue(f.runtime.entries.consume(accepted.entry.token))
         assertFalse(f.runtime.entries.consume(accepted.entry.token))
         val again = f.runtime.entries.capture(Intent(shadowOf(first).savedIntent)) as RetentionEntryAcceptance.Accepted
@@ -55,7 +55,7 @@ class WidgetInstanceTest {
         val f = Fixture()
         f.installWidget(10); f.installWidget(11)
         f.module.refresh()
-        assertTrue(f.module.configureInstance(10, listOf("history", "camera", "translate")))
+        assertTrue(f.module.configureInstance(10, listOf("guide", "saved_items", "notes")))
         f.platform.sizes[10] = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 90)
@@ -69,12 +69,12 @@ class WidgetInstanceTest {
         val restored = Fixture(store = f.store, platform = f.platform)
         // Startup refresh must not discard old saved configuration before the restore broadcast.
         RetentionWidgetProvider().onRestored(restored.app, intArrayOf(10), intArrayOf(20))
-        assertEquals(listOf("history", "camera", "translate"), restored.module.instances().first { it.appWidgetId == 20 }.featureIds)
+        assertEquals(listOf("guide", "saved_items", "notes"), restored.module.instances().first { it.appWidgetId == 20 }.featureIds)
         assertNull(restored.module.state.instance(10))
         RetentionWidgetProvider().onDeleted(restored.app, intArrayOf(11))
         assertNull(restored.module.state.instance(11))
         assertNotNull(restored.module.state.instance(20))
-        assertFalse(restored.module.configureInstance(999, listOf("translate")))
+        assertFalse(restored.module.configureInstance(999, listOf("notes")))
     }
 
     @Test fun standardLayoutsActuallyInflateWithThreeAndFourLocalizedActionsAfterLocaleChange() {
@@ -92,7 +92,7 @@ class WidgetInstanceTest {
         assertEquals("Quick actions", views.findViewById<TextView>(R.id.rk_widget_title).text.toString())
         assertEquals(View.VISIBLE, views.findViewById<View>(R.id.rk_action_4).visibility)
         language = "vi"
-        f.module.configureInstance(5, listOf("translate", "camera", "history"))
+        f.module.configureInstance(5, listOf("notes", "saved_items", "guide"))
         f.platform.sizes[5] = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 90)
@@ -121,7 +121,7 @@ class WidgetInstanceTest {
     }
 
     @Test fun narrowPortraitWidgetUsesTwoRowsDespiteLaunchersShortMinimumHeightBound() {
-        val labels = listOf("Phrase translation", "Saved phrases", "Text tools", "Travel documents")
+        val labels = listOf("Personal notes", "Saved items", "Text tools", "Getting started")
         val f = Fixture(featureProvider = RetentionFeatureProvider {
             Fixture.features.mapIndexed { i, feature -> feature.copy(label = labels[i]) }
         })
@@ -195,7 +195,7 @@ class WidgetInstanceTest {
         f.installWidget(10)
         f.module.refresh()
         assertFalse(f.module.configureInstance(10, listOf("missing")))
-        assertFalse(f.module.configureInstance(10, listOf("camera", "camera")))
+        assertFalse(f.module.configureInstance(10, listOf("saved_items", "saved_items")))
         f.platform.providers[88] = android.content.ComponentName(f.app.packageName, "OtherWidget")
         f.module.update(intArrayOf(88))
         assertFalse(f.platform.rendered.containsKey(88))

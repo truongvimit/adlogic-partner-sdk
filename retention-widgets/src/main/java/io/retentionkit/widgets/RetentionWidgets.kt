@@ -21,7 +21,7 @@ class RetentionWidgets @JvmOverloads constructor(options: WidgetOptions = Widget
     @Volatile internal var closed = true; private set
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = buildList {
-        listOf("widgets.enabled", "widgets.shortcuts.enabled").forEach { key ->
+        listOf("widgets.enabled", "widgets.shortcuts.enabled", "widgets.invitation.enabled").forEach { key ->
             if (config.values[key]?.toBooleanStrictOrNull() == null && key in config.values) add("$key must be true or false")
         }
         config.values["widgets.pin.timeout_ms"]?.let {
@@ -46,7 +46,10 @@ class RetentionWidgets @JvmOverloads constructor(options: WidgetOptions = Widget
         when (signal) {
             RetentionSignal.ProcessBackground -> pins.onBackground()
             RetentionSignal.ProcessForeground -> pins.onForeground()
-            is RetentionSignal.ConfigurationChanged -> if (!enabled()) pins.disable()
+            is RetentionSignal.ConfigurationChanged -> {
+                if (!enabled()) pins.disable()
+                else if (!invitationEnabled()) pins.closeInvitation()
+            }
             else -> Unit
         }
     }
@@ -115,6 +118,7 @@ class RetentionWidgets @JvmOverloads constructor(options: WidgetOptions = Widget
     } catch (error: Exception) { diagnose("instances", error); emptyList() }
 
     internal fun enabled(): Boolean = !closed && runtime.config.boolean("widgets.enabled", true)
+    internal fun invitationEnabled(): Boolean = enabled() && runtime.config.boolean("widgets.invitation.enabled", true)
     internal fun current(revision: Long): Boolean = enabled() && runtime.config.revision == revision
     internal fun owns(appWidgetId: Int): Boolean = appWidgetId > 0 && platform.providerFor(appWidgetId) == provider && appWidgetId in platform.ids(provider)
     internal fun onMain(action: () -> Unit) {
