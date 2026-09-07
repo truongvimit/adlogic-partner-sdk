@@ -18,6 +18,14 @@ Completed by audit_pdf in the private feedback-readiness worktree. A real lifecy
 
 Actual final command at production/test source `f15d4a45fc5be023d19425e8d6976738918ce8f4`: feedback39/39 PASS, zero failure/error/skip, release AAR PASS18seconds. Evidence: [full manifest](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket18-feedback-readiness/full-feedback-final/result.json), [minimized RED](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket18-feedback-readiness/red-minimized/result.json). Targeted/diagnostic runs are separate provenance and are not added to39. No ADB/root implementation changes; root receives the Gradle lease for integrated APK/device validation. This scoped Answer completes only the feedback correction; overall18 remains open under parent ownership.
 
+## Answer — final review correction scope
+
+The single fixer addressed all three findings from the frozen c925 review in the private final-review-fixes worktree. The real combined asynchronous post-confirmation → UNKNOWN → verified-free regression first failed with zero screen leases where one was required. A confirmed, unspent first-wake decision now persists through bounded checkpoints and can resume on authoritative readiness while the screen remains off. It rechecks the matching active occurrence and all current gates; UNKNOWN never wakes, repeated callbacks do not reset the checkpoint budget, and process recreation alone does not create a wake decision. New regressions cover cold restore, exhausted checkpoints, changed active identity, blocked channel, subscriber, dismissal and the existing two-attempt limit.
+
+Main and Feature handoffs now share one internal weak window-focus registration/cleanup owner while retaining their separate forwarding and consumption behavior. Coordination history is under Comments; earlier scoped Answers remain intact.
+
+At clean production/test source `186c6ecb96eac10d5a3743811bc40aa0e99e6815`, all104 notification tests and43 facade tests passed (147 total, zero failure/error/skip), and both release AARs assembled successfully in53seconds. The targeted RED/GREEN runs are provenance, not additional tests in that total. Immutable [JUnit/log result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/full-affected-186c6ec/result.json), [artifact/source SHA manifest](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/full-affected-186c6ec/artifact-manifest.json), and [actual minimized RED](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/first-wake-red/result.json) are outside the worktree. No ADB or root source changes were made. This Answer closes only the three implementation findings; parent retains the open final device, consumer and overall18 acceptance.
+
 ## Comments
 
 ### Parent checkpoint after ticket16 merge
