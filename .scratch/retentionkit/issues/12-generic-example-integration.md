@@ -19,3 +19,7 @@ Work in private worktree with scoped incremental commits. One build owner by roo
 ## Comments
 
 Claimed by audit_caller_translator. Source audit at retentionkit-correction/translate-flow-audit.md.
+
+Implementation checkpoint `5206487` integrates standard SDK entry APIs through `ef94857` and the common notification/Firebase profile. Generic catalogue/data migration, actual Splash → Main handoff, medium native slots and 17 instrumented routes are implemented. App26 actual unit cases passed at `c8f0cbd`; production/unit source is identical at `5206487`. Debug/test APK build passed and release R8 passed11m15s at clean `5206487`. External evidence: `SDKOptimize/retentionkit-correction/evidence/example-final/{unit-result,debug-result,release-result}.json`.
+
+Status remains claimed while the device owner runs the corrected17 cases and the SDK-owned Main focus follow-up is integrated. Follow-up debug callback logging and semantic ad-close instrumentation retain actual transport callbacks; no product flow or ad-policy override is introduced. No ADB was run by this implementer.

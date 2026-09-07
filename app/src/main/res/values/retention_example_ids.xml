@@ -1,16 +1,18 @@
 <resources>
     <item name="rk_feature_title" type="id" />
     <item name="rk_result" type="id" />
-    <item name="rk_phrase_spinner" type="id" />
-    <item name="rk_phrase_translate" type="id" />
-    <item name="rk_phrase_save" type="id" />
+    <item name="rk_note_input" type="id" />
+    <item name="rk_note_save" type="id" />
+    <item name="rk_item_save" type="id" />
     <item name="rk_text_input" type="id" />
     <item name="rk_text_analyze" type="id" />
-    <item name="rk_document_analyze" type="id" />
+    <item name="rk_guide_analyze" type="id" />
     <item name="rk_open_widget" type="id" />
     <item name="rk_open_feedback" type="id" />
     <item name="rk_open_rate" type="id" />
     <item name="rk_open_permissions" type="id" />
     <item name="rk_route_debug" type="id" />
     <item name="rk_qa_panel" type="id" />
+    <item name="rk_note_new" type="id" />
+    <item name="rk_entry_native" type="id" />
 </resources>

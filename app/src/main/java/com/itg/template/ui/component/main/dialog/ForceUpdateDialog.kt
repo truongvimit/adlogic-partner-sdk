@@ -14,6 +14,7 @@ import timber.log.Timber
 
 class ForceUpdateDialog(private val activity: Activity) {
     private var dialog: Dialog? = null
+    val isShowing: Boolean get() = dialog?.isShowing == true
 
     fun show(config: ForceUpdateConfig) {
         if (dialog?.isShowing == true) return

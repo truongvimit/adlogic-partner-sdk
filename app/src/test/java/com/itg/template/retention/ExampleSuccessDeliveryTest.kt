@@ -44,7 +44,7 @@ class ExampleSuccessDeliveryTest {
     @After fun shutdown() { RetentionRuntime.uninstallForTests() }
     @Test fun failedCoreStateCommitRetainsOutboxDespiteAcceptedQueueBoolean() {
         val data = ExampleDataStore(app)
-        data.record("durable-success", "translate", "Xin chào")
+        data.record("durable-success", "notes", "A useful note")
         clock.now = 2000
         failing.failUserState = true
         RetentionExample.flushSuccesses(app)

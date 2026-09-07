@@ -1,0 +1,16 @@
+Everyday tools: a quick guide
+
+Notes
+Write an idea, a checklist or a draft. Save it on this device. Select any saved note to edit it; use New note to start another. Saving unchanged text does not create another completed operation.
+
+Saved items
+Add a saved note to keep a copy in your collection. Editing the original note leaves that copy intact until you save it to the collection again. Removing an item from the collection does not delete the original note.
+
+Text tools
+Paste text to normalize repeated spaces and line breaks, then see its word and character counts. Text stays on this device. The tool counts space-separated words, so its count is a practical estimate rather than linguistic analysis.
+
+Keep tools close
+Add a widget to open a chosen tool from your home screen. Your launcher controls whether the widget can be added and how it can be resized. Reminders require notification permission and can be changed in Android settings.
+
+Help and feedback
+You can try another feature, keep the app, or continue to Android's uninstall confirmation. Giving a reason is optional. Rate on Play Store opens the store; the app cannot tell whether a rating was submitted.

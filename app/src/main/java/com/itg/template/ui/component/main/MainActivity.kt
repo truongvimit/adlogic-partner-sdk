@@ -59,6 +59,32 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
+    private var retentionHandoff: io.retentionkit.RetentionMainHandoff? = null
+    /** Main is an intermediary only; ordinary review/widget prompts remain in feature/settings UI. */
+    val isRetentionEntryReady: Boolean get() = window.decorView.hasWindowFocus() && !ConsentCenter.isFormShowing() &&
+        (!::noInternetDialog.isInitialized || !noInternetDialog.isShowing) &&
+        (!::forceUpdateDialog.isInitialized || !forceUpdateDialog.isShowing) && forceUpdateDialogHandle?.isShowing != true
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        retentionHandoff = io.retentionkit.RetentionKit.get()?.mainHandoff(this, savedInstanceState,
+            io.retentionkit.core.RetentionRouter { context, entry ->
+                val destination = com.itg.template.retention.ExampleDataStore.canonicalFeature(entry.destination)
+                if (destination in com.itg.template.retention.RetentionExampleContent.featureIds)
+                    android.content.Intent(context, com.itg.template.retention.RetentionPlaygroundActivity::class.java)
+                else null
+            })
+    }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        retentionHandoff?.onNewIntent(intent)
+    }
+    override fun onSaveInstanceState(outState: android.os.Bundle) {
+        retentionHandoff?.onSaveInstanceState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
     override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, BannerType.Collapsible())
 
     private val delayHandler = Handler(Looper.getMainLooper())
@@ -112,6 +138,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         if (ConsentCenter.isAlreadyResolved(this)) return
         if (!RemoteConfigUtils.getOnShowDialogConsent()) return
         delayRunnable = Runnable {
+            if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@Runnable
             ConsentCenter.request(
                 this,
                 screen = "main",
@@ -620,6 +647,8 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     // ─── Lifecycle ────────────────────────────────────────────
 
     override fun onDestroy() {
+        retentionHandoff?.close()
+        retentionHandoff = null
         retentionPermissionScope?.close()
         retentionPermissionScope = null
         ConsentCenter.detach(this)

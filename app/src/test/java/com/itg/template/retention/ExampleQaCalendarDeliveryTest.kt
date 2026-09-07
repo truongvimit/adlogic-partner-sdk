@@ -22,6 +22,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import java.time.Instant
+import java.time.Duration
 import java.util.TimeZone
 
 /** Actual debug fixture, saved schedule and Android receiver; no replacement delivery engine. */
@@ -111,5 +112,31 @@ class ExampleQaCalendarDeliveryTest {
         assertTrue(diagnostic(), hasEvent("retention_noti_skipped", "expired"))
         assertTrue(active(NotificationCampaign.DAILY).isEmpty())
         assertEquals(expiredNow, kit.runtime.clock.wallTimeMillis())
+    }
+
+    @Test fun realHandlerDelayMakesAdReturnDueWithoutCalendarInjection() {
+        kit = ExampleQa.prepare(application, initialTimeMillis = fixtureNow)
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        kit.adClicked("qa_elapsed_return")
+        kit.runtime.signal(RetentionSignal.ProcessBackground)
+        val raw = ExampleQa.savedAlarm(NotificationCampaign.AD_RETURN)
+        assertEquals(fixtureNow + 3000, JSONObject(raw).getLong("due"))
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3))
+
+        assertEquals(diagnostic(), 1, active(NotificationCampaign.AD_RETURN).size)
+        assertFalse(diagnostic(), hasEvent("retention_noti_skipped", "not_due"))
+        assertEquals(fixtureNow + 3000, kit.runtime.clock.wallTimeMillis())
+    }
+
+    @Test fun explicitCalendarJumpResetsElapsedAnchorAndContinuesTicking() {
+        val clock = ExampleQa.QaClock(fixtureNow)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(fixtureNow + 2000, clock.wallTimeMillis())
+        val nextDay = fixtureNow + Duration.ofDays(1).toMillis()
+        clock.now = nextDay
+        assertEquals(nextDay, clock.wallTimeMillis())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3))
+        assertEquals(nextDay + 3000, clock.wallTimeMillis())
     }
 }

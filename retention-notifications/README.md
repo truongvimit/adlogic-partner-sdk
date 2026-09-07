@@ -1,101 +1,92 @@
 # Retention notifications
 
-Seven configurable marketing flows with Android templates, durable calendar scheduling, local content rotation and entry routing. Select `retention-notifications` when the app needs notifications without widgets, feedback, Play review, ads, Firebase, WorkManager or Compose.
+A standalone core-only module for common retention notifications. No ads, Firebase, widgets, Play review, WorkManager or Compose dependency. Install in `Application.onCreate`; core owns process lifecycle, durable config and feature routing.
 
-## Install and route
-
-Install `RetentionNotifications()` from `Application.onCreate` inside `RetentionRuntime.install`; see [CONTRACT.md](CONTRACT.md) for the complete constructor and public signatures. Supply localized features, an explicit host Activity router, a monochrome small notification icon and the current entitlement. No-IAP apps explicitly use `NON_SUBSCRIBER`; `UNKNOWN` and subscribers suppress marketing. Call `SetupCompleted` when setup really completes. The initial setup grace is 24 hours.
-
-A host EntryActivity handles both `onCreate` and `onNewIntent` (call `setIntent(newIntent)`):
+## Installation and common entry chain
 
 ```kotlin
-when (val accepted = runtime.entries.capture(intent)) {
-    is RetentionEntryAcceptance.Accepted -> {
-        notifications.recordOpened(accepted.entry) // optional, truthful click telemetry
-        // Forward this rewritten envelope/token through required setup.
-        val entry = runtime.entries.pending(accepted.entry.token)
-        if (entry != null && setupReady && destinationExists(entry.destination)) {
-            if (runtime.entries.consume(entry.token)) openFeature(entry.destination)
-        }
-    }
-    else -> openDefaultScreen()
-}
-```
-
-The SDK uses immutable direct Activity PendingIntents. Each body/action has distinct category identity, destination and token; one-shot entries survive setup and are consumed once. Pinned action templates are reusable; core creates a fresh accepted token for each delivered Intent. The library adds no splash Activity, ad gate, clear-task flag or notification trampoline. Dismiss/Later uses a separate internal receiver that cannot launch UI.
-
-## Campaigns and profile v1 defaults
-
-All seven families default enabled, under the shared eligibility gates. They remain silent until the app has valid content/routes and the real permission, user and lifecycle conditions pass. Channels use `rk_retention_<campaign>` IDs by default. Channels are created once; existing user choices are preserved. Normal marketing channels default IMPORTANCE_DEFAULT; quiet reminder/pinned channels use IMPORTANCE_LOW with sound/vibration off. All templates use PRIVATE lockscreen visibility: the OS/user determines redaction and presentation.
-
-| Family/key | Trigger | TTL | Cooldown | Daily cap |
-|---|---|---:|---:|---:|
-| DAILY / `daily` | Local 08:00, 19:00; background | 1 hour | 1 hour | 2 |
-| WINBACK / `winback` | Local 11:00, 14:00; background and ≥48 hours inactive | 1 hour | 12 hours | 1 |
-| ONBOARDING / `onboarding` | Active unfinished setup → confirmed process background +3 seconds | 5 minutes | 24 hours | 1 |
-| AD_RETURN / `ad_return` | Actual AdClicked → confirmed process background +3 seconds | 5 minutes | 15 minutes | 2 |
-| REMINDER / `reminder` | ProcessForeground or explicit foreground refresh, silent with Later | 6 hours | 15 minutes | 4 |
-| PINNED / `pinned` | ProcessForeground or explicit foreground refresh, silent feature tiles; skip while active | 6 hours | 15 minutes | 2 |
-| LOCKSCREEN / `lockscreen` | Local 11:30, 17:00, 20:00; background; skip while active by default | 1 hour | 1 hour | 3 |
-
-Additional defaults (all key names below start with `notifications.`):
-
-| Key | Default | Validation |
-|---|---|---|
-| `profile_version` | `1` | Exactly `1` |
-| `enabled` | `true` | Strict lowercase boolean |
-| `setup_grace_ms` | `86400000` | 0–365 days, milliseconds |
-| `new_user_days` | `2` | 0–365 elapsed days after install |
-| `winback.inactivity_ms` | `172800000` | 0–365 days, milliseconds |
-| `onboarding.grace_ms` | `0` | 0–365 days from durable install time, not each onboarding screen |
-| `background_delay_ms` | `3000` | 1–60000 ms and shorter than both token TTLs |
-| `ad_return.token_ttl_ms`, `onboarding.token_ttl_ms` | `300000` each | 1–300000 ms |
-| `lockscreen.replace` | `false` | Strict lowercase boolean |
-| `daily.slots` | `08:00,19:00` | Up to 24 unique `HH:mm` slots |
-| `winback.slots` | `11:00,14:00` | Same |
-| `lockscreen.slots`, `lockscreen.new_user_slots` | `11:30,17:00,20:00` each | Same; new-user profile applies during the first two elapsed days |
-
-Every `<campaign>` has `.enabled`, `.ttl_ms` (1 ms–7 days), `.cooldown_ms` (0–365 days) and `.daily_cap` (1–50), with defaults in the campaign table. An empty slot string explicitly schedules no slots. Malformed/duplicate slots, unsupported profile versions, unknown notification keys and malformed booleans reject the **entire** update. No key allows subscriber marketing, exact alarms, screen wake or full-screen intent.
-
-Use the existing core cached PATCH API. Absent fields keep the last-known-good profile/defaults; explicit remove restores a default:
-
-```kotlin
-val result = runtime.updateConfig(mapOf(
-    "notifications.daily.slots" to "09:00,18:30",
-    "notifications.lockscreen.replace" to "true",
+val notifications = RetentionNotifications(RetentionNotificationOptions(
+    smallIconRes = R.drawable.ic_notification,
+    preset = NotificationPreset.COMMON_PLAN,
 ))
-// Applied(revision) or Rejected(reasons); no second Firebase client or startup fetch.
-runtime.updateConfig(emptyMap(), removeKeys = setOf("notifications.daily.slots"))
 ```
 
-Onboarding is a separate marketing phase: active and unfinished, grace from install (default zero), known non-subscriber, no host/system transition, permission/channel and current background. Completion, abort, foreground, config/entitlement changes or a scoped external transition invalidate pending callbacks. Ad-return also requires a fresh click recorded in the foreground. Both tokens are deliberately cancelled on process restart: a cold unrelated exit cannot use an old click. These three-second timers are in-process best effort, not wakeup guarantees.
+`COMMON_PLAN` is the default. `LEGACY_SDK` preserves the original SDK cadence and `rk_retention_<campaign>` channel IDs; it is **not** a Translate preset. Pick the preset when installing. Remote patches override individual policy values, without silently switching channel identity.
 
-## Content, renderer and ownership
+Supply localized, app-neutral feature IDs/labels/descriptions and a router targeting the host's real Splash. All body/action entry intents must follow **Splash → existing entry interstitial completed or legitimately skipped → Main actually resumed → destination**. Use the umbrella's standard entry integration with OnboardKit for the common chain; direct-module partners own the equivalent lifecycle handoff. `recordOpened()` only records an accepted entry, and never navigates or consumes it. Dismiss/X/Later is an internal broadcast that cannot open UI. Every action uses a distinct immutable direct Activity PendingIntent; no notification trampoline exists.
 
-The default content provider uses the core localized feature catalogue. Daily and reminder use accessible system text templates; winback can use a bounded bundled BigPicture; lockscreen has a bundled expanded title/body/CTA/dismiss layout; pinned has up to four independent feature tiles. English and Vietnamese fallback copy is bundled, with the selected app locale supplied by core. More app-specific copy and localization belongs in the provider.
+The host owns permission prompts, genuine setup completion, authoritative entitlement, consent/ads and real feature functionality. No-IAP hosts may explicitly set `NON_SUBSCRIBER`; `UNKNOWN` and subscribers suppress all marketing. The default setup-specific onboarding grace is **24 elapsed hours from installation**, while other campaigns use a separate **24 hours from setup completion**. Both durations are configurable; elapsed time is not a calendar-day boundary. Abandonment remains active/unfinished only. Entry taps never bypass unfinished setup.
 
-Supply `NotificationContentProvider` for a local list of `NotificationContent` per family, with stable unique IDs, catalogue destinations and optional bundled `imageRes`. Selection cycles deterministically without repeating the previous recorded content when multiple items exist. A removed/changed catalogue safely selects the first valid item. Failed rendering, blocked gates and failed notify do not advance rotation. Concurrent renders recheck the last selected content before claiming and may skip `rotation_changed`.
+## Shared profile and source precedence
 
-`NotificationRenderer` decorates a standard Android builder synchronously. Keep it short and local; receiver calls have Android's broadcast deadline. Only use the supplied main/action/dismiss PendingIntents in custom views. Standard fields and action list are reset by the SDK after decoration. The SDK cannot validate arbitrary PendingIntents a partner embeds in RemoteViews. It rechecks live config revision, lifecycle, entitlement, permission/channel, TTL and host transition after rendering and again after claim. No unmanaged image thread, network fetch or Activity retention is provided.
+Primary references: the common `Notification System Implementation & Test Plan` (complete MD plus DOCX image tables), the newer MO lockscreen v1.0 document (2026-08-17), `Noti.pdf`, and `NOTIFICATION_GUIDE.pdf`. Generic templates and priorities follow the main plan; the detailed MO default skip logic takes precedence over its earlier repeat-wake overview. Source-app labels/art are examples. The detailed audit, source hashes and exact page references are in `SDKOptimize/retentionkit-correction/noti-spec-audit.md` outside this repository.
 
-## Durable state and scheduling contract
+| Campaign / fixed SDK ID | Common trigger | Delivery TTL | Cooldown / daily cap |
+|---|---|---:|---:|
+| `daily` / 7101 | 08:00, 19:00 local, background | 1 h | 1 h / 2 |
+| `winback` / 7102 | 11:00, 14:00 local; inactivity **14–45 days inclusive** | 1 h | 1 h / 2; **3 lifetime reservations** |
+| `onboarding` / 7103 | Active unfinished setup, after install grace, confirmed background +3 s | 5 min | 24 h / 1 |
+| `ad_return` / 7104 | Genuine foreground ad click, then confirmed departure +3 s | 5 min | 15 min / 2 |
+| `reminder` / 7105 | Foreground/open; quiet, Later dismisses this occurrence | 6 h | **15 min** / 4 |
+| `pinned` / 7106 | Foreground/open; quiet four-feature extension, skip while visible | 6 h | 15 min / 2 |
+| `lockscreen` / 7107 | **11:30, 17:00, 20:00**, background | 1 h to deliver; **no posted timeout** | 1 h / 3 |
+| `app_exit` / 7108 | Completed setup, no qualifying ad click, confirmed departure +3 s | 5 min | 15 min / 2 |
 
-The namespace `notifications.state.v1` belongs to this module. A synchronous transaction reserves an occurrence and its daily budget **before** `notify`; success finalizes last-submit, rotation and active occurrence together. A thrown `notify` releases its budget reservation, leaves a failed dedupe record and does not spend cooldown. A new trigger can retry; the same occurrence is not automatically retried. Blocked/invalid content never claims. A crash after claim leaves `claimed` with an **unknown delivery outcome**, conservatively reserving that day's capacity and cooldown. It is never reported submitted on restore. The bounded ledger retains eight days of records (maximum 4096); stale claims age out, while calendar handled dates remain. Exactly-once display through a crash is not promised.
+The main plan's “Kill App” test also covers a no-click departure; its PDF/reference implementation describes ad-click departure. `APP_EXIT` supplies the former as an observable generic campaign. One departure arms one campaign; `AD_RETURN` wins when a valid click exists. There is no OS kill callback. A hard kill before background scheduling is unobservable. Common exits save a one-shot inexact alarm before the in-process timer; process death after saving can recover the same occurrence, with every gate rechecked. Foreground, config changes, subscriber/unknown entitlement, host UI and external transitions cancel pending exits. Timer completion and OS delivery race against the same saved envelope and claim. Onboarding remains session-only; restart does not invent an active setup scope.
 
-A notify return reports `PostSubmitted`; the OS may still suppress or delay presentation. If the following persistence operation fails, `receiptPersisted=false`, diagnostics record failure and the existing unknown claim prevents immediate duplicate replay. Events are dispatched on main outside engine/store locks; sink errors do not repeat notify. No event claims displayed/impression/screen-woken.
+| Channel | Families | New-channel defaults |
+|---|---|---|
+| `lock_screen_alerts` | lockscreen | HIGH, public generic content |
+| `updates_news` | winback, ad_return, app_exit, onboarding | HIGH |
+| `daily_tips` | daily | DEFAULT, silent/no vibration |
+| `reminders` | reminder | LOW, silent |
+| `rk_retention_pinned` | pinned extension | LOW, silent |
 
-Calendar alarms use `AlarmManager.setWindow(RTC_WAKEUP, ...)` with a ten-minute **requested window**, not a ten-minute delivery SLA. RTC_WAKEUP is the integer `0`, wakes the CPU if the OS delivers it and does not wake the screen. Android may defer inexact alarms for power restrictions/Doze. No exact-alarm permission, full-screen intent, wake lock or foreground service exists.
+Daily sound/HUN conflicts between source attachments; the shared default conservatively follows the quiet guide. Existing channels are never deleted/recreated or upgraded to evade user choices. `channelIds` overrides preserve a migrated app's exact existing channel choices. Existing SDK IDs7101–7107 stay stable; the source1001-series IDs were suggestions, not forced migration IDs.
 
-Each alarm has a stable campaign/slot PendingIntent and a saved revision, local date, due time and expiry. Reconcile durably replaces the desired set, cancels removed identities and rearms desired identities. Failed scheduling is diagnosed and retried on reconciliation. A queued old-revision or changed-time callback cannot post or restore removed slots. The next local occurrence is persisted/rearmed before processing a delivered one, even if current gates fail. A clock moved backward cannot repeat a handled date; expired occurrences are skipped, not replayed in a burst.
+Arbitration: lockscreen > Updates group > daily > reminder. A due, eligible, uncapped higher-priority scheduled occurrence wins even if a lower-priority receiver arrives first. Existing Updates posts block another Updates post until dismissed/opened. A durable **30-second guard** prevents cross-family bursts; this numeric value is a chosen configurable default because the main document leaves it blank. Lower-priority occurrences are skipped, not queued for burst replay. Initial pinned creation also spends the guard; an already-visible pinned surface is skipped without a new post. A single foreground refresh therefore cannot create both a reminder and pinned notification within the guard. Per-family cooldowns/caps still apply; neither priorities nor the guard can bypass permission, entitlement, phase or TTL.
 
-Calendar math uses `java.util.GregorianCalendar` on API 24: a missing DST time shifts forward by the gap, an overlapping time chooses Calendar's later standard-time occurrence, and identity is one local date/slot. Timezone/clock change triggers recomputation. Boot and own package replacement rearm from cached configuration via Application installation, without an Activity or network. Force-stop stays stopped until user interaction; ordinary process death differs. Notification timeoutAfter is enforced by Android on API 26+; API 24/25 have gate-time TTL and may retain an already posted notification until tap/dismiss/replace. Pinned/lockscreen active checks use actual tagged OS notifications and do not reset at midnight.
+The exact slots, two-day new-user cohort, replacement default false, three-second departure and reminder15min are known reference values. Winback14–45d and max3 are explicit PDF requirements. TTLs, other cooldowns/daily caps, post-setup24h grace, guard30s and token5min bounds are chosen SDK defaults, not falsely attributed to Translate. `LEGACY_SDK` keeps ≥48h unbounded inactivity, winback12h cooldown/1 per day/no lifetime cap, onboarding grace0, no shared guard/arbitration, one-hour posted lock timeout, in-process ad delay and APP_EXIT disabled. That48h inactivity was the original SDK choice, not Translate's two-day cohort.
 
-State and scheduler transitions are serialized inside this module; transactions are atomic in the main app process only, as core documents. Arbitrary multi-process writers are unsupported. Config/OS delivery are not one cross-system atomic transaction: revision is checked at commit, and reconciliation cancels disabled campaigns after concurrent state changes.
+## Complete configuration contract
 
-## Migration and validation
+All keys below use the `notifications.` prefix. Version1, `enabled=true`; all eight common campaigns enabled. Strict lowercase booleans; unknown keys/malformed values reject the entire patch and keep the last good revision. Empty slots disable that schedule.
 
-Disable the legacy engine and cancel its exact known alarm PendingIntents/notification IDs before enabling this module. The SDK does not guess old classes/request codes or cancel another module's notifications. Preserve channel IDs with `RetentionNotificationOptions(channelIds = ...)` where meanings match. Never delete a blocked old channel to bypass the user's choice.
+| Keys | Common default | Accepted values |
+|---|---|---|
+| `profile_version` | `1` | exactly1 |
+| `enabled`, `arbitration.enabled`, `app_exit.durable`, `lockscreen.persistent` | `true` | boolean |
+| `setup_grace_ms`, `onboarding.grace_ms` | `86400000` each | 0–365 days in ms |
+| `new_user_days` | `2` | 0–365 elapsed days from install |
+| `winback.inactivity_ms`, `winback.max_inactivity_ms` | `1209600000`, `3888000000` | 0–365 days; maximum0 means unbounded, otherwise ≥minimum |
+| `guard_window_ms` | `30000` | 0–365 days; 0 disables guard |
+| `background_delay_ms` | `3000` | 1–60000, shorter than both token TTLs |
+| `ad_return.token_ttl_ms`, `onboarding.token_ttl_ms` | `300000` each | 1–300000 |
+| `lockscreen.replace` | `false` | boolean |
+| `daily.slots`, `winback.slots` | `08:00,19:00`; `11:00,14:00` | ≤24 unique `HH:mm` values |
+| `lockscreen.slots`, `lockscreen.new_user_slots` | `11:30,17:00,20:00` each | same; first2 elapsed days use new-user slots |
+| `<campaign>.enabled` | `true` | boolean |
+| `<campaign>.ttl_ms`, `.cooldown_ms`, `.daily_cap` | campaign table | TTL1ms–7d; cooldown0–365d; cap1–50 |
+| `<campaign>.lifetime_cap` | winback3; others0 | 0–10000; 0 disables this limit |
 
-`NotificationLegacyConfig.translate(presentLegacyValues)` maps known Translate keys to native overrides and reports `unsupportedKeys`. Review the unsupported list (premium/wake/content JSON and other subsystems require explicit product/content migration), then pass translated overrides to `runtime.updateConfig`. Missing legacy fields are not inferred. Old daily budgets/cooldowns are not silently imported; choose a rollout grace/kill switch if state continuity is required.
+Use core's cached PATCH API; absent keys preserve existing values, explicit removal restores the selected preset's default. No second Firebase client is initialized. `NotificationLegacyConfig.keys` exposes exact legacy fetch keys and `map(presentValues)` returns `NotificationConfigMigration(overrides, unsupportedKeys)`; `translate()` remains a source-compatible alias. Feed actual fetched **present** values to this mapper, then use the same config owner to apply a single combined patch.
 
-Tests run with `./gradlew :retention-notifications:testDebugUnitTest :retention-notifications:assembleRelease --no-daemon --console=plain --max-workers=2`. Robolectric checks gates, actual Android channel/manifest/PendingIntent adapters, seven templates, delayed cancellation, state restart, storage/post failures, concurrency, stale revisions, reduced slots, TTL/DST/timezone and rotation. Passing these does not prove physical/OEM/Doze timing. The root task owns Pixel ADB and final sample/minified/selective-publication validation under Tickets06–08.
+Exact aliases: `notiDailyEnabled→daily.enabled`, `noti_daily_slots→daily.slots`, `notiWinbackEnabled→winback.enabled`, `noti_winback_slots→winback.slots`, `notiLockscreenEnabled→lockscreen.enabled`, **`noti_lockscreen_slots→lockscreen.slots`**, **`noti_lockscreen_slots_new→lockscreen.new_user_slots`**, **`notiLockscreenReplace→lockscreen.replace`**, `notiClickedAdsEnabled→ad_return.enabled`, `notiOnOpenEnabled→reminder.enabled`, `noti_new_user_days→new_user_days`. No undocumented `notiKillAppEnabled` alias is invented. Wake seconds, premium marketing, arbitrary remote image/content JSON and keys belonging to other modules are reported unsupported here, not silently accepted.
+
+## Content and lockscreen lifecycle
+
+The generic default catalogue combines **different campaign framing** with the real feature label/description; EN/VI strings are bundled. Daily uses BigText. Winback/exit use BigPicture with a bounded local image (a bundled generic illustration is the fallback); exits have independent collapsed “Before you go” and expanded feature titles. Lockscreen includes title/body/image/CTA/X; pinned has distinct feature tiles. Supply local `NotificationContent` for app copy/art, including `expandedTitle`, or decorate with `NotificationRenderer`. All supplied destinations must be allowlisted features. Default CTA is Action now/Mở ngay. Custom views must use the supplied PendingIntents; the SDK restores main/delete/standard actions and checks all gates again after renderer and storage boundaries.
+
+Common lockscreen selection is random excluding the previous recorded content; rotation survives restart and is not bound to a slot. A single item may repeat. Other families cycle deterministically. Failed/blocked rendering or notify does not advance rotation. Default replacementfalse leaves an untouched OS notification in place across slot/day boundaries. No repeat alert, midnight reset or one-hour posted timeout occurs. Replacementtrue replaces the same family ID at eligible slots and rotates. X/swipe cancels only the matching occurrence; ordinary app foreground also dismisses the old lockscreen. Delivery TTL only controls whether a queued alarm may first post. The persistent lockscreen PendingIntent uses core's reusable-template mechanism so a days-old visible notification still creates a fresh, once-consumed entry when tapped; selected feature validation still applies.
+
+The MO document explicitly asks dev to report feasibility for its20s wake request. `ACQUIRE_CAUSES_WAKEUP` is deprecated; `TURN_SCREEN_ON` is intended for home automation and is not a normal generic-app permission. A legacy wake lock may work on some devices, but cannot offer a portable all-app20s guarantee. The SDK uses **OS-controlled presentation**, records `wake_capability=os_controlled` on lockscreen submission, and does not fake compliance with a background Activity launch. No wake lock/full-screen intent/exact alarm/FGS workaround is included. [Android PowerManager](https://developer.android.com/reference/android/os/PowerManager.html), [TURN_SCREEN_ON](https://developer.android.com/reference/android/Manifest.permission#TURN_SCREEN_ON), [AOSP permission declaration](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/res/AndroidManifest.xml), checked2026-09-07.
+
+## State, scheduling and migration limits
+
+The owned `notifications.state.v1` namespace atomically reserves occurrence, daily/lifetime capacity and guard before notify. A known thrown notify releases its reservation; a crash/receipt-storage failure leaves unknown delivery and conservatively spent capacity. Lifetime counts do not disappear with the eight-day occurrence ledger, a new day or process restart. Successful submission advances rotation and global guard. `PostSubmitted(receiptPersisted)` describes a returned notify call, never a visible impression. Config revision, permission, channel/group, entitlement, host transition, setup phase, time bounds, cap, active-group state and rotation are rechecked; a stale alarm cannot revive a removed config.
+
+Calendar identities remain stable per family/local slot; handled dates prevent backward-clock duplication. Reboot/package replacement/clock/timezone reconciliation rearms desired records from cold local configuration. `GregorianCalendar` works on API24: nonexistent DST time shifts forward; repeated time chooses standard-time occurrence. `setWindow(RTC_WAKEUP, due, 10min, ...)` requests an **inexact** window: RTC_WAKEUP is0 and can wake CPU, not screen. Android/Doze/OEM restrictions can defer longer. Force-stop suspends execution until user interaction. No scheduling/display timing SLA is claimed. Alarm fallback after process death is also inexact;3s is only the live timer's intended confirmation delay.
+
+Disable and cancel the old engine's **known owned** alarm identities before migration. Do not delete user-disabled channels. Existing eight-day attempts/cooldowns and7101–7107 identities are retained; new lifetime limits import retained submitted/uncertain attempts once before pruning, without resetting known capacity; already-pruned legacy historical sends cannot be reconstructed. Cross-process storage writers remain unsupported. Active Process progress/FGS and battery-optimization UI from the source plan belong to real host jobs, not these marketing campaigns.
+
+Validation: `:retention-notifications:testDebugUnitTest :retention-notifications:assembleRelease --max-workers=2`; unit assertions cover both profiles, Android channels/templates/actions, permission/subscriber/setup, caps/guard/concurrency, durable exit/replay/cancellation, old callbacks, lockscreen lifetime/rotation, calendar DST/timezone/reboot-style restore and real failure boundaries. Device/full Splash acceptance belongs to the parent correction run; this module's test result does not claim physical timing or ad presentation.
