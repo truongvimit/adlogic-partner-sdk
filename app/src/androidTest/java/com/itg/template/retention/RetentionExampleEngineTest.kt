@@ -53,7 +53,7 @@ class RetentionExampleEngineTest {
     private var feedbackCleanup: (() -> Unit)? = null
     private data class ActivityMoment(val activity: Activity, val phase: String, val entry: RetentionEntry?, val elapsed: Long = SystemClock.elapsedRealtime())
     private val moments = CopyOnWriteArrayList<ActivityMoment>()
-    private var lastAdBackAt = 0L
+    private var lastAdGestureAt = 0L
     private val activityObserver = object : Application.ActivityLifecycleCallbacks {
         private fun record(activity: Activity, phase: String) {
             val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry
@@ -457,23 +457,50 @@ class RetentionExampleEngineTest {
     /** Actual device gesture on the actual test-ad Activity only. No synthetic ad callbacks. */
     private fun dismissVisibleEntryTestAd() {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastAdBackAt < 1000) return
+        if (now - lastAdGestureAt < 1000) return
+        val device = UiDevice.getInstance(instrumentation)
+        if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+        val closeLabel = java.util.regex.Pattern.compile(
+            "^(?:close(?: ad)?|interstitial close button|đóng(?: quảng cáo)?)$",
+            java.util.regex.Pattern.CASE_INSENSITIVE or java.util.regex.Pattern.UNICODE_CASE
+        )
+        val closeResource = java.util.regex.Pattern.compile(
+            ".*:id/(?:close|close_button|close_btn|interstitial_close|interstitial_close_button)$",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        )
+        // Only a semantically identified, currently exposed close control can be clicked.
+        // Unlabelled image buttons and ad content are never guessed from their position.
+        val close = device.findObject(By.desc(closeLabel).pkg(application.packageName))
+            ?: device.findObject(By.text(closeLabel).pkg(application.packageName))
+            ?: device.findObject(By.res(closeResource).pkg(application.packageName))
+        if (close != null) {
+            val clicked = runCatching {
+                if (!close.isEnabled || !focusedTestAd() || device.currentPackageName != application.packageName) return
+                val observed = "class=${close.className} resource=${close.resourceName} description=${close.contentDescription} text=${close.text} bounds=${close.visibleBounds}"
+                if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+                lastAdGestureAt = now
+                close.click()
+                android.util.Log.i("RetentionAdEvidence", "actual gesture=semantic_close $observed elapsed=$now")
+            }.onFailure {
+                android.util.Log.i("RetentionAdEvidence", "close_control_changed=${it.javaClass.simpleName} elapsed=$now")
+            }.isSuccess
+            if (clicked) return
+        }
+        // Back is a real fallback gesture, not proof that the ad accepted or completed it.
+        if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+        lastAdGestureAt = now
+        val sent = device.pressBack()
+        android.util.Log.i("RetentionAdEvidence", "actual gesture=Back activity=com.google.android.gms.ads.AdActivity sent=$sent elapsed=$now")
+    }
+
+    private fun focusedTestAd(): Boolean {
         var visibleAd = false
         instrumentation.runOnMainSync {
             val current = kit.runtime.activities.current()
             visibleAd = current?.javaClass?.name == "com.google.android.gms.ads.AdActivity" &&
                 !current.isFinishing && !current.isDestroyed && current.hasWindowFocus()
         }
-        val device = UiDevice.getInstance(instrumentation)
-        if (!visibleAd || device.currentPackageName != application.packageName) return
-        // Recheck immediately before input so a completed ad cannot deliberately send Back to a feature.
-        instrumentation.runOnMainSync {
-            visibleAd = kit.runtime.activities.current()?.javaClass?.name == "com.google.android.gms.ads.AdActivity"
-        }
-        if (!visibleAd) return
-        lastAdBackAt = now
-        val sent = device.pressBack()
-        android.util.Log.i("RetentionAdEvidence", "actual gesture=Back activity=com.google.android.gms.ads.AdActivity sent=$sent elapsed=$now")
+        return visibleAd
     }
 
     private fun clickFeedback(tag: String) {
