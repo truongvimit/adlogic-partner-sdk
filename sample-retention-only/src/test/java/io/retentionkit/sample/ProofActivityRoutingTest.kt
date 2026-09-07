@@ -51,7 +51,11 @@ class ProofActivityRoutingTest {
         runtime.signal(RetentionSignal.ExternalTransitionStarted("feedback.source", "feature", 120_000))
         val entry = RetentionEntry(RetentionEntrySource.FEEDBACK, "word_count", "rescue_feature")
         token = entry.token
-        controller = Robolectric.buildActivity(ProofActivity::class.java, runtime.createEntryIntent(entry)).setup().visible()
+        // This test isolates final-destination readiness; front-door traversal has separate real
+        // Splash tests. Do not launch a feature Activity with an Intent targeting Splash.
+        val destination = RetentionEntryCodec.write(android.content.Intent(
+            RuntimeEnvironment.getApplication(), ProofActivity::class.java), entry)
+        controller = Robolectric.buildActivity(ProofActivity::class.java, destination).setup().visible()
         main.idle()
         assertNotNull(runtime.entries.pending(token))
         assertTrue(status().contains("Tool: uppercase; pending entry: true"))
