@@ -404,7 +404,7 @@ class RetentionFeedbackModuleTest {
         assertEquals(FeedbackPhase.SYSTEM_HANDOFF, customController!!.state()!!.phase)
     }
 
-    @Test fun failedConfirmationCannotFallbackAfterReentrantDisableAndExplicitAppInfoRemainsAvailable() {
+    @Test fun failedConfirmationCannotFallbackAfterReentrantDisable() {
         val attempts = mutableListOf<String?>()
         install(configure = { base -> base.copy(launcher = FeedbackLauncher { _, intent ->
             if (intent.component != null) { launches.add(intent); true }
@@ -414,6 +414,26 @@ class RetentionFeedbackModuleTest {
         customController!!.continueToSystem()
         assertEquals(1, attempts.size)
         assertFalse(events.any { it.name == "retention_feedback_system_handoff" })
+    }
+
+    @Test fun explicitAppManagementOptionUsesSettings() {
+        install(custom = false, configure = { it.copy(systemAction = FeedbackSystemAction.APP_MANAGEMENT) })
+        show()
+        (view("rk_feedback_continue") as Button).performClick()
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, launches.last().action)
+    }
+
+    @Test fun disabledFallbackRestoresOpenSessionAfterConfirmationRefusal() {
+        val attempts = mutableListOf<String?>()
+        install(configure = { base -> base.copy(appManagementFallback = false, launcher = FeedbackLauncher { _, intent ->
+            if (intent.component != null) { launches.add(intent); true }
+            else { attempts.add(intent.action); false }
+        }) })
+        show()
+        assertTrue(customController!!.continueToSystem() is FeedbackActionResult.Failed)
+        assertEquals(1, attempts.size)
+        assertEquals(FeedbackPhase.OPEN, customController!!.state()!!.phase)
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
     }
 
     @Test fun customNativeSlotReceivesRealLifecycleAndClosesOwnedBindingOncePerRecreation() {
