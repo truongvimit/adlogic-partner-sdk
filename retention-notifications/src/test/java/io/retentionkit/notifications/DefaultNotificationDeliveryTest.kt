@@ -128,4 +128,23 @@ class DefaultNotificationDeliveryTest {
             runtime.signal(RetentionSignal.ProcessBackground)
         }
     }
+
+    @Test fun qualifyingAdDeparturesAreNotSilentlyCappedAtTwoPerDay() = assertThreeDepartures(adClicked = true)
+    @Test fun qualifyingOrdinaryDeparturesAreNotSilentlyCappedAtTwoPerDay() = assertThreeDepartures(adClicked = false)
+
+    private fun assertThreeDepartures(adClicked: Boolean) {
+        install()
+        val campaign = if (adClicked) NotificationCampaign.AD_RETURN else NotificationCampaign.APP_EXIT
+        repeat(3) { departure ->
+            runtime.signal(RetentionSignal.ProcessForeground)
+            clock.advance(31_000) // Preserve the SDK anti-overlap guard after the quiet Reminder.
+            if (adClicked) runtime.signal(RetentionSignal.AdClicked("click_$departure"))
+            runtime.signal(RetentionSignal.ProcessBackground)
+            clock.advance(3_000)
+            delays.fire()
+            assertEquals(departure + 1, platform.posts.count { it.first == campaign })
+            platform.cancel(campaign)
+            clock.advance(15 * MINUTE)
+        }
+    }
 }
