@@ -83,4 +83,18 @@ class DefaultNotificationDeliveryTest {
         assertEquals("The same open is not replayed by ready callbacks", 1,
             platform.posts.count { it.first == NotificationCampaign.REMINDER })
     }
+
+    @Test fun reminderHasItsDocumentedFifteenMinuteCooldownWithoutAnInventedFourPerDayLimit() {
+        install()
+        repeat(5) {
+            runtime.signal(RetentionSignal.ProcessForeground)
+            assertEquals(it + 1, platform.posts.count { post -> post.first == NotificationCampaign.REMINDER })
+            runtime.signal(RetentionSignal.ProcessBackground)
+            runtime.signal(RetentionSignal.ProcessForeground)
+            assertEquals("Immediate reopen must still respect cooldown", it + 1,
+                platform.posts.count { post -> post.first == NotificationCampaign.REMINDER })
+            runtime.signal(RetentionSignal.ProcessBackground)
+            clock.advance(15 * MINUTE)
+        }
+    }
 }
