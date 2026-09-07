@@ -37,7 +37,7 @@ class RetentionPlaygroundRoutingTest {
             splashActivity = com.itg.template.ui.component.splash.SplashActivity::class.java,
             mainActivity = com.itg.template.ui.component.main.MainActivity::class.java,
             featureProvider = RetentionFeatureProvider(RetentionExampleContent::features),
-            featureRouter = RetentionSplashRouter(RetentionPlaygroundActivity::class.java),
+            featureRouter = RetentionRouter { context, _ -> android.content.Intent(context, RetentionPlaygroundActivity::class.java) },
             resolveDestination = ExampleDataStore::canonicalFeature,
             customize = { standard -> standard.copy(
                 notifications = null, widgets = null, feedback = null, review = null, configSource = null,

@@ -11,7 +11,7 @@ val result = RetentionSuite.install(this, RetentionSuiteOptions(
     splashActivity = SplashActivity::class.java,
     mainActivity = MainActivity::class.java,
     featureProvider = RetentionFeatureProvider(::localizedFeatures),
-    featureRouter = RetentionSplashRouter(FeatureActivity::class.java),
+    featureRouter = RetentionRouter { context, _ -> Intent(context, FeatureActivity::class.java) },
 ))
 ```
 

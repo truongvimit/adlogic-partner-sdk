@@ -38,7 +38,7 @@ class RetentionSuiteTest {
     private fun options(resolve: (String) -> String = { it }, customize: (RetentionKitOptions) -> RetentionKitOptions = { it }) = RetentionSuiteOptions(
         Splash::class.java, Main::class.java,
         RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", android.R.drawable.ic_menu_edit), RetentionFeature("guide", "Guide", android.R.drawable.ic_menu_help)) },
-        RetentionSplashRouter(Feature::class.java), resolveDestination = resolve,
+        RetentionRouter { context, _ -> Intent(context, Feature::class.java) }, resolveDestination = resolve,
         customize = { standard -> customize(standard.copy(
             notifications = null, widgets = null, review = null, feedback = null, configSource = null,
             eventSink = RetentionEventSink.NONE, uiHost = RetentionUiHost.NONE,
@@ -69,6 +69,7 @@ class RetentionSuiteTest {
         idle(); assertNull(shadowOf(main.get()).nextStartedActivity)
         main.start().resume(); idle()
         val target = checkNotNull(shadowOf(main.get()).nextStartedActivity)
+        assertEquals("Final feature must retain the ordinary Main back stack", 0, target.flags)
         assertNotNull(kit.runtime.entries.pending(entry.token))
         main.pause()
         val feature = feature(target)

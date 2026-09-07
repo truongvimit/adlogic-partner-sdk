@@ -26,7 +26,7 @@ object RetentionExample {
                 splashActivity = SplashActivity::class.java,
                 mainActivity = MainActivity::class.java,
                 featureProvider = RetentionFeatureProvider(RetentionExampleContent::features),
-                featureRouter = RetentionSplashRouter(RetentionPlaygroundActivity::class.java),
+                featureRouter = RetentionRouter { context, _ -> android.content.Intent(context, RetentionPlaygroundActivity::class.java) },
                 localeProvider = RetentionLocaleProvider(RetentionExampleContent::localizedContext),
                 resolveDestination = ExampleDataStore::canonicalFeature,
                 hostCanPresent = {
