@@ -17,3 +17,18 @@ Work in private worktree, commit scoped parts. Build only when root grants owner
 ## Comments
 
 Claimed by platform_research; source audit is outside repo at retentionkit-correction/noti-spec-audit.md.
+
+
+## Answer
+
+Notification-owned implementation is complete at `b695be5`; integration acceptance remains with the parent correction run, so this ticket remains claimed until the shared Firebase mapper and full Splash/example route are integrated.
+
+- Default public `NotificationPreset.COMMON_PLAN` implements the canonical cadence, common channel groups, campaign framing and priority/30s guard (including first pinned creation). `LEGACY_SDK` explicitly preserves old SDK behavior;48h is not attributed to Translate. Existing7101–7107 identities and legacy channel override support stay intact.
+- Added APP_EXIT7108/OTHER for confirmed completed-app departure; AD_RETURN wins on the same departure. Common exit occurrence is persisted before inexact fallback and live3s timer; callback/foreground/config/permission/subscriber/restart checks prevent stale replay. Hard kill before scheduling is explicitly unobservable.
+- Winback14–45d inclusive,2/day/max3 lifetime; durable reservations survive pruning/restart and import retained legacy submitted/unknown attempts once. Unknown process-death delivery remains unknown. No reconstruction of already-pruned history is claimed.
+- Common lockscreen defaults skip untouched across slots/days, random excluding previous, no displayed timeout; delivery TTL remains1h. Ordinary app foreground dismisses it. Persistent template produces a fresh once-consumed entry on tap; custom renderer retains SDK PendingIntent ownership. Wake20s is explicitly nonportable, with `wake_capability=os_controlled` and official API rationale.
+- Default generic EN/VI campaign-specific title/body/action, independent collapsed/expanded exit titles, bounded local BigPicture and lockscreen image/CTA/X. Invalid/empty higher-priority content cannot starve a valid lower flow. `NotificationLegacyConfig.keys/map` exposes the single exact alias table; old `translate()` remains source compatible. Root owns shared Firebase source composition, without a second config client.
+
+Validation actually executed: `:retention-notifications:testDebugUnitTest :retention-notifications:assembleRelease --no-daemon --console=plain --max-workers=2`, JBR21. Final actual XML **56 tests,0 failures/errors/skips**:26 existing behavior,20 new common-profile,5 calendar,5 Android adapter. Both production variants compile and release AAR assembly passes. First run had only a fixture compile error constructing an internal config snapshot; fixed by installing the real runtime. Final run3 is green.
+
+Immutable logs, actual JUnit, AAR and hashes: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/notification-validation/b695be5/verification.json`. Canonical complete-source audit: `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/noti-spec-audit.md`. No ADB or physical timing run was performed by this agent. Shared-core/facade integration and full entry-chain device acceptance must be reported separately.
