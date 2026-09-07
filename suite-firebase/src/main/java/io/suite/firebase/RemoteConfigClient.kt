@@ -107,6 +107,17 @@ object RemoteConfigClient {
         return value.asString().takeIf { it.isNotBlank() }
     }
 
+    /** Capture selected server values from one activated getAll snapshot. Used when a document
+     * and its historical aliases must be resolved together. Never expose in-app defaults.
+     */
+    fun remoteStrings(keys: Set<String>): Map<String, String> {
+        val snapshot = remoteConfig()?.all ?: return emptyMap()
+        return keys.mapNotNull { key ->
+            val value = snapshot[key]?.takeIf { it.source == FirebaseRemoteConfig.VALUE_SOURCE_REMOTE }
+            value?.asString()?.takeIf { it.isNotBlank() }?.let { key to it }
+        }.toMap()
+    }
+
     /** Test seam: forget the memoised instance and any in-flight fetch. */
     fun reset() {
         cached = null
