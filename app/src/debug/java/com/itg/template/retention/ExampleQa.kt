@@ -80,8 +80,6 @@ object ExampleQa {
         override fun wallTimeMillis() = now
         override fun elapsedRealtimeMillis() = SystemClock.elapsedRealtime()
     }
-    fun clock(context: Context): RetentionClock = RetentionClock.System
-    fun store(context: Context): RetentionStore? = null
 
     /** Explicit QA action only. Erases this harness's file, never normal SDK or business state.
      * Tests may pin initialTimeMillis before installation records setup and schedules alarms. */

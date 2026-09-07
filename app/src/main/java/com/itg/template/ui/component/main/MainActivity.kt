@@ -59,31 +59,10 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
-    private var retentionHandoff: io.retentionkit.RetentionMainHandoff? = null
     /** Main is an intermediary only; ordinary review/widget prompts remain in feature/settings UI. */
     val isRetentionEntryReady: Boolean get() = window.decorView.hasWindowFocus() && !ConsentCenter.isFormShowing() &&
         (!::noInternetDialog.isInitialized || !noInternetDialog.isShowing) &&
         (!::forceUpdateDialog.isInitialized || !forceUpdateDialog.isShowing) && forceUpdateDialogHandle?.isShowing != true
-
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        super.onCreate(savedInstanceState)
-        retentionHandoff = io.retentionkit.RetentionKit.get()?.mainHandoff(this, savedInstanceState,
-            io.retentionkit.core.RetentionRouter { context, entry ->
-                val destination = com.itg.template.retention.ExampleDataStore.canonicalFeature(entry.destination)
-                if (destination in com.itg.template.retention.RetentionExampleContent.featureIds)
-                    android.content.Intent(context, com.itg.template.retention.RetentionPlaygroundActivity::class.java)
-                else null
-            })
-    }
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        retentionHandoff?.onNewIntent(intent)
-    }
-    override fun onSaveInstanceState(outState: android.os.Bundle) {
-        retentionHandoff?.onSaveInstanceState(outState)
-        super.onSaveInstanceState(outState)
-    }
 
     override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, BannerType.Collapsible())
 
@@ -191,6 +170,8 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     override fun onClickViews() {
         super.onClickViews()
 
+        mBinding.btnRetentionNotifications.click { requestPermission() }
+        mBinding.btnRetentionStatus.click { com.itg.template.retention.RetentionExample.showNotificationStatus(this) }
         mBinding.btnRetentionPlayground.click {
             startActivity(android.content.Intent(this, com.itg.template.retention.RetentionPlaygroundActivity::class.java))
         }
@@ -624,33 +605,13 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         }
     }
 
-    private var retentionPermissionScope: AutoCloseable? = null
     private fun requestPermission() {
-        retentionPermissionScope?.close()
-        retentionPermissionScope = com.itg.template.retention.RetentionExample.beginExternal("notification_permission")
-        xxPermissions {
-            permissions(PermissionLists.getPostNotificationsPermission())
-            onDoNotAskAgain { permissions, userResult ->
-                Timber.tag("Permission").d("Do not ask again ")
-            }
-            onShouldShowRationale { shouldShowRationaleList, onUserResult ->
-                Timber.tag("Permission").d("Should show rationale")
-            }
-            onResult { _, _, _ ->
-                retentionPermissionScope?.close()
-                retentionPermissionScope = null
-                io.retentionkit.RetentionKit.get()?.permissionChanged()
-            }
-        }
+        io.retentionkit.integration.RetentionSuite.get()?.requestNotifications(this)
     }
 
     // ─── Lifecycle ────────────────────────────────────────────
 
     override fun onDestroy() {
-        retentionHandoff?.close()
-        retentionHandoff = null
-        retentionPermissionScope?.close()
-        retentionPermissionScope = null
         ConsentCenter.detach(this)
         super.onDestroy()
         delayRunnable?.let {

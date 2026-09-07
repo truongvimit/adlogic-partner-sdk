@@ -40,4 +40,6 @@
     <string name="rk_example_language">Tiếng Việt</string>
     <string name="rk_example_request_sent">Request sent. Follow the system screen if one opens.</string>
     <string name="rk_example_notification_submitted">Reminder sent to notifications.</string>
+    <string name="rk_example_enable_notifications">Enable notifications</string>
+    <string name="rk_example_notification_status">Notification status</string>
 </resources>

@@ -33,12 +33,19 @@ class RetentionPlaygroundRoutingTest {
         RetentionRuntime.uninstallForTests()
         val app = ApplicationProvider.getApplicationContext<Application>()
         app.getSharedPreferences("retention_example_data_v1", Context.MODE_PRIVATE).edit().clear().commit()
-        kit = (RetentionKit.install(app, RetentionKitOptions(
+        kit = (io.retentionkit.integration.RetentionSuite.install(app, io.retentionkit.integration.RetentionSuiteOptions(
+            splashActivity = com.itg.template.ui.component.splash.SplashActivity::class.java,
+            mainActivity = com.itg.template.ui.component.main.MainActivity::class.java,
             featureProvider = RetentionFeatureProvider(RetentionExampleContent::features),
-            router = RetentionRouter { context, _ -> Intent(context, RetentionPlaygroundActivity::class.java) },
-            notifications = null, widgets = null, feedback = null, review = null,
-            initialUserState = RetentionUserState(setupCompleted = true),
-            store = SharedPreferencesRetentionStore(app, "route_${UUID.randomUUID()}"),
+            featureRouter = RetentionRouter { context, _ -> android.content.Intent(context, RetentionPlaygroundActivity::class.java) },
+            resolveDestination = ExampleDataStore::canonicalFeature,
+            customize = { standard -> standard.copy(
+                notifications = null, widgets = null, feedback = null, review = null, configSource = null,
+                uiHost = RetentionUiHost.NONE,
+                adapters = standard.adapters.filter { it.id == "suite.activities" },
+                initialUserState = RetentionUserState(setupCompleted = true),
+                store = SharedPreferencesRetentionStore(app, "route_${UUID.randomUUID()}"),
+            ) },
         )) as RetentionKitInstallResult.Installed).kit
         controller = Robolectric.buildActivity(RetentionPlaygroundActivity::class.java)
         controller.get().setTheme(R.style.Theme_Main)

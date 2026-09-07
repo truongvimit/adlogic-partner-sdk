@@ -54,12 +54,14 @@ class RetentionMainHandoff internal constructor(
 
     init {
         checkMain()
-        kit.runtime.application.registerActivityLifecycleCallbacks(this)
-        initialFocusObserver.get()?.addOnWindowFocusChangeListener(focusListener)
-        // Saved selection is already materialized. Never capture a restored reusable template again.
-        if (selected == null) capture(activity.intent)
-        else kit.runtime.entries.pending(selected!!)?.let { RetentionEntryCodec.write(activity.intent, it) }
-        holdHost()
+        try {
+            kit.runtime.application.registerActivityLifecycleCallbacks(this)
+            initialFocusObserver.get()?.addOnWindowFocusChangeListener(focusListener)
+            // Saved selection is already materialized. Never capture a restored reusable template again.
+            if (selected == null) capture(activity.intent)
+            else kit.runtime.entries.pending(selected!!)?.let { RetentionEntryCodec.write(activity.intent, it) }
+            holdHost()
+        } catch (error: Exception) { close(); throw error }
     }
 
     fun onNewIntent(intent: Intent) {

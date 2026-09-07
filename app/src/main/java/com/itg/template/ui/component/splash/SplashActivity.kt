@@ -9,7 +9,7 @@ import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
 import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
-import io.onboardkit.ui.splash.ObSplashActivity
+import io.retentionkit.integration.RetentionSplashActivity
 import io.paykit.PayKit
 import kotlinx.coroutines.launch
 
@@ -18,41 +18,13 @@ import kotlinx.coroutines.launch
  * OnboardKit; the ad config refreshes itself through the installed [com.ads.module.config.AdConfigSource].
  * What remains here is this app's own product wiring.
  */
-class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
-    override fun onCreateSafe(savedInstanceState: android.os.Bundle?) {
-        val restored = io.retentionkit.core.RetentionEntryCodec.decode(savedInstanceState?.getString("retention.splash.entry"))
-        if (restored is io.retentionkit.core.RetentionEntryDecodeResult.Valid) {
-            io.retentionkit.core.RetentionEntryCodec.write(intent, restored.entry)
-        }
-        com.itg.template.retention.RetentionExample.capture(this, intent)
-        // Completed setup still runs the real entry Splash/interstitial/legitimate skip.
-        super.onCreateSafe(savedInstanceState)
-    }
-
+class SplashActivity : RetentionSplashActivity(), RemoteConfigUtils.Listener {
     override fun splashInterstitialOverride(): io.onboardkit.config.InterstitialAdUnit? =
         super.splashInterstitialOverride().also { selected ->
             val entry = io.onboardkit.ui.splash.SplashEntry.from(intent.extras)
             com.itg.template.retention.ExampleQa.entryAdSelected(intent,
                 if (selected != null && entry != null) entry.interKey else "splash_default")
         }
-
-    override fun onSaveInstanceState(outState: android.os.Bundle) {
-        val entry = io.retentionkit.core.RetentionEntryCodec.read(intent)
-        if (entry is io.retentionkit.core.RetentionEntryDecodeResult.Valid) {
-            outState.putString("retention.splash.entry", io.retentionkit.core.RetentionEntryCodec.encode(entry.entry))
-        }
-        super.onSaveInstanceState(outState)
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        // An in-flight splash snapshots its ad policy. A new explicit tap starts its own actual
-        // Splash rather than grafting a different source onto an already-running ad attempt.
-        val next = android.content.Intent(intent).setClass(this, SplashActivity::class.java)
-            .setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(next)
-        finish()
-    }
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on

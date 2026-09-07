@@ -220,7 +220,7 @@ class GlobalApp : AdsMultiDexApplication() {
                         AppSharedPreferencesApp(context).languageCode = it
                     }
                 }
-                com.itg.template.retention.RetentionExample.onOutcome(context, outcome)
+                io.retentionkit.integration.RetentionSuite.get()?.onOutcome(context, outcome)
             }
         }
         OnboardKitSetup.configure()
