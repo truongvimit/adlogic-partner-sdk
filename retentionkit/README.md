@@ -98,7 +98,7 @@ when (val route = kit.dispatchPending(token)) {
 }
 ```
 
-`dispatchPending` checks setup and core UI readiness, validates host destinations against the current shared feature catalogue, and atomically consumes a host entry before returning Navigate. Standard feedback destinations delegate to the feedback module before consumption, so partners need no magic-string branch. SdkHandled means accepted/scheduled by the SDK, not visible UI. A blocked route stays pending. A successful consume followed by process death is at-most-once, not an exactly-once navigation guarantee. The advanced `consume(token): RetentionEntry?` helper claims only host feature entries; callers using it own final readiness/destination gates.
+`dispatchPending` checks setup and explicit ENTRY readiness at both final checks, validates host destinations against the current shared feature catalogue, and atomically consumes a host entry before returning Navigate. Standard feedback destinations delegate to the feedback module before consumption, so partners need no magic-string branch. SdkHandled means accepted/scheduled by the SDK, not visible UI. A blocked route stays pending. A successful consume followed by process death is at-most-once, not an exactly-once navigation guarantee. The advanced `consume(token): RetentionEntry?` helper claims only host feature entries; callers using it own final readiness/destination gates.
 
 Facade helpers publish actual host state/events: `setupCompleted()`, `onboardingChanged(active)`, `entitlementChanged(value)`, `businessSuccess(featureId, stableOperationId)`, `adClicked(stableClickId)`, and `permissionChanged()`. Review reacts to real successful business events. Do not manufacture successes from opening a screen or forward delayed/buffered analytics events as live ad-click state. RetentionKit never requests notification permission; the app's existing permission owner does so, then calls `permissionChanged` (foreground reconciliation also rechecks granted-later state).
 
@@ -232,6 +232,8 @@ Migrate one old owner at a time: map the feature catalogue/entry routes, preserv
 Choose a staged rollout/kill switch when old counters or scheduled state cannot be migrated. Do not delete/recreate a user-blocked notification channel to bypass its setting.
 
 ## Validation scope
+
+Corrected SDK scope passed162/162 unit tests and five release AARs at `ef94857`; see [verified entry contract](ENTRY_CONTRACT.md#verified-sdk-scope). Full app/device/consumer validation remains separate.
 
 The results below are **historical checkpoints**, superseded for standard-flow acceptance by tickets10–13. They do not prove corrected Splash → entry ad/skip → resumed Main → feature/native routing. Current interface and behavior are in [ENTRY_CONTRACT.md](ENTRY_CONTRACT.md); corrected source/build/device evidence will be recorded after integration. No new device pass is claimed by this SDK patch.
 
