@@ -24,6 +24,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import io.retentionkit.feedback.RetentionFeedbackActivity
 import com.itg.template.R
 import io.retentionkit.RetentionKit
@@ -62,9 +64,9 @@ class RetentionExampleEngineTest {
         }
         override fun onActivityCreated(activity: Activity, state: Bundle?) = record(activity, "created")
         override fun onActivityResumed(activity: Activity) = record(activity, "resumed")
-        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = record(activity, "paused")
         override fun onActivityStarted(activity: Activity) = Unit
-        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) = record(activity, "stopped")
         override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) = record(activity, "destroyed")
     }
@@ -435,25 +437,68 @@ class RetentionExampleEngineTest {
         assertTrue("Uninstall confirmation must identify this application", device.wait(Until.hasObject(By.textContains(appLabel)), 5000))
         assertTrue(ExampleQa.events.any { it.name == "retention_feedback_system_handoff" })
         assertFalse(ExampleQa.events.any { it.name == "retention_feedback_reason" })
-        assertTrue(device.pressBack())
-        await(8000) { kit.runtime.activities.current() is MainActivity }
+        val confirmationPackage = expectedSettings.activityInfo.packageName
+        val cancel = device.wait(Until.findObject(By.res("android", "button2").pkg(confirmationPackage)), 5000)
+        assertNotNull("Own uninstall dialog must expose Android's actual negative action; ${feedbackDiagnostic()}", cancel)
+        assertTrue(cancel!!.isEnabled)
+        assertEquals(confirmationPackage, device.currentPackageName)
+        android.util.Log.i("RetentionFeedbackEvidence", "actual uninstall cancel resource=${cancel.resourceName} package=$confirmationPackage text=${cancel.text}")
+        cancel.click() // Actual OS negative button; never invoke the positive uninstall action.
+        assertTrue("OS confirmation must disappear after Cancel; ${feedbackDiagnostic()}",
+            device.wait(Until.gone(By.pkg(confirmationPackage)), 8000))
+        await(8000, diagnostic = ::feedbackDiagnostic) {
+            var returned = false
+            instrumentation.runOnMainSync {
+                val main = kit.runtime.activities.current() as? MainActivity
+                returned = main != null && readyForActualClick(main)
+            }
+            returned && device.currentPackageName == application.packageName
+        }
         // Confirmation is cancelled, never approved; package remains installed.
         assertNotNull(application.packageManager.getApplicationInfo(application.packageName, 0))
     }
 
     private fun openActualFeedback() {
         // Keep returns to the real Main back stack. Use its real navigation control to reopen tools.
+        var returnedToMain = false
         instrumentation.runOnMainSync {
-            (kit.runtime.activities.current() as? MainActivity)?.findViewById<Button>(R.id.btn_retention_playground)?.performClick()
+            returnedToMain = kit.runtime.activities.current() is MainActivity
         }
-        await { kit.runtime.activities.current() is RetentionPlaygroundActivity }
+        if (returnedToMain) {
+            var clicked = false
+            await(8000, diagnostic = ::feedbackDiagnostic) {
+                instrumentation.runOnMainSync {
+                    val main = kit.runtime.activities.current() as? MainActivity
+                    val button = main?.findViewById<Button>(R.id.btn_retention_playground)
+                    if (!clicked && main != null && readyForActualClick(main) && button?.isShown == true && button.isEnabled) {
+                        clicked = true
+                        assertTrue("Actual Main navigation must handle one click", button.performClick())
+                    }
+                }
+                clicked
+            }
+        }
         val before = ExampleQa.events.count { it.name == "retention_feedback_shown" }
         val offset = moments.size
-        instrumentation.runOnMainSync {
-            val host = kit.runtime.activities.current() as RetentionPlaygroundActivity
-            host.findViewById<Button>(R.id.rk_open_feedback).performClick()
+        var clicked = false
+        await(10_000, diagnostic = ::feedbackDiagnostic) {
+            instrumentation.runOnMainSync {
+                val host = kit.runtime.activities.current() as? RetentionPlaygroundActivity
+                val button = host?.findViewById<Button>(R.id.rk_open_feedback)
+                if (!clicked && host != null && readyForActualClick(host) && button?.isShown == true && button.isEnabled &&
+                    kit.runtime.ui.eligibility(RetentionUiPurpose.ENTRY) is RetentionEligibility.Allowed &&
+                    readyForActualClick(host)) {
+                    // The readiness check and single real control click share the main-thread block.
+                    // Never retry clicks to hide a rejected explicit request or duplicate a token.
+                    clicked = true
+                    android.util.Log.i("RetentionFeedbackEvidence", "actual feedback click host=${host.javaClass.simpleName} resumed=true focused=true elapsed=${SystemClock.elapsedRealtime()}")
+                    assertTrue("Actual feedback control must handle one click", button.performClick())
+                }
+            }
+            clicked
         }
-        await(45_000) {
+        // Include the SDK's bounded 60s activation window; diagnostics identify the reached milestone.
+        await(75_000, diagnostic = ::feedbackDiagnostic) {
             dismissVisibleEntryTestAd()
             kit.runtime.activities.current() is RetentionFeedbackActivity &&
                 ExampleQa.events.count { it.name == "retention_feedback_shown" } > before
@@ -467,6 +512,28 @@ class RetentionExampleEngineTest {
         assertTrue("Feedback requires Splash → Main → SDK screen: $observed", splash >= 0 && main > splash && feedback > main)
         assertNotNull(kit.runtime.store.snapshot("core.entries").string("consumed:$token"))
         await { ExampleQa.nativeEvents.any { it.placement == "native_uninstall" && it.phase == "request_called" } }
+    }
+
+    /** Main-thread, observed UI readiness only. Does not acquire a lease or inject lifecycle state. */
+    private fun readyForActualClick(activity: Activity): Boolean =
+        kit.runtime.activities.current() === activity && kit.runtime.isForeground &&
+            !activity.isFinishing && !activity.isDestroyed && activity.window.decorView.hasWindowFocus() &&
+            (activity as? LifecycleOwner)?.lifecycle?.currentState == Lifecycle.State.RESUMED
+
+    private fun feedbackDiagnostic(): String {
+        var state = ""
+        instrumentation.runOnMainSync {
+            val current = kit.runtime.activities.current()
+            state = "current=${current?.javaClass?.simpleName}; focus=${current?.window?.decorView?.hasWindowFocus()}; " +
+                "lifecycle=${(current as? LifecycleOwner)?.lifecycle?.currentState}; finishing=${current?.isFinishing}; " +
+                "foreground=${kit.runtime.isForeground}; setup=${kit.runtime.userState.setupCompleted}; " +
+                "nextEntryEligibility=${kit.runtime.ui.eligibility(RetentionUiPurpose.ENTRY)}"
+        }
+        return state + "; lifecycleMoments=" + moments.takeLast(24).map {
+            "${it.activity.javaClass.simpleName}:${it.phase}:${it.entry?.token}:${it.entry?.destination}"
+        } + "; recentEvents=" + ExampleQa.events.takeLast(20) +
+            "; native=" + ExampleQa.nativeEvents.takeLast(8) + "; diagnostics=" + kit.runtime.diagnostics.snapshot().takeLast(8)
+        // Busy eligibility while the survey already owns its lease is context, not an automatic failure.
     }
     /** Actual device gesture on the actual test-ad Activity only. No synthetic ad callbacks. */
     private fun dismissVisibleEntryTestAd() {
