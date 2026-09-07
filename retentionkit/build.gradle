@@ -35,11 +35,14 @@ dependencies {
     compileOnly project(':ads')
     compileOnly project(':trackkit')
     compileOnly project(':billingkit')
+    compileOnly project(':suite-firebase')
+    implementation 'androidx.activity:activity-ktx:1.9.3'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
     testImplementation project(':onboardkitorigin')
     testImplementation project(':ads')
     testImplementation project(':trackkit')
     testImplementation project(':billingkit')
+    testImplementation project(':suite-firebase')
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.16.1'
     testImplementation 'androidx.test:core:1.7.0'

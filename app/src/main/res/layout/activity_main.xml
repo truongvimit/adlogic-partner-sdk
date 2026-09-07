@@ -74,6 +74,21 @@
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_retention_notifications"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/rk_example_enable_notifications" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_retention_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:text="@string/rk_example_notification_status" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_retention_playground"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

@@ -14,7 +14,11 @@ Partners supply three things: localized feature identities/content, one explicit
 
 Frozen source69d0f71 passed279 fresh tests across nine affected modules, full example release R8, six fresh local QA publications and all12 project/POM-only consumer graph/manifest/R8 checks at `retentionkit-qa-20260907-69d0f71`. Identical production source86048d6 passed17 physical Pixel cases and a genuine first-install API36 long-onboarding route. See [current acceptance](../.scratch/retentionkit/correction-acceptance.md) for exact commands, APK hashes, OS/QA/ad limits and pending restoration/cleanup; [Vietnamese report](CORRECTION_REPORT.vi.md) gives partner steps. These are local QA artifacts, not a remote release.
 
-## Minimal partner install
+## Existing suite: start here
+
+For apps already using Ads/Onboard/Billing/Firebase, use [the three-point suite integration](SUITE_INTEGRATION.md). `RetentionSuite` supplies adapter/config composition, a Splash base and automatic Main/final-feature lifecycle binding; the app supplies its catalogue/router and one feature UI callback. Permission stays an explicit normal UI action. The manual capture/handoff examples below are the lower-level, vendor-free integration and are not additional required suite hooks.
+
+## Vendor-free partner install
 
 Call from `Application.onCreate`, including cold starts for receivers/providers. Supply the localized feature catalogue and one explicit host entry Activity:
 
@@ -104,7 +108,7 @@ when (val route = kit.dispatchPending(token)) {
 
 `dispatchPending` checks setup and explicit ENTRY readiness at both final checks, validates host destinations against the current shared feature catalogue, and atomically consumes a host entry before returning Navigate. Standard feedback destinations delegate to the feedback module before consumption, so partners need no magic-string branch. SdkHandled means accepted/scheduled by the SDK, not visible UI. A blocked route stays pending. A successful consume followed by process death is at-most-once, not an exactly-once navigation guarantee. The advanced `consume(token): RetentionEntry?` helper claims only host feature entries; callers using it own final readiness/destination gates.
 
-Facade helpers publish actual host state/events: `setupCompleted()`, `onboardingChanged(active)`, `entitlementChanged(value)`, `businessSuccess(featureId, stableOperationId)`, `adClicked(stableClickId)`, and `permissionChanged()`. Review reacts to real successful business events. Do not manufacture successes from opening a screen or forward delayed/buffered analytics events as live ad-click state. RetentionKit never requests notification permission; the app's existing permission owner does so, then calls `permissionChanged` (foreground reconciliation also rechecks granted-later state).
+Facade helpers publish actual host state/events: `setupCompleted()`, `onboardingChanged(active)`, `entitlementChanged(value)`, `businessSuccess(featureId, stableOperationId)`, `adClicked(stableClickId)`, and `permissionChanged()`. Review reacts to real successful business events. Do not manufacture successes from opening a screen or forward delayed/buffered analytics events as live ad-click state. The base `RetentionKit` never requests notification permission. The optional `RetentionSuite.requestNotifications(activity)` can own an explicit user-triggered request; an existing host/Onboard permission owner instead calls `permissionChanged` from its result.
 
 Modules are exposed as `kit.notifications`, `.widgets`, `.feedback`, `.review` (nullable when disabled). Typical explicit actions are `widgets?.showPinInvitation()`, `feedback?.openViaEntry()` and `review?.openStore()`. Do not ask for a star rating before automatic Play review. Pin Requested/Unknown and review outcome-unknown are deliberate platform semantics; see each module's README.
 
