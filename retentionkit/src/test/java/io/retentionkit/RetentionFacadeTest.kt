@@ -103,4 +103,39 @@ class RetentionFacadeTest {
         kit.entitlementChanged(RetentionEntitlement.NON_SUBSCRIBER)
         assertTrue(kit.runtime.userState.setupCompleted)
     }
+    @Test fun finalFeatureDispatchUsesExplicitEntryPurposeEvenWhenAutomaticPromptsAreBlocked() {
+        val kit = install(options().copy(notifications = null, widgets = null, feedback = null, review = null,
+            uiHost = object : RetentionUiHost {
+                override fun canPresent(activity: Activity) = false
+                override fun canPresentEntry(activity: Activity) = true
+            }))
+        kit.setupCompleted()
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        val entry = RetentionEntry(RetentionEntrySource.WIDGET, "notes", "open")
+        kit.capture(RetentionEntryCodec.write(Intent(), entry))
+        assertTrue(kit.runtime.ui.eligibility() is RetentionEligibility.Blocked)
+        assertTrue(kit.dispatchPending(entry.token) is RetentionDispatchResult.Navigate)
+        assertNull(kit.runtime.entries.pending(entry.token))
+        activity.pause().stop().destroy()
+    }
+
+    @Test fun finalEntryGateRevocationKeepsSelectedTokenPending() {
+        var reads = 0
+        val kit = install(options().copy(notifications = null, widgets = null, feedback = null, review = null,
+            uiHost = object : RetentionUiHost {
+                override fun canPresent(activity: Activity) = true
+                override fun canPresentEntry(activity: Activity) = ++reads == 1
+            }))
+        kit.setupCompleted()
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        val entry = RetentionEntry(RetentionEntrySource.WIDGET, "notes", "open")
+        kit.capture(RetentionEntryCodec.write(Intent(), entry))
+        assertTrue(kit.dispatchPending(entry.token) is RetentionDispatchResult.Unavailable)
+        assertEquals(2, reads)
+        assertNotNull(kit.runtime.entries.pending(entry.token))
+        activity.pause().stop().destroy()
+    }
+
 }

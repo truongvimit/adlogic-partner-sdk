@@ -30,6 +30,7 @@ class RetentionMainHandoff internal constructor(
     private var resumed = false
     private var closed = false
     private var attempts = 0
+    private var deliveryGeneration = 0L
     private var hostResource: AutoCloseable? = null
     private var resourceToken: String? = null
     private var hostExpiry: Runnable? = null
@@ -65,6 +66,7 @@ class RetentionMainHandoff internal constructor(
 
     private fun capture(intent: Intent?) {
         // An ordinary/new invalid launch must not inherit an earlier selected entry.
+        val generation = ++deliveryGeneration
         val previousSelected = selected
         val previousForwarded = forwarded
         selected = null
@@ -72,7 +74,9 @@ class RetentionMainHandoff internal constructor(
         attempts = 0
         main.removeCallbacks(retry)
         releaseHost()
+        if (closed || generation != deliveryGeneration) return
         val accepted = kit.capture(intent)
+        if (closed || generation != deliveryGeneration) return
         if (accepted is RetentionEntryAcceptance.Accepted) {
             selected = accepted.entry.token
             if (selected == previousSelected && selected == previousForwarded) forwarded = previousForwarded
@@ -103,12 +107,13 @@ class RetentionMainHandoff internal constructor(
             require(target.component?.packageName == activity.packageName) { "Feature router must name a host Activity" }
             require(target.component?.className != activity.javaClass.name) { "Feature router must not loop back to Main" }
             // Router callbacks can reenter/configure/navigate. Recheck every owned condition.
-            if (selected != token || kit.runtime.entries.pending(token) != entry ||
-                !resumed || source.get() !== activity || lease.activity() !== activity) return retryLater()
+            val permittedActivity = lease.activity() // The host callback can deliver a newer Intent.
+            if (permittedActivity !== activity || selected != token || kit.runtime.entries.pending(token) != entry ||
+                !resumed || source.get() !== activity) return retryLater()
             activity.startActivity(RetentionEntryCodec.write(Intent(target), entry))
-            forwarded = token // Only after Android accepted the launch; failed factories remain retryable.
+            if (selected == token) forwarded = token // Do not replace a reentrant newer selection.
             kit.runtime.emit(RetentionEvent("retention_entry_forwarded", mapOf("source" to entry.source.name)))
-            releaseHostAfterDispatch()
+            releaseHostAfterDispatch(token)
         } catch (error: Exception) {
             kit.runtime.diagnostics.record("entry.main", "Feature forwarding failed", RetentionDiagnosticLevel.ERROR, error)
             retryLater()
@@ -142,7 +147,8 @@ class RetentionMainHandoff internal constructor(
             kit.runtime.diagnostics.record("entry.main", "Host entry resource unavailable", RetentionDiagnosticLevel.ERROR, error)
         } finally { acquiringHost = false }
     }
-    private fun releaseHostAfterDispatch() {
+    private fun releaseHostAfterDispatch(expectedToken: String? = null) {
+        if (expectedToken != null && resourceToken != expectedToken) return
         val resource = detachHost() ?: return
         deferredCloses.add(resource)
         main.post { if (deferredCloses.remove(resource)) closeHost(resource) } // Only this dispatch's resource, never a replacement.
