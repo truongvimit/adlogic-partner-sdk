@@ -39,8 +39,8 @@ class DefaultNotificationDeliveryTest {
     private fun user() = RetentionUserState(true, false, RetentionEntitlement.NON_SUBSCRIBER,
         clock.now, clock.now, clock.now)
 
-    private fun install(user: RetentionUserState = user()) {
-        module = RetentionNotifications(RetentionNotificationOptions(), platform, delays)
+    private fun install(user: RetentionUserState = user(), options: RetentionNotificationOptions = RetentionNotificationOptions()) {
+        module = RetentionNotifications(options, platform, delays)
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module),
             clock = clock, store = store, initialUserState = user,
             featureProvider = RetentionFeatureProvider { listOf(
@@ -165,5 +165,24 @@ class DefaultNotificationDeliveryTest {
             platform.cancel(campaign)
             clock.advance(15 * MINUTE)
         }
+    }
+
+    @Test fun reentrantSetupCallbackCannotStrandAnEligibleForegroundRequest() {
+        var sendSetup = false
+        install(options = RetentionNotificationOptions(contentProvider = NotificationContentProvider { context, campaign, features ->
+            if (campaign == NotificationCampaign.REMINDER && sendSetup) {
+                sendSetup = false
+                runtime.signal(RetentionSignal.SetupCompleted)
+            }
+            StandardNotificationContent.content(context, campaign, features)
+        }))
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        platform.block = null
+        sendSetup = true
+        val result = module.refreshForegroundNotifications()
+        assertEquals("Readiness changed while the partner callback was executing", 1,
+            platform.posts.count { it.first == NotificationCampaign.REMINDER })
+        assertTrue(result[NotificationCampaign.REMINDER] is NotificationOutcome.PostSubmitted)
     }
 }
