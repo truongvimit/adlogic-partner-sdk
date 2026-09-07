@@ -353,6 +353,53 @@ class NativeOwnershipTest {
         assertEquals(2, requests.size)
     }
 
+    @Test fun `destroy before first resume disposes the pending restored presentation`() {
+        controller.pause().stop().destroy()
+        controller = Robolectric.buildActivity(NativeHostActivity::class.java).create()
+        val ad = NativeVendorAd()
+        val saved = com.ads.module.ads.wrapper.ApNativeAd(config.layoutId, ad)
+        androidx.lifecycle.ViewModelProvider(activity)[NativePresentationStore::class.java]
+            .retain("a", NativePresentationStore.Presentation(saved, 0, 0, false))
+        val restored = helper()
+        restored.show()
+        assertNull(restored.nativeAd)
+        assertTrue(restored.isRestoringPresentation)
+        controller.destroy()
+        controller = Robolectric.buildActivity(NativeHostActivity::class.java).setup()
+        assertTrue(ad.destroyed)
+    }
+
+    @Test fun `resume debounce cannot refresh after pause or while hidden`() {
+        val helper = helper(reload = true)
+        helper.show()
+        requests.single().fill(NativeVendorAd())
+        main.idleFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        controller.pause().resume().pause()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals("pause must cancel the delayed resume refresh", 1, requests.size)
+        val slot = activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
+        slot.visibility = android.view.View.GONE
+        controller.resume()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals("hidden slots must not refresh on resume", 1, requests.size)
+    }
+
+    @Test fun `destroyed helper detaches its lifecycle observer and leaves pending fill unused`() {
+        val registry = activity.lifecycle as androidx.lifecycle.LifecycleRegistry
+        val helper = helper()
+        helper.show()
+        val observers = registry.observerCount
+        helper.destroy()
+        assertEquals(observers - 1, registry.observerCount)
+        requests.single().fill(NativeVendorAd())
+        assertNull(helper.nativeAd)
+        assertTrue(NativeAdManager.isReady("a"))
+        helper.show()
+        assertNull(helper.nativeAd)
+        assertTrue(NativeAdManager.isReady("a"))
+        assertEquals(1, requests.size)
+    }
+
     @Test fun `legacy Ready binding also removes the supplied ad from unused cache`() {
         preload.preloadWithKey("a", activity, config)
         requests.single().fill(NativeVendorAd())

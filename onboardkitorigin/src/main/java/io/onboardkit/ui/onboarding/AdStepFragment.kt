@@ -33,6 +33,7 @@ class AdStepFragment : LazyStepFragment() {
     private var skipJob: Job? = null
     private var autoNextJob: Job? = null
     private var adBound = false
+    private var adRequested = false
     private var adFailed = false
     private val impressionHandled = AtomicBoolean(false)
 
@@ -57,18 +58,21 @@ class AdStepFragment : LazyStepFragment() {
         }
     }
 
-    override fun onStepFirstSelected() {
-        requestAd()
-        scheduleSkipButton()
-    }
-
     override fun onStepSelected() {
-        if (adBound) scheduleAutoNext()
+        if (!adRequested) {
+            requestAd()
+            scheduleSkipButton()
+        } else if (adBound) scheduleAutoNext()
     }
 
     override fun onStepUnselected(dwellMs: Long) {
         skipJob?.cancel()
         autoNextJob?.cancel()
+        OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
+        adBound = false
+        adRequested = false
+        adFailed = false
+        impressionHandled.set(false)
     }
 
     private fun definition(): AdFullScreenStepDefinition? =
@@ -77,6 +81,10 @@ class AdStepFragment : LazyStepFragment() {
     private fun requestAd() {
         val b = binding ?: return
         val activity = activity ?: return
+        adRequested = true
+        b.obFullscreenFallback.visibility = View.GONE
+        b.obNativeContainer.visibility = View.VISIBLE
+        b.obSkipButton.visibility = View.GONE
         val placement = AdPlacement.StepFullScreen(stepId)
         activity.showNativeAd(
             placement = placement,
@@ -161,6 +169,7 @@ class AdStepFragment : LazyStepFragment() {
         autoNextJob?.cancel()
         binding = null
         adBound = false
+        adRequested = false
         impressionHandled.set(false)
         super.onDestroyView()
     }

@@ -115,6 +115,7 @@ class NativeAdHelper(
     private var nextReloadAtMs = 0L
     private var restoring = false
     private var restoreChecked = false
+    private var destroyed = false
     private var pendingRestoration: NativePresentationStore.Presentation? = null
     private var awaitingHost = false
     private var restartOnResume = false
@@ -132,7 +133,8 @@ class NativeAdHelper(
             armReload()
             return@Runnable
         }
-        if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && isActiveState()) {
+        if (isResumed() && contentView?.isShown == true && resumeCount.get() > 1 &&
+            canRequestAds() && canReloadAd() && isActiveState()) {
             requestAds(NativeAdParam.Reload)
         }
     }
@@ -272,6 +274,7 @@ class NativeAdHelper(
 
     /** Binds only an unused cache entry or a configuration-restored presentation. */
     fun bindAvailable(): Boolean {
+        if (destroyed) return false
         if (_nativeAdState.value is AdNativeState.Loading) return false
         if (!canShowAds() || !AdGate.passesUaGate(config.forceUaCheck)) return false
         flagActive.set(true)
@@ -282,6 +285,7 @@ class NativeAdHelper(
     }
 
     override fun requestAds(param: NativeAdParam) {
+        if (destroyed) return
         if (_nativeAdState.value is AdNativeState.Loading) return
         val passesUaGate = AdGate.passesUaGate(config.forceUaCheck)
         val preloadHit = NativeAdPreload.getInstance().isPreloadAvailable(storeKey)
@@ -334,6 +338,17 @@ class NativeAdHelper(
         setState(AdNativeState.Cancel)
     }
 
+    /** Permanently releases this UI helper. Shared unused ads and pending loads survive. */
+    fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        unbindLifecycle()
+        cancel()
+        listeners.clear()
+        contentView = null
+        shimmerView = null
+    }
+
     /** Reload is allowed only after the last bind has been visible for a minimum time. */
     fun conditionReloadAdAvailable(): Boolean =
         _nativeAdState.value !is AdNativeState.Loading &&
@@ -361,7 +376,10 @@ class NativeAdHelper(
                 mainHandler.postDelayed(resumeReloadRunnable, config.timeDebounceResume)
             }
 
-            Lifecycle.Event.ON_PAUSE -> mainHandler.removeCallbacks(reloadByTimeRunnable)
+            Lifecycle.Event.ON_PAUSE -> {
+                mainHandler.removeCallbacks(reloadByTimeRunnable)
+                mainHandler.removeCallbacks(resumeReloadRunnable)
+            }
 
             Lifecycle.Event.ON_STOP -> {
                 if (!activity.isChangingConfigurations) {
@@ -381,20 +399,9 @@ class NativeAdHelper(
                         pendingRestoration = null
                     }
                 }
-                requestVersion++
-                detachAdViews()
-                loadSubscription?.cancel()
-                eventSubscription?.cancel()
-                // Any callback already being dispatched must return its unbound fill to the store.
-                flagActive.set(false)
-                mainHandler.removeCallbacks(resumeReloadRunnable)
-                mainHandler.removeCallbacks(reloadByTimeRunnable)
-                listeners.clear()
-                nativeAd?.let { destroyNative(it) }
-                nativeAd = null
-                dropGeneratedShimmer()
-                contentView = null
-                shimmerView = null
+                // After a configuration transfer the retained references are null; otherwise
+                // cancel also disposes a presentation taken before this host's first resume.
+                destroy()
             }
 
             else -> Unit

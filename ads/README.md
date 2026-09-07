@@ -226,8 +226,14 @@ time. Recreate the helper with the same placement and call `show()` as usual, in
 `onCreate`; it binds when resumed. This does not return the consumed ad to the preload cache.
 Use one active helper per slot. Ads are held only in memory and cannot survive process death.
 
+For a retained ViewPager page or a custom navigator that only pauses/hides the view, call
+`cancel()` on page unselection and `show()` on selection. A pause alone can also mean a
+translucent dialog or configuration transition, so it only suspends refresh. OnboardKit wires
+its page-selection callbacks this way.
+
 `cancel()` detaches the current helper and disposes its presentation; it does not cancel the shared
-network request. `NativeAdManager.release(placement)` explicitly invalidates unused/pending fills.
+network request. If the helper will not be reused, call `destroy()` to also remove its lifecycle
+observer and view references. `NativeAdManager.release(placement)` explicitly invalidates unused/pending fills.
 Call `ApNativeAd.destroy()` when disposing an ad obtained through the low-level polling API.
 
 The old `NativeAdPreload` entry points delegate to this same store. `preloadWithKey()` now skips

@@ -19,6 +19,7 @@ import com.ads.module.helper.adnative.NativeAdPreload
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.adnative.NativeAdStyle
+import com.ads.module.helper.adnative.AdNativeState
 import com.ads.module.helper.adnative.NativeAdHelper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -98,6 +99,9 @@ class ERainAdProvider(
     private val nativeBindings = mutableMapOf<String, NativeBinding>()
     private val nativeConfigs = mutableMapOf<String, NativeAdConfig>()
     private val nativeOwners = mutableMapOf<String, LifecycleOwner>()
+    private val nativeOwnerObservers = mutableMapOf<String, LifecycleEventObserver>()
+    private val deferredNativeFailures = mutableSetOf<String>()
+    private val pendingNativeBinds = mutableSetOf<String>()
 
     /**
      * Presentation style per placement, resolved from the ad config at request time.
@@ -115,6 +119,7 @@ class ERainAdProvider(
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
         if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
+        deferredNativeFailures.remove(key)
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
             ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
@@ -132,7 +137,7 @@ class ERainAdProvider(
             preload.preloadWithKeyIfEmpty(key, activity, config)
         // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
         if (!covered && !isNativeReady(request.placement)) {
-            notifyListener(key) { it.onFailedToLoad() }
+            notifyNativeFailure(key)
         }
     }
 
@@ -154,24 +159,36 @@ class ERainAdProvider(
         val frame = container as? FrameLayout ?: return false
         val owner = frame.findViewTreeLifecycleOwner() ?: activity as? LifecycleOwner ?: return false
         if (nativeOwners[key] !== owner) {
+            detachNativeOwner(key)
             nativeOwners[key] = owner
             var observing = false
-            owner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            val observer = LifecycleEventObserver { _, event ->
                 if (nativeOwners[key] === owner) {
                     if (event == Lifecycle.Event.ON_DESTROY) {
-                        nativeOwners.remove(key)
+                        detachNativeOwner(key)
+                        // The helper receives the same destruction event and transfers its ad
+                        // on configuration recreation before releasing its own UI references.
+                        nativeBindings.remove(key)
+                        deferredNativeFailures.remove(key)
                         listeners.remove(key)
-                    } else if (observing && event == Lifecycle.Event.ON_RESUME && nativeBindings[key] == null &&
-                        preload.getAdNative(key) != null) {
-                        notifyListener(key) { it.onLoaded() }
+                    } else if (observing && event == Lifecycle.Event.ON_RESUME) {
+                        if (deferredNativeFailures.remove(key)) {
+                            pendingNativeBinds.remove(key)
+                            notifyListener(key) { it.onFailedToLoad() }
+                        } else if (key in pendingNativeBinds && !helperAwaitsNative(key) &&
+                            preload.getAdNative(key) != null) notifyListener(key) { it.onLoaded() }
                     }
                 }
-            })
+            }
+            nativeOwnerObservers[key] = observer
+            owner.lifecycle.addObserver(observer)
             observing = true
         }
+        pendingNativeBinds.add(key)
+        deferredNativeFailures.remove(key)
         val current = nativeBindings[key]
-        val binding = if (current?.activity === activity && current.container === frame) current else {
-            current?.helper?.cancel()
+        val binding = if (current?.activity === activity && current.container === frame && current.owner === owner) current else {
+            current?.helper?.destroy()
             val config = nativeConfigs[key] ?: return false
             val helper = NativeAdHelper(activity, owner, config)
                 .setNativeContentView(frame)
@@ -182,41 +199,54 @@ class ERainAdProvider(
                 nativeBindings[key] = created
                 helper.registerAdListener(object : AdCallback() {
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                        pendingNativeBinds.remove(key)
                         created.justBound = true
-                        if (!created.inBind) notifyListener(key) { it.onLoaded() }
+                        if (!created.inBind) {
+                            try { notifyListener(key) { it.onLoaded() } }
+                            finally { created.justBound = false }
+                        }
                         // Existing onboarding dwell timers use this bind signal, not paid analytics.
                         notifyListener(key) { it.onImpression() }
                     }
                     override fun onAdFailedToLoad(error: LoadAdError?) {
-                        notifyListener(key) { it.onFailedToLoad() }
+                        pendingNativeBinds.add(key)
+                        notifyNativeFailure(key)
                     }
                     override fun onAdClicked() { notifyListener(key) { it.onClicked() } }
                     override fun onAdOpened() { notifyListener(key) { it.onAdOpened() } }
-                })
-                owner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_DESTROY && nativeBindings[key] === created) {
-                        nativeBindings.remove(key)
-                        listeners.remove(key)
-                    }
                 })
             }
         }
         // A helper may finish an in-flight load on resume before the legacy onLoaded callback
         // asks bindNative again. Acknowledge that bind instead of consuming another ad.
         if (binding.justBound) {
+            pendingNativeBinds.remove(key)
             binding.justBound = false
             return true
         }
         binding.inBind = true
         return try {
-            binding.helper.bindAvailable().also { if (it) binding.justBound = false }
+            binding.helper.bindAvailable().also {
+                if (it) {
+                    pendingNativeBinds.remove(key)
+                    binding.justBound = false
+                }
+            }
         } finally { binding.inBind = false }
+    }
+
+    private fun detachNativeOwner(key: String) {
+        pendingNativeBinds.remove(key)
+        deferredNativeFailures.remove(key)
+        val owner = nativeOwners.remove(key)
+        nativeOwnerObservers.remove(key)?.let { owner?.lifecycle?.removeObserver(it) }
     }
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
-        nativeBindings.remove(key)?.helper?.cancel()
-        nativeOwners.remove(key)
+        nativeBindings.remove(key)?.helper?.destroy()
+        detachNativeOwner(key)
+        deferredNativeFailures.remove(key)
         nativeBridges.remove(key)?.let { preload.unregisterAdCallback(key, it) }
         listeners.remove(key)
         // A screen departure cannot cancel the process-owned request or drop its unused fill.
@@ -338,9 +368,11 @@ class ERainAdProvider(
         // Per-key release: the stores are process-wide and the host app owns keys of its own
         (nativeBridges.keys + nativeConfigs.keys).toSet().forEach { preload.release(it) }
         nativeBridges.clear()
-        nativeBindings.values.forEach { it.helper.cancel() }
+        nativeBindings.values.forEach { it.helper.destroy() }
         nativeBindings.clear()
-        nativeOwners.clear()
+        nativeOwners.keys.toList().forEach(::detachNativeOwner)
+        deferredNativeFailures.clear()
+        pendingNativeBinds.clear()
         nativeConfigs.clear()
         nativeStyles.clear()
         interKeys.forEach { InterstitialAdManager.release(it) }
@@ -358,24 +390,41 @@ class ERainAdProvider(
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
-                    notifyListener(key) { it.onLoaded() }
+                    deferredNativeFailures.remove(key)
+                    notifyNativeLoadListener(key) { it.onLoaded() }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
                     ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — no fill")
-                    notifyListener(key) { it.onFailedToLoad() }
+                    if (!helperAwaitsNative(key)) notifyNativeFailure(key)
                 }
 
-                override fun onAdClicked() {
-                    notifyListener(key) { it.onClicked() }
-                }
-
-                override fun onAdOpened() {
-                    notifyListener(key) { it.onAdOpened() }
-                }
-
+                // Click/open belong to the consumed ad's helper, not the preload listener.
             }.also { preload.registerAdCallback(key, it) }
         }
+    }
+
+    // A restored or resumed helper joins the load itself and reports its outcome. The
+    // legacy preload bridge only resolves attempts which have no helper waiting on them.
+    private fun helperAwaitsNative(key: String): Boolean =
+        nativeBindings[key]?.helper?.nativeAdState?.value is AdNativeState.Loading
+
+    private fun notifyNativeFailure(key: String) {
+        if (key !in pendingNativeBinds) return
+        val owner = nativeOwners[key]
+        if (owner != null && !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            deferredNativeFailures.add(key)
+        } else {
+            pendingNativeBinds.remove(key)
+            notifyListener(key) { it.onFailedToLoad() }
+        }
+    }
+
+    private fun notifyNativeLoadListener(key: String, block: (AdEventListener) -> Unit) {
+        if (key !in pendingNativeBinds || helperAwaitsNative(key)) return
+        val owner = nativeOwners[key]
+        if (owner != null && !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        notifyListener(key, block)
     }
 
     // Exhaustive so adding a store reason forces a mapping decision here

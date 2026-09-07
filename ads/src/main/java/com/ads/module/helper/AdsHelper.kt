@@ -40,6 +40,10 @@ abstract class AdsHelper<C : IAdsConfig, P : IAdsParam>(
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
     }
 
+    protected fun unbindLifecycle() {
+        lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+    }
+
     protected open fun onLifecycleEvent(event: Lifecycle.Event) {}
 
     protected fun isResumed(): Boolean =

@@ -33,6 +33,7 @@ class ContentStepFragment : LazyStepFragment() {
     private var binding: ObFragmentContentStepBinding? = null
     private var player: ExoPlayer? = null
     private var adBound = false
+    private var adRequested = false
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
@@ -158,24 +159,24 @@ class ContentStepFragment : LazyStepFragment() {
         }
     }
 
-    override fun onStepFirstSelected() {
-        requestNativeAd()
-    }
-
     override fun onStepSelected() {
         startVideoIfAny()
-        val config = OnboardingSdk.configOrNull() ?: return
-        if (!adBound && config.behavior.reloadAdOnStepReturn) requestNativeAd()
+        if (!adRequested) requestNativeAd()
     }
 
     override fun onStepUnselected(dwellMs: Long) {
         releasePlayer()
+        OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId))
+        adBound = false
+        adRequested = false
     }
 
     private fun requestNativeAd() {
         val b = binding ?: return
         val activity = activity ?: return
-        if (adBound) return
+        if (adRequested) return
+        adRequested = true
+        b.obAdBlock.visibility = View.VISIBLE
         val placement = AdPlacement.StepNative(stepId)
         activity.showNativeAd(
             placement = placement,
@@ -224,6 +225,7 @@ class ContentStepFragment : LazyStepFragment() {
         releasePlayer()
         binding = null
         adBound = false
+        adRequested = false
         super.onDestroyView()
     }
 

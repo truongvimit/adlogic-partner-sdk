@@ -43,6 +43,7 @@ class NativeProviderOwnershipTest {
     private lateinit var provider: ERainAdProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
+    private val vendorEvents = mutableListOf<AdListener>()
     private val placement = AdPlacement.Language1
     private val request = NativeAdRequest(placement, NativeAdUnit(listOf("native-test")),
         com.ads.module.R.layout.custom_native_admob_medium)
@@ -61,13 +62,15 @@ class NativeProviderOwnershipTest {
         builders = mockConstruction(AdLoader.Builder::class.java) { builder, _ ->
             var loaded: NativeAd.OnNativeAdLoadedListener? = null
             doAnswer { loaded = it.getArgument(0); builder }.`when`(builder).forNativeAd(any())
-            doReturn(builder).`when`(builder).withAdListener(any(AdListener::class.java))
+            doAnswer { vendorEvents += it.getArgument<AdListener>(0); builder }.`when`(builder).withAdListener(any(AdListener::class.java))
             doReturn(builder).`when`(builder).withNativeAdOptions(any())
             val loader = mock(AdLoader::class.java)
             doReturn(loader).`when`(builder).build()
             doAnswer { requests += checkNotNull(loaded); null }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
-        provider = ERainAdProvider()
+        // OnboardingSdk is process-scoped and install is intentionally idempotent.
+        provider = io.onboardkit.OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
+        provider.releaseAll()
         controller = Robolectric.buildActivity(NativeProviderHost::class.java).setup()
     }
 
@@ -107,6 +110,203 @@ class NativeProviderOwnershipTest {
         verify(ad).destroy()
         controller.restart().start().resume()
     }
+    @Test fun `bound native forwards each vendor click and open once`() {
+        val host = controller.get()
+        val container = FrameLayout(host).also(host::setContentView)
+        var clicks = 0
+        var opens = 0
+        provider.preloadNative(host, request)
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertTrue(provider.bindNative(host, placement, container, null, object : AdEventListener {
+            override fun onClicked() { clicks++ }
+            override fun onAdOpened() { opens++ }
+        }))
+        vendorEvents.single().onAdClicked()
+        vendorEvents.single().onAdOpened()
+        assertEquals(1, clicks)
+        assertEquals(1, opens)
+    }
+
+    @Test fun `content pager departure consumes old ad and return joins a pending preload`() {
+        verifyPagerReturn(io.onboardkit.ui.onboarding.ContentStepFragment.newInstance(io.onboardkit.core.StepId.OB1, 0),
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB1))
+    }
+
+    @Test fun `full screen pager departure consumes old ad and return joins a pending preload`() {
+        verifyPagerReturn(io.onboardkit.ui.onboarding.AdStepFragment.newInstance(io.onboardkit.core.StepId.OB3, 0),
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.OB3))
+    }
+
+    private fun verifyPagerReturn(fragment: io.onboardkit.ui.pager.LazyStepFragment, page: AdPlacement) {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(
+                contentStepNative = request.unit, fullScreenStepNative = request.unit)
+        }.getOrThrow())
+        val parent = FrameLayout(host).apply { id = android.view.View.generateViewId() }
+        host.setContentView(parent)
+        host.supportFragmentManager.beginTransaction().add(parent.id, fragment).commitNow()
+        fragment.dispatchSelected()
+        val first = mock(NativeAd::class.java)
+        requests.single().onNativeAdLoaded(first)
+        assertFalse(provider.isNativeReady(page))
+        fragment.dispatchUnselected()
+        host.supportFragmentManager.beginTransaction()
+            .setMaxLifecycle(fragment, androidx.lifecycle.Lifecycle.State.STARTED).commitNow()
+        verify(first).destroy()
+        provider.preloadNative(host, request.copy(placement = page))
+        assertEquals(2, requests.size)
+        host.supportFragmentManager.beginTransaction()
+            .setMaxLifecycle(fragment, androidx.lifecycle.Lifecycle.State.RESUMED).commitNow()
+        fragment.dispatchSelected()
+        assertEquals("return must join the pending preload", 2, requests.size)
+        val second = mock(NativeAd::class.java)
+        requests.last().onNativeAdLoaded(second)
+        assertFalse("return must bind and consume the new fill", provider.isNativeReady(page))
+        verify(second, never()).destroy()
+    }
+
+    @Test fun `cold fill while paused waits for resume without binding the old view`() {
+        val host = controller.get()
+        val container = FrameLayout(host).also(host::setContentView)
+        var binds = 0
+        assertFalse(provider.bindNative(host, placement, container, null, object : AdEventListener {
+            override fun onLoaded() {
+                if (provider.bindNative(host, placement, container, null)) binds++
+            }
+        }))
+        provider.preloadNative(host, request)
+        controller.pause()
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertEquals(0, binds)
+        assertTrue(provider.isNativeReady(placement))
+        controller.resume()
+        assertEquals(1, binds)
+        assertFalse(provider.isNativeReady(placement))
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `cold failure while paused is delivered once after resume`() {
+        val host = controller.get()
+        val container = FrameLayout(host).also(host::setContentView)
+        var failures = 0
+        assertFalse(provider.bindNative(host, placement, container, null, object : AdEventListener {
+            override fun onFailedToLoad() { failures++ }
+        }))
+        provider.preloadNative(host, request)
+        controller.pause()
+        vendorEvents.single().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        assertEquals(0, failures)
+        controller.resume()
+        assertEquals(1, failures)
+        controller.pause().resume()
+        assertEquals(1, failures)
+    }
+
+    @Test fun `pager rotation restores consumed native through its view lifecycle`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(contentStepNative = request.unit)
+        }.getOrThrow())
+        val parentId = android.view.View.generateViewId()
+        host.setContentView(FrameLayout(host).apply { id = parentId })
+        val page = io.onboardkit.ui.onboarding.ContentStepFragment.newInstance(io.onboardkit.core.StepId.OB1, 0)
+        host.supportFragmentManager.beginTransaction().add(parentId, page, "native-page").commitNow()
+        page.dispatchSelected()
+        val ad = mock(NativeAd::class.java)
+        requests.single().onNativeAdLoaded(ad)
+        NativeProviderHost.onCreated = { recreated ->
+            recreated.setContentView(FrameLayout(recreated).apply { id = parentId })
+        }
+        controller.configurationChange(android.content.res.Configuration(host.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        val restored = controller.get().supportFragmentManager.findFragmentByTag("native-page")
+            as io.onboardkit.ui.onboarding.ContentStepFragment
+        restored.dispatchSelected()
+        assertEquals(1, requests.size)
+        assertFalse(provider.isNativeReady(AdPlacement.StepNative(io.onboardkit.core.StepId.OB1)))
+        verify(ad, never()).destroy()
+        assertEquals(1, restored.requireView().findViewById<FrameLayout>(io.onboardkit.R.id.ob_native_container).childCount)
+    }
+
+    @Test fun `rotation pending native failure resolves only once`() = verifyPendingRotationOutcome(fail = true)
+
+    @Test fun `helper load failure during pause is deferred until resume`() =
+        verifyPendingRotationOutcome(fail = true, pauseBeforeOutcome = true)
+
+    @Test fun `rotation pending native success resolves only once`() = verifyPendingRotationOutcome(fail = false)
+
+    private fun verifyPendingRotationOutcome(fail: Boolean, pauseBeforeOutcome: Boolean = false) {
+        val host = controller.get()
+        provider.preloadNative(host, request)
+        assertFalse(provider.bindNative(host, placement, FrameLayout(host).also(host::setContentView), null))
+        var loaded = 0
+        var failures = 0
+        NativeProviderHost.onCreated = { recreated ->
+            val container = FrameLayout(recreated).also(recreated::setContentView)
+            val listener = object : AdEventListener {
+                override fun onLoaded() {
+                    loaded++
+                    provider.bindNative(recreated, placement, container, null)
+                }
+                override fun onFailedToLoad() { failures++ }
+            }
+            if (!provider.bindNative(recreated, placement, container, null, listener)) {
+                provider.preloadNative(recreated, request)
+            }
+        }
+        controller.configurationChange(android.content.res.Configuration(host.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        assertEquals(1, requests.size)
+        if (pauseBeforeOutcome) controller.pause()
+        if (fail) vendorEvents.single().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        else requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        if (pauseBeforeOutcome) {
+            assertEquals(0, failures)
+            controller.resume()
+        }
+        assertEquals(if (fail) 0 else 1, loaded)
+        assertEquals(if (fail) 1 else 0, failures)
+    }
+
+    @Test fun `preloading after display keeps the next fill unused until an explicit bind`() {
+        val host = controller.get()
+        val container = FrameLayout(host).also(host::setContentView)
+        var failures = 0
+        val listener = object : AdEventListener {
+            override fun onLoaded() { provider.bindNative(host, placement, container, null) }
+            override fun onFailedToLoad() { failures++ }
+        }
+        assertFalse(provider.bindNative(host, placement, container, null, listener))
+        provider.preloadNative(host, request)
+        val first = mock(NativeAd::class.java)
+        requests.single().onNativeAdLoaded(first)
+        provider.preloadNative(host, request)
+        vendorEvents.last().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        assertEquals("prewarm failure cannot fail a completed display attempt", 0, failures)
+        provider.preloadNative(host, request)
+        val second = mock(NativeAd::class.java)
+        requests.last().onNativeAdLoaded(second)
+        assertTrue(provider.isNativeReady(placement))
+        verify(first, never()).destroy()
+        assertTrue(provider.bindNative(host, placement, container, null))
+        assertFalse(provider.isNativeReady(placement))
+        verify(first).destroy()
+        verify(second, never()).destroy()
+    }
+
     @Test fun `onboarding rotation restores a consumed ad even when show starts in onCreate`() {
         val host = controller.get()
         val container = FrameLayout(host)

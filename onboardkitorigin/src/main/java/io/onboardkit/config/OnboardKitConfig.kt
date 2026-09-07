@@ -104,7 +104,8 @@ data class BehaviorConfig(
     val lockPagerSwipe: Boolean = true,
     /** Back returns to the previous step; on the first step it exits the app. */
     val backNavigatesBack: Boolean = true,
-    /** Re-request the native when the user returns to a step. Off: avoids impression farming. */
+    /** Compatibility only: a new page visit always consumes an unused ad or waits for a new one. */
+    @Deprecated("Native presentations end on page departure; return always starts a new visit.")
     val reloadAdOnStepReturn: Boolean = false,
     /**
      * A forward swipe on the last step completes it exactly like its CTA. Independent of
