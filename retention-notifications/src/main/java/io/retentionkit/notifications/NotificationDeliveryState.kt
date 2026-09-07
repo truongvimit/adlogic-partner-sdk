@@ -59,6 +59,16 @@ internal class NotificationDeliveryState(private val store: RetentionStore) {
         null
     }
 
+    /** Only the caller that has not invoked notify may reopen its reservation for a valid retry. */
+    fun abortBeforeNotify(campaign: NotificationCampaign, occurrence: String): Boolean = store.transaction(STATE) { s ->
+        val key = "attempt:$occurrence"
+        val record = s.string(key)?.let(::JSONObject) ?: return@transaction false
+        if (record.getString("status") != "claimed" || record.getString("campaign") != campaign.key) return@transaction false
+        s.remove(key)
+        s.put("total:${campaign.key}", (s.long("total:${campaign.key}") - 1).coerceAtLeast(0))
+        true
+    }
+
     fun finish(campaign: NotificationCampaign, occurrence: String, submitted: Boolean) = store.transaction(STATE) { s ->
         val key = "attempt:$occurrence"
         val record = JSONObject(s.string(key) ?: error("Missing delivery claim"))

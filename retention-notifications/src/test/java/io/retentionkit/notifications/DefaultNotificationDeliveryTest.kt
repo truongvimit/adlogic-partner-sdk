@@ -291,4 +291,78 @@ class DefaultNotificationDeliveryTest {
         assertFalse(platform.active(NotificationCampaign.PINNED))
         assertFalse(module.status().installed)
     }
+
+    @Test fun entitlementChangingAfterClaimCannotPoisonDeferredCalendarRetry() {
+        val delegate = store
+        var targetOccurrence: String? = null
+        var changedAfterCommit = false
+        store = object : RetentionStore {
+            override fun snapshot(namespace: String) = delegate.snapshot(namespace)
+            override fun <T> transaction(namespace: String, block: (RetentionTransaction) -> T): T {
+                val result = delegate.transaction(namespace, block)
+                // Deliberately AFTER the real durable commit, never inside a transaction block.
+                // This models a public entitlement update between claim and the final post gate.
+                val target = targetOccurrence
+                if (!changedAfterCommit && namespace == STATE && target != null) {
+                    val raw = delegate.snapshot(STATE).string("attempt:$target")
+                    if (raw != null && org.json.JSONObject(raw).getString("status") == "claimed") {
+                        changedAfterCommit = true
+                        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.UNKNOWN))
+                    }
+                }
+                return result
+            }
+        }
+        install()
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        targetOccurrence = alarm.occurrence
+        // Start at the real saved receiver seam outside an active core signal drainer, so the
+        // nested entitlement signal is applied now instead of merely being queued until after post.
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        assertTrue("The real claimed record was committed before entitlement changed", changedAfterCommit)
+        assertTrue("The final gate must prevent notify while entitlement is unknown", platform.posts.isEmpty())
+        assertEquals(alarm, platform.scheduled.getValue(alarm.key))
+
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("A proven-unposted claim must not turn the valid retry into duplicate", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+        RetentionRuntime.uninstallForTests()
+        install()
+        assertEquals("Successful retry remains once-only after duplicate callbacks and restart", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+    }
+
+    @Test fun configurationChangingAfterClaimCannotPoisonTheStillEnabledOccurrence() {
+        val delegate = store
+        var target: String? = null
+        var changed = false
+        store = object : RetentionStore by delegate {
+            override fun <T> transaction(namespace: String, block: (RetentionTransaction) -> T): T {
+                val result = delegate.transaction(namespace, block)
+                val raw = target?.let { delegate.snapshot(STATE).string("attempt:$it") }
+                if (!changed && namespace == STATE && raw != null && org.json.JSONObject(raw).getString("status") == "claimed") {
+                    changed = true
+                    assertTrue(runtime.updateConfig(mapOf("notifications.lockscreen.replace" to "true")) is RetentionConfigResult.Applied)
+                }
+                return result
+            }
+        }
+        install()
+        val old = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(old.due - clock.now + 1)
+        target = old.occurrence
+        assertEquals(NotificationOutcome.Skipped("stale_revision"), module.receiveAlarm(old))
+        assertTrue(changed)
+        assertTrue(platform.posts.isEmpty())
+        val replacement = platform.scheduled.getValue(old.key)
+        assertTrue(replacement.revision > old.revision)
+        assertEquals(old.occurrence, replacement.occurrence)
+        assertTrue("The current revision can deliver the still-valid unposted occurrence", module.receiveAlarm(replacement) is NotificationOutcome.PostSubmitted)
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(old))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(replacement))
+    }
 }

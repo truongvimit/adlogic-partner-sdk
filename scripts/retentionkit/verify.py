@@ -29,7 +29,6 @@ VENDOR_RULES = {
 }
 ALWAYS_FORBIDDEN_PERMISSIONS = {
     "android.permission.FOREGROUND_SERVICE",
-    "android.permission.WAKE_LOCK",
     "android.permission.SCHEDULE_EXACT_ALARM",
     "android.permission.USE_EXACT_ALARM",
     "android.permission.USE_FULL_SCREEN_INTENT",
@@ -38,7 +37,7 @@ ALWAYS_FORBIDDEN_PERMISSIONS = {
 }
 NO_NOTIFICATION_PERMISSIONS = {
     "android.permission.POST_NOTIFICATIONS", "android.permission.RECEIVE_BOOT_COMPLETED",
-    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE", "android.permission.WAKE_LOCK",
 }
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
 

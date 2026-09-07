@@ -331,6 +331,8 @@ class CommonNotificationProfileTest {
         assertEquals(listOf(LocalSlot(13, 0)), profile[NotificationCampaign.LOCKSCREEN].newUserSlots)
         assertTrue(profile.replaceLockscreen)
         assertEquals(14 * DAY, profile.winbackInactivity)
-        assertEquals(setOf("noti_lockscreen_wake_seconds", "notiForPremiumUsers"), NotificationLegacyConfig.map(mapOf("noti_lockscreen_wake_seconds" to "20", "notiForPremiumUsers" to "true")).unsupportedKeys)
+        val wake = NotificationLegacyConfig.map(mapOf("noti_lockscreen_wake_seconds" to "20", "notiForPremiumUsers" to "true"))
+        assertEquals(setOf("notiForPremiumUsers"), wake.unsupportedKeys)
+        assertEquals("20000", wake.overrides["notifications.lockscreen.wake_duration_ms"])
     }
 }

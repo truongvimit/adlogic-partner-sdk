@@ -8,6 +8,7 @@
     <string name="rk_n_lockscreen_body">A useful tool, ready when you need it.</string>
     <string name="rk_n_later">Later</string>
     <string name="rk_n_dismiss">Dismiss</string>
+    <string name="rk_n_close_symbol" translatable="false">×</string>
     <string name="rk_n_channel_daily">Daily tips</string>
     <string name="rk_n_channel_winback">Feature reminders</string>
     <string name="rk_n_channel_onboarding">Setup reminders</string>
