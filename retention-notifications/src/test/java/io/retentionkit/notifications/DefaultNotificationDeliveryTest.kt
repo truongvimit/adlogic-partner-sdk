@@ -114,6 +114,25 @@ class DefaultNotificationDeliveryTest {
         assertEquals(1, platform.posts.size)
     }
 
+    @Test fun unknownColdProcessGetsABoundedDurableRetryBeforeItsOriginalExpiry() {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        module.receiveAlarm(alarm)
+        val retryAt = platform.triggerTimes.getValue(alarm.key)
+        assertTrue("A killed process needs a real wake checkpoint before delivery expires",
+            retryAt > clock.now && retryAt < alarm.expires)
+        assertEquals("Retry cannot change route identity or widen the delivery TTL", alarm,
+            platform.scheduled.getValue(alarm.key))
+        RetentionRuntime.uninstallForTests()
+        clock.advance(retryAt - clock.now)
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+    }
+
     @Test fun pinnedAutomaticallyFollowsGuardAndRestoresAfterOsRemovalWithoutMarketingCaps() {
         install()
         repeat(3) { open ->
