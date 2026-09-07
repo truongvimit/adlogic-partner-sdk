@@ -61,8 +61,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
     private var retentionHandoff: io.retentionkit.RetentionMainHandoff? = null
     /** Main is an intermediary only; ordinary review/widget prompts remain in feature/settings UI. */
-    val isRetentionEntryReady: Boolean get() = retentionHandoff?.hasPendingEntry == true &&
-        window.decorView.hasWindowFocus() && !ConsentCenter.isFormShowing() &&
+    val isRetentionEntryReady: Boolean get() = window.decorView.hasWindowFocus() && !ConsentCenter.isFormShowing() &&
         (!::noInternetDialog.isInitialized || !noInternetDialog.isShowing) &&
         (!::forceUpdateDialog.isInitialized || !forceUpdateDialog.isShowing) && forceUpdateDialogHandle?.isShowing != true
 
