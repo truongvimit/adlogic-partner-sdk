@@ -81,8 +81,9 @@ internal class RetentionFeatureHandoff(
             if (kit.runtime.features().none { it.id == destination }) return
             // Resolver and host gate are arbitrary callbacks. Check selection AFTER both return.
             val ready = lease.activity()
-            if (ready !== activity || closed || !resumed || token != selected ||
-                kit.runtime.entries.pending(selected) != entry) return retryLater()
+            if (closed || !resumed || token != selected || kit.runtime.entries.pending(selected) != entry) return
+            // A stale attempt must not cancel or spend the retry budget of the newer delivery.
+            if (ready !== activity) return retryLater()
             val claimed = kit.consume(selected) ?: return
             token = null
             (activity as RetentionFeatureHost).onRetentionFeature(claimed, destination)
