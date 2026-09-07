@@ -80,6 +80,12 @@ lifecycleScope.launch {
 It does not replay old events; use `isPremium` for the current entitlement, including the
 cached value at startup. A pending purchase is not a completed purchase.
 
+When a decision requires current-process verification, observe `Billing.entitlement` instead.
+Its `BillingEntitlement` values are `UNKNOWN`, `VERIFIED_NON_PREMIUM` and `VERIFIED_PREMIUM`;
+cached booleans and failed/partial queries never verify free ownership. The flow is engine-owned,
+so late installation sees an already-completed verification. Existing `isPremium` and readiness
+APIs keep their compatibility behavior. See [authoritative entitlement semantics](AUTHORITATIVE_ENTITLEMENT.md).
+
 ## 3. Read prices and launch from a user action
 
 ```kotlin

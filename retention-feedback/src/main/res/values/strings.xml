@@ -1,0 +1,13 @@
+<resources>
+    <string name="rk_feedback_title">Before you go</string>
+    <string name="rk_feedback_body">You can keep using the app, try a feature, or continue to Android to manage or remove this app.</string>
+    <string name="rk_feedback_reasons_label">Tell us why (optional)</string>
+    <string name="rk_feedback_reason_usage">The app is difficult to use</string>
+    <string name="rk_feedback_reason_feature">A feature I need is missing</string>
+    <string name="rk_feedback_reason_other">Another reason</string>
+    <string name="rk_feedback_keep">Keep using the app</string>
+    <string name="rk_feedback_continue">Continue</string>
+    <string name="rk_feedback_system_explanation">Android controls app removal. No feedback is required; you can cancel on the system screen.</string>
+    <string name="rk_feedback_shortcut">Uninstall</string>
+    <string name="rk_feedback_try_feature">Try %1$s</string>
+</resources>

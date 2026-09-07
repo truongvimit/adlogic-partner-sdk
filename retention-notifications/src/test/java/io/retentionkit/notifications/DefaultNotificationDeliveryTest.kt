@@ -1,0 +1,368 @@
+package io.retentionkit.notifications
+
+import android.app.Application
+import android.content.ComponentName
+import android.content.Intent
+import androidx.test.core.app.ApplicationProvider
+import io.retentionkit.core.*
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.util.UUID
+
+/** Real runtime signals and saved OS alarm envelopes; only clock/Android transport are fake. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class DefaultNotificationDeliveryTest {
+    private lateinit var app: Application
+    private lateinit var clock: TestClock
+    private lateinit var store: RetentionStore
+    private lateinit var runtime: RetentionRuntime
+    private lateinit var module: RetentionNotifications
+    private lateinit var platform: FakePlatform
+    private lateinit var delays: FakeDelays
+
+    @Before fun before() {
+        RetentionRuntime.uninstallForTests()
+        app = ApplicationProvider.getApplicationContext()
+        clock = TestClock()
+        store = SharedPreferencesRetentionStore(app, "default_delivery_${UUID.randomUUID()}")
+        platform = FakePlatform()
+        delays = FakeDelays()
+    }
+    @After fun after() { RetentionRuntime.uninstallForTests() }
+
+    private fun user() = RetentionUserState(true, false, RetentionEntitlement.NON_SUBSCRIBER,
+        clock.now, clock.now, clock.now)
+
+    private fun install(user: RetentionUserState = user(), options: RetentionNotificationOptions = RetentionNotificationOptions()) {
+        module = RetentionNotifications(options, platform, delays)
+        val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module),
+            clock = clock, store = store, initialUserState = user,
+            featureProvider = RetentionFeatureProvider { listOf(
+                RetentionFeature("notes", "Notes", R.drawable.rk_ic_notification, "Save a note."),
+                RetentionFeature("saved_items", "Saved items", R.drawable.rk_ic_notification, "Find saved work.")) },
+            router = RetentionRouter { _, _ -> Intent().setComponent(ComponentName(app.packageName, "HostSplashActivity")) }))
+        assertTrue(result.toString(), result is RetentionInstallResult.Installed)
+        runtime = (result as RetentionInstallResult.Installed).runtime
+        assertEquals("These are production defaults, without synthetic remote overrides", 0L, runtime.config.revision)
+        assertTrue(runtime.config.values.isEmpty())
+    }
+
+    @Test fun firstCompletedSetupOpenPostsQuietReminderWithoutAnExtraDayOfWaiting() {
+        install()
+        runtime.signal(RetentionSignal.ProcessForeground)
+        assertTrue("The canonical first completed open must submit Reminder", platform.active(NotificationCampaign.REMINDER))
+        val reminder = platform.posts.single { it.first == NotificationCampaign.REMINDER }.second
+        assertNull(reminder.sound)
+        assertEquals(0, reminder.defaults)
+        assertFalse(platform.active(NotificationCampaign.DAILY))
+    }
+
+    @Test fun firstOpenWaitsForSetupBillingPermissionAndHostThenPublishesWithoutAnotherOpen() {
+        install(user().copy(setupCompleted = false, onboardingActive = true,
+            entitlement = RetentionEntitlement.UNKNOWN, setupCompletedAtMillis = 0))
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        runtime.signal(RetentionSignal.HostUiChanged("consent", true))
+        runtime.signal(RetentionSignal.SetupCompleted)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertTrue(platform.posts.isEmpty())
+        runtime.signal(RetentionSignal.HostUiChanged("consent", false))
+        assertTrue("Permission denial still wins", platform.posts.isEmpty())
+        platform.block = null
+        runtime.reconcile("notification_permission_result")
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.REMINDER })
+        runtime.reconcile("repeated_permission_result")
+        runtime.signal(RetentionSignal.SetupCompleted)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("The same open is not replayed by ready callbacks", 1,
+            platform.posts.count { it.first == NotificationCampaign.REMINDER })
+    }
+
+    @Test fun reminderHasItsDocumentedFifteenMinuteCooldownWithoutAnInventedFourPerDayLimit() {
+        install()
+        repeat(5) {
+            runtime.signal(RetentionSignal.ProcessForeground)
+            assertEquals(it + 1, platform.posts.count { post -> post.first == NotificationCampaign.REMINDER })
+            runtime.signal(RetentionSignal.ProcessBackground)
+            runtime.signal(RetentionSignal.ProcessForeground)
+            assertEquals("Immediate reopen must still respect cooldown", it + 1,
+                platform.posts.count { post -> post.first == NotificationCampaign.REMINDER })
+            runtime.signal(RetentionSignal.ProcessBackground)
+            clock.advance(15 * MINUTE)
+        }
+    }
+
+    @Test fun coldDueCalendarWaitsForVerifiedEntitlementWithoutSpendingItsSlotAcrossRestart() {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        assertTrue(platform.posts.isEmpty())
+        RetentionRuntime.uninstallForTests()
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("Verified free should recover the still-valid due slot", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+        assertEquals(1, platform.posts.size)
+    }
+
+    @Test fun unknownColdProcessGetsABoundedDurableRetryBeforeItsOriginalExpiry() {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        module.receiveAlarm(alarm)
+        val retryAt = platform.triggerTimes.getValue(alarm.key)
+        assertTrue("A killed process needs a real wake checkpoint before delivery expires",
+            retryAt > clock.now && retryAt < alarm.expires)
+        assertEquals("Retry cannot change route identity or widen the delivery TTL", alarm,
+            platform.scheduled.getValue(alarm.key))
+        RetentionRuntime.uninstallForTests()
+        clock.advance(retryAt - clock.now)
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+    }
+
+    @Test fun pinnedAutomaticallyFollowsGuardAndRestoresAfterOsRemovalWithoutMarketingCaps() {
+        install()
+        repeat(3) { open ->
+            runtime.signal(RetentionSignal.ProcessForeground)
+            clock.advance(31_000)
+            delays.fire()
+            assertEquals("A missing permanent surface restores on each eligible open", open + 1,
+                platform.posts.count { it.first == NotificationCampaign.PINNED })
+            runtime.reconcile("already_visible")
+            assertEquals(open + 1, platform.posts.count { it.first == NotificationCampaign.PINNED })
+            platform.cancel(NotificationCampaign.PINNED) // OS removed the surface, outside the SDK.
+            runtime.signal(RetentionSignal.ProcessBackground)
+        }
+    }
+
+    @Test fun qualifyingAdDeparturesAreNotSilentlyCappedAtTwoPerDay() = assertThreeDepartures(adClicked = true)
+    @Test fun qualifyingOrdinaryDeparturesAreNotSilentlyCappedAtTwoPerDay() = assertThreeDepartures(adClicked = false)
+
+    private fun assertThreeDepartures(adClicked: Boolean) {
+        install()
+        val campaign = if (adClicked) NotificationCampaign.AD_RETURN else NotificationCampaign.APP_EXIT
+        repeat(3) { departure ->
+            runtime.signal(RetentionSignal.ProcessForeground)
+            clock.advance(31_000) // Preserve the SDK anti-overlap guard after the quiet Reminder.
+            if (adClicked) runtime.signal(RetentionSignal.AdClicked("click_$departure"))
+            runtime.signal(RetentionSignal.ProcessBackground)
+            clock.advance(3_000)
+            delays.fire()
+            assertEquals(departure + 1, platform.posts.count { it.first == campaign })
+            platform.cancel(campaign)
+            clock.advance(15 * MINUTE)
+        }
+    }
+
+    @Test fun reentrantSetupCallbackCannotStrandAnEligibleForegroundRequest() {
+        var sendSetup = false
+        install(options = RetentionNotificationOptions(contentProvider = NotificationContentProvider { context, campaign, features ->
+            if (campaign == NotificationCampaign.REMINDER && sendSetup) {
+                sendSetup = false
+                runtime.signal(RetentionSignal.SetupCompleted)
+            }
+            StandardNotificationContent.content(context, campaign, features)
+        }))
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        platform.block = null
+        sendSetup = true
+        val result = module.refreshForegroundNotifications()
+        assertEquals("Readiness changed while the partner callback was executing", 1,
+            platform.posts.count { it.first == NotificationCampaign.REMINDER })
+        assertTrue(result[NotificationCampaign.REMINDER] is NotificationOutcome.PostSubmitted)
+    }
+
+    @Test fun repeatedReentrantSignalsGetOnlyOneCoalescedPassThenWaitForAnIndependentEvent() {
+        var reenter = false
+        var calls = 0
+        install(options = RetentionNotificationOptions(contentProvider = NotificationContentProvider { context, campaign, features ->
+            if (campaign == NotificationCampaign.REMINDER && reenter) {
+                calls++
+                runtime.signal(RetentionSignal.SetupCompleted)
+            }
+            StandardNotificationContent.content(context, campaign, features)
+        }))
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        platform.block = null
+        reenter = true
+        module.refreshForegroundNotifications()
+        assertEquals("Do not spin if partner callbacks continually change readiness", 2, calls)
+        assertTrue(platform.posts.isEmpty())
+        reenter = false
+        runtime.reconcile("independent_ready_event")
+        assertTrue(platform.active(NotificationCampaign.REMINDER))
+    }
+
+    @Test fun durableUnknownRetriesBackOffAcrossRestartsStopAtExpiryAndIgnoreDuplicateCallbacks() {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        module.receiveAlarm(alarm)
+        for (delay in listOf(30_000L, 60_000L, 120_000L, 240_000L, 480_000L, 960_000L)) {
+            val retryAt = platform.triggerTimes.getValue(alarm.key)
+            assertEquals(delay, retryAt - clock.now)
+            module.receiveAlarm(alarm)
+            assertEquals("Duplicate callbacks do not spend retry checkpoints", retryAt, platform.triggerTimes.getValue(alarm.key))
+            RetentionRuntime.uninstallForTests()
+            clock.advance(delay)
+            install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+            module.receiveAlarm(alarm)
+        }
+        assertEquals(alarm.expires, platform.triggerTimes.getValue(alarm.key))
+        clock.advance(alarm.expires - clock.now)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertTrue("A late verification cannot extend the original delivery deadline", platform.posts.isEmpty())
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+    }
+
+    @Test fun deferredCalendarStillHonorsPermissionDenial() = assertDeferredPlatformBlock("permission_denied")
+    @Test fun deferredCalendarStillHonorsBlockedChannel() = assertDeferredPlatformBlock("channel_blocked")
+    private fun assertDeferredPlatformBlock(reason: String) {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        module.receiveAlarm(alarm)
+        platform.block = reason
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertTrue(platform.posts.isEmpty())
+        platform.block = null
+        runtime.reconcile("later_permission_change")
+        assertTrue("A decided calendar skip is not an arbitrary backlog", platform.posts.isEmpty())
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+    }
+
+    @Test fun explicitPartnerCapRemainsEnforcedAndZeroRestoresUnboundedCommonReminder() {
+        install()
+        assertTrue(runtime.updateConfig(mapOf("notifications.reminder.daily_cap" to "1")) is RetentionConfigResult.Applied)
+        runtime.signal(RetentionSignal.ProcessForeground)
+        runtime.signal(RetentionSignal.ProcessBackground)
+        clock.advance(15 * MINUTE)
+        runtime.signal(RetentionSignal.ProcessForeground)
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.REMINDER })
+        assertTrue(runtime.updateConfig(mapOf("notifications.reminder.daily_cap" to "0")) is RetentionConfigResult.Applied)
+        clock.advance(31_000)
+        delays.fire()
+        assertEquals(2, platform.posts.count { it.first == NotificationCampaign.REMINDER })
+    }
+
+    @Test fun diagnosticSnapshotReportsActualBlockedAndSubmittedAttemptsWithoutSideEffects() {
+        install()
+        platform.block = "permission_denied"
+        runtime.signal(RetentionSignal.ProcessForeground)
+        val before = store.snapshot(STATE).entries()
+        val blocked = module.status()
+        assertEquals(before, store.snapshot(STATE).entries())
+        assertTrue(blocked.installed && blocked.foreground)
+        val reminder = blocked.campaigns.single { it.campaign == NotificationCampaign.REMINDER }
+        assertTrue(reminder.pendingForeground)
+        assertEquals(NotificationOutcome.Skipped("permission_denied"), reminder.lastOutcome)
+        assertTrue(platform.posts.isEmpty())
+        platform.block = null
+        runtime.reconcile("permission_result")
+        val ready = module.status().campaigns.single { it.campaign == NotificationCampaign.REMINDER }
+        assertFalse(ready.pendingForeground)
+        assertTrue(ready.lastOutcome is NotificationOutcome.PostSubmitted)
+        assertEquals("A prior snapshot is immutable", NotificationOutcome.Skipped("permission_denied"), reminder.lastOutcome)
+    }
+
+    @Test fun explicitBackgroundRefreshReturnsBothReasonsAndCannotLeakCancelledForegroundRetry() {
+        install()
+        assertEquals(mapOf(NotificationCampaign.REMINDER to NotificationOutcome.Skipped("background"),
+            NotificationCampaign.PINNED to NotificationOutcome.Skipped("background")), module.refreshForegroundNotifications())
+        runtime.signal(RetentionSignal.ProcessForeground)
+        RetentionRuntime.uninstallForTests()
+        clock.advance(31_000)
+        delays.fire(evenCancelled = true)
+        assertFalse(platform.active(NotificationCampaign.PINNED))
+        assertFalse(module.status().installed)
+    }
+
+    @Test fun entitlementChangingAfterClaimCannotPoisonDeferredCalendarRetry() {
+        val delegate = store
+        var targetOccurrence: String? = null
+        var changedAfterCommit = false
+        store = object : RetentionStore {
+            override fun snapshot(namespace: String) = delegate.snapshot(namespace)
+            override fun <T> transaction(namespace: String, block: (RetentionTransaction) -> T): T {
+                val result = delegate.transaction(namespace, block)
+                // Deliberately AFTER the real durable commit, never inside a transaction block.
+                // This models a public entitlement update between claim and the final post gate.
+                val target = targetOccurrence
+                if (!changedAfterCommit && namespace == STATE && target != null) {
+                    val raw = delegate.snapshot(STATE).string("attempt:$target")
+                    if (raw != null && org.json.JSONObject(raw).getString("status") == "claimed") {
+                        changedAfterCommit = true
+                        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.UNKNOWN))
+                    }
+                }
+                return result
+            }
+        }
+        install()
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        targetOccurrence = alarm.occurrence
+        // Start at the real saved receiver seam outside an active core signal drainer, so the
+        // nested entitlement signal is applied now instead of merely being queued until after post.
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        assertTrue("The real claimed record was committed before entitlement changed", changedAfterCommit)
+        assertTrue("The final gate must prevent notify while entitlement is unknown", platform.posts.isEmpty())
+        assertEquals(alarm, platform.scheduled.getValue(alarm.key))
+
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("A proven-unposted claim must not turn the valid retry into duplicate", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+        RetentionRuntime.uninstallForTests()
+        install()
+        assertEquals("Successful retry remains once-only after duplicate callbacks and restart", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+    }
+
+    @Test fun configurationChangingAfterClaimCannotPoisonTheStillEnabledOccurrence() {
+        val delegate = store
+        var target: String? = null
+        var changed = false
+        store = object : RetentionStore by delegate {
+            override fun <T> transaction(namespace: String, block: (RetentionTransaction) -> T): T {
+                val result = delegate.transaction(namespace, block)
+                val raw = target?.let { delegate.snapshot(STATE).string("attempt:$it") }
+                if (!changed && namespace == STATE && raw != null && org.json.JSONObject(raw).getString("status") == "claimed") {
+                    changed = true
+                    assertTrue(runtime.updateConfig(mapOf("notifications.lockscreen.replace" to "true")) is RetentionConfigResult.Applied)
+                }
+                return result
+            }
+        }
+        install()
+        val old = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(old.due - clock.now + 1)
+        target = old.occurrence
+        assertEquals(NotificationOutcome.Skipped("stale_revision"), module.receiveAlarm(old))
+        assertTrue(changed)
+        assertTrue(platform.posts.isEmpty())
+        val replacement = platform.scheduled.getValue(old.key)
+        assertTrue(replacement.revision > old.revision)
+        assertEquals(old.occurrence, replacement.occurrence)
+        assertTrue("The current revision can deliver the still-valid unposted occurrence", module.receiveAlarm(replacement) is NotificationOutcome.PostSubmitted)
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(old))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(replacement))
+    }
+}

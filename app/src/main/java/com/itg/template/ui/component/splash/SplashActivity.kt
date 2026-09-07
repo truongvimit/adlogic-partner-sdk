@@ -9,7 +9,7 @@ import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
 import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
-import io.onboardkit.ui.splash.ObSplashActivity
+import io.retentionkit.integration.RetentionSplashActivity
 import io.paykit.PayKit
 import kotlinx.coroutines.launch
 
@@ -18,7 +18,13 @@ import kotlinx.coroutines.launch
  * OnboardKit; the ad config refreshes itself through the installed [com.ads.module.config.AdConfigSource].
  * What remains here is this app's own product wiring.
  */
-class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
+class SplashActivity : RetentionSplashActivity(), RemoteConfigUtils.Listener {
+    override fun splashInterstitialOverride(): io.onboardkit.config.InterstitialAdUnit? =
+        super.splashInterstitialOverride().also { selected ->
+            val entry = io.onboardkit.ui.splash.SplashEntry.from(intent.extras)
+            com.itg.template.retention.ExampleQa.entryAdSelected(intent,
+                if (selected != null && entry != null) entry.interKey else "splash_default")
+        }
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on

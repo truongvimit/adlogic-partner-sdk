@@ -59,6 +59,11 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
+    /** Main is an intermediary only; ordinary review/widget prompts remain in feature/settings UI. */
+    val isRetentionEntryReady: Boolean get() = window.decorView.hasWindowFocus() && !ConsentCenter.isFormShowing() &&
+        (!::noInternetDialog.isInitialized || !noInternetDialog.isShowing) &&
+        (!::forceUpdateDialog.isInitialized || !forceUpdateDialog.isShowing) && forceUpdateDialogHandle?.isShowing != true
+
     override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, BannerType.Collapsible())
 
     private val delayHandler = Handler(Looper.getMainLooper())
@@ -112,6 +117,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         if (ConsentCenter.isAlreadyResolved(this)) return
         if (!RemoteConfigUtils.getOnShowDialogConsent()) return
         delayRunnable = Runnable {
+            if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@Runnable
             ConsentCenter.request(
                 this,
                 screen = "main",
@@ -163,6 +169,13 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
     override fun onClickViews() {
         super.onClickViews()
+
+        mBinding.btnRetentionNotifications.click { requestPermission() }
+        mBinding.btnRetentionStatus.click { com.itg.template.retention.RetentionExample.showNotificationStatus(this) }
+        mBinding.btnRetentionSettings.click { io.retentionkit.integration.RetentionSuite.get()?.openNotificationSettings(this) }
+        mBinding.btnRetentionPlayground.click {
+            startActivity(android.content.Intent(this, com.itg.template.retention.RetentionPlaygroundActivity::class.java))
+        }
 
         // Utilities
         mBinding.buttonHello.click {
@@ -594,16 +607,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     }
 
     private fun requestPermission() {
-        xxPermissions {
-            permissions(PermissionLists.getPostNotificationsPermission())
-            onDoNotAskAgain { permissions, userResult ->
-                Timber.tag("Permission").d("Do not ask again ")
-            }
-            onShouldShowRationale { shouldShowRationaleList, onUserResult ->
-                Timber.tag("Permission").d("Should show rationale")
-            }
-            onResult { allGranted, grantedList, deniedList -> }
-        }
+        io.retentionkit.integration.RetentionSuite.get()?.requestNotifications(this)
     }
 
     // ─── Lifecycle ────────────────────────────────────────────

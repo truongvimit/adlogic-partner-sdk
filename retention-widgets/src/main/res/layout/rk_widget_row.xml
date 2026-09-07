@@ -1,0 +1,17 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp" android:background="@drawable/rk_widget_background">
+<TextView android:id="@+id/rk_widget_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/rk_widget_title" android:textSize="13sp" android:textStyle="bold" android:textColor="#243149" android:maxLines="1" android:ellipsize="end" />
+<TextView android:id="@+id/rk_widget_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/rk_widget_unavailable" android:textSize="12sp" android:textColor="#405270" android:visibility="gone" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal"><LinearLayout android:id="@+id/rk_action_1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center" android:padding="4dp">
+<ImageView android:id="@+id/rk_icon_1" android:layout_width="24dp" android:layout_height="24dp" android:importantForAccessibility="no" />
+<TextView android:id="@+id/rk_label_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="12sp" android:textColor="#243149" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout><LinearLayout android:id="@+id/rk_action_2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center" android:padding="4dp">
+<ImageView android:id="@+id/rk_icon_2" android:layout_width="24dp" android:layout_height="24dp" android:importantForAccessibility="no" />
+<TextView android:id="@+id/rk_label_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="12sp" android:textColor="#243149" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout><LinearLayout android:id="@+id/rk_action_3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center" android:padding="4dp">
+<ImageView android:id="@+id/rk_icon_3" android:layout_width="24dp" android:layout_height="24dp" android:importantForAccessibility="no" />
+<TextView android:id="@+id/rk_label_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="12sp" android:textColor="#243149" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout><LinearLayout android:id="@+id/rk_action_4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center" android:padding="4dp">
+<ImageView android:id="@+id/rk_icon_4" android:layout_width="24dp" android:layout_height="24dp" android:importantForAccessibility="no" />
+<TextView android:id="@+id/rk_label_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="12sp" android:textColor="#243149" android:maxLines="2" android:ellipsize="end" />
+</LinearLayout></LinearLayout>
+</LinearLayout>

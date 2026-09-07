@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'io.retentionkit'
+    compileSdk compile_sdk_version
+    resourcePrefix 'rk_'
+    defaultConfig {
+        minSdk min_sdk_version
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += ['-Xjvm-default=all']
+    }
+    testOptions { unitTests.includeAndroidResources = true }
+    publishing { singleVariant('release') { withSourcesJar() } }
+}
+
+dependencies {
+    api project(':retention-core')
+    api project(':retention-notifications')
+    api project(':retention-widgets')
+    api project(':retention-feedback')
+    api project(':retention-review')
+    // Optional adapter classes are only loaded by a host that explicitly declares these kits.
+    compileOnly project(':onboardkitorigin')
+    compileOnly project(':ads')
+    compileOnly project(':trackkit')
+    compileOnly project(':billingkit')
+    compileOnly project(':suite-firebase')
+    compileOnly "androidx.appcompat:appcompat:$androidx_appcompat_version"
+    implementation 'androidx.activity:activity-ktx:1.9.3'
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+    testImplementation project(':onboardkitorigin')
+    testImplementation project(':ads')
+    testImplementation project(':trackkit')
+    testImplementation project(':billingkit')
+    testImplementation project(':suite-firebase')
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    testImplementation 'androidx.test:core:1.7.0'
+    testImplementation "androidx.appcompat:appcompat:$androidx_appcompat_version"
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create('release', MavenPublication) {
+                from components.release
+                artifactId = 'retentionkit'
+            }
+        }
+    }
+}

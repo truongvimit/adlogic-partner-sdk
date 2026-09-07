@@ -229,6 +229,22 @@ class AppOpenResumePresentationTest {
     }
 
     @Test
+    fun `a retention suppression acquired during loading blocks the pending show`() {
+        val ad = load()
+        manager.showAdIfAvailable(false)
+        val hold = manager.suppressResume("retention", "feedback_open", 10_000L)
+        try {
+            main.idleFor(800, TimeUnit.MILLISECONDS)
+            assertTrue(ad.hosts.isEmpty())
+            assertTrue(manager.isAdAvailable(false))
+            assertFalse(manager.isShowingAd)
+            assertFalse(latestDialogShowing())
+        } finally {
+            hold.close()
+        }
+    }
+
+    @Test
     fun `release or unit replacement during loading cannot dispatch the old cached ad`() {
         val released = load()
         manager.showAdIfAvailable(false)

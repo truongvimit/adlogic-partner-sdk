@@ -1,0 +1,38 @@
+# Verify normal partner flows and close review
+
+Type: task
+Status: claimed
+Blocked by: 15, 16, 17
+Base: 2865f6d
+
+Fresh default physical ADB tests without QA config for foreground/background notifications; OS alarms not receiver injection for lockscreen/calendar; channel/all permission/subscriber/pending suppression; reopen/reboot no launcher schedule recovery. Preserve physical app data/widget/system settings. Verify build and targeted full modules, R8 and consumers for final source. Run independent Standards/Spec review per skill, single fixer, incremental commits, PR external permission recorded accurately.
+
+## Acceptance
+
+Evidence must distinguish ordinary production defaults from explicit synthetic engine fixtures. Prior corrected acceptance is historical and does not prove this reopened request.
+
+
+## Answer — feedback readiness implementation scope
+
+Completed by audit_pdf in the private feedback-readiness worktree. A real lifecycle/focus regression reproduced the accepted survey immediately finishing while host focus was false. Internal activation now distinguishes READY/WAITING/TERMINAL; waiting uses focus/core signals with bounded fallback polling and a60-second monotonic timeout. The exact durable session/purpose is retained, actions still require the core lease, and config disable/shutdown cancel waiting UI. Pause, finish and destruction release owned callbacks/subscription/lease; native resources retain their existing lifecycle cleanup. Explicit feedback remains available to paid users.
+
+Actual final command at production/test source `f15d4a45fc5be023d19425e8d6976738918ce8f4`: feedback39/39 PASS, zero failure/error/skip, release AAR PASS18seconds. Evidence: [full manifest](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket18-feedback-readiness/full-feedback-final/result.json), [minimized RED](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket18-feedback-readiness/red-minimized/result.json). Targeted/diagnostic runs are separate provenance and are not added to39. No ADB/root implementation changes; root receives the Gradle lease for integrated APK/device validation. This scoped Answer completes only the feedback correction; overall18 remains open under parent ownership.
+
+## Answer — final review correction scope
+
+The single fixer addressed all three findings from the frozen c925 review in the private final-review-fixes worktree. The real combined asynchronous post-confirmation → UNKNOWN → verified-free regression first failed with zero screen leases where one was required. A confirmed, unspent first-wake decision now persists through bounded checkpoints and can resume on authoritative readiness while the screen remains off. It rechecks the matching active occurrence and all current gates; UNKNOWN never wakes, repeated callbacks do not reset the checkpoint budget, and process recreation alone does not create a wake decision. New regressions cover cold restore, exhausted checkpoints, changed active identity, blocked channel, subscriber, dismissal and the existing two-attempt limit.
+
+Main and Feature handoffs now share one internal weak window-focus registration/cleanup owner while retaining their separate forwarding and consumption behavior. Coordination history is under Comments; earlier scoped Answers remain intact.
+
+At clean production/test source `186c6ecb96eac10d5a3743811bc40aa0e99e6815`, all104 notification tests and43 facade tests passed (147 total, zero failure/error/skip), and both release AARs assembled successfully in53seconds. The targeted RED/GREEN runs are provenance, not additional tests in that total. Immutable [JUnit/log result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/full-affected-186c6ec/result.json), [artifact/source SHA manifest](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/full-affected-186c6ec/artifact-manifest.json), and [actual minimized RED](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/review-fixes-c925/first-wake-red/result.json) are outside the worktree. No ADB or root source changes were made. This Answer closes only the three implementation findings; parent retains the open final device, consumer and overall18 acceptance.
+
+## Comments
+
+### Parent checkpoint after ticket16 merge
+
+Parent tracker checkpoint after ticket16 merge:15 is resolved for module implementation (126 passing selected cases and release AAR),16 is resolved for scoped facade/example implementation (75 passing cases and debug/test APKs),17 is now resolved for scoped implementation (merged5e26fcf;97 notification tests/AAR PASS;49 unchanged core cases retained). The facade alias/test, Android test naming and explicit example Settings integration still await the next integrated build. This ticket retains the final normal-device, screen-wake, optional-vendor R8/consumer and independent review acceptance. Its dependency on16 is one-way;16 does not remain open waiting for18. Root's early normal-device observations and the historical corrected279/17/matrix records do not constitute completion of this final-source acceptance.
+
+
+### Feedback readiness coordination
+
+audit_pdf owns the bounded feedback module/test correction in private feedback-readiness at base78545de. Actual Suite16 launcher-Uninstall path creates RetentionFeedbackActivity then closes before survey shown/native loaded; source/evidence investigation and real lifecycle/focus RED→GREEN are required. Agreed seams: SDK Activity lifecycle/focus plus core host gating, real default/custom survey and lease cleanup. Root retains actual devices and overall18 acceptance; this subtask does not resolve18. No ADB/root/other implementation worktree edits. Exclusive Gradle lease transferred from17 for targeted/full feedback checks.

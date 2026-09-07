@@ -1,0 +1,45 @@
+# 06 Full example integration
+
+Type: task
+Status: resolved
+Blocked by: 02, 03, 04, 05
+
+Spec: ../spec.md
+
+## Scope and acceptance
+
+Own app/** and any standalone composition proof sample modules. Integrate umbrella once from GlobalApp, reuse selected app language/entitlement/OnboardKit completion/shared Firebase, preserve existing ads sample and add a clear Retention playground entry. Provide working destination screens (translation/document/task sample content), notification actions, widget, feedback and business-success/review controls. Standard default release behavior and debug-only test conveniences clearly separated. Add safe deterministic device instrumentation/automation, no release exported test receivers, no force success/mock production transport. Use only Google test ads in device debug. Remove/replace overlapping example legacy rating/shortcut wiring only where used.
+
+Follow the shared implementation contract and acceptance ledger in spec.md. Commit only owned files; write implementation/test results under Answer and change Status to resolved when verified. Provide commit hashes and concise context pointers for the merger.
+
+## Answer
+
+Implemented and accepted on 2026-09-07. The existing Ad Showcase remains intact and opens the EN/VI Everyday tools playground. Four working offline utilities share their localized catalogue with notifications, widget tiles, feedback rescue and shortcuts. Application installation reuses the Retention facade, selected app locale, shared Firebase/Trackkit and the Onboard/Billing bridges. Initial entitlement stays UNKNOWN until authoritative verification. Standard release keeps production defaults; explicit debug QA owns an isolated store/clock and uses actual Android/Play transports.
+
+Typed entries survive Splash and real onboarding, dispatch after resume, and retain the latest captured/restored token. Results and stable success IDs persist atomically in an app outbox; the owned core subscriber acknowledges after durable dispatch and safely replays after failure/restart. Standard feedback/manual Rate replace overlapping example wiring, and shortcut migration removes only the known legacy ID. No rating/uninstall/pin success is fabricated. See [app integration guide](/Users/Shared/AndroidProject/Example-AdLogic-Partner-main/app/RETENTION_EXAMPLE.md) for entrypoints, defaults, debug boundaries and exact commands.
+
+Final accepted implementation: delivery `2ff967a909cf043bf6e66b3424258a78efe67947`; clean execution checkout `97cc904486b8ef2219dcf56dabe2130a4ba5ef0e` had an identical whole Git tree throughout build and connected execution. The final app correction is `a4d3c3123d9079cc61b969675c1ce1c47778a972`; all non-app source remains identical to `bf68f1e6b11e0c15e2e1f8ad64670b516529de33`.
+
+| Acceptance | Actual result and provenance |
+| --- | --- |
+| Fresh app unit/Robolectric | **17/17 PASS**, zero failures/errors/skips; [actual XML summary](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/tests.json) |
+| Product unit scope | **549/549 PASS** = 532 unchanged non-app cases from the prior full run + 17 freshly executed app cases. These are separate invocations with verified non-app tree equality; [combined provenance](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/combined-product-tests.json) |
+| App packaging | Debug APK, instrumentation APK and release R8 **PASS**, 3m38s. Only Crashlytics mapping upload excluded; [exact run/source/log record](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/run.json) |
+| Root-owned Android acceptance | **15/15 PASS** on API36 emulator, zero failures/errors/skips; [actual verification](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-6-final-verification.json), [frozen execution record](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-6-final/run.json) |
+
+The 532 non-app cases are core 46, notifications 35, widgets 36, feedback 22, review 19, facade 12, shared Firebase 4, Billing 20, ads 162, OnboardKit 168 and Trackkit 8. Prior full 546 included the old 14 app cases; they are replaced by the final 17, not added twice. [Prior immutable XML summary](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-example-20260907-bf68f1e/tests.json).
+
+Android coverage includes all seven campaigns; actual four-action pinned routing; config/foreground/subscriber gates; setup/resume/replay; business outbox/review dedupe; actual IMPORTANCE_NONE channel suppression; genuine Play transport with accelerated eligibility and truthful terminal/lease release; and standard optional-reason feedback Keep/rescue/App Info + Back. Calendar injections use genuine saved envelopes and receivers but are explicitly engine-driven, not evidence of OS alarm wake timing. Final actual JUnit SHA256: `09d11219e950a8cb785d4560e104ccc4c179d38e7115c35abb1bcc4a21a47d3b`.
+
+Preserved [debug APK](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/artifacts/app-debug/ITG_Base_Project_v1.0.0_v100_09.07.2026-debug.apk), [test APK](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/artifacts/app-androidTest/ITG_Base_Project_v1.0.0_v100_09.07.2026-debug-androidTest.apk) and [R8 release APK](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/artifacts/app-release/ITG_Base_Project_v1.0.0_v100_09.07.2026-release.apk) are independent of worktree cleanup. [Artifact/mapping manifest](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/artifacts.json) records all hashes. APK SHA256 values: debug `b639397390479de43e087101d68d309af72e837f15d803ece893e112c746806c`; test `a04f8bc244f9397823faf2398a45bfdd90d6b517c9a51d02d4e5e150ffa8731d`; release `91a66bcd4f359d4e4ba02a754dea9650f2f92847a38d6fbf30d93f4d2f9c591d`.
+
+## Comments / preserved history
+
+- Early compiling integration: 11 app units passed. First actual API36 run passed 9/11; ActivityScenario launch-identity cleanup and an incorrectly disabled review-counter fixture were repaired without weakening production behavior. The locale assertion was aligned to the actual selected-language catalogue.
+- Coverage grew to 14 app units and 13, then 15 Android cases. The intermediate integrated suite had 522 relevant module cases, followed by Trackkit 8. Those are historical checkpoints; the final totals above supersede them.
+- Shared handoff review corrections in `90ac742` produced a full 546-unit pass. The subsequent device run passed 14/15 and exposed a real app routing race; [failed result preserved](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-5-review-fix-failure-verification.json). A minimized actual-Activity test reproduced the older feature winning after two Intent deliveries. `a4d3c312` removed ledger fallback and gave each newly captured route its own bounded retry. Three green regressions cover two deliveries, an eight-Intent burst with resume/recreation and exhausted-retry replacement. Pinned assertions now require distinct materialized tokens, correct destinations, consumed receipts and actual feature titles. Final 17-unit + 15-emulator acceptance passed after this correction.
+- Review S1's active-status correction to `claimed` was applied before final verification. This ticket is now `resolved` because its app implementation, build/minify and final root-owned emulator acceptance are recorded above; this does not resolve independent publication/PR tasks.
+
+Root's separate API36 manual checks at `1d06439` passed with normal adapters: actual widget pin → consent/language/onboard/PayKit → functional TextTools, VI widget refresh and warm Document routing. OS permission denial/grant, Store handoff/Back, force-stop/user-relaunch alarm recovery, timezone recalculation and guest-reboot restoration were also observed. [Force-stop](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/force-stop-verdict.json), [timezone](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/timezone-verdict.json), [reboot](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/reboot-verdict.json) retain exact timing/state evidence; none is a Doze, alarm-delivery or OEM guarantee.
+
+At this earlier checkpoint Pixel5 API34 was PIN-locked. The unlocked follow-up now records15/15 Android cases and additional manual checks at4356938; full physical acceptance remains pending in ticket09/physical-acceptance.md after concurrent device input. The earlier counts above remain historical evidence. Play review-card/quota/rating outcomes and launcher acceptance remain platform-controlled. The unpublished example's Store page may show Item not found. The root ledger owns these limits and remaining whole-project validation/publication work; no ADB was run by this implementer.

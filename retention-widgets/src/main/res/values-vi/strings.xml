@@ -1,0 +1,9 @@
+<resources>
+    <string name="rk_widget_title">Truy cập nhanh</string>
+    <string name="rk_widget_description">Mở tính năng yêu thích từ màn hình chính</string>
+    <string name="rk_widget_unavailable">Mở ứng dụng để thiết lập truy cập nhanh</string>
+    <string name="rk_widget_invitation_title">Thêm truy cập nhanh vào màn hình chính</string>
+    <string name="rk_widget_invitation_message">Mở tính năng yêu thích ngay từ tiện ích.</string>
+    <string name="rk_widget_add">Thêm tiện ích</string>
+    <string name="rk_widget_not_now">Để sau</string>
+</resources>

@@ -1,0 +1,112 @@
+import groovy.json.JsonOutput
+
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Consumer proof only: this application is intentionally absent from Maven/JitPack publications.
+def allowedProfiles = ['core', 'notifications', 'widgets', 'feedback', 'review', 'umbrella']
+def retentionProfile = providers.gradleProperty('retentionProfile').getOrElse('core')
+def dependencySource = providers.gradleProperty('retentionDependencySource').getOrElse('project')
+def mavenVersion = providers.gradleProperty('retentionMavenVersion').orNull
+def mavenRepo = providers.gradleProperty('retentionMavenRepo').orNull
+if (!(retentionProfile in allowedProfiles)) {
+    throw new GradleException("retentionProfile must be one of ${allowedProfiles.join(', ')}")
+}
+if (!(dependencySource in ['project', 'maven'])) {
+    throw new GradleException('retentionDependencySource must be project or maven')
+}
+if (dependencySource == 'maven') {
+    if (mavenVersion == null || !(mavenVersion ==~ /[A-Za-z0-9][A-Za-z0-9_.-]{0,127}/) || mavenVersion in ['latest.release', 'latest.integration', 'unspecified']) {
+        throw new GradleException('Maven consumer requires an explicit retentionMavenVersion (no dynamic versions)')
+    }
+    if (mavenRepo == null || !new File(mavenRepo).isAbsolute() || !new File(mavenRepo).isDirectory() || (mavenRepo =~ /[\x00-\x1f\x7f]/).find()) {
+        throw new GradleException('Maven consumer requires retentionMavenRepo as an existing absolute local repository directory')
+    }
+} else if (mavenVersion != null || mavenRepo != null) {
+    throw new GradleException('retentionMavenVersion/retentionMavenRepo are only valid for the maven dependency source')
+}
+def artifact = retentionProfile == 'umbrella' ? 'retentionkit' : "retention-${retentionProfile}"
+// Do not confuse a review/project APK or merged manifest with a later umbrella/maven build.
+layout.buildDirectory = file("build/${retentionProfile}/${dependencySource}")
+
+android {
+    namespace 'io.retentionkit.sample'
+    compileSdk compile_sdk_version
+    defaultConfig {
+        applicationId "io.retentionkit.sample.${retentionProfile}.${dependencySource}"
+        minSdk min_sdk_version
+        targetSdk target_sdk_version
+        versionCode 1
+        versionName '1.0'
+        buildConfigField 'String', 'RETENTION_PROFILE', JsonOutput.toJson(retentionProfile)
+        buildConfigField 'String', 'RETENTION_DEPENDENCY_SOURCE', JsonOutput.toJson(dependencySource)
+        buildConfigField 'String', 'RETENTION_VERSION', JsonOutput.toJson(mavenVersion ?: project.version.toString())
+    }
+    buildFeatures { buildConfig true }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            // Local installable R8 proof, not a shipping app or a production signing configuration.
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    sourceSets {
+        main.java.srcDirs += "src/profiles/${retentionProfile}/java"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    testOptions { unitTests.includeAndroidResources = true }
+}
+
+if (dependencySource == 'maven') {
+    repositories {
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'retentionLocalPomProof'
+                    url = uri(new File(mavenRepo))
+                    metadataSources {
+                        mavenPom()
+                        // Deliberately prove published POM closure instead of Gradle .module metadata.
+                        ignoreGradleMetadataRedirection()
+                    }
+                }
+            }
+            filter { includeGroup 'com.github.truongvimit' }
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:$androidx_core_ktx_version"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    if (dependencySource == 'project') {
+        implementation project(":${artifact}")
+    } else {
+        implementation "com.github.truongvimit:${artifact}:${mavenVersion}"
+    }
+}
+
+tasks.register('printRetentionConsumerConfiguration') {
+    group = 'verification'
+    description = 'Print the actual selected consumer configuration; does not assert build/test success.'
+    doLast {
+        println JsonOutput.toJson([
+            profile: retentionProfile, dependencySource: dependencySource, artifact: artifact,
+            version: mavenVersion ?: project.version.toString(), localMavenRepo: mavenRepo,
+            applicationId: android.defaultConfig.applicationId,
+            selectedSources: file("src/profiles/${retentionProfile}/java").absolutePath,
+            outputDirectory: layout.buildDirectory.get().asFile.absolutePath,
+            releaseMinified: android.buildTypes.release.minifyEnabled,
+            pomMetadataOnly: dependencySource == 'maven', behavioralResult: 'not_evaluated'
+        ])
+    }
+}

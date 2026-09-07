@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android P+ requires this for the user-owned uninstall confirmation. No automatic removal. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <application>
+        <activity android:name=".RetentionFeedbackActivity" android:exported="false" android:theme="@style/rk_FeedbackTheme" />
+    </application>
+</manifest>

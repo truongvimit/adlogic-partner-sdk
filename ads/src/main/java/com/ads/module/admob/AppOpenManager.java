@@ -112,6 +112,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private volatile String currentReturnSkipReason;
     private long resumeReturnGeneration;
     private ResumeSkipPolicy resumeSkipPolicy;
+    private final ResumeSuppressionRegistry resumeSuppressions =
+            new ResumeSuppressionRegistry(SystemClock::elapsedRealtime);
     private final List<Class> disabledAppOpenList;
     private Class splashActivity;
     private boolean isTimeout = false;
@@ -247,6 +249,38 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
+     * Holds both OPEN and a cooperating WELCOME flow for a modal/system operation. Each returned
+     * handle owns its own hold, even when owner names are equal. timeoutMs is 1..600000; expiry
+     * uses elapsed realtime and bounds a missing lifecycle callback. Existing host policy remains
+     * installed, and the durable app-resume enable flag is never changed.
+     */
+    @NonNull
+    public ResumeSuppression suppressResume(@NonNull String owner, @NonNull String reason, long timeoutMs) {
+        return boundedResumeSuppression(owner, reason, timeoutMs, false);
+    }
+
+    /**
+     * Owner-scoped alternative to the legacy one-argument method. The first real host return
+     * consumes it; both synchronous resume observers see the same snapshot. Close if the external
+     * launch fails, without erasing another owner's skip or an ad-click flag.
+     */
+    @NonNull
+    public ResumeSuppression skipNextResume(@NonNull String owner, @NonNull String reason, long timeoutMs) {
+        return boundedResumeSuppression(owner, reason, timeoutMs, true);
+    }
+
+    private ResumeSuppression boundedResumeSuppression(String owner, String reason, long timeoutMs,
+                                                       boolean nextReturn) {
+        ResumeSuppression lease = resumeSuppressions.acquire(owner, reason, timeoutMs, nextReturn);
+        Runnable expiry = lease::close;
+        resumeFetchHandler.postDelayed(expiry, timeoutMs);
+        return () -> {
+            resumeFetchHandler.removeCallbacks(expiry);
+            lease.close();
+        };
+    }
+
+    /**
      * Pure read: repeated queries do not spend the one-shot. Both process observers see the same
      * captured reason during this main-thread lifecycle dispatch. A posted clear ends that
      * snapshot so a later explicit show or overlay return in the same foreground is not blocked.
@@ -273,6 +307,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (activity instanceof AdActivity) return "ad_activity";
         String returnReason = getResumeReturnSkipReason();
         if (returnReason != null) return returnReason;
+        String ownedReason = resumeSuppressions.reason();
+        if (ownedReason != null) return ownedReason;
         com.ads.module.helper.AdSkipReason core = AdGate.skipReason(activity, true, true, false);
         if (core != null) return core.getKey();
         ResumeSkipPolicy policy = resumeSkipPolicy;
@@ -299,6 +335,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private void captureResumeReturn(@Nullable Activity activity) {
         if (activity == null || activity instanceof AdActivity) return;
+        long ownedCapture = resumeSuppressions.captureReturn();
+        if (ownedCapture != 0) {
+            resumeFetchHandler.post(() -> resumeSuppressions.clearCaptured(ownedCapture));
+        }
         String reason = pendingResumeSkipReason.getAndSet(null);
         if (reason != null) {
             currentReturnSkipReason = reason;
@@ -2015,6 +2055,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     public void onStop() {
         Log.d(TAG, "onStop: app stop");
         currentReturnSkipReason = null;
+        resumeSuppressions.clearCaptured();
 
     }
 

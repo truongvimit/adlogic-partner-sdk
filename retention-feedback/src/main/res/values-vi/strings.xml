@@ -1,0 +1,13 @@
+<resources>
+    <string name="rk_feedback_title">Trước khi bạn rời đi</string>
+    <string name="rk_feedback_body">Bạn có thể tiếp tục sử dụng, thử một tính năng hoặc mở Android để quản lý hay gỡ ứng dụng.</string>
+    <string name="rk_feedback_reasons_label">Chia sẻ lý do (không bắt buộc)</string>
+    <string name="rk_feedback_reason_usage">Ứng dụng khó sử dụng</string>
+    <string name="rk_feedback_reason_feature">Thiếu tính năng tôi cần</string>
+    <string name="rk_feedback_reason_other">Lý do khác</string>
+    <string name="rk_feedback_keep">Tiếp tục sử dụng</string>
+    <string name="rk_feedback_continue">Tiếp tục</string>
+    <string name="rk_feedback_system_explanation">Android quyết định việc gỡ ứng dụng. Bạn không cần gửi phản hồi và có thể hủy trên màn hình hệ thống.</string>
+    <string name="rk_feedback_shortcut">Gỡ cài đặt</string>
+    <string name="rk_feedback_try_feature">Thử %1$s</string>
+</resources>
