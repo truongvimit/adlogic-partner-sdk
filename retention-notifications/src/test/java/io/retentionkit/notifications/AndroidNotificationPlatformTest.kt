@@ -80,9 +80,10 @@ class AndroidNotificationPlatformTest {
         val permissions = pkg.requestedPermissions.orEmpty().toSet()
         assertTrue(Manifest.permission.POST_NOTIFICATIONS in permissions)
         assertTrue(Manifest.permission.RECEIVE_BOOT_COMPLETED in permissions)
-        assertFalse(permissions.any { it.contains("EXACT_ALARM") || it.contains("FULL_SCREEN") || it.contains("FOREGROUND_SERVICE") || it == Manifest.permission.WAKE_LOCK })
+        assertTrue(Manifest.permission.WAKE_LOCK in permissions)
+        assertFalse(permissions.any { it.contains("EXACT_ALARM") || it.contains("FULL_SCREEN") || it.contains("FOREGROUND_SERVICE") || it == Manifest.permission.TURN_SCREEN_ON })
         val owned = pkg.receivers.orEmpty().filter { it.name.startsWith("io.retentionkit.notifications.") }
-        assertEquals(3, owned.size)
+        assertEquals(4, owned.size)
         assertTrue(owned.all { !it.exported })
     }
 

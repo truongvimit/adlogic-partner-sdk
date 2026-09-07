@@ -1,0 +1,19 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="48dp" android:orientation="horizontal" android:baselineAligned="false">
+    <LinearLayout android:id="@+id/rk_tile_1" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="2dp">
+        <ImageView android:id="@+id/rk_icon_1" android:layout_width="20dp" android:layout_height="20dp" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/rk_label_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp" android:gravity="center" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/rk_tile_2" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="2dp">
+        <ImageView android:id="@+id/rk_icon_2" android:layout_width="20dp" android:layout_height="20dp" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/rk_label_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp" android:gravity="center" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/rk_tile_3" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="2dp">
+        <ImageView android:id="@+id/rk_icon_3" android:layout_width="20dp" android:layout_height="20dp" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/rk_label_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp" android:gravity="center" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/rk_tile_4" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="2dp">
+        <ImageView android:id="@+id/rk_icon_4" android:layout_width="20dp" android:layout_height="20dp" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/rk_label_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp" android:gravity="center" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+    </LinearLayout>
+</LinearLayout>

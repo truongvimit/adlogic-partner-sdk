@@ -231,6 +231,7 @@ class RetentionNotifications internal constructor(
                 if (state.string(key) != null) false else { state.put(key, runtime.clock.wallTimeMillis()); true }
             }.also { accepted ->
                 if (accepted && campaign != NotificationCampaign.PINNED && platform.activeOccurrence(campaign) == entry.instanceId) {
+                    if (campaign == NotificationCampaign.LOCKSCREEN) wake.cancel(entry.instanceId, "opened")
                     platform.cancel(campaign)
                 }
             }

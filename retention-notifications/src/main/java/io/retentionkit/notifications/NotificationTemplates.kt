@@ -81,34 +81,46 @@ object StandardNotificationRenderer : NotificationRenderer {
         val (context, campaign, content) = request
         builder.setStyle(Notification.BigTextStyle().setBigContentTitle(content.expandedTitle).bigText(content.body))
         if (campaign == NotificationCampaign.PINNED) {
-            val views = RemoteViews(context.packageName, R.layout.rk_notification_tiles)
-            views.setTextViewText(R.id.rk_notification_title, content.title)
-            val roots = intArrayOf(R.id.rk_tile_1, R.id.rk_tile_2, R.id.rk_tile_3, R.id.rk_tile_4)
-            val icons = intArrayOf(R.id.rk_icon_1, R.id.rk_icon_2, R.id.rk_icon_3, R.id.rk_icon_4)
-            val labels = intArrayOf(R.id.rk_label_1, R.id.rk_label_2, R.id.rk_label_3, R.id.rk_label_4)
-            roots.indices.forEach { i ->
-                val action = request.actions.getOrNull(i)
-                views.setViewVisibility(roots[i], if (action == null) View.GONE else View.VISIBLE)
-                if (action != null) {
-                    views.setTextViewText(labels[i], action.label)
-                    views.setImageViewResource(icons[i], action.iconRes.takeIf { it != 0 } ?: R.drawable.rk_ic_notification)
-                    views.setContentDescription(roots[i], action.label)
-                    views.setOnClickPendingIntent(roots[i], action.pendingIntent)
+            fun tiles(compact: Boolean): RemoteViews {
+                val views = RemoteViews(context.packageName, if (compact) R.layout.rk_notification_tiles_compact else R.layout.rk_notification_tiles)
+                if (!compact) views.setTextViewText(R.id.rk_notification_title, content.title)
+                val roots = intArrayOf(R.id.rk_tile_1, R.id.rk_tile_2, R.id.rk_tile_3, R.id.rk_tile_4)
+                val icons = intArrayOf(R.id.rk_icon_1, R.id.rk_icon_2, R.id.rk_icon_3, R.id.rk_icon_4)
+                val labels = intArrayOf(R.id.rk_label_1, R.id.rk_label_2, R.id.rk_label_3, R.id.rk_label_4)
+                roots.indices.forEach { i ->
+                    val action = request.actions.getOrNull(i)
+                    views.setViewVisibility(roots[i], if (action == null) View.GONE else View.VISIBLE)
+                    if (action != null) {
+                        views.setTextViewText(labels[i], action.label)
+                        views.setImageViewResource(icons[i], action.iconRes.takeIf { it != 0 } ?: R.drawable.rk_ic_notification)
+                        views.setContentDescription(roots[i], action.label)
+                        views.setOnClickPendingIntent(roots[i], action.pendingIntent)
+                    }
                 }
+                return views
             }
-            builder.setStyle(Notification.DecoratedCustomViewStyle()).setCustomBigContentView(views)
+            builder.setStyle(Notification.DecoratedCustomViewStyle()).setCustomContentView(tiles(true)).setCustomBigContentView(tiles(false))
         } else if (campaign == NotificationCampaign.LOCKSCREEN) {
-            val views = RemoteViews(context.packageName, R.layout.rk_notification_lockscreen)
-            views.setTextViewText(R.id.rk_notification_title, content.title)
-            views.setTextViewText(R.id.rk_notification_body, content.body)
-            views.setTextViewText(R.id.rk_notification_open, request.actions.firstOrNull()?.label ?: content.title)
-            views.setOnClickPendingIntent(R.id.rk_notification_open, request.actions.firstOrNull()?.pendingIntent ?: request.contentIntent)
-            views.setOnClickPendingIntent(R.id.rk_notification_close, request.dismissIntent)
-            if (content.imageRes != null) {
-                views.setImageViewResource(R.id.rk_notification_image, content.imageRes)
-                views.setViewVisibility(R.id.rk_notification_image, View.VISIBLE)
+            fun card(compact: Boolean): RemoteViews {
+                val views = RemoteViews(context.packageName, if (compact) R.layout.rk_notification_lockscreen_compact else R.layout.rk_notification_lockscreen)
+                views.setTextViewText(R.id.rk_notification_title, content.title)
+                views.setTextViewText(R.id.rk_notification_body, content.body)
+                val openLabel = request.actions.firstOrNull()?.label ?: context.getString(R.string.rk_n_action_now)
+                views.setTextViewText(R.id.rk_notification_open, openLabel)
+                views.setContentDescription(R.id.rk_notification_open, openLabel)
+                // Set runtime-localized text explicitly: SystemUI can inflate resources in another locale.
+                views.setTextViewText(R.id.rk_notification_close, context.getString(if (compact) R.string.rk_n_close_symbol else R.string.rk_n_dismiss))
+                views.setContentDescription(R.id.rk_notification_close, context.getString(R.string.rk_n_dismiss))
+                views.setOnClickPendingIntent(R.id.rk_notification_open, request.actions.firstOrNull()?.pendingIntent ?: request.contentIntent)
+                views.setOnClickPendingIntent(R.id.rk_notification_close, request.dismissIntent)
+                if (!compact && content.imageRes != null) {
+                    views.setImageViewResource(R.id.rk_notification_image, content.imageRes)
+                    views.setViewVisibility(R.id.rk_notification_image, View.VISIBLE)
+                }
+                return views
             }
-            builder.setStyle(Notification.DecoratedCustomViewStyle()).setCustomBigContentView(views)
+            builder.setStyle(Notification.DecoratedCustomViewStyle()).setCustomContentView(card(true))
+                .setCustomHeadsUpContentView(card(true)).setCustomBigContentView(card(false))
         } else if (campaign.updates && content.imageRes != null) {
             // Bundled image only; bound decode dimensions and avoid allocating a full-size photograph.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

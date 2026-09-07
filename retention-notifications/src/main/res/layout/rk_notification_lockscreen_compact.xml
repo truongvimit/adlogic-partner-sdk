@@ -1,0 +1,18 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="48dp"
+    android:orientation="horizontal" android:gravity="center_vertical" android:baselineAligned="false">
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"
+        android:orientation="vertical" android:gravity="center_vertical" android:paddingEnd="4dp">
+        <TextView android:id="@+id/rk_notification_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" android:textSize="14sp"
+            android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+        <TextView android:id="@+id/rk_notification_body" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp"
+            android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" />
+    </LinearLayout>
+    <TextView android:id="@+id/rk_notification_open" android:layout_width="72dp" android:layout_height="match_parent"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textStyle="bold"
+        android:gravity="center" android:paddingHorizontal="2dp" android:textSize="12sp" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:id="@+id/rk_notification_close" android:layout_width="48dp" android:layout_height="match_parent"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" android:gravity="center" android:textSize="24sp" />
+</LinearLayout>

@@ -110,16 +110,17 @@ internal class LockscreenWakeController(
 
     private fun observe() {
         if (observer != null || closed) return
+        val observedOccurrence = read()?.occurrence ?: return
         observer = power.observe { interactive ->
             synchronized(monitor) {
                 if (closed) return@synchronized
                 safely("screen") {
-                    val value = read()?.takeIf { !it.ended } ?: return@safely
+                    val value = current(observedOccurrence) ?: return@safely
                     if (!active(value)) { cancel(value.occurrence, "notification_gone"); return@safely }
                     if (interactive) {
                         if (!value.interactiveSeen) {
                             write(value.copy(interactiveSeen = true))
-                            event("wake_observed", mapOf("observation" to "interactive"))
+                            event("wake_observed", mapOf("observation" to "interactive", "attribution" to "not_proven"))
                         }
                     } else attempt(value.occurrence, "screen_off")
                 }
@@ -194,7 +195,7 @@ internal class LockscreenWakeController(
         if (token == leaseToken) releaseTimer = timer else timer.close()
         if (power.interactive()) {
             write(claimed.copy(interactiveSeen = true))
-            event("wake_observed", mapOf("observation" to "interactive"))
+            event("wake_observed", mapOf("observation" to "interactive", "attribution" to "not_proven"))
         }
         if (next > 0) power.schedule(occurrence, next)
         else { power.cancel(occurrence); observer?.close(); observer = null }
