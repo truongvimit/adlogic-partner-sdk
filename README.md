@@ -42,13 +42,13 @@ dependencyResolutionManagement {
 }
 ```
 
-The existing SDK examples below target **5.1.1**. The new `retention-*` and `retentionkit` artifacts in this branch are **unreleased**; 5.1.1 does not include them. Use project dependencies or the explicit local QA publication described in the RetentionKit guide until a release containing these artifacts exists. Keep every released module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+The existing SDK examples below target **5.1.2**. The new `retention-*` and `retentionkit` artifacts in this branch are **unreleased**; 5.1.2 does not include them. Use project dependencies or the explicit local QA publication described in the RetentionKit guide until a release containing these artifacts exists. Keep every released module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.1'
+def sdkVersion = '5.1.2'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
