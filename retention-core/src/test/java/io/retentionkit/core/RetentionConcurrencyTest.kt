@@ -42,7 +42,7 @@ class RetentionConcurrencyTest {
                 moduleLock.withLock {
                     lockHeld.countDown()
                     check(emitFromWorker.await(3, TimeUnit.SECONDS))
-                    runtime.signal(RetentionSignal.BusinessSuccess("translate"))
+                    runtime.signal(RetentionSignal.BusinessSuccess("notes"))
                 }
             }
             assertTrue(lockHeld.await(2, TimeUnit.SECONDS))
