@@ -58,8 +58,8 @@ class RetentionPlaygroundRoutingTest {
     }
 
     @Test fun twoNewIntentsBeforeDispatchKeepLatestExplicitDestination() {
-        val earlier = entry("saved_phrases")
-        val latest = entry("document")
+        val earlier = entry("saved_items")
+        val latest = entry("guide")
         deliver(earlier)
         deliver(latest)
         shadowOf(Looper.getMainLooper()).idle()
@@ -71,7 +71,7 @@ class RetentionPlaygroundRoutingTest {
     }
 
     @Test fun burstCannotAcknowledgeDefaultTitleOrReplayBacklogOnResumeAndRecreate() {
-        val burst = listOf("saved_phrases", "text_tools", "document", "translate", "document", "saved_phrases", "text_tools", "translate").map(::entry)
+        val burst = listOf("saved_items", "text_tools", "guide", "notes", "guide", "saved_items", "text_tools", "notes").map(::entry)
         burst.forEach(::deliver)
         shadowOf(Looper.getMainLooper()).idle()
         val latest = burst.last()
@@ -86,12 +86,39 @@ class RetentionPlaygroundRoutingTest {
         assertEquals(7, kit.runtime.entries.pending().size)
     }
 
+    @Test fun alreadyStagedRetiredDestinationKeepsItsTokenAndOpensTheCanonicalFeature() {
+        // Historical token already persisted by the previous installation; do not rewrite it.
+        val legacy = RetentionEntry(RetentionEntrySource.WIDGET, "saved_phrases", "open_saved")
+        assertTrue(kit.runtime.entries.stage(legacy) is RetentionEntryAcceptance.Accepted)
+        deliver(legacy)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(RetentionExampleContent.features(controller.get()).single { it.id == "saved_items" }.label, title())
+        assertConsumed(legacy)
+        assertEquals("saved_phrases", (RetentionEntryCodec.read(controller.get().intent) as RetentionEntryDecodeResult.Valid).entry.destination)
+        assertTrue(kit.runtime.entries.pending().isEmpty())
+    }
+
+    @Test fun noteSaveEditAndSavedCopyAreRealUiOperationsThatSurviveRecreation() {
+        val activity = controller.get()
+        val input = activity.findViewById<android.widget.EditText>(R.id.rk_note_input)
+        input.setText("Prepare the workshop")
+        activity.findViewById<android.widget.Button>(R.id.rk_note_save).performClick()
+        assertEquals("Prepare the workshop", ExampleDataStore(activity).notes().single().text)
+        activity.findViewById<android.widget.Button>(R.id.rk_item_save).performClick()
+        activity.findViewById<android.widget.EditText>(R.id.rk_note_input).setText("Prepare the workshop tomorrow")
+        activity.findViewById<android.widget.Button>(R.id.rk_note_save).performClick()
+        controller.recreate().visible()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Prepare the workshop tomorrow", controller.get().findViewById<android.widget.EditText>(R.id.rk_note_input).text.toString())
+        assertEquals("Prepare the workshop", ExampleDataStore(controller.get()).savedItems().single().text)
+    }
+
     @Test fun newerIntentGetsItsOwnBoundedRetryAfterOlderIntentExhaustedRetries() {
         kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", true))
-        val earlier = entry("saved_phrases")
+        val earlier = entry("saved_items")
         deliver(earlier)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6))
-        val latest = entry("document")
+        val latest = entry("guide")
         deliver(latest)
         shadowOf(Looper.getMainLooper()).idle()
         kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", false))

@@ -31,27 +31,40 @@ object RetentionExample {
     private var acknowledgement: RetentionSubscription? = null
     var bridge: OnboardRetentionBridge? = null
         private set
-    fun install(application: Application) {
+    fun install(application: Application): RetentionKit? {
+        RetentionKit.get()?.let { return it }
         val onboard = OnboardRetentionBridge(SplashActivity::class.java, hostCanPresent = {
-            it is RetentionPlaygroundActivity || it is SettingActivity || it is RetentionFeedbackActivity
-        })
+            when (it) {
+                is MainActivity -> it.isRetentionEntryReady
+                is RetentionPlaygroundActivity, is SettingActivity, is RetentionFeedbackActivity -> true
+                else -> false
+            }
+        }, mainActivity = MainActivity::class.java)
         bridge = onboard
-        val result = RetentionKit.install(application, RetentionKitOptions(
+        val result = RetentionKit.install(application, ExampleQa.options(RetentionKitOptions(
             featureProvider = RetentionFeatureProvider(RetentionExampleContent::features),
             localeProvider = RetentionLocaleProvider(RetentionExampleContent::localizedContext),
             router = onboard.router,
             uiHost = onboard,
             adapters = listOf(onboard, BillingRetentionBridge()),
-            feedback = FeedbackOptions(featureIds = RetentionExampleContent.featureIds.toList(), appIconRes = R.mipmap.ic_launcher),
+            feedback = FeedbackOptions(featureIds = RetentionExampleContent.featureIds.toList(), appIconRes = R.mipmap.ic_launcher,
+                nativeContent = io.retentionkit.feedback.FeedbackNativeContent { activity, owner, container ->
+                    val slot = android.widget.FrameLayout(activity)
+                    container.addView(slot)
+                    ExampleEntryNative.attach(activity, owner, slot, "native_uninstall")
+                }),
             initialUserState = RetentionUserState(entitlement = RetentionEntitlement.UNKNOWN),
             eventSink = TrackkitRetentionEventSink(),
-            configSource = FirebaseRetentionConfigSource(),
+            configSource = FirebaseRetentionConfigSource(
+                legacyKeys = io.retentionkit.integration.RetentionLegacyConfig.keys,
+                legacyMapper = io.retentionkit.integration.RetentionLegacyConfig::overrides),
             clock = ExampleQa.clock(application),
             store = ExampleQa.store(application),
-        ))
+        )))
         if (result is RetentionKitInstallResult.Installed) attachSuccessAcknowledgement(application, result.kit.runtime)
         if (result is RetentionKitInstallResult.Failed) Timber.e("Retention install failed: %s", result.reasons)
         com.itg.template.ui.component.uninstall.ShortcutManager.initShortCut(application)
+        return (result as? RetentionKitInstallResult.Installed)?.kit
     }
 
     /** Capture once and retain the rewritten envelope. Pending entries survive setup/process death. */
@@ -64,7 +77,7 @@ object RetentionExample {
         }
         val accepted = kit.capture(intent)
         if (accepted is RetentionEntryAcceptance.Accepted) {
-            // Normalize legacy/raw typed launches through the same no-splash-ad host contract.
+            // Normalize legacy/raw typed launches through the same standard Splash host contract.
             kit.runtime.createEntryIntent(accepted.entry)?.extras?.let { intent?.putExtras(it) }
         }
         if (accepted is RetentionEntryAcceptance.Accepted && !kit.runtime.userState.setupCompleted) {
@@ -76,7 +89,7 @@ object RetentionExample {
     }
 
     fun onOutcome(context: Context, outcome: OnboardingOutcome) {
-        val passthrough = bridge?.onOutcome(outcome)
+        val main = bridge?.mainIntent(context, MainActivity::class.java, outcome)
         val prefs = context.getSharedPreferences("retention_example_flow_v1", Context.MODE_PRIVATE)
         if (outcome is OnboardingOutcome.Aborted) {
             // Only cancel entries explicitly attached to this unfinished setup, never the backlog.
@@ -86,9 +99,7 @@ object RetentionExample {
             return
         }
         prefs.edit().remove("tokens").commit()
-        val hasPending = RetentionKit.get()?.runtime?.entries?.pending()?.isNotEmpty() == true
-        context.startActivity(Intent(context, if (hasPending) RetentionPlaygroundActivity::class.java else MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply { passthrough?.let(::putExtras) })
+        main?.let(context::startActivity)
     }
 
     fun continueSetup(activity: Activity, token: String) {
@@ -106,7 +117,7 @@ object RetentionExample {
     }
 
     fun showFeedback(activity: Activity) {
-        val result = RetentionKit.get()?.feedback?.show()
+        val result = RetentionKit.get()?.feedback?.openViaEntry()
         Toast.makeText(activity, if (result is FeedbackShowResult.Scheduled) R.string.rk_example_request_sent else R.string.rk_example_unavailable, Toast.LENGTH_SHORT).show()
     }
     fun manualRate(activity: Activity) {

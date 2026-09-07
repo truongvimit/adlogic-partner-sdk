@@ -8,7 +8,7 @@ import io.retentionkit.core.RetentionFeature
 import java.util.Locale
 
 object RetentionExampleContent {
-    val featureIds = setOf("translate", "saved_phrases", "text_tools", "document")
+    val featureIds = setOf("notes", "saved_items", "text_tools", "guide")
     fun localizedContext(context: Context): Context {
         val code = AppSharedPreferencesApp(context).languageCode
         val locale = Locale.forLanguageTag(code.replace('_', '-'))
@@ -16,9 +16,9 @@ object RetentionExampleContent {
     }
     fun isVietnamese(context: Context) = AppSharedPreferencesApp(context).languageCode.startsWith("vi")
     fun features(context: Context) = listOf(
-        RetentionFeature("translate", context.getString(R.string.rk_example_translate), R.drawable.rk_example_translate, context.getString(R.string.rk_example_translate_desc)),
-        RetentionFeature("saved_phrases", context.getString(R.string.rk_example_saved), R.drawable.rk_example_saved, context.getString(R.string.rk_example_saved_desc)),
+        RetentionFeature("notes", context.getString(R.string.rk_example_notes), R.drawable.rk_example_notes, context.getString(R.string.rk_example_notes_desc)),
+        RetentionFeature("saved_items", context.getString(R.string.rk_example_saved), R.drawable.rk_example_saved, context.getString(R.string.rk_example_saved_desc)),
         RetentionFeature("text_tools", context.getString(R.string.rk_example_text), R.drawable.rk_example_text, context.getString(R.string.rk_example_text_desc)),
-        RetentionFeature("document", context.getString(R.string.rk_example_document), R.drawable.rk_example_document, context.getString(R.string.rk_example_document_desc)),
+        RetentionFeature("guide", context.getString(R.string.rk_example_guide), R.drawable.rk_example_guide, context.getString(R.string.rk_example_guide_desc)),
     )
 }

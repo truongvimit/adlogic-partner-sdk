@@ -9,6 +9,7 @@ import com.itg.template.ui.bases.ext.click
 
 class NoInternetDialog(private val activity: Activity) {
     private var dialog: Dialog? = null
+    val isShowing: Boolean get() = dialog?.isShowing == true
 
     fun show() {
         if (dialog?.isShowing == true) return

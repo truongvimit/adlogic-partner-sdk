@@ -8,6 +8,7 @@ import android.text.InputFilter
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -20,17 +21,20 @@ import io.retentionkit.RetentionKit
 import io.retentionkit.core.RetentionEntryAcceptance
 import java.util.UUID
 
-/** Working offline destinations. Host ads remain in MainActivity's unchanged showcase. */
+/** Real offline business destinations; entry ad placement is supplied by the existing suite. */
 class RetentionPlaygroundActivity : AppCompatActivity() {
     private lateinit var content: LinearLayout
     private lateinit var featureBody: LinearLayout
     private lateinit var result: TextView
     private lateinit var title: TextView
     private lateinit var data: ExampleDataStore
-    private var selectedFeature = "translate"
-    private var selectedPhrase = "hello"
-    private var toVietnamese = true
+    private var selectedFeature = "notes"
+    private var selectedNoteId: String? = null
+    private var noteDraft = ""
     private var pendingToken: String? = null
+    private var entryNative: AutoCloseable? = null
+    private var nativePlacement: String? = null
+    private lateinit var nativeContainer: FrameLayout
     private var lastRoute = ""
     private var external: AutoCloseable? = null
     private var leftForExternal = false
@@ -42,12 +46,15 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         data = ExampleDataStore(this)
         selectedFeature = savedInstanceState?.getString("feature") ?: data.lastFeature()
-        if (selectedFeature !in RetentionExampleContent.featureIds) selectedFeature = "translate"
-        selectedPhrase = savedInstanceState?.getString("phrase") ?: "hello"
-        toVietnamese = savedInstanceState?.getBoolean("to_vi") ?: true
+        selectedFeature = ExampleDataStore.canonicalFeature(selectedFeature)
+        if (selectedFeature !in RetentionExampleContent.featureIds) selectedFeature = "notes"
+        selectedNoteId = savedInstanceState?.getString("note_id")
+        noteDraft = savedInstanceState?.getString("note_draft").orEmpty()
         pendingToken = savedInstanceState?.getString("entry_token")
         lastRoute = savedInstanceState?.getString("route").orEmpty()
         buildScreen()
+        val restored = io.retentionkit.core.RetentionEntryCodec.decode(savedInstanceState?.getString("retention.feature.entry"))
+        if (restored is io.retentionkit.core.RetentionEntryDecodeResult.Valid) io.retentionkit.core.RetentionEntryCodec.write(intent, restored.entry)
         capture(intent)
     }
     override fun onNewIntent(intent: Intent) {
@@ -64,16 +71,23 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         window.decorView.post {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                 dispatchPending()
+                showEntryNative()
                 RetentionExample.flushSuccesses(this)
                 ExampleQa.refresh(this)
             }
         }
     }
     override fun onPause() { window.decorView.removeCallbacks(routeRetry); if (external != null) leftForExternal = true; super.onPause() }
-    override fun onDestroy() { external?.close(); external = null; super.onDestroy() }
+    override fun onDestroy() { entryNative?.close(); entryNative = null; external?.close(); external = null; super.onDestroy() }
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString("feature", selectedFeature); outState.putString("phrase", selectedPhrase)
-        outState.putBoolean("to_vi", toVietnamese); outState.putString("entry_token", pendingToken); outState.putString("route", lastRoute)
+        val captured = io.retentionkit.core.RetentionEntryCodec.read(intent)
+        if (captured is io.retentionkit.core.RetentionEntryDecodeResult.Valid) {
+            outState.putString("retention.feature.entry", io.retentionkit.core.RetentionEntryCodec.encode(captured.entry))
+        }
+        outState.putString("feature", selectedFeature)
+        outState.putString("note_id", selectedNoteId)
+        outState.putString("note_draft", findViewById<EditText>(R.id.rk_note_input)?.text?.toString() ?: noteDraft)
+        outState.putString("entry_token", pendingToken); outState.putString("route", lastRoute)
         findViewById<EditText>(R.id.rk_text_input)?.let { runCatching { data.saveInput(it.text.toString()) } }
         super.onSaveInstanceState(outState)
     }
@@ -102,6 +116,8 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         featureBody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         result = label(data.lastResult(), 18f).apply { id = R.id.rk_result; setTextIsSelectable(true) }
         content.addView(title); content.addView(featureBody); content.addView(result)
+        nativeContainer = FrameLayout(this).apply { id = R.id.rk_entry_native }
+        content.addView(nativeContainer)
         content.addView(label(getString(R.string.rk_example_actions), 22f))
         button(content, R.string.rk_example_widget, R.id.rk_open_widget) {
             val outcome = RetentionKit.get()?.widgets?.showPinInvitation()
@@ -120,57 +136,72 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
         showFeature(selectedFeature)
     }
+    private fun showEntryNative() {
+        val entry = (io.retentionkit.core.RetentionEntryCodec.read(intent) as? io.retentionkit.core.RetentionEntryDecodeResult.Valid)?.entry
+        val placement = ExampleEntryNative.placement(entry?.source)
+        if (nativePlacement == placement) return
+        entryNative?.close()
+        nativeContainer.removeAllViews()
+        nativePlacement = placement
+        entryNative = ExampleEntryNative.attach(this, this, nativeContainer, placement)
+    }
     private fun showFeature(id: String) {
         if (id !in RetentionExampleContent.featureIds) { message(R.string.rk_example_unknown_route); return }
         selectedFeature = id
         title.text = RetentionExampleContent.features(this).first { it.id == id }.label
         featureBody.removeAllViews()
         when (id) {
-            "translate" -> showTranslation()
-            "saved_phrases" -> showSavedPhrases()
+            "notes" -> showNotes()
+            "saved_items" -> showSavedItems()
             "text_tools" -> showTextTools()
-            "document" -> showDocument()
+            "guide" -> showGuide()
         }
     }
-    private fun showTranslation() {
-        featureBody.addView(label(getString(R.string.rk_example_offline_note), 14f))
-        val direction = Switch(this).apply {
-            text = getString(if (toVietnamese) R.string.rk_example_to_vi else R.string.rk_example_to_en)
-            isChecked = toVietnamese
-            setOnCheckedChangeListener { _, checked -> toVietnamese = checked; showTranslationAgain() }
+    private fun showNotes() {
+        val input = EditText(this).apply {
+            id = R.id.rk_note_input; hint = getString(R.string.rk_example_note_hint); minLines = 3
+            filters = arrayOf(InputFilter.LengthFilter(10_000)); setText(noteDraft)
+            doAfterTextChanged { noteDraft = it?.toString().orEmpty() }
         }
-        featureBody.addView(direction)
-        val phrases = ExampleUtilities.phrases
-        val spinner = Spinner(this).apply {
-            id = R.id.rk_phrase_spinner
-            adapter = ArrayAdapter(this@RetentionPlaygroundActivity, android.R.layout.simple_spinner_dropdown_item,
-                phrases.map { if (toVietnamese) it.english else it.vietnamese })
-            setSelection(phrases.indexOfFirst { it.id == selectedPhrase }.coerceAtLeast(0))
-            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { selectedPhrase = phrases[position].id }
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
+        featureBody.addView(input)
+        button(featureBody, R.string.rk_example_note_save, R.id.rk_note_save) {
+            guarded {
+                val id = selectedNoteId ?: UUID.randomUUID().toString()
+                noteDraft = input.text.toString()
+                val operation = data.saveNote(id, noteDraft, UUID.randomUUID().toString())
+                selectedNoteId = id
+                result.text = operation?.result ?: noteDraft
+                RetentionExample.flushSuccesses(this)
+                showFeature("notes")
             }
         }
-        featureBody.addView(spinner)
-        button(featureBody, R.string.rk_example_translate_action, R.id.rk_phrase_translate) {
-            operation("translate") { ExampleUtilities.translate(selectedPhrase, toVietnamese) }
+        button(featureBody, R.string.rk_example_new_note, R.id.rk_note_new) {
+            selectedNoteId = null; noteDraft = ""; showFeature("notes")
         }
-        button(featureBody, R.string.rk_example_save, R.id.rk_phrase_save) {
+        button(featureBody, R.string.rk_example_save, R.id.rk_item_save) {
             guarded {
-                val saved = data.savePhrase(selectedPhrase, UUID.randomUUID().toString())
+                val id = selectedNoteId ?: error("Save the note first")
+                val saved = data.saveItem(id, UUID.randomUUID().toString())
                 message(if (saved == null) R.string.rk_example_already_saved else R.string.rk_example_saved_ok)
                 RetentionExample.flushSuccesses(this)
             }
+        }.isEnabled = selectedNoteId != null
+        val notes = data.notes()
+        if (notes.isEmpty()) featureBody.addView(label(getString(R.string.rk_example_no_notes), 16f))
+        notes.forEach { note ->
+            featureBody.addView(Button(this).apply {
+                text = note.text.take(80); contentDescription = "note:${note.id}"
+                setOnClickListener { selectedNoteId = note.id; noteDraft = note.text; showFeature("notes") }
+            })
         }
     }
-    private fun showTranslationAgain() { featureBody.removeAllViews(); showTranslation() }
-    private fun showSavedPhrases() {
-        val saved = data.savedPhrases()
+    private fun showSavedItems() {
+        val saved = data.savedItems()
         if (saved.isEmpty()) featureBody.addView(label(getString(R.string.rk_example_no_saved), 16f))
-        saved.forEach { phrase ->
-            featureBody.addView(label("${phrase.english}\n${phrase.vietnamese}", 18f))
+        saved.forEach { item ->
+            featureBody.addView(label(item.text, 18f).apply { setTextIsSelectable(true) })
             button(featureBody, R.string.rk_example_remove) {
-                guarded { data.removePhrase(phrase.id, UUID.randomUUID().toString()); RetentionExample.flushSuccesses(this); showFeature("saved_phrases"); message(R.string.rk_example_removed) }
+                guarded { data.removeItem(item.id, UUID.randomUUID().toString()); RetentionExample.flushSuccesses(this); showFeature("saved_items"); message(R.string.rk_example_removed) }
             }
         }
     }
@@ -188,12 +219,12 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
             }
         }
     }
-    private fun showDocument() {
-        val asset = if (RetentionExampleContent.isVietnamese(this)) "retention_sample_vi.txt" else "retention_sample_en.txt"
+    private fun showGuide() {
+        val asset = if (RetentionExampleContent.isVietnamese(this)) "retention_guide_vi.txt" else "retention_guide_en.txt"
         val document = assets.open(asset).bufferedReader().use { it.readText() }
         featureBody.addView(label(document, 17f).apply { setTextIsSelectable(true) })
-        button(featureBody, R.string.rk_example_reading, R.id.rk_document_analyze) {
-            operation("document") { getString(R.string.rk_example_minutes, ExampleUtilities.readingMinutes(document)) }
+        button(featureBody, R.string.rk_example_reading, R.id.rk_guide_analyze) {
+            operation("guide") { getString(R.string.rk_example_minutes, ExampleUtilities.readingMinutes(document)) }
         }
     }
     private fun operation(feature: String, compute: () -> String) = guarded {
@@ -229,8 +260,17 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
             }
             return
         }
+        // Compatibility for already-persisted envelopes: preserve the old token and event
+        // identity, validate the retired destination explicitly, and claim only at this final UI.
+        val pending = kit.runtime.entries.pending(token)
+        val canonical = pending?.destination?.let(ExampleDataStore::canonicalFeature)
+        if (pending != null && canonical != pending.destination && canonical in RetentionExampleContent.featureIds &&
+            kit.runtime.ui.eligibility() is io.retentionkit.core.RetentionEligibility.Allowed) {
+            if (kit.consume(token) != null) { pendingToken = null; showFeature(checkNotNull(canonical)); showEntryNative() }
+            return
+        }
         when (val dispatched = kit.dispatchPending(token)) {
-            is RetentionDispatchResult.Navigate -> { pendingToken = null; showFeature(dispatched.entry.destination) }
+            is RetentionDispatchResult.Navigate -> { pendingToken = null; showFeature(dispatched.entry.destination); showEntryNative() }
             RetentionDispatchResult.SdkHandled -> {
                 // Scheduled internal UI can still be blocked/disabled before consuming the entry.
                 pendingToken = token.takeIf { kit.runtime.entries.pending(it) != null }
