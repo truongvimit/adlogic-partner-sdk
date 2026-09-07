@@ -1,7 +1,7 @@
 # RetentionKit implementation specification
 
 Status: active
-Implementation: accepted; PR creation/readiness awaits authorized GitHub write login.
+Implementation: reopened by user correction; previous acceptance is historical and does not satisfy the corrected shared entry flow.
 Base: main at 632df43026b6f880deb84d478c71d22188ce093a
 Delivery branch: codex/retentionkit
 Requested: 2026-09-07
@@ -9,6 +9,20 @@ Requested: 2026-09-07
 ## Outcome
 
 Implement and publish-ready package a complete Android RetentionKit inside this SDK repository, integrated into the existing example app. Partners configure content, destinations, user state and business success events; the SDK owns the repeated flow and Android mechanics. TranslatorGuru is the primary source reference, with PDF Reader and Caller-ID supplying widget/pinned/exit variants. Do not modify those reference applications.
+
+## Corrected acceptance — 2026-09-07
+
+The user's latest instruction and the shared documents under `/Users/Shared/Panacea/Documents/Noti/` supersede conflicting decisions below and earlier completion records. Audit notes live outside the repository in `/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/` (`noti-spec-audit.md`, `translate-flow-audit.md`, `current-sdk-audit.md`). These documents supply product reference requirements; their test setup instructions do not authorize clearing unrelated device/app data.
+
+1. Every SDK notification body/action, widget tile, feature shortcut and uninstall entry traverses the actual host Splash in cold and warm states. Standard OnboardKit integration uses its existing `SplashEntry` ad selection (`inter_noti`, `inter_widget`, `inter_uninstall`) and AFTER_AD navigation. A completed setup must not bypass Splash. An explicitly configured no-ad policy remains possible, with honest ad-skip outcomes; the example uses the standard entry policy.
+2. Notification/widget/feature entries follow Splash → entry interstitial completed or legitimate skip → Main actually resumed → selected feature. Uninstall follows Splash → entry interstitial completed or legitimate skip → SDK feedback screen; a Main back stack is supported. Exact token, source and destination survive onboarding, rotation, process recreation and rapid taps. An old pending entry cannot replace the selected entry. The SDK should hide common handoff complexity behind a small reusable interface.
+3. Feature screens provide the existing suite's medium native placement; uninstall provides `native_uninstall`. The integration respects existing consent, Billing, ad caps, resume suppression, shared Firebase and Trackkit. No duplicate ad/config/permission owner. Ad unavailability must not stall navigation or fabricate a shown-ad result.
+4. SDK interfaces, standard templates, sample catalogue, documentation and ordinary test fixtures are app-neutral. The example demonstrates real offline Notes / Saved items / Text tools / Guide features. Reference-specific names belong only in migration/source attribution, not generic business contracts. Preserve legacy example data and intentionally handle retired feature identifiers.
+5. Shared notification profile and RC mapping trace back to the canonical documents. Keep one family/channel identity, safe replacement, priorities, calendar restore, selected app language, persistent feature rotation, subscriber/permission/channel/setup guards and documented conflict resolution. Host supplies content/assets; SDK supplies common transport and scheduling. UI content differs by campaign, rather than every campaign reusing a feature description.
+6. The uninstall SDK provides a usable standard survey/feature-rescue/Keep/system-uninstall-confirmation framework and a lifecycle-capable custom view seam, including optional host native content. Reasons remain optional. Continue opens Android's confirmation for this package, with an explicit app-management option/fallback. Tests cancel the OS confirmation; they do not remove the user's installed app. Rate uses the generic business-success contract and existing Play review semantics.
+7. Example QA may accelerate clock/eligibility in a clearly separated debug surface; it uses the same production entry router and full Activity chain. Regression tests and physical ADB checks verify the corrected paths, not a direct-to-feature fixture path. Engine injection, actual OS delivery, ad transport and UI observations are reported separately.
+
+Correction graph: 10 entry/feedback SDK + 11 notification profile → 12 generic example → 13 corrected integration/device/packaging verification → 14 independent Standards/Spec review and fixes. Tickets10–12 can proceed on disjoint files after agreeing the public handoff interface. Each implementer uses its own worktree; only root controls ADB. Previous ticket09 partial device evidence remains historical.
 
 The parent research is `/Users/Shared/Panacea/Documents/SDKOptimize/RETENTIONKIT_FEASIBILITY_REPORT.md`; related audit and platform files in that directory contain exact source pointers. Research statements are not substitutes for current tests. Existing SDK consumers must retain source compatibility and behavior unless they explicitly install the new kit/adapter.
 
@@ -21,7 +35,7 @@ The parent research is `/Users/Shared/Panacea/Documents/SDKOptimize/RETENTIONKIT
 5. Reusable exit-feedback UI: optional reasons, feature rescue/Keep, clear Continue to app management. No mandatory survey, no uninstall interception, no success claim after opening system Settings.
 6. Play review after business successes with persisted threshold/cooldown/cap and in-flight protection, safe Activity lifecycle, bounded async callbacks and UI coordination. Manual Rate opens Play Store. No pre-review star gating; completion is outcome-unknown, never rated=true. Feedback and review state are separate.
 7. Optional adapter fitting OnboardKit routing, resume-ad suppression, Trackkit and suite-firebase's existing shared config client. Permission must have one owner. Entry extras survive onboarding and are consumed once at final destination. No default second Firebase fetcher, duplicated resume observer or forced changes to existing splash behavior.
-8. Working example demonstrating all flows with real feature destinations and clear labels. A dedicated sample playground is appropriate in this SDK demo app; business sample content can be translation/document utilities. Release example must have genuine defaults. Debug-only controls may move eligibility time/test delays and show diagnostics but must never bypass production logic in the library or claim Play review success. No exported release test receivers.
+8. Working generic example demonstrating all flows with real feature destinations and clear labels, following the corrected acceptance above. Release example must have genuine defaults. Debug-only controls may move eligibility time/test delays and show diagnostics but must never bypass production entry flow or claim Play review success. No exported release test receivers.
 9. Unit/Robolectric + relevant instrumentation tests, build/minify/manifest/dependency composition checks, ADB tests on attached Pixel 5 API34 and a reproducible device script/result ledger with commands, results and limitations. Unit tests must cover failure/restart/concurrency/config transitions, not merely constructors/getters.
 10. Partner README with minimal full example, customization and migration, remote keys/defaults, callback semantics, target/minSdk details and known platform behavior. Complete draft PR with scoped commits, code-review findings fixed, ready for review. Do not merge PR or create a release tag.
 
@@ -38,7 +52,7 @@ The parent research is `/Users/Shared/Panacea/Documents/SDKOptimize/RETENTIONKIT
 - UI flows coordinate one prompt at a time and cooperate with host ads/onboarding/paywall. Host external/system transitions have bounded/scoped suppression. Callback completion must not navigate from a destroyed/background Activity or create an Activity leak.
 - Notification PendingIntent points directly to an Activity; no broadcast/service trampoline for clicks. Dismiss/Later receivers only cancel/track and cannot launch UI. Internal receivers not exported; externally reachable entries validate envelopes/IDs.
 - SDK telemetry names actual evidence: post_submitted, skipped(reason), opened, dismissed; pin_requested vs pin_confirmed; review_requested vs flow_finished_unknown; feedback/system_handoff. Trackkit adapter failures never break functional flow.
-- Default entry route does not force an interstitial at app load/exit. Optional OnboardKit bridge preserves typed entry and destination and supports a real no-ad route; existing SplashEntry users remain compatible. The example can demonstrate entry sources and existing ad configuration without making unsupported policy promises.
+- Standard optional OnboardKit integration preserves typed entry and destination through the full existing Splash flow and entry interstitial policy. Explicit no-ad routing is opt-in. Existing consumers not installing RetentionKit keep their existing behavior.
 
 ## Shared implementation contract
 
@@ -75,7 +89,7 @@ T05 may inspect while other modules are being implemented but must verify agains
 
 This repository's issue tracker is local Markdown. The PR closes this spec and the numbered local tickets by path/checklist, not fabricated GitHub issue numbers. Specs/tickets are force-added individually because `.scratch/` is ignored; do not alter the user's ignore policy or commit unrelated local notes/secrets.
 
-## Completion record — 2026-09-07
+## Historical completion record — before corrected shared-document acceptance
 
 The six SDK artifacts, optional suite integrations, working example, isolated consumer profiles, partner guides and all supported checks are implemented and accepted. Final SDK source is `bf68f1e`; final app source is `2ff967a`. The physical follow-up adds debug QA correction95181844 and separately authored Ads fixes through7cb23c3; see physical-acceptance.md. Tickets01–07 and05a are resolved;08 remains claimed for the external PR-readiness step. The source branch is separate and committed incrementally; no tag, remote RetentionKit release or PR merge was made.
 

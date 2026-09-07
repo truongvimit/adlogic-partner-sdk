@@ -4,6 +4,8 @@ Spec: [spec.md](spec.md) · Base: `632df43` · Branch: `codex/retentionkit`
 
 ## Frontier
 
+**Reopened for the user's shared-Noti correction:** tickets[10](issues/10-standard-entry-feedback.md), [11](issues/11-shared-notification-profile.md), and independent work in[12](issues/12-generic-example-integration.md) are claimed. Final12 depends on10/11; then[13 validation](issues/13-corrected-validation.md) and[14 review](issues/14-corrected-review.md). Fixed correction base543de03. The earlier acceptance below is historical, including its direct destination/no-entry-ad behavior, and does not prove the corrected full Splash flow.
+
 Tickets01–07 and additive05a are resolved and merged. SDK/app implementation, supported validation, partner documentation and code-review corrections are accepted. Ticket08 remains **claimed** only because the ready-PR step requires a GitHub account with write permission. The current account has READ-only repository access; branch pushes through the existing owner SSH identity succeed. The spec stays active for that external completion step. Additive ticket09 is claimed for the unlocked Pixel follow-up:15/15 Android cases at4356938 and some manual flows passed, but concurrent device input interrupted full UI acceptance. Latest build/source evidence is in physical-acceptance.md.
 
 ## Decisions and completion pointers
