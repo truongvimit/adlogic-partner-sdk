@@ -30,7 +30,7 @@ internal interface NotificationPlatform {
     fun active(campaign: NotificationCampaign): Boolean
     fun post(campaign: NotificationCampaign, notification: Notification)
     fun cancel(campaign: NotificationCampaign)
-    fun schedule(alarm: ScheduledNotification)
+    fun schedule(alarm: ScheduledNotification, triggerAtMillis: Long = alarm.due)
     fun cancelAlarm(alarm: ScheduledNotification)
 }
 internal fun RetentionNotificationOptions.channel(campaign: NotificationCampaign): String = channelIds[campaign] ?: when {
@@ -84,9 +84,9 @@ internal class AndroidNotificationPlatform(private val context: Context) : Notif
     override fun active(campaign: NotificationCampaign): Boolean = manager.activeNotifications.any { it.tag == NOTIFICATION_TAG && it.id == campaign.notificationId }
     override fun post(campaign: NotificationCampaign, notification: Notification) = manager.notify(NOTIFICATION_TAG, campaign.notificationId, notification)
     override fun cancel(campaign: NotificationCampaign) = manager.cancel(NOTIFICATION_TAG, campaign.notificationId)
-    override fun schedule(alarm: ScheduledNotification) {
+    override fun schedule(alarm: ScheduledNotification, triggerAtMillis: Long) {
         // RTC_WAKEUP is 0 (wall-clock CPU wake); it does not wake the screen. Inexact only.
-        alarms.setWindow(AlarmManager.RTC_WAKEUP, alarm.due, 10 * MINUTE, alarmIntent(alarm))
+        alarms.setWindow(AlarmManager.RTC_WAKEUP, triggerAtMillis, 10 * MINUTE, alarmIntent(alarm))
     }
     override fun cancelAlarm(alarm: ScheduledNotification) { alarms.cancel(alarmIntent(alarm)) }
     private fun alarmIntent(alarm: ScheduledNotification): PendingIntent {
