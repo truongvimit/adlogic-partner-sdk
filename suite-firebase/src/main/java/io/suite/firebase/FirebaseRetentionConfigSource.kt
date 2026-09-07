@@ -34,7 +34,8 @@ class FirebaseRetentionConfigSource @JvmOverloads constructor(
         scope.launch {
             val result = try {
                 if (RemoteConfigClient.fetchOnce(timeoutMillis)) {
-                    readActivatedValues(RemoteConfigClient::remoteString)
+                    val values = RemoteConfigClient.remoteStrings(legacyKeys + key)
+                    readActivatedValues(values::get)
                 } else RetentionConfigFetchResult.Missing
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { RetentionConfigFetchResult.Failed(error.message ?: "firebase_error") }
