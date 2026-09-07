@@ -100,4 +100,44 @@ class ProofActivityRoutingTest {
         assertNotNull(runtime.entries.pending(token))
         assertTrue(status().contains("pending entry: true"))
     }
+
+    @Test fun ordinaryNewIntentDoesNotReviveThePreviousBlockedEntry() {
+        assertNewDeliveryClearsSelection(android.content.Intent())
+    }
+
+    @Test fun malformedNewIntentDoesNotReviveThePreviousBlockedEntry() {
+        assertNewDeliveryClearsSelection(android.content.Intent().putExtra(RetentionEntryCodec.EXTRA_ENTRY, "{malformed"))
+    }
+
+    private fun assertNewDeliveryClearsSelection(intent: android.content.Intent) {
+        launchUnderExternalTransition()
+        controller!!.newIntent(intent)
+        main.idle()
+        runtime.signal(RetentionSignal.ExternalTransitionFinished("feedback.source"))
+        main.idleFor(Duration.ofMillis(500))
+        assertTrue("The old feature must remain unselected after a newer delivery", status().contains("Tool: uppercase; pending entry: false"))
+        assertNotNull("The old ledger entry remains inert and unconsumed", runtime.entries.pending(token))
+        controller!!.recreate().visible()
+        main.idleFor(Duration.ofMillis(500))
+        assertTrue(status().contains("Tool: uppercase; pending entry: false"))
+        assertNotNull(runtime.entries.pending(token))
+    }
+
+    @Test fun blockedMaterializedEntryKeepsExactlyItsSavedTokenAcrossRecreation() {
+        runtime.signal(RetentionSignal.ExternalTransitionStarted("feedback.source", "feature", 120_000))
+        val template = RetentionEntry(RetentionEntrySource.PINNED, "word_count", "open", mode = RetentionEntryMode.REUSABLE)
+        val intent = RetentionEntryCodec.write(android.content.Intent(RuntimeEnvironment.getApplication(), ProofActivity::class.java), template)
+        controller = Robolectric.buildActivity(ProofActivity::class.java, intent).setup().visible()
+        main.idle()
+        val materialized = (RetentionEntryCodec.read(controller!!.get().intent) as RetentionEntryDecodeResult.Valid).entry
+        assertEquals(RetentionEntryMode.ONCE, materialized.mode)
+        assertNotEquals(template.token, materialized.token)
+        controller!!.recreate().visible()
+        main.idle()
+        assertEquals(setOf(materialized.token), runtime.entries.pending().map { it.token }.toSet())
+        runtime.signal(RetentionSignal.ExternalTransitionFinished("feedback.source"))
+        main.idleFor(Duration.ofMillis(500))
+        assertNull(runtime.entries.pending(materialized.token))
+        assertTrue(status().contains("Tool: word_count; pending entry: false"))
+    }
 }
