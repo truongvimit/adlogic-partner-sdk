@@ -31,13 +31,15 @@ object ExampleQa {
     fun clock(context: Context): RetentionClock = RetentionClock.System
     fun store(context: Context): RetentionStore? = null
 
-    /** Explicit QA action only. Erases this harness's file, never normal SDK or business state. */
+    /** Explicit QA action only. Erases this harness's file, never normal SDK or business state.
+     * Tests may pin initialTimeMillis before installation records setup and schedules alarms. */
     fun prepare(application: Application, setup: Boolean = true, extra: Map<String, String> = emptyMap(), clear: Boolean = true,
-        notifications: RetentionNotificationOptions = RetentionNotificationOptions()): RetentionKit {
+        notifications: RetentionNotificationOptions = RetentionNotificationOptions(),
+        initialTimeMillis: Long = System.currentTimeMillis()): RetentionKit {
         handler.removeCallbacksAndMessages(null)
         RetentionRuntime.uninstallForTests()
         if (clear) check(application.getSharedPreferences(FIXTURE_FILE, Context.MODE_PRIVATE).edit().clear().commit())
-        fixtureClock = QaClock()
+        fixtureClock = QaClock(initialTimeMillis)
         events.clear()
         val overrides = mapOf(
             "notifications.setup_grace_ms" to "0",
@@ -79,7 +81,10 @@ object ExampleQa {
      * This verifies engine handling, NOT AlarmManager wake timing or OEM/Doze behavior. */
     fun deliverSavedAlarm(context: Context, raw: String) {
         check(Looper.myLooper() == Looper.getMainLooper())
-        checkNotNull(fixtureClock) { "Activate explicit QA profile first" }.now = JSONObject(raw).getLong("due")
+        val clock = checkNotNull(fixtureClock) { "Activate explicit QA profile first" }
+        // A saved slot may already be due but still inside its TTL. Never rewind before setup or
+        // make an expired occurrence fresh; future slots alone need an advance to their due time.
+        clock.now = maxOf(clock.now, JSONObject(raw).getLong("due"))
         NotificationAlarmReceiver().onReceive(context, Intent(context, NotificationAlarmReceiver::class.java)
             .setAction("io.retentionkit.notifications.ALARM")
             .putExtra("io.retentionkit.notifications.alarm.v1", raw))
