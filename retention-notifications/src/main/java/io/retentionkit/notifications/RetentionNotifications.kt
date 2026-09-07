@@ -182,7 +182,8 @@ class RetentionNotifications internal constructor(
                 return skipped(alarm.campaign, "not_due")
             }
             runtime.store.transaction(STATE) { state ->
-                if (alarm.campaign.calendar) state.put("handled:${alarm.key}", maxOf(alarm.localDate, state.string("handled:${alarm.key}", alarm.localDate)!!))
+                val calendarDate = alarm.calendarDate
+                if (calendarDate != null) state.put("handled:${alarm.key}", maxOf(calendarDate, state.string("handled:${alarm.key}", calendarDate)!!))
                 else state.remove("schedule:${alarm.key}")
             }
             if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }

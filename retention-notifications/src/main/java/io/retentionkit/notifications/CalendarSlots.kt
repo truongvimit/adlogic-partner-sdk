@@ -23,12 +23,15 @@ internal data class LocalSlot(val hour: Int, val minute: Int) {
     }
 }
 internal data class ScheduledNotification(
-    val campaign: NotificationCampaign, val slot: String, val localDate: String,
+    val campaign: NotificationCampaign, val slot: String, val occurrenceDiscriminator: String,
     val due: Long, val expires: Long, val revision: Long,
 ) {
     val key get() = "${campaign.key}:$slot"
-    val occurrence get() = "$key:$localDate"
-    fun encode(): String = JSONObject().put("campaign", campaign.name).put("slot", slot).put("date", localDate)
+    val occurrence get() = "$key:$occurrenceDiscriminator"
+    /** Calendar occurrences use a civil date; exit occurrences use a departure identity. */
+    val calendarDate: String? get() = occurrenceDiscriminator.takeIf { campaign.calendar }
+    // Preserve the original persisted key, including exit records written before the rename.
+    fun encode(): String = JSONObject().put("campaign", campaign.name).put("slot", slot).put("date", occurrenceDiscriminator)
         .put("due", due).put("expires", expires).put("revision", revision).toString()
     companion object {
         fun decode(raw: String): ScheduledNotification {
@@ -36,8 +39,8 @@ internal data class ScheduledNotification(
             val j = JSONObject(raw)
             val result = ScheduledNotification(NotificationCampaign.valueOf(j.getString("campaign")), j.getString("slot"),
                 j.getString("date"), j.getLong("due"), j.getLong("expires"), j.getLong("revision"))
-            require(if (result.campaign.calendar) result.slot.matches(Regex("[0-9]{4}")) && result.localDate.matches(Regex("[0-9]{8}"))
-                else result.campaign in setOf(NotificationCampaign.APP_EXIT, NotificationCampaign.AD_RETURN) && result.slot == "exit" && idPattern.matches(result.localDate))
+            require(if (result.campaign.calendar) result.slot.matches(Regex("[0-9]{4}")) && result.occurrenceDiscriminator.matches(Regex("[0-9]{8}"))
+                else result.campaign in setOf(NotificationCampaign.APP_EXIT, NotificationCampaign.AD_RETURN) && result.slot == "exit" && idPattern.matches(result.occurrenceDiscriminator))
             require(result.due > 0 && result.expires > result.due && result.revision >= 0)
             return result
         }
