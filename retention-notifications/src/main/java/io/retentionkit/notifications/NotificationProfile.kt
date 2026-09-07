@@ -61,7 +61,7 @@ internal data class NotificationProfile(
                 put("$key.daily_cap", when (campaign) {
                     NotificationCampaign.WINBACK -> if (common) "2" else "1"
                     NotificationCampaign.ONBOARDING -> "1"
-                    NotificationCampaign.REMINDER -> "4"
+                    NotificationCampaign.REMINDER -> if (common) "0" else "4"
                     NotificationCampaign.LOCKSCREEN -> "3"
                     else -> "2"
                 })
@@ -80,7 +80,7 @@ internal data class NotificationProfile(
                     key.endsWith(".slots") || key.endsWith("_slots") -> LocalSlot.parse(value) != null
                     key.endsWith("profile_version") -> value == "1"
                     key.endsWith("new_user_days") -> value.toLongOrNull() in 0L..365L
-                    key.endsWith("daily_cap") -> value.toLongOrNull() in 1L..50L
+                    key.endsWith("daily_cap") -> value.toLongOrNull() in (if (preset == NotificationPreset.COMMON_PLAN) 0L else 1L)..50L
                     key.endsWith("lifetime_cap") -> value.toLongOrNull() in 0L..10_000L
                     key.endsWith("background_delay_ms") -> value.toLongOrNull() in 1L..60_000L
                     key.endsWith("token_ttl_ms") -> value.toLongOrNull() in 1L..300_000L

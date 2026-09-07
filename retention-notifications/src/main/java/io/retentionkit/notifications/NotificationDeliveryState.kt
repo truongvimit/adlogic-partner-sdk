@@ -27,7 +27,7 @@ internal class NotificationDeliveryState(private val store: RetentionStore) {
         val budgetDay = maxOf(day, s.string("budget_day:${campaign.key}", day)!!)
         val reserved = s.entries().filterKeys { it.startsWith("attempt:") }.values.map(::JSONObject)
             .filter { it.getString("campaign") == campaign.key && it.getString("status") in setOf("claimed", "submitted") }
-        if (reserved.count { it.getString("day") == budgetDay } >= profile.cap) return "daily_cap"
+        if (profile.cap > 0 && reserved.count { it.getString("day") == budgetDay } >= profile.cap) return "daily_cap"
         val last = maxOf(s.long("last:${campaign.key}"), reserved.filter { it.getString("status") == "claimed" }.maxOfOrNull { it.getLong("at") } ?: 0)
         if (last > 0 && (now < last || now - last < profile.cooldown)) return "cooldown"
         return null
