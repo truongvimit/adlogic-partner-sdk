@@ -300,7 +300,7 @@ class RetentionNotifications internal constructor(
         runtime.diagnostics.record("notifications.reconcile", "$reason: ${desired.size} desired inexact alarms, revision ${profile.revision}")
     }
 
-    internal fun receiveAlarm(alarm: ScheduledNotification): NotificationOutcome {
+    internal fun receiveAlarm(alarm: ScheduledNotification, execution: NotificationAlarmExecution? = null): NotificationOutcome {
         synchronized(lock) {
             if (closed) return NotificationOutcome.Skipped("not_installed")
             val current = runtime.store.snapshot(STATE).string("schedule:${alarm.key}")
@@ -311,7 +311,7 @@ class RetentionNotifications internal constructor(
                 return skipped(alarm.campaign, "not_due")
             }
         }
-        val outcome = deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires)
+        val outcome = deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires, wakeExecution = execution)
         synchronized(lock) {
             if (closed) return outcome
             // Rendering can synchronously replace config; an old completion must not rewrite it.
@@ -340,7 +340,7 @@ class RetentionNotifications internal constructor(
             runtime.store.snapshot(STATE).entries().filterKeys { it.startsWith("deferred:") }.values.map(ScheduledNotification::decode)
                 .also { retryingDeferred = true }
         }
-        try { pending.forEach(::receiveAlarm) }
+        try { pending.forEach { receiveAlarm(it) } }
         finally { synchronized(lock) { retryingDeferred = false } }
     }
 
@@ -377,7 +377,7 @@ class RetentionNotifications internal constructor(
 
     private fun profile() = NotificationProfile.read(runtime.config, options.preset)
 
-    internal fun wakeCheckpoint(occurrence: String, atMillis: Long) = wake.checkpoint(occurrence, atMillis)
+    internal fun wakeCheckpoint(occurrence: String, atMillis: Long, execution: NotificationAlarmExecution? = null) = wake.checkpoint(occurrence, atMillis, execution)
 
     /** Already-posted message eligibility: no send TTL, frequency claim or still_active rejection. */
     private fun wakeBlocked(): String? {
@@ -509,14 +509,14 @@ class RetentionNotifications internal constructor(
     }
 
     internal fun deliver(campaign: NotificationCampaign, occurrence: String, revision: Long, due: Long, expires: Long,
-                         expectedGeneration: Long? = null): NotificationOutcome {
-        val outcome = deliverSafely(campaign, occurrence, revision, due, expires, expectedGeneration)
+                         expectedGeneration: Long? = null, wakeExecution: NotificationAlarmExecution? = null): NotificationOutcome {
+        val outcome = deliverSafely(campaign, occurrence, revision, due, expires, expectedGeneration, wakeExecution)
         synchronized(lock) { lastOutcomes[campaign] = outcome }
         return outcome
     }
 
     private fun deliverSafely(campaign: NotificationCampaign, occurrence: String, revision: Long, due: Long, expires: Long,
-                              expectedGeneration: Long?): NotificationOutcome {
+                              expectedGeneration: Long?, wakeExecution: NotificationAlarmExecution?): NotificationOutcome {
         try {
             synchronized(lock) {
                 gate(campaign, revision, due, expires, expectedGeneration)?.let { return skipped(campaign, it) }
@@ -619,7 +619,7 @@ class RetentionNotifications internal constructor(
                     return@synchronized NotificationOutcome.Failed("post")
                 }
                 val persisted = safe("persist_receipt") { delivery.finish(campaign, occurrence, true) }
-                if (campaign == NotificationCampaign.LOCKSCREEN) wake.posted(occurrence)
+                if (campaign == NotificationCampaign.LOCKSCREEN) wake.posted(occurrence, wakeExecution)
                 event("post_submitted", campaign, mapOf("receipt_persisted" to persisted.toString()) + if (campaign == NotificationCampaign.LOCKSCREEN) mapOf("wake_policy" to if (profile().wakeEnabled) "bounded_legacy_attempt" else "disabled") else emptyMap())
                 NotificationOutcome.PostSubmitted(campaign.notificationId, persisted)
             }

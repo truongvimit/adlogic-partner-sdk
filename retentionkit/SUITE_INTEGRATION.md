@@ -2,6 +2,20 @@
 
 Use this optional entry point when the app already declares OnboardKit, Ads, Billing, Trackkit and `suite-firebase`. The ordinary `RetentionKitOptions` API and selective artifacts stay vendor-free. None of these optional vendor dependencies is added to the umbrella's published runtime graph.
 
+## Host manifest prerequisite
+
+Keep notification permission and restore permission in the app's highest-priority manifest. In particular, the existing Google Mobile Ads dependency can remove `RECEIVE_BOOT_COMPLETED` during manifest merging; explicitly merge it back so cold reboot restore works:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="merge" />
+</manifest>
+```
+
+The example checks the final debug/release merged manifest during assembly. Retention still needs Application installation on cold receiver starts, available storage and authoritative entitlement; this permission does not guarantee immediate alarm delivery. See [the umbrella host manifest requirements](README.md#host-manifest-and-reboot-recovery).
+
 ## Three integration points
 
 Install after the existing suite initialization in `Application.onCreate`, including cold receiver/provider starts. Required app facts are the Splash and Main classes, one localized feature catalogue, and the final feature router:

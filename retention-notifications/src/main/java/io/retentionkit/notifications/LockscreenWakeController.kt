@@ -11,17 +11,18 @@ private data class WakeMessage(
     val occurrence: String, val attempts: Int = 0, val ended: Boolean = false,
     val interactiveSeen: Boolean = false, val notBefore: Long = 0,
     val checkpointAt: Long = 0, val checkpointPending: Boolean = false, val deferrals: Int = 0,
+    val confirmed: Boolean = false,
 ) {
     fun encode(): String = JSONObject().put("occurrence", occurrence).put("attempts", attempts).put("ended", ended)
         .put("interactive", interactiveSeen).put("not_before", notBefore).put("checkpoint", checkpointAt)
-        .put("pending", checkpointPending).put("deferrals", deferrals).toString()
+        .put("pending", checkpointPending).put("deferrals", deferrals).put("confirmed", confirmed).toString()
     companion object {
         fun decode(raw: String): WakeMessage {
             require(raw.length <= 2048)
             val j = JSONObject(raw)
             return WakeMessage(j.getString("occurrence"), j.getInt("attempts"), j.getBoolean("ended"),
                 j.getBoolean("interactive"), j.getLong("not_before"), j.getLong("checkpoint"),
-                j.getBoolean("pending"), j.getInt("deferrals")).also {
+                j.getBoolean("pending"), j.getInt("deferrals"), j.optBoolean("confirmed", true)).also {
                 require(idPattern.matches(it.occurrence) && it.attempts in 0..2 && it.deferrals in 0..6)
             }
         }
@@ -46,7 +47,7 @@ internal class LockscreenWakeController(
     private var lease: AutoCloseable? = null
     private var releaseTimer: AutoCloseable? = null
     private var confirmation: AutoCloseable? = null
-    private var confirmationCpu: AutoCloseable? = null
+    private var execution: NotificationAlarmExecution? = null
     private var confirming: String? = null
     private var leaseToken = 0L
 
@@ -54,13 +55,15 @@ internal class LockscreenWakeController(
     private fun write(value: WakeMessage) { store.transaction(WAKE_STATE) { it.put("message", value.encode()) } }
     private fun active(value: WakeMessage): Boolean = notifications.activeOccurrence(NotificationCampaign.LOCKSCREEN) == value.occurrence
     private fun current(occurrence: String): WakeMessage? = read()?.takeIf { it.occurrence == occurrence && !it.ended }
-    private inline fun safely(stage: String, action: () -> Unit) { try { action() } catch (e: Exception) { report("wake_$stage", e) } }
+    private inline fun safely(stage: String, action: () -> Unit) {
+        try { action() } catch (e: Exception) { release(); report("wake_$stage", e) }
+    }
 
     fun matchesPending(occurrence: String?): Boolean = synchronized(monitor) {
         if (closed || occurrence == null) false else try { current(occurrence) != null } catch (_: Exception) { false }
     }
 
-    fun posted(occurrence: String) = synchronized(monitor) {
+    fun posted(occurrence: String, alarmExecution: NotificationAlarmExecution? = null) = synchronized(monitor) {
         if (closed) return
         safely("posted") {
             val old = read()
@@ -69,31 +72,44 @@ internal class LockscreenWakeController(
                 write(WakeMessage(occurrence))
             }
             confirming = occurrence
-            if (notifications.activeOccurrence(NotificationCampaign.LOCKSCREEN) != occurrence &&
-                blocked() == null && power.blocked() == null && !power.interactive()) {
-                // AlarmManager's CPU protection ends when onReceive returns; notify may settle later.
-                val cpu = try { power.holdCpu(2000) } catch (e: Exception) {
-                    cancel(occurrence, "confirmation_cpu_unavailable"); throw e
-                }
-                if (closed || confirming != occurrence || current(occurrence) == null || blocked() != null) cpu.close()
-                else confirmationCpu = cpu
+            execution = alarmExecution?.takeIf { it.retain() }
+            val value = current(occurrence) ?: return@safely
+            if (blocked() != null || execution == null) {
+                confirming = null
+                val pending = if (!value.confirmed && active(value)) value.copy(confirmed = true).also(::write) else value
+                requestCheckpoint(pending, "post")
+                release()
+                return@safely
             }
-            confirmPost(occurrence, 0)
+            confirmPost(occurrence, 0, execution)
         }
     }
 
-    private fun confirmPost(occurrence: String, check: Int) {
-        if (closed || confirming != occurrence) return
+    private fun confirmPost(occurrence: String, check: Int, owner: NotificationAlarmExecution?) {
+        if (closed || confirming != occurrence || execution !== owner) return
         val value = current(occurrence) ?: return
+        if (blocked() != null || execution?.isActive() != true) {
+            confirming = null
+            requestCheckpoint(value, "confirmation")
+            release()
+            return
+        }
         if (!active(value)) {
+            // Save recovery before waiting: process death or a blocked main thread can prevent
+            // the short confirmation callback from running even though Android accepted notify.
+            if (check == 0 && !value.checkpointPending && value.deferrals < 6) {
+                val at = clock.wallTimeMillis() + 30_000L * (1L shl value.deferrals)
+                write(value.copy(checkpointAt = at, checkpointPending = true))
+                power.schedule(occurrence, at)
+            }
             if (check >= 3) { cancel(occurrence, "post_not_observed"); return }
             confirmation = delays.post(listOf(100L, 300L, 1000L)[check]) {
-                synchronized(monitor) { safely("confirm") { confirmPost(occurrence, check + 1) } }
+                synchronized(monitor) { safely("confirm") { confirmPost(occurrence, check + 1, owner) } }
             }
             return
         }
         confirmation?.close(); confirmation = null; confirming = null
-        confirmationCpu?.close(); confirmationCpu = null
+        write(value.copy(confirmed = true))
         observe()
         attempt(occurrence, "post")
     }
@@ -103,8 +119,15 @@ internal class LockscreenWakeController(
         if (closed) return
         safely("reconcile") {
             val value = read()?.takeIf { !it.ended } ?: return@safely
-            if (confirming == value.occurrence) return@safely
-            if (!active(value)) { cancel(value.occurrence, "notification_gone"); return@safely }
+            if (confirming == value.occurrence && blocked() == null && execution?.isActive() == true) return@safely
+            if (confirming == value.occurrence) {
+                confirmation?.close(); confirmation = null; confirming = null
+                val pending = if (!value.confirmed && active(value)) value.copy(confirmed = true).also(::write) else value
+                requestCheckpoint(pending, "confirmation_readiness")
+                release()
+                return@safely
+            }
+            if (!active(value) && value.confirmed) { cancel(value.occurrence, "notification_gone"); return@safely }
             val reason = blocked()
             if (reason != null) {
                 release()
@@ -114,11 +137,9 @@ internal class LockscreenWakeController(
             }
             if (value.attempts < 2) observe()
             if (value.attempts == 0 && value.checkpointPending) {
-                // A confirmed post/screen-off decision met UNKNOWN. Readiness can finish it now,
-                // even before the saved fallback alarm and without another screen transition.
-                attempt(value.occurrence, "readiness")
+                requestCheckpoint(value, "readiness")
             } else if (value.checkpointPending && value.checkpointAt <= clock.wallTimeMillis()) {
-                checkpoint(value.occurrence, value.checkpointAt)
+                requestCheckpoint(value, "readiness")
             } else if (value.checkpointAt > 0) power.schedule(value.occurrence, value.checkpointAt)
         }
     }
@@ -137,20 +158,20 @@ internal class LockscreenWakeController(
                             write(value.copy(interactiveSeen = true))
                             event("wake_observed", mapOf("observation" to "interactive", "attribution" to "not_proven"))
                         }
-                    } else attempt(value.occurrence, "screen_off")
+                    } else requestCheckpoint(value, "screen_off")
                 }
             }
         }
     }
 
-    fun checkpoint(occurrence: String, atMillis: Long) = synchronized(monitor) {
+    fun checkpoint(occurrence: String, atMillis: Long, alarmExecution: NotificationAlarmExecution? = null) = synchronized(monitor) {
         if (closed) return
         safely("checkpoint") {
             val value = current(occurrence) ?: return@safely
             if (!value.checkpointPending || value.checkpointAt != atMillis) return@safely
             val now = clock.wallTimeMillis()
             if (now < atMillis) { power.schedule(occurrence, atMillis); return@safely }
-            if (!active(value)) { cancel(occurrence, "notification_gone"); return@safely }
+            if (!active(value) && value.confirmed) { cancel(occurrence, "notification_gone"); return@safely }
             if (blocked() == "entitlement_unknown") {
                 release()
                 // Bounded cold Billing readiness checks. No timer holds the process between them.
@@ -164,16 +185,26 @@ internal class LockscreenWakeController(
                 }
                 return@safely
             }
-            write(value.copy(checkpointAt = 0, checkpointPending = false))
+            if (alarmExecution == null || !alarmExecution.retain()) {
+                requestCheckpoint(value, "outside_alarm")
+                return@safely
+            }
+            release()
+            execution = alarmExecution
+            write(value.copy(checkpointAt = 0, checkpointPending = false,
+                deferrals = if (!value.confirmed) (value.deferrals + 1).coerceAtMost(6) else value.deferrals))
             power.cancel(occurrence)
             observe()
-            attempt(occurrence, "checkpoint")
+            if (!value.confirmed) {
+                confirming = occurrence
+                confirmPost(occurrence, 0, execution)
+            } else attempt(occurrence, "checkpoint")
         }
     }
 
     private fun attempt(occurrence: String, trigger: String) {
         val value = current(occurrence) ?: return
-        if (value.attempts >= 2 || !active(value)) return
+        if (value.attempts >= 2 || !active(value)) { release(); return }
         val reason = blocked() ?: power.blocked()
         if (reason != null) {
             release()
@@ -188,25 +219,33 @@ internal class LockscreenWakeController(
             event("wake_blocked", mapOf("reason" to reason))
             return
         }
+        val owner = execution
+        if (owner?.isActive() != true) {
+            requestCheckpoint(value, trigger)
+            release()
+            return
+        }
         if (power.interactive()) {
             if (!value.interactiveSeen) write(value.copy(interactiveSeen = true))
+            release()
             return
         }
         val now = clock.wallTimeMillis()
-        if (value.attempts > 0 && (!value.interactiveSeen || now < value.notBefore)) return
+        if (value.attempts > 0 && (!value.interactiveSeen || now < value.notBefore)) { release(); return }
         val duration = profile().wakeDurationMillis.coerceIn(1, MAX_WAKE_MILLIS)
         val next = if (value.attempts == 0) now + duration + REWAKE_MARGIN else 0L
         // Persist before acquire; uncertain failures consume the claim instead of risking a third wake.
         val claimed = value.copy(attempts = value.attempts + 1, notBefore = next,
             checkpointAt = next, checkpointPending = next > 0, deferrals = 0)
         write(claimed)
-        if (closed || current(occurrence)?.attempts != claimed.attempts || !active(claimed) || blocked() != null) return
-        release()
+        if (closed || current(occurrence)?.attempts != claimed.attempts || !active(claimed) || blocked() != null) { release(); return }
+        releaseTimer?.close(); releaseTimer = null
+        lease?.close(); lease = null
         val token = ++leaseToken
         event("wake_requested", mapOf("attempt" to claimed.attempts.toString(), "duration_ms" to duration.toString(), "trigger" to trigger))
-        val acquired = try { power.acquire(duration) } catch (e: Exception) {
+        val acquired = try { owner.acquire(duration) { power.acquire(duration) } } catch (e: Exception) {
             event("wake_failed", mapOf("reason" to e.javaClass.simpleName)); throw e
-        }
+        } ?: return
         // An Android adapter or store boundary can reenter and revoke the selected message.
         if (closed || token != leaseToken || current(occurrence)?.attempts != claimed.attempts || !active(claimed) || blocked() != null) {
             acquired.close(); return
@@ -223,6 +262,25 @@ internal class LockscreenWakeController(
         else { power.cancel(occurrence); observer?.close(); observer = null }
     }
 
+    /** Only an owned manifest alarm may acquire. Foreign callbacks persist an inexact request. */
+    private fun requestCheckpoint(value: WakeMessage, trigger: String) {
+        if (value.attempts >= 2) return
+        if (!value.confirmed && value.deferrals >= 6 && !active(value)) {
+            cancel(value.occurrence, "post_not_observed")
+            return
+        }
+        val reason = blocked() ?: power.blocked()
+        if (reason != null && reason != "entitlement_unknown") { cancel(value.occurrence, reason); return }
+        if (reason == "entitlement_unknown" && value.checkpointPending) return
+        val now = clock.wallTimeMillis()
+        val desired = if (reason == "entitlement_unknown") now + 30_000L else maxOf(now + 1, value.notBefore)
+        val at = if (value.checkpointPending && value.checkpointAt > 0) minOf(value.checkpointAt, desired) else desired
+        val pending = value.copy(checkpointAt = at, checkpointPending = true)
+        if (pending != value) write(pending)
+        power.schedule(value.occurrence, at)
+        event("wake_deferred", mapOf("reason" to (reason ?: "alarm_execution_required"), "trigger" to trigger))
+    }
+
     fun cancel(occurrence: String? = null, reason: String) = synchronized(monitor) {
         safely("cancel") {
             val value = read() ?: return@safely
@@ -237,12 +295,17 @@ internal class LockscreenWakeController(
         leaseToken++
         releaseTimer?.close(); releaseTimer = null
         val owned = lease; lease = null
-        if (owned != null) safely("release") { owned.close(); event("wake_released", emptyMap()) }
+        val receipt = execution; execution = null
+        var failure: Exception? = null
+        try { owned?.close() } catch (error: Exception) { failure = error }
+        try { receipt?.close() } catch (error: Exception) { if (failure == null) failure = error }
+        // No partner telemetry before both mandatory raw/receipt cleanup operations.
+        if (failure != null) report("wake_release", failure)
+        else if (owned != null && receipt?.cleanupSucceeded() == true) event("wake_released", emptyMap())
     }
     private fun stopResources(occurrence: String?) {
         release()
         confirmation?.close(); confirmation = null; confirming = null
-        confirmationCpu?.close(); confirmationCpu = null
         observer?.close(); observer = null
         if (occurrence != null) safely("cancel_alarm") { power.cancel(occurrence) }
     }
