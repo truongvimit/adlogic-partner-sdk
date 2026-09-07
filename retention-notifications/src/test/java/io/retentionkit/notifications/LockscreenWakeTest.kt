@@ -46,8 +46,9 @@ class LockscreenWakeTest {
     }
     @After fun after() { RetentionRuntime.uninstallForTests() }
 
-    private fun install(power: NotificationWakePlatform? = null, entitlement: RetentionEntitlement = RetentionEntitlement.NON_SUBSCRIBER) {
-        module = RetentionNotifications(RetentionNotificationOptions(), platform, delays, power)
+    private fun install(power: NotificationWakePlatform? = null, entitlement: RetentionEntitlement = RetentionEntitlement.NON_SUBSCRIBER,
+                        notifier: NotificationPlatform = platform) {
+        module = RetentionNotifications(RetentionNotificationOptions(), notifier, delays, power)
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), clock = clock, store = store,
             initialUserState = RetentionUserState(true, false, entitlement,
                 clock.now, clock.now, clock.now),
@@ -242,6 +243,25 @@ class LockscreenWakeTest {
         assertEquals(2, power.leases.size)
         assertEquals(1, platform.posts.count { it.first == NotificationCampaign.LOCKSCREEN })
     }
+
+    @Test fun asynchronousPostConfirmationHoldsCpuBrieflyButCannotWakeAnUnconfirmedPost() {
+        val power = FakeWakePlatform()
+        var visible = false
+        val notifier = object : NotificationPlatform by platform {
+            override fun activeOccurrence(campaign: NotificationCampaign): String? =
+                if (visible) platform.activeOccurrence(campaign) else null
+        }
+        install(power, notifier = notifier)
+        send()
+        assertTrue("No screen wake before the matching active notification is observed", power.leases.isEmpty())
+        assertEquals("Alarm receiver's temporary CPU protection may end before notify settles", 1, power.cpuLeases.size)
+        assertTrue(power.cpuLeases.single().held)
+        assertTrue(power.cpuLeases.single().duration <= 2000)
+        visible = true
+        delays.fire()
+        assertTrue(power.cpuLeases.none { it.held })
+        assertEquals(1, power.leases.size)
+    }
 }
 
 private class FakeWakePlatform : NotificationWakePlatform {
@@ -253,6 +273,7 @@ private class FakeWakePlatform : NotificationWakePlatform {
     var onAcquire: (() -> Unit)? = null
     var blockReason: String? = null
     val leases = mutableListOf<Lease>()
+    val cpuLeases = mutableListOf<Lease>()
     val checkpoints = mutableMapOf<String, Long>()
     val callbacks = mutableListOf<(Boolean) -> Unit>()
     private var currentCallback: ((Boolean) -> Unit)? = null
@@ -265,6 +286,7 @@ private class FakeWakePlatform : NotificationWakePlatform {
         onAcquire?.invoke()
         return lease
     }
+    override fun holdCpu(durationMillis: Long): AutoCloseable = Lease(durationMillis).also { cpuLeases += it }
     override fun observe(callback: (Boolean) -> Unit): AutoCloseable {
         currentCallback = callback; callbacks += callback
         return AutoCloseable { if (currentCallback === callback) currentCallback = null }

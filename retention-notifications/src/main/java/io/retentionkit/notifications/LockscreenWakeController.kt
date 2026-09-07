@@ -46,6 +46,7 @@ internal class LockscreenWakeController(
     private var lease: AutoCloseable? = null
     private var releaseTimer: AutoCloseable? = null
     private var confirmation: AutoCloseable? = null
+    private var confirmationCpu: AutoCloseable? = null
     private var confirming: String? = null
     private var leaseToken = 0L
 
@@ -68,6 +69,15 @@ internal class LockscreenWakeController(
                 write(WakeMessage(occurrence))
             }
             confirming = occurrence
+            if (notifications.activeOccurrence(NotificationCampaign.LOCKSCREEN) != occurrence &&
+                blocked() == null && power.blocked() == null && !power.interactive()) {
+                // AlarmManager's CPU protection ends when onReceive returns; notify may settle later.
+                val cpu = try { power.holdCpu(2000) } catch (e: Exception) {
+                    cancel(occurrence, "confirmation_cpu_unavailable"); throw e
+                }
+                if (closed || confirming != occurrence || current(occurrence) == null || blocked() != null) cpu.close()
+                else confirmationCpu = cpu
+            }
             confirmPost(occurrence, 0)
         }
     }
@@ -83,6 +93,7 @@ internal class LockscreenWakeController(
             return
         }
         confirmation?.close(); confirmation = null; confirming = null
+        confirmationCpu?.close(); confirmationCpu = null
         observe()
         attempt(occurrence, "post")
     }
@@ -220,6 +231,7 @@ internal class LockscreenWakeController(
     private fun stopResources(occurrence: String?) {
         release()
         confirmation?.close(); confirmation = null; confirming = null
+        confirmationCpu?.close(); confirmationCpu = null
         observer?.close(); observer = null
         if (occurrence != null) safely("cancel_alarm") { power.cancel(occurrence) }
     }

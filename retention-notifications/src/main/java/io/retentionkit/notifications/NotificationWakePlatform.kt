@@ -21,6 +21,7 @@ internal interface NotificationWakePlatform {
     fun interactive(): Boolean
     fun blocked(): String?
     fun acquire(durationMillis: Long): AutoCloseable
+    fun holdCpu(durationMillis: Long): AutoCloseable
     fun observe(callback: (Boolean) -> Unit): AutoCloseable
     fun schedule(occurrence: String, atMillis: Long)
     fun cancel(occurrence: String)
@@ -41,8 +42,17 @@ internal class AndroidNotificationWakePlatform(context: Context) : NotificationW
 
     override fun acquire(durationMillis: Long): AutoCloseable {
         require(durationMillis in 1..MAX_WAKE_MILLIS)
-        val wake = power.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "RetentionKit:lockscreen") // No ON_AFTER_RELEASE: do not extend user-activity timeout.
+        // No ON_AFTER_RELEASE: do not extend user-activity timeout.
+        return hold(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "lockscreen", durationMillis)
+    }
+
+    override fun holdCpu(durationMillis: Long): AutoCloseable {
+        require(durationMillis in 1..2000)
+        return hold(PowerManager.PARTIAL_WAKE_LOCK, "post_confirmation", durationMillis)
+    }
+
+    private fun hold(flags: Int, suffix: String, durationMillis: Long): AutoCloseable {
+        val wake = power.newWakeLock(flags, "RetentionKit:$suffix")
         wake.setReferenceCounted(false)
         wake.acquire(durationMillis)
         val released = AtomicBoolean(false)
