@@ -52,6 +52,7 @@ class RetentionExampleEngineTest {
     private var feedbackCleanup: (() -> Unit)? = null
     private data class ActivityMoment(val activity: Activity, val phase: String, val entry: RetentionEntry?, val elapsed: Long = SystemClock.elapsedRealtime())
     private val moments = CopyOnWriteArrayList<ActivityMoment>()
+    private var lastAdBackAt = 0L
     private val activityObserver = object : Application.ActivityLifecycleCallbacks {
         private fun record(activity: Activity, phase: String) {
             val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry
@@ -195,6 +196,7 @@ class RetentionExampleEngineTest {
         await(45_000, diagnostic = { "Expected $source/$destination; lifecycle=" + moments.drop(offset).map {
             "${it.activity.javaClass.simpleName}:${it.phase}:${it.entry?.token}:${it.entry?.destination}"
         } + "; native=" + ExampleQa.nativeEvents.takeLast(8) }) {
+            dismissVisibleEntryTestAd()
             var ready = false
             instrumentation.runOnMainSync {
                 val feature = kit.runtime.activities.current() as? RetentionPlaygroundActivity
@@ -435,8 +437,11 @@ class RetentionExampleEngineTest {
             val host = kit.runtime.activities.current() as RetentionPlaygroundActivity
             host.findViewById<Button>(R.id.rk_open_feedback).performClick()
         }
-        await(45_000) { kit.runtime.activities.current() is RetentionFeedbackActivity &&
-            ExampleQa.events.count { it.name == "retention_feedback_shown" } > before }
+        await(45_000) {
+            dismissVisibleEntryTestAd()
+            kit.runtime.activities.current() is RetentionFeedbackActivity &&
+                ExampleQa.events.count { it.name == "retention_feedback_shown" } > before
+        }
         val observed = moments.drop(offset)
         val main = observed.indexOfLast { it.activity is MainActivity && it.phase == "resumed" && it.entry?.destination == "retention.feedback" }
         assertTrue("Feedback must pass actual Main resume", main >= 0)
@@ -447,6 +452,28 @@ class RetentionExampleEngineTest {
         assertNotNull(kit.runtime.store.snapshot("core.entries").string("consumed:$token"))
         await { ExampleQa.nativeEvents.any { it.placement == "native_uninstall" && it.phase == "request_called" } }
     }
+    /** Actual device gesture on the actual test-ad Activity only. No synthetic ad callbacks. */
+    private fun dismissVisibleEntryTestAd() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastAdBackAt < 1000) return
+        var visibleAd = false
+        instrumentation.runOnMainSync {
+            val current = kit.runtime.activities.current()
+            visibleAd = current?.javaClass?.name == "com.google.android.gms.ads.AdActivity" &&
+                !current.isFinishing && !current.isDestroyed && current.hasWindowFocus()
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        if (!visibleAd || device.currentPackageName != application.packageName) return
+        // Recheck immediately before input so a completed ad cannot deliberately send Back to a feature.
+        instrumentation.runOnMainSync {
+            visibleAd = kit.runtime.activities.current()?.javaClass?.name == "com.google.android.gms.ads.AdActivity"
+        }
+        if (!visibleAd) return
+        lastAdBackAt = now
+        val sent = device.pressBack()
+        android.util.Log.i("RetentionAdEvidence", "actual gesture=Back activity=com.google.android.gms.ads.AdActivity sent=$sent elapsed=$now")
+    }
+
     private fun clickFeedback(tag: String) {
         instrumentation.runOnMainSync {
             val feedback = kit.runtime.activities.current() as RetentionFeedbackActivity
