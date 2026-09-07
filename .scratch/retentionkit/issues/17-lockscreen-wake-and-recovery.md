@@ -1,7 +1,7 @@
 # Implement canonical lockscreen wake/recovery
 
 Type: task
-Status: ready-for-agent
+Status: claimed
 Blocked by: 15
 Base: 2865f6d
 

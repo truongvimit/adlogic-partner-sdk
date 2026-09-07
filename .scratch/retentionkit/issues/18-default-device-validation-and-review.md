@@ -10,3 +10,8 @@ Fresh default physical ADB tests without QA config for foreground/background not
 ## Acceptance
 
 Evidence must distinguish ordinary production defaults from explicit synthetic engine fixtures. Prior corrected acceptance is historical and does not prove this reopened request.
+
+
+## Coordination
+
+Parent tracker checkpoint after ticket16 merge:15 is resolved for module implementation (126 passing selected cases and release AAR),16 is resolved for scoped facade/example implementation (75 passing cases and debug/test APKs),17 remains in progress. This ticket retains the final normal-device, screen-wake, optional-vendor R8/consumer and independent review acceptance. Its dependency on16 is one-way;16 does not remain open waiting for18. Root's early normal-device observations and the historical corrected279/17/matrix records do not constitute completion of this final-source acceptance.

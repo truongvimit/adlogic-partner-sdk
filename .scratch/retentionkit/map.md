@@ -2,7 +2,13 @@
 
 Spec: [spec.md](spec.md) · Base: `632df43` · Branch: `codex/retentionkit`
 
-## Frontier
+## Frontier — reopened default request
+
+[15 default delivery](issues/15-default-notification-delivery.md) is resolved for module implementation/verification; [16 simple integration](issues/16-simple-partner-integration.md) is resolved for the scoped facade/example implementation. [17 wake/recovery](issues/17-lockscreen-wake-and-recovery.md) is in progress and owns its private implementation/Gradle work. [18 final acceptance](issues/18-default-device-validation-and-review.md) remains pending final normal-device, screen-wake, R8/consumer and two-axis review evidence after15–17; root's early device work is not a final acceptance claim. External08 PR remains separately blocked by GitHub permissions.
+
+The accepted69d0f71/correction results below are historical for this reopened request; they do not prove current default delivery, new Suite integration or wake behavior.
+
+## Previous correction checkpoint — historical
 
 The corrected common-flow implementation is accepted at69d0f71, production-equivalent to device source86048d6: tickets10–14 are resolved, including [13 validation/closure](issues/13-corrected-validation.md), physical restoration and task-resource cleanup; the minified release smoke has passed. [08 external PR](issues/08-review-completion.md) remains claimed because the configured GitHub API account has READ-only repository access; no PR URL/readiness is claimed. Correction base543de03.
 
@@ -32,6 +38,11 @@ Final closure: ticket13 resolved; [Final physical/restore proof](/Users/Shared/P
 
 External08 confirmation: branch push succeeded; actual draft PR creation after3801f74 returned `GraphQL: must be a collaborator (createPullRequest)`. [PR attempt](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/final-pr-attempt.json). No PR exists/readiness claimed; all code, validation, report and resource-cleanup work is complete.
 
-## Reopened frontier — current
+## Reopened implementation decisions and evidence
 
-15 default delivery and16 simple integration ready independently;17 wake/recovery follows15;18 physical default validation and two-axis review follows15–17. Prior closure above is historical. External08 PR remains separately blocked by GitHub permissions.
+- **15 — resolved, module scope:** source4988246, final implementation/docs7a988b9;77 notification +49 core tests =126 actual PASS in one invocation, release AAR PASS. [Immutable source/XML/AAR evidence](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket15/module-verification-2/result.json). No device/wake/facade/app acceptance is inferred from this result.
+- **16 — resolved, scoped implementation:** source5ac3102, author tip354dedc, merged2e274d6;43 facade +32 app tests =75 actual PASS in one invocation, debug/test APK assembly PASS. [Immutable source/XML/APK evidence](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket16/full-app-suite-1/result.json). The17 Android cases compiled but were not executed by that build. Required partner seams are documented in [Suite integration](../../retentionkit/SUITE_INTEGRATION.md). Physical and optional-vendor R8 integration acceptance belongs to18, so16 does not depend on18.
+- **17 — in progress:**15 is resolved and unblocks the private wake/recovery implementation. Its implementation, tests and platform capability still require their own evidence; this checkpoint does not merge17.
+- **18 — pending final acceptance:** retains `Blocked by: 15, 16, 17`;15 and16 now satisfy their scoped implementation dependencies, while17 remains open. Root owns actual normal-device behavior, final source R8/consumer checks and independent Standards/Spec review. Preserve intermediate/failed evidence and do not add the two separate126/75 invocations to any historical279 or claim one combined invocation.
+
+The tracker resolution of16 removes the former author-handoff hold for parent acceptance; it does not assert device or R8 completion. No release/tag, remote publication or successful PR creation is claimed.

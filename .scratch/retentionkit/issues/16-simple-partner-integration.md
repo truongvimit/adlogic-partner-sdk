@@ -1,7 +1,7 @@
 # Simplify partner installation and refactor example
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 Base: 2865f6d
 
@@ -25,4 +25,11 @@ Fresh verified source `5ac3102f5d2bc683d1cd8b81d37a426f0021cad6` (including merg
 
 Added13 Suite tests cover actual lifecycle/terminal/forwarded task, burst/reentry/recreation/alias/backlog, duplicate runtime installation, explicit permission/results/timeout/foreign ownership and failed restored binding. A real restored-Main regression was RED1/1 at `e631f12` (unowned listener started Feature after storage failure), then GREEN after `20714a6`; a reentrant retry ownership test found and verified `5ac3102`. [RED/transition notes](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket16/binding-regression.md). Initial superclass compilation failure is retained with zero tests and is not behavioral RED.
 
-[Partner three-point guide](../../../retentionkit/SUITE_INTEGRATION.md) and [actual example](../../../app/RETENTION_EXAMPLE.md) describe the new required seam and optional ownership. Status remains claimed pending root's actual normal/device and optional-vendor R8 integration acceptance; earlier corrected279/17/matrix results are historical. Root owns map and final acceptance.
+[Partner three-point guide](../../../retentionkit/SUITE_INTEGRATION.md) and [actual example](../../../app/RETENTION_EXAMPLE.md) describe the new required seam and optional ownership. At the author handoff this ticket remained claimed for parent normal-device and optional-vendor R8 acceptance; that hold is superseded by the scoped parent resolution below. Earlier corrected279/17/matrix results are historical. Root owns map and final acceptance.
+
+
+### Scoped parent resolution — 2026-09-07
+
+Merged clean author354dedc4772742ad852086df9a9d20186744e8ac into rootcodex/retentionkit at2e274d6a17ee2e188bcd7a937f47d75157289f8e. Production, tests and build configuration are identical to the verified5ac3102 source; subsequent author changes are documentation only. The merger independently matched every copied XML/APK hash and confirmed75 actual passing cases (43 facade/32 app, zero failures/errors/skips); no new build or device run was performed by the merger.
+
+**Resolved for implementation and scoped automated verification.** Final normal-device behavior, optional-vendor R8/consumer composition and two-axis acceptance are explicitly deferred to [18](18-default-device-validation-and-review.md), which already depends on16 and17. This ticket has no dependency on18; resolving its implementation avoids a dependency cycle and does not claim that parent acceptance has passed.
