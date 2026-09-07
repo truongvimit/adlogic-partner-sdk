@@ -59,9 +59,13 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // A new delivery replaces this Activity's selection, even when it has no valid entry.
+        // The old ledger record remains inert; saved-state restoration follows onCreate instead.
+        pendingToken = null
+        routeRetries = 0
+        window.decorView.removeCallbacks(routeRetry)
         setIntent(intent)
         capture(intent)
-        window.decorView.removeCallbacks(routeRetry)
         window.decorView.post(routeRetry)
     }
     override fun onPostResume() {
