@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
@@ -14,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -30,6 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 import java.time.Duration
 import java.util.Locale
 import java.util.UUID
@@ -290,6 +293,29 @@ class RetentionFeedbackModuleTest {
         assertNull(module.session(expired))
         module.show(); idle()
         assertNotEquals(expired, launches.last().getStringExtra(RetentionFeedbackModule.EXTRA_SESSION))
+    }
+
+    @Test fun uninstallShortcutUsesSeparateIconWhileSurveyKeepsAppBrandingAndEntryRoute() {
+        val headerIcon = android.R.drawable.ic_menu_info_details
+        install(custom = false, shortcut = true, configure = { it.copy(appIconRes = headerIcon) })
+        val own = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
+            .single { it.id == RetentionFeedbackModule.SHORTCUT_ID }
+        val template = (RetentionEntryCodec.read(own.intent) as RetentionEntryDecodeResult.Valid).entry
+        assertEquals(Activity::class.java.name, own.intent.component!!.className)
+        assertEquals(RetentionEntrySource.SHORTCUT, template.source)
+        assertEquals(RetentionFeedbackModule.DESTINATION, template.destination)
+        assertEquals(RetentionEntryMode.REUSABLE, template.mode)
+        // Android's icon metadata accessor is hidden from its SDK stubs; inspect only this OS boundary.
+        val shortcutIcon = ReflectionHelpers.callInstanceMethod<Icon>(own, "getIcon")
+        assertEquals("Uninstall" to false, own.shortLabel.toString() to (shortcutIcon.resId == headerIcon))
+        show()
+        fun images(view: View): List<ImageView> = when (view) {
+            is ImageView -> listOf(view)
+            is ViewGroup -> (0 until view.childCount).flatMap { images(view.getChildAt(it)) }
+            else -> emptyList()
+        }
+        val header = images(screen!!.get().findViewById(android.R.id.content)).first()
+        assertEquals(headerIcon, shadowOf(header.drawable).createdFromResId)
     }
 
     @Test fun shortcutUpdateAndDisablePreserveForeignDynamicEntries() {
