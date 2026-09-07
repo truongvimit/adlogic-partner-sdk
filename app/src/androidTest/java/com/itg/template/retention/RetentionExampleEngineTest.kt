@@ -37,6 +37,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Calendar
+import kotlinx.coroutines.flow.first
 
 /** Real Android adapter tests with an explicitly synthetic engine clock/state.
  * Calendar tests deliver the actual saved alarm to its actual receiver; they do not test OS wake timing.
@@ -145,11 +146,12 @@ class RetentionExampleEngineTest {
     @Test fun dailyActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.DAILY)
     @Test fun winbackActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.WINBACK)
     @Test fun lockscreenActualSavedEnvelopePostsWithoutFullScreenOrWakeRequest() = calendar(NotificationCampaign.LOCKSCREEN)
+    private fun completedOnboardState(): Boolean = kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withTimeout(5000) { io.onboardkit.OnboardingSdk.state.first().isFlowCompleted }
+    }
     @Test fun completedRealOnboardStateSynchronizesAndSuppressesUnfinishedAbandonment() {
         // This installation has completed the real first-open flow; never erase it for a test.
-        await(diagnostic = { "Complete the actual first-open flow before this established-installation suite" }) {
-            io.onboardkit.OnboardingSdk.state.value.isFlowCompleted
-        }
+        assertTrue("Complete the actual first-open flow before this established-installation suite", completedOnboardState())
         assertFalse(io.onboardkit.OnboardingSdk.isFlowActive.value)
         prepare(setup = false)
         await { kit.runtime.userState.setupCompleted && !kit.runtime.userState.onboardingActive }
@@ -157,7 +159,7 @@ class RetentionExampleEngineTest {
         SystemClock.sleep(3600)
         assertNull(active(NotificationCampaign.ONBOARDING))
         assertFalse(ExampleQa.events.any { it.name == "retention_noti_post_submitted" && it.attributes["campaign"] == "onboarding" })
-        assertTrue(io.onboardkit.OnboardingSdk.state.value.isFlowCompleted)
+        assertTrue(completedOnboardState())
     }
     @Test fun adReturnNeedsFreshDebugClickAndActualHome() {
         prepare()
