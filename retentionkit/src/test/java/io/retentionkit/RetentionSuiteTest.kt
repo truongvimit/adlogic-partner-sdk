@@ -222,4 +222,23 @@ class RetentionSuiteTest {
         assertNotNull(kit.runtime.entries.pending(backlog.token))
     }
 
+    @Test fun oneTerminalDelegateUsesOnlyOutcomePassthroughWithRealOnboardBridge() {
+        val isolated = options()
+        val kit = install(isolated.copy(customize = { standard ->
+            isolated.customize(standard).copy(adapters = standard.adapters.filterNot { it is BillingRetentionBridge })
+        }))
+        val selected = entry()
+        val incoming = checkNotNull(kit.runtime.createEntryIntent(selected))
+        val suite = checkNotNull(RetentionSuite.get())
+        suite.captureSplash(incoming)
+        suite.onOutcome(app, OnboardingOutcome.Skipped(io.onboardkit.core.SkipReason.ALREADY_COMPLETED, incoming.extras))
+        val main = checkNotNull(shadowOf(app).nextStartedActivity)
+        assertEquals(Main::class.java.name, main.component?.className)
+        assertEquals(selected, (RetentionEntryCodec.read(main) as RetentionEntryDecodeResult.Valid).entry)
+        assertNull(shadowOf(app).nextStartedActivity)
+        suite.onOutcome(app, OnboardingOutcome.Skipped(io.onboardkit.core.SkipReason.ALREADY_COMPLETED, null))
+        assertTrue(RetentionEntryCodec.read(checkNotNull(shadowOf(app).nextStartedActivity)) is RetentionEntryDecodeResult.Absent)
+        assertNotNull("An ordinary terminal outcome must never select the pending backlog", kit.runtime.entries.pending(selected.token))
+    }
+
 }

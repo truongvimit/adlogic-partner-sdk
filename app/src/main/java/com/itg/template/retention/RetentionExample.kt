@@ -36,7 +36,7 @@ object RetentionExample {
                         else -> false
                     }
                 },
-                feedback = FeedbackOptions(featureIds = RetentionExampleContent.featureIds.toList(), appIconRes = R.mipmap.ic_launcher,
+                feedback = FeedbackOptions(appIconRes = R.mipmap.ic_launcher,
                     nativeContent = io.retentionkit.feedback.FeedbackNativeContent { activity, owner, container ->
                         val slot = android.widget.FrameLayout(activity)
                         container.addView(slot)

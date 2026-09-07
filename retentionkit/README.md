@@ -118,10 +118,10 @@ Save the pending token with Activity state and do not recapture the original Int
 
 | Area | Default behavior | Host responsibility |
 |---|---|---|
-| Daily notifications | Local 08:00/19:00; ordinary marketing waits 24 hours after setup. | One notification permission owner, valid icon/content and a known non-subscriber. |
+| Daily notifications | Local 08:00/19:00 after completed setup and verified eligibility; unfinished-install grace is separate. | One notification permission owner, valid icon/content and a known non-subscriber. |
 | Winback / lockscreen | COMMON_PLAN winback during days 14–45 at 11:00/14:00, up to three lifetime posts; lockscreen 11:30/17:00/20:00, skip an active item by default. | Preserve user channel choices; OS delivery/lockscreen presentation is conditional. |
 | Onboarding / ad return | COMMON_PLAN unfinished onboarding after 24 hours from install, or a real ad click; both require confirmed background + 3 seconds. | Report real onboarding state; suite bridge forwards actual ad clicks once. |
-| Reminder / pinned | Quiet foreground refresh; reminder cooldown 15 minutes and Later action. | Leave functional app notifications under their existing owner. |
+| Reminder / pinned | Quiet foreground delivery when setup, entitlement and permission become ready; reminder cooldown 15 minutes and Later action. | Leave functional app notifications under their existing owner. |
 | Widgets / shortcuts | Localized feature grid, pin invitation/request, owned dynamic shortcuts. | Ask from a suitable user action; pin Requested/Unknown is not Confirmed. |
 | Feedback | Optional reasons, feature rescue, Keep and Continue to Android uninstall confirmation, with App Info fallback. | Optional branding/content only; no survey is required before Continue. |
 | Review | 5 real business successes, 10 days between launch attempts, maximum 3 attempts. | Stable operation IDs; manual Rate calls `review.openStore()` independently. |
