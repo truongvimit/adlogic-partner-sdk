@@ -12,15 +12,14 @@ RetentionRuntime.install(this, RetentionOptions(
     modules = listOf(widgets),
     featureProvider = RetentionFeatureProvider { localized ->
         listOf(
-            RetentionFeature("translate", localized.getString(R.string.translate), R.drawable.ic_translate),
-            RetentionFeature("camera", localized.getString(R.string.camera), R.drawable.ic_camera),
-            RetentionFeature("conversation", localized.getString(R.string.conversation), R.drawable.ic_conversation),
+            RetentionFeature("notes", localized.getString(R.string.notes), R.drawable.ic_notes),
+            RetentionFeature("saved_items", localized.getString(R.string.saved_items), R.drawable.ic_saved),
+            RetentionFeature("text_tools", localized.getString(R.string.text_tools), R.drawable.ic_tools),
+            RetentionFeature("guide", localized.getString(R.string.guide), R.drawable.ic_guide),
         )
     },
     localeProvider = RetentionLocaleProvider { app -> appLocaleContext(app) },
-    router = RetentionRouter { context, entry ->
-        Intent(context, EntryActivity::class.java) // optional suite bridge constructs a no-splash-ad entry
-    },
+    router = RetentionSplashRouter(SplashActivity::class.java),
 ))
 ```
 
@@ -50,6 +49,8 @@ In the host entry Activity, call `runtime.entries.capture(intent)` in both `onCr
 
 Android supplies no negative pin callback. A real pause→resume of the originating Activity without confirmation, a background→foreground return, source Activity destruction, timeout (default 120 seconds), or a disable operation produces `Unknown(token, reason)`. These do not claim cancellation or installation. Dismissing the SDK invitation itself emits `retention_widget_invitation_dismissed` and never calls the launcher. Pin results/events have no Activity reference or host callback to retain across lifecycle changes. A temporary observer holds the originating Activity weakly; an initial/self resume without an actual pause is ignored. Return processing is deferred one main turn and rechecks both the current Activity and pending request, so a queued verified callback can win. Every terminal path unregisters this observer and releases only its matching transition, including storage failures; a failed write emits no fabricated persisted outcome. After a storage outage the durable request may remain pending until the next successful expiry/reconciliation, but it cannot retain the Activity observer or UI suppression.
 
+`widgets.invitation.enabled=false` closes an existing invitation and rejects a stale positive click. It leaves direct user `requestPin()`, installed widget content/instances and feature shortcuts available. Use `widgets.enabled=false` only for the full module kill switch.
+
 The SDK invitation holds its dialog weakly, reserves a 60-second core lease, and closes when the lease/config/lifecycle becomes invalid. Immediately before requesting the launcher, it checks the lease's weak Activity and configuration revision. It then emits scoped `ExternalTransitionStarted("widgets.pin:<token>", "widget_pin", timeout)`; this intentionally revokes its lease. Matching finish signals occur on confirmed/failed/unsupported/unknown/timeout/return/shutdown. They never clear another owner's suppression. The suite bridge can use these core transition signals to suppress resume ads; the widget module itself does not modify global ad flags. SDK dialog lease observation and vendor-specific synchronous safety gates belong to the optional suite/core UI adapter, not telemetry inference.
 
 ## Configuration and customization
@@ -59,6 +60,7 @@ Core config updates are patches, validated before application. Recognized keys:
 | Key | Default | Validation |
 | --- | --- | --- |
 | `widgets.enabled` | `true` | Exact `true` or `false`. |
+| `widgets.invitation.enabled` | `true` | Exact `true` or `false`; invitation only. |
 | `widgets.shortcuts.enabled` | `WidgetOptions.shortcutsEnabled` (`true`) | Exact `true` or `false`. |
 | `widgets.pin.timeout_ms` | `120000` | Integer 1000–300000. |
 

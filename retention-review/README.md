@@ -8,7 +8,7 @@ RetentionRuntime.install(app, RetentionOptions(modules = listOf(review), /* shar
 // Once the app has completed setup:
 RetentionRuntime.get()?.signal(RetentionSignal.SetupCompleted)
 // Use a stable operation ID when retrying delivery of the same business success:
-RetentionRuntime.get()?.signal(RetentionSignal.BusinessSuccess("translate", operationId))
+RetentionRuntime.get()?.signal(RetentionSignal.BusinessSuccess("notes", operationId))
 // A user explicitly presses Rate:
 review.openStore()
 ```

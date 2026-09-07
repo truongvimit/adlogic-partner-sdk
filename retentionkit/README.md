@@ -6,7 +6,7 @@ The umbrella supplies standard notifications, widgets, feedback and Play review 
 
 These artifacts are **unreleased on this branch**. The existing 5.1.1 SDK release does not include RetentionKit. In this checkout use `implementation project(':retentionkit')`; choose a single `retention-*` project instead for a smaller dependency graph. Local QA coordinates use `com.github.truongvimit:<artifact>:<exact-QA-version>` in the explicitly selected local repository. Use the documented release coordinates only after publication; local QA publication does not make a remote release available.
 
-The [isolated consumer](../sample-retention-only/README.md) is a complete compiling example: [Application and shared feature catalogue](../sample-retention-only/src/main/java/io/retentionkit/sample/ProofApplication.kt), [umbrella install/capture/dispatch](../sample-retention-only/src/profiles/umbrella/java/io/retentionkit/sample/ProfileFactory.kt), and [Activity with real text operations, setup and restored pending routes](../sample-retention-only/src/main/java/io/retentionkit/sample/ProofActivity.kt). Build its umbrella profile to exercise the actual facade; it needs no ads, Firebase, OnboardKit or Billing.
+The full [partner example](../app/RETENTION_EXAMPLE.md) demonstrates the standard suite flow. The [isolated consumer](../sample-retention-only/README.md) proves selective packaging without vendor SDKs: [Application and shared feature catalogue](../sample-retention-only/src/main/java/io/retentionkit/sample/ProofApplication.kt), [umbrella install/capture/dispatch](../sample-retention-only/src/profiles/umbrella/java/io/retentionkit/sample/ProfileFactory.kt), and [Activity with real text operations, setup and restored pending routes](../sample-retention-only/src/main/java/io/retentionkit/sample/ProofActivity.kt). Build its umbrella profile to exercise the actual facade; it needs no ads, Firebase, OnboardKit or Billing.
 
 Partners supply three things: localized feature identities/content, one explicit entry Activity, and truthful lifecycle/business state. The SDK supplies the repeated retention mechanics. An IAP app keeps entitlement UNKNOWN until verified; an app without IAP explicitly sets NON_SUBSCRIBER.
 
@@ -17,11 +17,12 @@ Call from `Application.onCreate`, including cold starts for receivers/providers.
 ```kotlin
 val result = RetentionKit.install(this, RetentionKitOptions(
     featureProvider = RetentionFeatureProvider { context -> listOf(
-        RetentionFeature("translate", context.getString(R.string.translate), R.drawable.ic_translate),
-        RetentionFeature("camera", context.getString(R.string.camera), R.drawable.ic_camera),
-        RetentionFeature("conversation", context.getString(R.string.conversation), R.drawable.ic_conversation),
+        RetentionFeature("notes", context.getString(R.string.notes), R.drawable.ic_notes),
+        RetentionFeature("saved_items", context.getString(R.string.saved_items), R.drawable.ic_saved),
+        RetentionFeature("text_tools", context.getString(R.string.text_tools), R.drawable.ic_tools),
+        RetentionFeature("guide", context.getString(R.string.guide), R.drawable.ic_guide),
     ) },
-    router = RetentionRouter { context, _ -> Intent(context, EntryActivity::class.java) },
+    router = RetentionSplashRouter(SplashActivity::class.java), // non-Onboard front door
     localeProvider = RetentionLocaleProvider { app -> selectedAppLocaleContext(app) },
     // An app without IAP may explicitly supply NON_SUBSCRIBER. Otherwise keep UNKNOWN until verified.
     initialUserState = RetentionUserState(entitlement = RetentionEntitlement.UNKNOWN),
@@ -36,16 +37,48 @@ Install is bounded/local and does not wait for network or an Activity. Invalid c
 
 `RetentionKitOptions.notifications/widgets/feedback/review` each accepts its module options; all default to standard behavior, and null disables that module. `adapters`, `uiHost`, `eventSink`, `configSource`, `initialOverrides`, `clock` and `store` are optional shared seams. The umbrella includes all four artifacts; null turns off behavior, not the declared dependency. See the module READMEs for customization, remote keys and platform limits.
 
-## Capture once, route after setup
+## Standard Splash → Main → feature handoff
 
-Use the same method from your entry Activity's `onCreate` and `onNewIntent` (call `setIntent(newIntent)` in the latter). Capture rewrites a reusable widget/shortcut envelope into one delivery token; forward these rewritten extras through splash/onboarding:
+Every external notification/action, widget/shortcut and feedback/rescue tap starts the configured Splash, including a warm task. With the suite bridge, OnboardKit owns entry interstitial `inter_noti`, `inter_widget` or `inter_uninstall`, consent and legitimate skip policy; it completes the entry boundary before its terminal listener opens Main. Do not short-circuit ready users or redirect entry directly to a feature. Non-Onboard hosts use core `RetentionSplashRouter` and implement the equivalent Splash/setup boundary.
+
+Capture once in Splash, preserve that rewritten materialized envelope/token in saved Activity state, and forward it through setup. Never recapture an original reusable OS template after recreation. The existing OnboardingListener can use:
+
+```kotlin
+bridge.mainIntent(context, MainActivity::class.java, outcome)?.let(context::startActivity)
+```
+
+It copies only that outcome’s extras and returns null for Aborted; no backlog selection. Other host listener work stays in place. Bind Main’s small helper during onCreate, before onStart:
+
+```kotlin
+private lateinit var handoff: RetentionMainHandoff
+
+override fun onCreate(state: Bundle?) {
+    super.onCreate(state)
+    // Inflate the actual Main UI first.
+    handoff = requireNotNull(RetentionKit.get()).mainHandoff(this, state,
+        RetentionRouter { context, entry ->
+            when (entry.destination) {
+                "notes", "saved_items", "text_tools", "guide" -> Intent(context, FeatureActivity::class.java)
+                else -> null
+            }
+        })
+}
+override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handoff.onNewIntent(intent) }
+override fun onSaveInstanceState(out: Bundle) { handoff.onSaveInstanceState(out); super.onSaveInstanceState(out) }
+```
+
+The helper waits for this Main to be resumed, setup complete and shared UI gates ready; it retries at most ten seconds per resume and stops on pause/destroy. It saves only the selected token and successful-forward marker, holds bounded resume-ad suppression, and handles the SDK feedback destination itself. Features are forwarded **without consume** to the final Activity; failed routers stay retryable. `hasPendingEntry` supports Main’s host UI predicate. A configured Main permits ENTRY only for a pending exact ONCE envelope and the host predicate; it never permits automatic review/widget prompts. Modal/focus checks remain the host’s responsibility. No second interstitial or durable queue is created.
+
+## Final feature consumption
+
+In the final feature Activity, capture the forwarded ONCE envelope and restore the selected token on recreation. Use `setIntent(newIntent)` on a new delivery; clear the previous selection before accepting it. No automatic fallback to another pending entry:
 
 ```kotlin
 val kit = RetentionKit.get() ?: return
 when (val accepted = kit.capture(intent)) {
     is RetentionEntryAcceptance.Accepted -> pendingEntryToken = accepted.entry.token
-    is RetentionEntryAcceptance.Rejected -> logRejectedEntry(accepted.reason)
-    RetentionEntryAcceptance.Absent -> Unit
+    is RetentionEntryAcceptance.Rejected -> { pendingEntryToken = null; logRejectedEntry(accepted.reason) }
+    RetentionEntryAcceptance.Absent -> { pendingEntryToken = null }
 }
 // When the final Activity is resumed and setup is complete:
 val token = pendingEntryToken ?: return
@@ -69,7 +102,7 @@ when (val route = kit.dispatchPending(token)) {
 
 Facade helpers publish actual host state/events: `setupCompleted()`, `onboardingChanged(active)`, `entitlementChanged(value)`, `businessSuccess(featureId, stableOperationId)`, `adClicked(stableClickId)`, and `permissionChanged()`. Review reacts to real successful business events. Do not manufacture successes from opening a screen or forward delayed/buffered analytics events as live ad-click state. RetentionKit never requests notification permission; the app's existing permission owner does so, then calls `permissionChanged` (foreground reconciliation also rechecks granted-later state).
 
-Modules are exposed as `kit.notifications`, `.widgets`, `.feedback`, `.review` (nullable when disabled). Typical explicit actions are `widgets?.showPinInvitation()`, `feedback?.show()` and `review?.openStore()`. Do not ask for a star rating before automatic Play review. Pin Requested/Unknown and review outcome-unknown are deliberate platform semantics; see each module's README.
+Modules are exposed as `kit.notifications`, `.widgets`, `.feedback`, `.review` (nullable when disabled). Typical explicit actions are `widgets?.showPinInvitation()`, `feedback?.openViaEntry()` and `review?.openStore()`. Do not ask for a star rating before automatic Play review. Pin Requested/Unknown and review outcome-unknown are deliberate platform semantics; see each module's README.
 
 Save the pending token with Activity state and do not recapture the original Intent on recreation. Route only the latest explicitly captured token or the selection restored with that Activity; never choose an arbitrary older entry from the pending ledger after consuming the current selection. Dispatch after core has observed the resumed Activity, for example from a posted callback after `onResume`; retry a blocked route when setup/UI state changes. A source SDK Activity can finish its external scope after the destination's first resume callback. The isolated consumer therefore uses a bounded five-second readiness retry while resumed, cancels on pause/consumption and retains the entry when still blocked. Do not poll indefinitely or treat SdkHandled as consumption.
 
@@ -78,11 +111,11 @@ Save the pending token with Activity state and do not recapture the original Int
 | Area | Default behavior | Host responsibility |
 |---|---|---|
 | Daily notifications | Local 08:00/19:00; ordinary marketing waits 24 hours after setup. | One notification permission owner, valid icon/content and a known non-subscriber. |
-| Winback / lockscreen | Winback after 48 hours of inactivity at 11:00/14:00; lockscreen 11:30/17:00/20:00, skip an active item by default. | Preserve user channel choices; OS delivery/lockscreen presentation is conditional. |
-| Onboarding / ad return | Active unfinished onboarding or a real ad click followed by confirmed background + 3 seconds. Onboarding grace defaults to zero. | Report real onboarding state; suite bridge forwards actual ad clicks once. |
+| Winback / lockscreen | COMMON_PLAN winback during days 14–45 at 11:00/14:00, up to three lifetime posts; lockscreen 11:30/17:00/20:00, skip an active item by default. | Preserve user channel choices; OS delivery/lockscreen presentation is conditional. |
+| Onboarding / ad return | COMMON_PLAN unfinished onboarding after 24 hours from install, or a real ad click; both require confirmed background + 3 seconds. | Report real onboarding state; suite bridge forwards actual ad clicks once. |
 | Reminder / pinned | Quiet foreground refresh; reminder cooldown 15 minutes and Later action. | Leave functional app notifications under their existing owner. |
 | Widgets / shortcuts | Localized feature grid, pin invitation/request, owned dynamic shortcuts. | Ask from a suitable user action; pin Requested/Unknown is not Confirmed. |
-| Feedback | Optional reasons, feature rescue, Keep and Continue to Android App Info. | Optional branding/content only; no survey is required before Continue. |
+| Feedback | Optional reasons, feature rescue, Keep and Continue to Android uninstall confirmation, with App Info fallback. | Optional branding/content only; no survey is required before Continue. |
 | Review | 5 real business successes, 10 days between launch attempts, maximum 3 attempts. | Stable operation IDs; manual Rate calls `review.openStore()` independently. |
 
 All notification families default enabled under their gates. Full keys, caps and TTLs are in [notifications](../retention-notifications/README.md); module options/overrides are in [widgets](../retention-widgets/README.md), [feedback](../retention-feedback/README.md) and [review](../retention-review/README.md). Null module options disable behavior in the umbrella but do not remove its declared artifacts; use selective artifacts to remove dependencies.
@@ -127,9 +160,12 @@ val feedbackOptions = FeedbackOptions(
         controller.features().forEach { feature ->
             button(feature.label) { controller.tryFeature(feature.id) }
         }
+        val slot = FrameLayout(activity)
+        column.addView(slot)
+        controller.bindNative(slot) // binds configured nativeContent, lifecycle cleanup stays SDK-owned
         button(copy.keepLabel) { controller.keep() }
         column.addView(TextView(activity).apply { text = copy.systemExplanation })
-        button(copy.continueLabel) { controller.continueToAppManagement() }
+        button(copy.continueLabel) { controller.continueToSystem() }
         ScrollView(activity).apply { addView(column) }
     },
 )
@@ -145,7 +181,11 @@ A custom widget renderer receives `WidgetAction.pendingIntent`; use that supplie
 The following classes are optional; declare their existing SDKs explicitly. They are never loaded by the default facade.
 
 ```kotlin
-val bridge = OnboardRetentionBridge(SplashActivity::class.java)
+val bridge = OnboardRetentionBridge(
+    SplashActivity::class.java,
+    mainActivity = MainActivity::class.java,
+    hostCanPresent = { activity -> hostRetentionUiReady(activity) },
+)
 val result = RetentionKit.install(this, RetentionKitOptions(
     featureProvider = features,
     localeProvider = locale,
@@ -153,17 +193,20 @@ val result = RetentionKit.install(this, RetentionKitOptions(
     uiHost = bridge,
     adapters = listOf(bridge, BillingRetentionBridge()), // omit billing bridge in apps without IAP
     eventSink = TrackkitRetentionEventSink(),
-    configSource = FirebaseRetentionConfigSource(),
+    configSource = FirebaseRetentionConfigSource(
+        legacyKeys = RetentionLegacyConfig.keys,
+        legacyMapper = RetentionLegacyConfig::overrides,
+    ),
 ))
 ```
 
 Packages: facade `io.retentionkit`, module/core types `io.retentionkit.*`, suite adapters `io.retentionkit.integration`, Firebase source `io.suite.firebase`. Install Tracker and its chosen sinks once, then existing OnboardKit, then RetentionKit. The facade does not install Tracker/Firebase/OnboardKit again. `BillingRetentionBridge` observes BillingKit's engine-owned authoritative `Billing.entitlement` StateFlow: UNKNOWN stays unknown; only VERIFIED_NON_PREMIUM maps to NON_SUBSCRIBER, and VERIFIED_PREMIUM maps to SUBSCRIBER. Late installation reads the current verified snapshot. It never uses cached/default `isPremium` or `awaitReady` as proof, and never launches/initializes billing. Declare BillingKit explicitly only when using this optional adapter.
 
-`OnboardRetentionBridge` implements core `RetentionModule` and `RetentionUiHost`. Its router uses the existing `SplashEntry.intentWithoutSplashAds`: suppresses splash banner/interstitial requests, display and SPLASH_INTER checkpoint while retaining consent, permission and first-open setup under host policy. Later onboarding ads remain host policy. All initial routes still use the host entry Activity; the feedback module alone launches its session-protected internal Activity.
+`OnboardRetentionBridge` implements core `RetentionModule` and `RetentionUiHost`. Its standard router uses existing `SplashEntry.intent` and preserves the entry interstitial/AFTER_AD boundary and consent/Billing/ad policy. `entryAdPolicy=RetentionEntryAdPolicy.WITHOUT_SPLASH_ADS` is an explicit advanced opt-in; the standard example/QA never uses it. All initial routes still use the host entry Activity; the feedback module alone launches its session-protected internal Activity.
 
-In the existing `OnboardingListener`, call `bridge.onOutcome(outcome)` and forward the returned Bundle to the final host Activity. It marks Completed/Skipped as setup complete by default; pass `setupCompleted=false` if the host still has setup work. Aborted does not complete setup. The bridge also collects authoritative `OnboardingSdk.isFlowActive` and persisted completed state; it does not infer active UI from FlowStarted telemetry or replace the host's listener. `bridge.capture(intent)` is a convenience equivalent to facade capture when attached.
+In the existing `OnboardingListener`, call `bridge.mainIntent(context, MainActivity::class.java, outcome)` and start its non-null result. Advanced hosts can retain `bridge.onOutcome(outcome)` to obtain the same passthrough Bundle. It marks Completed/Skipped as setup complete by default; pass `setupCompleted=false` if the host still has setup work. Aborted does not complete setup. The bridge also collects authoritative `OnboardingSdk.isFlowActive` and persisted completed state; it does not infer active UI from FlowStarted telemetry or replace the host's listener. `bridge.capture(intent)` is a convenience equivalent to facade capture when attached.
 
-The bridge's synchronous UI gate checks actual fullscreen-ad state, current GMA/Splash Activity and authoritative onboarding activity. Optional `hostCanPresent(Activity)` adds the host's paywall/dialog gate. It never treats a generic consent/premium/remote-disabled ad reason as unsafe UI. Each SDK UI lease owns a bounded resume-suppression resource; expiry/pause/destroy/close releases only that lease. External/system transitions own separate tokens and preserve them when a UI lease is revoked for handoff. Finished-token cleanup is posted to the next main turn, so a core ProcessForeground callback cannot remove suppression between OPEN and WELCOME's synchronous return readers. Failure without departure clears next turn, without poisoning a later return or clearing other owners. The SDK feedback Activity is registered in the existing Activity exclusion list before it starts.
+The bridge's synchronous UI gate checks actual fullscreen-ad state, current GMA/Splash Activity and authoritative onboarding activity. Optional `hostCanPresent(Activity)` adds the host's paywall/dialog/focus gate. For configured Main, return true only while its helper has a selected pending entry and dialogs permit handoff; PROMPT remains blocked on Main regardless. Construct a fresh bridge per fresh runtime install, including QA restart after uninstallForTests; do not reuse a detached adapter whose subscriptions were canceled. It never treats a generic consent/premium/remote-disabled ad reason as unsafe UI. Each SDK UI lease owns a bounded resume-suppression resource; expiry/pause/destroy/close releases only that lease. External/system transitions own separate tokens and preserve them when a UI lease is revoked for handoff. Finished-token cleanup is posted to the next main turn, so a core ProcessForeground callback cannot remove suppression between OPEN and WELCOME's synchronous return readers. Failure without departure clears next turn, without poisoning a later return or clearing other owners. The SDK feedback Activity is registered in the existing Activity exclusion list before it starts.
 
 Actual ad clicks are forwarded once from the ads module's sole synchronous vendor-click point (`ERainLogEventManager.observeAdClicks`). No per-placement Retention callback wiring is needed when this bridge is installed. The observer is owner-scoped, removable, exception-isolated and never replays buffered Tracker events; shutdown removes only the bridge registration. Existing Tracker ad_click emission and daily cap counting continue unchanged. Do not also call `kit.adClicked` for those same suite clicks; keep the explicit helper for an app-owned ad system outside this bridge.
 
@@ -182,7 +225,7 @@ Migrate one old owner at a time: map the feature catalogue/entry routes, preserv
 | App-owned notification alarms/receivers | Inventory exact IDs and PendingIntents; disable the old scheduler and cancel only those known entries before enabling the corresponding SDK campaign. Keep matching channel IDs through `channelIds` when their meaning is unchanged. |
 | Existing widgets | Keep old provider instances functional until users migrate; Android bindings are not silently reassigned to a new provider. Use the custom provider/renderer seam for deliberate integration. |
 | Launcher shortcuts | Remove only the app's documented legacy IDs. SDK quota calculations preserve foreign and manifest shortcuts. |
-| Exit/uninstall screen | Route to feedback through the host entry Activity/facade. Continue opens App Info; remove any expectation of intercepting system uninstall or receiving an uninstall-success callback. |
+| Exit/uninstall screen | Route to feedback through the host entry Activity/facade. Continue opens Android confirmation by default (explicit App Info mode/fallback); remove any expectation of intercepting system uninstall or receiving an uninstall-success callback. |
 | Rating prompt | Replace old star gates and separate manual Store navigation from automatic Play review. Old counters/cooldowns are not imported automatically. |
 | Permission, ads and config | Keep a single permission owner. Reuse the suite adapters/shared Firebase client and remove duplicate click/return/config wiring for replaced flows. |
 
@@ -190,10 +233,12 @@ Choose a staged rollout/kill switch when old counters or scheduled state cannot 
 
 ## Validation scope
 
-The final [product evidence](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/combined-product-tests.json) records 549 passing unit tests, zero failures/errors/skips: 532 unchanged non-app cases at SDK tree `bf68f1e` plus 17 freshly executed app cases at `2ff967a`. These are scoped results across recorded runs, not one invocation. Non-app counts: core 46, notifications 35, widgets 36, feedback 22, review 19, facade 12, Firebase 4, Billing 20, ads 162, OnboardKit 168 and Trackkit 8. Coverage includes reentrant/queued handoff cancellation, owned scope cleanup, routing, config persistence, Billing authority and existing OPEN/WELCOME/ad-click behavior.
+The results below are **historical checkpoints**, superseded for standard-flow acceptance by tickets10–13. They do not prove corrected Splash → entry ad/skip → resumed Main → feature/native routing. Current interface and behavior are in [ENTRY_CONTRACT.md](ENTRY_CONTRACT.md); corrected source/build/device evidence will be recorded after integration. No new device pass is claimed by this SDK patch.
+
+The earlier [product evidence](/Users/Shared/Panacea/Documents/SDKOptimize/evidence/retentionkit-final-app-20260907-2ff967a/combined-product-tests.json) records 549 passing unit tests, zero failures/errors/skips: 532 unchanged non-app cases at SDK tree `bf68f1e` plus 17 freshly executed app cases at `2ff967a`. These are scoped results across recorded runs, not one invocation. Non-app counts: core 46, notifications 35, widgets 36, feedback 22, review 19, facade 12, Firebase 4, Billing 20, ads 162, OnboardKit 168 and Trackkit 8. Coverage includes reentrant/queued handoff cancellation, owned scope cleanup, routing, config persistence, Billing authority and existing OPEN/WELCOME/ad-click behavior.
 
 At `bf68f1e`, all six project and six POM-only Maven consumers passed release R8/resource shrinking, all 12 actual runtime graph/merged-manifest composition checks passed, and all six matching local AAR/POM/Gradle metadata inspections passed using `retentionkit-qa-20260907-bf68f1e`. Standalone umbrella consumers did not pull the optional ads/OnboardKit/Billing/Firebase stack. The full example also passed debug/test APK and minified release assembly. See [consumer verification](../sample-retention-only/VERIFICATION.md) for exact artifacts, commands, historical checkpoints and source identity.
 
-Root-owned [API 36 instrumentation](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-6-final-verification.json) passed 15/15 cases on the final app tree. The [final minified Maven umbrella smoke](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/final-bf68-maven-umbrella-verdict.json) passed cold launch/setup, immediate feedback rescue to word count, a real business result, Store handoff/return and Keep. Physical/OEM coverage is limited; no Play card/rating or uninstall success is inferred. Retention artifacts remain unreleased.
+Root-owned [API 36 instrumentation](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-run-6-final-verification.json) passed 15/15 cases on the final app tree. The earlier [minified Maven umbrella smoke](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-device/example-api36-manual/final-bf68-maven-umbrella-verdict.json) passed cold launch/setup, immediate feedback rescue to word count, a real business result, Store handoff/return and Keep. Physical/OEM coverage is limited; no Play card/rating or uninstall success is inferred. Retention artifacts remain unreleased.
 
 Physical follow-up: the unlocked Pixel recorded15/15 Android cases at4356938 and additional manual checks. The latest7cb23c3 build/source and unfinished exclusive-device matrix are recorded in [the current physical ledger](../.scratch/retentionkit/physical-acceptance.md). Earlier counts on this page remain checkpoint evidence.

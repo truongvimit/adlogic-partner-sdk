@@ -8,7 +8,7 @@ Package: `io.retentionkit.core`. The signatures below are implemented by the sha
 val result = RetentionRuntime.install(application, RetentionOptions(
     modules = listOf(notificationModule, widgetModule, feedbackModule, reviewModule),
     featureProvider = RetentionFeatureProvider { localized -> listOf(
-        RetentionFeature("translate", localized.getString(R.string.translate), R.drawable.ic_translate),
+        RetentionFeature("notes", localized.getString(R.string.notes), R.drawable.ic_notes),
         RetentionFeature("history", localized.getString(R.string.history), R.drawable.ic_history),
     ) },
     localeProvider = RetentionLocaleProvider { app -> selectedLocaleContext(app) },
@@ -100,8 +100,8 @@ Source enum: DAILY, WINBACK, ONBOARDING_ABANDONMENT, AD_RETURN, REMINDER, PINNED
 ```kotlin
 val entry = RetentionEntry(
     source = RetentionEntrySource.WIDGET,
-    destination = "translate",
-    actionId = "open_translate",
+    destination = "notes",
+    actionId = "open_notes",
     instanceId = widgetId.toString(),
     mode = RetentionEntryMode.REUSABLE,
 )
@@ -110,7 +110,7 @@ val pending = PendingIntent.getActivity(context, 0, explicitIntent,
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 ```
 
-`createEntryIntent` validates the envelope and requires the router to return an explicit component in the host package. Core writes its encoded string extra and a SHA-256 **category** distinguishing source/campaign/action/destination/instance/token; it preserves host data URI and flags. Android PendingIntent filter identity includes categories, so different actions/instances cannot overwrite each other even with the same requestCode. The host component must actually be an Activity; module adapters use `PendingIntent.getActivity`, never click trampolines. Core does not force CLEAR_TASK or add an interstitial.
+`createEntryIntent` validates the envelope and requires the router to return an explicit component in the host package. Core writes its encoded string extra and a SHA-256 **category** distinguishing source/campaign/action/destination/instance/token; it preserves host data URI and flags. Android PendingIntent filter identity includes categories, so different actions/instances cannot overwrite each other even with the same requestCode. The host component must actually be an Activity; module adapters use `PendingIntent.getActivity`, never click trampolines. The low-level runtime preserves router flags and does not add an interstitial. Standard non-Onboard integration uses `RetentionSplashRouter(SplashActivity::class.java)`, which deliberately sets NEW_TASK | CLEAR_TASK for every external delivery. Forward the exact rewritten envelope through Splash/setup and resumed Main before final feature dispatch. The optional Onboard bridge uses its existing SplashEntry entry ad policy; see [entry contract](../retentionkit/ENTRY_CONTRACT.md).
 
 `RetentionEntryCodec` offers `validate(entry): String?`, `encode(entry): String`, `decode(raw)`, `read(intent)`, `write(intent, entry): Intent`, `identityUri(entry): Uri`. Read/decode return Valid(entry), Invalid(reason), or Absent and do **not** consume anything. The extra key is `RetentionEntryCodec.EXTRA_ENTRY` (`io.retentionkit.entry.v1`). It is versioned JSON, not a custom Parcelable requiring consumer keep rules. External entries are untrusted; hosts must still validate the requested destination against their own allowed registry.
 
@@ -138,9 +138,11 @@ if (runtime.entries.consume(token)) openFeature(entry.destination)
 
 ## Foreground UI and marketing gates
 
-`runtime.ui.acquire(owner, durationMillis = 60000)` returns Acquired(RetentionUiLease) or Blocked(reason). A lease has token, owner, `isValid()`, `activity(): Activity?`, and idempotent `close()`. Only one exists at a time, expires within five minutes, and is invalidated on Activity pause/destroy, process background, onboarding or scoped host/system UI. Activity is held weakly. Check `lease.activity()` **again** on main immediately before an async UI launch; never cache the returned Activity in a long-lived callback. Always close in terminal callbacks and timeout paths. Releasing an expired/stale lease cannot release a newer owner's lease.
+`runtime.ui.acquire(owner, durationMillis = 60000, purpose = RetentionUiPurpose.PROMPT)` returns Acquired(RetentionUiLease) or Blocked(reason). A lease has token, owner, `isValid()`, `activity(): Activity?`, and idempotent `close()`. Only one exists at a time, expires within five minutes, and is invalidated on Activity pause/destroy, process background, onboarding or scoped host/system UI. Activity is held weakly. Check `lease.activity()` **again** on main immediately before an async UI launch; never cache the returned Activity in a long-lived callback. Always close in terminal callbacks and timeout paths. Releasing an expired/stale lease cannot release a newer owner's lease.
 
-`ui.eligibility()` returns RetentionEligibility.Allowed or Blocked(reason, detail). `RetentionSuppressionReason` covers common unavailable/config/user/lifecycle/permission/channel/cooldown/cap/duplicate/expired reasons; modules may put specific machine-readable details in the detail field or event attributes. `RetentionCapability` is Available, Unavailable(reason), or Unknown(reason), so pin-request accepted and support-unknown are not coerced into success.
+`RetentionUiPurpose.ENTRY` is only for an explicit selected entry; it uses `RetentionUiHost.canPresentEntry(Activity)` (default delegates to `canPresent`) at acquisition and every lease recheck. Automatic review/widget prompts and ordinary feedback.show retain PROMPT. ENTRY still enforces actual current resumed Activity, foreground, onboarding, other reservations and external transitions. `RetentionHandoffScope.forEntry(...)` retains this purpose after the intentional lease revocation, while its original constructor remains PROMPT/source compatible. It ignores only its own transition token at final checks, never another owner.
+
+`ui.eligibility(purpose = RetentionUiPurpose.PROMPT)` returns RetentionEligibility.Allowed or Blocked(reason, detail). `RetentionSuppressionReason` covers common unavailable/config/user/lifecycle/permission/channel/cooldown/cap/duplicate/expired reasons; modules may put specific machine-readable details in the detail field or event attributes. `RetentionCapability` is Available, Unavailable(reason), or Unknown(reason), so pin-request accepted and support-unknown are not coerced into success.
 
 `runtime.marketingEligibility(graceMillis = 86400000, requireBackground = true, phase = RetentionMarketingPhase.AFTER_SETUP)` checks runtime, setup, onboarding, entitlement, 24-hour grace measured from durable setupCompletedAtMillis, external transition and foreground. It applies to **marketing only**, never a host's functional notifications. Every notification module still checks its own enabled/campaign/user/permission/channel/inactivity/cooldown/cap/TTL/revision conditions immediately before posting. Core does not auto-create notification channels or request permission. A host permission/ads adapter remains the single owner.
 
