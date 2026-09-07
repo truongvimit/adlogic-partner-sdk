@@ -230,17 +230,17 @@ class RetentionNotifications internal constructor(
             s.entries().keys.filter { it.startsWith("schedule:") }.forEach(s::remove)
             desired.forEach { s.put("schedule:${it.key}", it.encode()) }
             s.entries().filterKeys { it.startsWith("deferred:") }.forEach { (key, raw) ->
-                if (desired.none { it.encode() == raw }) s.remove(key)
+                if (desired.none { it.encode() == raw }) DeferredCalendarRetry.clear(s, key.removePrefix("deferred:"))
             }
         }
         previous.filter { old -> desired.none { it.key == old.key } }.forEach { safe("cancel_alarm") { platform.cancelAlarm(it) } }
         // Re-arm all desired identities, including after a failed setWindow or OS restart.
         desired.forEach { alarm -> safe("schedule") {
             // UNKNOWN is a current-process Billing state, not a decision to skip today's slot.
-            // Keep its original due/expiry/identity and schedule only expiry cleanup while waiting;
+            // Preserve the original due/expiry/identity and use bounded durable checkpoints;
             // do not repeatedly arm a past-due alarm and spin the cold receiver.
-            val deferred = state.string("deferred:${alarm.key}") == alarm.encode()
-            platform.schedule(alarm, if (deferred && runtime.userState.entitlement == RetentionEntitlement.UNKNOWN) alarm.expires else alarm.due)
+            platform.schedule(alarm, if (runtime.userState.entitlement == RetentionEntitlement.UNKNOWN)
+                DeferredCalendarRetry.trigger(state, alarm, now) else alarm.due)
         } }
         NotificationCampaign.entries.filter { campaign ->
             !profile.enabled || !profile[campaign].enabled || runtime.marketingEligibility(
@@ -267,19 +267,20 @@ class RetentionNotifications internal constructor(
         synchronized(lock) {
             if (closed) return outcome
             // Rendering can synchronously replace config; an old completion must not rewrite it.
-            runtime.store.transaction(STATE) { state ->
-                if (state.string("schedule:${alarm.key}") != alarm.encode()) return@transaction
+            val matched = runtime.store.transaction(STATE) { state ->
+                if (state.string("schedule:${alarm.key}") != alarm.encode()) return@transaction false
                 if (alarm.campaign.calendar && outcome == NotificationOutcome.Skipped("entitlement_unknown") &&
                     runtime.clock.wallTimeMillis() < alarm.expires) {
-                    state.put("deferred:${alarm.key}", alarm.encode())
+                    DeferredCalendarRetry.remember(state, alarm, runtime.clock.wallTimeMillis())
                 } else {
-                    state.remove("deferred:${alarm.key}")
+                    DeferredCalendarRetry.clear(state, alarm.key)
                     val calendarDate = alarm.calendarDate
                     if (calendarDate != null) state.put("handled:${alarm.key}", maxOf(calendarDate, state.string("handled:${alarm.key}", calendarDate)!!))
                     else state.remove("schedule:${alarm.key}")
                 }
+                true
             }
-            if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
+            if (matched && !alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
         }
         reconcile("alarm_received")
         return outcome
@@ -288,8 +289,8 @@ class RetentionNotifications internal constructor(
     private fun retryDeferredCalendars() {
         val pending = synchronized(lock) {
             if (closed || retryingDeferred || runtime.userState.entitlement == RetentionEntitlement.UNKNOWN) return
-            retryingDeferred = true
             runtime.store.snapshot(STATE).entries().filterKeys { it.startsWith("deferred:") }.values.map(ScheduledNotification::decode)
+                .also { retryingDeferred = true }
         }
         try { pending.forEach(::receiveAlarm) }
         finally { synchronized(lock) { retryingDeferred = false } }
