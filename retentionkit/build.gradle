@@ -36,6 +36,7 @@ dependencies {
     compileOnly project(':trackkit')
     compileOnly project(':billingkit')
     compileOnly project(':suite-firebase')
+    compileOnly "androidx.appcompat:appcompat:$androidx_appcompat_version"
     implementation 'androidx.activity:activity-ktx:1.9.3'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
     testImplementation project(':onboardkitorigin')
