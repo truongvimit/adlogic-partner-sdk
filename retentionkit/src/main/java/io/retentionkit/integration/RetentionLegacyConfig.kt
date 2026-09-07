@@ -19,7 +19,7 @@ object RetentionLegacyConfig {
         "rateCooldownDays" to "review.cooldown_days",
         "rateMaxPrompts" to "review.max_attempts",
     )
-    private val capabilityKeys = setOf("noti_lockscreen_wake_seconds", "noti_lockscreen_content", "notiForPremiumUsers")
+    private val capabilityKeys = setOf("noti_lockscreen_content", "notiForPremiumUsers")
     @JvmField val keys: Set<String> = (NotificationLegacyConfig.keys + suiteKeys.keys + capabilityKeys).toSet()
 
     @JvmStatic fun map(values: Map<String, String>): RetentionLegacyMapping {
@@ -31,7 +31,8 @@ object RetentionLegacyConfig {
     }
 
     /** Convenient mapper for an external config source; unsupported keys produce diagnostics,
-     * never bypass entitlement or pretend to support forced wake/network content.
+     * never bypass entitlement or pretend to support network content. The notification module
+     * validates bounded wake duration; an accepted value does not guarantee the OS wakes the screen.
      */
     @JvmStatic fun overrides(values: Map<String, String>): Map<String, String> = map(values).also { mapped ->
         if (mapped.unsupportedKeys.isNotEmpty()) RetentionRuntime.get()?.diagnostics?.record(

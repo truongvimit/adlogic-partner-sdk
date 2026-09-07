@@ -42,4 +42,5 @@
     <string name="rk_example_notification_submitted">Reminder sent to notifications.</string>
     <string name="rk_example_enable_notifications">Enable notifications</string>
     <string name="rk_example_notification_status">Notification status</string>
+    <string name="rk_example_notification_settings">Notification settings</string>
 </resources>

@@ -24,8 +24,8 @@ class RetentionLegacyConfigTest {
     @Test fun unsupportedCapabilitiesAreReportedAndNeverEnablePremiumMarketing() {
         val result = RetentionLegacyConfig.map(mapOf("notiForPremiumUsers" to "true",
             "noti_lockscreen_wake_seconds" to "20", "noti_lockscreen_content" to "[]", "unknown" to "true"))
-        assertTrue(result.overrides.isEmpty())
-        assertEquals(setOf("notiForPremiumUsers", "noti_lockscreen_wake_seconds", "noti_lockscreen_content", "unknown"), result.unsupportedKeys)
+        assertEquals(mapOf("notifications.lockscreen.wake_duration_ms" to "20000"), result.overrides)
+        assertEquals(setOf("notiForPremiumUsers", "noti_lockscreen_content", "unknown"), result.unsupportedKeys)
         assertTrue(RetentionLegacyConfig.map(mapOf("notiForPremiumUsers" to "false")).unsupportedKeys.isEmpty())
     }
 
@@ -33,6 +33,6 @@ class RetentionLegacyConfigTest {
         assertTrue(RetentionLegacyConfig.map(emptyMap()).overrides.isEmpty())
         assertEquals("9223372036854775807", RetentionLegacyConfig.map(mapOf("rateCooldownDays" to "9223372036854775807"))
             .overrides["review.cooldown_days"])
-        assertTrue(RetentionLegacyConfig.keys.containsAll(setOf("noti_lockscreen_slots", "notiWidgetPromptEnabled", "rateCooldownDays")))
+        assertTrue(RetentionLegacyConfig.keys.containsAll(setOf("noti_lockscreen_slots", "noti_lockscreen_wake_seconds", "notiWidgetPromptEnabled", "rateCooldownDays")))
     }
 }

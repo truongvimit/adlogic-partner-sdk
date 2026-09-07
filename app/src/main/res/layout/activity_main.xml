@@ -89,6 +89,13 @@
                     android:text="@string/rk_example_notification_status" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_retention_settings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:text="@string/rk_example_notification_settings" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_retention_playground"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

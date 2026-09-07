@@ -149,7 +149,7 @@ class RetentionExampleEngineTest {
     }
     @Test fun dailyActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.DAILY)
     @Test fun winbackActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.WINBACK)
-    @Test fun lockscreenActualSavedEnvelopePostsWithoutFullScreenOrWakeRequest() = calendar(NotificationCampaign.LOCKSCREEN)
+    @Test fun lockscreenActualSavedEnvelopePostsWithoutFullScreenIntent() = calendar(NotificationCampaign.LOCKSCREEN)
     private fun completedOnboardState(): Boolean = kotlinx.coroutines.runBlocking {
         kotlinx.coroutines.withTimeout(5000) { io.onboardkit.OnboardingSdk.state.first().isFlowCompleted }
     }

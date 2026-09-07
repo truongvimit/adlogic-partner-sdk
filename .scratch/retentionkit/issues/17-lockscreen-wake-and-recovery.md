@@ -1,7 +1,7 @@
 # Implement canonical lockscreen wake/recovery
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 15
 Base: c40d18d
 Owner: codex/retentionkit-lockscreen-wake
@@ -12,12 +12,12 @@ Implement supported channel-gated bounded screen wake with canonical duration/re
 
 Evidence must distinguish ordinary production defaults from explicit synthetic engine fixtures. Prior corrected acceptance is historical and does not prove this reopened request.
 
-Implementation in private `lockscreen-wake` worktree. Agreed seams: real notification/PowerManager/alarm transport, durable wake budget and cancellation through module lifecycle, and six-profile manifest/AAR verifier. Public API capability is a bounded20s lease with max2 attempts per message; exact physical screen-off remains system/user controlled. Root owns device evidence. Gradle awaits ticket16 release.
+Implementation in private `lockscreen-wake` worktree. Agreed seams: real notification/PowerManager/alarm transport, durable wake budget and cancellation through module lifecycle, and six-profile manifest/AAR verifier. Public API capability is a bounded20s lease with max2 attempts per message; exact physical screen-off remains system/user controlled. Root owns final device evidence under Ticket18; this ticket resolves only the scoped implementation and module verification.
 
 
 ## Answer — implementation ready, physical acceptance pending
 
-Owned implementation is complete at source `020196d`; this ticket remains in progress until parent Ticket18 records actual supported-device wake and compact-card acceptance. No device/ADB work was performed by this implementer.
+Owned implementation is complete at source `020196d`, final author tip `fcfe32f`, merged into the delivery branch at `5e26fcf`. The notification/core/verifier trees and source archive match the final checkpoint. This ticket is resolved for implementation; Ticket18 remains open for actual supported-device wake, compact-card, integrated build/consumer and review acceptance. No device/ADB work was performed by this implementer.
 
 - COMMON_PLAN performs eligible bounded20s screen-wake requests, hard max2 durable claims per occurrence; no ON_AFTER_RELEASE/FSI/Activity/privileged-permission workaround. Exact physical screen-off remains system/user controlled.
 - Confirms matching active notification before wake, with at most100/300/1000ms checks and a timed≤2s CPU-only lease while waiting. Rechecks user/channel/config state and cancels/releases owned work on dismissal/open/subscriber/disable/replacement/shutdown. The second wake uses an occurrence-bound SCREEN_OFF observer and bounded inexact checkpoint recovery.
@@ -25,4 +25,4 @@ Owned implementation is complete at source `020196d`; this ticket remains in pro
 - Collapsed48dp Lockscreen has headline/body/X/CTA; heads-up uses the compact view, expanded keeps image. Pinned exposes4 real actions collapsed and expanded. Explicit request-context labels avoid SystemUI locale drift; partner renderer remains customizable.
 - WAKE_LOCK is permitted only in notifications/umbrella by verifier; other selective profiles and existing FSI/exact/FGS/overlay/battery negatives remain enforced.
 
-Validation:97 fresh notification unit/Robolectric tests PASS, release AAR PASS;49 unchanged-core tests retained from actual83f6357 verification.27 Python fixtures PASS. Immutable logs/XML/AAR and actual RED/GREEN history are outside repo at `SDKOptimize/retentionkit-default-fix/ticket17/`; final code run is `final-after-claim-fix/result.json`. No JitPack publication, consumer matrix or physical timing is inferred from these results. Parent owns those final checks and facade legacy-key warning correction.
+Validation:97 fresh notification unit/Robolectric tests PASS, release AAR PASS;49 unchanged-core tests retained from actual83f6357 verification.27 Python fixtures PASS. Immutable logs/XML/AAR and actual RED/GREEN history are outside repo at `SDKOptimize/retentionkit-default-fix/ticket17/`; final code run is `final-after-claim-fix/result.json`. No JitPack publication, consumer matrix or physical timing is inferred from these results. Parent owns those final checks. The integration follow-up delegates the supported wake-seconds alias to the notification mapper, retains diagnostics for unsupported content/premium overrides, and renames the existing Android test to assert no full-screen intent without implying no bounded wake. The ordinary example has a separate EN/VI Notification settings button using the existing Suite API; the status dialog remains read-only. These facade/app edits still need fresh integrated tests/APKs; no Gradle was run during merge because the feedback fixer owns that lease.

@@ -172,6 +172,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
         mBinding.btnRetentionNotifications.click { requestPermission() }
         mBinding.btnRetentionStatus.click { com.itg.template.retention.RetentionExample.showNotificationStatus(this) }
+        mBinding.btnRetentionSettings.click { io.retentionkit.integration.RetentionSuite.get()?.openNotificationSettings(this) }
         mBinding.btnRetentionPlayground.click {
             startActivity(android.content.Intent(this, com.itg.template.retention.RetentionPlaygroundActivity::class.java))
         }

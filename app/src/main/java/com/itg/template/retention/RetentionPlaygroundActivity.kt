@@ -101,9 +101,9 @@ class RetentionPlaygroundActivity : AppCompatActivity(), io.retentionkit.Retenti
             io.retentionkit.integration.RetentionSuite.get()?.requestNotifications(this)
         }
         button(content, R.string.rk_example_notification_status) { RetentionExample.showNotificationStatus(this) }
+        button(content, R.string.rk_example_notification_settings) { io.retentionkit.integration.RetentionSuite.get()?.openNotificationSettings(this) }
         button(content, R.string.rk_example_feedback, R.id.rk_open_feedback) { RetentionExample.showFeedback(this) }
         button(content, R.string.rk_example_rate, R.id.rk_open_rate) { RetentionExample.manualRate(this) }
-        button(content, R.string.rk_example_permissions) { io.retentionkit.integration.RetentionSuite.get()?.openNotificationSettings(this) }
         button(content, R.string.rk_example_ads) { startActivity(Intent(this, MainActivity::class.java)); finish() }
         ExampleQa.attach(this, content)
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
