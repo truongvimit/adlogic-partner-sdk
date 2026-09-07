@@ -127,4 +127,48 @@ class RetentionPlaygroundRoutingTest {
         assertEquals(RetentionExampleContent.features(controller.get()).single { it.id == latest.destination }.label, title())
         assertNotNull(kit.runtime.entries.pending(earlier.token))
     }
+
+    @Test fun ordinaryNewIntentDoesNotReviveThePreviousBlockedEntry() {
+        assertNewDeliveryClearsSelection(Intent())
+    }
+
+    @Test fun malformedNewIntentDoesNotReviveThePreviousBlockedEntry() {
+        assertNewDeliveryClearsSelection(Intent().putExtra(RetentionEntryCodec.EXTRA_ENTRY, "{malformed"))
+    }
+
+    private fun assertNewDeliveryClearsSelection(intent: Intent) {
+        kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", true))
+        val previous = entry("guide")
+        val originalTitle = title()
+        deliver(previous)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNotNull(kit.runtime.entries.pending(previous.token))
+        controller.newIntent(intent)
+        shadowOf(Looper.getMainLooper()).idle()
+        kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", false))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertEquals("A new ordinary/rejected delivery cannot select the previous feature", originalTitle, title())
+        assertNotNull("The old ledger entry stays unconsumed and inert", kit.runtime.entries.pending(previous.token))
+        controller.recreate().visible()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertEquals(originalTitle, title())
+        assertNotNull(kit.runtime.entries.pending(previous.token))
+    }
+
+    @Test fun blockedMaterializedEntryKeepsExactlyItsSavedTokenAcrossRecreation() {
+        kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", true))
+        val template = entry("guide").copy(mode = RetentionEntryMode.REUSABLE)
+        deliver(template)
+        shadowOf(Looper.getMainLooper()).idle()
+        val materialized = (RetentionEntryCodec.read(controller.get().intent) as RetentionEntryDecodeResult.Valid).entry
+        assertEquals(RetentionEntryMode.ONCE, materialized.mode)
+        assertNotEquals(template.token, materialized.token)
+        controller.recreate().visible()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(setOf(materialized.token), kit.runtime.entries.pending().map { it.token }.toSet())
+        kit.runtime.signal(RetentionSignal.HostUiChanged("test.dialog", false))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertConsumed(materialized)
+        assertEquals(RetentionExampleContent.features(controller.get()).single { it.id == "guide" }.label, title())
+    }
 }
