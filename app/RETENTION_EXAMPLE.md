@@ -53,3 +53,7 @@ The physical Pixel5/API34 executed17/17 Android cases, unassisted, with unchange
 The earlier5206487 run remains a historical15/17 harness failure, corrected by the live clock and same-Splash materialization changes. Migration, selection, clock and TTL RED/GREEN evidence remains immutable rather than relabelled. The current root ledger records manual launcher/survey/rescue/Store evidence and remaining restoration/cleanup: [correction acceptance](../.scratch/retentionkit/correction-acceptance.md). Do not clear unrelated app data to reproduce these results.
 
 The current default-delivery and integration changes require their own fresh acceptance; see tickets15/16. The historical checks above do not prove the reopened normal-default request.
+
+## Current simplification checkpoint
+
+At source `5ac3102f5d2bc683d1cd8b81d37a426f0021cad6`, all32 app tests and43 facade tests ran freshly and passed in one invocation. Debug/test APKs assembled successfully; the17 Android cases are compiled, not executed by this build. The app routing tests now exercise the real Suite lifecycle binding and preserve exact-token, burst, absent/rejected delivery, alias, recreation and durable business behavior. [Source/JUnit/artifact proof](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket16/full-app-suite-1/result.json). Current device and release/minification acceptance is recorded separately by the root; no automatic default-delivery success is inferred from a synthetic QA fixture.

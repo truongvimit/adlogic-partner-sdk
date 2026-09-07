@@ -49,4 +49,4 @@ Ordinary notifications react to SDK readiness; partners do not call `refreshFore
 
 ## Verification scope
 
-This simplification is a new implementation checkpoint. Earlier correction matrix/device results are historical, not acceptance for these lifecycle changes. Ticket16 records fresh facade/app and subsequent device validation.
+Source `5ac3102f5d2bc683d1cd8b81d37a426f0021cad6` passed43 facade and32 app tests in one fresh invocation, plus debug/Android-test APK assembly. The13 new Suite tests cover actual Activity lifecycle/newIntent/recreation/terminal routing and permission/scope ownership. [Immutable evidence](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-default-fix/ticket16/full-app-suite-1/result.json). Device execution and optional-vendor R8 for this new seam remain root acceptance work. Earlier correction matrix/device results are historical, not acceptance for these lifecycle changes.
