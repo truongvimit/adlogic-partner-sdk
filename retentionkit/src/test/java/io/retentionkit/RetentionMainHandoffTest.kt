@@ -174,4 +174,52 @@ class RetentionMainHandoffTest {
         recreated.pause().stop().destroy()
     }
 
+    @Test fun newerIntentDeliveredByOwnedResourceCloseWinsOverOuterCapture() {
+        lateinit var helper: RetentionMainHandoff
+        var replacement: Intent? = null
+        val host = object : RetentionUiHost {
+            override fun onLeaseAcquired(owner: String, token: String, durationMillis: Long) = AutoCloseable {
+                replacement?.also { replacement = null; helper.onNewIntent(it) }
+            }
+        }
+        val kit = install(host)
+        val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
+        helper = bind(kit, activity.get())
+        replacement = envelope("guide")
+        helper.onNewIntent(envelope("saved_items"))
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        activity.start().resume(); idle()
+        val target = requireNotNull(shadowOf(activity.get()).nextStartedActivity)
+        assertEquals("guide", (RetentionEntryCodec.read(target) as RetentionEntryDecodeResult.Valid).entry.destination)
+        activity.pause().stop().destroy()
+    }
+
+    @Test fun newerIntentDeliveredByFinalLeaseGatePreventsOlderForward() {
+        lateinit var helper: RetentionMainHandoff
+        var deliverFromGate = false
+        var replaceOnce = true
+        val host = object : RetentionUiHost {
+            override fun canPresentEntry(activity: Activity): Boolean {
+                if (deliverFromGate) {
+                    deliverFromGate = false
+                    helper.onNewIntent(envelope("guide"))
+                }
+                return true
+            }
+        }
+        val kit = install(host)
+        val activity = Robolectric.buildActivity(Main::class.java, envelope()).create()
+        helper = bind(kit, activity.get(), router = RetentionRouter { context, _ ->
+            if (replaceOnce) { replaceOnce = false; deliverFromGate = true }
+            Intent(context, Feature::class.java)
+        })
+        kit.runtime.signal(RetentionSignal.ProcessForeground)
+        activity.start().resume()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300))
+        val target = requireNotNull(shadowOf(activity.get()).nextStartedActivity)
+        assertEquals("guide", (RetentionEntryCodec.read(target) as RetentionEntryDecodeResult.Valid).entry.destination)
+        assertNull(shadowOf(activity.get()).nextStartedActivity)
+        activity.pause().stop().destroy()
+    }
+
 }
