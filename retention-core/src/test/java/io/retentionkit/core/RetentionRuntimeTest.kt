@@ -161,7 +161,7 @@ class RetentionRuntimeTest {
                 order.add("first")
                 second.close()
                 runtime.subscribe("third") { order.add("third") }
-                runtime.signal(RetentionSignal.BusinessSuccess("translate"))
+                runtime.signal(RetentionSignal.BusinessSuccess("notes"))
             }
         }
         second = runtime.subscribe("second") { order.add("second") }
@@ -197,13 +197,13 @@ class RetentionRuntimeTest {
         val options = RetentionOptions(store = testStore(), localeProvider = RetentionLocaleProvider { localized },
             featureProvider = RetentionFeatureProvider { context ->
                 assertEquals("fr", context.resources.configuration.locales[0].language)
-                listOf(RetentionFeature("translate", "Traduire", 1))
+                listOf(RetentionFeature("notes", "Traduire", 1))
             },
             router = RetentionRouter { _, _ -> Intent().setComponent(ComponentName(app.packageName, "HostEntry")) })
         val runtime = installed(options)
         assertEquals("Traduire", runtime.features().single().label)
         assertSame(localized, runtime.localizedContext())
-        val entry = RetentionEntry(RetentionEntrySource.DAILY, "translate", "open")
+        val entry = RetentionEntry(RetentionEntrySource.DAILY, "notes", "open")
         val intent = runtime.createEntryIntent(entry)!!
         assertEquals(entry, (RetentionEntryCodec.read(intent) as RetentionEntryDecodeResult.Valid).entry)
         assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK)

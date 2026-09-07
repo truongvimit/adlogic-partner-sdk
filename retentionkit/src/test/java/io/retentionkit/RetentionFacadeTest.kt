@@ -26,7 +26,7 @@ class RetentionFacadeTest {
     private val app: Application get() = ApplicationProvider.getApplicationContext()
     @After fun after() { RetentionRuntime.uninstallForTests(); Tracker.resetForTesting() }
     private fun options() = RetentionKitOptions(
-        featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("translate", "Translate", android.R.drawable.ic_menu_search)) },
+        featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", android.R.drawable.ic_menu_search)) },
         router = RetentionRouter { context, _ -> Intent(context, Activity::class.java) },
         store = SharedPreferencesRetentionStore(app, "facade_${UUID.randomUUID()}"),
     )
@@ -46,7 +46,7 @@ class RetentionFacadeTest {
     @Test fun featureEntrySurvivesPassthroughAndConsumesOnceAcrossWarmCaptureAndProcessRestore() {
         val configured = options().copy(notifications = null, widgets = null, feedback = null, review = null)
         val kit = install(configured)
-        val entry = RetentionEntry(RetentionEntrySource.WIDGET, "translate", "translate", instanceId = "5", mode = RetentionEntryMode.REUSABLE)
+        val entry = RetentionEntry(RetentionEntrySource.WIDGET, "notes", "notes", instanceId = "5", mode = RetentionEntryMode.REUSABLE)
         val original = requireNotNull(kit.runtime.createEntryIntent(entry))
         val first = kit.capture(Intent(original)) as RetentionEntryAcceptance.Accepted
         // The actual host forwards the rewritten launch extras, not the reusable OS template.
@@ -60,7 +60,7 @@ class RetentionFacadeTest {
         Robolectric.buildActivity(Activity::class.java).setup()
         restored.runtime.signal(RetentionSignal.ProcessForeground)
         val route = restored.dispatchPending(captured.entry.token) as RetentionDispatchResult.Navigate
-        assertEquals("translate", route.entry.destination)
+        assertEquals("notes", route.entry.destination)
         assertTrue(restored.dispatchPending(captured.entry.token) is RetentionDispatchResult.Unavailable)
         val warm = restored.capture(Intent(original)) as RetentionEntryAcceptance.Accepted
         assertNotEquals(first.entry.token, warm.entry.token)

@@ -12,14 +12,26 @@ import java.lang.ref.WeakReference
  * effects: register this object in the module's owner map before start(), whose signal can reenter.
  * Widget pin confirmation has a different lifecycle and does not use this scope.
  */
-class RetentionHandoffScope @JvmOverloads constructor(
+class RetentionHandoffScope private constructor(
     private val runtime: RetentionRuntime,
     activity: Activity,
     val token: String,
     private val kind: String,
-    private val durationMillis: Long = 120_000,
-    private val onClosed: () -> Unit = {},
+    private val durationMillis: Long,
+    private val purpose: RetentionUiPurpose,
+    private val onClosed: () -> Unit,
 ) : Application.ActivityLifecycleCallbacks, AutoCloseable {
+    @JvmOverloads constructor(runtime: RetentionRuntime, activity: Activity, token: String, kind: String,
+        durationMillis: Long = 120_000, onClosed: () -> Unit = {}) :
+        this(runtime, activity, token, kind, durationMillis, RetentionUiPurpose.PROMPT, onClosed)
+
+    companion object {
+        /** Same ownership/lifecycle contract, with the host's explicit-entry gate at every recheck. */
+        @JvmStatic @JvmOverloads fun forEntry(runtime: RetentionRuntime, activity: Activity,
+            token: String, kind: String, durationMillis: Long = 120_000,
+            onClosed: () -> Unit = {}): RetentionHandoffScope =
+            RetentionHandoffScope(runtime, activity, token, kind, durationMillis, RetentionUiPurpose.ENTRY, onClosed)
+    }
     private val source = WeakReference(activity)
     private val main = Handler(Looper.getMainLooper())
     private var started = false
@@ -45,7 +57,7 @@ class RetentionHandoffScope @JvmOverloads constructor(
         checkMain()
         if (closed || !started || RetentionRuntime.get() !== runtime) return null
         val activity = source.get() ?: return null
-        return if (runtime.ui.canContinueHandoff(token, activity) && !closed) activity else null
+        return if (runtime.ui.canContinueHandoff(token, activity, purpose) && !closed) activity else null
     }
 
     /**

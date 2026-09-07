@@ -21,6 +21,7 @@ import io.onboardkit.ui.splash.ObSplashActivity
 import io.retentionkit.core.*
 import io.retentionkit.feedback.RetentionFeedbackActivity
 import io.retentionkit.integration.OnboardRetentionBridge
+import io.retentionkit.integration.RetentionEntryAdPolicy
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -124,9 +125,9 @@ class OnboardBridgeTest {
         ads.setResumeSkipPolicy(object : ResumeSkipPolicy {
             override fun skipReasonFor(activity: Activity) = "host_policy"
         })
-        val original = RetentionEntry(RetentionEntrySource.WIDGET, "translate", "translate", mode = RetentionEntryMode.REUSABLE)
+        val original = RetentionEntry(RetentionEntrySource.WIDGET, "notes", "notes", mode = RetentionEntryMode.REUSABLE)
         val intent = requireNotNull(runtime.createEntryIntent(original))
-        assertTrue(intent.getBooleanExtra("ob_without_splash_ads", false))
+        assertFalse(intent.getBooleanExtra("ob_without_splash_ads", false))
         val accepted = bridge.capture(intent) as RetentionEntryAcceptance.Accepted
         val extras = bridge.onOutcome(OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, intent.extras))
         val finalIntent = Intent().putExtras(requireNotNull(extras))
@@ -149,4 +150,42 @@ class OnboardBridgeTest {
         ERainLogEventManager.logClickAdsEvent(app, "unit")
         assertEquals(1, clickIds.size)
     }
+    class Main : Activity()
+    @Test fun explicitNoAdPolicyRemainsOptInAndAllSourcesKeepEntryPlacement() {
+        val standard = OnboardRetentionBridge(Splash::class.java) { true } // Legacy trailing-lambda source compatibility.
+        val noAds = OnboardRetentionBridge(Splash::class.java, entryAdPolicy = RetentionEntryAdPolicy.WITHOUT_SPLASH_ADS)
+        for ((source, key) in listOf(RetentionEntrySource.DAILY to "inter_noti", RetentionEntrySource.WIDGET to "inter_widget",
+            RetentionEntrySource.SHORTCUT to "inter_widget", RetentionEntrySource.FEEDBACK to "inter_uninstall")) {
+            val entry = RetentionEntry(source, "notes", "open")
+            val normal = standard.router.createIntent(app, entry)!!
+            val explicitSkip = noAds.router.createIntent(app, entry)!!
+            assertFalse(normal.getBooleanExtra("ob_without_splash_ads", false))
+            assertTrue(explicitSkip.getBooleanExtra("ob_without_splash_ads", false))
+            assertEquals(key, io.onboardkit.ui.splash.SplashEntry.from(normal)?.interKey)
+            assertTrue(normal.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK != 0)
+        }
+    }
+
+    @Test fun configuredMainAllowsOnlySelectedEntryAndHonorsHostModalGateAtFinalRecheck() {
+        var ready = true
+        val bridge = OnboardRetentionBridge(Splash::class.java, hostCanPresent = { ready }, mainActivity = Main::class.java)
+        val rt = (RetentionRuntime.install(app, RetentionOptions(modules = listOf(bridge), uiHost = bridge,
+            store = SharedPreferencesRetentionStore(app, "main_bridge_${UUID.randomUUID()}"))) as RetentionInstallResult.Installed).runtime
+        val activity = Robolectric.buildActivity(Main::class.java).setup()
+        rt.signal(RetentionSignal.ProcessForeground)
+        assertTrue(rt.ui.acquire("review") is RetentionUiLeaseResult.Blocked)
+        assertTrue(rt.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) is RetentionUiLeaseResult.Blocked)
+        val entry = RetentionEntry(RetentionEntrySource.FEEDBACK, "notes", "rescue")
+        rt.entries.capture(RetentionEntryCodec.write(activity.get().intent, entry))
+        val lease = (rt.ui.acquire("entry", 5000, RetentionUiPurpose.ENTRY) as RetentionUiLeaseResult.Acquired).lease
+        ready = false
+        assertNull(lease.activity())
+        ready = true
+        val terminal = bridge.mainIntent(app, Main::class.java, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, activity.get().intent.extras))!!
+        assertEquals(entry, (RetentionEntryCodec.read(terminal) as RetentionEntryDecodeResult.Valid).entry)
+        rt.entries.consume(entry.token)
+        assertFalse(bridge.canPresentEntry(activity.get()))
+        activity.pause().stop().destroy()
+    }
+
 }

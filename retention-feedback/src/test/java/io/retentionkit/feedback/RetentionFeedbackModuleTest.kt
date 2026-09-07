@@ -62,22 +62,22 @@ class RetentionFeedbackModuleTest {
         host?.pause()?.stop()?.destroy(); host = null
         RetentionRuntime.uninstallForTests()
     }
-    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true) {
+    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true, configure: (FeedbackOptions) -> FeedbackOptions = { it }) {
         val factory = if (custom) FeedbackUiFactory { activity, controller, _ ->
             customController = controller
             TextView(activity).apply { text = "Custom content" }
         } else null
-        module = RetentionFeedbackModule(FeedbackOptions(shortcutEnabled = shortcut, showReasons = reasons,
+        module = RetentionFeedbackModule(configure(FeedbackOptions(shortcutEnabled = shortcut, showReasons = reasons,
             uiFactory = factory, launcher = FeedbackLauncher { activity, intent ->
                 assertSame(runtime.activities.current(), activity)
                 blockedDuringLaunch = runtime.ui.eligibility() is RetentionEligibility.Blocked
                 if (throwLaunch) error("launcher exception")
                 if (rejectLaunch) false else { launches.add(Intent(intent)); true }
-            }))
+            })))
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock,
             initialUserState = RetentionUserState(setupCompleted = true, entitlement = RetentionEntitlement.NON_SUBSCRIBER),
             localeProvider = RetentionLocaleProvider { context -> context.createConfigurationContext(Configuration(context.resources.configuration).apply { setLocale(selectedLocale) }) },
-            featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("translate", "Translate", R.drawable.rk_ic_feedback)) },
+            featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", R.drawable.rk_ic_feedback)) },
             router = RetentionRouter { context, _ -> Intent().setComponent(ComponentName(context.packageName, Activity::class.java.name)) },
             eventSink = RetentionEventSink { events.add(it) }))
         assertTrue(result.toString(), result is RetentionInstallResult.Installed)
@@ -122,7 +122,7 @@ class RetentionFeedbackModuleTest {
     @Test fun disabledRescueCannotNavigateOrLeaveFalseHandoffSession() {
         install(); show()
         runtime.subscribe("test.disable") { if (it is RetentionSignal.ExternalTransitionStarted && it.token.startsWith("feedback.action.")) runtime.updateConfig(mapOf("feedback.enabled" to "false")) }
-        assertTrue(customController!!.tryFeature("translate") is FeedbackActionResult.Blocked)
+        assertTrue(customController!!.tryFeature("notes") is FeedbackActionResult.Blocked)
         assertEquals(1, launches.size)
         assertEquals(FeedbackPhase.CANCELLED, module.session(token)!!.phase)
         assertFalse(events.any { it.name == "retention_feedback_feature_handoff" })
@@ -175,15 +175,15 @@ class RetentionFeedbackModuleTest {
 
     @Test fun featureRescueCreatesOneTypedHostEntryWithSessionAttribution() {
         install(); show()
-        assertEquals(FeedbackActionResult.Applied, customController!!.tryFeature("translate"))
+        assertEquals(FeedbackActionResult.Applied, customController!!.tryFeature("notes"))
         val entry = (RetentionEntryCodec.read(launches.last()) as RetentionEntryDecodeResult.Valid).entry
         assertEquals(RetentionEntrySource.FEEDBACK, entry.source)
-        assertEquals("translate", entry.destination)
+        assertEquals("notes", entry.destination)
         assertEquals("try_feature", entry.actionId)
         assertEquals(token, entry.instanceId)
         assertEquals(FeedbackPhase.FEATURE_HANDOFF, module.session(token)!!.phase)
         assertTrue(screen!!.get().isFinishing)
-        assertTrue(customController!!.tryFeature("translate") is FeedbackActionResult.Blocked)
+        assertTrue(customController!!.tryFeature("notes") is FeedbackActionResult.Blocked)
         assertEquals(2, launches.size)
     }
 
@@ -226,7 +226,10 @@ class RetentionFeedbackModuleTest {
         assertEquals(5, outer.paddingLeft); assertEquals(30, outer.paddingTop)
         assertEquals(7, outer.paddingRight); assertEquals(160, outer.paddingBottom)
         (view("rk_feedback_continue") as Button).performClick()
-        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, launches.last().action)
+        @Suppress("DEPRECATION")
+        val expected = Intent.ACTION_UNINSTALL_PACKAGE
+        assertEquals(expected, launches.last().action)
+        assertEquals("package:${app.packageName}", launches.last().dataString)
     }
 
     @Test fun defaultContentUsesHostSelectedLocaleAndCanRemoveSurvey() {
@@ -235,7 +238,7 @@ class RetentionFeedbackModuleTest {
         assertEquals("Tiếp tục sử dụng", (view("rk_feedback_keep") as Button).text.toString())
         val content = screen!!.get().findViewById<ViewGroup>(android.R.id.content)
         assertNull(content.findViewWithTag<View>("rk_feedback_reason_other"))
-        assertNotNull(content.findViewWithTag<View>("rk_feedback_feature_translate"))
+        assertNotNull(content.findViewWithTag<View>("rk_feedback_feature_notes"))
         (view("rk_feedback_continue") as Button).performClick()
         assertEquals(FeedbackPhase.SYSTEM_HANDOFF, module.session(token)!!.phase)
     }
@@ -372,6 +375,68 @@ class RetentionFeedbackModuleTest {
         screen!!.get().onBackPressed()
         assertTrue(screen!!.get().isFinishing)
         assertEquals(FeedbackPhase.KEPT, module.session(token)!!.phase)
+    }
+
+    @Test fun openViaEntryUsesHostFrontDoorWithoutCreatingOrShowingSurveyEarly() {
+        install()
+        module.openViaEntry(); idle()
+        val entry = (RetentionEntryCodec.read(launches.single()) as RetentionEntryDecodeResult.Valid).entry
+        assertEquals(RetentionEntrySource.FEEDBACK, entry.source)
+        assertEquals(RetentionFeedbackModule.DESTINATION, entry.destination)
+        assertEquals(Activity::class.java.name, launches.single().component!!.className)
+        assertNull(launches.single().getStringExtra(RetentionFeedbackModule.EXTRA_SESSION))
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(events.any { it.name == "retention_feedback_entry_requested" })
+    }
+
+    @Test fun unavailableUninstallConfirmationFallsBackToAppInfoWithoutMandatoryReason() {
+        val attempts = mutableListOf<String?>()
+        install(configure = { base -> base.copy(launcher = FeedbackLauncher { _, intent ->
+            if (intent.component != null) { launches.add(intent); true }
+            else { attempts.add(intent.action); intent.action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS }
+        }) })
+        show()
+        assertTrue(customController!!.state()!!.selectedReasons.isEmpty())
+        assertEquals(FeedbackActionResult.Applied, customController!!.continueToSystem())
+        @Suppress("DEPRECATION") val confirmation = Intent.ACTION_UNINSTALL_PACKAGE
+        assertEquals(listOf(confirmation, Settings.ACTION_APPLICATION_DETAILS_SETTINGS), attempts)
+        assertEquals("app_management", events.last { it.name == "retention_feedback_system_handoff" }.attributes["action"])
+        assertEquals(FeedbackPhase.SYSTEM_HANDOFF, customController!!.state()!!.phase)
+    }
+
+    @Test fun failedConfirmationCannotFallbackAfterReentrantDisableAndExplicitAppInfoRemainsAvailable() {
+        val attempts = mutableListOf<String?>()
+        install(configure = { base -> base.copy(launcher = FeedbackLauncher { _, intent ->
+            if (intent.component != null) { launches.add(intent); true }
+            else { attempts.add(intent.action); runtime.updateConfig(mapOf("feedback.enabled" to "false")); false }
+        }) })
+        show()
+        customController!!.continueToSystem()
+        assertEquals(1, attempts.size)
+        assertFalse(events.any { it.name == "retention_feedback_system_handoff" })
+    }
+
+    @Test fun customNativeSlotReceivesRealLifecycleAndClosesOwnedBindingOncePerRecreation() {
+        var bound = 0; var closed = 0
+        val owners = mutableListOf<androidx.lifecycle.LifecycleOwner>()
+        install(configure = { base -> base.copy(
+            uiFactory = FeedbackUiFactory { activity, control, _ ->
+                customController = control
+                FrameLayout(activity).also { control.bindNative(it) }
+            },
+            nativeContent = FeedbackNativeContent { _, owner, container ->
+                bound++; owners.add(owner)
+                container.addView(TextView(container.context).apply { text = "Host native slot" })
+                AutoCloseable { closed++ }
+            },
+        ) })
+        show()
+        assertEquals(androidx.lifecycle.Lifecycle.State.RESUMED, owners.single().lifecycle.currentState)
+        screen!!.recreate(); idle()
+        assertEquals(2, bound); assertEquals(1, closed)
+        assertEquals(androidx.lifecycle.Lifecycle.State.DESTROYED, owners.first().lifecycle.currentState)
+        screen!!.pause().stop().destroy(); screen = null
+        assertEquals(2, closed)
     }
 
     private class FakeClock(var now: Long = 1_800_000_000_000L, var elapsed: Long = 1_000L) : RetentionClock {

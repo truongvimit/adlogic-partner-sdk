@@ -49,6 +49,35 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
 
     fun handles(entry: RetentionEntry): Boolean = entry.destination == DESTINATION
     fun show(): FeedbackShowResult = showInternal(null)
+    /** Partner menu/button entry: always routes through the configured Splash before the survey. */
+    fun openViaEntry(): FeedbackShowResult {
+        if (runtime == null) return FeedbackShowResult.Unavailable("not_attached")
+        onMain {
+            val rt = runtime ?: return@onMain
+            if (!enabled() || scopes.containsKey(ENTRY_SCOPE)) return@onMain
+            val acquired = rt.ui.acquire("feedback.entry", 15_000, RetentionUiPurpose.ENTRY)
+                as? RetentionUiLeaseResult.Acquired ?: return@onMain
+            var scope: RetentionHandoffScope? = null
+            try {
+                val activity = acquired.lease.activity() ?: return@onMain
+                val revision = rt.config.revision
+                val entry = RetentionEntry(RetentionEntrySource.FEEDBACK, DESTINATION, "open_feedback", createdAtMillis = rt.clock.wallTimeMillis())
+                val intent = rt.createEntryIntent(entry) ?: return@onMain
+                if (acquired.lease.activity() !== activity || runtime !== rt || !enabled() || rt.config.revision != revision) return@onMain
+                val owned = createScope(rt, activity, ENTRY_SCOPE, RetentionUiPurpose.ENTRY).also { scope = it }
+                owned.start()
+                owned.dispatch { current ->
+                    if (current == null || runtime !== rt || !enabled() || rt.config.revision != revision) owned.close()
+                    else {
+                        val launched = try { options.launcher.launch(current, intent) } catch (_: Exception) { false }
+                        if (launched) event("entry_requested") else { owned.close(); event("failed", "entry_launch_failed") }
+                    }
+                }
+            } catch (error: Exception) { scope?.close(); diagnostic("entry", error) }
+            finally { acquired.lease.close() }
+        }
+        return FeedbackShowResult.Scheduled
+    }
     /** Final feedback route: keep the entry staged until UI gates pass, then consume before launch. */
     fun handleEntry(entry: RetentionEntry): FeedbackShowResult {
         if (!handles(entry) || entry.mode != RetentionEntryMode.ONCE) return FeedbackShowResult.Unavailable("not_a_materialized_feedback_entry")
@@ -64,7 +93,8 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
             val rt = runtime ?: return@onMain
             if (!enabled()) { event("skipped", "disabled"); return@onMain }
             if (launchPending != null || visible.get()?.let { !it.isFinishing && !it.isDestroyed } == true) { event("skipped", "already_open"); return@onMain }
-            val acquired = rt.ui.acquire("feedback.launch", 15_000) as? RetentionUiLeaseResult.Acquired
+            val purpose = if (entry == null) RetentionUiPurpose.PROMPT else RetentionUiPurpose.ENTRY
+            val acquired = rt.ui.acquire("feedback.launch", 15_000, purpose) as? RetentionUiLeaseResult.Acquired
             if (acquired == null) { event("skipped", "ui_blocked"); return@onMain }
             val activity = acquired.lease.activity()
             if (activity == null) { acquired.lease.close(); return@onMain }
@@ -75,15 +105,15 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
                 val session = rt.store.transaction(STATE) { state ->
                     prune(state)
                     val old = state.string("active")?.let { decode(state.string(it)) }
-                    if (old?.phase == FeedbackPhase.OPEN) old else {
-                        FeedbackSession(UUID.randomUUID().toString(), rt.clock.wallTimeMillis(), FeedbackPhase.OPEN, emptySet(), false).also {
+                    if (old?.phase == FeedbackPhase.OPEN) old.copy(uiPurpose = purpose).also { save(state, it) } else {
+                        FeedbackSession(UUID.randomUUID().toString(), rt.clock.wallTimeMillis(), FeedbackPhase.OPEN, emptySet(), false, purpose).also {
                             save(state, it); state.put("active", it.token)
                         }
                     }
                 }
                 sessionToken = session.token
                 launchPending = session.token
-                val ownedScope = createScope(rt, activity, "feedback.open.${session.token}")
+                val ownedScope = createScope(rt, activity, "feedback.open.${session.token}", purpose)
                 scope = ownedScope
                 ownedScope.start()
                 ownedScope.dispatch { current -> onMain launch@{
@@ -140,7 +170,7 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         val current = session(controller.sessionToken) ?: return false
         if (!enabled() || current.phase != FeedbackPhase.OPEN || rt.activities.current() !== activity) return false
         controller.pause()
-        val acquired = rt.ui.acquire("feedback.session", 60_000) as? RetentionUiLeaseResult.Acquired ?: return false
+        val acquired = rt.ui.acquire("feedback.session", 60_000, current.uiPurpose) as? RetentionUiLeaseResult.Acquired ?: return false
         controller.lease = acquired.lease
         visible = WeakReference(activity)
         if (!current.shown) {
@@ -175,19 +205,28 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         val intent = rt.createEntryIntent(entry) ?: return@action FeedbackActionResult.Failed("route_unavailable")
         handoff(controller, intent, FeedbackPhase.FEATURE_HANDOFF, "feature_handoff", finishSource = true)
     }
+    internal fun continueToSystem(controller: FeedbackController): FeedbackActionResult = action(controller) {
+        val rt = checkNotNull(runtime)
+        val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", rt.application.packageName, null))
+        val confirmation = options.systemAction == FeedbackSystemAction.UNINSTALL_CONFIRMATION
+        @Suppress("DEPRECATION")
+        val intent = if (confirmation) Intent(Intent.ACTION_UNINSTALL_PACKAGE, Uri.fromParts("package", rt.application.packageName, null)) else appInfo
+        handoff(controller, intent, FeedbackPhase.SYSTEM_HANDOFF, "system_handoff", finishSource = false,
+            fallback = appInfo.takeIf { confirmation && options.appManagementFallback })
+    }
     internal fun continueToAppManagement(controller: FeedbackController): FeedbackActionResult = action(controller) {
         val rt = checkNotNull(runtime)
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", rt.application.packageName, null))
         handoff(controller, intent, FeedbackPhase.SYSTEM_HANDOFF, "system_handoff", finishSource = false)
     }
 
-    private fun handoff(controller: FeedbackController, intent: Intent, phase: FeedbackPhase, eventName: String, finishSource: Boolean): FeedbackActionResult {
+    private fun handoff(controller: FeedbackController, intent: Intent, phase: FeedbackPhase, eventName: String, finishSource: Boolean, fallback: Intent? = null): FeedbackActionResult {
         val rt = runtime ?: return FeedbackActionResult.Blocked("not_attached")
         val activity = controller.lease?.activity() ?: return FeedbackActionResult.Blocked("activity_unavailable")
         val revision = rt.config.revision
         if (!terminal(controller.sessionToken, phase)) return FeedbackActionResult.Blocked("already_handled")
         // The final Activity was obtained before this signal intentionally revokes the lease.
-        val scope = createScope(rt, activity, "feedback.action.${UUID.randomUUID()}")
+        val scope = createScope(rt, activity, "feedback.action.${UUID.randomUUID()}", controller.state()?.uiPurpose ?: RetentionUiPurpose.PROMPT)
         var outcome: FeedbackActionResult = FeedbackActionResult.Applied // Accepted if signal dispatch is still queued.
         scope.start()
         scope.dispatch { current ->
@@ -196,13 +235,22 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
                 event("skipped", "handoff_gate_changed")
                 outcome = FeedbackActionResult.Blocked("handoff_gate_changed")
             } else {
-                val submitted = try { options.launcher.launch(current, intent) } catch (_: Exception) { false }
+                var launchedAction = intent.action
+                var submitted = try { options.launcher.launch(current, intent) } catch (_: Exception) { false }
+                // A failed platform launch may reenter. Fallback still needs this exact scope/session.
+                if (!submitted && fallback != null && scope.activity() === current && runtime === rt && enabled() &&
+                    rt.config.revision == revision && session(controller.sessionToken)?.phase == phase) {
+                    submitted = try { options.launcher.launch(current, fallback) } catch (_: Exception) { false }
+                    launchedAction = fallback.action
+                }
                 if (!submitted) {
                     restoreHandoff(rt, controller, phase, scope)
                     event("failed", "handoff_failed")
                     outcome = FeedbackActionResult.Failed("handoff_failed")
                 } else {
-                    event(eventName)
+                    if (phase == FeedbackPhase.SYSTEM_HANDOFF) rt.emit(RetentionEvent("retention_feedback_system_handoff",
+                        mapOf("action" to if (launchedAction == Settings.ACTION_APPLICATION_DETAILS_SETTINGS) "app_management" else "uninstall_confirmation")))
+                    else event(eventName)
                     controller.pause()
                     if (finishSource) current.finish()
                 }
@@ -270,9 +318,11 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         manager.enableShortcuts(listOf(SHORTCUT_ID))
         if (!manager.addDynamicShortcuts(listOf(shortcut))) event("skipped", "shortcut_rejected")
     }
-    private fun createScope(rt: RetentionRuntime, activity: Activity, token: String): RetentionHandoffScope {
+    private fun createScope(rt: RetentionRuntime, activity: Activity, token: String, purpose: RetentionUiPurpose = RetentionUiPurpose.PROMPT): RetentionHandoffScope {
         lateinit var scope: RetentionHandoffScope
-        scope = RetentionHandoffScope(rt, activity, token, "feedback_handoff", onClosed = { if (scopes[token] === scope) scopes.remove(token) })
+        val closed = { if (scopes[token] === scope) scopes.remove(token); Unit }
+        scope = if (purpose == RetentionUiPurpose.ENTRY) RetentionHandoffScope.forEntry(rt, activity, token, "feedback_handoff", onClosed = closed)
+            else RetentionHandoffScope(rt, activity, token, "feedback_handoff", onClosed = closed)
         scopes[token] = scope
         return scope
     }
@@ -304,6 +354,7 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         const val DESTINATION = "retention.feedback"
         const val SHORTCUT_ID = "retention.feedback.open"
         internal const val EXTRA_SESSION = "io.retentionkit.feedback.session"
+        private const val ENTRY_SCOPE = "feedback.entry.open"
         private const val STATE = "feedback.sessions.v1"
         private const val SESSION_TTL = 1_800_000L
         private val ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
@@ -312,11 +363,11 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         private fun decode(raw: String?): FeedbackSession? = try {
             if (raw == null) null else JSONObject(raw).let { json ->
                 val reasons = json.getJSONArray("reasons")
-                FeedbackSession(json.getString("token"), json.getLong("created"), FeedbackPhase.valueOf(json.getString("phase")), (0 until reasons.length()).map { reasons.getString(it) }.toSet(), json.optBoolean("shown", false))
+                FeedbackSession(json.getString("token"), json.getLong("created"), FeedbackPhase.valueOf(json.getString("phase")), (0 until reasons.length()).map { reasons.getString(it) }.toSet(), json.optBoolean("shown", false), runCatching { RetentionUiPurpose.valueOf(json.optString("purpose")) }.getOrDefault(RetentionUiPurpose.PROMPT))
             }
         } catch (_: Exception) { null }
         private fun save(state: RetentionTransaction, value: FeedbackSession) {
-            state.put(value.token, JSONObject().put("token", value.token).put("created", value.createdAtMillis).put("phase", value.phase.name).put("reasons", JSONArray(value.selectedReasons.toList())).put("shown", value.shown).toString())
+            state.put(value.token, JSONObject().put("token", value.token).put("created", value.createdAtMillis).put("phase", value.phase.name).put("reasons", JSONArray(value.selectedReasons.toList())).put("shown", value.shown).put("purpose", value.uiPurpose.name).toString())
         }
     }
 }

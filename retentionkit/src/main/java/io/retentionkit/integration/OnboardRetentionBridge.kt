@@ -1,6 +1,7 @@
 package io.retentionkit.integration
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -19,14 +20,22 @@ import kotlinx.coroutines.*
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
+enum class RetentionEntryAdPolicy { STANDARD, WITHOUT_SPLASH_ADS }
+
 /**
  * Optional suite adapter. Declare OnboardKit/ads explicitly, install OnboardKit first, and place
  * this object in RetentionKitOptions.adapters + uiHost; use its router for the one host entry.
  */
-class OnboardRetentionBridge @JvmOverloads constructor(
+class OnboardRetentionBridge constructor(
     private val splashActivity: Class<out ObSplashActivity>,
     private val hostCanPresent: (Activity) -> Boolean = { true },
+    private val entryAdPolicy: RetentionEntryAdPolicy = RetentionEntryAdPolicy.STANDARD,
+    private val mainActivity: Class<out Activity>? = null,
 ) : RetentionModule, RetentionUiHost {
+    constructor(splashActivity: Class<out ObSplashActivity>) : this(splashActivity, { true }, RetentionEntryAdPolicy.STANDARD, null)
+    constructor(splashActivity: Class<out ObSplashActivity>, hostCanPresent: (Activity) -> Boolean) :
+        this(splashActivity, hostCanPresent, RetentionEntryAdPolicy.STANDARD, null)
+
     override val id = "onboard-bridge"
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -36,14 +45,17 @@ class OnboardRetentionBridge @JvmOverloads constructor(
     private val transitions = mutableMapOf<String, Transition>()
     private var clickObservation: AutoCloseable? = null
 
-    /** Keeps typed extras in core's envelope; no splash/load/exit interstitial or checkpoint. */
+    /** Every tap, including rescue/warm entry, executes Splash. No-ad routing is explicit opt-in. */
     val router = RetentionRouter { context, entry ->
         val source = when {
             entry.destination == RetentionFeedbackModule.DESTINATION || entry.source == RetentionEntrySource.FEEDBACK -> SplashEntry.UNINSTALL
             entry.source == RetentionEntrySource.WIDGET || entry.source == RetentionEntrySource.SHORTCUT -> SplashEntry.WIDGET
             else -> SplashEntry.NOTIFICATION
         }
-        source.intentWithoutSplashAds(context, splashActivity)
+        when (entryAdPolicy) {
+            RetentionEntryAdPolicy.STANDARD -> source.intent(context, splashActivity)
+            RetentionEntryAdPolicy.WITHOUT_SPLASH_ADS -> source.intentWithoutSplashAds(context, splashActivity)
+        }
     }
 
     override fun attach(runtime: RetentionRuntime) {
@@ -73,10 +85,20 @@ class OnboardRetentionBridge @JvmOverloads constructor(
         }
     }
 
-    override fun canPresent(activity: Activity): Boolean =
+    private fun hostReady(activity: Activity): Boolean =
         !closed && activity !is ObSplashActivity && activity.javaClass.name != "com.google.android.gms.ads.AdActivity" &&
             !OnboardingSdk.isFlowActive.value && !AppOpenManager.getInstance().isShowingAd &&
-            !AppOpenManager.getInstance().isInterstitialShowing && hostCanPresent(activity)
+            !AppOpenManager.getInstance().isInterstitialShowing && !activity.isFinishing && !activity.isDestroyed
+
+    override fun canPresent(activity: Activity): Boolean = hostReady(activity) &&
+        mainActivity?.isInstance(activity) != true && hostCanPresent(activity)
+
+    override fun canPresentEntry(activity: Activity): Boolean {
+        if (!hostReady(activity)) return false
+        if (mainActivity?.isInstance(activity) != true) return hostCanPresent(activity)
+        val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry ?: return false
+        return entry.mode == RetentionEntryMode.ONCE && runtime.entries.pending(entry.token) == entry && hostCanPresent(activity)
+    }
 
     override fun onLeaseAcquired(owner: String, token: String, durationMillis: Long): AutoCloseable {
         check(!closed) { "Onboard bridge is detached" }
@@ -124,6 +146,13 @@ class OnboardRetentionBridge @JvmOverloads constructor(
             is OnboardingOutcome.Aborted -> null
         }
         return extras?.let(::Bundle)
+    }
+
+    /** Existing listener retains its own business work; this helper never reads the pending backlog. */
+    fun mainIntent(context: Context, mainActivity: Class<out Activity>, outcome: OnboardingOutcome): Intent? {
+        val extras = onOutcome(outcome)
+        if (closed || outcome is OnboardingOutcome.Aborted) return null
+        return Intent(context, mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply { extras?.let(::putExtras) }
     }
     /** The existing OnboardKit/host permission launcher remains the only owner. */
     fun permissionChanged() { if (!closed) runtime.reconcile("permission_changed") }

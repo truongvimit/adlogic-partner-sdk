@@ -14,7 +14,7 @@ import java.util.concurrent.Executors
 @Config(sdk = [34])
 class RetentionEntryTest {
     private val clock = TestClock()
-    private fun entry(destination: String = "translate") = RetentionEntry(RetentionEntrySource.DAILY, destination, "open", createdAtMillis = clock.now)
+    private fun entry(destination: String = "notes") = RetentionEntry(RetentionEntrySource.DAILY, destination, "open", createdAtMillis = clock.now)
 
     @Test fun entrySurvivesRestartSetupAndHasOneAtomicFinalConsumption() {
         val store = testStore()
@@ -50,10 +50,10 @@ class RetentionEntryTest {
     }
 
     @Test fun eachActionAndWidgetInstanceHasFilterIdentityAndPreservesHostIntent() {
-        val original = Intent("host.action", Uri.parse("partner://feature/translate")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val original = Intent("host.action", Uri.parse("partner://feature/notes")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val base = entry().copy(mode = RetentionEntryMode.REUSABLE, instanceId = "1")
         val a = RetentionEntryCodec.write(Intent(original), base)
-        val b = RetentionEntryCodec.write(Intent(original), base.copy(destination = "history", actionId = "history"))
+        val b = RetentionEntryCodec.write(Intent(original), base.copy(destination = "guide", actionId = "guide"))
         val c = RetentionEntryCodec.write(Intent(original), base.copy(instanceId = "2"))
         assertFalse(a.filterEquals(b))
         assertFalse(a.filterEquals(c))

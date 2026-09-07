@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.view.View
+import android.view.ViewGroup
+import androidx.lifecycle.LifecycleOwner
+import io.retentionkit.core.RetentionUiPurpose
 
 /** Stable reason IDs may be tracked; labels use the selected app locale. No survey is mandatory. */
 data class FeedbackReason(val id: String, val label: String)
@@ -19,6 +22,12 @@ data class FeedbackContent(
 )
 fun interface FeedbackContentProvider { fun content(localizedContext: Context): FeedbackContent }
 fun interface FeedbackUiFactory { fun create(activity: Activity, controller: FeedbackController, content: FeedbackContent): View }
+/** Ads stay in the host adapter. The returned resource is closed when this UI is destroyed. */
+fun interface FeedbackNativeContent {
+    fun bind(activity: Activity, lifecycleOwner: LifecycleOwner, container: ViewGroup): AutoCloseable
+}
+enum class FeedbackSystemAction { UNINSTALL_CONFIRMATION, APP_MANAGEMENT }
+
 fun interface FeedbackLauncher {
     fun launch(activity: Activity, intent: Intent): Boolean
     companion object {
@@ -48,10 +57,13 @@ data class FeedbackOptions @JvmOverloads constructor(
     },
     val uiFactory: FeedbackUiFactory? = null,
     val launcher: FeedbackLauncher = FeedbackLauncher.ANDROID,
+    val systemAction: FeedbackSystemAction = FeedbackSystemAction.UNINSTALL_CONFIRMATION,
+    val appManagementFallback: Boolean = true,
+    val nativeContent: FeedbackNativeContent? = null,
 )
 
 enum class FeedbackPhase { OPEN, KEPT, FEATURE_HANDOFF, SYSTEM_HANDOFF, CANCELLED }
-data class FeedbackSession(val token: String, val createdAtMillis: Long, val phase: FeedbackPhase, val selectedReasons: Set<String>, val shown: Boolean)
+data class FeedbackSession(val token: String, val createdAtMillis: Long, val phase: FeedbackPhase, val selectedReasons: Set<String>, val shown: Boolean, val uiPurpose: RetentionUiPurpose = RetentionUiPurpose.PROMPT)
 sealed class FeedbackShowResult {
     data object Scheduled : FeedbackShowResult()
     data class Unavailable(val reason: String) : FeedbackShowResult()

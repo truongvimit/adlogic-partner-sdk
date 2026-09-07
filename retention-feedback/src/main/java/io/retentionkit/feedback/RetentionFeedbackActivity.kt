@@ -15,9 +15,14 @@ import android.widget.*
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 
 /** Internal host for both default and custom views; state survives recreation in the module store. */
-class RetentionFeedbackActivity : Activity() {
+class RetentionFeedbackActivity : Activity(), LifecycleOwner {
+    private val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
     private val main = Handler(Looper.getMainLooper())
     private var controller: FeedbackController? = null
     private var module: RetentionFeedbackModule? = null
@@ -39,6 +44,7 @@ class RetentionFeedbackActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         val attached = RetentionFeedbackModule.get()
         val session = savedInstanceState?.getString("session") ?: intent.getStringExtra(RetentionFeedbackModule.EXTRA_SESSION)
         if (attached == null || session == null || attached.session(session) == null) { finish(); return }
@@ -65,8 +71,11 @@ class RetentionFeedbackActivity : Activity() {
             }
         } catch (error: Exception) { attached.diagnostic("ui", error); finish() }
     }
+    override fun onStart() { super.onStart(); registry.handleLifecycleEvent(Lifecycle.Event.ON_START) }
+    override fun onStop() { registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP); super.onStop() }
     override fun onResume() {
         super.onResume()
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         // Application.ActivityLifecycleCallbacks updates the core's resumed Activity after onResume.
         main.post(resumeWork)
     }
@@ -74,11 +83,13 @@ class RetentionFeedbackActivity : Activity() {
         main.removeCallbacks(resumeWork)
         main.removeCallbacks(renewLease)
         controller?.pause()
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         super.onPause()
     }
     override fun onSaveInstanceState(outState: Bundle) { outState.putString("session", token); super.onSaveInstanceState(outState) }
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         controller?.detach(); controller = null
         if (Build.VERSION.SDK_INT >= 33) backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
         backCallback = null
@@ -125,8 +136,13 @@ class RetentionFeedbackActivity : Activity() {
             val label = module.runtime!!.localizedContext().getString(R.string.rk_feedback_try_feature, feature.label)
             column.addView(button(label, "rk_feedback_feature_${feature.id}", module.options.brandColor, false) { control.tryFeature(feature.id) }, rowParams(12))
         }
+        if (module.options.nativeContent != null) {
+            val slot = FrameLayout(this).apply { tag = "rk_feedback_native" }
+            column.addView(slot, rowParams(16))
+            control.bindNative(slot)
+        }
         column.addView(button(content.keepLabel, "rk_feedback_keep", module.options.brandColor, true) { control.keep() }, rowParams(24))
-        column.addView(button(content.continueLabel, "rk_feedback_continue", module.options.brandColor, false) { control.continueToAppManagement() }, rowParams(8))
+        column.addView(button(content.continueLabel, "rk_feedback_continue", module.options.brandColor, false) { control.continueToSystem() }, rowParams(8))
         column.addView(text(content.systemExplanation, 14, Color.rgb(80, 90, 104)), rowParams(12))
         return scroll
     }
