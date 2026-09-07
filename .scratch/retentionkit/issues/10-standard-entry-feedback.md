@@ -1,7 +1,7 @@
 # 10 Standard entry handoff and uninstall framework
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by:
 
 Spec: ../spec.md, Corrected acceptance
@@ -28,6 +28,6 @@ Added widgets.invitation.enabled as a strict invitation-only switch; disabling i
 
 Production checkpoints:07cc390 (core/entry/feedback API),1e02926 (invitation switch),e598dab (ordinary Main explicit start),ef94857 (reentrant latest-selection and final dispatch purpose corrections). Separate test/documentation commits preserve the implementation trail.
 
-Validation: actual targeted RED15 at9984e98 produced four expected failures; identical GREEN15 at ef94857 passed. Full affected invocation at clean ef94857 passed162/162 (core49,feedback28,facade28,widgets37,review20), no failures/errors/skips, and all five release AARs in1m49. Commands, module trees, XML/log/AAR SHA256 are in [immutable result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/sdk-full-ef94857/result.json). This resolves ticket10 SDK scope only. No ADB/remote publish; final app/device/minified consumer acceptance remains tickets12–13.
+Validation: actual targeted RED15 at9984e98 produced four expected failures; identical GREEN15 at ef94857 passed. Full affected invocation at clean ef94857 passed162/162 (core49,feedback28,facade28,widgets37,review20), no failures/errors/skips, and all five release AARs in1m49. Commands, module trees, XML/log/AAR SHA256 are in [immutable result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/sdk-full-ef94857/result.json). This verified the initial ticket10 SDK checkpoint only. No ADB/remote publish; final app/device/minified consumer acceptance remains tickets12–13.
 
-Follow-up: root found a long-dialog readiness gap after the bounded retry window. Preparing real window-focus regression and SDK-owned focus listener; source/test acceptance will be updated before resolution.
+Resolved follow-up: real window-focus regression at e9358f3 reproduced a selected entry remaining blocked after >15 seconds unfocused without Activity pause/resume (2 cases,1 expected failure). Production fix7c3470d observes window-focus gain, restarts a bounded retry window, uses weak decor/observer references and removes the live observer on close after Android attachment. Identical2 GREEN cases pass; full facade30/30 plus release AAR PASS12s, zero failures/errors/skips. [Immutable follow-up result](/Users/Shared/Panacea/Documents/SDKOptimize/retentionkit-correction/evidence/focus-full-7c3470d/result.json) records source/tree/XML/AAR hashes and134 retained results for the four unchanged complete module trees.164 is scoped provenance across invocations, not one fresh run. SDK scope is resolved; final app/device/consumer acceptance remains separate, and this follow-up ran no ADB.

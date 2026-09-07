@@ -67,7 +67,7 @@ override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handoff.on
 override fun onSaveInstanceState(out: Bundle) { handoff.onSaveInstanceState(out); super.onSaveInstanceState(out) }
 ```
 
-The helper waits for this Main to be resumed, setup complete and shared UI gates ready; it retries at most ten seconds per resume and stops on pause/destroy. It saves only the selected token and successful-forward marker, holds bounded resume-ad suppression, and handles the SDK feedback destination itself. Features are forwarded **without consume** to the final Activity; failed routers stay retryable. `hasPendingEntry` exposes the selected ledger state. Main continuation requires that exact ONCE envelope; explicit menu `openViaEntry()` can start from ordinary Main using the same safe ENTRY gate. A configured Main permits ENTRY when the host predicate passes; it never permits automatic review/widget prompts. Modal/focus checks remain the host’s responsibility. No second interstitial or durable queue is created.
+The helper waits for this Main to be resumed, setup complete and shared UI gates ready; it retries at most ten seconds per resume or window-focus gain and stops on pause/destroy. A long dialog can outlive that budget; Android focus return starts a new bounded attempt without another host callback. Closing the helper removes its focus listener. It saves only the selected token and successful-forward marker, holds bounded resume-ad suppression, and handles the SDK feedback destination itself. Features are forwarded **without consume** to the final Activity; failed routers stay retryable. `hasPendingEntry` exposes the selected ledger state. Main continuation requires that exact ONCE envelope; explicit menu `openViaEntry()` can start from ordinary Main using the same safe ENTRY gate. A configured Main permits ENTRY when the host predicate passes; it never permits automatic review/widget prompts. Modal/focus checks remain the host’s responsibility. No second interstitial or durable queue is created.
 
 ## Final feature consumption
 
@@ -233,7 +233,7 @@ Choose a staged rollout/kill switch when old counters or scheduled state cannot 
 
 ## Validation scope
 
-Corrected SDK scope passed162/162 unit tests and five release AARs at `ef94857`; see [verified entry contract](ENTRY_CONTRACT.md#verified-sdk-scope). Full app/device/consumer validation remains separate.
+Corrected SDK scope first passed162/162 unit tests and five release AARs at `ef94857`. The focus follow-up at `7c3470d` passed30 fresh facade tests and its release AAR;134 other module tests retain verified identical source/XML provenance, giving164 scoped results across invocations. See [verified entry contract](ENTRY_CONTRACT.md#verified-sdk-scope). Full app/device/consumer validation remains separate.
 
 The results below are **historical checkpoints**, superseded for standard-flow acceptance by tickets10–13. They do not prove corrected Splash → entry ad/skip → resumed Main → feature/native routing. Current interface and behavior are in [ENTRY_CONTRACT.md](ENTRY_CONTRACT.md); corrected source/build/device evidence will be recorded after integration. No new device pass is claimed by this SDK patch.
 
