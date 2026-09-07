@@ -46,6 +46,8 @@ class RemoteConfigSyncer internal constructor(
             }
         } ?: false
 
+        // A failed/timed-out fetch must not replace a valid disk assignment with SDK defaults.
+        if (!fetched) return false
         val snapshot = RemoteFlags.from(FirebaseReader(remote))
         if (snapshot.configVersion != _flags.value.configVersion) {
             prefs.edit { clear() }
@@ -111,6 +113,8 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.ADS_QUESTION_NATIVE.key, snapshot.adsQuestionNative.toString())
         put(ObRemoteKeys.ADS_QUESTION_INTER.key, snapshot.adsQuestionInter.toString())
         put(ObRemoteKeys.ADS_APP_RESUME.key, snapshot.adsAppResume.toString())
+        put(ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED.key, snapshot.splashLfoParallelPreloadEnabled.toString())
+        put(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.key, snapshot.splashNotificationSettleMs.toString())
         put(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.key, snapshot.splashMinDisplayMs.toString())
         put(ObRemoteKeys.SPLASH_AD_BUDGET_MS.key, snapshot.splashAdBudgetMs.toString())
         put(ObRemoteKeys.SPLASH_BANNER_WAIT_MS.key, snapshot.splashBannerWaitMs.toString())

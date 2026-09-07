@@ -116,7 +116,20 @@ Defaults to account for:
 - `noInternetPromptEnabled = true`: splash asks the user to connect before continuing. Set it to `false` if your app should allow an offline start.
 - `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Landscape apps must set it to `false` and review merged manifest orientation rules too.
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
-- Splash ad requests and display timing start after prompts finish and splash regains foreground focus. The SDK then preloads the next screen before navigation; you do not add a second load-and-show flow.
+- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; a ready interstitial can show before that minimum, while navigation waits only its remaining time.
+
+### Splash → Language preload experiment
+
+`ob_splash_lfo_parallel_preload_enabled` is a Boolean, default **false**. Configure stable assignment in Firebase Remote Config/A/B Testing; the SDK does not randomize groups.
+
+- **false / sequential (A):** preload LFO1 after the entire splash interstitial waterfall settles (loaded, failed, skipped), or its splash wait budget expires.
+- **true / parallel (B):** preload LFO1 alongside splash loading once remote, the Language destination and request gates are resolved.
+
+Only LFO1 moves. OB1 and LFO2 keep their existing triggers; `SAME_TIME`/`ALTERNATE` independently control remote-fetch versus splash-interstitial loading. A ready LFO1 binds, an in-flight request is joined, and a failed splash preload does not immediately retry on Language entry. Expired/empty inventory can load normally.
+
+The mode and one launch attempt survive Activity recreation in memory. Fetch failure retains the cached remote snapshot. Console output is sufficient to compare runs: `splash_lfo attempt=<id> mode=sequential|parallel reason=<trigger>`; no extra experiment analytics are emitted.
+
+`ob_splash_ad_budget_ms` (60,000 ms default) starts once after notification finishes/skips and splash resumes with focus. Banner waiting shares that deadline; elapsed background/recreation time is not reset, and late interstitial fill cannot reopen an expired opportunity. `ob_splash_notification_settle_ms` defaults to **0** and, when enabled, counts from the notification result. Existing minimum (3,000 ms), banner wait (0 ms), floors and per-tier network timeouts remain unchanged. Splash continues using the existing `show()` path.
 
 ## 3. Map ads and content to screens
 

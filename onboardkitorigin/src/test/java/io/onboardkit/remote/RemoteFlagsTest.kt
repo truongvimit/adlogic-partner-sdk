@@ -13,6 +13,15 @@ class RemoteFlagsTest {
         }
 
     @Test
+    fun `splash parallel preload is opt in and malformed values select sequential`() {
+        assertFalse(RemoteFlags.from(reader(emptyMap())).splashLfoParallelPreloadEnabled)
+        assertTrue(RemoteFlags.from(reader(mapOf("ob_splash_lfo_parallel_preload_enabled" to "true")))
+            .splashLfoParallelPreloadEnabled)
+        assertFalse(RemoteFlags.from(reader(mapOf("ob_splash_lfo_parallel_preload_enabled" to "invalid")))
+            .splashLfoParallelPreloadEnabled)
+    }
+
+    @Test
     fun `missing keys resolve to declared defaults`() {
         val flags = RemoteFlags.from(reader(emptyMap()))
         assertEquals(RemoteFlags(), flags)

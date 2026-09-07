@@ -116,7 +116,20 @@ Các mặc định cần biết:
 - `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
 - `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
-- Request quảng cáo splash và đồng hồ hiển thị bắt đầu sau khi các hộp thoại kết thúc và splash lấy lại focus ở foreground. SDK tải trước màn kế tiếp trước khi điều hướng; không cần thêm một luồng load-and-show khác.
+- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Inter ready được show ngay, còn chuyển màn chỉ đợi phần minimum còn thiếu.
+
+### Thử nghiệm preload Splash → Language
+
+`ob_splash_lfo_parallel_preload_enabled` là Boolean, mặc định **false**. Chia nhóm ổn định bằng Firebase Remote Config/A/B Testing; SDK không tự random.
+
+- **false / sequential (A):** preload LFO1 sau khi toàn bộ waterfall inter splash kết thúc (loaded, failed, skipped), hoặc hết budget chờ tại splash.
+- **true / parallel (B):** preload LFO1 cùng pha tải splash khi đã biết remote, đích đến Language và các điều kiện cho phép request.
+
+Chỉ đổi lịch LFO1; OB1/LFO2 giữ trigger cũ. `SAME_TIME`/`ALTERNATE` vẫn độc lập điều khiển thứ tự remote và tải inter. LFO1 ready thì bind, loading thì join request cũ; preload đã failed không retry ngay khi vào Language. Ads hết hạn/cache rỗng vẫn tải bình thường.
+
+Mode và attempt được giữ trong bộ nhớ khi Activity tạo lại. Fetch lỗi giữ snapshot remote đã cache. Chỉ cần xem console: `splash_lfo attempt=<id> mode=sequential|parallel reason=<trigger>`; không thêm analytics riêng cho thử nghiệm.
+
+`ob_splash_ad_budget_ms` (mặc định 60.000 ms) bắt đầu một lần sau khi notification kết thúc/bỏ qua và splash resumed + có focus. Banner dùng chung deadline; thời gian ở nền/recreation không được cấp lại, inter về trễ không được khôi phục lượt show đã hết hạn. `ob_splash_notification_settle_ms` mặc định **0**, nếu bật sẽ tính từ lúc có kết quả quyền. Giữ nguyên minimum (3.000 ms), banner wait (0 ms), floor và timeout mạng từng tier. Splash vẫn dùng `show()` hiện tại.
 
 ## 3. Gắn quảng cáo và nội dung vào màn
 

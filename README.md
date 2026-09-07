@@ -82,7 +82,7 @@ Dependencies and the main install APIs are unchanged. These are the integration 
 | Area | Partner action |
 | --- | --- |
 | Custom consent | Returning `true` from `onConsentRequired()` or calling `setCanRequestAds(true)` no longer grants consent. Publish your CMP's actual decision through `ConsentCenter.setHostConsent(...)`. Standard UMP through `ObSplashActivity` needs no new wiring. |
-| Notification permission | `SplashConfig.notificationPermissionEnabled` defaults to `true`; OnboardKit merges `POST_NOTIFICATIONS`. Set it to `false` if your app owns this prompt or does not use notifications. Splash ad loading starts after consent/permission settle and focus returns. |
+| Notification permission | `SplashConfig.notificationPermissionEnabled` defaults to `true`; OnboardKit merges `POST_NOTIFICATIONS`. Set it to `false` if your app owns this prompt or does not use notifications. Authorized splash ads can load under the visible notification prompt; presentation and the shared wait budget require its result and foreground focus. |
 | Portrait | `BehaviorConfig.lockPortrait` defaults to `true`, including the app's splash subclass. Set it to `false` for a landscape/tablet flow; follow the splash manifest example in the OnboardKit guide. |
 | Banner refresh | Choose AdMob or the SDK to own refresh. SDK `Reload` uses an ordinary banner even if the initial request is collapsible. See the ads guide before keeping a custom reload timer. |
 | Skip callbacks | Update exhaustive Kotlin `when` branches for the added `AdSkipReason` values: consent reasons in ads, and `SHOW_IN_BACKGROUND` in ads/onboarding. |

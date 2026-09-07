@@ -77,10 +77,14 @@ object ObRemoteKeys {
     // read; a second cap over the same store silently subtracted impressions nobody could attribute.
 
     // Timing
+    val SPLASH_LFO_PARALLEL_PRELOAD_ENABLED = RemoteKey.BoolKey("ob_splash_lfo_parallel_preload_enabled", false)
+    /** Optional pause after the notification result; zero preserves the existing default. */
+    val SPLASH_NOTIFICATION_SETTLE_MS = RemoteKey.LongKey("ob_splash_notification_settle_ms", 0)
     val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", 3_000)
 
     /**
-     * How long the splash waits for its full-screen ad before giving up and moving on.
+     * Shared banner/interstitial wait budget, armed after notification and foreground focus.
+     * It uses monotonic elapsed time across backgrounding and Activity recreation.
      *
      * `60 s` is the audited whole-waterfall budget (`LOAD_AD_TIMEOUT`), which is what this has to
      * cover: at 30 s per ad unit anything lower silently denies the lower floors their turn. The
@@ -90,7 +94,7 @@ object ObRemoteKeys {
 
     /**
      * How long the splash holds for its banner/native slot to render before the full-screen ad
-     * is allowed to cover it. `0` means do not wait, which is what the audited build shipped.
+     * is allowed to cover it, capped by the shared splash budget. `0` means do not wait.
      */
     val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", 0)
 
@@ -120,6 +124,7 @@ object ObRemoteKeys {
         ADS_LANGUAGE_CONFIRM_NATIVE,
         ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
         ADS_APP_RESUME,
+        SPLASH_LFO_PARALLEL_PRELOAD_ENABLED, SPLASH_NOTIFICATION_SETTLE_MS,
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_BANNER_WAIT_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,

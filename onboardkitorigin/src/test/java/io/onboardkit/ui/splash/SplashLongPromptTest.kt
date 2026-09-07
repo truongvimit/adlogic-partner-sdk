@@ -140,16 +140,261 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun sequentialStartsLfoOnTerminalFailureUnderNotificationOnlyOnce() {
+        launch(notification = true)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        val host = requireNotNull(controller).get()
+        host.onWindowFocusChanged(false)
+        requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
+        main.idle()
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun resultWhileHomeUnderNotificationCannotStartLfoUntilTheSplashIsVisible() {
+        launch(notification = true)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        val host = requireNotNull(controller).get()
+        host.onWindowFocusChanged(false)
+        requireNotNull(controller).pause().stop()
+        requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
+        main.idleFor(Duration.ofSeconds(2))
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+        requireNotNull(controller).restart().start().resume().visible()
+        main.idle()
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun deadlineElapsedInBackgroundIsNotRenewedAndLateFillIsNotShown() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 10_000, splashMinDisplayMs = 100)
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        main.idleFor(Duration.ofMillis(200))
+        val host = requireNotNull(controller).get()
+        host.onWindowFocusChanged(false)
+        requireNotNull(controller).pause().stop()
+        main.idleFor(Duration.ofSeconds(11))
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertTrue("Background must hold LFO: ${LongPromptFixture.provider.order}", LongPromptFixture.provider.order.isEmpty())
+        assertEquals(0, LongPromptFixture.flowStarts)
+        requireNotNull(controller).restart().start().resume().visible()
+        host.onWindowFocusChanged(true)
+        main.idle()
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun notificationSettleCountsFromTheResultRatherThanFromRestoredFocus() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashNotificationSettleMs = 2_000, splashMinDisplayMs = 100)
+        launch(notification = true)
+        val host = requireNotNull(controller).get()
+        drainUntil("Permission and inter must start") {
+            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.provider.interstitialLoads == 1
+        }
+        host.onWindowFocusChanged(false)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
+        host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
+            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
+        main.idleFor(Duration.ofSeconds(3))
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        host.onWindowFocusChanged(true)
+        main.idle()
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun disabledInterstitialStillPreloadsLanguageWhenItsOwnGuardAllowsIt() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(adsSplashInter = false)
+        launch(notification = false)
+        drainUntil("LFO1 must not depend on an enabled inter slot") { LongPromptFixture.provider.order == listOf("native") }
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+    }
+
+    @Test
+    fun premiumBlocksBothSplashAndLanguageRequests() {
+        LongPromptFixture.provider.premium = true
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        launch(notification = false)
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+    }
+
+    @Test
+    fun sameTimeKeepsAnInterstitialResultWhichArrivedBeforeTheRemoteHookAndRoute() {
+        LongPromptFixture.strategy = io.onboardkit.config.AdLoadStrategy.SAME_TIME
+        LongPromptFixture.provider.immediateInterResult = 1
+        launch(notification = false)
+        drainUntil("An early terminal result must still trigger LFO1") { "native" in LongPromptFixture.provider.order }
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(1, LongPromptFixture.provider.order.count { it == "native" })
+    }
+
+    @Test
+    fun completedFlowDoesNotPreloadLanguageInParallelMode() {
+        kotlinx.coroutines.runBlocking { OnboardingSdk.markCompleted() }
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        launch(notification = false)
+        drainUntil("Inter must start for the resolved returning route") { LongPromptFixture.provider.interstitialLoads == 1 }
+        main.idleFor(Duration.ofSeconds(1))
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+    }
+
+    @Test
+    fun bannerAndInterstitialShareOneDeadlineAndLateFillCannotShow() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 5_000, splashBannerWaitMs = 4_000)
+        LongPromptFixture.provider.settleBanner = false
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        main.idleFor(Duration.ofSeconds(6))
+        assertEquals("Banner cannot add four more seconds to the inter budget", 1, LongPromptFixture.flowStarts)
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun readyInterstitialShowsBeforeTheMinimumButFailedShowStillWaitsBeforeHandoff() {
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertEquals("Min time must not delay showing a ready inter", listOf("native", "show"), LongPromptFixture.provider.order)
+        assertEquals("An immediately skipped show still owes the remaining splash minimum", 0, LongPromptFixture.flowStarts)
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("One handoff after the remaining minimum") { LongPromptFixture.flowStarts == 1 }
+    }
+
+    @Test
+    fun recreationDoesNotRestartTheBannerWaitOrInterstitialBudget() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 10_000, splashBannerWaitMs = 6_000)
+        LongPromptFixture.provider.settleBanner = false
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        main.idleFor(Duration.ofSeconds(4))
+        requireNotNull(controller).configurationChange(android.content.res.Configuration(
+            requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
+        requireNotNull(controller).visible().get().onWindowFocusChanged(true)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofMillis(2_100))
+        assertEquals("The original banner deadline must release the ready inter", listOf("native", "show"), LongPromptFixture.provider.order)
+        assertEquals(1, LongPromptFixture.provider.bannerLoads)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+    }
+
+    @Test
+    fun underAdHandsOffAfterRemainingMinimumWhilePresentationContinues() {
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertNotNull(LongPromptFixture.provider.presentation)
+        assertEquals(0, LongPromptFixture.flowStarts)
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertTrue("Splash stays alive until the real close callback", !requireNotNull(controller).get().isFinishing)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        assertTrue(requireNotNull(controller).get().isFinishing)
+    }
+
+    @Test
+    fun afterAdWaitsForCloseWithoutRepeatingAnAlreadyElapsedMinimum() {
+        LongPromptFixture.timing = io.onboardkit.ads.NextScreenTiming.AFTER_AD
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals(0, LongPromptFixture.flowStarts)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun recreationKeepsTheOriginalModeAndPendingInterstitialRequest() {
+        launch(notification = false)
+        drainUntil("Inter must be in flight") { LongPromptFixture.provider.interstitialLoads == 1 }
+        val pending = requireNotNull(LongPromptFixture.provider.pending)
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        requireNotNull(controller).configurationChange(android.content.res.Configuration(
+            requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
+        requireNotNull(controller).visible().get().onWindowFocusChanged(true)
+        main.idleFor(Duration.ofMillis(100))
+        assertEquals("Recreation must rejoin the original request", 1, LongPromptFixture.provider.interstitialLoads)
+        assertTrue("A late remote mode cannot turn this sequential attempt into parallel", LongPromptFixture.provider.order.isEmpty())
+        LongPromptFixture.provider.ready = true
+        pending.onLoaded()
+        drainUntil("The retained callback must release LFO1") { "native" in LongPromptFixture.provider.order }
+        assertEquals(1, LongPromptFixture.provider.order.count { it == "native" })
+    }
+
+    @Test
+    fun parallelStartsLanguageWhileInterstitialAndNotificationArePending() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        launch(notification = true)
+        drainUntil("Parallel must start LFO1 without the interstitial outcome") {
+            LongPromptFixture.provider.order == listOf("native")
+        }
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertNotNull(shadowOf(requireNotNull(controller).get()).lastRequestedPermission)
+    }
+
+    @Test
+    fun splashLoadsStartWhileNotificationIsOpenAndDoNotSpendTheBudget() {
+        launch(notification = true)
+        val activity = requireNotNull(controller).get()
+        drainUntil("Notification must start") { shadowOf(activity).lastRequestedPermission != null }
+        activity.onWindowFocusChanged(false)
+        drainUntil("Splash must preload under its own notification prompt") {
+            LongPromptFixture.provider.interstitialLoads == 1
+        }
+        main.idleFor(Duration.ofMinutes(2))
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+        val permission = requireNotNull(shadowOf(activity).lastRequestedPermission)
+        activity.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
+            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
+        activity.onWindowFocusChanged(true)
+        main.idleFor(Duration.ofSeconds(30))
+        assertEquals("The 60-second budget starts after the prompt", 0, LongPromptFixture.flowStarts)
+        completeInterstitialAndAssertNormalHandoff()
+    }
+
+    @Test
     fun tenMinuteNotificationAnswerGetsSplashWaitBeforeDestinationPreload() {
         notificationAnswerBeforeFill(promptMinutes = 10)
     }
 
     @Test
-    fun tenMinuteNotificationAnswerStillReceivesFreshMinimumDisplay() {
-        notificationAnswerBeforeFill(promptMinutes = 10, verifyFreshMinimum = true)
+    fun tenMinuteNotificationAnswerDoesNotRestartTheMinimumDisplay() {
+        notificationAnswerBeforeFill(promptMinutes = 10, minimumAlreadyElapsed = true)
     }
 
-    private fun notificationAnswerBeforeFill(promptMinutes: Long, verifyFreshMinimum: Boolean = false) {
+    private fun notificationAnswerBeforeFill(promptMinutes: Long, minimumAlreadyElapsed: Boolean = false) {
         launch(notification = true)
         val activity = requireNotNull(controller).get()
         drainUntil("The real Activity permission request must have started") {
@@ -161,8 +406,8 @@ class SplashLongPromptTest {
         main.idleFor(if (promptMinutes == 0L) Duration.ofSeconds(5) else Duration.ofMinutes(promptMinutes))
         assertEquals(0, LongPromptFixture.flowStarts)
         assertTrue("Pending notification must not preload destination", LongPromptFixture.provider.order.isEmpty())
-        assertEquals("User reading time must precede the splash banner request", 0, LongPromptFixture.provider.bannerLoads)
-        assertEquals("User reading time must precede the splash interstitial request", 0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals("Splash banner loads while the notification is open", 1, LongPromptFixture.provider.bannerLoads)
+        assertEquals("Splash interstitial loads while the notification is open", 1, LongPromptFixture.provider.interstitialLoads)
 
         activity.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
@@ -171,14 +416,14 @@ class SplashLongPromptTest {
 
         assertEquals("Answering permission must not skip an in-flight splash ad", 0, LongPromptFixture.flowStarts)
         assertTrue("Destination must wait for splash fill after a long notification prompt", LongPromptFixture.provider.order.isEmpty())
-        if (!verifyFreshMinimum) main.idleFor(Duration.ofSeconds(30))
-        completeInterstitialAndAssertNormalHandoff(verifyFreshMinimum = verifyFreshMinimum)
+        if (!minimumAlreadyElapsed) main.idleFor(Duration.ofSeconds(30))
+        completeInterstitialAndAssertNormalHandoff(minimumAlreadyElapsed = minimumAlreadyElapsed)
     }
 
     private fun launch(notification: Boolean) {
         OnboardingSdk.configure(onboardKitConfig {
             splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = notification,
-                minDisplayTimeMs = 0, remoteFetchTimeoutMs = 100)
+                minDisplayTimeMs = 0, remoteFetchTimeoutMs = 100, adLoadStrategy = LongPromptFixture.strategy)
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             ads = AdsConfig(splashBanner = BannerAdUnit("host-banner"),
                 splashInterstitial = InterstitialAdUnit("host-interstitial"),
@@ -189,27 +434,14 @@ class SplashLongPromptTest {
         main.idle()
     }
 
-    private fun completeInterstitialAndAssertNormalHandoff(verifyFreshMinimum: Boolean = false) {
+    private fun completeInterstitialAndAssertNormalHandoff(minimumAlreadyElapsed: Boolean = false) {
         assertNotNull("The original public load callback must remain available", LongPromptFixture.provider.pending)
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        if (verifyFreshMinimum) {
+        if (minimumAlreadyElapsed) {
             main.idle()
-            assertEquals("A fill after a long prompt still owes the splash minimum", 0, LongPromptFixture.flowStarts)
-            // External Android work can advance Robolectric time while the test is awaiting
-            // the request. Measure from the public provider dispatch, not from this test line.
-            // Leave 20ms for UI work preceding the provider call in the same request turn.
-            val beforeMinimum = LongPromptFixture.provider.interstitialRequestAtMs + 3_000 -
-                SystemClock.elapsedRealtime() - 20
-            assertTrue("Fixture must still be before the fresh splash deadline", beforeMinimum > 0)
-            main.idleFor(Duration.ofMillis(beforeMinimum))
-            assertEquals("Permission reading time must not consume the fresh 3-second minimum", 0, LongPromptFixture.flowStarts)
-            assertTrue(LongPromptFixture.provider.order.isEmpty())
-            main.idleFor(Duration.ofMillis(40))
-        } else {
-            // Permit the default 3-second minimum display before checking the completed handoff.
-            main.idleFor(Duration.ofSeconds(4))
-        }
+            assertEquals("Long prompt time already consumed the minimum", 1, LongPromptFixture.flowStarts)
+        } else main.idleFor(Duration.ofSeconds(4))
         drainUntil("Ready splash must show and hand off once; order=${LongPromptFixture.provider.order}") { LongPromptFixture.flowStarts == 1 }
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
@@ -227,11 +459,15 @@ class SplashLongPromptTest {
 }
 
 class LongPromptSplashActivity : ObSplashActivity() {
+    override fun nextScreenTiming() = LongPromptFixture.timing
     override suspend fun onInitBilling() {
         LongPromptFixture.billingEntered = true
         LongPromptFixture.billing?.await()
     }
-    override fun onRemoteFetched() { LongPromptFixture.remoteHookCalled = true }
+    override fun onRemoteFetched() {
+        OnboardingSdk.remoteOrNull()?.applySnapshot(LongPromptFixture.flags)
+        LongPromptFixture.remoteHookCalled = true
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(com.google.android.material.R.style.Theme_MaterialComponents_DayNight_NoActionBar)
         super.onCreate(savedInstanceState)
@@ -243,16 +479,27 @@ private object LongPromptFixture {
     var ump = LongPromptConsentInformation()
     var form = LongPromptConsentForm()
     var flowStarts = 0
+    var timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
+    var flags = io.onboardkit.remote.RemoteFlags()
+    var strategy = io.onboardkit.config.AdLoadStrategy.ALTERNATE
     var billing: CompletableDeferred<Unit>? = null
     var billingEntered = false
     var remoteHookCalled = false
     fun reset() {
+        flags = io.onboardkit.remote.RemoteFlags()
+        strategy = io.onboardkit.config.AdLoadStrategy.ALTERNATE
         billing = null
         billingEntered = false
         remoteHookCalled = false
         ump = LongPromptConsentInformation()
         form = LongPromptConsentForm()
         flowStarts = 0
+        timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
+        provider.successfulShow = false
+        provider.presentation = null
+        provider.immediateInterResult = 0
+        provider.premium = false
+        provider.settleBanner = true
         provider.bannerLoads = 0
         provider.interstitialLoads = 0
         provider.interstitialRequestAtMs = 0L
@@ -264,12 +511,17 @@ private object LongPromptFixture {
 
 private class LongPromptProvider : OnboardingAdProvider {
     var bannerLoads = 0
+    var successfulShow = false
+    var presentation: ObInterstitialCallback? = null
+    var settleBanner = true
+    var immediateInterResult = 0
+    var premium = false
     var interstitialRequestAtMs = 0L
     var interstitialLoads = 0
     var pending: AdEventListener? = null
     var ready = false
     val order = mutableListOf<String>()
-    override fun isPremium(context: Context) = false
+    override fun isPremium(context: Context) = premium
     override fun preloadNative(activity: Activity, request: NativeAdRequest) { order += "native" }
     override fun isNativeReady(placement: AdPlacement) = false
     override fun isNativeLoading(placement: AdPlacement) = false
@@ -279,15 +531,18 @@ private class LongPromptProvider : OnboardingAdProvider {
         interstitialLoads++
         interstitialRequestAtMs = SystemClock.elapsedRealtime()
         pending = listener
+        if (immediateInterResult == 1) { ready = true; listener?.onLoaded() }
+        if (immediateInterResult == 2) listener?.onFailedToLoad()
     }
     override fun isInterstitialReady(placement: AdPlacement) = ready
     override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
         order += "show"
-        callback.onAdSkipped(AdSkipReason.NOT_READY)
+        if (successfulShow) { presentation = callback; callback.onNextAction() }
+        else callback.onAdSkipped(AdSkipReason.NOT_READY)
     }
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
         bannerLoads++
-        listener?.onFailedToLoad()
+        if (settleBanner) listener?.onFailedToLoad()
     }
     override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
     override fun releaseAll() = Unit

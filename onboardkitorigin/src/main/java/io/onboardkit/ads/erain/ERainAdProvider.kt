@@ -22,6 +22,12 @@ import com.ads.module.helper.adnative.NativeAdStyle
 import com.ads.module.helper.adnative.AdNativeState
 import com.ads.module.helper.adnative.NativeAdHelper
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import io.onboardkit.ads.awaitNativeRequestWindow
+import io.onboardkit.ads.canStartNativeRequest
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
@@ -102,6 +108,9 @@ class ERainAdProvider(
     private val nativeOwnerObservers = mutableMapOf<String, LifecycleEventObserver>()
     private val deferredNativeFailures = mutableSetOf<String>()
     private val pendingNativeBinds = mutableSetOf<String>()
+    private val failedNativeLoads = mutableSetOf<String>()
+    private class QueuedNative(val activity: Activity, val job: Job)
+    private val queuedNatives = mutableMapOf<String, QueuedNative>()
 
     /**
      * Presentation style per placement, resolved from the ad config at request time.
@@ -119,7 +128,29 @@ class ERainAdProvider(
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
         if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
+        val queued = queuedNatives[key]
+        if (queued?.activity === activity && queued.job.isActive) return
+        queued?.job?.cancel()
+        if (isNativeReady(request.placement) || preload.isPreloadInProgress(key) ||
+            activity.canStartNativeRequest(request.allowWhileVisible)) {
+            preloadNativeNow(activity, request)
+            return
+        }
+        val owner = activity as? LifecycleOwner ?: run { notifyNativeFailure(key); return }
+        val job = owner.lifecycleScope.launch(start = CoroutineStart.LAZY) {
+            if (activity.awaitNativeRequestWindow()) preloadNativeNow(activity, request)
+        }
+        val pending = QueuedNative(activity, job)
+        queuedNatives[key] = pending
+        job.invokeOnCompletion { if (queuedNatives[key] === pending) queuedNatives.remove(key) }
+        job.start()
+    }
+
+    private fun preloadNativeNow(activity: Activity, request: NativeAdRequest) {
+        val key = request.placement.key
+        if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
         deferredNativeFailures.remove(key)
+        failedNativeLoads.remove(key)
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
             ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
@@ -137,6 +168,7 @@ class ERainAdProvider(
             preload.preloadWithKeyIfEmpty(key, activity, config)
         // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
         if (!covered && !isNativeReady(request.placement)) {
+            failedNativeLoads.add(key)
             notifyNativeFailure(key)
         }
     }
@@ -145,7 +177,11 @@ class ERainAdProvider(
         preload.getAdNative(placement.key) != null
 
     override fun isNativeLoading(placement: AdPlacement): Boolean =
-        preload.isPreloadInProgress(placement.key)
+        preload.isPreloadInProgress(placement.key) || queuedNatives[placement.key]?.job?.isActive == true
+
+    override fun isNativeLoadFailed(placement: AdPlacement): Boolean =
+        placement.key in failedNativeLoads && !isNativeReady(placement) && !isNativeLoading(placement) &&
+            nativeBindings[placement.key]?.helper?.isRestoringPresentation != true
 
     override fun bindNative(
         activity: Activity,
@@ -244,6 +280,7 @@ class ERainAdProvider(
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
+        queuedNatives.remove(key)?.job?.cancel()
         nativeBindings.remove(key)?.helper?.destroy()
         detachNativeOwner(key)
         deferredNativeFailures.remove(key)
@@ -365,6 +402,8 @@ class ERainAdProvider(
     }
 
     override fun releaseAll() {
+        queuedNatives.values.toList().forEach { it.job.cancel() }
+        queuedNatives.clear()
         // Per-key release: the stores are process-wide and the host app owns keys of its own
         (nativeBridges.keys + nativeConfigs.keys).toSet().forEach { preload.release(it) }
         nativeBridges.clear()
@@ -373,6 +412,7 @@ class ERainAdProvider(
         nativeOwners.keys.toList().forEach(::detachNativeOwner)
         deferredNativeFailures.clear()
         pendingNativeBinds.clear()
+        failedNativeLoads.clear()
         nativeConfigs.clear()
         nativeStyles.clear()
         interKeys.forEach { InterstitialAdManager.release(it) }
@@ -390,12 +430,14 @@ class ERainAdProvider(
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
+                    failedNativeLoads.remove(key)
                     deferredNativeFailures.remove(key)
                     notifyNativeLoadListener(key) { it.onLoaded() }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
                     ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — no fill")
+                    failedNativeLoads.add(key)
                     if (!helperAwaitsNative(key)) notifyNativeFailure(key)
                 }
 

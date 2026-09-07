@@ -39,6 +39,8 @@ data class RemoteFlags(
     val adsQuestionNative: Boolean = ObRemoteKeys.ADS_QUESTION_NATIVE.default,
     val adsQuestionInter: Boolean = ObRemoteKeys.ADS_QUESTION_INTER.default,
     val adsAppResume: Boolean = ObRemoteKeys.ADS_APP_RESUME.default,
+    val splashLfoParallelPreloadEnabled: Boolean = ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED.default,
+    val splashNotificationSettleMs: Long = ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.default,
     val splashMinDisplayMs: Long = ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.default,
     val splashAdBudgetMs: Long = ObRemoteKeys.SPLASH_AD_BUDGET_MS.default,
     val splashBannerWaitMs: Long = ObRemoteKeys.SPLASH_BANNER_WAIT_MS.default,
@@ -74,7 +76,8 @@ data class RemoteFlags(
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
         "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
         "reuseSplashInter=$reuseSplashInter minDisplayMs=$splashMinDisplayMs " +
-        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs"
+        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs " +
+        "lfoPreload=${if (splashLfoParallelPreloadEnabled) "parallel" else "sequential"} notificationSettleMs=$splashNotificationSettleMs"
 
     /** Any tutorial page enabled → the pager flow can show. */
     val anyTutorialStepEnabled: Boolean
@@ -122,6 +125,8 @@ data class RemoteFlags(
                 adsQuestionNative = bool(ObRemoteKeys.ADS_QUESTION_NATIVE),
                 adsQuestionInter = bool(ObRemoteKeys.ADS_QUESTION_INTER),
                 adsAppResume = bool(ObRemoteKeys.ADS_APP_RESUME),
+                splashLfoParallelPreloadEnabled = bool(ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED),
+                splashNotificationSettleMs = long(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS).coerceAtLeast(0),
                 splashMinDisplayMs = long(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS),
                 splashAdBudgetMs = long(ObRemoteKeys.SPLASH_AD_BUDGET_MS),
                 splashBannerWaitMs = long(ObRemoteKeys.SPLASH_BANNER_WAIT_MS),

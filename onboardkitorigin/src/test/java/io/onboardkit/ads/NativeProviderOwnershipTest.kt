@@ -71,7 +71,7 @@ class NativeProviderOwnershipTest {
         // OnboardingSdk is process-scoped and install is intentionally idempotent.
         provider = io.onboardkit.OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
         provider.releaseAll()
-        controller = Robolectric.buildActivity(NativeProviderHost::class.java).setup()
+        controller = Robolectric.buildActivity(NativeProviderHost::class.java).setup().visible().windowFocusChanged(true)
     }
 
     @After fun tearDown() {
@@ -82,6 +82,56 @@ class NativeProviderOwnershipTest {
         NativeProviderHost.onCreated = null
         builders.close()
         ConsentCenter.clearHostConsent()
+    }
+
+    @Test fun `new preload while stopped waits for foreground and remains deduplicated`() {
+        val host = controller.get()
+        controller.pause().stop()
+        repeat(3) { provider.preloadNative(host, request) }
+        main.idle()
+        assertEquals(0, requests.size)
+        assertTrue(provider.isNativeLoading(placement))
+        controller.restart().start().resume().visible().windowFocusChanged(true)
+        main.idle()
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `a queued preload transfers to the destination before its old owner dies`() {
+        controller.pause().stop()
+        provider.preloadNative(controller.get(), request)
+        assertEquals(0, requests.size)
+        val destination = Robolectric.buildActivity(NativeProviderHost::class.java).setup().visible().windowFocusChanged(true)
+        try {
+            provider.preloadNative(destination.get(), request)
+            assertEquals(1, requests.size)
+            controller.destroy()
+            provider.preloadNative(destination.get(), request)
+            assertEquals("The original queue is gone and the real request is joined", 1, requests.size)
+        } finally {
+            // Let the normal fixture tearDown destroy the surviving Activity.
+            controller = destination
+        }
+    }
+
+    @Test fun `language handoff reports failed preload without requesting the same ad again`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(languageNative = request.unit)
+        }.getOrThrow())
+        provider.preloadNative(host, request)
+        vendorEvents.single().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        var failed = 0
+        host.showNativeAd(placement, request.unit, FrameLayout(host).also(host::setContentView),
+            reuseFailedPreload = true, onUnavailable = { failed++ })
+        assertEquals(1, failed)
+        assertEquals("Screen entry cannot immediately retry a terminal preload", 1, requests.size)
+        host.showNativeAd(placement, request.unit, FrameLayout(host).also(host::setContentView))
+        assertEquals("A later explicit attempt remains permitted", 2, requests.size)
     }
 
     @Test fun `cold native show receives fill binds once and consumes placement cache`() {

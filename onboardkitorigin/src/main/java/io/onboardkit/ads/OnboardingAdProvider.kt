@@ -24,10 +24,12 @@ interface AdEventListener {
     fun onAdOpened() {}
 }
 
-data class NativeAdRequest(
+data class NativeAdRequest @JvmOverloads constructor(
     val placement: AdPlacement,
     val unit: NativeAdUnit,
     @LayoutRes val layoutRes: Int,
+    /** Only the visible splash beneath its own notification prompt may opt into this window. */
+    val allowWhileVisible: Boolean = false,
 )
 
 /**
@@ -41,12 +43,20 @@ interface OnboardingAdProvider {
 
     fun isPremium(context: Context): Boolean
 
-    /** Fire-and-forget waterfall preload, highest floor first. Idempotent per placement. */
+    /**
+     * Fire-and-forget waterfall preload, highest floor first. Idempotent per placement.
+     * Join existing loads; start new ones only with resumed foreground focus, or when
+     * [NativeAdRequest.allowWhileVisible] permits the visible splash notification window.
+     * A queued foreground wait should transfer when a new Activity requests the same placement.
+     */
     fun preloadNative(activity: Activity, request: NativeAdRequest)
 
     fun isNativeReady(placement: AdPlacement): Boolean
 
     fun isNativeLoading(placement: AdPlacement): Boolean
+
+    /** Terminal preload outcome, used by a handoff that must not immediately retry no-fill. */
+    fun isNativeLoadFailed(placement: AdPlacement): Boolean = false
 
     /**
      * Binds the buffered native into [container], swapping [shimmer] out.

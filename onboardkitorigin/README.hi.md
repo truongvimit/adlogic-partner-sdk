@@ -116,7 +116,20 @@ class SplashActivity : ObSplashActivity()
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
 - `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
 - `consentTimeoutMs = 20_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
-- Prompts खत्म होने और splash के foreground focus वापस पाने के बाद ad requests और display clock शुरू होते हैं। SDK navigation से पहले अगली screen preload करता है; अलग load-and-show flow जोड़ने की जरूरत नहीं।
+- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है; ready interstitial तुरंत दिख सकता है और navigation केवल बचा minimum इंतज़ार करता है।
+
+### Splash → Language preload प्रयोग
+
+`ob_splash_lfo_parallel_preload_enabled` Boolean है, default **false**। स्थिर समूह Firebase Remote Config/A/B Testing में तय करें; SDK random समूह नहीं चुनता।
+
+- **false / sequential (A):** पूरे splash interstitial waterfall के loaded/failed/skipped होने या splash budget समाप्त होने पर LFO1 preload करें।
+- **true / parallel (B):** remote, Language destination और request अनुमति तय होते ही splash loading के साथ LFO1 preload करें।
+
+केवल LFO1 का समय बदलता है। OB1/LFO2 के triggers वही हैं; `SAME_TIME`/`ALTERNATE` remote fetch और splash interstitial का क्रम स्वतंत्र रूप से तय करते हैं। Ready LFO1 bind होता है, loading request से जुड़ता है और failed splash preload को Language entry पर तुरंत retry नहीं करता। Expired/empty inventory सामान्य रूप से लोड हो सकती है।
+
+Activity recreation में mode और attempt memory में रहते हैं। Fetch failure पर cached remote snapshot रहता है। Console में `splash_lfo attempt=<id> mode=sequential|parallel reason=<trigger>` देखें; अतिरिक्त experiment analytics नहीं जुड़ते।
+
+`ob_splash_ad_budget_ms` (default 60,000 ms) notification result/skip और resumed + focus के बाद एक बार शुरू होता है। Banner इसी deadline में इंतज़ार करता है; background/recreation से समय reset नहीं होता और late interstitial fill समाप्त show अवसर को फिर नहीं खोलता। `ob_splash_notification_settle_ms` default **0** है और notification result से समय गिनता है। Minimum (3,000 ms), banner wait (0 ms), floors और हर tier के network timeouts वही हैं। Splash मौजूदा `show()` इस्तेमाल करता है।
 
 ## 3. Ads और सामग्री को screens से जोड़ें
 

@@ -27,18 +27,32 @@ class PreloadChain internal constructor(
     private val canShowAdStep: (StepId) -> Boolean = { true },
 ) {
 
+    private var splashAttemptId: String? = null
+    private var language1HandoffPending = false
+
+    internal fun beginSplashAttempt(id: String) {
+        if (splashAttemptId == id) return
+        splashAttemptId = id
+        language1HandoffPending = false
+    }
+
+    /** Transfers scheduling metadata only. Ads and terminal outcomes stay in the provider. */
+    internal fun takeLanguage1Preload(): Boolean = language1HandoffPending.also {
+        language1HandoffPending = false
+    }
+
     /**
      * Splash has settled remote, its configured ad waits and its permission prompt, and is ready to proceed.
      * Only the ads of [destination] are requested — a returning
      * user whose flow is already completed gets `null` and therefore no request at all, instead of
      * paying for an LFO and an OB native that will never be shown.
      */
-    fun onSplashRemoteReady(activity: Activity, destination: FlowDestination?, resumeIndex: Int) {
+    fun onSplashRemoteReady(activity: Activity, destination: FlowDestination?, resumeIndex: Int, language1AlreadyScheduled: Boolean = false) {
         ObLog.d(ObLog.Section.PRELOAD, "splash_ready destination=$destination resumeIndex=$resumeIndex")
         config() ?: return
         when (destination) {
             FlowDestination.LANGUAGE -> {
-                preloadNative(activity, AdPlacement.Language1)
+                if (!language1AlreadyScheduled) preloadLanguage1(activity)
                 firstEnabledStep()?.let { preloadForStep(activity, it) }
             }
 
@@ -51,6 +65,12 @@ class PreloadChain internal constructor(
 
             null -> Unit
         }
+    }
+
+    /** Only LFO1 belongs to the splash ordering experiment; OB1 keeps its handoff trigger. */
+    fun preloadLanguage1(activity: Activity, allowWhileVisible: Boolean = false) {
+        language1HandoffPending = true
+        preloadNative(activity, AdPlacement.Language1, allowWhileVisible)
     }
 
     /** The LFO is on screen; slot 2 is buffered before the user's first tap swaps it into view. */
@@ -124,7 +144,7 @@ class PreloadChain internal constructor(
      * The unit and the layout both come from the same place the screen will read them from, so a
      * buffered ad always matches what the screen asks for.
      */
-    private fun preloadNative(activity: Activity, placement: AdPlacement) {
+    private fun preloadNative(activity: Activity, placement: AdPlacement, allowWhileVisible: Boolean = false) {
         val adProvider = provider ?: return
         val unit = config()?.ads?.nativeUnitFor(placement)
         if (unit == null) {
@@ -132,14 +152,16 @@ class PreloadChain internal constructor(
             return
         }
         if (guard.skipReason(activity, placement) != null) return
-        if (adProvider.isNativeReady(placement) || adProvider.isNativeLoading(placement)) {
-            ObLog.d(ObLog.Section.PRELOAD, "${placement.key} skip — already buffered or in flight")
+        if (adProvider.isNativeReady(placement)) {
+            ObLog.d(ObLog.Section.PRELOAD, "${placement.key} skip — already buffered")
             return
         }
-        ObLog.d(ObLog.Section.PRELOAD, "${placement.key} request tiers=${unit.tierCount}")
+        // Also call for a queued/in-flight preload: the provider joins the network request or
+        // transfers a foreground wait from the departing splash to the destination's owner.
+        ObLog.d(ObLog.Section.PRELOAD, "${placement.key} request/join tiers=${unit.tierCount}")
         adProvider.preloadNative(
             activity,
-            NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement)),
+            NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement), allowWhileVisible),
         )
     }
 

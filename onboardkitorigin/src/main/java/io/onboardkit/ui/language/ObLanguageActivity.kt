@@ -49,6 +49,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private lateinit var adapter: LanguageAdapter
 
     private var mode = LanguageScreenMode.FIRST_OPEN
+    private var reuseLfo1Preload = false
     private var selectedCode: String? = null
     private var languages: List<ObLanguage> = emptyList()
 
@@ -88,6 +89,8 @@ class ObLanguageActivity : BaseOnboardActivity() {
         mode = intent.getStringExtra(EXTRA_MODE)
             ?.let { runCatching { LanguageScreenMode.valueOf(it) }.getOrNull() }
             ?: LanguageScreenMode.FIRST_OPEN
+        reuseLfo1Preload = savedInstanceState?.getBoolean("ob_lfo1_preload_handoff")
+            ?: (mode == LanguageScreenMode.FIRST_OPEN && sdk.preload().takeLanguage1Preload())
         selectedCode = sdk.configOrNull()?.language?.defaultCode
 
         languages = resolveLanguages()
@@ -294,6 +297,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
             placement = placement,
             unit = sdk.requireConfig().ads.nativeUnitFor(placement),
             container = containerFor(placement),
+            reuseFailedPreload = placement == AdPlacement.Language1 && reuseLfo1Preload,
             onUnavailable = { adBlockFor(placement).visibility = View.GONE },
         )
     }
@@ -398,6 +402,11 @@ class ObLanguageActivity : BaseOnboardActivity() {
         if (selectedCode == null) return
         if (!sdk.requireConfig().language.saveButtonOnBackEnabled) return
         binding.obLanguageSave.isVisible = true
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("ob_lfo1_preload_handoff", reuseLfo1Preload)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
