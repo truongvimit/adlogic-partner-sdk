@@ -63,7 +63,7 @@ internal data class NotificationProfile(
                     NotificationCampaign.WINBACK -> if (common) "2" else "1"
                     NotificationCampaign.ONBOARDING -> "1"
                     NotificationCampaign.REMINDER -> if (common) "0" else "4"
-                    NotificationCampaign.PINNED -> if (common) "0" else "2"
+                    NotificationCampaign.PINNED, NotificationCampaign.AD_RETURN, NotificationCampaign.APP_EXIT -> if (common) "0" else "2"
                     NotificationCampaign.LOCKSCREEN -> "3"
                     else -> "2"
                 })
