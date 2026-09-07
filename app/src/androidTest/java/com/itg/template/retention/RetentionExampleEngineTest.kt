@@ -144,10 +144,19 @@ class RetentionExampleEngineTest {
     @Test fun dailyActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.DAILY)
     @Test fun winbackActualSavedEnvelopePostsOnceInBackground() = calendar(NotificationCampaign.WINBACK)
     @Test fun lockscreenActualSavedEnvelopePostsWithoutFullScreenOrWakeRequest() = calendar(NotificationCampaign.LOCKSCREEN)
-    @Test fun onboardingNeedsUnfinishedActiveSetupAndActualHome() {
+    @Test fun completedRealOnboardStateSynchronizesAndSuppressesUnfinishedAbandonment() {
+        // This installation has completed the real first-open flow; never erase it for a test.
+        await(diagnostic = { "Complete the actual first-open flow before this established-installation suite" }) {
+            io.onboardkit.OnboardingSdk.state.value.isFlowCompleted
+        }
+        assertFalse(io.onboardkit.OnboardingSdk.isFlowActive.value)
         prepare(setup = false)
+        await { kit.runtime.userState.setupCompleted && !kit.runtime.userState.onboardingActive }
         background()
-        assertSubmitted(NotificationCampaign.ONBOARDING)
+        SystemClock.sleep(3600)
+        assertNull(active(NotificationCampaign.ONBOARDING))
+        assertFalse(ExampleQa.events.any { it.name == "retention_noti_post_submitted" && it.attributes["campaign"] == "onboarding" })
+        assertTrue(io.onboardkit.OnboardingSdk.state.value.isFlowCompleted)
     }
     @Test fun adReturnNeedsFreshDebugClickAndActualHome() {
         prepare()
