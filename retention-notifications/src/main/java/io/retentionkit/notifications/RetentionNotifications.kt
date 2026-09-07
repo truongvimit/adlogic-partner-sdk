@@ -42,6 +42,7 @@ class RetentionNotifications internal constructor(
     private data class ForegroundRequest(val occurrence: String, val created: Long)
     private val foregroundPending = linkedMapOf<NotificationCampaign, ForegroundRequest>()
     private var refreshingForeground = false
+    private var retryingDeferred = false
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config, options.preset) + buildList {
         if (options.smallIconRes <= 0) add("A small notification icon is required")
@@ -166,6 +167,7 @@ class RetentionNotifications internal constructor(
 
     override fun reconcile(reason: String) {
         reconcileSchedules(reason)
+        retryDeferredCalendars()
         // Setup/Billing/config and explicit permission reconciliation can complete after the one
         // process-foreground event. Preserve that open until it can post; callbacks do not invent
         // another open after successful submission. Partner renderers run outside our state lock.
@@ -194,10 +196,19 @@ class RetentionNotifications internal constructor(
         runtime.store.transaction(STATE) { s ->
             s.entries().keys.filter { it.startsWith("schedule:") }.forEach(s::remove)
             desired.forEach { s.put("schedule:${it.key}", it.encode()) }
+            s.entries().filterKeys { it.startsWith("deferred:") }.forEach { (key, raw) ->
+                if (desired.none { it.encode() == raw }) s.remove(key)
+            }
         }
         previous.filter { old -> desired.none { it.key == old.key } }.forEach { safe("cancel_alarm") { platform.cancelAlarm(it) } }
         // Re-arm all desired identities, including after a failed setWindow or OS restart.
-        desired.forEach { safe("schedule") { platform.schedule(it) } }
+        desired.forEach { alarm -> safe("schedule") {
+            // UNKNOWN is a current-process Billing state, not a decision to skip today's slot.
+            // Keep its original due/expiry/identity and schedule only expiry cleanup while waiting;
+            // do not repeatedly arm a past-due alarm and spin the cold receiver.
+            val deferred = state.string("deferred:${alarm.key}") == alarm.encode()
+            platform.schedule(alarm, if (deferred && runtime.userState.entitlement == RetentionEntitlement.UNKNOWN) alarm.expires else alarm.due)
+        } }
         NotificationCampaign.entries.filter { campaign ->
             !profile.enabled || !profile[campaign].enabled || runtime.marketingEligibility(
                 graceMillis = if (campaign == NotificationCampaign.ONBOARDING) profile.onboardingGrace else profile.grace,
@@ -218,15 +229,37 @@ class RetentionNotifications internal constructor(
                 safe("rearm_early") { platform.schedule(alarm) }
                 return skipped(alarm.campaign, "not_due")
             }
+        }
+        val outcome = deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires)
+        synchronized(lock) {
+            if (closed) return outcome
+            // Rendering can synchronously replace config; an old completion must not rewrite it.
             runtime.store.transaction(STATE) { state ->
-                val calendarDate = alarm.calendarDate
-                if (calendarDate != null) state.put("handled:${alarm.key}", maxOf(calendarDate, state.string("handled:${alarm.key}", calendarDate)!!))
-                else state.remove("schedule:${alarm.key}")
+                if (state.string("schedule:${alarm.key}") != alarm.encode()) return@transaction
+                if (alarm.campaign.calendar && outcome == NotificationOutcome.Skipped("entitlement_unknown") &&
+                    runtime.clock.wallTimeMillis() < alarm.expires) {
+                    state.put("deferred:${alarm.key}", alarm.encode())
+                } else {
+                    state.remove("deferred:${alarm.key}")
+                    val calendarDate = alarm.calendarDate
+                    if (calendarDate != null) state.put("handled:${alarm.key}", maxOf(calendarDate, state.string("handled:${alarm.key}", calendarDate)!!))
+                    else state.remove("schedule:${alarm.key}")
+                }
             }
             if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
         }
-        reconcile("alarm_received") // Keep the next slot even when this occurrence is blocked/fails.
-        return deliver(alarm.campaign, alarm.occurrence, alarm.revision, alarm.due, alarm.expires)
+        reconcile("alarm_received")
+        return outcome
+    }
+
+    private fun retryDeferredCalendars() {
+        val pending = synchronized(lock) {
+            if (closed || retryingDeferred || runtime.userState.entitlement == RetentionEntitlement.UNKNOWN) return
+            retryingDeferred = true
+            runtime.store.snapshot(STATE).entries().filterKeys { it.startsWith("deferred:") }.values.map(ScheduledNotification::decode)
+        }
+        try { pending.forEach(::receiveAlarm) }
+        finally { synchronized(lock) { retryingDeferred = false } }
     }
 
     internal fun dismiss(campaign: NotificationCampaign, occurrence: String) = synchronized(lock) {

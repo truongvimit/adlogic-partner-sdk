@@ -454,6 +454,7 @@ internal class FakePlatform : NotificationPlatform {
     val posts = mutableListOf<Pair<NotificationCampaign, Notification>>()
     val activeCampaigns = mutableSetOf<NotificationCampaign>()
     val scheduled = mutableMapOf<String, ScheduledNotification>()
+    val triggerTimes = mutableMapOf<String, Long>()
     val cancelledAlarms = mutableListOf<ScheduledNotification>()
     override fun createChannels(options: RetentionNotificationOptions) {}
     override fun blocked(channel: String) = block
@@ -461,7 +462,7 @@ internal class FakePlatform : NotificationPlatform {
     override fun active(campaign: NotificationCampaign) = campaign in activeCampaigns
     override fun post(campaign: NotificationCampaign, notification: Notification) { if (failPost) error("notify failure"); posts += campaign to notification; activeCampaigns += campaign }
     override fun cancel(campaign: NotificationCampaign) { activeCampaigns -= campaign }
-    override fun schedule(alarm: ScheduledNotification) { if (failSchedule) error("alarm failure"); scheduled[alarm.key] = alarm }
+    override fun schedule(alarm: ScheduledNotification, triggerAtMillis: Long) { if (failSchedule) error("alarm failure"); scheduled[alarm.key] = alarm; triggerTimes[alarm.key] = triggerAtMillis }
     override fun cancelAlarm(alarm: ScheduledNotification) { cancelledAlarms += alarm; scheduled.remove(alarm.key) }
 }
 internal class FakeDelays : NotificationDelays {
