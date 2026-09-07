@@ -97,4 +97,20 @@ class DefaultNotificationDeliveryTest {
             clock.advance(15 * MINUTE)
         }
     }
+
+    @Test fun coldDueCalendarWaitsForVerifiedEntitlementWithoutSpendingItsSlotAcrossRestart() {
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        val alarm = platform.scheduled.values.first { it.campaign == NotificationCampaign.DAILY }
+        clock.advance(alarm.due - clock.now + 1)
+        assertEquals(NotificationOutcome.Skipped("entitlement_unknown"), module.receiveAlarm(alarm))
+        assertTrue(platform.posts.isEmpty())
+        RetentionRuntime.uninstallForTests()
+        install(user().copy(entitlement = RetentionEntitlement.UNKNOWN))
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("Verified free should recover the still-valid due slot", 1,
+            platform.posts.count { it.first == NotificationCampaign.DAILY })
+        assertEquals(alarm.occurrence, platform.activeOccurrence(NotificationCampaign.DAILY))
+        assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
+        assertEquals(1, platform.posts.size)
+    }
 }
