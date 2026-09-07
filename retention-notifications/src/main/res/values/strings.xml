@@ -15,4 +15,14 @@
     <string name="rk_n_channel_reminder">Quiet reminders</string>
     <string name="rk_n_channel_pinned">Pinned tools</string>
     <string name="rk_n_channel_lockscreen">Lock screen tips</string>
+    <string name="rk_n_daily_title">Today’s tip: %1$s</string>
+    <string name="rk_n_winback_title">Ready when you return: %1$s</string>
+    <string name="rk_n_onboarding_title">Finish setting up %1$s</string>
+    <string name="rk_n_before_you_go">Before you go</string>
+    <string name="rk_n_reminder_title">Keep %1$s handy</string>
+    <string name="rk_n_pinned_title">Your tools</string>
+    <string name="rk_n_lockscreen_title">Try %1$s</string>
+    <string name="rk_n_action_now">Action now</string>
+    <string name="rk_n_return_expanded">Continue with %1$s</string>
+    <string name="rk_n_channel_updates">Updates and news</string>
 </resources>
