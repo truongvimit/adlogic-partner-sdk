@@ -65,7 +65,7 @@ class RetentionFeedbackModuleTest {
         host?.pause()?.stop()?.destroy(); host = null
         RetentionRuntime.uninstallForTests()
     }
-    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true, configure: (FeedbackOptions) -> FeedbackOptions = { it }) {
+    private fun install(custom: Boolean = true, shortcut: Boolean = false, reasons: Boolean = true, uiHost: RetentionUiHost = RetentionUiHost.NONE, configure: (FeedbackOptions) -> FeedbackOptions = { it }) {
         val factory = if (custom) FeedbackUiFactory { activity, controller, _ ->
             customController = controller
             TextView(activity).apply { text = "Custom content" }
@@ -79,6 +79,7 @@ class RetentionFeedbackModuleTest {
             })))
         val result = RetentionRuntime.install(app, RetentionOptions(modules = listOf(module), store = store, clock = clock,
             initialUserState = RetentionUserState(setupCompleted = true, entitlement = RetentionEntitlement.NON_SUBSCRIBER),
+            uiHost = uiHost,
             localeProvider = RetentionLocaleProvider { context -> context.createConfigurationContext(Configuration(context.resources.configuration).apply { setLocale(selectedLocale) }) },
             featureProvider = RetentionFeatureProvider { listOf(RetentionFeature("notes", "Notes", R.drawable.rk_ic_feedback)) },
             router = RetentionRouter { context, _ -> Intent().setComponent(ComponentName(context.packageName, Activity::class.java.name)) },
@@ -101,6 +102,29 @@ class RetentionFeedbackModuleTest {
         assertFalse(screen!!.get().isFinishing)
     }
     private fun view(tag: String): View = screen!!.get().findViewById<ViewGroup>(android.R.id.content).findViewWithTag(tag)
+
+    @Test fun resumedSurveyWaitsForActualWindowFocusBeforeShowingAndAllowingActions() {
+        install(uiHost = object : RetentionUiHost {
+            override fun canPresent(activity: Activity) =
+                activity !is RetentionFeedbackActivity || activity.window.decorView.hasWindowFocus()
+        })
+        module.show(); idle()
+        val intent = launches.single()
+        token = intent.getStringExtra(RetentionFeedbackModule.EXTRA_SESSION)!!
+        host!!.pause()
+        screen = Robolectric.buildActivity(RetentionFeedbackActivity::class.java, intent)
+            .create().start().resume().visible().windowFocusChanged(false)
+        idle()
+        assertSame(screen!!.get(), runtime.activities.current())
+        assertFalse(screen!!.get().hasWindowFocus())
+        assertFalse("An unfocused first resume must retain the accepted survey", screen!!.get().isFinishing)
+        assertEquals(FeedbackPhase.OPEN, customController!!.state()!!.phase)
+        assertFalse(events.any { it.name == "retention_feedback_shown" })
+        assertTrue(customController!!.keep() is FeedbackActionResult.Blocked)
+        screen!!.windowFocusChanged(true); idle()
+        assertEquals(1, events.count { it.name == "retention_feedback_shown" })
+        assertEquals(FeedbackActionResult.Applied, customController!!.keep())
+    }
 
     @Test fun queuedShowDisabledByTransitionObserverKeepsEntryPendingAndReleasesScope() {
         install()
