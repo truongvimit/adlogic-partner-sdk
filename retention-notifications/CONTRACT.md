@@ -40,4 +40,6 @@ APP_EXIT is a confirmed completed-app departure; AD_RETURN wins for a valid ad-c
 
 Every tap must reach actual host Splash, shared entry interstitial outcome, Main resumed, then destination. The module creates only the PendingIntent envelope; use the facade's standard entry controller or implement that host lifecycle chain. It does not treat recordOpened as navigation success.
 
+Posting/display expiry is not route expiry. New notification entries omit an explicit `expiresAtMillis`, allowing accepted onboarding routes to survive the notification's display timeout. Core's seven-day retention remains unchanged (from creation for one-shot entries, from each delivered capture for reusable pinned/persistent-lockscreen templates). The send gate and Android timeout still enforce the campaign TTL. Prior posted/staged envelopes keep their old expiry; only newly created envelopes receive the correction. Schedule serialization retains the historical JSON `date` field and identical alarm/occurrence keys; the internal occurrence discriminator distinguishes calendar dates from departure identities.
+
 See README for every remote key/default, migration, persistence/crash semantics and platform limits. Tests and build evidence belong to Ticket02; device/OEM delivery remains Ticket07.

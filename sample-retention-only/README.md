@@ -82,6 +82,8 @@ The launcher and every SDK entry first visit `ProofSplashActivity` through the v
 
 Stable common view IDs `rk_proof_status`, `rk_proof_input`, `rk_proof_result`, `rk_proof_setup`, `rk_proof_run`, `rk_proof_entry` support the root-owned instrumentation/device smoke. There is no exported test receiver, hidden backdoor, debug timestamp bypass or fake-success toggle. Only the root/device owner may install/launch this app through ADB and add observed evidence to the ledger.
 
+New deliveries replace local selection even when the envelope is absent or rejected: the Activity cancels its old retry callback and leaves the previous ledger token inert. Saved-state recreation retains the selected materialized ONCE token without capturing the original reusable template again. These are separate operations; ordinary launches never choose an older pending entry.
+
 ## Tooling checks and remaining acceptance
 
 The Python tooling tests validate profile/property parsing, safety and umbrella composition rules using explicitly synthetic files. They do not run Gradle or prove this application compiles:
