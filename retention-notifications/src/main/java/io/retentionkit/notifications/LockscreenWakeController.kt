@@ -98,7 +98,7 @@ internal class LockscreenWakeController(
         attempt(occurrence, "post")
     }
 
-    /** Never wake merely because a process restarted. Restore observation and a saved checkpoint. */
+    /** Restore observation/checkpoints, including an explicitly deferred first wake, not a new request. */
     fun reconcile() = synchronized(monitor) {
         if (closed) return
         safely("reconcile") {
@@ -113,7 +113,11 @@ internal class LockscreenWakeController(
                 return@safely
             }
             if (value.attempts < 2) observe()
-            if (value.checkpointPending && value.checkpointAt <= clock.wallTimeMillis()) {
+            if (value.attempts == 0 && value.checkpointPending) {
+                // A confirmed post/screen-off decision met UNKNOWN. Readiness can finish it now,
+                // even before the saved fallback alarm and without another screen transition.
+                attempt(value.occurrence, "readiness")
+            } else if (value.checkpointPending && value.checkpointAt <= clock.wallTimeMillis()) {
                 checkpoint(value.occurrence, value.checkpointAt)
             } else if (value.checkpointAt > 0) power.schedule(value.occurrence, value.checkpointAt)
         }
@@ -173,8 +177,15 @@ internal class LockscreenWakeController(
         val reason = blocked() ?: power.blocked()
         if (reason != null) {
             release()
-            event("wake_blocked", mapOf("reason" to reason))
             if (reason != "entitlement_unknown") cancel(occurrence, reason)
+            else if (value.attempts == 0 && !value.checkpointPending) {
+                // No wake claim was spent. Persist this confirmed pending decision before arming
+                // bounded readiness recovery; repeated UNKNOWN signals cannot reset its budget.
+                val at = clock.wallTimeMillis() + 30_000L
+                write(value.copy(checkpointAt = at, checkpointPending = true))
+                if (current(occurrence)?.checkpointAt == at) power.schedule(occurrence, at)
+            }
+            event("wake_blocked", mapOf("reason" to reason))
             return
         }
         if (power.interactive()) {

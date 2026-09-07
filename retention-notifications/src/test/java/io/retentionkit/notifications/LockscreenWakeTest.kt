@@ -262,6 +262,149 @@ class LockscreenWakeTest {
         assertTrue(power.cpuLeases.none { it.held })
         assertEquals(1, power.leases.size)
     }
+
+    @Test fun unknownDuringActivePostConfirmationRecoversFirstWakeWhenVerifiedFreeWhileScreenStaysOff() {
+        val power = FakeWakePlatform()
+        pendingFirstWake(power)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals("Verified readiness must recover the confirmed pending first wake without another SCREEN_OFF", 1, power.leases.size)
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.LOCKSCREEN })
+        runtime.reconcile("duplicate_readiness")
+        assertEquals(1, power.leases.size)
+    }
+
+    /** Real module post/confirmation under UNKNOWN, not a manually manufactured wake ledger. */
+    private fun pendingFirstWake(power: FakeWakePlatform): ScheduledNotification {
+        var visible = false
+        val notifier = object : NotificationPlatform by platform {
+            override fun activeOccurrence(campaign: NotificationCampaign): String? =
+                if (visible) platform.activeOccurrence(campaign) else null
+        }
+        install(power, notifier = notifier)
+        val alarm = send()
+        assertTrue(power.cpuLeases.single().held)
+        visible = true
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.UNKNOWN))
+        delays.fire() // The real post-confirmation callback observes the matching notification under UNKNOWN.
+        assertEquals(alarm.occurrence, notifier.activeOccurrence(NotificationCampaign.LOCKSCREEN))
+        assertTrue(power.cpuLeases.none { it.held })
+        assertTrue(power.leases.isEmpty())
+        assertFalse(power.interactive())
+        return alarm
+    }
+
+    @Test fun confirmedPendingFirstWakeSurvivesColdUnknownAndBoundedCheckpointsWithSameTwoAttemptBudget() {
+        val power = FakeWakePlatform()
+        val alarm = pendingFirstWake(power)
+        val initialCheckpoint = power.checkpoints.getValue(alarm.occurrence)
+        assertTrue(initialCheckpoint > clock.now)
+        RetentionRuntime.uninstallForTests()
+        assertTrue(power.checkpoints.isEmpty())
+        install(power, RetentionEntitlement.UNKNOWN)
+        assertEquals(initialCheckpoint, power.checkpoints.getValue(alarm.occurrence))
+        assertTrue(power.leases.isEmpty())
+        repeat(7) {
+            val at = power.checkpoints.getValue(alarm.occurrence)
+            runtime.reconcile("duplicate_unknown")
+            power.screen(false)
+            assertEquals("Duplicate signals cannot postpone the same checkpoint", at, power.checkpoints.getValue(alarm.occurrence))
+            clock.advance((at - clock.now).coerceAtLeast(0))
+            module.wakeCheckpoint(alarm.occurrence, at)
+        }
+        assertTrue("Readiness alarms must stop after their bounded budget", power.checkpoints.isEmpty())
+        assertTrue(power.leases.isEmpty())
+        repeat(3) { runtime.reconcile("still_unknown"); power.screen(false) }
+        assertTrue(power.checkpoints.isEmpty())
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertEquals(1, power.leases.size)
+        clock.advance(31_000); power.screen(false)
+        assertEquals(2, power.leases.size)
+        RetentionRuntime.uninstallForTests()
+        power.interactiveState = false
+        install(power)
+        power.screen(false)
+        assertEquals(2, power.leases.size)
+        assertEquals(1, platform.posts.count { it.first == NotificationCampaign.LOCKSCREEN })
+    }
+
+    @Test fun coldPendingFirstWakeCannotUseAMissingOrDifferentActiveOccurrence() {
+        val power = FakeWakePlatform()
+        val alarm = pendingFirstWake(power)
+        val at = power.checkpoints.getValue(alarm.occurrence)
+        RetentionRuntime.uninstallForTests()
+        // Android no longer reports our occurrence, even if an unrelated active post exists.
+        val notifier = object : NotificationPlatform by platform {
+            override fun activeOccurrence(campaign: NotificationCampaign): String? = "unrelated_occurrence"
+        }
+        install(power, RetentionEntitlement.UNKNOWN, notifier)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        clock.advance(at - clock.now)
+        module.wakeCheckpoint(alarm.occurrence, at)
+        power.screen(false)
+        assertTrue(power.leases.isEmpty())
+        assertTrue(power.checkpoints.isEmpty())
+    }
+
+    @Test fun pendingFirstWakeRechecksBlockedChannelAndNeverRevivesAfterReenable() {
+        val power = FakeWakePlatform()
+        val alarm = pendingFirstWake(power)
+        val at = power.checkpoints.getValue(alarm.occurrence)
+        platform.block = "channel_blocked"
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        assertTrue(power.leases.isEmpty())
+        assertTrue(power.checkpoints.isEmpty())
+        platform.block = null
+        clock.advance(at - clock.now)
+        module.wakeCheckpoint(alarm.occurrence, at)
+        runtime.reconcile("channel_reenabled")
+        power.screen(false)
+        assertTrue(power.leases.isEmpty())
+    }
+
+    @Test fun subscriberCancelsUnspentFirstWakeBeforeAnyCheckpointOrReverification() {
+        val power = FakeWakePlatform()
+        val alarm = pendingFirstWake(power)
+        val at = power.checkpoints.getValue(alarm.occurrence)
+        RetentionRuntime.uninstallForTests()
+        install(power, RetentionEntitlement.UNKNOWN)
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.SUBSCRIBER))
+        assertFalse(platform.active(NotificationCampaign.LOCKSCREEN))
+        assertTrue(power.checkpoints.isEmpty())
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        clock.advance(at - clock.now)
+        module.wakeCheckpoint(alarm.occurrence, at)
+        power.screen(false)
+        assertTrue(power.leases.isEmpty())
+    }
+
+    @Test fun dismissBeforeFirstWakeClosesOwnedWorkAndIgnoresAlreadyQueuedCheckpoint() {
+        val power = FakeWakePlatform()
+        val alarm = pendingFirstWake(power)
+        val at = power.checkpoints.getValue(alarm.occurrence)
+        platform.cancel(NotificationCampaign.LOCKSCREEN)
+        module.dismiss(NotificationCampaign.LOCKSCREEN, alarm.occurrence)
+        assertTrue(power.checkpoints.isEmpty())
+        assertTrue(power.cpuLeases.none { it.held })
+        runtime.signal(RetentionSignal.EntitlementChanged(RetentionEntitlement.NON_SUBSCRIBER))
+        clock.advance(at - clock.now)
+        module.wakeCheckpoint(alarm.occurrence, at)
+        power.screen(false)
+        assertTrue(power.leases.isEmpty())
+    }
+
+    @Test fun coldRestartWithoutAnExplicitlyDeferredFirstWakeCannotInventAWakeDecision() {
+        val power = FakeWakePlatform()
+        power.interactiveState = true
+        install(power); send()
+        assertTrue(power.leases.isEmpty())
+        assertTrue(power.checkpoints.isEmpty())
+        RetentionRuntime.uninstallForTests()
+        power.interactiveState = false
+        install(power)
+        runtime.reconcile("ordinary_process_restore")
+        assertTrue(power.leases.isEmpty())
+        assertTrue(platform.active(NotificationCampaign.LOCKSCREEN))
+    }
 }
 
 private class FakeWakePlatform : NotificationWakePlatform {
