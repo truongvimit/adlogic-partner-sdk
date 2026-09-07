@@ -43,6 +43,9 @@ class RetentionNotifications internal constructor(
     private val foregroundPending = linkedMapOf<NotificationCampaign, ForegroundRequest>()
     private var refreshingForeground = false
     private var retryingDeferred = false
+    private val foregroundGuardRetries = mutableSetOf<String>()
+    private var foregroundRetry: AutoCloseable? = null
+    private var foregroundRetryId: String? = null
 
     override fun validateConfig(config: RetentionConfigSnapshot): List<String> = NotificationProfile.errors(config, options.preset) + buildList {
         if (options.smallIconRes <= 0) add("A small notification icon is required")
@@ -73,7 +76,7 @@ class RetentionNotifications internal constructor(
                     }
                 }
                 RetentionSignal.ProcessBackground -> {
-                    foregroundPending.clear()
+                    clearForegroundRequests()
                     armBackground()
                 }
                 RetentionSignal.ProcessForeground -> {
@@ -113,6 +116,7 @@ class RetentionNotifications internal constructor(
     fun refreshForegroundNotifications(): Map<NotificationCampaign, NotificationOutcome> {
         synchronized(lock) {
             if (closed) return foregroundCampaigns.associateWith { NotificationOutcome.Skipped("not_installed") }
+            clearForegroundRequests()
             val now = runtime.clock.wallTimeMillis()
             foregroundCampaigns.forEach { foregroundPending[it] = ForegroundRequest("${it.key}:${UUID.randomUUID()}", now) }
         }
@@ -134,9 +138,38 @@ class RetentionNotifications internal constructor(
                     if (foregroundPending[campaign] == request && (outcome is NotificationOutcome.PostSubmitted ||
                             outcome == NotificationOutcome.Skipped("still_active"))) foregroundPending.remove(campaign)
                 }
+                if (outcome == NotificationOutcome.Skipped("guard_window")) scheduleForegroundGuardRetry(request)
                 outcome
             }
         } finally { synchronized(lock) { refreshingForeground = false } }
+    }
+
+    private fun scheduleForegroundGuardRetry(request: ForegroundRequest) {
+        val retry = synchronized(lock) {
+            if (closed || !runtime.isForeground || request !in foregroundPending.values ||
+                !foregroundGuardRetries.add(request.occurrence) || foregroundRetryId != null) return
+            val id = UUID.randomUUID().toString()
+            foregroundRetryId = id
+            id to profile().guardWindow.coerceAtLeast(1)
+        }
+        val handle = delays.post(retry.second) {
+            val valid = synchronized(lock) {
+                if (closed || foregroundRetryId != retry.first) false
+                else { foregroundRetry = null; foregroundRetryId = null; true }
+            }
+            if (valid) retryForegroundNotifications()
+        }
+        synchronized(lock) {
+            if (foregroundRetryId == retry.first) foregroundRetry = handle else handle.close()
+        }
+    }
+
+    private fun clearForegroundRequests() {
+        foregroundPending.clear()
+        foregroundGuardRetries.clear()
+        foregroundRetryId = null
+        foregroundRetry?.close()
+        foregroundRetry = null
     }
 
     /** Optional host hook after entries.capture returns Accepted. Dedupe survives Activity recreation. */
@@ -285,7 +318,7 @@ class RetentionNotifications internal constructor(
         closed = true
         invalidateDelayed(cancelDurableExit = false)
         hostBlocks.clear()
-        foregroundPending.clear()
+        clearForegroundRequests()
         telemetryHandler.removeCallbacksAndMessages(null)
         if (active === this) active = null
         // OS calendar alarms stay durable for the next Application install. No background timer survives.
