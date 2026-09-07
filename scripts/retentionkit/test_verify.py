@@ -101,6 +101,25 @@ class EvidenceTests(unittest.TestCase):
         args.manifest.write_bytes(MANIFEST.replace(b"<application/>", b'<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application/>'))
         self.assertFalse(verify.composition(args)["ok"])
 
+    def test_bounded_notification_wake_permission_only_belongs_to_notification_profiles(self):
+        wake = MANIFEST.replace(b"<application/>", b'<uses-permission android:name="android.permission.WAKE_LOCK"/><application/>')
+        for profile in verify.PROFILES:
+            with self.subTest(profile=profile):
+                expected = profile in ("notifications", "umbrella")
+                self.assertEqual(expected, not verify.manifest_errors(verify.parse_manifest(wake), profile))
+                path = self.aar(wake, classes=["io/retentionkit/core/RetentionRuntime.class"])
+                self.assertEqual(expected, not verify.inspect_aar(path, profile)["errors"])
+
+    def test_wake_permission_does_not_allow_full_screen_exact_alarm_or_service_leaks(self):
+        for profile in verify.PROFILES:
+            for permission in ("FOREGROUND_SERVICE", "USE_FULL_SCREEN_INTENT", "SCHEDULE_EXACT_ALARM",
+                               "USE_EXACT_ALARM", "SYSTEM_ALERT_WINDOW", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"):
+                with self.subTest(profile=profile, permission=permission):
+                    manifest = verify.parse_manifest(MANIFEST)
+                    manifest["permissions"] = ["android.permission.WAKE_LOCK", f"android.permission.{permission}"]
+                    errors = verify.manifest_errors(manifest, profile)
+                    self.assertIn(f"Forbidden permission: android.permission.{permission}", errors)
+
     def test_review_aar_detects_bundled_vendor_and_unrelated_module_classes(self):
         path = self.aar(classes=["com/google/firebase/FirebaseApp.class", "io/retentionkit/notifications/Receiver.class"])
         errors = verify.inspect_aar(path, "review")["errors"]
