@@ -8,6 +8,6 @@
     <string name="rk_feedback_keep">Tiếp tục sử dụng</string>
     <string name="rk_feedback_continue">Tiếp tục</string>
     <string name="rk_feedback_system_explanation">Android quyết định việc gỡ ứng dụng. Bạn không cần gửi phản hồi và có thể hủy trên màn hình hệ thống.</string>
-    <string name="rk_feedback_shortcut">Phản hồi</string>
+    <string name="rk_feedback_shortcut">Gỡ cài đặt</string>
     <string name="rk_feedback_try_feature">Thử %1$s</string>
 </resources>

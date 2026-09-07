@@ -60,6 +60,8 @@ data class FeedbackOptions @JvmOverloads constructor(
     val systemAction: FeedbackSystemAction = FeedbackSystemAction.UNINSTALL_CONFIRMATION,
     val appManagementFallback: Boolean = true,
     val nativeContent: FeedbackNativeContent? = null,
+    /** Launcher shortcut branding is independent of the survey header appIconRes. */
+    val shortcutIconRes: Int = R.drawable.rk_ic_uninstall,
 )
 
 enum class FeedbackPhase { OPEN, KEPT, FEATURE_HANDOFF, SYSTEM_HANDOFF, CANCELLED }
