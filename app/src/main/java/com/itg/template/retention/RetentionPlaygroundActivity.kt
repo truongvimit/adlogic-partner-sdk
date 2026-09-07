@@ -149,6 +149,8 @@ class RetentionPlaygroundActivity : AppCompatActivity() {
         if (id !in RetentionExampleContent.featureIds) { message(R.string.rk_example_unknown_route); return }
         selectedFeature = id
         title.text = RetentionExampleContent.features(this).first { it.id == id }.label
+        // Collection operation IDs belong to the durable outbox, not to the user-facing result.
+        result.text = if (id != "saved_items" && data.lastFeature() == id) data.lastResult() else ""
         featureBody.removeAllViews()
         when (id) {
             "notes" -> showNotes()
