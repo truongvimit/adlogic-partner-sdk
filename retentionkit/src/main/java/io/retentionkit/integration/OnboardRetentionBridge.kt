@@ -93,12 +93,9 @@ class OnboardRetentionBridge constructor(
     override fun canPresent(activity: Activity): Boolean = hostReady(activity) &&
         mainActivity?.isInstance(activity) != true && hostCanPresent(activity)
 
-    override fun canPresentEntry(activity: Activity): Boolean {
-        if (!hostReady(activity)) return false
-        if (mainActivity?.isInstance(activity) != true) return hostCanPresent(activity)
-        val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry ?: return false
-        return entry.mode == RetentionEntryMode.ONCE && runtime.entries.pending(entry.token) == entry && hostCanPresent(activity)
-    }
+    // ENTRY includes explicit menu starts as well as continuation of a selected envelope. The
+    // Main helper validates its selected ledger token; automatic prompts still use canPresent.
+    override fun canPresentEntry(activity: Activity): Boolean = hostReady(activity) && hostCanPresent(activity)
 
     override fun onLeaseAcquired(owner: String, token: String, durationMillis: Long): AutoCloseable {
         check(!closed) { "Onboard bridge is detached" }

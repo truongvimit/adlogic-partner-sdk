@@ -121,7 +121,7 @@ class WidgetInstanceTest {
     }
 
     @Test fun narrowPortraitWidgetUsesTwoRowsDespiteLaunchersShortMinimumHeightBound() {
-        val labels = listOf("Personal notes", "Saved items", "Text tools", "Getting started guide")
+        val labels = listOf("Personal notes", "Saved items", "Text tools", "Getting started")
         val f = Fixture(featureProvider = RetentionFeatureProvider {
             Fixture.features.mapIndexed { i, feature -> feature.copy(label = labels[i]) }
         })
