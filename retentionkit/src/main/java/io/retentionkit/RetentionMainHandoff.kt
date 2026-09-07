@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewTreeObserver
 import io.retentionkit.core.*
 import io.retentionkit.feedback.RetentionFeedbackModule
 import java.lang.ref.WeakReference
@@ -37,12 +38,24 @@ class RetentionMainHandoff internal constructor(
     private var acquiringHost = false
     private val deferredCloses = mutableListOf<AutoCloseable>()
     private val retry = Runnable { dispatch() }
+    private val focusView = WeakReference(activity.window.decorView)
+    private val initialFocusObserver = WeakReference(activity.window.decorView.viewTreeObserver)
+    private val focusListener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+        if (hasFocus && !closed && resumed && hasPendingEntry) {
+            // A dialog may outlive the retry budget without pausing Main. Focus is a new readiness
+            // event, so start another bounded attempt window instead of polling indefinitely.
+            attempts = 0
+            holdHost()
+            schedule()
+        }
+    }
 
     val hasPendingEntry: Boolean get() = !closed && selected?.let { kit.runtime.entries.pending(it) } != null
 
     init {
         checkMain()
         kit.runtime.application.registerActivityLifecycleCallbacks(this)
+        initialFocusObserver.get()?.addOnWindowFocusChangeListener(focusListener)
         // Saved selection is already materialized. Never capture a restored reusable template again.
         if (selected == null) capture(activity.intent)
         else kit.runtime.entries.pending(selected!!)?.let { RetentionEntryCodec.write(activity.intent, it) }
@@ -192,6 +205,14 @@ class RetentionMainHandoff internal constructor(
         if (closed) return
         closed = true
         main.removeCallbacksAndMessages(null)
+        // Binding happens before decor attachment. Android can merge the initial observer into
+        // the attached window's observer; remove from that live observer as well as the original.
+        val currentObserver = focusView.get()?.viewTreeObserver
+        currentObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
+        initialFocusObserver.get()?.takeIf { it !== currentObserver && it.isAlive }
+            ?.removeOnWindowFocusChangeListener(focusListener)
+        focusView.clear()
+        initialFocusObserver.clear()
         kit.runtime.application.unregisterActivityLifecycleCallbacks(this)
         releaseHost()
         deferredCloses.toList().also { deferredCloses.clear() }.forEach(::closeHost)
