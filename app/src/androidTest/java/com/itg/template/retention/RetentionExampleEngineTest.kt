@@ -54,6 +54,7 @@ class RetentionExampleEngineTest {
     private data class ActivityMoment(val activity: Activity, val phase: String, val entry: RetentionEntry?, val elapsed: Long = SystemClock.elapsedRealtime())
     private val moments = CopyOnWriteArrayList<ActivityMoment>()
     private var lastAdGestureAt = 0L
+    private var fixtureInitialTimeMillis = 0L
     private val activityObserver = object : Application.ActivityLifecycleCallbacks {
         private fun record(activity: Activity, phase: String) {
             val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry
@@ -94,6 +95,7 @@ class RetentionExampleEngineTest {
     private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null,
         notifications: RetentionNotificationOptions = RetentionNotificationOptions(),
         initialTimeMillis: Long = System.currentTimeMillis()) {
+        fixtureInitialTimeMillis = initialTimeMillis
         instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra, notifications = notifications, initialTimeMillis = initialTimeMillis) }
         scenario = ActivityScenario.launch(launch ?: Intent(application, RetentionPlaygroundActivity::class.java))
         await { kit.runtime.isForeground && kit.runtime.activities.current() is RetentionPlaygroundActivity }
@@ -127,9 +129,11 @@ class RetentionExampleEngineTest {
     private fun assertDailyCatchUp(raw: String) {
         val alarm = JSONObject(raw)
         val now = kit.runtime.clock.wallTimeMillis()
-        assertEquals("Regression requires a real saved 08:00 DAILY envelope", 56 * 60_000L, now - alarm.getLong("due"))
-        assertEquals(4 * 60_000L, alarm.getLong("expires") - now)
-        assertEquals(now, kit.runtime.userState.setupCompletedAtMillis)
+        assertEquals("Fixture starts at 08:56 against the real saved 08:00 DAILY envelope", 56 * 60_000L,
+            fixtureInitialTimeMillis - alarm.getLong("due"))
+        assertEquals(4 * 60_000L, alarm.getLong("expires") - fixtureInitialTimeMillis)
+        assertTrue("Live QA clock must remain inside this saved catch-up interval", now in fixtureInitialTimeMillis until alarm.getLong("expires"))
+        assertTrue("Setup is recorded after fixture activation without rewinding", checkNotNull(kit.runtime.userState.setupCompletedAtMillis) in fixtureInitialTimeMillis..now)
     }
     private fun calendar(campaign: NotificationCampaign) {
         prepare(initialTimeMillis = if (campaign == NotificationCampaign.DAILY) dailyCatchUpTime() else System.currentTimeMillis())
@@ -215,10 +219,20 @@ class RetentionExampleEngineTest {
         }
         val entry = checkNotNull(selected)
         val observed = moments.drop(offset)
-        val splashCreated = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "created" && it.entry?.token == entry.token }
-        val splashResumed = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "resumed" && it.entry?.token == entry.token }
-        val mainResumed = observed.indexOfFirst { it.activity is MainActivity && it.phase == "resumed" && it.entry?.token == entry.token }
-        val featureResumed = observed.indexOfFirst { it.activity is RetentionPlaygroundActivity && it.phase == "resumed" && it.entry?.token == entry.token }
+        val splashResumed = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "resumed" && it.entry == entry }
+        assertTrue("Actual Splash must resume with the complete materialized entry: $observed", splashResumed >= 0)
+        val splash = observed[splashResumed].activity
+        val splashCreated = observed.indexOfFirst { it.activity === splash && it.phase == "created" }
+        assertTrue("The same actual Splash instance must have been created: $observed", splashCreated >= 0)
+        val createdEntry = checkNotNull(observed[splashCreated].entry)
+        if (createdEntry.mode == RetentionEntryMode.REUSABLE) {
+            assertNotEquals("Capture materializes a fresh token", createdEntry.token, entry.token)
+            assertTrue(entry.createdAtMillis >= createdEntry.createdAtMillis)
+            assertEquals("Materialization changes only token, creation time and mode; payload is exact",
+                createdEntry, entry.copy(token = createdEntry.token, createdAtMillis = createdEntry.createdAtMillis, mode = RetentionEntryMode.REUSABLE))
+        } else assertEquals("An ONCE envelope stays exact from creation", createdEntry, entry)
+        val mainResumed = observed.indexOfFirst { it.activity is MainActivity && it.phase == "resumed" && it.entry == entry }
+        val featureResumed = observed.indexOfFirst { it.activity is RetentionPlaygroundActivity && it.phase == "resumed" && it.entry == entry }
         assertTrue("Actual Splash created/resumed → Main resumed → feature resumed required: $observed",
             splashCreated >= 0 && splashResumed >= splashCreated && mainResumed > splashResumed && featureResumed > mainResumed)
         android.util.Log.i("RetentionRouteEvidence", "verified token=${entry.token} source=$source destination=$destination " +
