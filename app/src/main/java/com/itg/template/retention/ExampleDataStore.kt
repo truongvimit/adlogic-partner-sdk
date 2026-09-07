@@ -58,14 +58,23 @@ class ExampleDataStore(context: Context) {
         persist(state)
     }
     fun lastResult(): String = synchronized(lock) { read().optString("last_result") }
-    fun lastFeature(): String = synchronized(lock) { read().optString("last_feature", "translate") }
+    fun lastFeature(): String = synchronized(lock) { canonicalFeature(read().optString("last_feature", "notes")) }
     fun saveInput(value: String) = synchronized(lock) {
         require(value.length <= 10_000)
         persist(read().put("input", value))
     }
     fun input(): String = synchronized(lock) { read().optString("input") }
     private fun decode(id: String, value: JSONObject) = Operation(id, value.getString("feature"), value.getString("result"), value.getBoolean("reported"))
-    private fun read(): JSONObject = preferences.getString("state", null)?.let(::JSONObject) ?: JSONObject()
+    private fun read(): JSONObject {
+        val state = preferences.getString("state", null)?.let(::JSONObject) ?: JSONObject()
+        if (state.optInt("version") < 2) {
+            // Existing outbox entries retain feature/result/event IDs: a replay is the same work.
+            state.put("last_feature", canonicalFeature(state.optString("last_feature", "notes")))
+            state.put("version", 2)
+            persist(state)
+        }
+        return state
+    }
     private fun persist(state: JSONObject) {
         val previous = preferences.getString("state", null)
         if (!preferences.edit().putString("state", state.toString()).commit()) {
@@ -77,5 +86,14 @@ class ExampleDataStore(context: Context) {
             error("Could not save example data")
         }
     }
-    private companion object { val lock = Any() }
+    companion object {
+        private val lock = Any()
+        /** Only compatibility input accepts retired IDs; new business operations use the catalogue. */
+        fun canonicalFeature(id: String): String = when (id) {
+            "translate" -> "notes"
+            "saved_phrases" -> "saved_items"
+            "document" -> "guide"
+            else -> id
+        }
+    }
 }
