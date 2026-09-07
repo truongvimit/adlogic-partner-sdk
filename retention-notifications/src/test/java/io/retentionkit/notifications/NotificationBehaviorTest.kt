@@ -303,7 +303,7 @@ class NotificationBehaviorTest {
         assertEquals(NotificationOutcome.Skipped("expired"), module.receiveAlarm(alarm))
         val next = platform.scheduled.getValue(alarm.key)
         assertTrue(next.due > clock.now)
-        assertNotEquals(alarm.localDate, next.localDate)
+        assertNotEquals(alarm.calendarDate, next.calendarDate)
         assertEquals(NotificationOutcome.Skipped("stale_alarm"), module.receiveAlarm(alarm))
         assertTrue(platform.posts.isEmpty())
     }

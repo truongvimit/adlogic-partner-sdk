@@ -313,7 +313,7 @@ class RetentionFeedbackModule @JvmOverloads constructor(internal val options: Fe
         if (foreign.size >= manager.maxShortcutCountPerActivity) { manager.removeDynamicShortcuts(listOf(SHORTCUT_ID)); event("skipped", "shortcut_quota"); return }
         val shortcut = ShortcutInfo.Builder(rt.application, SHORTCUT_ID).setActivity(launcher)
             .setShortLabel(content().shortcutLabel.take(40))
-            .setIcon(Icon.createWithResource(rt.application, options.appIconRes ?: R.drawable.rk_ic_feedback))
+            .setIcon(Icon.createWithResource(rt.application, options.shortcutIconRes))
             .setIntent(intent).build()
         manager.enableShortcuts(listOf(SHORTCUT_ID))
         if (!manager.addDynamicShortcuts(listOf(shortcut))) event("skipped", "shortcut_rejected")

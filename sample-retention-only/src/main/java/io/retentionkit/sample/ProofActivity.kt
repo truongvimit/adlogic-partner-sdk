@@ -103,6 +103,11 @@ class ProofActivity : Activity() {
         refreshStatus()
     }
     private fun capture(intent: Intent?) {
+        // Only fresh deliveries call capture; recreation restores pending_token separately.
+        // Absent/rejected input replaces local selection without deleting the old ledger entry.
+        pendingToken = null
+        routeRetries = 0
+        main.removeCallbacks(resumeEntry)
         val rt = runtime ?: return
         when (val accepted = proofApp.profile.capture(rt, intent)) {
             is RetentionEntryAcceptance.Accepted -> {
@@ -110,10 +115,9 @@ class ProofActivity : Activity() {
                 requestRouteAttempt()
             }
             is RetentionEntryAcceptance.Rejected -> {
-                if (pendingToken?.let { rt.entries.pending(it) } == null) pendingToken = null
                 result.text = "Entry rejected: ${accepted.reason}"
             }
-            else -> if (pendingToken != null) requestRouteAttempt()
+            else -> Unit
         }
     }
     private fun requestRouteAttempt() {

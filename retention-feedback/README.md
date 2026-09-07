@@ -28,7 +28,7 @@ The final SDK screen is `io.retentionkit.feedback.RetentionFeedbackActivity`, de
 
 Defaults use app icon/name, an optional reason survey, up to four localized core features, Keep, and Continue to Android with a system explanation. Default `systemAction=UNINSTALL_CONFIRMATION` opens `ACTION_UNINSTALL_PACKAGE`; the library manifest declares `REQUEST_DELETE_PACKAGES`, required on Android P+. The user/system owns confirmation. If launch fails, `appManagementFallback=true` opens App Info only after a new scope/config/session check. Set `systemAction=APP_MANAGEMENT` explicitly to use App Info, or disable fallback to keep a failed confirmation retryable. English and Vietnamese resources are included. Override the `rk_feedback_*` string resources in other `values-xx` directories, or supply `FeedbackContentProvider` (called with core's selected app-locale Context). Branding uses `brandColor` and optional `appIconRes`.
 
-`FeedbackOptions` fields: `enabled`, `shortcutEnabled`, `showReasons`, `featureIds`, `brandColor`, `appIconRes`, `contentProvider`, `uiFactory`, `launcher`, `systemAction`, `appManagementFallback`, `nativeContent`. Config keys `feedback.enabled`, `feedback.shortcut_enabled`, `feedback.show_reasons` accept strict booleans through core's last-known-good config.
+`FeedbackOptions` fields: `enabled`, `shortcutEnabled`, `showReasons`, `featureIds`, `brandColor`, `appIconRes`, `contentProvider`, `uiFactory`, `launcher`, `systemAction`, `appManagementFallback`, `nativeContent`, `shortcutIconRes`. Config keys `feedback.enabled`, `feedback.shortcut_enabled`, `feedback.show_reasons` accept strict booleans through core's last-known-good config.
 
 A custom `FeedbackUiFactory.create(activity, controller, content): View` replaces the view inside the SDK Activity. Bind actions to the supplied controller:
 
@@ -44,6 +44,8 @@ Actions return `FeedbackActionResult.Applied`, `Blocked(reason)`, or `Failed(rea
 When called from a core subscriber, `Applied` means accepted; handoff waits for queued synchronous observers, then rechecks the same runtime, config revision, session and resumed source. Events report the eventual handoff or rejection. Disable/cancel during this boundary cannot open SDK UI, a rescue feature or a system screen; a blocked initial entry remains pending. Failed handoff restores OPEN only while the module remains enabled, otherwise CANCELLED. Shared core scopes expire after 120 seconds and release only their own token.
 
 ## Shortcut ownership and observable outcomes
+
+The default launcher label is **Uninstall / Gỡ cài đặt**, with a bundled red trash icon. `shortcutIconRes` replaces only that shortcut icon; `appIconRes` continues to brand the survey header. Override `FeedbackContent.shortcutLabel` through the existing content provider to customize the label. The shortcut opens the standard feedback entry journey; uninstall still requires Continue and Android confirmation.
 
 Only dynamic shortcut ID `retention.feedback.open` belongs to this module. It adds/updates its own ID, subtracts foreign dynamic and manifest entries from the associated launcher Activity quota, and never replaces/removes other IDs. Disabling the shortcut removes its own dynamic entry and disables its own pinned copy. OEM quota/rate-limit rejection is safe and does not imply installation. Shortcut taps travel through the host entry router with a reusable core template, materialized separately per delivery.
 

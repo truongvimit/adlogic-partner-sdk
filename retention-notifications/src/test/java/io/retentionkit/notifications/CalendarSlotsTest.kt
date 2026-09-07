@@ -19,8 +19,8 @@ class CalendarSlotsTest {
         assertEquals(due + DAY, next(due + HOUR).due)
     }
     @Test fun handledDateSuppressesRepeatAfterClockMovesBack() {
-        assertEquals("20260908", next(time("2026-09-07 07:00:00"), last = "20260907").localDate)
-        assertEquals("20260908", next(time("2026-09-01 07:00:00"), last = "20260907").localDate)
+        assertEquals("20260908", next(time("2026-09-07 07:00:00"), last = "20260907").calendarDate)
+        assertEquals("20260908", next(time("2026-09-01 07:00:00"), last = "20260907").calendarDate)
     }
     @Test fun springGapMovesForwardAndFallOverlapProducesOneIdentity() {
         val paris = TimeZone.getTimeZone("Europe/Paris")
@@ -28,8 +28,8 @@ class CalendarSlotsTest {
         assertEquals(time("2026-03-29 01:30:00", utc), spring.due) // 03:30 CEST, shifted by missing hour
         val fall = next(time("2026-10-25 00:00:00", paris), paris, LocalSlot(2, 30))
         assertEquals(time("2026-10-25 01:30:00", utc), fall.due) // later 02:30, standard time
-        val following = next(fall.due + 1, paris, LocalSlot(2, 30), fall.localDate)
-        assertEquals("20261026", following.localDate)
+        val following = next(fall.due + 1, paris, LocalSlot(2, 30), fall.calendarDate)
+        assertEquals("20261026", following.calendarDate)
         assertNotEquals(fall.occurrence, following.occurrence)
     }
     @Test fun timezoneChangeKeepsCivilSlotsAndRecomputesUtcDue() {

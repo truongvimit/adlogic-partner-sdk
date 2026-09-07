@@ -182,7 +182,8 @@ class RetentionNotifications internal constructor(
                 return skipped(alarm.campaign, "not_due")
             }
             runtime.store.transaction(STATE) { state ->
-                if (alarm.campaign.calendar) state.put("handled:${alarm.key}", maxOf(alarm.localDate, state.string("handled:${alarm.key}", alarm.localDate)!!))
+                val calendarDate = alarm.calendarDate
+                if (calendarDate != null) state.put("handled:${alarm.key}", maxOf(calendarDate, state.string("handled:${alarm.key}", calendarDate)!!))
                 else state.remove("schedule:${alarm.key}")
             }
             if (!alarm.campaign.calendar) safe("cancel_exit_alarm") { platform.cancelAlarm(alarm) }
@@ -381,7 +382,10 @@ class RetentionNotifications internal constructor(
             fun entryIntent(action: String, destination: String): PendingIntent {
                 val entry = RetentionEntry(source(campaign), destination, action,
                     token = UUID.nameUUIDFromBytes("$occurrence:$action:$destination".toByteArray(Charsets.UTF_8)).toString(),
-                    campaignId = campaign.key, instanceId = occurrence, createdAtMillis = due, expiresAtMillis = if (persistentLockscreen) null else expires,
+                    // Delivery/display TTL controls posting and OS timeout, not an accepted user's
+                    // setup journey. Core retains routes for at most seven days; reusable surfaces
+                    // materialize that bounded lifetime on each actual tap.
+                    campaignId = campaign.key, instanceId = occurrence, createdAtMillis = due,
                     mode = if (campaign == NotificationCampaign.PINNED || persistentLockscreen) RetentionEntryMode.REUSABLE else RetentionEntryMode.ONCE)
                 val intent = runtime.createEntryIntent(entry) ?: error("No valid explicit host route")
                 return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
