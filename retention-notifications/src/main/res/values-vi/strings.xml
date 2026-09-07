@@ -15,4 +15,14 @@
     <string name="rk_n_channel_reminder">Nhắc yên lặng</string>
     <string name="rk_n_channel_pinned">Công cụ đã ghim</string>
     <string name="rk_n_channel_lockscreen">Mẹo màn hình khóa</string>
+    <string name="rk_n_daily_title">Mẹo hôm nay: %1$s</string>
+    <string name="rk_n_winback_title">Sẵn sàng khi bạn quay lại: %1$s</string>
+    <string name="rk_n_onboarding_title">Hoàn tất thiết lập %1$s</string>
+    <string name="rk_n_before_you_go">Trước khi bạn rời đi</string>
+    <string name="rk_n_reminder_title">Giữ %1$s trong tầm tay</string>
+    <string name="rk_n_pinned_title">Công cụ của bạn</string>
+    <string name="rk_n_lockscreen_title">Thử %1$s</string>
+    <string name="rk_n_action_now">Mở ngay</string>
+    <string name="rk_n_return_expanded">Tiếp tục với %1$s</string>
+    <string name="rk_n_channel_updates">Cập nhật và tin mới</string>
 </resources>
