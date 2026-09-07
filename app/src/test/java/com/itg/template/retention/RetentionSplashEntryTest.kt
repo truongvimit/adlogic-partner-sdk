@@ -1,6 +1,7 @@
 package com.itg.template.retention
 
 import android.app.Application
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
@@ -77,5 +78,39 @@ class RetentionSplashEntryTest {
         assertEquals(next, entry(launched))
         assertEquals(SplashEntry.WIDGET, SplashEntry.from(launched.extras))
         assertTrue(first.get().isFinishing)
+    }
+
+    @Test fun actualLifecycleCreatedSeesReusableTemplateBeforeSameSplashResumesWithOnceEntry() {
+        val observations = mutableListOf<Triple<Activity, String, RetentionEntry>>()
+        val observer = object : Application.ActivityLifecycleCallbacks {
+            private fun record(activity: Activity, phase: String) {
+                if (activity is SplashActivity) observations.add(Triple(activity, phase, entry(activity.intent)))
+            }
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = record(activity, "created")
+            override fun onActivityResumed(activity: Activity) = record(activity, "resumed")
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        }
+        app.registerActivityLifecycleCallbacks(observer)
+        try {
+            val reusable = RetentionEntry(RetentionEntrySource.PINNED, "notes", "notes",
+                campaignId = "pinned", instanceId = "pinned_fixture", mode = RetentionEntryMode.REUSABLE)
+            val screen = create(checkNotNull(kit.runtime.createEntryIntent(reusable))).start().resume()
+            val created = observations.single { it.second == "created" }
+            val resumed = observations.single { it.second == "resumed" }
+            assertSame(screen.get(), created.first)
+            assertSame(created.first, resumed.first)
+            assertEquals(reusable, created.third)
+            assertEquals(RetentionEntryMode.ONCE, resumed.third.mode)
+            assertNotEquals(created.third.token, resumed.third.token)
+            assertEquals(created.third, resumed.third.copy(token = created.third.token,
+                createdAtMillis = created.third.createdAtMillis, mode = RetentionEntryMode.REUSABLE))
+            assertEquals(resumed.third, kit.runtime.entries.pending(resumed.third.token))
+        } finally {
+            app.unregisterActivityLifecycleCallbacks(observer)
+        }
     }
 }

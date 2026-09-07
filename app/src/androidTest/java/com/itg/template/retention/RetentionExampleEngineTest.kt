@@ -53,7 +53,8 @@ class RetentionExampleEngineTest {
     private var feedbackCleanup: (() -> Unit)? = null
     private data class ActivityMoment(val activity: Activity, val phase: String, val entry: RetentionEntry?, val elapsed: Long = SystemClock.elapsedRealtime())
     private val moments = CopyOnWriteArrayList<ActivityMoment>()
-    private var lastAdBackAt = 0L
+    private var lastAdGestureAt = 0L
+    private var fixtureInitialTimeMillis = 0L
     private val activityObserver = object : Application.ActivityLifecycleCallbacks {
         private fun record(activity: Activity, phase: String) {
             val entry = (RetentionEntryCodec.read(activity.intent) as? RetentionEntryDecodeResult.Valid)?.entry
@@ -94,6 +95,7 @@ class RetentionExampleEngineTest {
     private fun prepare(setup: Boolean = true, extra: Map<String, String> = emptyMap(), launch: Intent? = null,
         notifications: RetentionNotificationOptions = RetentionNotificationOptions(),
         initialTimeMillis: Long = System.currentTimeMillis()) {
+        fixtureInitialTimeMillis = initialTimeMillis
         instrumentation.runOnMainSync { kit = ExampleQa.prepare(application, setup, extra, notifications = notifications, initialTimeMillis = initialTimeMillis) }
         scenario = ActivityScenario.launch(launch ?: Intent(application, RetentionPlaygroundActivity::class.java))
         await { kit.runtime.isForeground && kit.runtime.activities.current() is RetentionPlaygroundActivity }
@@ -127,9 +129,11 @@ class RetentionExampleEngineTest {
     private fun assertDailyCatchUp(raw: String) {
         val alarm = JSONObject(raw)
         val now = kit.runtime.clock.wallTimeMillis()
-        assertEquals("Regression requires a real saved 08:00 DAILY envelope", 56 * 60_000L, now - alarm.getLong("due"))
-        assertEquals(4 * 60_000L, alarm.getLong("expires") - now)
-        assertEquals(now, kit.runtime.userState.setupCompletedAtMillis)
+        assertEquals("Fixture starts at 08:56 against the real saved 08:00 DAILY envelope", 56 * 60_000L,
+            fixtureInitialTimeMillis - alarm.getLong("due"))
+        assertEquals(4 * 60_000L, alarm.getLong("expires") - fixtureInitialTimeMillis)
+        assertTrue("Live QA clock must remain inside this saved catch-up interval", now in fixtureInitialTimeMillis until alarm.getLong("expires"))
+        assertTrue("Setup is recorded after fixture activation without rewinding", checkNotNull(kit.runtime.userState.setupCompletedAtMillis) in fixtureInitialTimeMillis..now)
     }
     private fun calendar(campaign: NotificationCampaign) {
         prepare(initialTimeMillis = if (campaign == NotificationCampaign.DAILY) dailyCatchUpTime() else System.currentTimeMillis())
@@ -215,10 +219,20 @@ class RetentionExampleEngineTest {
         }
         val entry = checkNotNull(selected)
         val observed = moments.drop(offset)
-        val splashCreated = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "created" && it.entry?.token == entry.token }
-        val splashResumed = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "resumed" && it.entry?.token == entry.token }
-        val mainResumed = observed.indexOfFirst { it.activity is MainActivity && it.phase == "resumed" && it.entry?.token == entry.token }
-        val featureResumed = observed.indexOfFirst { it.activity is RetentionPlaygroundActivity && it.phase == "resumed" && it.entry?.token == entry.token }
+        val splashResumed = observed.indexOfFirst { it.activity is SplashActivity && it.phase == "resumed" && it.entry == entry }
+        assertTrue("Actual Splash must resume with the complete materialized entry: $observed", splashResumed >= 0)
+        val splash = observed[splashResumed].activity
+        val splashCreated = observed.indexOfFirst { it.activity === splash && it.phase == "created" }
+        assertTrue("The same actual Splash instance must have been created: $observed", splashCreated >= 0)
+        val createdEntry = checkNotNull(observed[splashCreated].entry)
+        if (createdEntry.mode == RetentionEntryMode.REUSABLE) {
+            assertNotEquals("Capture materializes a fresh token", createdEntry.token, entry.token)
+            assertTrue(entry.createdAtMillis >= createdEntry.createdAtMillis)
+            assertEquals("Materialization changes only token, creation time and mode; payload is exact",
+                createdEntry, entry.copy(token = createdEntry.token, createdAtMillis = createdEntry.createdAtMillis, mode = RetentionEntryMode.REUSABLE))
+        } else assertEquals("An ONCE envelope stays exact from creation", createdEntry, entry)
+        val mainResumed = observed.indexOfFirst { it.activity is MainActivity && it.phase == "resumed" && it.entry == entry }
+        val featureResumed = observed.indexOfFirst { it.activity is RetentionPlaygroundActivity && it.phase == "resumed" && it.entry == entry }
         assertTrue("Actual Splash created/resumed → Main resumed → feature resumed required: $observed",
             splashCreated >= 0 && splashResumed >= splashCreated && mainResumed > splashResumed && featureResumed > mainResumed)
         android.util.Log.i("RetentionRouteEvidence", "verified token=${entry.token} source=$source destination=$destination " +
@@ -457,23 +471,50 @@ class RetentionExampleEngineTest {
     /** Actual device gesture on the actual test-ad Activity only. No synthetic ad callbacks. */
     private fun dismissVisibleEntryTestAd() {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastAdBackAt < 1000) return
+        if (now - lastAdGestureAt < 1000) return
+        val device = UiDevice.getInstance(instrumentation)
+        if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+        val closeLabel = java.util.regex.Pattern.compile(
+            "^(?:close(?: ad)?|interstitial close button|đóng(?: quảng cáo)?)$",
+            java.util.regex.Pattern.CASE_INSENSITIVE or java.util.regex.Pattern.UNICODE_CASE
+        )
+        val closeResource = java.util.regex.Pattern.compile(
+            ".*:id/(?:close|close_button|close_btn|interstitial_close|interstitial_close_button)$",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        )
+        // Only a semantically identified, currently exposed close control can be clicked.
+        // Unlabelled image buttons and ad content are never guessed from their position.
+        val close = device.findObject(By.desc(closeLabel).pkg(application.packageName))
+            ?: device.findObject(By.text(closeLabel).pkg(application.packageName))
+            ?: device.findObject(By.res(closeResource).pkg(application.packageName))
+        if (close != null) {
+            val clicked = runCatching {
+                if (!close.isEnabled || !focusedTestAd() || device.currentPackageName != application.packageName) return
+                val observed = "class=${close.className} resource=${close.resourceName} description=${close.contentDescription} text=${close.text} bounds=${close.visibleBounds}"
+                if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+                lastAdGestureAt = now
+                close.click()
+                android.util.Log.i("RetentionAdEvidence", "actual gesture=semantic_close $observed elapsed=$now")
+            }.onFailure {
+                android.util.Log.i("RetentionAdEvidence", "close_control_changed=${it.javaClass.simpleName} elapsed=$now")
+            }.isSuccess
+            if (clicked) return
+        }
+        // Back is a real fallback gesture, not proof that the ad accepted or completed it.
+        if (!focusedTestAd() || device.currentPackageName != application.packageName) return
+        lastAdGestureAt = now
+        val sent = device.pressBack()
+        android.util.Log.i("RetentionAdEvidence", "actual gesture=Back activity=com.google.android.gms.ads.AdActivity sent=$sent elapsed=$now")
+    }
+
+    private fun focusedTestAd(): Boolean {
         var visibleAd = false
         instrumentation.runOnMainSync {
             val current = kit.runtime.activities.current()
             visibleAd = current?.javaClass?.name == "com.google.android.gms.ads.AdActivity" &&
                 !current.isFinishing && !current.isDestroyed && current.hasWindowFocus()
         }
-        val device = UiDevice.getInstance(instrumentation)
-        if (!visibleAd || device.currentPackageName != application.packageName) return
-        // Recheck immediately before input so a completed ad cannot deliberately send Back to a feature.
-        instrumentation.runOnMainSync {
-            visibleAd = kit.runtime.activities.current()?.javaClass?.name == "com.google.android.gms.ads.AdActivity"
-        }
-        if (!visibleAd) return
-        lastAdBackAt = now
-        val sent = device.pressBack()
-        android.util.Log.i("RetentionAdEvidence", "actual gesture=Back activity=com.google.android.gms.ads.AdActivity sent=$sent elapsed=$now")
+        return visibleAd
     }
 
     private fun clickFeedback(tag: String) {
