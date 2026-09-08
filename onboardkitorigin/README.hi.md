@@ -131,6 +131,28 @@ Activity recreation में mode और attempt memory में रहते 
 
 `ob_splash_ad_budget_ms` (default 60,000 ms) notification result/skip और resumed + focus के बाद एक बार शुरू होता है। Banner इसी deadline में इंतज़ार करता है; background/recreation से समय reset नहीं होता और late interstitial fill समाप्त show अवसर को फिर नहीं खोलता। `ob_splash_notification_settle_ms` default **0** है और notification result से समय गिनता है। Minimum (3,000 ms), banner wait (0 ms), floors और हर tier के network timeouts वही हैं। Splash मौजूदा `show()` इस्तेमाल करता है।
 
+### Partner integration के लिए नोट्स
+
+`ObSplashActivity` और दिए गए `ERainAdProvider` के साथ install/configure flow वही रखें।
+SDK preload, notification, timers और navigation संभालता है; splash में अतिरिक्त delay या
+`loadAndShow()` की जरूरत नहीं है। Onboarding के बाहर native slots के लिए
+[shared manager और screen/view के helper](../ads/README.md#native-preload-repeated-show-and-refresh) का उपयोग करें।
+
+Default **3 s minimum navigation को रोकता है, interstitial दिखने को नहीं**। Launcher `UNDER_AD`
+में ad phase के दूसरे 1 पर interstitial दिखे तो दूसरे 3 तक उसके नीचे splash रह सकता है;
+फिर अगली screen नीचे खुलती है। दूसरे 5 पर दिखे तो minimum का अतिरिक्त इंतज़ार नहीं है।
+**60 s budget notification के बाद ads का इंतज़ार सीमित करता है**, पूरे launch या उपयोगकर्ता
+के interstitial देखने का समय नहीं। Remote config इन defaults को बदल सकता है।
+
+अपना [OnboardingAdProvider](src/main/java/io/onboardkit/ads/OnboardingAdProvider.kt) देने पर नया
+native contract लागू करें: preload प्रति placement idempotent हो, pending load से जुड़े और
+usable unused fill हो तो skip करे; successful bind उस fill को unused cache से निकालता है।
+`isNativeLoadFailed()` से terminal preload failure बताएं ताकि Language तुरंत retry न करे
+(compatibility default `false` है)। `releaseNative()` presentation समाप्त करे, shared pending
+loads और unused fills बचाए। Queued request शुरू होने से पहले foreground eligibility फिर जांचें;
+`allowWhileVisible` केवल अपने notification prompt के नीचे दिख रहे splash के लिए है।
+दिया गया provider इन आवश्यकताओं को पहले से संभालता है।
+
 ## 3. Ads और सामग्री को screens से जोड़ें
 
 सिर्फ जरूरी optional slots configure करें; कुछ slots fallback units लेते हैं, जैसा [AdsConfig](src/main/java/io/onboardkit/config/AdsConfig.kt) में बताया गया है।

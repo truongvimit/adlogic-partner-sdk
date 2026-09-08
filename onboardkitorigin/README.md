@@ -131,6 +131,28 @@ The mode and one launch attempt survive Activity recreation in memory. Fetch fai
 
 `ob_splash_ad_budget_ms` (60,000 ms default) starts once after notification finishes/skips and splash resumes with focus. Banner waiting shares that deadline; elapsed background/recreation time is not reset, and late interstitial fill cannot reopen an expired opportunity. `ob_splash_notification_settle_ms` defaults to **0** and, when enabled, counts from the notification result. Existing minimum (3,000 ms), banner wait (0 ms), floors and per-tier network timeouts remain unchanged. Splash continues using the existing `show()` path.
 
+### Partner integration notes
+
+With `ObSplashActivity` and the supplied `ERainAdProvider`, keep the existing install/configure
+flow. The SDK owns preload, notification, timers and handoff; no extra delay or splash
+`loadAndShow()` call is needed. Native slots outside onboarding use the
+[shared native manager and screen-scoped helper](../ads/README.md#native-preload-repeated-show-and-refresh).
+
+The default **3 s minimum gates navigation, not interstitial presentation**. For launcher
+`UNDER_AD`, an interstitial shown at ad-phase second 1 can still have splash underneath until
+second 3; the next screen then opens beneath it. If shown at second 5, no minimum remains.
+The **60 s budget bounds ad waiting after notification**, not total launch duration or the time
+the user spends viewing the interstitial. Remote configuration can override these defaults.
+
+If you inject your own [OnboardingAdProvider](src/main/java/io/onboardkit/ads/OnboardingAdProvider.kt),
+implement the updated native contract: preload is idempotent per placement, joins pending loads
+and skips usable unused fills; successful binding consumes that unused fill. Report terminal
+preload failures through `isNativeLoadFailed()` so Language entry does not immediately retry
+them (its compatibility default is `false`). `releaseNative()` ends the presentation while
+preserving shared pending loads and unused fills. Recheck foreground eligibility before queued
+requests start; `allowWhileVisible` only permits the visible splash beneath its notification
+prompt. The supplied provider already handles these requirements.
+
 ## 3. Map ads and content to screens
 
 Leave optional slots unset unless you need them; some slots inherit fallback units, as documented in [AdsConfig](src/main/java/io/onboardkit/config/AdsConfig.kt).

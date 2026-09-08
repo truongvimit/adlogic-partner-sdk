@@ -85,6 +85,8 @@ Dependencies and the main install APIs are unchanged. These are the integration 
 | Notification permission | `SplashConfig.notificationPermissionEnabled` defaults to `true`; OnboardKit merges `POST_NOTIFICATIONS`. Set it to `false` if your app owns this prompt or does not use notifications. Authorized splash ads can load under the visible notification prompt; presentation and the shared wait budget require its result and foreground focus. |
 | Portrait | `BehaviorConfig.lockPortrait` defaults to `true`, including the app's splash subclass. Set it to `false` for a landscape/tablet flow; follow the splash manifest example in the OnboardKit guide. |
 | Banner refresh | Choose AdMob or the SDK to own refresh. SDK `Reload` uses an ordinary banner even if the initial request is collapsible. See the ads guide before keeping a custom reload timer. |
+| Native ownership | Keep a helper per screen/view and a stable placement per slot. Successful binding consumes the unused cache; pending loads survive departure, and rotation restores the presentation. Follow the [native usage and cleanup guide](ads/README.md#native-preload-repeated-show-and-refresh). |
+| Splash preload | Built-in splash owns scheduling and timing. The optional A/B flag changes only LFO1 preload; see [splash integration and custom providers](onboardkitorigin/README.md#partner-integration-notes). |
 | Skip callbacks | Update exhaustive Kotlin `when` branches for the added `AdSkipReason` values: consent reasons in ads, and `SHOW_IN_BACKGROUND` in ads/onboarding. |
 | Analytics | Native binding now emits `fo_ad_bound`. Keep it separate from vendor-confirmed `ad_show` in dashboards; do not emit a second show event from a bind callback. |
 

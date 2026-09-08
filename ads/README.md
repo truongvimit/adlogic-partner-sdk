@@ -195,6 +195,8 @@ for every tier; see [BannerAdConfig](src/main/java/com/ads/module/helper/banner/
 `NativeAdManager` owns one unused native and one pending load per placement across screens.
 Use a distinct placement for each slot, even when two slots use the same AdMob unit. Requests
 from `NativeAdHelper` always share this store; enabling preload on the helper is no longer required.
+Keep helpers scoped to their screen/view; the shared manager already owns the cross-screen state,
+so partners do not need a singleton helper holding an Activity or ad view.
 
 ```kotlin
 // Optional: start earlier, after consent. Repeat calls do not append load batches.
@@ -234,6 +236,8 @@ its page-selection callbacks this way.
 `cancel()` detaches the current helper and disposes its presentation; it does not cancel the shared
 network request. If the helper will not be reused, call `destroy()` to also remove its lifecycle
 observer and view references. `NativeAdManager.release(placement)` explicitly invalidates unused/pending fills.
+Do not call that manager release as routine screen/rotation cleanup if the next screen instance
+must reuse the pending request or unused fill.
 Call `ApNativeAd.destroy()` when disposing an ad obtained through the low-level polling API.
 
 The old `NativeAdPreload` entry points delegate to this same store. `preloadWithKey()` now skips

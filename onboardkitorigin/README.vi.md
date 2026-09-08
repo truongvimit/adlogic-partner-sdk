@@ -131,6 +131,27 @@ Mode và attempt được giữ trong bộ nhớ khi Activity tạo lại. Fetch
 
 `ob_splash_ad_budget_ms` (mặc định 60.000 ms) bắt đầu một lần sau khi notification kết thúc/bỏ qua và splash resumed + có focus. Banner dùng chung deadline; thời gian ở nền/recreation không được cấp lại, inter về trễ không được khôi phục lượt show đã hết hạn. `ob_splash_notification_settle_ms` mặc định **0**, nếu bật sẽ tính từ lúc có kết quả quyền. Giữ nguyên minimum (3.000 ms), banner wait (0 ms), floor và timeout mạng từng tier. Splash vẫn dùng `show()` hiện tại.
 
+### Lưu ý tích hợp cho partner
+
+Với `ObSplashActivity` và `ERainAdProvider` có sẵn, giữ cách install/configure hiện tại.
+SDK quản lý preload, notification, timer và chuyển màn; không cần thêm delay hay gọi
+`loadAndShow()` ở splash. Native ngoài onboarding dùng
+[manager dùng chung và helper theo màn/view](../ads/README.md#native-preload-repeated-show-and-refresh).
+
+Mặc định **minimum 3 s chặn chuyển màn, không chặn show inter**. Với launcher `UNDER_AD`,
+inter show ở giây 1 của pha ads thì bên dưới vẫn có thể là splash tới giây 3, sau đó mới mở
+màn kế tiếp dưới inter. Nếu show ở giây 5 thì không còn minimum phải đợi.
+**Budget 60 s giới hạn chờ ads sau notification**, không phải tổng thời gian khởi động hay
+thời gian người dùng xem inter. Remote config có thể ghi đè các mặc định này.
+
+Nếu tự cài [OnboardingAdProvider](src/main/java/io/onboardkit/ads/OnboardingAdProvider.kt),
+cần đáp ứng contract native mới: preload theo placement phải join request đang tải và skip
+khi còn ads chưa dùng hợp lệ; bind thành công lấy ads khỏi cache chưa dùng. Trả kết quả lỗi
+preload qua `isNativeLoadFailed()` để Language không retry ngay (mặc định tương thích là `false`).
+`releaseNative()` kết thúc phần hiển thị nhưng giữ request chung và ads chưa dùng.
+Kiểm tra lại điều kiện foreground trước khi chạy request đang chờ; `allowWhileVisible` chỉ
+cho phép splash còn hiển thị dưới prompt notification của nó. Provider có sẵn đã xử lý các yêu cầu này.
+
 ## 3. Gắn quảng cáo và nội dung vào màn
 
 Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự phòng, được mô tả trong [AdsConfig](src/main/java/io/onboardkit/config/AdsConfig.kt).
