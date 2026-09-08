@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.LayoutRes
+import androidx.appcompat.app.AppCompatActivity
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
@@ -93,6 +94,20 @@ interface OnboardingAdProvider {
         activity: Activity,
         placement: AdPlacement,
         callback: ObInterstitialCallback,
+    )
+
+    /**
+     * Use a buffered fill or wait at most [timeoutMs] for a load, then report a terminal skip.
+     * Every provider must implement this contract. The timeout bounds waiting for a fill,
+     * not show preparation or ad dismissal. A late fill must not auto-show for an expired call.
+     * The bundled ERain provider delegates to InterstitialAdManager.loadAndShow.
+     */
+    fun loadAndShowInterstitial(
+        activity: AppCompatActivity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        callback: ObInterstitialCallback,
+        timeoutMs: Long = 8_000L,
     )
 
     /** Wall clock of the last interstitial impression, `0` when the provider does not track it. */

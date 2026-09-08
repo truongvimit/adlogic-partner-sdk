@@ -157,6 +157,8 @@ data class AdsConfig(
     val questionTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
     val skipAdOnlyStepsWhenPremium: Boolean = true,
+    /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */
+    val afterOnboardingInterstitial: InterstitialAdUnit? = null,
 ) {
 
     /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */
@@ -171,6 +173,7 @@ data class AdsConfig(
     fun unitFor(placement: AdPlacement): AdUnitTiers? = when (placement) {
         AdPlacement.SplashBanner -> splashBanner?.let { NativeAdUnit(it.id) }
         AdPlacement.SplashInterstitial -> splashInterstitial
+        AdPlacement.AfterOnboardingInterstitial -> afterOnboardingInterstitial
         AdPlacement.Language1 -> languageNative
         AdPlacement.Language2 -> languageDupNative ?: languageNative
         AdPlacement.LanguageConfirm -> languageConfirmNative

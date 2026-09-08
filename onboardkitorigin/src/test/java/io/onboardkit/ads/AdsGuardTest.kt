@@ -189,6 +189,16 @@ private class FakeAdProvider(
 
     override fun isInterstitialReady(placement: AdPlacement): Boolean = false
 
+    override fun loadAndShowInterstitial(
+        activity: androidx.appcompat.app.AppCompatActivity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        callback: ObInterstitialCallback,
+        timeoutMs: Long,
+    ) {
+        throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
+    }
+
     override fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,

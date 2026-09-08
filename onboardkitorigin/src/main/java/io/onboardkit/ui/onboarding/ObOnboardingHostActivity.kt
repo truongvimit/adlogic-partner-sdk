@@ -10,7 +10,7 @@ import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.showInterstitial
+import io.onboardkit.ads.loadAndShowInterstitial
 import io.onboardkit.core.FinishReason
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepHost
@@ -76,6 +76,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             finishFlow(FinishReason.EMPTY_FLOW)
             return
         }
+
+        sdk.preload().onOnboardingShown(this)
 
         pagerAdapter = StepPagerAdapter(this)
         binding.obStepPager.adapter = pagerAdapter
@@ -286,22 +288,26 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     // ── Exit handoff ──
 
     private fun resolveExit() {
+        loadAndShowInterstitial(
+            AdPlacement.AfterOnboardingInterstitial,
+            timeoutMs = 8_000L,
+            onFinished = { continueAfterOnboardingAd() },
+        )
+    }
+
+    private fun continueAfterOnboardingAd() {
+        if (isFinishing || isDestroyed) return
         val config = sdk.requireConfig()
         val provider = sdk.provider()
         val decision = FlowNavigator.decideExit(
             flags = sdk.flags(),
             config = config,
-            hasReusableSplashInterstitial =
-            provider?.isInterstitialReady(AdPlacement.SplashInterstitial) == true,
+            hasReusableSplashInterstitial = false,
             isOb5NativeReady = provider?.isNativeReady(AdPlacement.Ob5) == true,
         )
         ObLog.d(ObLog.Section.NAV, "ob_onboarding exit_decision=$decision")
         when (decision) {
-            ExitDecision.ShowReusedInterstitialThenComplete ->
-                showInterstitial(
-                    AdPlacement.SplashInterstitial,
-                    onFinished = { finishFlow(FinishReason.COMPLETED) },
-                )
+            ExitDecision.ShowReusedInterstitialThenComplete -> finishFlow(FinishReason.COMPLETED)
 
             ExitDecision.GoToOb5 -> {
                 ObFullScreenAdActivity.start(this)

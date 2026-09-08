@@ -1,5 +1,8 @@
 package io.onboardkit.remote
 
+import io.onboardkit.remote.ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE
+
+
 /**
  * Type-safe remote key: the default lives next to the key string, so there is no
  * defaults XML to keep in sync. All keys carry the `ob_` prefix to avoid clashing
@@ -60,6 +63,7 @@ object ObRemoteKeys {
     // RemoteFlags — a placement can never out-vote the master kill switch.
     val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", true)
     val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
+    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", true)
     val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
     val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
     val ADS_LANGUAGE_CONFIRM_NATIVE =
@@ -120,7 +124,11 @@ object ObRemoteKeys {
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
         SHOW_LANGUAGE_TAP_HINT, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
         SHOW_LANGUAGE_CONFIRM_DIALOG,
-        REUSE_SPLASH_INTER, ADS_SPLASH_BANNER, ADS_SPLASH_INTER, ADS_LANGUAGE_NATIVE,
+        REUSE_SPLASH_INTER,
+        ADS_SPLASH_BANNER,
+        ADS_SPLASH_INTER,
+        ADS_AFTER_ONBOARD_INTER,
+        ADS_LANGUAGE_NATIVE,
         ADS_LANGUAGE_CONFIRM_NATIVE,
         ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
         ADS_APP_RESUME,

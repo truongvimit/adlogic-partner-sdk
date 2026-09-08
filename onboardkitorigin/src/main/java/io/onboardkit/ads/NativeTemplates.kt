@@ -54,6 +54,7 @@ object NativeTemplates {
 
             AdPlacement.SplashBanner,
             AdPlacement.SplashInterstitial,
+            AdPlacement.AfterOnboardingInterstitial,
             AdPlacement.QuestionInterstitial,
             AdPlacement.AppResume,
             -> NativeTemplate.CTA_BOTTOM

@@ -4,10 +4,7 @@ import android.content.Context
 import io.onboardkit.config.AdUnitTiers
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.ObLog
-import io.onboardkit.core.StepId
-import io.onboardkit.core.StepType
 import io.onboardkit.remote.RemoteFlags
-import io.trackkit.AdFormat
 
 /**
  * The single place that answers "may this placement show".
@@ -121,6 +118,7 @@ class AdsGuard internal constructor(
 internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = when (placement) {
     AdPlacement.SplashBanner -> adsSplashBanner
     AdPlacement.SplashInterstitial -> adsSplashInter
+    AdPlacement.AfterOnboardingInterstitial -> adsAfterOnboardInter
     AdPlacement.Language1, AdPlacement.Language2 -> adsLanguageNative
     AdPlacement.LanguageConfirm -> adsLanguageConfirmNative
     is AdPlacement.StepNative -> adsContentNative

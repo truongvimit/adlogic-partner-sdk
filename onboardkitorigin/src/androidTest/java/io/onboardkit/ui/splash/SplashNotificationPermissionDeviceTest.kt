@@ -370,6 +370,16 @@ private object NotificationFixture {
             if (holdInterstitial) pendingInterstitial = listener else listener?.onLoaded()
         }
         override fun isInterstitialReady(placement: AdPlacement) = !holdInterstitial || interstitialReady
+        override fun loadAndShowInterstitial(
+            activity: androidx.appcompat.app.AppCompatActivity,
+            placement: AdPlacement,
+            unit: InterstitialAdUnit,
+            callback: ObInterstitialCallback,
+            timeoutMs: Long,
+        ) {
+            throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
+        }
+
         override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
             shows.incrementAndGet()
             presentationOrder += "show"

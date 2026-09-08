@@ -1,8 +1,6 @@
 package io.onboardkit.ads
 
 import android.app.Activity
-import io.onboardkit.config.NativeAdUnit
-import io.onboardkit.config.NativeTemplate
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
@@ -95,6 +93,15 @@ class PreloadChain internal constructor(
         if (!cfg.language.confirmDialogOnReselectEnabled) return
         if (!flags().showLanguageConfirmDialog) return
         preloadNative(activity, AdPlacement.LanguageConfirm)
+    }
+
+    /** Pager entry, including resumed flows. Empty flows never call this. */
+    fun onOnboardingShown(activity: Activity) {
+        val unit = config()?.ads?.afterOnboardingInterstitial ?: return
+        val placement = AdPlacement.AfterOnboardingInterstitial
+        if (guard.skipReason(activity, placement) == null) {
+            provider?.loadInterstitial(activity, placement, unit)
+        }
     }
 
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {

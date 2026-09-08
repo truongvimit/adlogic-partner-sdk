@@ -24,6 +24,11 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.INTERSTITIAL
     }
 
+    data object AfterOnboardingInterstitial : AdPlacement {
+        override val key: String = "inter_after_ob3"
+        override val format: AdFormat = AdFormat.INTERSTITIAL
+    }
+
     data object Language1 : AdPlacement {
         override val key: String = "language1"
         override val format: AdFormat = AdFormat.NATIVE

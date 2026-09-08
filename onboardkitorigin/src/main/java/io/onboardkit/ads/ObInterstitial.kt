@@ -5,6 +5,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import io.onboardkit.OnboardingSdk
+import io.onboardkit.ads.ObInterstitial.show
+import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -36,6 +38,16 @@ fun AppCompatActivity.showInterstitial(
     ObInterstitial.show(this, placement, onNext, onFinished)
 }
 
+/** Same presentation lifecycle as [showInterstitial], with a bounded wait for a fill. */
+fun AppCompatActivity.loadAndShowInterstitial(
+    placement: AdPlacement,
+    timeoutMs: Long = 8_000L,
+    onNext: () -> Unit = {},
+    onFinished: (AdSkipReason?) -> Unit = {},
+) {
+    ObInterstitial.show(this, placement, onNext, onFinished, timeoutMs)
+}
+
 /**
  * One interstitial presentation at a time, process-wide.
  *
@@ -52,6 +64,7 @@ internal object ObInterstitial {
         placement: AdPlacement,
         onNext: () -> Unit,
         onFinished: (AdSkipReason?) -> Unit,
+        timeoutMs: Long? = null,
     ) {
         ObLog.d(ObLog.Section.SHOW, "${placement.key} begin host=${activity.javaClass.simpleName}")
         val startedAtMs = System.currentTimeMillis()
@@ -77,7 +90,7 @@ internal object ObInterstitial {
             onFinished(reason)
         }
 
-        val blocked = blockReason(activity, placement)
+        val blocked = blockReason(activity, placement, requireReady = timeoutMs == null)
         if (blocked != null) {
             finish.run(blocked)
             return
@@ -100,15 +113,19 @@ internal object ObInterstitial {
                 finish.run(AdSkipReason.NOT_READY)
                 return@whenResumed
             }
-            present(activity, placement, next, finish)
+            present(activity, placement, next, finish, timeoutMs)
         }
     }
 
-    private fun blockReason(activity: AppCompatActivity, placement: AdPlacement): AdSkipReason? {
+    private fun blockReason(
+        activity: AppCompatActivity,
+        placement: AdPlacement,
+        requireReady: Boolean
+    ): AdSkipReason? {
         if (isShowing) return AdSkipReason.SUPPRESSED_BY_FLOW
         OnboardingSdk.guard().skipReason(activity, placement)?.let { return it }
         val provider = OnboardingSdk.provider() ?: return AdSkipReason.NO_PROVIDER
-        if (!provider.isInterstitialReady(placement)) return AdSkipReason.NOT_READY
+        if (requireReady && !provider.isInterstitialReady(placement)) return AdSkipReason.NOT_READY
         return null
     }
 
@@ -117,31 +134,35 @@ internal object ObInterstitial {
         placement: AdPlacement,
         next: RunOnce<Unit>,
         finish: RunOnce<AdSkipReason?>,
+        timeoutMs: Long?,
     ) {
         val provider = OnboardingSdk.provider() ?: run {
             finish.run(AdSkipReason.NO_PROVIDER)
             return
         }
         ObLog.d(ObLog.Section.SHOW, "${placement.key} vendor_show")
-        provider.showInterstitial(
-            activity,
-            placement,
-            object : ObInterstitialCallback() {
-                override fun onNextAction() {
-                    ObLog.d(ObLog.Section.SHOW, "${placement.key} visible -> next")
-                    activity.endWhenBackInFront(placement, finish)
-                    next.run()
-                }
+        val callback = object : ObInterstitialCallback() {
+            override fun onNextAction() {
+                ObLog.d(ObLog.Section.SHOW, "${placement.key} visible -> next")
+                activity.endWhenBackInFront(placement, finish)
+                next.run()
+            }
 
-                override fun onAdClosed() {
-                    finish.run(null)
-                }
+            override fun onAdClosed() {
+                finish.run(null)
+            }
 
-                override fun onAdSkipped(reason: AdSkipReason) {
-                    finish.run(reason)
-                }
-            },
-        )
+            override fun onAdSkipped(reason: AdSkipReason) {
+                finish.run(reason)
+            }
+        }
+        if (timeoutMs == null) {
+            provider.showInterstitial(activity, placement, callback)
+        } else {
+            val unit = OnboardingSdk.requireConfig().ads.unitFor(placement) as? InterstitialAdUnit
+            if (unit == null) finish.run(AdSkipReason.NO_AD_UNIT)
+            else provider.loadAndShowInterstitial(activity, placement, unit, callback, timeoutMs)
+        }
     }
 }
 

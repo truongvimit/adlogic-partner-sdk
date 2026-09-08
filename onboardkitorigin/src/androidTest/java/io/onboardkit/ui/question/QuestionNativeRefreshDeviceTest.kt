@@ -254,6 +254,16 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
     }
     override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
     override fun isInterstitialReady(placement: AdPlacement) = false
+    override fun loadAndShowInterstitial(
+        activity: androidx.appcompat.app.AppCompatActivity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        callback: ObInterstitialCallback,
+        timeoutMs: Long,
+    ) {
+        throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
+    }
+
     override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
     override fun suppressAppResume(activityClass: Class<out Activity>) = Unit

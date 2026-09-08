@@ -1,17 +1,17 @@
 package com.itg.template.app
 
-import com.itg.template.R
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
+import com.itg.template.R
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
-import io.onboardkit.config.NativeTemplate
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
+import io.onboardkit.config.NativeTemplate
 import io.onboardkit.config.SplashConfig
 import io.onboardkit.config.SystemBarConfig
 import io.onboardkit.config.onboardKitConfig
@@ -96,6 +96,7 @@ object OnboardKitSetup {
             this.ads = AdsConfig(
                 splashBanner = ads?.unit("banner_splash").toBanner(),
                 splashInterstitial = ads.interstitial("inter_splash"),
+                afterOnboardingInterstitial = ads.interstitial("inter_after_ob3"),
                 // Optional: declare this key to bid a different floor for returning users. Absent
                 // from remote config, the splash falls back to `inter_splash` for everyone.
                 splashInterstitialOldUser = ads.interstitial("inter_splash_old_user"),

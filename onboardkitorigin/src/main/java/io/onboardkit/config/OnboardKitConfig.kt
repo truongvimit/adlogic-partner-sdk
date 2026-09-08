@@ -285,6 +285,7 @@ class OnboardKitConfigBuilder internal constructor() {
         checkTiers("questionNative", ads.questionNative)
         checkTiers("splashInterstitial", ads.splashInterstitial)
         checkTiers("questionInterstitial", ads.questionInterstitial)
+        checkTiers("afterOnboardingInterstitial", ads.afterOnboardingInterstitial)
         val banner = ads.splashBanner
         if (banner != null && banner.id.isBlank()) {
             errors += "[ads] splashBanner.id must not be blank"

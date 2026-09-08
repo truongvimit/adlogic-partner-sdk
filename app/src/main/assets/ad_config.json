@@ -211,6 +211,16 @@
     ],
     "enable_ua_check": false
   },
+  "inter_after_ob3_high": {
+    "id": "ca-app-pub-8736026111298299/7318554179",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
+  "inter_after_ob3": {
+    "id": "ca-app-pub-8736026111298299/8259888721",
+    "isEnable": true,
+    "enable_ua_check": false
+  },
   "inter_onboarding": {
     "id": "ca-app-pub-7208941695689653/1200371069",
     "isEnable": true,

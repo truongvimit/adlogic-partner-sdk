@@ -5,32 +5,28 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.toNativeStyle
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.AdmobHelper
 import com.ads.module.helper.AdGate
-import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
-import com.ads.module.helper.adnative.NativeAdConfig
-import com.ads.module.helper.adnative.NativeAdPreload
-import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.toNativeStyle
-import com.ads.module.helper.adnative.NativeAdStyle
 import com.ads.module.helper.adnative.AdNativeState
+import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import io.onboardkit.ads.awaitNativeRequestWindow
-import io.onboardkit.ads.canStartNativeRequest
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.findViewTreeLifecycleOwner
+import com.ads.module.helper.adnative.NativeAdPreload
+import com.ads.module.helper.adnative.NativeAdStyle
+import com.ads.module.helper.interstitial.InterLoadAndShowOptions
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
@@ -45,12 +41,18 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.awaitNativeRequestWindow
+import io.onboardkit.ads.canStartNativeRequest
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
 import io.trackkit.PlacementRegistry
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
 
 /**
  * Default [OnboardingAdProvider]: a thin adapter over the `:ads` helper layer.
@@ -351,31 +353,58 @@ class ERainAdProvider(
         InterstitialAdManager.show(
             activity,
             key,
-            object : InterShowCallback() {
-                private val skipped = AtomicBoolean(false)
-
-                override fun onSkipped(reason: SdkAdSkipReason) {
-                    skipped.set(true)
-                    ObLog.w(ObLog.Section.SHOW, "$key skipped: ${reason.key}")
-                    callback.onAdSkipped(mapReason(reason))
-                }
-
-                override fun onComplete() {
-                    if (!skipped.get()) callback.onNextAction()
-                }
-
-                override fun onClosed() {
-                    callback.onAdClosed()
-                }
-
-                override fun onClicked() {
-                    notifyListener(key) { it.onClicked() }
-                }
-            },
+            interstitialCallback(key, callback),
             reportTelemetry = false,
             nextAction = InterNextAction.UnderAd,
         )
     }
+
+    override fun loadAndShowInterstitial(
+        activity: AppCompatActivity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        callback: ObInterstitialCallback,
+        timeoutMs: Long,
+    ) {
+        interKeys.add(placement.key)
+        InterstitialAdManager.loadAndShow(
+            activity,
+            placement.key,
+            unit.loadOrder,
+            interstitialCallback(placement.key, callback),
+            InterLoadAndShowOptions(
+                timeoutMs = timeoutMs,
+                reportTelemetry = false,
+                nextAction = InterNextAction.UnderAd,
+            ),
+        )
+    }
+
+    private fun interstitialCallback(
+        key: String,
+        callback: ObInterstitialCallback
+    ): InterShowCallback =
+        object : InterShowCallback() {
+            private val skipped = AtomicBoolean(false)
+
+            override fun onSkipped(reason: SdkAdSkipReason) {
+                skipped.set(true)
+                ObLog.w(ObLog.Section.SHOW, "$key skipped: ${reason.key}")
+                callback.onAdSkipped(mapReason(reason))
+            }
+
+            override fun onComplete() {
+                if (!skipped.get()) callback.onNextAction()
+            }
+
+            override fun onClosed() {
+                callback.onAdClosed()
+            }
+
+            override fun onClicked() {
+                notifyListener(key) { it.onClicked() }
+            }
+        }
 
     override fun lastInterstitialShownAtMs(context: Context): Long =
         runCatching { SharePreferenceUtils.getLastImpressionInterstitialTime(context) }

@@ -17,14 +17,29 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.*
-import io.onboardkit.config.*
+import io.onboardkit.ads.AdEventListener
+import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.NextScreenTiming
+import io.onboardkit.ads.ObInterstitialCallback
+import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.config.AdLoadStrategy
+import io.onboardkit.config.AdsConfig
+import io.onboardkit.config.BannerAdUnit
+import io.onboardkit.config.ContentStepDefinition
+import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.config.NativeAdUnit
+import io.onboardkit.config.SplashConfig
+import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.AnalyticsPlugin
 import io.onboardkit.remote.RemoteFlags
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
@@ -294,6 +309,16 @@ private object OrderingFixture {
             if (immediate) finishLoad(true)
         }
         override fun isInterstitialReady(placement: AdPlacement) = ready
+        override fun loadAndShowInterstitial(
+            activity: androidx.appcompat.app.AppCompatActivity,
+            placement: AdPlacement,
+            unit: InterstitialAdUnit,
+            callback: ObInterstitialCallback,
+            timeoutMs: Long,
+        ) {
+            throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
+        }
+
         override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
             shows.incrementAndGet()
             if (!activity.hasWindowFocus()) violations += "show without focus"

@@ -31,6 +31,7 @@ data class RemoteFlags(
     val languageSupportedCodes: String = ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
     val reuseSplashInter: Boolean = ObRemoteKeys.REUSE_SPLASH_INTER.default,
     val adsSplashBanner: Boolean = ObRemoteKeys.ADS_SPLASH_BANNER.default,
+    val adsAfterOnboardInter: Boolean = ObRemoteKeys.ADS_AFTER_ONBOARD_INTER.default,
     val adsSplashInter: Boolean = ObRemoteKeys.ADS_SPLASH_INTER.default,
     val adsLanguageNative: Boolean = ObRemoteKeys.ADS_LANGUAGE_NATIVE.default,
     val adsLanguageConfirmNative: Boolean = ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.default,
@@ -72,7 +73,7 @@ data class RemoteFlags(
      */
     fun adSummary(): String = "flags allAds=$enableAllAds " +
         "splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
-        "langConfirm=$adsLanguageConfirmNative " +
+            "langConfirm=$adsLanguageConfirmNative afterOnboardInter=$adsAfterOnboardInter " +
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
         "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
         "reuseSplashInter=$reuseSplashInter minDisplayMs=$splashMinDisplayMs " +
@@ -117,6 +118,7 @@ data class RemoteFlags(
                     ?: ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.default,
                 reuseSplashInter = bool(ObRemoteKeys.REUSE_SPLASH_INTER),
                 adsSplashBanner = bool(ObRemoteKeys.ADS_SPLASH_BANNER),
+                adsAfterOnboardInter = bool(ObRemoteKeys.ADS_AFTER_ONBOARD_INTER),
                 adsSplashInter = bool(ObRemoteKeys.ADS_SPLASH_INTER),
                 adsLanguageNative = bool(ObRemoteKeys.ADS_LANGUAGE_NATIVE),
                 adsLanguageConfirmNative = bool(ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE),

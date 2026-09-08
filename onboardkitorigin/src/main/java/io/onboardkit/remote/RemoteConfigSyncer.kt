@@ -2,6 +2,7 @@ package io.onboardkit.remote
 
 import android.content.Context
 import android.util.Log
+import androidx.core.content.edit
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,7 +11,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.core.content.edit
 
 /**
  * Fetches remote config with a hard timeout and publishes an immutable [RemoteFlags] snapshot.
@@ -100,6 +100,7 @@ class RemoteConfigSyncer internal constructor(
             snapshot.showLanguageConfirmDialog.toString(),
         )
         put(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key, snapshot.languageSupportedCodes)
+        put(ObRemoteKeys.ADS_AFTER_ONBOARD_INTER.key, snapshot.adsAfterOnboardInter.toString())
         put(ObRemoteKeys.REUSE_SPLASH_INTER.key, snapshot.reuseSplashInter.toString())
         put(ObRemoteKeys.ADS_SPLASH_BANNER.key, snapshot.adsSplashBanner.toString())
         put(ObRemoteKeys.ADS_SPLASH_INTER.key, snapshot.adsSplashInter.toString())
