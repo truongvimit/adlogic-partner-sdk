@@ -104,15 +104,16 @@ public class ERainAd {
     }
 
     /**
-     * Minimum gap, in seconds, between two interstitial impressions. {@code 0} — the default —
-     * disables the rule.
+     * Shared AutoBuffer interval in seconds, counted from activation, dismissal or final load
+     * failure. It gates both preload and show; {@code 0} disables the time interval.
      *
-     * <p>Read on every show, so remote config can retune it mid-session. This module owns the rule
-     * because it owns the impression timestamp both it and any caller would have to read.
+     * <p>Read by the AutoBuffer placement group for preload and show eligibility. Remote
+     * changes reschedule its next check; splash and other non-group placements are exempt.
      */
     public void setIntervalInterstitialAd(int intervalSeconds) {
         if (adConfig != null) {
             adConfig.setIntervalInterstitialAd(intervalSeconds);
+            com.ads.module.helper.interstitial.InterstitialAutoBuffer.onGateChanged();
         }
     }
 
@@ -403,12 +404,8 @@ public class ERainAd {
     public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
                                       @NonNull final AdCallback callback, boolean shouldReloadAds,
                                       boolean openNextUnderAd) {
-        if (System.currentTimeMillis() - SharePreferenceUtils.getLastImpressionInterstitialTime(context)
-                < ERainAd.getInstance().adConfig.getIntervalInterstitialAd() * 1000L
-        ) {
-            callback.onNextAction();
-            return;
-        }
+        // Frequency belongs to placement-based InterstitialAdManager/AutoBuffer. Raw
+        // splash/OB callers must not inherit or advance that group's interval.
         if (mInterstitialAd == null || mInterstitialAd.isNotReady()) {
             callback.onNextAction();
             return;

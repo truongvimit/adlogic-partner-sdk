@@ -155,6 +155,7 @@ object InterstitialAdManager {
         val ids = AdWaterfall.usableIds(adUnitIds)
         val skipReason =
             AdGate.skipReason(context, options.enabled && ids.isNotEmpty(), options.passesUaGate)
+                ?: InterstitialAutoBuffer.loadSkipReason(placement)
         if (skipReason != null) {
             // A temporary waiter owns its terminal skip; do not report it twice here.
             if (options.reportTelemetry && extra == null) {
@@ -180,7 +181,8 @@ object InterstitialAdManager {
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     inFlight.remove(placement)
-                    if (apInterstitialAd == null) {
+                    if (apInterstitialAd == null || !apInterstitialAd.isReady) {
+                        InterstitialFrequency.onLoadFailed(placement)
                         notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(null) }
                         return
                     }
@@ -190,6 +192,7 @@ object InterstitialAdManager {
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
                     inFlight.remove(placement)
+                    InterstitialFrequency.onLoadFailed(placement)
                     notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(adError) }
                 }
             },
@@ -197,9 +200,11 @@ object InterstitialAdManager {
     }
 
     /**
-     * Explicit partner trigger: use a ready fill, or join/start one load and wait for it.
+     * Explicit partner trigger. AutoBuffer placements use ready-only [show]: an empty or
+     * gated placement proceeds immediately and never starts or waits for a load here.
+     * Other placements can use a ready fill, or join/start one load and wait for it.
      *
-     * [InterLoadAndShowOptions.timeoutMs] limits only waiting for a fill, not the waterfall,
+     * Outside AutoBuffer, [InterLoadAndShowOptions.timeoutMs] limits waiting for a fill, not the waterfall,
      * the existing 800ms show preparation, or an ad awaiting dismissal. Timeout/destroy removes
      * this caller's waiter; a later valid fill can remain buffered but never auto-shows for it.
      * A fill arriving while the host is in the background is likewise retained for a new trigger.
@@ -230,7 +235,8 @@ object InterstitialAdManager {
             reportSkipped(entryGate)
             return
         }
-        if (isReady(placement)) {
+        // Managed placements are always ready-only, even through this convenience API.
+        if (InterstitialAutoBuffer.owns(placement) || isReady(placement)) {
             show(activity, placement, callback, options.reportTelemetry, options.nextAction)
             return
         }
@@ -321,7 +327,7 @@ object InterstitialAdManager {
     @JvmStatic
     fun showSkipReason(context: Context, placement: String): AdSkipReason? =
         AdGate.skipReason(context, enabled = true, checkNetwork = false) ?: when {
-            !InterstitialFrequency.elapsed(context) -> AdSkipReason.CAPPED_BY_MODULE
+            !InterstitialFrequency.elapsed(context, placement) -> AdSkipReason.CAPPED_BY_MODULE
             !isReady(placement) -> AdSkipReason.NOT_READY
             else -> null
         }
@@ -352,10 +358,8 @@ object InterstitialAdManager {
         reportTelemetry: Boolean = true,
         nextAction: InterNextAction = defaultNextAction,
     ) {
-        // Decided BEFORE the buffer is touched. The interval rule lives downstream in
-        // ERainAd.forceShowInterstitial, which answers a blocked show with a bare onNextAction —
-        // so a tap one second inside the interval used to reach this method, drop a perfectly
-        // good fill, and only then be refused. A withheld ad is not a spent ad.
+        // Decide before touching the buffer. Group timing is placement-scoped here; raw
+        // splash/OB calls downstream no longer impose a second, global interval.
         val blockReason = showSkipReason(context, placement)
         if (blockReason != null) {
             // PURCHASED still drops it: a bought entitlement must not leave a showable ad behind.
@@ -365,8 +369,8 @@ object InterstitialAdManager {
             if (reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, blockReason.key)
             }
-            callback.onSkipped(blockReason)
-            callback.onComplete()
+            runCatching { callback.onSkipped(blockReason) }
+            runCatching { callback.onComplete() }
             return
         }
         // Committed to showing: single-use, so the buffer is dropped before show() to make one
@@ -377,27 +381,33 @@ object InterstitialAdManager {
             if (reportTelemetry) {
                 AdTracking.skipped(placement, AdFormat.INTERSTITIAL, AdSkipReason.NOT_READY.key)
             }
-            callback.onSkipped(AdSkipReason.NOT_READY)
-            callback.onComplete()
+            runCatching { callback.onSkipped(AdSkipReason.NOT_READY) }
+            runCatching { callback.onComplete() }
             return
         }
         val committed = AtomicBoolean(false)
         val terminal = AtomicBoolean(false)
         val completed = AtomicBoolean(false)
-        val complete = { if (completed.compareAndSet(false, true)) callback.onComplete() }
+        val complete = { if (completed.compareAndSet(false, true)) runCatching { callback.onComplete() }; Unit }
+        InterstitialFrequency.beginShow(placement)
         ERainAd.getInstance().forceShowInterstitial(
             context,
             ad,
             object : AdCallback() {
                 override fun onInterstitialShow() {
                     committed.set(true)
-                    callback.onShowed()
+                    runCatching { callback.onShowed() }
                 }
 
                 override fun onNextAction() {
                     when (meaningOfNextAction(nextAction, committed.get(), completed.get())) {
                         NextActionMeaning.MODULE_CAP -> {
                             if (!terminal.compareAndSet(false, true)) return
+                            // A lower-level counter cap did not spend this ready fill.
+                            if (spent != null && spent.isFresh && spent.ad.isReady &&
+                                releaseTokens[placement] === releaseToken
+                            ) cache.putIfAbsent(placement, spent)
+                            InterstitialFrequency.endShow(placement, closed = false)
                             if (reportTelemetry) {
                                 AdTracking.skipped(
                                     placement,
@@ -405,7 +415,7 @@ object InterstitialAdManager {
                                     AdSkipReason.CAPPED_BY_MODULE.key,
                                 )
                             }
-                            callback.onSkipped(AdSkipReason.CAPPED_BY_MODULE)
+                            runCatching { callback.onSkipped(AdSkipReason.CAPPED_BY_MODULE) }
                             complete()
                         }
                         // The ad is on screen; the next screen starts underneath it.
@@ -417,12 +427,14 @@ object InterstitialAdManager {
 
                 override fun onAdClosed() {
                     if (!terminal.compareAndSet(false, true)) return
-                    callback.onClosed()
+                    InterstitialFrequency.endShow(placement, closed = true)
+                    runCatching { callback.onClosed() }
                     complete()
                 }
 
                 override fun onAdFailedToShow(adError: AdError?) {
                     if (!terminal.compareAndSet(false, true)) return
+                    InterstitialFrequency.endShow(placement, closed = false)
                     val lifecycleRejected = Admob.isShowInBackgroundError(adError)
                     if (lifecycleRejected && spent != null && spent.isFresh && spent.ad.isReady &&
                         releaseTokens[placement] === releaseToken &&
@@ -436,7 +448,7 @@ object InterstitialAdManager {
                     if (reportTelemetry) {
                         AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key)
                     }
-                    callback.onSkipped(reason)
+                    runCatching { callback.onSkipped(reason) }
                     complete()
                 }
 

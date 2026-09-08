@@ -68,6 +68,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     // Resume fetch state only; raw splash requests retain their own callbacks and buffer.
     private static final long RESUME_FETCH_TIMEOUT_MS = 30_000L;
+    private static final long RESUME_BACKGROUND_DELAY_MS = 2_000L;
+    private boolean resumeBackground;
+    private boolean resumeDispatchAllowed;
+    private Runnable pendingBackgroundLoad;
     private static final long RESUME_LOADING_TIMEOUT_MS = 3_000L;
     private static final long RESUME_PRE_SHOW_DELAY_MS = 800L;
     private static final long[] RESUME_FAILURE_BACKOFF_MS = {5_000L, 30_000L, 120_000L};
@@ -193,7 +197,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     public void setInitialized(boolean initialized) {
         isInitialized = initialized;
-        if (!initialized) cancelResumeFetch(false);
+        if (!initialized) {
+            cancelBackgroundLoad();
+            cancelResumeFetch(false);
+        }
     }
 
     /**
@@ -384,16 +391,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public void disableAppResume() {
         isAppResumeEnabled = false;
+        cancelBackgroundLoad();
         cancelResumeFetch(false);
     }
 
     /**
-     * Enables resume ads and warms the buffer through the request gate/backoff, on main.
+     * Enables resume ads. The next eligible background stay owns the first load; enabling
+     * during splash or an Activity transition never warms the buffer.
      * @see #disableAppResume() — this is not an "undo my suppression".
      */
     public void enableAppResume() {
         isAppResumeEnabled = true;
-        fetchAd(false);
     }
 
     public void setSplashActivity(Class splashActivity, String adId, int timeoutInMillis) {
@@ -441,7 +449,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Requests an ad. Resume requires initialization, enabled mode, application-context
+     * Requests an ad. Resume dispatch is restricted to the SDK's single delayed background
+     * opportunity; explicit calls outside it are no-ops. Resume requires enabled mode, application-context
      * entitlement, network, current consent authority, and no visible UMP form. A ready buffer
      * or pending request is reused. Vendor failures/timeouts back off for 5s, 30s, then 120s.
      * No timer retries or shows an ad. Resume dispatch runs on main; mutate its configuration
@@ -454,6 +463,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
         Log.d(TAG, "fetchAd: isSplash = " + isSplash);
+        // Only the delayed background opportunity may dispatch. Public/legacy fetch calls
+        // cannot create startup, foreground, post-show or repeated-background reloads.
+        if (!isSplash && !resumeDispatchAllowed) return;
         final long observedGeneration = resumeFetchGeneration;
         if (!isSplash && !canFetchResume(true)) {
             if (resumeFetchGeneration == observedGeneration) cancelResumeFetch(false);
@@ -698,6 +710,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @Override
     public void onActivityStarted(Activity activity) {
+        // Activity start precedes process ON_START. Cancel here too so a quick return cannot
+        // lose a race with the delayed background runnable on the main queue.
+        cancelBackgroundLoad();
         currentActivity = activity;
         Log.d(TAG, "onActivityStarted: " + currentActivity);
     }
@@ -708,17 +723,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         resumedActivity = activity;
         Log.d(TAG, "onActivityResumed: " + currentActivity);
         captureResumeReturn(activity);
-        if (splashActivity == null) {
-            if (!activity.getClass().getName().equals(AdActivity.class.getName())) {
-                Log.d(TAG, "onActivityResumed 1: with " + activity.getClass().getName());
-                fetchAd(false);
-            }
-        } else {
-            if (!activity.getClass().getName().equals(splashActivity.getName()) && !activity.getClass().getName().equals(AdActivity.class.getName())) {
-                Log.d(TAG, "onActivityResumed 2: with " + activity.getClass().getName());
-                fetchAd(false);
-            }
-        }
+
     }
 
     @Override
@@ -798,9 +803,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         } else {
             Log.d(TAG, "Ad is not ready");
-            if (!isSplash) {
-                fetchAd(false);
-            }
             if (isSplash && isShowingAd && isAdAvailable(true)) {
                 showAdsWithLoading();
             }
@@ -920,14 +922,12 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             @Override
             public void onAdDismissedFullScreenContent() {
                 if (!finishResumeAttempt(attempt, ownedDialog)) return;
-                fetchAd(false);
                 if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdDismissedFullScreenContent());
             }
 
             @Override
             public void onAdFailedToShowFullScreenContent(AdError error) {
                 if (!finishResumeAttempt(attempt, ownedDialog)) return;
-                fetchAd(false);
                 if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdFailedToShowFullScreenContent(error));
             }
 
@@ -1939,6 +1939,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     @OnLifecycleEvent(Lifecycle.Event.ON_START)
     public void onResume() {
+        cancelBackgroundLoad();
         captureResumeReturn(currentActivity);
         if (!isAppResumeEnabled) {
             Log.d(TAG, "onResume: app resume is disabled");
@@ -1993,10 +1994,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         }
 
         if (!isInitialized) return;
-        if (!isAdAvailable(false)) {
-            fetchAd(false);
-            return;
-        }
+        if (!isAdAvailable(false)) return;
         final Activity host = currentActivity;
         final AppOpenAd candidate = appResumeAd;
         final long hostGeneration = resumeHostGeneration;
@@ -2015,7 +2013,33 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     public void onStop() {
         Log.d(TAG, "onStop: app stop");
         currentReturnSkipReason = null;
+        if (resumeBackground) return;
+        resumeBackground = true;
+        // The SDK's own fullscreen and partner-suppressed external actions are not a new
+        // opportunity to buy a resume ad. Their return remains governed by the same policy.
+        if (!isAppResumeEnabled || !isInitialized || isShowingAd || isInterstitialShowing
+                || pendingResumeSkipReason.get() != null
+                || currentActivity instanceof AdActivity) return;
+        if (currentActivity != null && (isResumeSuppressedFor(currentActivity)
+                || resumeSkipReasonFor(currentActivity) != null
+                || appOpenPolicySkipReasonFor(currentActivity) != null)) return;
+        pendingBackgroundLoad = () -> {
+            pendingBackgroundLoad = null;
+            if (!resumeBackground) return;
+            resumeDispatchAllowed = true;
+            try {
+                fetchAd(false);
+            } finally {
+                resumeDispatchAllowed = false;
+            }
+        };
+        resumeFetchHandler.postDelayed(pendingBackgroundLoad, RESUME_BACKGROUND_DELAY_MS);
+    }
 
+    private void cancelBackgroundLoad() {
+        resumeBackground = false;
+        if (pendingBackgroundLoad != null) resumeFetchHandler.removeCallbacks(pendingBackgroundLoad);
+        pendingBackgroundLoad = null;
     }
 
     @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)

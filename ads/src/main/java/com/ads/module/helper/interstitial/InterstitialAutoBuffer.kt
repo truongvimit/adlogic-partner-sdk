@@ -4,6 +4,10 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.ads.module.helper.AdSkipReason
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
@@ -30,9 +34,10 @@ class InterstitialBufferOptions @JvmOverloads constructor(
     /** Floor on the tick, so a tiny remote interval cannot turn this into a spin loop. */
     val minTickMs: Long = 5_000L,
 
-    /** First backoff after a failed fill; doubles up to [maxBackoffMs]. */
+    /** Legacy constructor parameter; retries now use the shared remote interval. */
     val backoffMs: Long = 30_000L,
 
+    /** Legacy constructor parameter retained for source/binary compatibility. */
     val maxBackoffMs: Long = 5 * 60_000L,
 )
 
@@ -40,20 +45,10 @@ class InterstitialBufferOptions @JvmOverloads constructor(
  * Keeps one interstitial buffered per placement, paced by the frequency clock instead of by
  * whichever screen the user happens to open.
  *
- * Without this a partner app loads from every screen that *might* show an ad, so entering a screen
- * the user never acts on still costs a request, and a screen the user never reaches leaves the
- * placement empty. Opt in once, from `Application`:
- *
- * ```
- * InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf("inter_all", "inter_back")))
- * InterstitialAutoBuffer.start(this)
- * ```
- *
- * **It shares one store with explicit loads and never doubles them.** Everything goes through
- * [InterstitialAdManager], whose `cache`/`inFlight` are keyed by placement, so:
- * a screen that calls `load` itself is untouched; a tick that finds the load still in flight does
- * not start a second; and the ad that load produced *is* the buffer, so the tick that follows
- * finds the placement satisfied and asks for nothing.
+ * Configure the group and call [start] from the first content screen after onboarding,
+ * including notification/restored entries. The first preload waits the remote interval.
+ * Process background pauses scheduling but preserves both the gate and cached ads.
+ * All placement-based loads share the manager's cache and in-flight request guard.
  *
  * Ad unit ids come from [AdRemoteConfig.tiersFor], so a placement that grows a `_high` floor in
  * remote config starts using it without a code change.
@@ -68,12 +63,14 @@ object InterstitialAutoBuffer {
     private val handler = Handler(Looper.getMainLooper())
     private val reserved = ConcurrentHashMap.newKeySet<String>()
 
-    /** Placement -> when a failed fill may be retried. */
-    private val backoffUntil = ConcurrentHashMap<String, Long>()
-    private val backoffStep = ConcurrentHashMap<String, Long>()
-
-    /** Placements this object asked to load on the previous tick, to notice a silent failure. */
-    private val requested = ConcurrentHashMap.newKeySet<String>()
+    private var observing = false
+    private val lifecycleObserver = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_START -> if (running) schedule(1L)
+            Lifecycle.Event.ON_STOP -> handler.removeCallbacks(tick)
+            else -> Unit
+        }
+    }
 
     @Volatile
     private var options = InterstitialBufferOptions()
@@ -91,7 +88,14 @@ object InterstitialAutoBuffer {
     /** Replaces the configuration. Safe before or after [start]; takes effect on the next tick. */
     @JvmStatic
     fun configure(newOptions: InterstitialBufferOptions) {
+        if (options.placements.isEmpty() && newOptions.placements.isNotEmpty()) {
+            InterstitialFrequency.reset()
+        }
         options = newOptions
+        if (running) {
+            InterstitialFrequency.activate()
+            schedule(1L)
+        }
         Log.i(TAG, "configured for ${newOptions.placements}")
     }
 
@@ -99,15 +103,20 @@ object InterstitialAutoBuffer {
     fun options(): InterstitialBufferOptions = options
 
     /**
-     * Starts ticking. Call after `AdRemoteConfig.initializeFromAssets` and `ERainAd.init` — before
-     * the first the tier list is empty, before the second the interval reads as 0.
+     * Arms this process after onboarding/content entry. Repeated calls and foreground returns
+     * do not restart the initial delay or a live group interval. Never call from Application.
      */
     @JvmStatic
     fun start(context: Context) {
         appContext = context.applicationContext
         if (running) return
         running = true
-        schedule()
+        InterstitialFrequency.activate()
+        if (!observing) {
+            observing = true
+            ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+        }
+        schedule(InterstitialFrequency.groupRemainingMs().coerceAtLeast(1L))
     }
 
     @JvmStatic
@@ -132,27 +141,42 @@ object InterstitialAutoBuffer {
         reserved += placements
     }
 
-    /**
-     * Buys the replacement now instead of waiting for the interval to expire.
-     *
-     * Nothing inside the SDK calls this. The buffer's own schedule deliberately waits — an ad
-     * bought at the moment of an impression sits idle for a whole interval and ages against
-     * [com.ads.module.helper.CachedAd.MAX_AGE_MS] while it waits. This is here for the caller who
-     * knows the next showable moment arrives the instant the interval does, and is the same kind
-     * of explicit request as calling [InterstitialAdManager.load] directly.
-     */
+    /** Requests an eligibility check. This never bypasses the group gate or foreground rule. */
     @JvmStatic
     fun topUpNow() {
         if (!running) return
-        handler.post { topUp(ignoreInterval = true) }
+        handler.post { if (running) schedule(topUp()) }
     }
 
-    /** Clears the failure backoff, e.g. when connectivity returns. */
+    /** Compatibility API: connectivity changes can prompt a check but never erase the gate. */
     @JvmStatic
-    fun resetBackoff() {
-        backoffUntil.clear()
-        backoffStep.clear()
+    fun resetBackoff() = topUpNow()
+
+    internal fun owns(placement: String): Boolean =
+        placement in options.placements && placement !in reserved
+
+    internal fun loadSkipReason(placement: String): AdSkipReason? {
+        if (!owns(placement)) return null
+        if (!running) return AdSkipReason.DISABLED_CONFIG
+        if (!isForeground()) return AdSkipReason.SHOW_IN_BACKGROUND
+        if (InterstitialFrequency.isPresenting() || InterstitialFrequency.groupRemainingMs() > 0L) {
+            return AdSkipReason.CAPPED_BY_MODULE
+        }
+        return null
     }
+
+    /** Recalculate wakeup when a show closes, a waterfall fails, or remote interval changes. */
+    @JvmStatic
+    fun onGateChanged() {
+        if (!running) return
+        val remaining = InterstitialFrequency.groupRemainingMs()
+        // A shorter remote interval can make the group eligible immediately. Do not add a
+        // fresh polling period. Zero-interval retries still use the idle polling pace.
+        schedule(if (remaining == 0L && InterstitialFrequency.intervalSeconds() > 0) 1L else remaining)
+    }
+
+    private fun isForeground(): Boolean =
+        ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 
     /** The decision for one placement on one tick. Separated out so the rules are testable. */
     internal enum class Decision {
@@ -175,9 +199,7 @@ object InterstitialAutoBuffer {
         // to avoid. The fill it produces becomes the buffer.
         isLoading -> Decision.SKIP_IN_FLIGHT
         // Nothing may be shown for another `intervalRemainingMs`, so nothing needs buying yet.
-        // Buying at the moment of the last impression would hold a paid fill idle for a whole
-        // interval and age it against CachedAd.MAX_AGE_MS for no reason. A caller that wants the
-        // ad immediately asks for it — InterstitialAdManager.load — rather than expecting this.
+        // Explicit loads follow the same gate; a ready ad never needs replacing.
         intervalRemainingMs > 0L -> Decision.SKIP_INTERVAL
         nowMs < backoffUntilMs -> Decision.SKIP_BACKOFF
         !hasIds -> Decision.SKIP_NO_IDS
@@ -204,68 +226,44 @@ object InterstitialAutoBuffer {
     /**
      * @return the delay to use before looking again, or `0` for the configured period.
      */
-    private fun topUp(ignoreInterval: Boolean = false): Long {
+    private fun topUp(): Long {
         val context = appContext ?: return options.minTickMs
-        // Never request before the UMP answer. AdGate does not cover consent, and this runs on a
-        // timer rather than behind the flow's consent step.
+        if (!running || !isForeground()) return 0L
         if (ConsentCenter.state.value == ConsentState.UNKNOWN) return options.minTickMs
-        // A paying user has nothing to wait for.
         if (AdGate.isPurchased(context)) return 0L
-
-        val now = System.currentTimeMillis()
-        // One clock for the whole app, stamped when an interstitial is dismissed. While it is
-        // running there is nothing to show and therefore nothing to buy — so the next look is
-        // timed to the moment it expires rather than to the tick period.
-        val intervalRemaining =
-            if (ignoreInterval) 0L else InterstitialFrequency.remainingMs(context)
-        options.placements.forEach { placement ->
-            val wasRequested = requested.remove(placement)
-            val ready = InterstitialAdManager.isReady(placement)
-            val loading = InterstitialAdManager.isLoading(placement)
-            // Nothing to observe but a failure: asked last tick, still neither filled nor walking.
-            if (wasRequested && !ready && !loading) noteFailure(placement, now) else if (ready) {
-                backoffUntil.remove(placement)
-                backoffStep.remove(placement)
-            }
+        options.placements.distinct().forEach { placement ->
+            if (loadSkipReason(placement) != null) return@forEach
             val ids = runCatching { AdRemoteConfig.getInstance().tiersFor(placement) }
                 .getOrDefault(emptyList())
-            val decision = decide(
-                nowMs = now,
-                isReady = ready,
-                isLoading = loading,
-                intervalRemainingMs = intervalRemaining,
-                backoffUntilMs = backoffUntil[placement] ?: 0L,
-                hasIds = ids.isNotEmpty(),
-                isReserved = placement in reserved,
-            )
-            if (decision != Decision.LOAD) return@forEach
+            if (decide(
+                    nowMs = 0L,
+                    isReady = InterstitialAdManager.isReady(placement),
+                    isLoading = InterstitialAdManager.isLoading(placement),
+                    intervalRemainingMs = InterstitialFrequency.groupRemainingMs(),
+                    backoffUntilMs = 0L,
+                    hasIds = ids.isNotEmpty(),
+                    isReserved = placement in reserved,
+                ) != Decision.LOAD
+            ) return@forEach
             Log.d(TAG, "buffering '$placement'")
-            requested += placement
-            // listener = null on purpose: the store keeps one listener per placement, so passing
-            // one here would silently evict the partner's and their load callbacks would stop.
+            // Do not register a listener here: the partner owns that subscription. Manager
+            // terminal callbacks update the shared gate immediately, including explicit loads.
             InterstitialAdManager.load(
                 context,
                 placement,
                 ids,
-                InterLoadOptions(enabled = true, passesUaGate = AdGate.passesUaGate(false)),
+                InterLoadOptions(enabled = true, passesUaGate = AdGate.passesUaGate(
+                    AdRemoteConfig.getInstance().unit(placement).enableUaCheck,
+                )),
             )
         }
-        return if (intervalRemaining > 0L) intervalRemaining else 0L
-    }
-
-    private fun noteFailure(placement: String, nowMs: Long) {
-        val step = (backoffStep[placement] ?: 0L).let {
-            if (it <= 0L) options.backoffMs else (it * 2).coerceAtMost(options.maxBackoffMs)
-        }
-        backoffStep[placement] = step
-        backoffUntil[placement] = nowMs + step
-        Log.d(TAG, "'$placement' did not fill; backing off ${step}ms")
+        return InterstitialFrequency.groupRemainingMs()
     }
 
     /** [delayMs] `0` uses the configured period; anything else is an exact wake-up. */
     private fun schedule(delayMs: Long = 0L) {
-        if (!running) return
         handler.removeCallbacks(tick)
+        if (!running || !isForeground()) return
         val period =
             if (delayMs > 0L) delayMs.coerceAtLeast(MIN_WAKE_MS)
             else periodMs(

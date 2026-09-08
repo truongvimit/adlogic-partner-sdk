@@ -110,16 +110,17 @@ class AppOpenResumePresentationDeviceTest {
                     ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
                     observerAttached = true
                     manager.setAppResumeAdId(TEST_UNIT)
+                    manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
                     manager.enableAppResume()
-                    manager.fetchAd(false)
                 }
-                eventually("A real app-open fill is required; inspect GMA errors if unavailable", 60_000L) {
+                assertFalse("Startup must not preload", onMain { manager.isAdAvailable(false) })
+                physicalHome()
+                eventually("A real background app-open fill is required; inspect GMA errors if unavailable", 60_000L) {
                     onMain { manager.isAdAvailable(false) }
                 }
                 assertEquals(0, shown.get())
                 onMain { manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java) }
-                mark("FILLED AUTOMATIC_HOME_BEGIN; no direct show call")
-                physicalHome()
+                mark("FILLED AUTOMATIC_RETURN_BEGIN; no direct show call")
                 returnTask(app, host)
                 eventually("Automatic Home return must show a real focused GMA Activity", 20_000L) {
                     shown.get() == 1 && resumedAdActivity() != null

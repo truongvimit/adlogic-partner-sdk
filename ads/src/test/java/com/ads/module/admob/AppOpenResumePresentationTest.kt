@@ -505,11 +505,55 @@ class AppOpenResumePresentationTest {
         ad.content!!.onAdDismissedFullScreenContent()
         assertEquals(1, closed)
         assertFalse(manager.isShowingAd)
-        assertEquals(requestCount + 1, requests.size)
+        assertEquals("Dismissal must not buy a replacement", requestCount, requests.size)
         ad.content!!.onAdDismissedFullScreenContent()
         assertEquals(1, closed)
         assertEquals(0, failed)
-        assertEquals(requestCount + 1, requests.size)
+        assertEquals("Dismissal must not buy a replacement", requestCount, requests.size)
+    }
+
+    @Test
+    fun `real quick background return cancels load and a later stay can load`() {
+        manager.setAppResumeAdId(UNIT)
+        manager.enableAppResume()
+        assertTrue(requests.isEmpty())
+        leaveProcess()
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        controller.restart().start().resume().visible()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        leaveProcess()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `automatic return without a fill never waits or shows a late fill until next return`() {
+        manager.setAppResumeAdId(UNIT)
+        manager.enableAppResume()
+        leaveProcess()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        controller.restart().start().resume().visible()
+        main.idle()
+        assertFalse(latestDialogShowing())
+        val ad = ResumePresentationAd(UNIT).also(ads::add)
+        requests.single().callback.onAdLoaded(ad)
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertTrue(ad.hosts.isEmpty())
+        assertTrue(manager.isAdAvailable(false))
+        leaveProcess()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertEquals("A cached late fill survives the next background cycle", 1, requests.size)
+        controller.restart().start().resume().visible()
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(listOf(host), ad.hosts)
+        ad.content!!.onAdDismissedFullScreenContent()
+        main.idleFor(5_000, TimeUnit.MILLISECONDS)
+        assertEquals("No post-show replacement", 1, requests.size)
+        leaveProcess()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
     }
 
     private fun showAfterLoading() {
@@ -520,7 +564,13 @@ class AppOpenResumePresentationTest {
     private fun load(): ResumePresentationAd {
         manager.setAppResumeAdId(UNIT)
         manager.enableAppResume()
-        manager.fetchAd(false)
+        val before = requests.size
+        // Drive the public process lifecycle seam to obtain the fill. Return before delivering
+        // it so this fixture cannot trigger an automatic presentation during setup.
+        manager.onStop()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        manager.onResume()
+        assertEquals(before + 1, requests.size)
         val ad = ResumePresentationAd(UNIT).also(ads::add)
         requests.last().callback.onAdLoaded(ad)
         assertTrue(manager.isAdAvailable(false))

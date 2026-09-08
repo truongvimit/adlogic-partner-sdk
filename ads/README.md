@@ -255,8 +255,23 @@ current ad until another show/refresh trigger.
 | Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
 | Rewarded ads | Use `load`, `isReady` and `show`; grant only when `onClosed(earned)` has `earned=true`. See [RewardAdManager](src/main/java/com/ads/module/helper/reward/RewardAdManager.kt). |
-| Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) after initialization. It shares the same cache. |
+| Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
 | App-open on return | Set `ERainAdConfig.idAdResume` before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [AppOpenManager](src/main/java/com/ads/module/admob/AppOpenManager.java). |
+
+## Resume and interstitial lifecycle migration
+
+See the [SDK lifecycle contract and partner migration](../docs/ads-buffer-lifecycle.md).
+Resume enablement no longer preloads: one eligible background stay schedules a load after two
+seconds, and returning early cancels it. A ready ad is reused across returns; no post-show refill
+or foreground fetch occurs. A late result is cached for the next return.
+
+Only AutoBuffer's configured, non-reserved placements share the interstitial interval. Closing
+a group ad or failing its final waterfall starts the interval; successful load does not. Splash
+and after-onboarding placements outside the group do not read or update that gate. Start the
+buffer at content entry, not in Application. `topUpNow()` no longer bypasses the gate. Managed
+`loadAndShow()` calls are ready-only and proceed immediately when empty; explicit waiting for
+non-managed placements remains available. Raw ERain/Admob calls have no placement group: use
+`InterstitialAdManager` for managed ads and remove partner-side interval overrides/refills.
 
 ## Moving from the main / 5.0 setup
 

@@ -1,6 +1,10 @@
 package io.onboardkit.ads
 
 import android.app.Application
+import android.accessibilityservice.AccessibilityService
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
+import java.util.concurrent.atomic.AtomicReference
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.os.Bundle
@@ -70,7 +74,7 @@ class AppOpenResumeLoadDeviceTest {
             // send an extra AppOpen request even against the unfixed implementation.
             manager.disableAppResume()
             manager.init(app, "")
-            manager.disableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
+            manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
             manager.releaseCachedAds()
             // Explicit host authorization for GMA initialization; selected phase is applied below.
             ConsentCenter.setHostConsent(canRequestAds = true, personalized = false)
@@ -100,7 +104,7 @@ class AppOpenResumeLoadDeviceTest {
                         else "BEGIN unit=$unit windowMs=$observeMs")
                     intervalStarted = true
                     ConsentCenter.setHostConsent(canRequestAds = phase != "unauthorized", personalized = false)
-                    // Set ID while disabled; enable may itself warm the buffer after the fix.
+                    // Enable and explicit fetches must not warm the buffer in the foreground.
                     manager.setAppResumeAdId(unit)
                     if (phase != "disabled") manager.enableAppResume()
                     // Same main-thread runnable: no queued GMA terminal can interleave the burst
@@ -108,13 +112,22 @@ class AppOpenResumeLoadDeviceTest {
                     val calls = if (phase == "burst") 3 else 1
                     repeat(calls) { manager.fetchAd(false) }
                     mark(phase, "FETCH_RETURNED explicitCalls=$calls (not a vendor-request count)")
-                    when (phase) {
-                        "release" -> manager.releaseCachedAds()
-                        "off" -> manager.disableAppResume()
+                    assertFalse("Foreground fetch must not synchronously fill", manager.isAdAvailable(false))
+                }
+                SystemClock.sleep(1_000)
+                assertFalse("Startup/foreground must not warm the buffer", isReady(manager))
+                assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
+                val stopDeadline = SystemClock.elapsedRealtime() + 10_000L
+                while (!processStopped() && SystemClock.elapsedRealtime() < stopDeadline) SystemClock.sleep(50)
+                assertTrue("Physical Home must stop the process", processStopped())
+                mark(phase, "PROCESS_BACKGROUND delayMs=2000")
+                if (phase == "release" || phase == "off") {
+                    // Invalidate the one background request after its dispatch opportunity.
+                    SystemClock.sleep(2_100)
+                    instrumentation.runOnMainSync {
+                        if (phase == "release") manager.releaseCachedAds() else manager.disableAppResume()
                     }
-                    if (phase == "release" || phase == "off") {
-                        mark(phase, "INVALIDATED_BEFORE_MAIN_RUNNABLE_RETURN")
-                    }
+                    mark(phase, "INVALIDATED_BACKGROUND_REQUEST")
                 }
 
                 if (phase == "allowed" || phase == "burst") {
@@ -127,18 +140,17 @@ class AppOpenResumeLoadDeviceTest {
                     mark(phase, "OBSERVED_BUFFER ready=$ready")
                     assertTrue("No real test fill within window; inspect GMA error/network logs before diagnosis", ready)
                     // A ready buffer should remain reusable. These API calls are not request counts.
-                    scenario.onActivity { repeat(3) { manager.fetchAd(false) } }
+                    instrumentation.runOnMainSync { repeat(3) { manager.fetchAd(false) } }
                     mark(phase, "READY_BUFFER_FETCH_RETURNED explicitCalls=3")
                     SystemClock.sleep(1_000)
                     assertTrue("No show/release was requested; ready buffer should remain", isReady(manager))
                     mark(phase, "OBSERVATION_COMPLETE positiveBuffer=true dispatchCount=external-evidence-required")
                 } else if (phase == "failure") {
-                    // These are explicit public fetch probes, never claimed as physical requests.
-                    // Retry deadlines are measured from each actual failure in the source logs,
-                    // not from BEGIN or the first API call.
+                    // These public fetch probes must not retry during this same background stay.
+                    // Correlate the dispatch log to verify the one-opportunity contract.
                     repeat(20) { index ->
                         SystemClock.sleep(1_000)
-                        scenario.onActivity {
+                        instrumentation.runOnMainSync {
                             assertTrue("Failure backoff needs network; offline is a separate phase", hasActiveNetwork(app))
                             manager.fetchAd(false)
                             mark(phase, "RETRY_PROBE_RETURNED index=${index + 1} explicitCallsAfterInitial=${index + 1}")
@@ -148,7 +160,7 @@ class AppOpenResumeLoadDeviceTest {
                     SystemClock.sleep(1_000)
                     assertFalse(isReady(manager))
                     mark(phase, "OBSERVATION_COMPLETE emptyBuffer=true invalidUnitFailure_not_NO_FILL " +
-                        "backoff5s30s=actual_error_dispatch_logs_required probeCallsAfterInitial=20")
+                        "sameBackgroundRetries=0_verify_dispatch_logs probeCallsAfterInitial=20")
                 } else {
                     val deadline = SystemClock.elapsedRealtime() + observeMs
                     do {
@@ -173,6 +185,14 @@ class AppOpenResumeLoadDeviceTest {
                 ConsentCenter.clearHostConsent()
             }
         }
+    }
+
+    private fun processStopped(): Boolean {
+        val stopped = AtomicReference(false)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            stopped.set(ProcessLifecycleOwner.get().lifecycle.currentState == Lifecycle.State.CREATED)
+        }
+        return stopped.get()
     }
 
     private fun hasActiveNetwork(app: Application): Boolean =

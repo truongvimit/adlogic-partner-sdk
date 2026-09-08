@@ -33,6 +33,9 @@ import org.robolectric.annotation.Implements
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowNetworkInfo
 import java.util.concurrent.TimeUnit
+import java.util.Date
+import org.mockito.Mockito.mockConstruction
+import org.mockito.Mockito.`when`
 
 /** Real AppOpenManager and public host consent/billing signals; only the external GMA API is shadowed. */
 @RunWith(RobolectricTestRunner::class)
@@ -60,7 +63,7 @@ class AppOpenResumeLoadStateTest {
         })
         networkAvailable(true)
         requests.clear()
-        // No Activity needed: the source gate must work from the Application during warmup.
+        // The delayed background load must work with only an Application context.
         assertNull(manager.currentActivity)
     }
 
@@ -74,151 +77,231 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
-    fun `three public fetches share one pending vendor load and reuse its fill`() {
-        manager.enableAppResume()
-        manager.setAppResumeAdId(UNIT)
+    fun `startup enable and explicit foreground fetches do not buy a resume ad`() {
+        enable()
         repeat(3) { manager.fetchAd(false) }
+        main.idleFor(10, TimeUnit.SECONDS)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `background dispatches once at two seconds and reuses an in flight request`() {
+        enable()
+        manager.onStop()
+        main.idleFor(1_999, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        nextBackground()
         assertEquals(1, requests.size)
         fill(0)
         assertTrue(manager.isAdAvailable(false))
-        repeat(3) { manager.fetchAd(false) }
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
     @Test
-    fun `GMA failure callbacks back off 5 then 30 then capped120 seconds and fill resets streak`() {
+    fun `return before two seconds cancels the pending opportunity`() {
+        enable()
+        manager.onStop()
+        main.idleFor(1_999, TimeUnit.MILLISECONDS)
+        manager.onResume()
+        main.idleFor(10, TimeUnit.SECONDS)
+        assertTrue(requests.isEmpty())
+        nextBackground()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `activity start cancels before process foreground is delivered`() {
+        enable()
+        manager.onStop()
+        main.idleFor(1_999, TimeUnit.MILLISECONDS)
+        val host = Activity()
+        manager.onActivityStarted(host)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        manager.onActivityDestroyed(host)
+    }
+
+    @Test
+    fun `fill after foreground decision stays cached across later background cycles`() {
+        startRequest()
+        manager.onResume()
+        main.idleFor(2, TimeUnit.SECONDS)
+        fill(0)
+        assertTrue(manager.isAdAvailable(false))
+        repeat(3) { nextBackground() }
+        assertEquals(1, requests.size)
+        assertTrue(manager.isAdAvailable(false))
+    }
+
+    @Test
+    fun `failed request does not retry during the same long background stay`() {
+        startRequest()
+        fail(0)
+        main.idleFor(10, TimeUnit.MINUTES)
+        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        assertEquals(1, requests.size)
+        nextBackground()
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `failure backoff guards rapid background cycles and success resets it`() {
         startRequest()
         for (delayMs in listOf(5_000L, 30_000L, 120_000L, 120_000L)) {
             val count = requests.size
             fail(count - 1)
-            repeat(3) { manager.fetchAd(false) }
+            nextBackground() // Only two seconds after failure: each backoff still blocks.
             assertEquals(count, requests.size)
-            main.idleFor(delayMs - 1, TimeUnit.MILLISECONDS)
-            manager.fetchAd(false)
-            assertEquals(count, requests.size)
-            main.idleFor(1, TimeUnit.MILLISECONDS)
-            manager.fetchAd(false)
+            main.idleFor(delayMs, TimeUnit.MILLISECONDS)
+            assertEquals("Time alone cannot buy another ad", count, requests.size)
+            nextBackground()
             assertEquals(count + 1, requests.size)
         }
         fill(requests.lastIndex)
-        assertTrue(manager.isAdAvailable(false))
         manager.releaseCachedAds()
-        manager.fetchAd(false)
+        nextBackground()
         val count = requests.size
         fail(count - 1)
-        main.idleFor(4_999, TimeUnit.MILLISECONDS)
-        manager.fetchAd(false)
-        assertEquals(count, requests.size)
-        main.idleFor(1, TimeUnit.MILLISECONDS)
-        manager.fetchAd(false)
-        assertEquals("Success resets the failure schedule to five seconds", count + 1, requests.size)
+        main.idleFor(5_000, TimeUnit.MILLISECONDS)
+        nextBackground()
+        assertEquals("A successful load resets retry protection to five seconds", count + 1, requests.size)
     }
 
     @Test
-    fun `30 second timeout ignores late fill and old failure cannot clear the next request`() {
+    fun `30 second request timeout rejects stale callbacks without background retry`() {
         startRequest()
         main.idleFor(30_000, TimeUnit.MILLISECONDS)
         fill(0)
         assertFalse(manager.isAdAvailable(false))
-        manager.fetchAd(false)
-        assertEquals(1, requests.size)
         main.idleFor(5_000, TimeUnit.MILLISECONDS)
         manager.fetchAd(false)
-        assertEquals(2, requests.size)
-        fail(0)
-        manager.fetchAd(false)
-        assertEquals(2, requests.size)
-        fill(1)
-        assertTrue(manager.isAdAvailable(false))
-    }
-
-    @Test
-    fun `release invalidates A without letting its callbacks clear or replace pending B`() {
-        startRequest()
-        manager.releaseCachedAds()
-        manager.fetchAd(false)
+        assertEquals(1, requests.size)
+        nextBackground()
         assertEquals(2, requests.size)
         assertOldRequestCannotOwnReplacement()
     }
 
     @Test
-    fun `disable invalidates pending fill and later enable owns a new request`() {
+    fun `release invalidates A and only a new background stay can buy B`() {
+        startRequest()
+        manager.releaseCachedAds()
+        manager.fetchAd(false)
+        assertEquals(1, requests.size)
+        nextBackground()
+        assertEquals(2, requests.size)
+        assertOldRequestCannotOwnReplacement()
+    }
+
+    @Test
+    fun `disable invalidates pending fill and reenable waits for next background`() {
         startRequest()
         manager.disableAppResume()
         fill(0)
         assertFalse(manager.isAdAvailable(false))
-        manager.fetchAd(false)
-        assertEquals(1, requests.size)
         manager.enableAppResume()
         manager.fetchAd(false)
+        assertEquals(1, requests.size)
+        nextBackground()
         assertEquals(2, requests.size)
         assertOldRequestCannotOwnReplacement()
     }
 
     @Test
-    fun `unit replacement invalidates A without letting it mutate the new unit request`() {
+    fun `disable cancels scheduled background dispatch`() {
+        enable()
+        manager.onStop()
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        manager.disableAppResume()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `unit replacement invalidates A without allowing old callbacks to overwrite B`() {
         startRequest()
         manager.setAppResumeAdId("resume-unit-B")
-        manager.fetchAd(false)
+        nextBackground()
         assertEquals(listOf(UNIT, "resume-unit-B"), requests.map { it.unit })
         assertOldRequestCannotOwnReplacement()
     }
 
     @Test
-    fun `disabled mode does not dispatch despite explicit fetch`() {
+    fun `disabled mode cannot dispatch through either lifecycle or explicit fetch`() {
         manager.setAppResumeAdId(UNIT)
+        nextBackground()
         repeat(3) { manager.fetchAd(false) }
         assertTrue(requests.isEmpty())
         manager.enableAppResume()
-        manager.fetchAd(false)
+        assertTrue(requests.isEmpty())
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
     @Test
-    fun `current consent denial does not dispatch and grant permits a real load`() {
+    fun `consent denial blocks background load and later grant needs another opportunity`() {
+        enable()
         ConsentCenter.setHostConsent(false, false)
-        manager.enableAppResume()
-        manager.setAppResumeAdId(UNIT)
-        repeat(3) { manager.fetchAd(false) }
+        nextBackground()
         assertTrue(requests.isEmpty())
         ConsentCenter.setHostConsent(true, false)
         manager.fetchAd(false)
+        assertTrue(requests.isEmpty())
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
     @Test
-    fun `offline source does not dispatch and connectivity recovery permits a load`() {
+    fun `offline background does not load and connectivity alone does not retry`() {
+        enable()
         networkAvailable(false)
-        manager.enableAppResume()
-        manager.setAppResumeAdId(UNIT)
-        repeat(3) { manager.fetchAd(false) }
+        nextBackground()
         assertTrue(requests.isEmpty())
         networkAvailable(true)
         manager.fetchAd(false)
+        assertTrue(requests.isEmpty())
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
     @Test
-    fun `Application premium source gates without a current Activity`() {
+    fun `premium source gates without a current Activity`() {
+        enable()
         premium = true
-        manager.enableAppResume()
-        manager.setAppResumeAdId(UNIT)
-        repeat(3) { manager.fetchAd(false) }
+        nextBackground()
         assertTrue(requests.isEmpty())
         premium = false
-        manager.fetchAd(false)
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
     @Test
-    fun `raw splash fetch uses the network gate without inheriting resume mode or consent gates`() {
+    fun `ad click suppression and fullscreen departure never buy a resume ad`() {
+        enable()
+        manager.setDisableAdResumeByClickAction(true)
+        nextBackground()
+        assertTrue(requests.isEmpty())
+        manager.setDisableAdResumeByClickAction(false)
+        manager.setInterstitialShowing(true)
+        nextBackground()
+        assertTrue(requests.isEmpty())
+        manager.setInterstitialShowing(false)
+        nextBackground()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `raw splash fetch keeps its separate network guard`() {
         manager.disableAppResume()
         ConsentCenter.setHostConsent(false, false)
         manager.setSplashActivity(Activity::class.java, "raw-splash-unit", 5_000)
         try {
             networkAvailable(false)
             manager.fetchAd(true)
-            assertTrue("Raw fetch must not dispatch while offline", requests.isEmpty())
+            assertTrue(requests.isEmpty())
             networkAvailable(true)
             manager.fetchAd(true)
             assertEquals(listOf("raw-splash-unit"), requests.map { it.unit })
@@ -227,10 +310,45 @@ class AppOpenResumeLoadStateTest {
         }
     }
 
-    private fun startRequest() {
-        manager.enableAppResume()
+    @Test
+    fun `cache keeps its original four hour expiry and only next background replaces it`() {
+        var now = 1_000_000L
+        // Date is the external clock boundary used by the existing app-open TTL.
+        mockConstruction(Date::class.java) { clock, _ ->
+            `when`(clock.time).thenAnswer { now }
+        }.use {
+            startRequest()
+            fill(0)
+            now += TimeUnit.HOURS.toMillis(4) - 1
+            repeat(3) { nextBackground() }
+            assertTrue(manager.isAdAvailable(false))
+            assertEquals(1, requests.size)
+            now++
+            assertFalse("Reusing the cache must not renew its original TTL", manager.isAdAvailable(false))
+            manager.fetchAd(false)
+            main.idleFor(10, TimeUnit.MINUTES)
+            assertEquals("An expired ad does not cause a background refresh loop", 1, requests.size)
+            nextBackground()
+            assertEquals(2, requests.size)
+            fill(1)
+            assertTrue(manager.isAdAvailable(false))
+        }
+    }
+
+    private fun enable() {
         manager.setAppResumeAdId(UNIT)
-        manager.fetchAd(false)
+        manager.enableAppResume()
+    }
+
+    private fun nextBackground() {
+        manager.onResume()
+        manager.onStop()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+    }
+
+    private fun startRequest() {
+        enable()
+        nextBackground()
         assertEquals(1, requests.size)
     }
 
@@ -242,7 +360,7 @@ class AppOpenResumeLoadStateTest {
         assertEquals(2, requests.size)
         fill(1)
         assertTrue(manager.isAdAvailable(false))
-        manager.fetchAd(false)
+        nextBackground()
         assertEquals(2, requests.size)
     }
 

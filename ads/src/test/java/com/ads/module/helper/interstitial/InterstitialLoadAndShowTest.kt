@@ -84,9 +84,11 @@ class InterstitialLoadAndShowTest {
 
     @After
     fun tearDown() {
+        InterstitialAutoBuffer.stop()
         vendorAds.filter { it.hosts.isNotEmpty() }.forEach {
             it.callback.onAdDismissedFullScreenContent()
         }
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAdManager.releaseAll()
         ShadowDialog.getLatestDialog()?.dismiss()
         ConsentCenter.setHostConsent(false, false)
@@ -298,7 +300,9 @@ class InterstitialLoadAndShowTest {
     }
 
     @Test
-    fun `frequency blocked cold trigger does not waste a new request`() {
+    fun `managed frequency blocked cold trigger does not waste a new request`() {
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(PLACEMENT)))
+        InterstitialAutoBuffer.start(activity)
         val raw = newVendor()
         loadAndFill(raw)
         InterstitialAdManager.show(activity, PLACEMENT, RecordingShow())
