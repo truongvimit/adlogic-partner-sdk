@@ -12,6 +12,8 @@ import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
+import io.trackkit.TrackSink
+import io.trackkit.Tracker
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -554,6 +556,43 @@ class AppOpenResumePresentationTest {
         leaveProcess()
         main.idleFor(2_000, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `a real presentation reports ad_show and a vendor show failure reports ad_show_failed`() {
+        val sink = ResumeShowSink()
+        Tracker.install(ApplicationProvider.getApplicationContext<Application>())
+        Tracker.addSink(sink)
+        try {
+            val ad = load()
+            showAfterLoading()
+            ad.content!!.onAdShowedFullScreenContent()
+            val shown = sink.of("ad_show").single()
+            assertEquals("app_resume", shown["placement"])
+            assertEquals("app_open", shown["ad_format"])
+            assertEquals(UNIT, shown["ad_unit_id"])
+            assertTrue(sink.of("ad_show_failed").isEmpty())
+
+            sink.events.clear()
+            ad.content!!.onAdDismissedFullScreenContent()
+            val second = load()
+            showAfterLoading()
+            second.content!!.onAdFailedToShowFullScreenContent(error())
+            val failed = sink.of("ad_show_failed").single()
+            assertEquals("app_resume", failed["placement"])
+            assertEquals(1, failed["error_code"])
+        } finally {
+            Tracker.removeSink(sink)
+        }
+    }
+
+    private class ResumeShowSink : TrackSink {
+        override val id = "res04-show-telemetry"
+        val events = mutableListOf<Pair<String, Map<String, Any?>>>()
+        override fun onEvent(name: String, params: Map<String, Any?>) {
+            events += name to params.toMap()
+        }
+        fun of(name: String) = events.filter { it.first == name }.map { it.second }
     }
 
     private fun showAfterLoading() {

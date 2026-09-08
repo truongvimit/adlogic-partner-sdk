@@ -39,6 +39,8 @@ import com.ads.module.tracking.AdTracking;
 
 import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
+import io.trackkit.Tracker;
+import io.trackkit.TrackkitEvents;
 import com.ads.module.helper.AdSkipReason;
 import com.ads.module.consent.ConsentCenter;
 import com.google.android.gms.ads.AdActivity;
@@ -54,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Objects;
 
@@ -320,9 +323,41 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     private void reportResumePolicySkip(String reason) {
-        // The registry may not know a blank/late-config unit yet; keep the known placement stable.
-        String placement = PlacementRegistry.placementOf(appResumeAdId, "app_resume");
-        AdTracking.skipped(placement, AdFormat.APP_OPEN, reason);
+        AdTracking.skipped(resumePlacementFor(appResumeAdId), AdFormat.APP_OPEN, reason);
+    }
+
+    /** The registry may not know a blank/late-config unit yet; keep the known placement stable. */
+    private static String resumePlacementFor(String adUnitId) {
+        return PlacementRegistry.placementOf(adUnitId, "app_resume");
+    }
+
+    /**
+     * Resume is the one format that reaches GMA without an {@link com.ads.module.funtion.AdCallback},
+     * so {@code TrackingAdCallback} never sees it and these emit its funnel directly. Without them
+     * a console gap between matched requests and impressions cannot be attributed to a stage.
+     */
+    private static void reportResumeRequest(String adUnitId) {
+        AdTracking.request(resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId);
+    }
+
+    private static void reportResumeLoaded(String adUnitId, long requestedAtMs) {
+        Tracker.track(new TrackkitEvents.Ad.Loaded(resumePlacementFor(adUnitId), AdFormat.APP_OPEN,
+                adUnitId, System.currentTimeMillis() - requestedAtMs));
+    }
+
+    private static void reportResumeLoadFailed(String adUnitId, Integer errorCode) {
+        Tracker.track(new TrackkitEvents.Ad.LoadFailed(
+                resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId, errorCode));
+    }
+
+    private static void reportResumeShown(String adUnitId) {
+        Tracker.track(new TrackkitEvents.Ad.Show(
+                resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId));
+    }
+
+    private static void reportResumeShowFailed(String adUnitId, Integer errorCode) {
+        Tracker.track(new TrackkitEvents.Ad.ShowFailed(
+                resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId, errorCode));
     }
 
     /**
@@ -505,6 +540,13 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         final Application requestApplication = myApplication;
         final boolean personalized = ConsentCenter.canPersonalize();
         final long generation = isSplash ? 0 : ++resumeFetchGeneration;
+        // One terminal event per request, the same latch TrackingAdCallback keeps for every
+        // other format: a superseded request must not report both an outcome and a retry's.
+        final AtomicBoolean resumeTerminalReported = new AtomicBoolean(false);
+        // A terminal is only meaningful for a request the funnel has actually seen; the gates
+        // below can still refuse after this point, and those exits report nothing at all.
+        final AtomicBoolean resumeRequestReported = new AtomicBoolean(false);
+        final long resumeRequestedAtMs = System.currentTimeMillis();
         if (!isSplash) {
             resumeFetchPending = true;
             resumeFetchDeadlineMs = SystemClock.elapsedRealtime() + RESUME_FETCH_TIMEOUT_MS;
@@ -530,7 +572,17 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     public void onAdLoaded(AppOpenAd ad) {
                         Log.d(TAG, "onAppOpenAdLoaded: isSplash = " + isSplash);
                         if (!isSplash) {
-                            if (!canContinueResumeFetch(generation, adUnitId, personalized)) return;
+                            if (resumeTerminalReported.compareAndSet(false, true)) {
+                                reportResumeLoaded(adUnitId, resumeRequestedAtMs);
+                            }
+                            if (!canContinueResumeFetch(generation, adUnitId, personalized)) {
+                                // The vendor matched and billed this request; we are refusing the
+                                // arrival. Reporting it is what separates "no fill" from "our own
+                                // deadline threw a paid fill away".
+                                AdTracking.skipped(resumePlacementFor(adUnitId), AdFormat.APP_OPEN,
+                                        "fill_discarded");
+                                return;
+                            }
                             ad.setOnPaidEventListener(adValue -> {
                                 ERainLogEventManager.logPaidAdImpression(requestApplication.getApplicationContext(),
                                         adValue,
@@ -569,6 +621,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                     @Override
                     public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
                         Log.d(TAG, "onAppOpenAdFailedToLoad: isSplash" + isSplash + " message " + loadAdError.getMessage());
+                        if (!isSplash && resumeTerminalReported.compareAndSet(false, true)) {
+                            reportResumeLoadFailed(adUnitId, loadAdError.getCode());
+                        }
                         if (!isSplash && ownsResumeFetch(generation)) {
                             if (!canFetchResume(false)) {
                                 if (ownsResumeFetch(generation)) cancelResumeFetch(false);
@@ -603,10 +658,18 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 }
                 if (!ownsResumeFetch(generation)) return;
                 Log.d(TAG, "resume load dispatch generation=" + generation);
+                // After every gate, so the funnel counts requests that actually reach GMA.
+                resumeRequestReported.set(true);
+                reportResumeRequest(adUnitId);
             }
             AppOpenAd.load(requestApplication, adUnitId, request, requestCallback);
         } catch (RuntimeException error) {
             if (isSplash) throw error;
+            // A reported request must always reach a terminal event, or the funnel keeps a
+            // request that no outcome ever answers and every rate computed from it is wrong.
+            if (resumeRequestReported.get() && resumeTerminalReported.compareAndSet(false, true)) {
+                reportResumeLoadFailed(adUnitId, null);
+            }
             failResumeFetch(generation, "dispatch_error=" + error.getClass().getSimpleName());
         }
     }
@@ -928,6 +991,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             @Override
             public void onAdFailedToShowFullScreenContent(AdError error) {
                 if (!finishResumeAttempt(attempt, ownedDialog)) return;
+                reportResumeShowFailed(unit, error == null ? null : error.getCode());
                 if (delegate != null && forwardContent) forwardResumeCallback(() -> delegate.onAdFailedToShowFullScreenContent(error));
             }
 
@@ -935,6 +999,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             public void onAdShowedFullScreenContent() {
                 if (activeResumeAttempt != attempt || shown) return;
                 shown = true;
+                reportResumeShown(unit);
                 // GMA can report shown before its content paints. Keep the loading backdrop
                 // until the host stops, the ad ends, or the cosmetic timeout expires.
                 // GMA may already have paused the host; only this attempt's identity matters now.

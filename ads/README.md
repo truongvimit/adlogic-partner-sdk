@@ -265,6 +265,12 @@ Resume enablement no longer preloads: one eligible background stay schedules a l
 seconds, and returning early cancels it. A ready ad is reused across returns; no post-show refill
 or foreground fetch occurs. A late result is cached for the next return.
 
+`app_resume` now reports its own funnel — `ad_request`, `ad_loaded` / `ad_load_failed`, `ad_show` /
+`ad_show_failed` — under the placement the unit is registered to, so its client-side show rate is
+computable without console data. A fill the vendor billed and the request deadline then refused
+reports `ad_skipped` with reason `fill_discarded`; that is the one branch that used to lose a paid
+ad silently, and it is what tells a matched-but-never-shown gap apart from a no-fill.
+
 Only AutoBuffer's configured, non-reserved placements share the interstitial interval. Closing
 a group ad or failing its final waterfall starts the interval; successful load does not. Splash
 and after-onboarding placements outside the group do not read or update that gate. Start the

@@ -63,6 +63,7 @@ class AppOpenResumeLoadStateTest {
         })
         networkAvailable(true)
         requests.clear()
+        ResumeLoadGmaShadow.throwOnLoad = false
         // The delayed background load must work with only an Application context.
         assertNull(manager.currentActivity)
     }
@@ -396,10 +397,16 @@ class ResumeLoadGmaShadow {
     data class Request(val unit: String, val callback: AppOpenAd.AppOpenAdLoadCallback)
     companion object {
         val requests = mutableListOf<Request>()
+
+        /** Reproduces a vendor dispatch that throws instead of returning a callback. */
+        @JvmStatic
+        var throwOnLoad = false
+
         @JvmStatic
         @Implementation
         fun load(context: Context, unit: String, request: AdRequest, callback: AppOpenAd.AppOpenAdLoadCallback) {
             requests += Request(unit, callback)
+            if (throwOnLoad) throw IllegalStateException("External GMA dispatch failure")
         }
     }
 }
