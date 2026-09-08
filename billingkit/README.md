@@ -9,7 +9,7 @@ screen, start with [PayKit](../paykit/README.md); PayKit initializes BillingKit 
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
 ```groovy
-def sdkVersion = '5.1.2' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.0' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0" // Activity examples below.
@@ -144,5 +144,4 @@ From your Restore button, call `Billing.restore()` in `lifecycleScope.launch`. I
 
 For receipt verification, Java callbacks and other options, see
 [AppPurchase](src/main/java/com/ads/module/billing/AppPurchase.java) and
-[Billing](src/main/java/com/ads/module/billing/Billing.kt). Existing billing initialization can
-stay the same when upgrading from 5.0.0.
+[Billing](src/main/java/com/ads/module/billing/Billing.kt).

@@ -6,14 +6,13 @@ Follow [onboardkitorigin](../onboardkitorigin/README.md) for that flow; it owns 
 
 ## Requirements and installation
 
-Use `minSdk 24+`, `compileSdk 36+` and JDK 17. The repository's target SDK is 36; this is not a
-new migration requirement. Add the repositories from the
+Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add the repositories from the
 [root setup](../README.md), including the mediation repositories. Google Mobile Ads and mediation
 adapters are bundled; [build.gradle](build.gradle) lists versions and dependencies.
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -48,14 +47,9 @@ Create `res/values/ad_keys.xml` with your real Meta values. Both are required by
 The SDK supplies `AutoInitEnabled`, `AutoLogAppEventsEnabled` and
 `AdvertiserIDCollectionEnabled` as `true` in its library manifest. A host can override an
 entry with `android:value="false" tools:replace="android:value"` (declare the `tools` XML
-namespace). Runtime Meta settings supplied by the host are not forced back on.
-`facebookClientToken` in `ERainAdConfig` is optional when the manifest already supplies it;
-the legacy placeholder no longer overwrites the manifest token.
+namespace). `facebookClientToken` in `ERainAdConfig` is optional when the manifest supplies it.
 
-Meta bidding is already bundled through `com.google.ads.mediation:facebook`; no extra
-load/show integration is required ([Google integration guide](https://developers.google.com/admob/android/mediation/meta)).
-`facebook-core` includes automatic App Events, so the larger `facebook-android-sdk` bundle
-is unnecessary for this setup ([Meta source](https://github.com/facebook/facebook-android-sdk/tree/main/facebook-core/src/main/java/com/facebook/appevents)).
+Meta mediation and Facebook Core are bundled; no additional Meta dependency is needed.
 
 ## 1. Initialize once in Application
 
@@ -204,60 +198,33 @@ for every tier; see [BannerAdConfig](src/main/java/com/ads/module/helper/banner/
 
 ## Native preload, repeated show, and refresh
 
-`NativeAdManager` owns one unused native and one pending load per placement across screens.
-Use a distinct placement for each slot, even when two slots use the same AdMob unit. Requests
-from `NativeAdHelper` always share this store; enabling preload on the helper is no longer required.
-Keep helpers scoped to their screen/view; the shared manager already owns the cross-screen state,
-so partners do not need a singleton helper holding an Activity or ad view.
+Use a stable placement for each slot and one `NativeAdHelper` per Activity/view. A Fragment
+uses `viewLifecycleOwner`. The shared manager keeps one unused ad and one pending request per
+placement, so a singleton helper holding an Activity is unnecessary.
 
 ```kotlin
-// Optional: start earlier, after consent. Repeat calls do not append load batches.
+// Optional: preload earlier, after consent, using the nativeConfig from the previous example.
 NativeAdManager.preload(applicationContext, "native_home", nativeConfig)
 
-// In the destination Activity; for a Fragment use viewLifecycleOwner.
+// Destination Activity; use viewLifecycleOwner for a Fragment.
 val nativeHelper = NativeAdHelper(this, this, nativeConfig)
     .setNativeContentView(binding.frAds)
+    .setNativeStyle(native.toNativeStyle())
     .also { it.placement = "native_home" }
 nativeHelper.show()
 ```
 
-`show()` consumes a ready ad, joins its pending load, or starts one. Calls while this helper is
-loading coalesce. Once binding succeeds the ad is out of the unused cache, so a later explicit
-`show()` requests another ad and replaces the current one when ready. Removing it from the cache
-does not destroy the ad backing the visible view. Failed replacement loads/binds keep a valid
-current ad. Gate denial and expired ads cannot be used as survivors.
-
-For a slot that refreshes while visible, use the same helper with `canReloadAds = true` in
-`NativeAdConfig`, then call `applyReloadByTime(intervalMs)` before `show()`. The old native stays
-visible while its replacement loads. Failure retries use the configured interval, not an immediate
-request loop. Hidden/stopped slots do not issue timed refresh requests.
-
-A real departure stops the helper's timer and ends the displayed ad. The shared request and any
-unused fill survive: returning uses that fill or joins that request. A retained helper automatically
-starts a fresh visit on resume. With an `AppCompatActivity`/`ViewModelStoreOwner` host, configuration
-recreation (including rotation) instead restores the current presentation and remaining refresh
-time. Recreate the helper with the same placement and call `show()` as usual, including in
-`onCreate`; it binds when resumed. This does not return the consumed ad to the preload cache.
-Use one active helper per slot. Ads are held only in memory and cannot survive process death.
-
-For a retained ViewPager page or a custom navigator that only pauses/hides the view, call
-`cancel()` on page unselection and `show()` on selection. A pause alone can also mean a
-translucent dialog or configuration transition, so it only suspends refresh. OnboardKit wires
-its page-selection callbacks this way.
-
-`cancel()` detaches the current helper and disposes its presentation; it does not cancel the shared
-network request. If the helper will not be reused, call `destroy()` to also remove its lifecycle
-observer and view references. `NativeAdManager.release(placement)` explicitly invalidates unused/pending fills.
-Do not call that manager release as routine screen/rotation cleanup if the next screen instance
-must reuse the pending request or unused fill.
-Call `ApNativeAd.destroy()` when disposing an ad obtained through the low-level polling API.
-
-The old `NativeAdPreload` entry points delegate to this same store. `preloadWithKey()` now skips
-when covered, just like `preloadWithKeyIfEmpty()`; their Boolean return meanings remain distinct
-(started versus covered). Legacy `buffer`/`preloadBuffer` values no longer request batches: capacity
-is one unused native per placement. `preloadOnResume` no longer selects a separate network path.
-`preloadAfterShow` remains an optional request for the next unused ad; it does not replace the
-current ad until another show/refresh trigger.
+- `show()` uses a ready ad, joins a pending request, or loads one. Repeated calls while loading
+  share that request. Calling it again after a successful bind requests a replacement.
+- For timed refresh, set `NativeAdConfig.canReloadAds = true`, then call
+  `applyReloadByTime(intervalMs)` before `show()`. The current ad stays visible while loading;
+  refresh pauses when the slot is hidden/stopped.
+- For retained pager pages or custom navigation, call `cancel()` when the page is unselected
+  and `show()` when selected. Use `destroy()` when permanently disposing the helper.
+- After rotation, recreate the helper with the same placement and call `show()`; an
+  `AppCompatActivity` host restores its current presentation. Ads do not survive process death.
+- Do not call `NativeAdManager.release(placement)` for routine screen cleanup: it invalidates
+  shared pending/unused ads. Use it only when deliberately discarding that placement's inventory.
 
 ## Optional integrations
 
@@ -270,37 +237,60 @@ current ad until another show/refresh trigger.
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
 | App-open on return | Set `ERainAdConfig.idAdResume` before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [AppOpenManager](src/main/java/com/ads/module/admob/AppOpenManager.java). |
 
-## Resume and interstitial lifecycle migration
+## Automatic interstitial preload
 
-See the [SDK lifecycle contract and partner migration](../docs/ads-buffer-lifecycle.md).
-Resume enablement no longer preloads. Each eligible background captures the top-level
-`app_resume_load_delay_ms` field from the remote `ad_remote_config` JSON (default 2000 ms;
-0–86,400,000 ms). Returning early cancels it. Network recovery and failure retries are limited to
-3 requests within 120 seconds after that delay. A ready ad is reused across returns; no post-show
-refill or foreground fetch occurs. A timed-out request's late result can still be cached until
-superseded or invalidated; the four-hour ad lifetime is measured from the original request.
+Set `intervalInterstitialAd = 30` (seconds, choose your own interval) in the
+`ERainAdConfig(...).apply` block before initialization; `0` disables the interval gate.
+Configure the group once after ads initialization. Include only your in-app content placements;
+keep splash and `inter_after_ob3` outside this group. Define each placement in your ad JSON.
 
-`app_resume` reports `ad_request`, `ad_loaded` / `ad_load_failed`, `ad_show` / `ad_show_failed`.
-`ad_skipped: load_timeout` identifies a request exceeding the SDK's 30-second loading deadline;
-`ad_skipped: fill_discarded` identifies a vendor fill rejected after replacement, invalidation or
-expiry. A timeout does not fabricate a vendor failure. Client funnel events support diagnosis;
-use impressions/session alongside show rate when evaluating the change.
+```kotlin
+import com.ads.module.helper.interstitial.InterstitialAutoBuffer
+import com.ads.module.helper.interstitial.InterstitialBufferOptions
 
-Only AutoBuffer's configured, non-reserved placements share the interstitial interval. Closing
-a group ad or failing its final waterfall starts the interval; successful load does not. Splash
-and after-onboarding placements outside the group do not read or update that gate. Start the
-buffer at content entry, not in Application. `topUpNow()` no longer bypasses the gate. Managed
-`loadAndShow()` calls are ready-only and proceed immediately when empty; explicit waiting for
-non-managed placements remains available. Raw ERain/Admob calls have no placement group: use
-`InterstitialAdManager` for managed ads and remove partner-side interval overrides/refills.
+// Application.onCreate(), after ERainAd.init(...).
+InterstitialAutoBuffer.configure(
+    InterstitialBufferOptions(placements = listOf("inter_back", "inter_all")),
+)
 
-## Moving from the main / 5.0 setup
+// First actual content Activity, after onboarding/consent/remote setup.
+// Also cover direct notification, deep-link and restored entry paths.
+InterstitialAutoBuffer.start(applicationContext)
+```
 
-Dependencies, manifest entries and basic `load`/`show` calls keep the same shape. In the current
-branch, helpers require consent authority and pause while its form is open; remove any timeout
-fallback that grants permission. Keep preload separate from navigation; no new interstitial API
-is required for migration. Banner `Reload` now requests an ordinary banner for collapsible
-placements; explicit `Request` keeps collapsible.
+Keep using `InterstitialAdManager.canShow/show` at navigation opportunities. The first preload
+waits for the configured interstitial interval; closing a group ad or a final load failure
+starts the next interval. The SDK pauses scheduling in background and retains ready ads.
+Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass the interval.
+Use the manager APIs for these placements and remove app-side refill timers or temporary
+interval overrides. Call `stop()` only when you want to disable buffering.
+
+## App-open on return
+
+Set the app-open unit before `ERainAd.init(...)`; the setter also enables resume ads:
+
+```kotlin
+// Inside the ERainAdConfig(...).apply block from step 1:
+idAdResume = "YOUR_APP_OPEN_UNIT_ID" // Use a test unit in debug.
+```
+
+Exclude your custom splash and sensitive Activities during Application setup:
+
+```kotlin
+import com.ads.module.admob.AppOpenManager
+
+AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
+```
+
+OnboardKit handles its splash/fullscreen/survey exclusions. With OnboardKit, also map
+`AdsConfig.appResume` to your app-open unit so its placement gate is configured; see the
+[onboarding guide](../onboardkitorigin/README.md#app-open-on-return).
+
+The SDK loads on a genuine background transition and shows only an already-ready ad on an
+eligible return. It does not wait for a load on foreground entry. To tune background delay,
+add the top-level `"app_resume_load_delay_ms": 2000` field alongside placements in your asset
+JSON or remote `ad_remote_config`. Values are milliseconds, from 0 to 86,400,000; default 2000.
+Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
 
 ## Troubleshooting
 

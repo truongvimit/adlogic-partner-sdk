@@ -12,7 +12,7 @@ Với Firebase Analytics, thêm `suite-firebase`; module này đã cung cấp Tr
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
@@ -55,6 +55,8 @@ Dùng tên event cố định và truyền giá trị qua tham số; không đư
 
 Ads, onboarding, billing và PayKit tự phát event SDK. Không gửi lặp lại từ callback của app. Tên và tham số có trong [TrackkitEvents](src/main/java/io/trackkit/TrackkitEvents.kt).
 
+`fo_ad_bound` là lúc native được gắn vào view; `ad_show` là hiển thị do vendor xác nhận. Tách hai event khi làm báo cáo.
+
 ## Nối consent
 
 Khi dùng `ConsentCenter` của module ads, consent tự được gửi sang Tracker. Mapping hiện tại là `analytics = true` và `ads = personalized`; đây không phải quyền request quảng cáo. Đọc quyền request bằng `ConsentCenter.canRequestAds()`.
@@ -88,10 +90,6 @@ if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
 | Event bị giữ/bỏ | Xem `Tracker.currentConsent` và `consentPolicy` đang dùng. |
 | Event SDK bị lặp | Bỏ phần tự gửi lại trong callback ads/onboarding; mỗi nơi nhận chỉ đăng ký một lần. |
 | Validation ném lỗi | Dùng `strictValidation = BuildConfig.DEBUG`, không đặt `true` trong release. |
-
-## Nâng cấp từ 5.0.0
-
-Code khởi tạo giữ nguyên. Native bind chuyển sang `fo_ad_bound`, tách khỏi `ad_show` do vendor xác nhận. Sửa báo cáo nếu trước đây đang tính callback bind onboarding như impression thật.
 
 ## Backend riêng và tùy chọn khác
 

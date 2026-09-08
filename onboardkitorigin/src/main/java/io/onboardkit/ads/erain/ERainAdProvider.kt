@@ -74,12 +74,12 @@ class ERainAdProvider(
 ) : OnboardingAdProvider {
 
     init {
-        // The flow reuses its splash interstitial at the language and pager exits, and decides
-        // which screens to show from a bare "is one buffered" probe. A background top-up would
-        // both add an impression and delete the screens the flow would otherwise have shown.
+        // Flow placements preload at their own transitions and stay independent of the
+        // content buffer's activation and shared frequency interval.
         InterstitialAutoBuffer.reserve(
             AdPlacement.SplashInterstitial.key,
             AdPlacement.QuestionInterstitial.key,
+            AdPlacement.AfterOnboardingInterstitial.key,
         )
     }
 

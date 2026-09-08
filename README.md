@@ -20,7 +20,7 @@ Add only the modules you use. Trackkit is already exposed by ads, onboarding, bi
 
 ## Build setup
 
-Use JDK 17, `minSdk 24+` and `compileSdk 36+`. This repository builds with Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 and targetSdk 36; these toolchain versions did not change in this branch.
+Use JDK 17, `minSdk 24+` and `compileSdk 36+`. This repository builds with Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 and targetSdk 36.
 
 Merge these repositories into your existing Gradle repository block; do not create a second `dependencyResolutionManagement` block. The three mediation repositories are needed only for ads/onboarding.
 
@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-The current published version is **5.1.2**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+This guide targets **5.2.0**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
@@ -74,23 +74,6 @@ With OnboardKit, the splash runs consent and the notification step automatically
 | Onboarding | Destination Activity, language/content configuration and ad placements. |
 | Purchases | Play product IDs and entitlement mapping. PayKit also needs terms/privacy URLs and your catalog JSON. |
 | Firebase · optional | Firebase app configuration and published Remote Config parameters for the sources you use. |
-
-## Upgrading from 5.0.0
-
-Dependencies and the main install APIs are unchanged. These are the integration changes to check when adopting this branch:
-
-| Area | Partner action |
-| --- | --- |
-| Custom consent | Returning `true` from `onConsentRequired()` or calling `setCanRequestAds(true)` no longer grants consent. Publish your CMP's actual decision through `ConsentCenter.setHostConsent(...)`. Standard UMP through `ObSplashActivity` needs no new wiring. |
-| Notification permission | `SplashConfig.notificationPermissionEnabled` defaults to `true`; OnboardKit merges `POST_NOTIFICATIONS`. Set it to `false` if your app owns this prompt or does not use notifications. Authorized splash ads can load under the visible notification prompt; presentation and the shared wait budget require its result and foreground focus. |
-| Portrait | `BehaviorConfig.lockPortrait` defaults to `true`, including the app's splash subclass. Set it to `false` for a landscape/tablet flow; follow the splash manifest example in the OnboardKit guide. |
-| Banner refresh | Choose AdMob or the SDK to own refresh. SDK `Reload` uses an ordinary banner even if the initial request is collapsible. See the ads guide before keeping a custom reload timer. |
-| Native ownership | Keep a helper per screen/view and a stable placement per slot. Successful binding consumes the unused cache; pending loads survive departure, and rotation restores the presentation. Follow the [native usage and cleanup guide](ads/README.md#native-preload-repeated-show-and-refresh). |
-| Splash preload | Built-in splash owns scheduling and timing. The optional A/B flag changes only LFO1 preload; see [splash integration and custom providers](onboardkitorigin/README.md#partner-integration-notes). |
-| Skip callbacks | Update exhaustive Kotlin `when` branches for the added `AdSkipReason` values: consent reasons in ads, and `SHOW_IN_BACKGROUND` in ads/onboarding. |
-| Analytics | Native binding now emits `fo_ad_bound`. Keep it separate from vendor-confirmed `ad_show` in dashboards; do not emit a second show event from a bind callback. |
-
-The remote-cache and ad-lifecycle fixes need no new partner configuration. Keep preload + show for normal feature navigation; the new interstitial `loadAndShow` API is optional and is not used by the built-in onboarding flow.
 
 ## Verify the integration
 

@@ -13,7 +13,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
 ```groovy
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -118,48 +118,22 @@ Defaults to account for:
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
 - Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; a ready interstitial can show before that minimum, while navigation waits only its remaining time.
 
-### LFO tap hint delay
+### Splash and language options
 
-Remote Config `ob_language_tap_hint_delay_sec` is an integer number of seconds, default **3**.
-`0` shows the hand immediately; negative or malformed values fall back to 3 seconds.
-It applies only when both `LanguageConfig.tapHintEnabled` and `ob_show_language_tap_hint`
-are enabled. Selecting a language cancels the pending hint or hides the visible hand.
-SETTINGS and a preselected `defaultCode` do not show the hint.
+The supplied splash/provider owns consent, preloading and handoff; keep app-side delays out of
+this flow. Configure only the defaults you need to change:
 
-### Splash → Language preload experiment
+| Option | Default / use |
+|---|---|
+| `SplashConfig.minDisplayTimeMs` | 3000 ms; minimum before navigation, not before showing a ready interstitial. |
+| `ob_splash_ad_budget_ms` | 60000 ms of ad waiting, starting after notification completes and splash has focus. |
+| `ob_splash_lfo_parallel_preload_enabled` | `false`: preload the first language native after the splash waterfall settles or its wait expires. `true`: preload alongside splash ads. |
+| `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Both must be enabled to show the language selection hand. |
+| `ob_language_tap_hint_delay_sec` | 3 seconds; `0` shows immediately. Selecting a language cancels the hint; SETTINGS/preselected language hides it. |
 
-`ob_splash_lfo_parallel_preload_enabled` is a Boolean, default **false**. Configure stable assignment in Firebase Remote Config/A/B Testing; the SDK does not randomize groups.
-
-- **false / sequential (A):** preload LFO1 after the entire splash interstitial waterfall settles (loaded, failed, skipped), or its splash wait budget expires.
-- **true / parallel (B):** preload LFO1 alongside splash loading once remote, the Language destination and request gates are resolved.
-
-Only LFO1 moves. OB1 and LFO2 keep their existing triggers; `SAME_TIME`/`ALTERNATE` independently control remote-fetch versus splash-interstitial loading. A ready LFO1 binds, an in-flight request is joined, and a failed splash preload does not immediately retry on Language entry. Expired/empty inventory can load normally.
-
-The mode and one launch attempt survive Activity recreation in memory. Fetch failure retains the cached remote snapshot. Console output is sufficient to compare runs: `splash_lfo attempt=<id> mode=sequential|parallel reason=<trigger>`; no extra experiment analytics are emitted.
-
-`ob_splash_ad_budget_ms` (60,000 ms default) starts once after notification finishes/skips and splash resumes with focus. Banner waiting shares that deadline; elapsed background/recreation time is not reset, and late interstitial fill cannot reopen an expired opportunity. `ob_splash_notification_settle_ms` defaults to **0** and, when enabled, counts from the notification result. Existing minimum (3,000 ms), banner wait (0 ms), floors and per-tier network timeouts remain unchanged. Splash continues using the existing `show()` path.
-
-### Partner integration notes
-
-With `ObSplashActivity` and the supplied `ERainAdProvider`, keep the existing install/configure
-flow. The SDK owns preload, notification, timers and handoff; no extra delay or splash
-`loadAndShow()` call is needed. Native slots outside onboarding use the
-[shared native manager and screen-scoped helper](../ads/README.md#native-preload-repeated-show-and-refresh).
-
-The default **3 s minimum gates navigation, not interstitial presentation**. For launcher
-`UNDER_AD`, an interstitial shown at ad-phase second 1 can still have splash underneath until
-second 3; the next screen then opens beneath it. If shown at second 5, no minimum remains.
-The **60 s budget bounds ad waiting after notification**, not total launch duration or the time
-the user spends viewing the interstitial. Remote configuration can override these defaults.
-
-If you inject your own [OnboardingAdProvider](src/main/java/io/onboardkit/ads/OnboardingAdProvider.kt),
-implement the updated native contract: preload is idempotent per placement, joins pending loads
-and skips usable unused fills; successful binding consumes that unused fill. Report terminal
-preload failures through `isNativeLoadFailed()` so Language entry does not immediately retry
-them (its compatibility default is `false`). `releaseNative()` ends the presentation while
-preserving shared pending loads and unused fills. Recheck foreground eligibility before queued
-requests start; `allowWhileVisible` only permits the visible splash beneath its notification
-prompt. The supplied provider already handles these requirements.
+`ob_*` values are optional Firebase Remote Config parameters. See
+[ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) for other supported options.
+Native slots outside onboarding follow the [Ads guide](../ads/README.md#native-preload-repeated-show-and-refresh).
 
 ## 3. Map ads and content to screens
 
@@ -171,6 +145,8 @@ Leave optional slots unset unless you need them; some slots inherit fallback uni
 | `languageNative`, `languageDupNative` | First / replacement language native |
 | `contentStepNative`, `stepNatives[StepId.OB1]` | Shared content native / per-step override |
 | `fullScreenStepNative` | Ad-only step; skipped when no usable unit exists |
+| `afterOnboardingInterstitial` | Separate interstitial at onboarding completion (`inter_after_ob3`) |
+| `appResume` | App-open eligibility during language/content and in-app returns |
 
 `defaultSteps()` creates OB1, OB2, OB3 (ad-only), OB4. For your copy and images, replace it with `steps(ContentStepDefinition(...), ...)`; see [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in request order; banners take one ID.
@@ -178,6 +154,48 @@ Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in re
 JSON names such as `inter_splash` or `native_lang` must be mapped into `AdsConfig`; the SDK does not infer every mapping from the field name.
 Use `AdRemoteConfig.getInstance().tiersFor(key)` and rebuild the config after refreshed IDs arrive in `onRemoteFetched()`.
 The sample's [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
+
+## Fullscreen page and onboarding exit ad
+
+Configure these in the same `onboardKitConfig` block as your content. `StepId` is in
+`io.onboardkit.core`; the other types below are in `io.onboardkit.config`.
+
+```kotlin
+// Include this among your content pages in steps(...).
+AdFullScreenStepDefinition(
+    StepId.OB3,
+    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
+    skipButtonDelaySec = 1,
+    autoNextEnabled = true,
+    autoNextDelayMs = 3_000,
+)
+
+// Add these fields to your existing AdsConfig(...).
+afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
+afterOnboardingInterstitialEnabled = true,
+```
+
+The fullscreen page defaults to an X after 1 second and automatic advance after 3 seconds from
+page selection; set `autoNextEnabled = false` for manual completion. Remote
+`ob_skip_button_delay_sec >= 0` overrides the local skip delay; `-1` uses the local value.
+`AdsConfig.fullScreenSkipStyle` sets the shared appearance for OB3/OB5. Standalone OB5 uses
+its own 3-second skip and 15-second auto-dismiss defaults.
+
+`inter_after_ob3` is a separate placement from splash. The built-in provider preloads it on
+pager entry and waits up to 8 seconds for a fill on completion, then continues after dismissal
+or a skip. Both `afterOnboardingInterstitialEnabled` and remote `ob_ads_inter_after_ob3_enabled`
+must be true. Set the local switch to `false` if your app owns this ad trigger; this disables
+both automatic preload and show. Keep this placement out of your content AutoBuffer group.
+
+## App-open on return
+
+Complete the [Ads app-open setup](../ads/README.md#app-open-on-return), then add
+`appResume = InterstitialAdUnit("YOUR_APP_OPEN_UNIT_ID")` to `AdsConfig` using the same unit.
+Language and onboarding content pages allow a ready resume ad on a genuine background/return.
+Splash, standalone fullscreen and survey screens are excluded; fullscreen pager pages,
+page transitions and the language confirmation dialog temporarily block it.
+Remove any app-owned exclusion of language/content Activities only if you want resume ads there.
+The SDK manages loading and screen eligibility; no Activity lifecycle callback is needed.
 
 ## Optional integrations
 
@@ -217,14 +235,6 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 The listener above forwards extras for `Completed`/`Skipped`. Read them in your destination's `onCreate` and `onNewIntent`.
 Entries use `inter_noti`, `inter_widget` or `inter_uninstall`, falling back to the normal splash unit; these entries navigate after the ad, while a launcher start normally opens the next screen underneath it.
 
-## Upgrading from 5.0.0
-
-- Keep the existing `install → configure → splash` integration and update all module versions together.
-- Remove any custom timeout that closes the SDK's UMP form or navigates while it is open. Do not grant consent from a timeout or boolean callback.
-- Check notification ownership and portrait behavior against the defaults above.
-- Native bind now reports `fo_ad_bound`; count actual ad displays with `ad_show`. Update dashboards that treated the old bind signal as an impression.
-- Language/question native replacements keep the current creative while waiting. OB5 restarts its countdown after returning to foreground. No new host calls are required.
-
 ## Troubleshooting
 
 | Symptom | Check |
@@ -239,65 +249,3 @@ Use `OnboardingSdk.setFlowLogging(true)` during integration (`OB_FLOW` in Logcat
 For a later language change, call `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
 
 [Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
-
-## Fullscreen Skip and automatic interstitial
-
-Fullscreen steps (OB3) default to showing the close (X) button after **1 second** and advancing
-after
-**3 seconds from page selection**, including time after the device Home button is pressed.
-No fill still skips the page immediately. Returning to the app does not restart the timer.
-The deadline lives for the page visit; force-stop/process death is not a background timer.
-Android may defer execution of a suspended process; a resumed page catches up to its deadline.
-The pager can advance while stopped. If this is the final page, opening the next Activity,
-paywall or interstitial waits for the task to resume; the completed page's timer does not restart.
-
-```kotlin
-steps(
-    AdFullScreenStepDefinition(
-        StepId.OB3,
-        skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
-        skipButtonDelaySec = 1,
-        autoNextEnabled = true,
-        autoNextDelayMs = 3_000,
-    ),
-)
-ads = AdsConfig(
-    fullScreenSkipStyle = FullScreenSkipStyle.CLOSE_ICON, // shared default for OB3 and OB5
-    afterOnboardingInterstitial = InterstitialAdUnit("YOUR_AD_UNIT"),
-    afterOnboardingInterstitialEnabled = false,
-)
-```
-
-`skipButtonStyle = null` inherits `AdsConfig.fullScreenSkipStyle`, which defaults to `CLOSE_ICON`.
-Set `TEXT` to display the word “Skip” instead. Both appearances use the
-same timer and click action. `autoNextEnabled = false` restores manual completion.
-The existing `ob_skip_button_delay_sec` remote key overrides the local Skip delay when
-nonnegative; its new default `-1` inherits the page setting. An existing remote value (for
-example `3`) still overrides it. Standalone OB5 keeps its 3-second Skip and 15-second
-auto-dismiss defaults and its foreground countdown behavior.
-
-`afterOnboardingInterstitialEnabled = false` disables **both automatic preload and show**
-for `inter_after_ob3`, even when the unit is configured and the remote switch is true.
-The remote key `ob_ads_inter_after_ob3_enabled` is still supported; both switches must be
-true. The partner can show an interstitial at its own point using the Ads module directly.
-
-
-## Resume during language and onboarding content
-
-Language selection (including first open) and onboarding content pages now permit the configured
-resume entry on a genuine background/foreground return, before onboarding completes. They use the
-same SDK background delay, ready-only presentation, retained cache and bounded recovery as in-app
-content; entering the flow or advancing a page does not request or show a resume ad.
-
-Splash, dedicated fullscreen and Question screens remain excluded. The pager dynamically blocks
-resume while an ad-only page is current, while scrolling, or after exit begins. The language
-confirmation dialog and language exit also block resume. Finishing the fullscreen auto-next timer
-does not queue a resume show: the next genuine eligible return is evaluated normally.
-
-Existing partner Activity exclusions, consent, premium, placement flags, ad-click suppression and
-active fullscreen ownership still apply. Partners that explicitly exclude LFO/onboarding classes
-need to remove their own exclusions to use this expansion; SDK opt-in never clears partner policy.
-
-The fullscreen three-second timer is not a policy guarantee. Google advises against displaying
-app-open over other ads or immediately adjacent to them; see the
-[AdMob implementation guidance](https://support.google.com/admob/answer/9341964?hl=en-GB).

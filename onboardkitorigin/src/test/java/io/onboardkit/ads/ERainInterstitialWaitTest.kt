@@ -23,6 +23,8 @@ import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.ads.module.helper.interstitial.InterstitialAutoBuffer
+import com.ads.module.helper.interstitial.InterstitialBufferOptions
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.MobileAds
@@ -75,6 +77,8 @@ class ERainInterstitialWaitTest {
     @Before
     fun setUp() {
         val app = ApplicationProvider.getApplicationContext<Application>()
+        InterstitialAutoBuffer.stop()
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAdManager.releaseAll()
         requests.clear()
         ids.clear()
@@ -110,11 +114,29 @@ class ERainInterstitialWaitTest {
         shown.filter { it.hosts.isNotEmpty() }
             .forEach { it.callback.onAdDismissedFullScreenContent() }
         provider.releaseAll()
+        InterstitialAutoBuffer.stop()
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         ShadowDialog.getLatestDialog()?.dismiss()
         ConsentCenter.setHostConsent(false, false)
         controller.pause().stop().destroy()
         main.idleFor(800, TimeUnit.MILLISECONDS)
         AppOpenManager.getInstance().setInterstitialShowing(false)
+    }
+
+    @Test
+    fun `onboarding exit preload stays independent of an unstarted content buffer`() {
+        InterstitialAutoBuffer.configure(
+            InterstitialBufferOptions(listOf("inter_all", placement.key))
+        )
+
+        provider.loadInterstitial(activity, placement, unit)
+
+        assertEquals("Onboarding must preload before the first content screen starts buffering", listOf("after-high"), ids)
+        val ad = vendor("after-high")
+        requests.single().onAdLoaded(ad)
+        main.idle()
+        assertTrue(provider.isInterstitialReady(placement))
+        assertFalse(InterstitialAutoBuffer.isRunning())
     }
 
     @Test
@@ -355,4 +377,3 @@ class ProviderWaitApplication : Application() {
         }
     }
 }
-

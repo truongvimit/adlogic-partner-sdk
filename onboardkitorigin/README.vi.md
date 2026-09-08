@@ -13,7 +13,7 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -118,47 +118,22 @@ Các mặc định cần biết:
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
 - Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Inter ready được show ngay, còn chuyển màn chỉ đợi phần minimum còn thiếu.
 
-### Thời gian hiện bàn tay tại LFO
+### Tùy chọn splash và ngôn ngữ
 
-Remote Config `ob_language_tap_hint_delay_sec` là số nguyên giây, mặc định **3**.
-`0` hiện ngay; giá trị âm hoặc không hợp lệ dùng lại mặc định 3 giây.
-Chỉ có hiệu lực khi cả `LanguageConfig.tapHintEnabled` và `ob_show_language_tap_hint`
-đều bật. Chọn ngôn ngữ trước khi hết giờ sẽ hủy bàn tay; bàn tay đang hiện cũng ẩn
-khi chọn. SETTINGS và trường hợp có `defaultCode` không hiện bàn tay.
+Splash/provider có sẵn quản lý consent, preload và chuyển màn. Chỉ cấu hình các giá trị cần đổi;
+không thêm timer chờ vào luồng này.
 
-### Thử nghiệm preload Splash → Language
+| Tùy chọn | Mặc định / cách dùng |
+|---|---|
+| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi chuyển màn; không chặn interstitial đã sẵn sàng. |
+| `ob_splash_ad_budget_ms` | Chờ quảng cáo tối đa 60000 ms, tính sau khi notification hoàn tất và splash có focus. |
+| `ob_splash_lfo_parallel_preload_enabled` | `false`: preload native ngôn ngữ đầu sau khi waterfall splash kết thúc hoặc hết thời gian chờ. `true`: preload cùng quảng cáo splash. |
+| `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Cần bật cả hai để hiện bàn tay gợi ý chọn ngôn ngữ. |
+| `ob_language_tap_hint_delay_sec` | 3 giây; `0` hiện ngay. Chọn ngôn ngữ sẽ hủy gợi ý; SETTINGS/ngôn ngữ chọn sẵn không hiện gợi ý. |
 
-`ob_splash_lfo_parallel_preload_enabled` là Boolean, mặc định **false**. Chia nhóm ổn định bằng Firebase Remote Config/A/B Testing; SDK không tự random.
-
-- **false / sequential (A):** preload LFO1 sau khi toàn bộ waterfall inter splash kết thúc (loaded, failed, skipped), hoặc hết budget chờ tại splash.
-- **true / parallel (B):** preload LFO1 cùng pha tải splash khi đã biết remote, đích đến Language và các điều kiện cho phép request.
-
-Chỉ đổi lịch LFO1; OB1/LFO2 giữ trigger cũ. `SAME_TIME`/`ALTERNATE` vẫn độc lập điều khiển thứ tự remote và tải inter. LFO1 ready thì bind, loading thì join request cũ; preload đã failed không retry ngay khi vào Language. Ads hết hạn/cache rỗng vẫn tải bình thường.
-
-Mode và attempt được giữ trong bộ nhớ khi Activity tạo lại. Fetch lỗi giữ snapshot remote đã cache. Chỉ cần xem console: `splash_lfo attempt=<id> mode=sequential|parallel reason=<trigger>`; không thêm analytics riêng cho thử nghiệm.
-
-`ob_splash_ad_budget_ms` (mặc định 60.000 ms) bắt đầu một lần sau khi notification kết thúc/bỏ qua và splash resumed + có focus. Banner dùng chung deadline; thời gian ở nền/recreation không được cấp lại, inter về trễ không được khôi phục lượt show đã hết hạn. `ob_splash_notification_settle_ms` mặc định **0**, nếu bật sẽ tính từ lúc có kết quả quyền. Giữ nguyên minimum (3.000 ms), banner wait (0 ms), floor và timeout mạng từng tier. Splash vẫn dùng `show()` hiện tại.
-
-### Lưu ý tích hợp cho partner
-
-Với `ObSplashActivity` và `ERainAdProvider` có sẵn, giữ cách install/configure hiện tại.
-SDK quản lý preload, notification, timer và chuyển màn; không cần thêm delay hay gọi
-`loadAndShow()` ở splash. Native ngoài onboarding dùng
-[manager dùng chung và helper theo màn/view](../ads/README.md#native-preload-repeated-show-and-refresh).
-
-Mặc định **minimum 3 s chặn chuyển màn, không chặn show inter**. Với launcher `UNDER_AD`,
-inter show ở giây 1 của pha ads thì bên dưới vẫn có thể là splash tới giây 3, sau đó mới mở
-màn kế tiếp dưới inter. Nếu show ở giây 5 thì không còn minimum phải đợi.
-**Budget 60 s giới hạn chờ ads sau notification**, không phải tổng thời gian khởi động hay
-thời gian người dùng xem inter. Remote config có thể ghi đè các mặc định này.
-
-Nếu tự cài [OnboardingAdProvider](src/main/java/io/onboardkit/ads/OnboardingAdProvider.kt),
-cần đáp ứng contract native mới: preload theo placement phải join request đang tải và skip
-khi còn ads chưa dùng hợp lệ; bind thành công lấy ads khỏi cache chưa dùng. Trả kết quả lỗi
-preload qua `isNativeLoadFailed()` để Language không retry ngay (mặc định tương thích là `false`).
-`releaseNative()` kết thúc phần hiển thị nhưng giữ request chung và ads chưa dùng.
-Kiểm tra lại điều kiện foreground trước khi chạy request đang chờ; `allowWhileVisible` chỉ
-cho phép splash còn hiển thị dưới prompt notification của nó. Provider có sẵn đã xử lý các yêu cầu này.
+Các tham số `ob_*` là tùy chọn trong Firebase Remote Config. Xem các key khác tại
+[ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt).
+Native ngoài onboarding làm theo [hướng dẫn Ads](../ads/README.md#native-preload-repeated-show-and-refresh).
 
 ## 3. Gắn quảng cáo và nội dung vào màn
 
@@ -170,6 +145,8 @@ Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự p
 | `languageNative`, `languageDupNative` | Native đầu / native thay thế ở màn ngôn ngữ |
 | `contentStepNative`, `stepNatives[StepId.OB1]` | Native chung cho trang nội dung / ghi đè riêng từng bước |
 | `fullScreenStepNative` | Bước chỉ có quảng cáo; bỏ qua nếu không có unit dùng được |
+| `afterOnboardingInterstitial` | Interstitial riêng khi hoàn thành onboarding (`inter_after_ob3`) |
+| `appResume` | Điều kiện app-open khi quay lại màn ngôn ngữ/nội dung |
 
 `defaultSteps()` tạo OB1, OB2, OB3 (chỉ quảng cáo), OB4. Để dùng nội dung và ảnh riêng, thay bằng `steps(ContentStepDefinition(...), ...)`; xem [định nghĩa bước](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo thứ tự request; banner nhận một ID.
@@ -177,6 +154,48 @@ Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo t
 Tên JSON như `inter_splash`, `native_lang` cần được app gắn vào `AdsConfig`; SDK không tự suy ra mọi ánh xạ từ tên trường.
 Dùng `AdRemoteConfig.getInstance().tiersFor(key)` và dựng lại config khi ID mới đã cập nhật trong `onRemoteFetched()`.
 [OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
+
+## Trang fullscreen và interstitial sau onboarding
+
+Cấu hình trong cùng khối `onboardKitConfig` với nội dung của app. `StepId` thuộc
+`io.onboardkit.core`; các kiểu còn lại bên dưới thuộc `io.onboardkit.config`.
+
+```kotlin
+// Đặt cạnh các trang nội dung trong steps(...).
+AdFullScreenStepDefinition(
+    StepId.OB3,
+    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT để hiện chữ Skip
+    skipButtonDelaySec = 1,
+    autoNextEnabled = true,
+    autoNextDelayMs = 3_000,
+)
+
+// Thêm vào AdsConfig(...) đang có.
+afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
+afterOnboardingInterstitialEnabled = true,
+```
+
+Trang fullscreen mặc định hiện X sau 1 giây và tự chuyển sau 3 giây tính từ lúc chọn trang;
+đặt `autoNextEnabled = false` nếu chỉ muốn chuyển bằng thao tác người dùng. Remote
+`ob_skip_button_delay_sec >= 0` ghi đè delay local; `-1` dùng local.
+`AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho OB3/OB5. OB5 độc lập có mặc định riêng:
+hiện nút sau 3 giây và tự đóng sau 15 giây.
+
+`inter_after_ob3` là placement riêng với splash. Provider có sẵn preload khi vào pager và
+chờ fill tối đa 8 giây lúc hoàn thành, rồi đi tiếp sau khi đóng hoặc bỏ qua quảng cáo.
+Cần bật cả `afterOnboardingInterstitialEnabled` và remote `ob_ads_inter_after_ob3_enabled`.
+Đặt switch local thành `false` nếu app tự quản lý thời điểm hiện ad này; SDK sẽ tắt cả preload
+lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
+
+## App-open khi quay lại app
+
+Hoàn tất [cấu hình app-open](../ads/README.md#app-open-on-return), rồi thêm
+`appResume = InterstitialAdUnit("YOUR_APP_OPEN_UNIT_ID")` vào `AdsConfig` với cùng ID.
+Màn ngôn ngữ và nội dung onboarding cho phép hiện resume ad đã sẵn sàng khi thực sự ra nền/quay lại.
+Splash, fullscreen độc lập và khảo sát được loại trừ; trang fullscreen trong pager,
+chuyển trang và dialog xác nhận ngôn ngữ tạm chặn resume.
+Chỉ bỏ exclusion do app đặt cho màn ngôn ngữ/nội dung nếu muốn hiện resume tại đó.
+SDK quản lý tải và điều kiện màn hình; không cần thêm callback lifecycle của Activity.
 
 ## Tích hợp tùy chọn
 
@@ -215,14 +234,6 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 
 Listener bên trên chuyển tiếp extras cho `Completed`/`Skipped`. Đọc chúng ở cả `onCreate` và `onNewIntent` của màn đích.
 Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`, dự phòng bằng unit splash thường; các entry này điều hướng sau quảng cáo, còn launcher thường mở màn tiếp theo ở dưới quảng cáo.
-
-## Nâng cấp từ 5.0.0
-
-- Giữ cách tích hợp `install → configure → splash` và cập nhật mọi module cùng phiên bản.
-- Bỏ timeout tự đóng form UMP của SDK hoặc điều hướng khi form còn mở. Không cấp consent từ timeout hay boolean callback.
-- Kiểm tra app nào sở hữu lời nhắc thông báo và hành vi khóa dọc theo mặc định bên trên.
-- Native bind nay phát `fo_ad_bound`; dùng `ad_show` để đếm hiển thị quảng cáo thật. Cập nhật dashboard từng coi bind là impression.
-- Khi thay native ở ngôn ngữ/câu hỏi, ad hiện tại được giữ trong lúc chờ. OB5 đếm lại khi trở về foreground. App không cần thêm lời gọi mới.
 
 ## Xử lý lỗi tích hợp
 

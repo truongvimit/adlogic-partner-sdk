@@ -12,7 +12,7 @@ For Firebase Analytics, add `suite-firebase`; it already exposes Trackkit. Compl
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
@@ -55,6 +55,8 @@ Use stable names and parameters, not file names or user data inside event names.
 
 Ads, onboarding, billing and PayKit emit their own SDK events. Do not duplicate those from your app callbacks. Event names and parameters are in [TrackkitEvents](src/main/java/io/trackkit/TrackkitEvents.kt).
 
+`fo_ad_bound` means a native view was bound; only vendor-confirmed `ad_show` means an ad was displayed. Keep these separate in reports.
+
 ## Connect consent
 
 When using the ads module's `ConsentCenter`, consent is forwarded to Tracker automatically. Its current mapping is `analytics = true` and `ads = personalized`; this is distinct from permission to request ads. Read request authority through `ConsentCenter.canRequestAds()`.
@@ -88,10 +90,6 @@ if (BuildConfig.DEBUG) Tracker.addSink(ConsoleSink())
 | Events are held/dropped | Check `Tracker.currentConsent` and your configured `consentPolicy`. |
 | Duplicate SDK events | Remove manual copies from ad/onboarding callbacks; register each destination once. |
 | Validation throws | Use `strictValidation = BuildConfig.DEBUG`, not `true` in release. |
-
-## Upgrading from 5.0.0
-
-Install code stays the same. Native binding is now `fo_ad_bound`, separate from vendor-confirmed `ad_show`. Update reports that previously treated onboarding bind callbacks as real impressions.
 
 ## Other destinations and options
 

@@ -20,7 +20,7 @@ Chỉ thêm module cần dùng. Ads, onboarding, billing, paywall và Firebase �
 
 ## Cấu hình build
 
-Dùng JDK 17, `minSdk 24+` và `compileSdk 36+`. Repo đang build với Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 và targetSdk 36; các phiên bản toolchain này không đổi trong nhánh hiện tại.
+Dùng JDK 17, `minSdk 24+` và `compileSdk 36+`. Repo đang build với Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 và targetSdk 36.
 
 Gộp các repository sau vào cấu hình Gradle đang có; không tạo thêm một khối `dependencyResolutionManagement` thứ hai. Ba repository mediation chỉ cần khi dùng ads/onboarding.
 
@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-Phiên bản hiện tại đã phát hành là **5.1.2**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
+Hướng dẫn này dành cho phiên bản **5.2.0**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
 
 Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
@@ -74,21 +74,6 @@ Khi dùng OnboardKit, splash tự chạy consent và bước notification. Nếu
 | Onboarding | Activity đích, ngôn ngữ/nội dung và các placement quảng cáo. |
 | Mua hàng | Product ID trên Play và cách xác định premium. PayKit cần thêm URL điều khoản/quyền riêng tư và JSON catalog của app. |
 | Firebase · tùy chọn | Cấu hình Firebase của app và các tham số Remote Config đã publish cho source cần dùng. |
-
-## Nâng cấp từ 5.0.0
-
-Dependency và API khởi tạo chính giữ nguyên. Khi dùng nhánh này, kiểm tra các thay đổi tích hợp sau:
-
-| Phần | Partner cần làm |
-| --- | --- |
-| Consent tùy biến | Trả `true` từ `onConsentRequired()` hoặc gọi `setCanRequestAds(true)` không còn tự cấp consent. Gửi quyết định thật của CMP qua `ConsentCenter.setHostConsent(...)`. Luồng UMP mặc định của `ObSplashActivity` không cần nối thêm. |
-| Quyền notification | `SplashConfig.notificationPermissionEnabled` mặc định `true`; OnboardKit merge `POST_NOTIFICATIONS`. Đặt `false` nếu app tự hỏi quyền hoặc không dùng notification. Splash chỉ tải ad sau khi consent/permission hoàn tất và có lại focus. |
-| Màn hình dọc | `BehaviorConfig.lockPortrait` mặc định `true`, áp dụng cả splash của app. Đặt `false` cho flow ngang/tablet; làm theo ví dụ manifest splash trong hướng dẫn OnboardKit. |
-| Refresh banner | Chọn AdMob hoặc SDK quản refresh. `Reload` của SDK dùng banner thường dù request ban đầu là collapsible. Xem hướng dẫn ads trước khi giữ timer reload riêng. |
-| Callback bỏ qua ad | Cập nhật `when` Kotlin vét cạn cho giá trị `AdSkipReason` mới: lý do consent trong ads và `SHOW_IN_BACKGROUND` trong ads/onboarding. |
-| Analytics | Native bind gửi `fo_ad_bound`. Tách event này khỏi `ad_show` do vendor xác nhận trên dashboard; không tự gửi thêm show từ callback bind. |
-
-Các sửa lỗi cache remote và lifecycle quảng cáo không cần cấu hình mới. Với điều hướng chức năng thông thường, giữ preload + show; API interstitial `loadAndShow` mới là tùy chọn và flow onboarding tích hợp sẵn không gọi nó.
 
 ## Kiểm tra sau tích hợp
 

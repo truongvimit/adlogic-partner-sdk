@@ -20,7 +20,7 @@ buildscript {
 // app/build.gradle: keep your existing Android/Kotlin plugins.
 plugins { id 'com.google.gms.google-services' }
 
-def sdkVersion = '5.1.2' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.0' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }
@@ -107,5 +107,3 @@ the process; a failure permits a later retry. A failed refresh leaves the kit's 
 | Remote values are ignored | Publish the parameter; check its name, nonblank JSON and the module's parser requirements. |
 | Debug ads keep local configuration | A successfully loaded debug asset is pinned by default; see [ads debug setup](../ads/README.md). |
 | Analytics stops after a consent update | `Tracker.currentConsent` and your selected collection policy. |
-
-Existing Firebase integration can stay the same when upgrading from 5.0.0.

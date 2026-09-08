@@ -20,7 +20,7 @@
 
 ## Build setup
 
-JDK 17, `minSdk 24+` और `compileSdk 36+` इस्तेमाल करें। यह repo Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 और targetSdk 36 से build होता है; इस branch में ये toolchain versions नहीं बदले हैं।
+JDK 17, `minSdk 24+` और `compileSdk 36+` इस्तेमाल करें। यह repo Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 और targetSdk 36 से build होता है।
 
 इन repositories को मौजूदा Gradle configuration में मिलाएँ; दूसरा `dependencyResolutionManagement` block न बनाएँ। अंतिम तीन mediation repositories केवल ads/onboarding के लिए चाहिए।
 
@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-मौजूदा प्रकाशित version **5.1.2** है। सभी modules का version एक रखें। बाद में upgrade करते समय उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) चुनें और उसी tag की README पढ़ें।
+यह गाइड version **5.2.0** के लिए है। सभी modules का version एक रखें। बाद में upgrade करते समय उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) चुनें और उसी tag की README पढ़ें।
 
 उदाहरण: ads और onboarding वाला ऐप। दूसरी ज़रूरत के लिए ऊपर की तालिका के अनुसार artifact नाम बदलें।
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.1.2'
+def sdkVersion = '5.2.0'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
@@ -74,21 +74,6 @@ OnboardKit का splash consent और notification चरण चलाता �
 | Onboarding | Destination Activity, भाषा/पेज content और ad placements। |
 | खरीदारी | Play product IDs और premium entitlement mapping। PayKit को terms/privacy URLs और अपना catalog JSON भी दें। |
 | Firebase · वैकल्पिक | ऐप का Firebase configuration और इस्तेमाल होने वाले sources के published Remote Config parameters। |
-
-## 5.0.0 से अपग्रेड
-
-Dependencies और मुख्य install APIs नहीं बदले हैं। इस branch को अपनाते समय ये integration बदलाव जाँचें:
-
-| हिस्सा | Partner को क्या करना है |
-| --- | --- |
-| Custom consent | `onConsentRequired()` से `true` लौटाना या `setCanRequestAds(true)` बुलाना अब consent नहीं देता। CMP का वास्तविक निर्णय `ConsentCenter.setHostConsent(...)` से दें। `ObSplashActivity` के सामान्य UMP flow में नई wiring नहीं चाहिए। |
-| Notification permission | `SplashConfig.notificationPermissionEnabled` का default `true` है; OnboardKit `POST_NOTIFICATIONS` merge करता है। ऐप खुद permission माँगता हो या notifications न भेजता हो तो `false` रखें। Splash ads consent/permission पूरा होने और focus लौटने के बाद load होते हैं। |
-| Portrait | `BehaviorConfig.lockPortrait` का default `true` है, ऐप के splash पर भी। Landscape/tablet flow के लिए `false` करें; OnboardKit गाइड का splash manifest उदाहरण देखें। |
-| Banner refresh | Refresh का मालिक AdMob या SDK में से एक रखें। SDK का `Reload` सामान्य banner लाता है, भले पहली request collapsible हो। अपना reload timer रखने से पहले ads गाइड देखें। |
-| Skip callbacks | Kotlin के exhaustive `when` में नए `AdSkipReason` cases जोड़ें: ads में consent reasons और ads/onboarding में `SHOW_IN_BACKGROUND`। |
-| Analytics | Native bind अब `fo_ad_bound` भेजता है। Dashboard में इसे vendor-confirmed `ad_show` से अलग रखें; bind callback से अतिरिक्त show event न भेजें। |
-
-Remote cache और ad lifecycle fixes के लिए नई configuration नहीं चाहिए। सामान्य feature navigation में preload + show रखें; नया interstitial `loadAndShow` API वैकल्पिक है और built-in onboarding इसे नहीं बुलाता।
 
 ## Integration की जाँच
 

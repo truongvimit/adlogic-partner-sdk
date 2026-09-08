@@ -28,7 +28,8 @@ import org.robolectric.annotation.LooperMode
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class)
+// Keep this no-provider install in its own sandbox; SDK install retains the first process provider.
+@Config(sdk = [34], application = Application::class, instrumentedPackages = ["io.onboardkit.ui.language"])
 @LooperMode(LooperMode.Mode.PAUSED)
 class LanguageTapHintTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()

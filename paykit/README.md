@@ -8,7 +8,7 @@ catalogue, legal links and the places where it may appear. Firebase, ads and onb
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
 ```groovy
-def sdkVersion = '5.1.2' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.0' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
 }
@@ -145,4 +145,3 @@ before PayKit.
 | Configuration is rejected | Legal URLs and at least one valid `packages` row; read the `PayKit` log. |
 
 For more UI options, see [PayKitConfig](src/main/java/io/paykit/PayKitConfig.kt).
-Existing PayKit initialization can stay the same when upgrading from 5.0.0.
