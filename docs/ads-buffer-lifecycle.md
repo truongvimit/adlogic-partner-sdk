@@ -154,3 +154,15 @@ Compare production show rate alongside impressions/session when the partner adop
   answering shell/logcat and remained offline after reconnect, before the third request and test
   completion could be confirmed. Do not use this partial run as proof of the device retry cap.
   The exact retry intervals, request cap and time window passed the automated public-seam tests.
+
+
+## Completed device release round — 2026-09-08
+
+The follow-up on production revision `c6d1048` completed **16/16 device cases** on Pixel 5 /
+Android 14, including the previously interrupted retry cap: exactly three actual requests over
+125 seconds. Remote delays, offline recovery, early return, retained cache, real fullscreen
+presentation and AutoBuffer group gates also passed. **441/441 unit tests** and both release AAR
+builds passed. No production SDK changes were required in this verification round.
+
+See [the device release report](qa/device-release-2026-09-08.md) for observations, build hashes,
+manual-step rerun history and the boundary between physical-device and deterministic coverage.

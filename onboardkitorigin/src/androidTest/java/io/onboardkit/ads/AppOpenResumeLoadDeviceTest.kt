@@ -1,6 +1,7 @@
 package io.onboardkit.ads
 
 import android.app.Application
+import android.app.ActivityManager
 import android.accessibilityservice.AccessibilityService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -22,6 +23,10 @@ import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.google.android.gms.ads.MobileAds
+import io.trackkit.Tracker
+import io.trackkit.TrackSink
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,7 +62,7 @@ class AppOpenResumeLoadDeviceTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         val phase = args.getString("resumePhase") ?: "allowed"
-        require(phase in setOf("allowed", "disabled", "unauthorized", "burst", "release", "off", "offline", "failure")) {
+        require(phase in setOf("allowed", "disabled", "unauthorized", "burst", "release", "off", "offline", "failure", "quick_return", "cache_roundtrip", "offline_recovery")) {
             "resumePhase must be allowed, disabled, unauthorized, burst, release, off, offline, or failure"
         }
         val unit = if (phase == "failure") INVALID_APP_OPEN_QA_UNIT else APP_OPEN_TEST_UNIT
@@ -67,6 +72,13 @@ class AppOpenResumeLoadDeviceTest {
         require(observeMs in 5_000L..120_000L) { "resumeObserveMs must be 5000..120000" }
         val app = ApplicationProvider.getApplicationContext<Application>()
         val manager = AppOpenManager.getInstance()
+        val requests = AtomicInteger()
+        val sink = object : TrackSink {
+            override val id = "resume-device-dispatch-count"
+            override fun onEvent(name: String, params: Map<String, Any?>) {
+                if (name == "ad_request" && params["ad_format"] == "app_open") requests.incrementAndGet()
+            }
+        }
         val initialized = CountDownLatch(1)
         var intervalStarted = false
 
@@ -77,6 +89,8 @@ class AppOpenResumeLoadDeviceTest {
             // send an extra AppOpen request even against the unfixed implementation.
             manager.disableAppResume()
             manager.init(app, "")
+            Tracker.install(app)
+            Tracker.addSink(sink)
             AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":$delayMs}""")
             manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
             manager.releaseCachedAds()
@@ -90,7 +104,7 @@ class AppOpenResumeLoadDeviceTest {
             ActivityScenario.launch<AppOpenResumeDeviceActivity>(
                 Intent(app, AppOpenResumeDeviceActivity::class.java),
             ).use { scenario ->
-                if (phase == "offline") {
+                if (phase == "offline" || phase == "offline_recovery") {
                     mark(phase, "WAITING_FOR_OFFLINE root_must_disable_wifi_and_data; fixture_changes_no_radios")
                     val deadline = SystemClock.elapsedRealtime() + 45_000L
                     while (hasActiveNetwork(app) && SystemClock.elapsedRealtime() < deadline) {
@@ -104,7 +118,7 @@ class AppOpenResumeLoadDeviceTest {
                     assertFalse(activity.isFinishing)
                     assertFalse(activity.isDestroyed)
                     assertFalse("Fixture must start with an empty resume buffer", manager.isAdAvailable(false))
-                    mark(phase, if (phase == "failure") "BEGIN unit=$unit spacedRetryProbes=45"
+                    mark(phase, if (phase == "failure") "BEGIN unit=$unit spacedRetryProbes=125"
                         else "BEGIN unit=$unit windowMs=$observeMs")
                     intervalStarted = true
                     ConsentCenter.setHostConsent(canRequestAds = phase != "unauthorized", personalized = false)
@@ -120,11 +134,34 @@ class AppOpenResumeLoadDeviceTest {
                 }
                 SystemClock.sleep(1_000)
                 assertFalse("Startup/foreground must not warm the buffer", isReady(manager))
+                assertEquals("Startup must not send a vendor request", 0, requests.get())
                 assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
                 val stopDeadline = SystemClock.elapsedRealtime() + 10_000L
                 while (!processStopped() && SystemClock.elapsedRealtime() < stopDeadline) SystemClock.sleep(50)
                 assertTrue("Physical Home must stop the process", processStopped())
                 mark(phase, "PROCESS_BACKGROUND delayMs=$delayMs")
+                if (phase == "quick_return") {
+                    require(delayMs >= 3_000) { "Quick-return QA requires delay >= 3000 ms" }
+                    instrumentation.runOnMainSync {
+                        app.getSystemService(ActivityManager::class.java).appTasks.single().moveToFront()
+                    }
+                    awaitForeground()
+                    SystemClock.sleep(delayMs + 500)
+                    assertFalse("Returning before delay must cancel the first load", isReady(manager))
+                    assertEquals("Early return cancels dispatch, not just its result", 0, requests.get())
+                    mark(phase, "EARLY_RETURN_VERIFIED no_buffer=true; SECOND_HOME")
+                    assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
+                    val secondStop = SystemClock.elapsedRealtime() + 10_000L
+                    while (!processStopped() && SystemClock.elapsedRealtime() < secondStop) SystemClock.sleep(50)
+                    assertTrue(processStopped())
+                    mark(phase, "SECOND_PROCESS_BACKGROUND")
+                }
+                if (phase == "offline_recovery") {
+                    SystemClock.sleep(delayMs + 1_000)
+                    assertFalse(isReady(manager))
+                    assertEquals("Offline recovery starts without a dispatched request", 0, requests.get())
+                    mark(phase, "RESTORE_NETWORK_NOW; background must recover without another ON_STOP")
+                }
                 if (phase == "release" || phase == "off") {
                     // Invalidate the one background request after its dispatch opportunity.
                     SystemClock.sleep(delayMs + 100)
@@ -134,7 +171,7 @@ class AppOpenResumeLoadDeviceTest {
                     mark(phase, "INVALIDATED_BACKGROUND_REQUEST")
                 }
 
-                if (phase == "allowed" || phase == "burst") {
+                if (phase in setOf("allowed", "burst", "quick_return", "cache_roundtrip", "offline_recovery")) {
                     val deadline = SystemClock.elapsedRealtime() + observeMs
                     var ready = isReady(manager)
                     while (!ready && SystemClock.elapsedRealtime() < deadline) {
@@ -143,16 +180,35 @@ class AppOpenResumeLoadDeviceTest {
                     }
                     mark(phase, "OBSERVED_BUFFER ready=$ready")
                     assertTrue("No real test fill within window; inspect GMA error/network logs before diagnosis", ready)
+                    val requestsAtFill = requests.get()
                     // A ready buffer should remain reusable. These API calls are not request counts.
                     instrumentation.runOnMainSync { repeat(3) { manager.fetchAd(false) } }
                     mark(phase, "READY_BUFFER_FETCH_RETURNED explicitCalls=3")
                     SystemClock.sleep(1_000)
                     assertTrue("No show/release was requested; ready buffer should remain", isReady(manager))
-                    mark(phase, "OBSERVATION_COMPLETE positiveBuffer=true dispatchCount=external-evidence-required")
+                    if (phase == "cache_roundtrip") {
+                        repeat(2) { round ->
+                            instrumentation.runOnMainSync {
+                                manager.skipNextResume("device_cache_observation")
+                                app.getSystemService(ActivityManager::class.java).appTasks.single().moveToFront()
+                            }
+                            awaitForeground()
+                            assertTrue(isReady(manager))
+                            assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
+                            val stoppedAt = SystemClock.elapsedRealtime() + 10_000L
+                            while (!processStopped() && SystemClock.elapsedRealtime() < stoppedAt) SystemClock.sleep(50)
+                            assertTrue(processStopped())
+                            SystemClock.sleep(delayMs + 500)
+                            assertTrue("Cached ad survives the next background", isReady(manager))
+                            mark(phase, "CACHE_ROUNDTRIP_VERIFIED round=${round + 1}")
+                        }
+                    }
+                    assertEquals("A ready cache must prevent replacement requests", requestsAtFill, requests.get())
+                    mark(phase, "OBSERVATION_COMPLETE positiveBuffer=true requests=${requests.get()}")
                 } else if (phase == "failure") {
                     // Public probes do not dispatch. The SDK itself retries with bounded backoff.
                     // Correlate dispatch logs: at most three requests in this background stay.
-                    repeat(45) { index ->
+                    repeat(125) { index ->
                         SystemClock.sleep(1_000)
                         instrumentation.runOnMainSync {
                             assertTrue("Failure backoff needs network; offline is a separate phase", hasActiveNetwork(app))
@@ -163,8 +219,9 @@ class AppOpenResumeLoadDeviceTest {
                     }
                     SystemClock.sleep(1_000)
                     assertFalse(isReady(manager))
-                    mark(phase, "OBSERVATION_COMPLETE emptyBuffer=true invalidUnitFailure_not_NO_FILL " +
-                        "sameBackgroundRequestsAtMost=3_verify_dispatch_logs probeCallsAfterInitial=45")
+                    assertEquals("Online invalid-ID case must exercise all three bounded attempts", 3, requests.get())
+                    mark(phase, "OBSERVATION_COMPLETE emptyBuffer=true requests=${requests.get()} invalidUnitFailure_not_NO_FILL " +
+                        "sameBackgroundRequestsAtMost=3_verify_dispatch_logs probeCallsAfterInitial=125")
                 } else {
                     val deadline = SystemClock.elapsedRealtime() + observeMs
                     do {
@@ -182,6 +239,7 @@ class AppOpenResumeLoadDeviceTest {
         } finally {
             if (intervalStarted) mark(phase, "END_BEFORE_CLEANUP")
             instrumentation.runOnMainSync {
+                Tracker.removeSink(sink)
                 manager.disableAppResume()
                 manager.setAppResumeAdId("")
                 manager.releaseCachedAds()
@@ -189,6 +247,19 @@ class AppOpenResumeLoadDeviceTest {
                 ConsentCenter.clearHostConsent()
             }
         }
+    }
+
+    private fun awaitForeground() {
+        val deadline = SystemClock.elapsedRealtime() + 10_000L
+        val resumed = AtomicReference(false)
+        do {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                resumed.set(ProcessLifecycleOwner.get().lifecycle.currentState == Lifecycle.State.RESUMED)
+            }
+            if (resumed.get()) return
+            SystemClock.sleep(50)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        assertTrue("Physical task return must actually resume the process", resumed.get())
     }
 
     private fun processStopped(): Boolean {
