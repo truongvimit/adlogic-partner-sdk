@@ -30,7 +30,10 @@ interface StepHost {
      * @param stepId the page reporting the failure, so a late answer cannot advance a page the
      *   user has already moved on to.
      */
-    fun skipAdStep(stepId: StepId) = next(StepExit.AD_FAILED)
+    fun skipAdStep(stepId: StepId) = completeAdStep(stepId, StepExit.AD_FAILED)
+
+    /** Completes only the source ad page, waiting for a pager transition if necessary. */
+    fun completeAdStep(stepId: StepId, exitReason: String) = next(exitReason)
 
     /** Returns false when already at the first step (caller may then exit or ignore). */
     fun back(): Boolean

@@ -159,6 +159,10 @@ data class AdsConfig(
     val skipAdOnlyStepsWhenPremium: Boolean = true,
     /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */
     val afterOnboardingInterstitial: InterstitialAdUnit? = null,
+    /** False disables both preload and presentation by the onboarding flow. */
+    val afterOnboardingInterstitialEnabled: Boolean = true,
+    /** Shared Skip/X appearance for OB3 and standalone OB5. */
+    val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.TEXT,
 ) {
 
     /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */

@@ -154,14 +154,14 @@ public class ERainAd {
         // Always attach the lifecycle hooks — the resume unit usually arrives later from remote
         // config. AppOpenManager skips requests until it has an id.
         AppOpenManager.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
-        // The placeholder keeps FacebookSdk.sdkInitialize from crashing on a missing token, but
-        // every Graph/App Events request made with it fails server-side — say so once, loudly.
-        if (ERainAdConfig.DEFAULT_TOKEN_FACEBOOK_SDK.equals(adConfig.getFacebookClientToken())) {
-            Log.e(TAG, "facebookClientToken is not set — Facebook SDK is running on the "
-                    + "placeholder token and every Facebook request will fail. "
-                    + "Set ERainAdConfig.facebookClientToken.");
+        // A partner may supply ClientToken only in the manifest. Never overwrite that real
+        // value (possibly already loaded by FacebookInitProvider) with our legacy placeholder.
+        String facebookToken = adConfig.getFacebookClientToken();
+        if (!TextUtils.isEmpty(facebookToken)
+                && !facebookToken.trim().isEmpty()
+                && !ERainAdConfig.DEFAULT_TOKEN_FACEBOOK_SDK.equals(facebookToken)) {
+            FacebookSdk.setClientToken(facebookToken);
         }
-        FacebookSdk.setClientToken(adConfig.getFacebookClientToken());
         FacebookSdk.sdkInitialize(context);
     }
 

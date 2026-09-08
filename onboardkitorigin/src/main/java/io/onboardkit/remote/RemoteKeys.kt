@@ -102,7 +102,8 @@ object ObRemoteKeys {
      */
     val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", 0)
 
-    val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", 3)
+    /** Negative inherits the page default: OB3 1s, standalone OB5 3s. */
+    val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", -1)
     val FULLSCREEN_AUTO_DISMISS_SEC = RemoteKey.LongKey("ob_fullscreen_auto_dismiss_sec", 15)
 
     // Skip buttons on ad-only screens

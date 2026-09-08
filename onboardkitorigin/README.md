@@ -231,3 +231,42 @@ Use `OnboardingSdk.setFlowLogging(true)` during integration (`OB_FLOW` in Logcat
 For a later language change, call `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
 
 [Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
+
+## Fullscreen Skip and automatic interstitial
+
+Fullscreen steps (OB3) default to showing Skip after **1 second** and advancing after
+**3 seconds from page selection**, including time after the device Home button is pressed.
+No fill still skips the page immediately. Returning to the app does not restart the timer.
+The deadline lives for the page visit; force-stop/process death is not a background timer.
+Android may defer execution of a suspended process; a resumed page catches up to its deadline.
+The pager can advance while stopped. If this is the final page, opening the next Activity,
+paywall or interstitial waits for the task to resume; the completed page's timer does not restart.
+
+```kotlin
+steps(
+    AdFullScreenStepDefinition(
+        StepId.OB3,
+        skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
+        skipButtonDelaySec = 1,
+        autoNextEnabled = true,
+        autoNextDelayMs = 3_000,
+    ),
+)
+ads = AdsConfig(
+    fullScreenSkipStyle = FullScreenSkipStyle.TEXT, // shared default for OB3 and OB5
+    afterOnboardingInterstitial = InterstitialAdUnit("YOUR_AD_UNIT"),
+    afterOnboardingInterstitialEnabled = false,
+)
+```
+
+`skipButtonStyle = null` inherits `AdsConfig.fullScreenSkipStyle`. Both appearances use the
+same timer and click action. `autoNextEnabled = false` restores manual completion.
+The existing `ob_skip_button_delay_sec` remote key overrides the local Skip delay when
+nonnegative; its new default `-1` inherits the page setting. An existing remote value (for
+example `3`) still overrides it. Standalone OB5 keeps its 3-second Skip and 15-second
+auto-dismiss defaults and its foreground countdown behavior.
+
+`afterOnboardingInterstitialEnabled = false` disables **both automatic preload and show**
+for `inter_after_ob3`, even when the unit is configured and the remote switch is true.
+The remote key `ob_ads_inter_after_ob3_enabled` is still supported; both switches must be
+true. The partner can show an interstitial at its own point using the Ads module directly.

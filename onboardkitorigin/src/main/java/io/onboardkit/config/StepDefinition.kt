@@ -35,14 +35,18 @@ data class ContentStepDefinition(
     override val type: StepType get() = StepType.CONTENT
 }
 
+enum class FullScreenSkipStyle { TEXT, CLOSE_ICON }
+
 data class AdFullScreenStepDefinition(
     override val id: StepId,
     val showSkipButton: Boolean = true,
-    val skipButtonDelaySec: Int = 3,
-    /** Off by default: full-screen ad advances only on Skip unless enabled. */
-    val autoNextEnabled: Boolean = false,
-    val autoNextDelayMs: Long = 15_000,
+    val skipButtonDelaySec: Int = 1,
+    /** Counts from page selection, including time spent in the background. */
+    val autoNextEnabled: Boolean = true,
+    val autoNextDelayMs: Long = 3_000,
     @LayoutRes val layoutRes: Int = 0,
+    /** Null inherits AdsConfig.fullScreenSkipStyle. */
+    val skipButtonStyle: FullScreenSkipStyle? = null,
 ) : StepDefinition {
     override val type: StepType get() = StepType.AD_FULL_SCREEN
     override val showsProgressIndicator: Boolean get() = false

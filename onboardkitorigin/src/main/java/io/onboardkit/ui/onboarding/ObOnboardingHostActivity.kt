@@ -5,7 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
@@ -237,25 +239,25 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             )
         }
         if (position < enabledStepIds.size - 1) {
-            binding.obStepPager.setCurrentItem(position + 1, true)
+            binding.obStepPager.setCurrentItem(
+                position + 1,
+                lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+            )
         } else {
             resolveExit()
         }
     }
 
     /**
-     * Leaves an ad-only page that has nothing to show, whatever the pager is doing at the time.
-     *
-     * `showNativeAd` can answer "unavailable" synchronously, one frame after `onPageSelected` and
-     * well inside the settle animation — the window in which [next] deliberately drops calls. The
-     * page then stayed on screen, empty, until the user found Skip. Waiting for idle and leaving
-     * then is the whole fix.
+     * Completes an ad page on failure, Skip, or timeout. A callback may arrive while the
+     * pager is settling onto that page, when [next] would drop it. Wait for idle and check
+     * the source page again so a late answer cannot complete the following page instead.
      */
-    override fun skipAdStep(stepId: StepId) {
+    override fun completeAdStep(stepId: StepId, exitReason: String) {
         val position = enabledStepIds.indexOf(stepId)
         if (position < 0) return
         if (binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE) {
-            if (binding.obStepPager.currentItem == position) next(StepExit.AD_FAILED)
+            if (binding.obStepPager.currentItem == position) next(exitReason)
             return
         }
         binding.obStepPager.registerOnPageChangeCallback(
@@ -263,8 +265,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
                 override fun onPageScrollStateChanged(state: Int) {
                     if (state != ViewPager2.SCROLL_STATE_IDLE) return
                     binding.obStepPager.unregisterOnPageChangeCallback(this)
-                    // The user may have swiped on in the meantime; only leave the page that failed.
-                    if (binding.obStepPager.currentItem == position) next(StepExit.AD_FAILED)
+                    // The user may have swiped on in the meantime; only complete the source page.
+                    if (binding.obStepPager.currentItem == position) next(exitReason)
                 }
             },
         )
@@ -291,7 +293,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
             timeoutMs = 8_000L,
-            onFinished = { continueAfterOnboardingAd() },
+            onFinished = {
+                // The page can complete in the background. Android only permits the next
+                // Activity/paywall presentation once this task is back in front.
+                lifecycleScope.launch { lifecycle.withResumed { continueAfterOnboardingAd() } }
+            },
         )
     }
 

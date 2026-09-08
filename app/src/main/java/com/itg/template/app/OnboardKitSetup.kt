@@ -76,7 +76,7 @@ object OnboardKitSetup {
                     subtitleRes = R.string.onboarding_des_2,
                     imageRes = R.drawable.img_onboard_sample_2,
                 ),
-                AdFullScreenStepDefinition(Page.AD_FULL_SCREEN, autoNextEnabled = true),
+                AdFullScreenStepDefinition(Page.AD_FULL_SCREEN),
                 ContentStepDefinition(
                     Page.CONTENT_3,
                     titleRes = R.string.onboarding_title_3,
@@ -97,6 +97,8 @@ object OnboardKitSetup {
                 splashBanner = ads?.unit("banner_splash").toBanner(),
                 splashInterstitial = ads.interstitial("inter_splash"),
                 afterOnboardingInterstitial = ads.interstitial("inter_after_ob3"),
+                // Set false when the partner presents this interstitial after its own next screen.
+                afterOnboardingInterstitialEnabled = true,
                 // Optional: declare this key to bid a different floor for returning users. Absent
                 // from remote config, the splash falls back to `inter_splash` for everyone.
                 splashInterstitialOldUser = ads.interstitial("inter_splash_old_user"),

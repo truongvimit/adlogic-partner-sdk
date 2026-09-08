@@ -20,6 +20,7 @@ import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.applyFullScreenSkipStyle
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.Job
@@ -67,6 +68,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
 
+        binding.obSkipButton.applyFullScreenSkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle)
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()
@@ -99,7 +101,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         }
         skipJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(flags.skipButtonDelaySec.coerceAtLeast(0) * 1_000)
+                delay((flags.skipButtonDelaySec.takeIf { it >= 0 } ?: 3L) * 1_000)
                 binding.obSkipButton.visibility = View.VISIBLE
             }
         }

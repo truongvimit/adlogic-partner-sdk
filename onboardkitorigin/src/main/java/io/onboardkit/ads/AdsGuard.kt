@@ -84,6 +84,8 @@ class AdsGuard internal constructor(
     ): AdSkipReason? {
         resumeEntrySkipReason(context)?.let { return it }
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
+        if (placement == AdPlacement.AfterOnboardingInterstitial &&
+            !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
         if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
 
         val slot = unit ?: cfg.ads.unitFor(placement)

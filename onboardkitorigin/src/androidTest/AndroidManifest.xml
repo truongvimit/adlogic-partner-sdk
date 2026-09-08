@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <application>
         <activity android:name="io.onboardkit.ads.NativeOwnershipDeviceActivity"
             android:exported="false" android:theme="@style/ob_Theme_OnboardKit" />
@@ -21,9 +22,9 @@
         <!-- ERain.init also initializes Facebook. Match the sample placeholders without
              enabling unrelated automatic Facebook initialization/events in this test APK. -->
         <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="fb123456789" />
-        <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false" />
-        <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="false" />
-        <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled" android:value="false" />
+        <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false" tools:replace="android:value" />
+        <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="false" tools:replace="android:value" />
+        <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled" android:value="false" tools:replace="android:value" />
         <activity
             android:name="io.onboardkit.ads.InterstitialRealGmaDeviceActivity"
             android:exported="false"

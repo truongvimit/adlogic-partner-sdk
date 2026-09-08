@@ -45,6 +45,18 @@ Create `res/values/ad_keys.xml` with your real Meta values. Both are required by
 </resources>
 ```
 
+The SDK supplies `AutoInitEnabled`, `AutoLogAppEventsEnabled` and
+`AdvertiserIDCollectionEnabled` as `true` in its library manifest. A host can override an
+entry with `android:value="false" tools:replace="android:value"` (declare the `tools` XML
+namespace). Runtime Meta settings supplied by the host are not forced back on.
+`facebookClientToken` in `ERainAdConfig` is optional when the manifest already supplies it;
+the legacy placeholder no longer overwrites the manifest token.
+
+Meta bidding is already bundled through `com.google.ads.mediation:facebook`; no extra
+load/show integration is required ([Google integration guide](https://developers.google.com/admob/android/mediation/meta)).
+`facebook-core` includes automatic App Events, so the larger `facebook-android-sdk` bundle
+is unnecessary for this setup ([Meta source](https://github.com/facebook/facebook-android-sdk/tree/main/facebook-core/src/main/java/com/facebook/appevents)).
+
 ## 1. Initialize once in Application
 
 ```kotlin

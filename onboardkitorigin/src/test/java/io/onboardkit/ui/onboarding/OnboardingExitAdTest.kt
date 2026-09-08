@@ -133,10 +133,22 @@ class OnboardingExitAdTest {
         assertTrue(activity.isFinishing)
     }
 
-    private fun launch(enabled: Boolean = true): ObOnboardingHostActivity {
+    @Test
+    fun `partner switch disables preload and show even with a configured placement`() {
+        val activity = launch(automatic = false)
+        activity.next(null)
+        main.idle()
+        assertTrue(loads.isEmpty())
+        assertEquals(0, waits)
+        assertEquals(0, bufferedShows)
+        assertTrue(activity.isFinishing)
+    }
+
+    private fun launch(enabled: Boolean = true, automatic: Boolean = true): ObOnboardingHostActivity {
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
-            ads = AdsConfig(afterOnboardingInterstitial = unit.takeIf { enabled })
+            ads = AdsConfig(afterOnboardingInterstitial = unit.takeIf { enabled },
+                afterOnboardingInterstitialEnabled = automatic)
         }.getOrThrow()).getOrThrow()
         controller =
             Robolectric.buildActivity(ObOnboardingHostActivity::class.java).setup().visible()

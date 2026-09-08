@@ -1,13 +1,12 @@
 package io.onboardkit.ui.onboarding
 
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
@@ -16,6 +15,7 @@ import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObFragmentAdStepBinding
+import io.onboardkit.ui.applyFullScreenSkipStyle
 import io.onboardkit.ui.pager.LazyStepFragment
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,8 +32,9 @@ class AdStepFragment : LazyStepFragment() {
     private var binding: ObFragmentAdStepBinding? = null
     private var skipJob: Job? = null
     private var autoNextJob: Job? = null
-    private var adBound = false
-    private var adRequested = false
+    private var selected = false
+    private var completed = false
+    private var autoNextDeadlineMs: Long? = null
     private var adFailed = false
     private val impressionHandled = AtomicBoolean(false)
 
@@ -53,24 +54,29 @@ class AdStepFragment : LazyStepFragment() {
         b.obFallbackImage.setImageDrawable(
             requireContext().packageManager.getApplicationIcon(requireContext().applicationInfo),
         )
+        b.obSkipButton.applyFullScreenSkipStyle(
+            definition()?.skipButtonStyle ?: OnboardingSdk.requireConfig().ads.fullScreenSkipStyle,
+        )
         b.obSkipButton.setOnClickListener {
-            requireStepHost().next(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
+            completeStep(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
         }
     }
 
     override fun onStepSelected() {
-        if (!adRequested) {
-            requestAd()
-            scheduleSkipButton()
-        } else if (adBound) scheduleAutoNext()
+        if (selected) return
+        selected = true
+        completed = false
+        scheduleAutoNext()
+        requestAd()
+        if (!completed) scheduleSkipButton()
     }
 
     override fun onStepUnselected(dwellMs: Long) {
+        selected = false
         skipJob?.cancel()
         autoNextJob?.cancel()
         OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
-        adBound = false
-        adRequested = false
+        autoNextDeadlineMs = null
         adFailed = false
         impressionHandled.set(false)
     }
@@ -81,7 +87,6 @@ class AdStepFragment : LazyStepFragment() {
     private fun requestAd() {
         val b = binding ?: return
         val activity = activity ?: return
-        adRequested = true
         b.obFullscreenFallback.visibility = View.GONE
         b.obNativeContainer.visibility = View.VISIBLE
         b.obSkipButton.visibility = View.GONE
@@ -93,32 +98,27 @@ class AdStepFragment : LazyStepFragment() {
             // shared slot instead reported no_ad_unit for a page that had one.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onBound = { adBound = true },
             onShown = { onAdImpression() },
             onUnavailable = { onAdFailed() },
             onAdEngaged = { onStepAdEngaged() },
         )
     }
 
-    /**
-     * Reached twice on the common path — once from the provider's listener notification inside
-     * `bindNative`, once from [bindAd]'s own post-bind branch — so both the event and the auto-next
-     * timer are latched. Before the latch OB3 reported two impressions and armed two timers.
-     */
+    /** A provider may repeat its impression callback; emit the page signal once per visit. */
     private fun onAdImpression() {
-        if (!impressionHandled.compareAndSet(false, true)) return
+        if (!selected || completed || !impressionHandled.compareAndSet(false, true)) return
         OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
-        scheduleAutoNext()
     }
 
     private fun onAdFailed() {
+        if (!selected || completed) return
         adFailed = true
         showFallback()
         // Not gated on autoNextEnabled any more. That flag decides how long a page waits with an
         // ad on it; a page with no ad has nothing to wait for, and leaving it up meant an empty
         // screen mid-flow until the user found Skip. The host handles the case where this answer
         // arrives while the pager is still settling onto the page.
-        requireStepHost().skipAdStep(stepId)
+        completeStep(StepExit.AD_FAILED)
     }
 
     private fun showFallback() {
@@ -138,7 +138,7 @@ class AdStepFragment : LazyStepFragment() {
         val mustForceSkip = !skipAllowed && !definition.autoNextEnabled
         if (!skipAllowed && !mustForceSkip) return
         val delaySec = flags.skipButtonDelaySec.takeIf { it >= 0 }
-            ?: definition.skipButtonDelaySec.toLong()
+            ?: definition.skipButtonDelaySec.toLong().coerceAtLeast(0)
         skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(delaySec * 1_000)
@@ -146,30 +146,40 @@ class AdStepFragment : LazyStepFragment() {
         }
     }
 
-    /**
-     * The countdown runs only while the page is in front of the user. A plain `delay` kept
-     * counting through an ad click, advancing the pager while the user was still in the
-     * destination — so the page they clicked from was gone before they got back, and it
-     * navigated the host from the background.
-     */
+    /** One deadline per visit. Pausing the Activity does not cancel or restart it. */
     private fun scheduleAutoNext() {
         val definition = definition() ?: return
         if (!definition.autoNextEnabled) return
-        autoNextJob?.cancel()
+        val durationMs = definition.autoNextDelayMs.coerceAtLeast(0)
+        autoNextDeadlineMs = SystemClock.elapsedRealtime() + durationMs
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(definition.autoNextDelayMs)
-                stepHost?.next(StepExit.AUTO_NEXT)
-            }
+            delay(durationMs)
+            completeStep(StepExit.AUTO_NEXT)
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Android can suspend the process/CPU while away. Catch up before starting a new wait.
+        if (autoNextDeadlineMs?.let { SystemClock.elapsedRealtime() >= it } == true) {
+            completeStep(StepExit.AUTO_NEXT)
+        }
+    }
+
+    private fun completeStep(reason: String) {
+        if (!selected || completed) return
+        completed = true
+        skipJob?.cancel()
+        autoNextJob?.cancel()
+        requireStepHost().completeAdStep(stepId, reason)
+    }
+
     override fun onDestroyView() {
+        selected = false
         skipJob?.cancel()
         autoNextJob?.cancel()
         binding = null
-        adBound = false
-        adRequested = false
+        autoNextDeadlineMs = null
         impressionHandled.set(false)
         super.onDestroyView()
     }

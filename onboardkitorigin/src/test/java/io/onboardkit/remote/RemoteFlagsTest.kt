@@ -29,7 +29,7 @@ class RemoteFlagsTest {
         assertTrue(flags.enableLanguageNative2)
         assertTrue(flags.showLanguageTapHint)
         assertTrue(flags.showLanguageConfirmBeforeSelect)
-        assertEquals(3L, flags.skipButtonDelaySec)
+        assertEquals(-1L, flags.skipButtonDelaySec)
     }
 
     @Test

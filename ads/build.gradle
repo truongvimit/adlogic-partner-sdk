@@ -80,8 +80,8 @@ dependencies {
     implementation 'com.google.ads.mediation:unity:4.18.0.0'
     implementation 'com.google.ads.mediation:ironsource:9.4.2.0'
 
-    // Facebook SDK: only FacebookSdk.setClientToken/sdkInitialize are used, so core is enough —
-    // the umbrella artifact also pulls login/share/messenger.
+    // Facebook Core includes SDK initialization and automatic App Events tracking.
+    // The umbrella facebook-android-sdk also pulls unrelated login/share modules.
     implementation 'com.facebook.android:facebook-core:18.2.3'
 
     // Adjust
