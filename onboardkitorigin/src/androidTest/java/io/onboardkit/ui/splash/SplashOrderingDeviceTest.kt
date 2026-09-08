@@ -57,7 +57,7 @@ class SplashOrderingDeviceTest {
         val case = args.getString("splashCase") ?: "success"
         require(case in setOf("success", "failure", "timeout", "late_fill", "banner_budget", "recreate", "mode_freeze", "rotate",
             "inter_off", "no_unit", "premium", "master_off", "host_off", "consent_denied", "same_time", "other_route",
-            "home_pending", "home_expired", "under_ad_home", "after_ad", "native_ready", "native_loading", "native_failed"))
+            "home_pending", "home_expired", "under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate", "native_ready", "native_loading", "native_failed"))
         val parallel = args.getString("lfoParallel") == "true"
         f.flags = RemoteFlags(splashLfoParallelPreloadEnabled = parallel, splashMinDisplayMs = 200,
             splashAdBudgetMs = 3_000, splashBannerWaitMs = if (case == "banner_budget") 2_200 else 0,
@@ -67,9 +67,9 @@ class SplashOrderingDeviceTest {
         f.consentAllowed = case != "consent_denied"
         f.immediate = case == "same_time"
         f.bannerPending = case == "banner_budget"
-        f.realPresentation = case in setOf("under_ad_home", "after_ad")
-        f.afterAd = case == "after_ad"
-        if (f.realPresentation) f.flags = f.flags.copy(splashMinDisplayMs = 5_000)
+        f.realPresentation = case in setOf("under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate")
+        f.afterAd = case in setOf("after_ad", "after_ad_recreate")
+        if (f.realPresentation && case != "under_ad_slow") f.flags = f.flags.copy(splashMinDisplayMs = 5_000)
         onMain {
             assertFalse("Fresh instrumentation process required", OnboardingSdk.isReady())
             OnboardingSdk.install(app) {
@@ -148,22 +148,38 @@ class SplashOrderingDeviceTest {
                         assertEquals(if (parallel) 1 else 0, f.splashLfo.get())
                         returnTask(host.taskId)
                     }
+                    "under_ad_slow" -> { SystemClock.sleep(500); onMain { f.finishLoad(success = true) } }
                     "timeout", "late_fill", "banner_budget" -> Unit
                     "failure" -> onMain { f.finishLoad(success = false) }
                     else -> onMain { f.finishLoad(success = true) }
                 }
                 if (f.realPresentation) {
                     eventually("Separate ad Activity is resumed") { f.ad != null && onMain { f.ad?.hasWindowFocus() == true } }
+                    if (case in setOf("under_ad_recreate", "after_ad_recreate")) {
+                        // ActivityScenario.recreate() first forces RESUMED, which cannot happen
+                        // beneath a fullscreen ad. Request recreation without foregrounding it.
+                        onMain { host.recreate() }
+                        eventually("Splash owner must be recreated while the ad remains visible") { f.creates.get() == 2 }
+                        assertTrue("Recreation must not cover the ad", onMain { f.ad?.hasWindowFocus() == true })
+                        assertEquals(if (f.afterAd) 0 else 1, f.handoffs.get())
+                    }
                     if (case == "under_ad_home") {
                         goHome()
                         eventually("Ad no longer resumed") { onMain { f.ad?.hasWindowFocus() == false } }
                         SystemClock.sleep(5_500)
-                        assertEquals("Minimum expiration while Home must not navigate", 0, f.handoffs.get())
+                        assertEquals("UnderAd already navigated before showing the ad", 1, f.handoffs.get())
                         returnTask(host.taskId)
-                        eventually("UNDER_AD handoff after returning") { f.handoffs.get() == 1 }
-                    } else {
+                        eventually("Ad must remain above the destination after returning") {
+                            onMain { f.ad?.hasWindowFocus() == true }
+                        }
+                    } else if (f.afterAd) {
                         SystemClock.sleep(5_500)
                         assertEquals("AFTER_AD must wait for actual close", 0, f.handoffs.get())
+                    }
+                    if (!f.afterAd) {
+                        assertEquals(1, f.handoffs.get())
+                        SystemClock.sleep(500)
+                        assertTrue("Destination must stay underneath the ad", onMain { f.ad?.hasWindowFocus() == true })
                     }
                     onMain { f.ad?.finish(); f.presentation?.onAdClosed() }
                 }
@@ -241,7 +257,6 @@ class OrderingSplashDeviceActivity : ObSplashActivity() {
 /** Real Android foreground owner for a controlled vendor presentation, with no production ad. */
 class OrderingAdDeviceActivity : Activity() {
     override fun onCreate(state: Bundle?) { super.onCreate(state); OrderingFixture.ad = this }
-    override fun onResume() { super.onResume(); OrderingFixture.presentation?.onNextAction() }
     override fun onDestroy() { if (OrderingFixture.ad === this) OrderingFixture.ad = null; super.onDestroy() }
 }
 
@@ -324,6 +339,9 @@ private object OrderingFixture {
             if (!activity.hasWindowFocus()) violations += "show without focus"
             if (realPresentation) {
                 presentation = callback
+                // Match the production provider: next is synchronous, immediately BEFORE show.
+                callback.onNextAction()
+                if (handoffs.get() != if (afterAd) 0 else 1) violations += "navigation did not run before vendor show"
                 activity.startActivity(Intent(activity, OrderingAdDeviceActivity::class.java))
             } else callback.onAdSkipped(AdSkipReason.NOT_READY)
         }

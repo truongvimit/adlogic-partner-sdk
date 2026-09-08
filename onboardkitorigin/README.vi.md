@@ -13,7 +13,7 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-def sdkVersion = '5.2.3'
+def sdkVersion = '5.2.4'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -116,7 +116,7 @@ Các mặc định cần biết:
 - `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
 - `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
-- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Inter ready được show ngay, còn chuyển màn chỉ đợi phần minimum còn thiếu.
+- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. `UNDER_AD` chờ phần minimum còn thiếu rồi mở màn và show inter liên tiếp. `AFTER_AD` có thể show inter sớm, nhưng chuyển màn phải chờ cả đóng ads và đủ minimum.
 
 ### Tùy chọn splash và ngôn ngữ
 
@@ -125,7 +125,7 @@ không thêm timer chờ vào luồng này.
 
 | Tùy chọn | Mặc định / cách dùng |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi chuyển màn; không chặn interstitial đã sẵn sàng. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi chuyển màn; `UNDER_AD` cũng chờ trước khi show, còn `AFTER_AD` có thể show sớm. |
 | `ob_splash_ad_budget_ms` | Chờ quảng cáo tối đa 60000 ms, tính sau khi notification hoàn tất và splash có focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload native ngôn ngữ đầu sau khi waterfall splash kết thúc hoặc hết thời gian chờ. `true`: preload cùng quảng cáo splash. |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Cần bật cả hai để hiện bàn tay gợi ý chọn ngôn ngữ. |

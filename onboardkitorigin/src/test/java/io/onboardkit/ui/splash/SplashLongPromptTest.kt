@@ -35,6 +35,9 @@ import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.AnalyticsPlugin
+import io.onboardkit.paywall.PaywallGate
+import io.onboardkit.paywall.PaywallOutcome
+import io.onboardkit.paywall.PaywallPlacement
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -71,6 +74,13 @@ class SplashLongPromptTest {
         ConsentCenter.configure(ConsentOptions(debug = false, timeoutMs = 20_000))
         OnboardingSdk.install(app) {
             adProvider = LongPromptFixture.provider
+            paywallGate = object : PaywallGate {
+                override suspend fun shouldShow(placement: PaywallPlacement) = LongPromptFixture.paywallEnabled
+                override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome {
+                    LongPromptFixture.paywallCalls++
+                    return PaywallOutcome.ContinueWithAds
+                }
+            }
             trackkitAutoTracking(false)
             analyticsPlugin(AnalyticsPlugin {
                 if (it is AnalyticsEvent.FlowStarted) LongPromptFixture.flowStarts++
@@ -300,7 +310,8 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun readyInterstitialShowsBeforeTheMinimumButFailedShowStillWaitsBeforeHandoff() {
+    fun afterAdCanShowEarlyButFailedShowStillWaitsBeforeHandoff() {
+        LongPromptFixture.timing = io.onboardkit.ads.NextScreenTiming.AFTER_AD
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
@@ -331,17 +342,21 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun underAdHandsOffAfterRemainingMinimumWhilePresentationContinues() {
+    fun underAdWaitsForMinimumThenNavigatesInsideCallbackBeforeVendorShow() {
         LongPromptFixture.provider.successfulShow = true
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
-        assertNotNull(LongPromptFixture.provider.presentation)
+        assertEquals("No show before the minimum", listOf("native"), LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
         main.idleFor(Duration.ofSeconds(4))
+        assertEquals("Navigation must finish inside onNext, before the vendor opens its Activity",
+            1, LongPromptFixture.provider.flowStartsAtVendorShow)
         assertEquals(1, LongPromptFixture.flowStarts)
+        requireNotNull(LongPromptFixture.provider.presentation).onNextAction()
+        assertEquals("Repeated next callback cannot open a second destination", 1, LongPromptFixture.flowStarts)
         assertTrue("Splash stays alive until the real close callback", !requireNotNull(controller).get().isFinishing)
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
@@ -349,7 +364,7 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun homeDuringUnderAdMinimumWaitCannotNavigateUntilTheAdReturnsToForeground() {
+    fun homeDuringUnderAdMinimumWaitDefersBothNavigationAndShowUntilSplashReturns() {
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashMinDisplayMs = 10_000)
         LongPromptFixture.provider.successfulShow = true
         launch(notification = false)
@@ -357,23 +372,61 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
-        requireNotNull(controller).get().onWindowFocusChanged(false)
+        val host = requireNotNull(controller).get()
+        host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
-        val ad = Robolectric.buildActivity(LongPromptVendorActivity::class.java).setup().visible()
-        try {
-            main.idleFor(Duration.ofSeconds(2))
-            ad.pause().stop() // Home while the vendor Activity still owns the presentation.
-            main.idleFor(Duration.ofSeconds(11))
-            assertEquals("UNDER_AD cannot navigate from Home when minimum expires", 0, LongPromptFixture.flowStarts)
-            ad.restart().start().resume().visible()
-            main.idle()
-            assertEquals(1, LongPromptFixture.flowStarts)
-            requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
-            main.idle()
-        } finally {
-            LongPromptFixture.provider.presentation?.onAdClosed()
-            ad.pause().stop().destroy()
-        }
+        main.idleFor(Duration.ofSeconds(11))
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        requireNotNull(controller).restart().start().resume().visible()
+        host.onWindowFocusChanged(true)
+        main.idle()
+        assertEquals(1, LongPromptFixture.provider.flowStartsAtVendorShow)
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+    }
+
+    @Test
+    fun recreationDuringMinimumDoesNotRepeatThePaywallCheckpoint() {
+        LongPromptFixture.paywallEnabled = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        requireNotNull(controller).configurationChange(android.content.res.Configuration(
+            requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
+        requireNotNull(controller).visible().get().onWindowFocusChanged(true)
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals("Minimum waiting must not reopen an already resolved paywall after recreation",
+            1, LongPromptFixture.paywallCalls)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun recreatedSplashDoesNotReplayLateUnderAdNavigationOverAnExistingAd() {
+        LongPromptFixture.provider.successfulShow = true
+        LongPromptFixture.provider.holdNext = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        val old = requireNotNull(controller).get()
+        val callback = requireNotNull(LongPromptFixture.provider.presentation)
+        requireNotNull(controller).configurationChange(android.content.res.Configuration(old.resources.configuration)
+            .apply { fontScale += 0.1f })
+        requireNotNull(controller).visible().get().onWindowFocusChanged(true)
+        callback.onNextAction()
+        main.idle()
+        assertTrue(old.isDestroyed)
+        assertEquals("A stale owner's callback must not navigate over the ad", 0, LongPromptFixture.flowStarts)
+        callback.onAdClosed()
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.provider.order.count { it == "show" })
+        assertTrue(requireNotNull(controller).get().isFinishing)
     }
 
     @Test
@@ -546,6 +599,8 @@ private object LongPromptFixture {
     var ump = LongPromptConsentInformation()
     var form = LongPromptConsentForm()
     var flowStarts = 0
+    var paywallEnabled = false
+    var paywallCalls = 0
     var timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
     var flags = io.onboardkit.remote.RemoteFlags()
     var strategy = io.onboardkit.config.AdLoadStrategy.ALTERNATE
@@ -561,8 +616,12 @@ private object LongPromptFixture {
         ump = LongPromptConsentInformation()
         form = LongPromptConsentForm()
         flowStarts = 0
+        paywallEnabled = false
+        paywallCalls = 0
         timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
         provider.successfulShow = false
+        provider.holdNext = false
+        provider.flowStartsAtVendorShow = -1
         provider.presentation = null
         provider.immediateInterResult = 0
         provider.premium = false
@@ -579,6 +638,8 @@ private object LongPromptFixture {
 private class LongPromptProvider : OnboardingAdProvider {
     var bannerLoads = 0
     var successfulShow = false
+    var holdNext = false
+    var flowStartsAtVendorShow = -1
     var presentation: ObInterstitialCallback? = null
     var settleBanner = true
     var immediateInterResult = 0
@@ -614,7 +675,13 @@ private class LongPromptProvider : OnboardingAdProvider {
 
     override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
         order += "show"
-        if (successfulShow) { presentation = callback; callback.onNextAction() }
+        if (successfulShow) {
+            presentation = callback
+            if (!holdNext) {
+                callback.onNextAction()
+                flowStartsAtVendorShow = LongPromptFixture.flowStarts
+            }
+        }
         else callback.onAdSkipped(AdSkipReason.NOT_READY)
     }
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {

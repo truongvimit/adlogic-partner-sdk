@@ -13,7 +13,7 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
 ```groovy
-def sdkVersion = '5.2.3'
+def sdkVersion = '5.2.4'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -116,7 +116,7 @@ class SplashActivity : ObSplashActivity()
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
 - `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
 - `consentTimeoutMs = 20_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
-- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है; ready interstitial तुरंत दिख सकता है और navigation केवल बचा minimum इंतज़ार करता है।
+- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है; `UNDER_AD` बचे हुए minimum के बाद अगली स्क्रीन खोलता है और तुरंत interstitial दिखाता है। `AFTER_AD` में ad पहले दिख सकता है, लेकिन navigation dismissal और minimum दोनों का इंतज़ार करता है।
 
 ### Splash और भाषा के विकल्प
 
@@ -125,7 +125,7 @@ class SplashActivity : ObSplashActivity()
 
 | विकल्प | Default / उपयोग |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | Navigation से पहले 3000 ms; तैयार interstitial को नहीं रोकता। |
+| `SplashConfig.minDisplayTimeMs` | Navigation से पहले 3000 ms; `UNDER_AD` में show भी इंतज़ार करता है, `AFTER_AD` में ad पहले दिख सकता है। |
 | `ob_splash_ad_budget_ms` | Notification पूरा होने और splash को focus मिलने के बाद ads के लिए अधिकतम 60000 ms। |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: splash waterfall पूरा होने या wait समाप्त होने पर पहला language native preload करें। `true`: splash ads के साथ preload करें। |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | भाषा चुनने का hand hint दिखाने के लिए दोनों enabled हों। |

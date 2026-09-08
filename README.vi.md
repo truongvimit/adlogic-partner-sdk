@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-Hướng dẫn này dành cho phiên bản **5.2.3**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
+Hướng dẫn này dành cho phiên bản **5.2.4**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
 
 Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.3'
+def sdkVersion = '5.2.4'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

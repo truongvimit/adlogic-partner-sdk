@@ -24,7 +24,7 @@ Run each case with `lfoParallel=false` and `true`:
 - `recreate`, `mode_freeze`, `rotate`
 - `inter_off`, `no_unit`, `premium`, `master_off`, `host_off`, `consent_denied`
 - `same_time`, `other_route`, `home_pending`, `home_expired`
-- `under_ad_home`, `after_ad`
+- `under_ad`, `under_ad_slow`, `under_ad_home`, `under_ad_recreate`, `after_ad`, `after_ad_recreate`
 - `native_ready`, `native_loading`, `native_failed` (Language entry binds/joins/ends without retry)
 
 These use real Activities, focus, Home and rotation with a controlled external ad provider. `rotate` must actually recreate the Activity. Test-only budgets are shortened; production timing is unchanged.

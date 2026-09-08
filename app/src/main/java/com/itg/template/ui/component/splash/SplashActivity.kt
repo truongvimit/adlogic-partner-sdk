@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
  */
 class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
 
-    // Wait for the splash interstitial to close before opening LFO or the next destination.
-    override fun nextScreenTiming(): NextScreenTiming = NextScreenTiming.AFTER_AD
+    // Open LFO or the next destination underneath the splash interstitial.
+    override fun nextScreenTiming(): NextScreenTiming = NextScreenTiming.UNDER_AD
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on

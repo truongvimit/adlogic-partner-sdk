@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -491,22 +492,35 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private suspend fun proceed() {
         if (!attempt.showRequested) {
+            val timing = attempt.nextScreenTiming ?: nextScreenTiming().also { attempt.nextScreenTiming = it }
+            // UnderAd queues the destination immediately before the vendor's show(). Any wait
+            // belongs before that pair, otherwise the destination can cover an already visible ad.
+            // Wait before the paywall too: recreation during the minimum must not replay it.
+            if (timing == NextScreenTiming.UNDER_AD) awaitMinimumDisplay()
             awaitPresentationWindow()
             val purchased = sdk.presentPaywall(this, PaywallPlacement.SPLASH_INTER) == PaywallOutcome.Purchased
             awaitPresentationWindow()
             attempt.showRequested = true
-            attempt.nextScreenTiming = nextScreenTiming()
             val state = attempt
             if (purchased || state.interstitialSettled.await() != InterResult.LOADED) {
                 if (purchased) AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PURCHASED_AT_PAYWALL)
                 state.showNext.complete(Unit)
                 state.showFinished.complete(Unit)
             } else {
-                // These callbacks retain only the attempt. A recreated Activity resumes the
-                // handoff coroutine; the destroyed owner can never navigate from a late callback.
+                // Keep terminal state across recreation without retaining the old Activity.
+                // Only this live presentation owner can take the synchronous UnderAd handoff.
+                val owner = WeakReference(this)
                 showInterstitial(
                     AdPlacement.SplashInterstitial,
-                    onNext = { state.showNext.complete(Unit) },
+                    onNext = {
+                        if (state.nextScreenTiming == NextScreenTiming.UNDER_AD) {
+                            owner.get()?.takeIf {
+                                !it.isFinishing && !it.isDestroyed &&
+                                    it.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                            }?.startFlow()
+                        }
+                        state.showNext.complete(Unit)
+                    },
                     onFinished = { state.showFinished.complete(Unit) },
                 )
             }
@@ -515,17 +529,21 @@ open class ObSplashActivity : BaseOnboardActivity() {
         else attempt.showNext.await()
 
         if (!attempt.flowStarted) {
-            val remaining = remainingMinDisplayMs(sdk.requireConfig().splash.minDisplayTimeMs)
-            if (remaining > 0) delay(remaining.milliseconds)
-            // UNDER_AD explicitly permits preparing the destination beneath the visible ad.
-            // Failed/no-ad and AFTER_AD paths still require a focused foreground splash.
-            if (!attempt.showFinished.isCompleted) attempt.foreground.first { it }
-            if (attempt.showFinished.isCompleted) awaitSplashFocus()
+            // AFTER_AD, no-ad, or an owner lost before onNext: never replay navigation on top
+            // of an existing ad. A recreated owner continues once the presentation has ended.
+            attempt.showFinished.await()
+            awaitMinimumDisplay()
+            awaitSplashFocus()
             startFlow()
         }
         attempt.showFinished.await()
         attempt.completed = true
         finish()
+    }
+
+    private suspend fun awaitMinimumDisplay() {
+        val remaining = remainingMinDisplayMs(sdk.requireConfig().splash.minDisplayTimeMs)
+        if (remaining > 0) delay(remaining.milliseconds)
     }
 
     private suspend fun awaitPresentationWindow() {

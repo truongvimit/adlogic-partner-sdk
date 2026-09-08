@@ -13,7 +13,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
 ```groovy
-def sdkVersion = '5.2.3'
+def sdkVersion = '5.2.4'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -116,7 +116,7 @@ Defaults to account for:
 - `noInternetPromptEnabled = true`: splash asks the user to connect before continuing. Set it to `false` if your app should allow an offline start.
 - `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Landscape apps must set it to `false` and review merged manifest orientation rules too.
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
-- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; a ready interstitial can show before that minimum, while navigation waits only its remaining time.
+- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; `UNDER_AD` waits out the remaining minimum before opening the destination and showing the interstitial together. `AFTER_AD` may show a ready interstitial early, but navigation waits for both dismissal and the minimum.
 
 ### Splash and language options
 
@@ -125,7 +125,7 @@ this flow. Configure only the defaults you need to change:
 
 | Option | Default / use |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms; minimum before navigation, not before showing a ready interstitial. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms before navigation; `UNDER_AD` also waits before showing, while `AFTER_AD` may show early. |
 | `ob_splash_ad_budget_ms` | 60000 ms of ad waiting, starting after notification completes and splash has focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload the first language native after the splash waterfall settles or its wait expires. `true`: preload alongside splash ads. |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Both must be enabled to show the language selection hand. |
