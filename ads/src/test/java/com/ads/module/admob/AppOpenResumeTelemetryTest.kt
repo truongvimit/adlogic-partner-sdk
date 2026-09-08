@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit
  *
  * Before this the manager emitted policy skips and nothing else, so a console showing many
  * matched requests against few impressions could not be attributed to a stage. The last test
- * covers the branch that mattered most: a fill the vendor billed and the buffer then refused.
+ * covers a vendor fill the buffer refuses after its request has been superseded.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class, shadows = [ResumeLoadGmaShadow::class])
@@ -107,18 +107,35 @@ class AppOpenResumeTelemetryTest {
     }
 
     @Test
-    fun `a fill discarded after the request deadline is reported, not lost silently`() {
+    fun `a superseded fill is reported as loaded and discarded`() {
         enable()
         background()
-        main.idleFor(30_000, TimeUnit.MILLISECONDS)
+        main.idleFor(35_000, TimeUnit.MILLISECONDS)
         sink.events.clear()
         fill(0)
-        // The vendor matched and billed this request; the buffer refused the late arrival.
+        // The vendor returned an ad, but a newer request now owns the buffer.
         assertEquals(1, named(AD_LOADED).size)
         val skipped = named(AD_SKIPPED).single()
         assertEquals("app_resume", skipped["placement"])
         assertEquals("app_open", skipped["ad_format"])
         assertEquals("fill_discarded", skipped["reason"])
+    }
+
+    @Test
+    fun `timeout followed by a valid late fill reports one vendor outcome without discard`() {
+        enable()
+        background()
+        manager.onResume()
+        main.idleFor(60_000, TimeUnit.MILLISECONDS)
+        assertEquals("load_timeout", named(AD_SKIPPED).single()["reason"])
+        assertTrue(named(AD_LOAD_FAILED).isEmpty())
+        fill(0)
+        fill(0)
+        fail(0)
+        assertEquals(1, named(AD_LOADED).size)
+        assertTrue(named(AD_LOAD_FAILED).isEmpty())
+        assertTrue(manager.isAdAvailable(false))
+        assertEquals(1, named(AD_SKIPPED).size)
     }
 
     @Test

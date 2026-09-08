@@ -21,25 +21,33 @@ internal object AdConfigParser {
     private const val DEFAULT_HEIGHT_CTA = 40
     private const val DEFAULT_COLOR_CTA = "default"
 
-    fun parse(source: Reader): Map<String, AdUnitConfig> {
+    fun parse(source: Reader): Map<String, AdUnitConfig> = parseConfig(source).ads
+
+    fun parseConfig(source: Reader): AdRemoteConfig {
         JsonReader(source).use { reader ->
             reader.isLenient = true
             if (reader.peek() == JsonToken.NULL) {
                 reader.nextNull()
-                return emptyMap()
+                return AdRemoteConfig()
             }
             val units = LinkedHashMap<String, AdUnitConfig>()
+            var resumeDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
             reader.beginObject()
             while (reader.hasNext()) {
                 val key = reader.nextName()
-                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                if (key == "app_resume_load_delay_ms") {
+                    resumeDelayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(
+                        safeNextString(reader, "").toLongOrNull()
+                            ?: AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
+                    )
+                } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
                     units[key] = readAdUnit(reader)
                 } else {
                     reader.skipValue()
                 }
             }
             reader.endObject()
-            return units
+            return AdRemoteConfig(units, resumeDelayMs)
         }
     }
 

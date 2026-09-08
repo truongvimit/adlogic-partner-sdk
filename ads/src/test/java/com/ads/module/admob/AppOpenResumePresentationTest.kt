@@ -539,6 +539,8 @@ class AppOpenResumePresentationTest {
         controller.restart().start().resume().visible()
         main.idle()
         assertFalse(latestDialogShowing())
+        // The SDK's 30-second loading timeout must not turn a late fill into an unsolicited show.
+        main.idleFor(60_000, TimeUnit.MILLISECONDS)
         val ad = ResumePresentationAd(UNIT).also(ads::add)
         requests.single().callback.onAdLoaded(ad)
         main.idleFor(2_000, TimeUnit.MILLISECONDS)

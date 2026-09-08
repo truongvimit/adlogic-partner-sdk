@@ -273,15 +273,18 @@ current ad until another show/refresh trigger.
 ## Resume and interstitial lifecycle migration
 
 See the [SDK lifecycle contract and partner migration](../docs/ads-buffer-lifecycle.md).
-Resume enablement no longer preloads: one eligible background stay schedules a load after two
-seconds, and returning early cancels it. A ready ad is reused across returns; no post-show refill
-or foreground fetch occurs. A late result is cached for the next return.
+Resume enablement no longer preloads. Each eligible background captures the top-level
+`app_resume_load_delay_ms` field from the remote `ad_remote_config` JSON (default 2000 ms;
+0–86,400,000 ms). Returning early cancels it. Network recovery and failure retries are limited to
+3 requests within 120 seconds after that delay. A ready ad is reused across returns; no post-show
+refill or foreground fetch occurs. A timed-out request's late result can still be cached until
+superseded or invalidated; the four-hour ad lifetime is measured from the original request.
 
-`app_resume` now reports its own funnel — `ad_request`, `ad_loaded` / `ad_load_failed`, `ad_show` /
-`ad_show_failed` — under the placement the unit is registered to, so its client-side show rate is
-computable without console data. A fill the vendor billed and the request deadline then refused
-reports `ad_skipped` with reason `fill_discarded`; that is the one branch that used to lose a paid
-ad silently, and it is what tells a matched-but-never-shown gap apart from a no-fill.
+`app_resume` reports `ad_request`, `ad_loaded` / `ad_load_failed`, `ad_show` / `ad_show_failed`.
+`ad_skipped: load_timeout` identifies a request exceeding the SDK's 30-second loading deadline;
+`ad_skipped: fill_discarded` identifies a vendor fill rejected after replacement, invalidation or
+expiry. A timeout does not fabricate a vendor failure. Client funnel events support diagnosis;
+use impressions/session alongside show rate when evaluating the change.
 
 Only AutoBuffer's configured, non-reserved placements share the interstitial interval. Closing
 a group ad or failing its final waterfall starts the interval; successful load does not. Splash

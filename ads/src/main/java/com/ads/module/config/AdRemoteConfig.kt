@@ -11,12 +11,22 @@ import java.io.InputStream
  * Loaded from the host app's `assets/ad_config.json` by convention — a partner ships that file and
  * calls nothing — and replaced at runtime when remote config delivers a newer document.
  */
-data class AdRemoteConfig(
+data class AdRemoteConfig @JvmOverloads constructor(
     val ads: Map<String, AdUnitConfig> = emptyMap(),
+    /** Extra wait after process ON_STOP; captured once for each background stay. */
+    val appResumeLoadDelayMs: Long = DEFAULT_APP_RESUME_LOAD_DELAY_MS,
 ) {
 
     companion object {
         private const val TAG = "AdRemoteConfig"
+
+        const val DEFAULT_APP_RESUME_LOAD_DELAY_MS = 2_000L
+        const val MAX_APP_RESUME_LOAD_DELAY_MS = 86_400_000L
+
+        @JvmStatic
+        fun normalizeAppResumeLoadDelayMs(value: Long): Long =
+            value.takeIf { it in 0..MAX_APP_RESUME_LOAD_DELAY_MS }
+                ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
         const val RELEASE_FILE_NAME = "ad_config.json"
         const val DEBUG_FILE_NAME = "ad_config_debug.json"
@@ -137,7 +147,7 @@ data class AdRemoteConfig(
         @JvmStatic
         fun fromJson(json: String): AdRemoteConfig? {
             if (json.isBlank()) return null
-            return runCatching { AdRemoteConfig(AdConfigParser.parse(json.reader())) }
+            return runCatching { AdConfigParser.parseConfig(json.reader()) }
                 .onFailure { Log.w(TAG, "Ad config parse failed: ${it.message}") }
                 .getOrNull()
         }
@@ -145,7 +155,7 @@ data class AdRemoteConfig(
         @JvmStatic
         fun fromInputStream(inputStream: InputStream): AdRemoteConfig? =
             runCatching {
-                inputStream.bufferedReader().use { AdRemoteConfig(AdConfigParser.parse(it)) }
+                inputStream.bufferedReader().use { AdConfigParser.parseConfig(it) }
             }.onFailure { Log.w(TAG, "Ad config parse failed: ${it.message}") }.getOrNull()
 
         @JvmStatic

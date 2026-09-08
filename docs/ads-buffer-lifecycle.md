@@ -6,18 +6,63 @@ screens are not changed. The integration steps below must be applied when adopti
 ## App resume
 
 - Initial startup, enabling resume ads, and activity transitions do not load resume ads.
-- A real process background transition schedules one opportunity to load after two seconds.
-  A foreground return cancels the opportunity if it has not dispatched.
+- A real process background transition captures `app_resume_load_delay_ms` from the current
+  `ad_remote_config` document (default 2000 ms). Returning before dispatch cancels the schedule.
 - Dispatch only while still background, enabled, eligible, empty/expired, and not loading.
-  No retry or refresh loop runs during the same background stay.
+  Existing cache and in-flight work are checked before the network precheck for a new request.
+- Recovery is bounded: at most **3 dispatched requests per background stay**, within **120 seconds
+  after the initial delay expires**. Offline checks run at most once every 5 seconds in that window
+  and do not count as requests. Request preparation exceptions use the same bounded 5-second
+  recovery without changing existing ownership or emitting a vendor outcome.
+  Vendor failure/dispatch exception/request timeout uses the existing
+  5s, 30s, 120s backoff; a later background waits any remaining backoff rather than losing its turn.
+  A foreground return cancels every scheduled recovery. Repeated ON_STOP does not reset the budget.
 - Returning to foreground shows only an already-ready ad on an eligible return. It never waits
-  for a load. A request that completes after that decision is cached for a future return.
-- Ready ads survive foreground/background cycles, with their original four-hour expiry.
-  Dismissal or failure to show does not request a replacement. The next background stay may.
+  for a load or shows a callback arriving after the return decision.
+- At 30 seconds, a request releases its loading slot and permits a bounded retry. Its callback
+  may still fill the empty cache until a newer request dispatches or configuration/consent/premium
+  invalidates it. Timeout cannot cancel Google's underlying transport; after replacement, the old
+  callback is discarded so it cannot overwrite the new request. Duplicate terminal callbacks do
+  not mutate the buffer or report a second vendor outcome.
+- Ready ads survive foreground/background cycles. Their four-hour lifetime starts at request time,
+  including when the callback arrives late. A result arriving already four hours old is rejected.
+  Fill success ends recovery. Dismissal/failure to show does not refill; wait for the next background.
 - Existing consent, premium, external-action suppression, and fullscreen exclusion still apply.
   Suppression is decided for the departure/return; an ad Activity is not a new user visit.
 - Android may suspend or kill a background process. A scheduled load is best effort; an ad
   cache lives only in that process and is not persisted through process death.
+
+## Remote delay and A/B testing
+
+Edit the existing Firebase Remote Config JSON parameter `ad_remote_config`. Add this top-level
+numeric field **alongside the existing placement objects**, preserving their IDs and settings:
+
+```json
+"app_resume_load_delay_ms": 2000
+```
+
+- Milliseconds, accepted range **0–86,400,000** (up to 24 hours). `0` means no additional SDK wait
+  after process ON_STOP; AndroidX's process lifecycle delay still exists.
+- Missing, negative, out-of-range, overflow or malformed values fall back to **2000**, without
+  discarding the placement document. Integer strings are also accepted.
+- Assign A/B variants of the JSON parameter with e.g. 0, 500, 2000 or 5000 for this field. The
+  existing config-source refresh/activation path applies the document; no partner Activity edit
+  or new Firebase fetch on background is needed. The delay is also supported in asset JSON.
+- Each background stay snapshots its delay. A remote update affects the next stay, without
+  moving an existing timer or resetting cache age/backoff. Debug builds keep their existing
+  test-asset pinning; use test IDs in every test configuration.
+- This is an SDK policy, not a claim that it reproduces LinguaPal's process-wide behavior.
+- Evaluate show rate together with impressions/session and revenue/session. A decrease in
+  loads alone can improve show rate without creating an additional impression.
+
+## Resume telemetry
+
+The existing request/vendor outcome/show funnel is preserved. `ad_skipped: load_timeout` marks
+30 seconds without a terminal callback; it is **not** a vendor no-fill or a second terminal event.
+A subsequent vendor fill still reports `ad_loaded`. If superseded/invalidated/expired, it also
+reports `ad_skipped: fill_discarded`; otherwise it enters the cache for a later eligible return.
+These counts diagnose stages, but do not by themselves prove that timeout dominates production
+losses. A vendor fill is not evidence of a publisher charge or an impression.
 
 ## AutoBuffer interstitial group
 
@@ -60,7 +105,7 @@ Cover cancellation at the delay boundary, late fill retention, no refill, cache 
 gate, splash exclusion, fixed retry, foreground pause, duplicate triggers, and exactly-once next.
 Compare production show rate alongside impressions/session when the partner adopts the change.
 
-## Validation result — 2026-09-08
+## Historical validation — commit 722ef46 (2026-09-08)
 
 - Full repository `./gradlew testDebugUnitTest :ads:compileReleaseKotlin
   :ads:compileReleaseJavaWithJavac --continue --console=plain`: successful.
@@ -81,5 +126,31 @@ Compare production show rate alongside impressions/session when the partner adop
 - Scope of device validation: background loading/failure and physical Home/return suppression.
   Long-held real-ad presentation requiring an operator was not rerun. Presentation, duplicate
   terminal delivery and expiry were verified at the public SDK seam with controlled GMA/time.
-- Existing app-resume request timeout remains 30 seconds; late-fill reuse applies before that
-  request expires. No production show-rate or revenue uplift has been measured by these tests.
+- That historical revision discarded callbacks after 30 seconds. The recovery update above
+  supersedes that behavior. No production show-rate or revenue uplift was established by these tests.
+
+
+## Recovery update validation — 2026-09-08
+
+- Base: `7802f17`, including the existing `app_resume` telemetry commit. SDK implementation,
+  configuration parsing, documentation and SDK tests only; no partner Activity implementation edits.
+- Full `./gradlew testDebugUnitTest :ads:compileReleaseKotlin
+  :ads:compileReleaseJavaWithJavac :onboardkitorigin:assembleDebugAndroidTest --continue --console=plain`
+  passed. **441 tests**, zero failures/errors/skips: ads 223, onboarding 209, trackkit 8, app 1.
+  Counts include only modules participating in that build, excluding stale reports from other projects.
+- Public resume coverage: 36 load/lifecycle/config tests, 23 presentation tests, 7 telemetry tests.
+  Regressions were observed failing before their fixes: offline reentry invalidation, bounded retry,
+  late fill after timeout, remote delay, carried failure/timeout shortening the next delay, last-check
+  offline recovery, preparation exception recovery, and old-result rejection cancelling a new timer.
+- Standards review and Spec review both passed after their findings were fixed and retested.
+- Full-run log: `/tmp/resume-final-verified.log` (local QA evidence, not a shipped dependency).
+- Production impression/session or revenue improvement is not established by this validation.
+- Pixel 5, official Google app-open test unit: remote delay **500 ms** passed the real load
+  fixture. Process ON_STOP at 14:53:37.128, dispatch at 14:53:37.655 (**527 ms**), real fill at
+  14:53:40.781. Logs: `/tmp/resume-device-500ms.log` and
+  `/tmp/resume-device-500ms-dispatch.log`.
+- Pixel 5 failure fixture is **incomplete**, not passed: the deliberately invalid test unit
+  returned vendor code 1; the first retry dispatched 5008 ms after failure. ADB then stopped
+  answering shell/logcat and remained offline after reconnect, before the third request and test
+  completion could be confirmed. Do not use this partial run as proof of the device retry cap.
+  The exact retry intervals, request cap and time window passed the automated public-seam tests.

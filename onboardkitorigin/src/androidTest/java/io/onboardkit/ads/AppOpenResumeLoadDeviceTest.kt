@@ -18,6 +18,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.google.android.gms.ads.MobileAds
@@ -60,6 +61,8 @@ class AppOpenResumeLoadDeviceTest {
             "resumePhase must be allowed, disabled, unauthorized, burst, release, off, offline, or failure"
         }
         val unit = if (phase == "failure") INVALID_APP_OPEN_QA_UNIT else APP_OPEN_TEST_UNIT
+        val delayMs = args.getString("resumeDelayMs")?.toLong() ?: 2_000L
+        require(delayMs in 0L..10_000L) { "Device QA delay must be 0..10000 ms" }
         val observeMs = args.getString("resumeObserveMs")?.toLong() ?: 45_000L
         require(observeMs in 5_000L..120_000L) { "resumeObserveMs must be 5000..120000" }
         val app = ApplicationProvider.getApplicationContext<Application>()
@@ -74,6 +77,7 @@ class AppOpenResumeLoadDeviceTest {
             // send an extra AppOpen request even against the unfixed implementation.
             manager.disableAppResume()
             manager.init(app, "")
+            AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":$delayMs}""")
             manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
             manager.releaseCachedAds()
             // Explicit host authorization for GMA initialization; selected phase is applied below.
@@ -100,7 +104,7 @@ class AppOpenResumeLoadDeviceTest {
                     assertFalse(activity.isFinishing)
                     assertFalse(activity.isDestroyed)
                     assertFalse("Fixture must start with an empty resume buffer", manager.isAdAvailable(false))
-                    mark(phase, if (phase == "failure") "BEGIN unit=$unit spacedRetryProbes=20"
+                    mark(phase, if (phase == "failure") "BEGIN unit=$unit spacedRetryProbes=45"
                         else "BEGIN unit=$unit windowMs=$observeMs")
                     intervalStarted = true
                     ConsentCenter.setHostConsent(canRequestAds = phase != "unauthorized", personalized = false)
@@ -120,10 +124,10 @@ class AppOpenResumeLoadDeviceTest {
                 val stopDeadline = SystemClock.elapsedRealtime() + 10_000L
                 while (!processStopped() && SystemClock.elapsedRealtime() < stopDeadline) SystemClock.sleep(50)
                 assertTrue("Physical Home must stop the process", processStopped())
-                mark(phase, "PROCESS_BACKGROUND delayMs=2000")
+                mark(phase, "PROCESS_BACKGROUND delayMs=$delayMs")
                 if (phase == "release" || phase == "off") {
                     // Invalidate the one background request after its dispatch opportunity.
-                    SystemClock.sleep(2_100)
+                    SystemClock.sleep(delayMs + 100)
                     instrumentation.runOnMainSync {
                         if (phase == "release") manager.releaseCachedAds() else manager.disableAppResume()
                     }
@@ -146,9 +150,9 @@ class AppOpenResumeLoadDeviceTest {
                     assertTrue("No show/release was requested; ready buffer should remain", isReady(manager))
                     mark(phase, "OBSERVATION_COMPLETE positiveBuffer=true dispatchCount=external-evidence-required")
                 } else if (phase == "failure") {
-                    // These public fetch probes must not retry during this same background stay.
-                    // Correlate the dispatch log to verify the one-opportunity contract.
-                    repeat(20) { index ->
+                    // Public probes do not dispatch. The SDK itself retries with bounded backoff.
+                    // Correlate dispatch logs: at most three requests in this background stay.
+                    repeat(45) { index ->
                         SystemClock.sleep(1_000)
                         instrumentation.runOnMainSync {
                             assertTrue("Failure backoff needs network; offline is a separate phase", hasActiveNetwork(app))
@@ -160,7 +164,7 @@ class AppOpenResumeLoadDeviceTest {
                     SystemClock.sleep(1_000)
                     assertFalse(isReady(manager))
                     mark(phase, "OBSERVATION_COMPLETE emptyBuffer=true invalidUnitFailure_not_NO_FILL " +
-                        "sameBackgroundRetries=0_verify_dispatch_logs probeCallsAfterInitial=20")
+                        "sameBackgroundRequestsAtMost=3_verify_dispatch_logs probeCallsAfterInitial=45")
                 } else {
                     val deadline = SystemClock.elapsedRealtime() + observeMs
                     do {

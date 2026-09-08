@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -62,6 +63,7 @@ class AppOpenResumeLoadStateTest {
             override fun isPremium(context: Context): Boolean = premium
         })
         networkAvailable(true)
+        AdRemoteConfig.reset()
         requests.clear()
         ResumeLoadGmaShadow.throwOnLoad = false
         // The delayed background load must work with only an Application context.
@@ -73,8 +75,113 @@ class AppOpenResumeLoadStateTest {
         manager.disableAppResume()
         manager.setAppResumeAdId("")
         manager.releaseCachedAds()
+        AdRemoteConfig.reset()
         ConsentCenter.clearHostConsent()
         requests.clear()
+    }
+
+    @Test
+    fun `previous request failure cannot shorten the next background remote delay`() {
+        startRequest()
+        manager.onResume()
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        manager.onStop()
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        fail(0)
+        main.idleFor(58_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `previous request timeout cannot shorten the next background remote delay`() {
+        startRequest()
+        manager.onResume()
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        manager.onStop()
+        main.idleFor(59_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `network lost during request preparation rearms without dispatching or replacing old result`() {
+        startRequest()
+        manager.onResume()
+        main.idleFor(31_000, TimeUnit.MILLISECONDS)
+        // External GMA builder construction is the last boundary before dispatch.
+        mockConstruction(AdRequest.Builder::class.java) { _, _ -> networkAvailable(false) }.use {
+            manager.onStop()
+            main.idleFor(5_000, TimeUnit.MILLISECONDS)
+            assertEquals(1, requests.size)
+        }
+        networkAvailable(true)
+        fill(0)
+        assertTrue("No replacement was sent, so A still owns its late result", manager.isAdAvailable(false))
+        main.idleFor(120_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `network lost during first request preparation recovers in same background`() {
+        enable()
+        mockConstruction(AdRequest.Builder::class.java) { _, _ -> networkAvailable(false) }.use {
+            nextBackground()
+            assertTrue(requests.isEmpty())
+        }
+        networkAvailable(true)
+        main.idleFor(5_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `request preparation failure recovers without spending a vendor request`() {
+        enable()
+        mockConstruction(AdRequest.Builder::class.java) { builder, _ ->
+            `when`(builder.build()).thenThrow(IllegalStateException("External request construction"))
+        }.use {
+            nextBackground()
+            assertTrue(requests.isEmpty())
+        }
+        main.idleFor(5_000, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        fill(0)
+        assertTrue(manager.isAdAvailable(false))
+    }
+
+    @Test
+    fun `rejecting an old personalization result does not cancel the next scheduled opportunity`() {
+        startRequest()
+        manager.onResume()
+        main.idleFor(31_000, TimeUnit.MILLISECONDS)
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        manager.onStop()
+        ConsentCenter.setHostConsent(true, true)
+        fill(0)
+        assertFalse(manager.isAdAvailable(false))
+        main.idleFor(60_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `remote delay is applied to next background without moving the current schedule`() {
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":500}""")
+        enable()
+        manager.onStop()
+        main.idleFor(499, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":5000}""")
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        manager.onResume()
+        manager.releaseCachedAds()
+        manager.onStop()
+        main.idleFor(4_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
     }
 
     @Test
@@ -99,6 +206,19 @@ class AppOpenResumeLoadStateTest {
         fill(0)
         assertTrue(manager.isAdAvailable(false))
         nextBackground()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `offline reentry cannot invalidate an already dispatched request`() {
+        startRequest()
+        manager.onResume()
+        networkAvailable(false)
+        manager.onStop()
+        main.idleFor(2_000, TimeUnit.MILLISECONDS)
+        networkAvailable(true)
+        fill(0)
+        assertTrue(manager.isAdAvailable(false))
         assertEquals(1, requests.size)
     }
 
@@ -139,51 +259,52 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
-    fun `failed request does not retry during the same long background stay`() {
+    fun `failed requests retry after backoff with at most three dispatches per background stay`() {
         startRequest()
         fail(0)
-        main.idleFor(10, TimeUnit.MINUTES)
-        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        main.idleFor(4_999, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
-        nextBackground()
+        main.idleFor(1, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
+        fail(1)
+        main.idleFor(29_999, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(3, requests.size)
+        fail(2)
+        main.idleFor(20, TimeUnit.MINUTES)
+        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        assertEquals(3, requests.size)
+        nextBackground()
+        assertEquals(4, requests.size)
     }
 
     @Test
-    fun `failure backoff guards rapid background cycles and success resets it`() {
+    fun `a new background waits for remaining backoff then retries without another lifecycle event`() {
         startRequest()
-        for (delayMs in listOf(5_000L, 30_000L, 120_000L, 120_000L)) {
+        for (delayMs in listOf(5_000L, 30_000L, 120_000L)) {
             val count = requests.size
             fail(count - 1)
-            nextBackground() // Only two seconds after failure: each backoff still blocks.
-            assertEquals(count, requests.size)
-            main.idleFor(delayMs, TimeUnit.MILLISECONDS)
-            assertEquals("Time alone cannot buy another ad", count, requests.size)
             nextBackground()
+            assertEquals(count, requests.size)
+            main.idleFor(delayMs - 2_001, TimeUnit.MILLISECONDS)
+            assertEquals(count, requests.size)
+            main.idleFor(1, TimeUnit.MILLISECONDS)
             assertEquals(count + 1, requests.size)
         }
         fill(requests.lastIndex)
-        manager.releaseCachedAds()
-        nextBackground()
-        val count = requests.size
-        fail(count - 1)
-        main.idleFor(5_000, TimeUnit.MILLISECONDS)
-        nextBackground()
-        assertEquals("A successful load resets retry protection to five seconds", count + 1, requests.size)
+        main.idleFor(10, TimeUnit.MINUTES)
+        assertEquals(4, requests.size)
     }
 
     @Test
-    fun `30 second request timeout rejects stale callbacks without background retry`() {
+    fun `fill after timeout before replacement is cached and cancels retry`() {
         startRequest()
-        main.idleFor(30_000, TimeUnit.MILLISECONDS)
+        main.idleFor(31_000, TimeUnit.MILLISECONDS)
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
-        main.idleFor(5_000, TimeUnit.MILLISECONDS)
-        manager.fetchAd(false)
+        assertTrue(manager.isAdAvailable(false))
+        main.idleFor(10, TimeUnit.MINUTES)
         assertEquals(1, requests.size)
-        nextBackground()
-        assertEquals(2, requests.size)
-        assertOldRequestCannotOwnReplacement()
     }
 
     @Test
@@ -256,16 +377,135 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
-    fun `offline background does not load and connectivity alone does not retry`() {
+    fun `offline precheck can recover within the same background without spending a request`() {
         enable()
         networkAvailable(false)
         nextBackground()
         assertTrue(requests.isEmpty())
         networkAvailable(true)
         manager.fetchAd(false)
+        main.idleFor(4_999, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        fill(0)
+        main.idleFor(10, TimeUnit.MINUTES)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `offline recovery after the retry window needs a new background stay`() {
+        enable()
+        networkAvailable(false)
+        nextBackground()
+        main.idleFor(120_000, TimeUnit.MILLISECONDS)
+        networkAvailable(true)
+        main.idleFor(20, TimeUnit.MINUTES)
         assertTrue(requests.isEmpty())
         nextBackground()
         assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `foreground cancels a scheduled failure retry`() {
+        startRequest()
+        fail(0)
+        main.idleFor(4_999, TimeUnit.MILLISECONDS)
+        manager.onResume()
+        main.idleFor(10, TimeUnit.MINUTES)
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `foreground cancels offline rechecks`() {
+        enable()
+        networkAvailable(false)
+        nextBackground()
+        manager.onResume()
+        networkAvailable(true)
+        main.idleFor(10, TimeUnit.MINUTES)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `foreground keeps a result arriving after timeout without starting another request`() {
+        startRequest()
+        manager.onResume()
+        main.idleFor(60_000, TimeUnit.MILLISECONDS)
+        fill(0)
+        assertTrue(manager.isAdAvailable(false))
+        nextBackground()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `timeout replacement rejects old fill without cancelling the newer request`() {
+        startRequest()
+        main.idleFor(35_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+        fill(0)
+        assertFalse(manager.isAdAvailable(false))
+        fill(1)
+        assertTrue(manager.isAdAvailable(false))
+        main.idleFor(120_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `late result still obeys consent personalization and premium changes`() {
+        startRequest()
+        manager.onResume()
+        main.idleFor(31_000, TimeUnit.MILLISECONDS)
+        ConsentCenter.setHostConsent(true, true)
+        fill(0)
+        assertFalse(manager.isAdAvailable(false))
+        nextBackground()
+        main.idleFor(3_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+        manager.onResume()
+        main.idleFor(31_000, TimeUnit.MILLISECONDS)
+        premium = true
+        fill(1)
+        assertFalse(manager.isAdAvailable(false))
+    }
+
+    @Test
+    fun `duplicate vendor terminal callbacks cannot replace or discard a cached ad`() {
+        startRequest()
+        fill(0)
+        fill(0)
+        fail(0)
+        main.idleFor(10, TimeUnit.MINUTES)
+        assertTrue(manager.isAdAvailable(false))
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `remote zero starts on process stop and invalid values fall back without dropping placements`() {
+        for (value in listOf("-1", "null", "true", "{}", "[]", "1.5", "\"oops\"", "9223372036854775808", "86400001")) {
+            val config = AdRemoteConfig.fromJson("""{"app_resume_load_delay_ms":$value,"open_resume":{"id":"qa","isEnable":true}}""")!!
+            assertEquals(2000L, config.appResumeLoadDelayMs)
+            assertEquals(listOf("qa"), config.tiersFor("open_resume"))
+        }
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":0}""")
+        enable()
+        manager.onStop()
+        main.idle()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `long remote delay still permits the first load and its bounded retry window`() {
+        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":"300000"}""")
+        enable()
+        manager.onStop()
+        main.idleFor(299_999, TimeUnit.MILLISECONDS)
+        assertTrue(requests.isEmpty())
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        fail(0)
+        main.idleFor(5_000, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
     }
 
     @Test
