@@ -53,6 +53,7 @@ data class RemoteFlags(
     val uiDesignTokensJson: String = ObRemoteKeys.UI_DESIGN_TOKENS_JSON.default,
     val questionConfigJson: String = ObRemoteKeys.QUESTION_CONFIG_JSON.default,
     val configVersion: Long = ObRemoteKeys.CONFIG_VERSION.default,
+    val languageTapHintDelaySec: Long = ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default,
 ) {
 
     fun isStepEnabled(stepId: StepId): Boolean = when (stepId) {
@@ -111,6 +112,8 @@ data class RemoteFlags(
                 enableLanguageNative2 = bool(ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2),
                 passLfoIfCompleted = bool(ObRemoteKeys.PASS_LFO_IF_COMPLETED),
                 showLanguageTapHint = bool(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT),
+                languageTapHintDelaySec = long(ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC)
+                    .takeIf { it >= 0 } ?: ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default,
                 showLanguageConfirmBeforeSelect =
                     bool(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT),
                 showLanguageConfirmDialog = bool(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_DIALOG),

@@ -50,6 +50,9 @@ object ObRemoteKeys {
      */
     val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", true)
 
+    /** Seconds before the hand appears; ignored when tap hints are disabled. */
+    val LANGUAGE_TAP_HINT_DELAY_SEC = RemoteKey.LongKey("ob_language_tap_hint_delay_sec", 3)
+
     /**
      * Whether the LFO confirm button is on screen before a language is picked. Off hides it until
      * the first tap; the button always comes back once there is a selection, so the screen can
@@ -123,7 +126,7 @@ object ObRemoteKeys {
         ENABLE_STEP_OB1, ENABLE_STEP_OB2, ENABLE_STEP_OB3, ENABLE_STEP_OB4, ENABLE_STEP_OB5,
         ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
-        SHOW_LANGUAGE_TAP_HINT, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
+        SHOW_LANGUAGE_TAP_HINT, LANGUAGE_TAP_HINT_DELAY_SEC, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
         SHOW_LANGUAGE_CONFIRM_DIALOG,
         REUSE_SPLASH_INTER,
         ADS_SPLASH_BANNER,

@@ -16,6 +16,13 @@
     <color name="ob_placeholder_bg">#F0F1F5</color>
     <color name="ob_placeholder_fg">#C4C8D4</color>
 
+    <!-- LFO item states, Figma 7316:8712 / 7316:8769. -->
+    <color name="ob_language_selected_bg">#1AFF0000</color>
+    <color name="ob_language_selected_text">#EE1313</color>
+    <color name="ob_language_text">#1E293B</color>
+    <color name="ob_language_native_text">#919191</color>
+    <color name="ob_language_native_selected_text">#3C3C3C</color>
+
     <color name="ob_row_bg">#F5F5F5</color>
     <color name="ob_ad_block_bg">#F5F7FF</color>
     <color name="ob_ad_compact_bg">#F5F5F5</color>

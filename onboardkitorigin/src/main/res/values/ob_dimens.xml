@@ -10,13 +10,13 @@
     <dimen name="ob_cta_height">48dp</dimen>
     <dimen name="ob_cta_height_small">44dp</dimen>
 
-    <dimen name="ob_language_row_height">64dp</dimen>
-    <dimen name="ob_language_row_gap">8dp</dimen>
+    <dimen name="ob_language_row_height">52dp</dimen>
+    <dimen name="ob_language_row_gap">13dp</dimen>
     <!-- Figma LFO: header ends y=100, first row starts y=116. -->
     <dimen name="ob_language_list_top">16dp</dimen>
-    <dimen name="ob_flag_size">28dp</dimen>
+    <dimen name="ob_flag_size">32dp</dimen>
     <dimen name="ob_radio_size">20dp</dimen>
-    <!-- "Tap here" hand hint, centred on the radio and allowed to overflow it. -->
+    <!-- "Tap here" hand hint at the trailing edge of the language row. -->
     <dimen name="ob_language_hint_size">44dp</dimen>
     <dimen name="ob_header_height">62dp</dimen>
     <dimen name="ob_ratio_anim_area">55dp</dimen>
@@ -37,7 +37,8 @@
     <dimen name="ob_text_headline">14sp</dimen>
     <dimen name="ob_text_body">12sp</dimen>
     <dimen name="ob_text_cta">18sp</dimen>
-    <dimen name="ob_text_language">24sp</dimen>
+    <dimen name="ob_text_language">17sp</dimen>
+    <dimen name="ob_text_language_native">12sp</dimen>
     <dimen name="ob_text_header">18sp</dimen>
     <dimen name="ob_text_ad_badge">8sp</dimen>
     <!-- Confirm Language modal, Figma node 3584:24369. Card is 328dp wide: the close glyph sits

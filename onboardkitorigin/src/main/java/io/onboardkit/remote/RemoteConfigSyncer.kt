@@ -92,6 +92,10 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.PASS_LFO_IF_COMPLETED.key, snapshot.passLfoIfCompleted.toString())
         put(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.key, snapshot.showLanguageTapHint.toString())
         put(
+            ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.key,
+            snapshot.languageTapHintDelaySec.toString()
+        )
+        put(
             ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT.key,
             snapshot.showLanguageConfirmBeforeSelect.toString(),
         )

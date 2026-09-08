@@ -10,6 +10,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ProgressBar
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.consent.ConsentOptions
@@ -85,6 +86,34 @@ class SplashLongPromptTest {
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.reset(app)
         main.idle()
+    }
+
+    @Test
+    fun loadingLoopsWhileUmpRequestAndFormArePending() {
+        LongPromptFixture.ump.holdUpdate = true
+        LongPromptFixture.ump.requireForm = true
+        launch(notification = false)
+        drainUntil("UMP request must be pending") { LongPromptFixture.ump.pendingUpdate != null }
+        val bar = requireNotNull(controller).get()
+            .findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
+
+        main.idleFor(Duration.ofMillis(250))
+        assertTrue("Loading must loop immediately, before UMP returns", bar.isIndeterminate)
+        assertTrue(bar.isShown)
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+
+        requireNotNull(LongPromptFixture.ump.pendingUpdate).onConsentInfoUpdateSuccess()
+        drainUntil("UMP form must be open") { LongPromptFixture.form.dismiss != null }
+        main.idleFor(Duration.ofSeconds(10))
+        assertTrue("Loading must keep looping beyond the minimum display time", bar.isIndeterminate)
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+
+        LongPromptFixture.ump.allowed = true
+        requireNotNull(LongPromptFixture.form.dismiss).onConsentFormDismissed(null)
+        drainUntil("Accept must release ad requests") { LongPromptFixture.provider.interstitialLoads == 1 }
+        assertTrue("Ad loading must not switch back to a timed progress bar", bar.isIndeterminate)
+        completeInterstitialAndAssertNormalHandoff()
     }
 
     @Test
@@ -372,6 +401,13 @@ class SplashLongPromptTest {
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
         main.idleFor(Duration.ofMillis(100))
+        val bar = requireNotNull(controller).get()
+            .findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
+        assertTrue(
+            "Recreated splash must keep looping during the retained request",
+            bar.isIndeterminate
+        )
+        assertTrue(bar.isShown)
         assertEquals("Recreation must rejoin the original request", 1, LongPromptFixture.provider.interstitialLoads)
         assertTrue("A late remote mode cannot turn this sequential attempt into parallel", LongPromptFixture.provider.order.isEmpty())
         LongPromptFixture.provider.ready = true
@@ -500,7 +536,7 @@ class LongPromptSplashActivity : ObSplashActivity() {
         LongPromptFixture.remoteHookCalled = true
     }
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(com.google.android.material.R.style.Theme_MaterialComponents_DayNight_NoActionBar)
+        setTheme(io.onboardkit.R.style.ob_Theme_OnboardKit)
         super.onCreate(savedInstanceState)
     }
 }
@@ -608,6 +644,8 @@ private class LongPromptConsentForm : ConsentForm {
 }
 
 private class LongPromptConsentInformation : ConsentInformation {
+    var holdUpdate = false
+    var pendingUpdate: ConsentInformation.OnConsentInfoUpdateSuccessListener? = null
     var requireForm = false
     var allowed = false
     override fun canRequestAds() = allowed
@@ -617,6 +655,10 @@ private class LongPromptConsentInformation : ConsentInformation {
     override fun requestConsentInfoUpdate(activity: Activity, parameters: ConsentRequestParameters,
         success: ConsentInformation.OnConsentInfoUpdateSuccessListener,
         failure: ConsentInformation.OnConsentInfoUpdateFailureListener) {
+        if (holdUpdate) {
+            pendingUpdate = success
+            return
+        }
         if (!requireForm) allowed = true
         success.onConsentInfoUpdateSuccess()
     }

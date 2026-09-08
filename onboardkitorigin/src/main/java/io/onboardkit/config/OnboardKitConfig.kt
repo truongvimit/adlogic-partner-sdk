@@ -62,7 +62,8 @@ data class LanguageConfig(
     /**
      * Animated hand pointing at the row that matches the device language (English when the
      * device language is not on the list), shown only until the user picks something.
-     * AND-ed with the `ob_show_language_tap_hint` remote flag.
+     * AND-ed with the `ob_show_language_tap_hint` remote flag. Appears after
+     * `ob_language_tap_hint_delay_sec` seconds (default 3); the delay is ignored when disabled.
      */
     val tapHintEnabled: Boolean = true,
     /**

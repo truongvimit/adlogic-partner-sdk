@@ -118,6 +118,14 @@ Các mặc định cần biết:
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
 - Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Inter ready được show ngay, còn chuyển màn chỉ đợi phần minimum còn thiếu.
 
+### Thời gian hiện bàn tay tại LFO
+
+Remote Config `ob_language_tap_hint_delay_sec` là số nguyên giây, mặc định **3**.
+`0` hiện ngay; giá trị âm hoặc không hợp lệ dùng lại mặc định 3 giây.
+Chỉ có hiệu lực khi cả `LanguageConfig.tapHintEnabled` và `ob_show_language_tap_hint`
+đều bật. Chọn ngôn ngữ trước khi hết giờ sẽ hủy bàn tay; bàn tay đang hiện cũng ẩn
+khi chọn. SETTINGS và trường hợp có `defaultCode` không hiện bàn tay.
+
 ### Thử nghiệm preload Splash → Language
 
 `ob_splash_lfo_parallel_preload_enabled` là Boolean, mặc định **false**. Chia nhóm ổn định bằng Firebase Remote Config/A/B Testing; SDK không tự random.

@@ -118,6 +118,14 @@ Defaults to account for:
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
 - Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; a ready interstitial can show before that minimum, while navigation waits only its remaining time.
 
+### LFO tap hint delay
+
+Remote Config `ob_language_tap_hint_delay_sec` is an integer number of seconds, default **3**.
+`0` shows the hand immediately; negative or malformed values fall back to 3 seconds.
+It applies only when both `LanguageConfig.tapHintEnabled` and `ob_show_language_tap_hint`
+are enabled. Selecting a language cancels the pending hint or hides the visible hand.
+SETTINGS and a preselected `defaultCode` do not show the hint.
+
 ### Splash → Language preload experiment
 
 `ob_splash_lfo_parallel_preload_enabled` is a Boolean, default **false**. Configure stable assignment in Firebase Remote Config/A/B Testing; the SDK does not randomize groups.

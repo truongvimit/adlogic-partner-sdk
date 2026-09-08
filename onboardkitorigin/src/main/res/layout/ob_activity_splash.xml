@@ -40,7 +40,7 @@
 
     <LinearLayout
         android:id="@+id/ob_splash_loading"
-        android:layout_width="220dp"
+        android:layout_width="240dp"
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:orientation="vertical"
@@ -59,16 +59,18 @@
             android:textColor="@color/ob_text_splash_loading"
             android:textSize="18sp" />
 
-        <ProgressBar
+        <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/ob_splash_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="220dp"
-            android:layout_height="6dp"
+            style="@style/Widget.MaterialComponents.LinearProgressIndicator"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
             android:layout_marginTop="12dp"
-            android:indeterminate="false"
-            android:max="100"
-            android:progress="30"
-            android:progressDrawable="@drawable/ob_progress_splash" />
+            android:indeterminate="true"
+            app:indeterminateAnimationType="disjoint"
+            app:indicatorColor="@color/ob_accent"
+            app:trackColor="@color/ob_progress_track"
+            app:trackCornerRadius="4dp"
+            app:trackThickness="8dp" />
     </LinearLayout>
 
     <FrameLayout

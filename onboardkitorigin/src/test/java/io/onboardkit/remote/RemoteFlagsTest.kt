@@ -41,6 +41,22 @@ class RemoteFlagsTest {
     }
 
     @Test
+    fun `tap hint delay accepts zero and custom seconds and defaults invalid values`() {
+        val key = ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.key
+        for ((raw, expected) in listOf(
+            null to 3L, "0" to 0L, "7" to 7L,
+            "-1" to 3L, "oops" to 3L, "99999999999999999999" to 3L
+        )) {
+            val values = raw?.let { mapOf(key to it) } ?: emptyMap()
+            assertEquals(
+                "delay=$raw",
+                expected,
+                RemoteFlags.from(reader(values)).languageTapHintDelaySec
+            )
+        }
+    }
+
+    @Test
     fun `language confirm can be hidden before the first selection`() {
         val flags = RemoteFlags.from(
             reader(mapOf(ObRemoteKeys.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT.key to "false")),

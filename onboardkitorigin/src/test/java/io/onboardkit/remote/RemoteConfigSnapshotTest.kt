@@ -9,11 +9,12 @@ import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito.*
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -25,6 +26,13 @@ class RemoteConfigSnapshotTest {
 
     @Before fun clearCache() {
         context.getSharedPreferences("ob_remote_cache", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    @Test
+    fun `custom tap hint delay survives reloading the disk snapshot`() {
+        val expected = RemoteFlags(languageTapHintDelaySec = 7)
+        RemoteConfigSyncer(context) { null }.applySnapshot(expected)
+        assertEquals(expected, RemoteConfigSyncer(context) { null }.flags.value)
     }
 
     @Test fun `failed fetch keeps the persisted parallel assignment and settle delay`() {

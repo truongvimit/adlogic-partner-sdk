@@ -11,9 +11,9 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackSkipped
@@ -26,11 +26,16 @@ import io.onboardkit.databinding.ObActivityLanguageBinding
 import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
+import io.onboardkit.remote.ObRemoteKeys
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.language.ObLanguageActivity.Companion.RESULT_LANGUAGE_CODE
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * One class for every language screen: the first-open LFO and a SETTINGS mode with no ads and
@@ -74,6 +79,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
      * like a re-tap and be answered with a confirmation instead of a selection.
      */
     private var userHasSelected = false
+    private var tapHintJob: Job? = null
 
     private var confirmDialog: ObConfirmLanguageDialog? = null
 
@@ -103,10 +109,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
         adapter = LanguageAdapter(::onLanguageTapped)
         adapter.selectedCode = selectedCode
-        adapter.hintCode = hintCode
         binding.obLanguageList.layoutManager = LinearLayoutManager(this)
         binding.obLanguageList.adapter = adapter
         adapter.submitList(languages)
+        scheduleTapHint(hintCode)
 
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
@@ -148,6 +154,18 @@ class ObLanguageActivity : BaseOnboardActivity() {
         return DeviceLanguageHint.resolve(languages)
     }
 
+    private fun scheduleTapHint(hintCode: String?) {
+        if (hintCode == null) return
+        val delaySec = sdk.flags().languageTapHintDelaySec.takeIf { it >= 0 }
+            ?: ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default
+        tapHintJob = lifecycleScope.launch {
+            delay(delaySec.seconds)
+            if (!languageExitStarted && !isFinishing && selectedCode == null) {
+                adapter.hintCode = hintCode
+            }
+        }
+    }
+
     /**
      * Confirm button state for the current selection.
      *
@@ -182,6 +200,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
             return
         }
 
+        tapHintJob?.cancel()
         userHasSelected = true
         selectedCode = language.code
         adapter.selectedCode = language.code
@@ -310,6 +329,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         if (languageExitStarted) return
         val code = selectedCode ?: return
         languageExitStarted = true
+        tapHintJob?.cancel()
         cancelSecondNativeSwap()
         OnboardingSdk.persistLanguage(code)
 
@@ -415,6 +435,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     override fun onDestroy() {
         languageExitStarted = true
+        tapHintJob?.cancel()
         clearSecondNativeWait()
         // Dismissed before super: a modal still attached to a finishing Activity leaks its window,
         // and dismissing also hands back the native it was holding.

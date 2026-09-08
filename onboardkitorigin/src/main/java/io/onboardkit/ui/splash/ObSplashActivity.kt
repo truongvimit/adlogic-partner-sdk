@@ -1,7 +1,6 @@
 package io.onboardkit.ui.splash
 
 import android.Manifest
-import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -9,7 +8,6 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
-import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -25,37 +23,36 @@ import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.StartOptions
-import io.onboardkit.ui.splash.SplashAttempt.InterResult
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.showInterstitial
-import io.onboardkit.ads.tracked
 import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
+import io.onboardkit.ads.tracked
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.SkipReason
-import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.analytics.AnalyticsEvent
-import io.onboardkit.core.net.ObNetwork
 import io.onboardkit.core.events.OnboardingEvent
+import io.onboardkit.core.net.ObNetwork
 import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.StartDecision
 import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
-import kotlinx.coroutines.CompletableDeferred
+import io.onboardkit.ui.splash.SplashAttempt.InterResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
@@ -75,7 +72,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private val attempt by lazy {
         ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[SplashAttempt::class.java]
     }
-    private var progressAnimator: ObjectAnimator? = null
     private var noInternetDialog: ObNoInternetDialog? = null
     private val windowFocused = MutableStateFlow(false)
 
@@ -326,7 +322,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
         attempt.adsRequested = true
         // The minimum begins once requests are allowed, overlapping our notification prompt.
         attempt.adPhaseStartedAtMs = SystemClock.elapsedRealtime()
-        progressAnimator?.start()
         requestSplashBanner()
         requestSplashInterstitial()
     }
@@ -599,16 +594,14 @@ open class ObSplashActivity : BaseOnboardActivity() {
             }
         }
         findViewById<ProgressBar?>(R.id.ob_splash_progress)?.let { bar ->
-            progressAnimator = ObjectAnimator.ofInt(bar, "progress", 0, 100).apply {
-                duration = cfg.splash.minDisplayTimeMs.coerceAtLeast(1_000)
-                interpolator = LinearInterpolator()
-            }
+            // Loading is visible throughout network/consent/ad waits, whose duration is unknown.
+            // The view owns its looping animation and starts/stops it with visibility, including
+            // after recreation. Apply this to host layouts as well as the default splash.
+            bar.isIndeterminate = true
         }
     }
 
     override fun onDestroy() {
-        progressAnimator?.cancel()
-        progressAnimator = null
         // The consent timeout holds this screen's completion callback for its whole window; the
         // flow it guards died with the screen.
         ConsentCenter.detach(this)
