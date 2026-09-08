@@ -234,7 +234,8 @@ For a later language change, call `OnboardingSdk.openLanguagePicker(activity, La
 
 ## Fullscreen Skip and automatic interstitial
 
-Fullscreen steps (OB3) default to showing Skip after **1 second** and advancing after
+Fullscreen steps (OB3) default to showing the close (X) button after **1 second** and advancing
+after
 **3 seconds from page selection**, including time after the device Home button is pressed.
 No fill still skips the page immediately. Returning to the app does not restart the timer.
 The deadline lives for the page visit; force-stop/process death is not a background timer.
@@ -253,13 +254,14 @@ steps(
     ),
 )
 ads = AdsConfig(
-    fullScreenSkipStyle = FullScreenSkipStyle.TEXT, // shared default for OB3 and OB5
+    fullScreenSkipStyle = FullScreenSkipStyle.CLOSE_ICON, // shared default for OB3 and OB5
     afterOnboardingInterstitial = InterstitialAdUnit("YOUR_AD_UNIT"),
     afterOnboardingInterstitialEnabled = false,
 )
 ```
 
-`skipButtonStyle = null` inherits `AdsConfig.fullScreenSkipStyle`. Both appearances use the
+`skipButtonStyle = null` inherits `AdsConfig.fullScreenSkipStyle`, which defaults to `CLOSE_ICON`.
+Set `TEXT` to display the word “Skip” instead. Both appearances use the
 same timer and click action. `autoNextEnabled = false` restores manual completion.
 The existing `ob_skip_button_delay_sec` remote key overrides the local Skip delay when
 nonnegative; its new default `-1` inherits the page setting. An existing remote value (for

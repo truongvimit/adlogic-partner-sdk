@@ -6,7 +6,6 @@ import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
-import io.onboardkit.config.FullScreenSkipStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
@@ -16,6 +15,7 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
+import io.onboardkit.config.FullScreenSkipStyle
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.FinishReason
@@ -23,7 +23,9 @@ import io.onboardkit.core.StepHost
 import io.onboardkit.core.StepId
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito
@@ -105,8 +107,9 @@ class AdStepTimingTest {
         main.idleFor(2500, MILLISECONDS)
         assertEquals(listOf("auto_next"), controller.get().exits)
     }
-    @Test fun `close icon unlocks then tap wins over the auto timer`() {
-        launch(AdFullScreenStepDefinition(StepId.OB3, skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON))
+    @Test
+    fun `default close icon unlocks then tap wins over the auto timer`() {
+        launch()
         val skip = fragment.requireView().findViewById<TextView>(R.id.ob_skip_button)
         assertEquals("", skip.text.toString())
         assertNotNull(skip.compoundDrawables[0])
@@ -120,7 +123,12 @@ class AdStepTimingTest {
     }
 
     @Test fun `manual mode honors the local skip delay and never auto advances`() {
-        launch(AdFullScreenStepDefinition(StepId.OB3, skipButtonDelaySec = 2, autoNextEnabled = false))
+        launch(
+            AdFullScreenStepDefinition(
+                StepId.OB3, skipButtonDelaySec = 2,
+                autoNextEnabled = false, skipButtonStyle = FullScreenSkipStyle.TEXT
+            )
+        )
         val skip = fragment.requireView().findViewById<TextView>(R.id.ob_skip_button)
         assertEquals(controller.get().getString(R.string.ob_skip), skip.text.toString())
         main.idleFor(1000, MILLISECONDS)

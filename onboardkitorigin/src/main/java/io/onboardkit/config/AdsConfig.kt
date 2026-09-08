@@ -162,7 +162,7 @@ data class AdsConfig(
     /** False disables both preload and presentation by the onboarding flow. */
     val afterOnboardingInterstitialEnabled: Boolean = true,
     /** Shared Skip/X appearance for OB3 and standalone OB5. */
-    val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.TEXT,
+    val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.CLOSE_ICON,
 ) {
 
     /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */
