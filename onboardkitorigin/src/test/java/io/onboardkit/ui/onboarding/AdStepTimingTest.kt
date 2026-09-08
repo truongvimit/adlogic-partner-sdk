@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ApplicationProvider
@@ -110,14 +111,16 @@ class AdStepTimingTest {
     @Test
     fun `default close icon unlocks then tap wins over the auto timer`() {
         launch()
-        val skip = fragment.requireView().findViewById<TextView>(R.id.ob_skip_button)
-        assertEquals("", skip.text.toString())
-        assertNotNull(skip.compoundDrawables[0])
-        assertEquals(controller.get().getString(R.string.ob_skip), skip.contentDescription)
+        val skip = fragment.requireView().findViewById<View>(R.id.ob_skip_button)
+        val close = fragment.requireView().findViewById<ImageButton>(R.id.ob_skip_close)
+        assertNotNull(close.drawable)
+        assertEquals(controller.get().getString(R.string.ob_skip), close.contentDescription)
+        assertEquals(View.GONE, fragment.requireView().findViewById<View>(R.id.ob_skip_text).visibility)
         main.idleFor(1000, MILLISECONDS)
         assertEquals(View.VISIBLE, skip.visibility)
-        skip.performClick()
-        skip.performClick()
+        assertTrue(close.isShown)
+        close.performClick()
+        close.performClick()
         main.idleFor(3000, MILLISECONDS)
         assertEquals(listOf("skip"), controller.get().exits)
     }
@@ -129,14 +132,19 @@ class AdStepTimingTest {
                 autoNextEnabled = false, skipButtonStyle = FullScreenSkipStyle.TEXT
             )
         )
-        val skip = fragment.requireView().findViewById<TextView>(R.id.ob_skip_button)
-        assertEquals(controller.get().getString(R.string.ob_skip), skip.text.toString())
+        val skip = fragment.requireView().findViewById<View>(R.id.ob_skip_button)
+        val text = fragment.requireView().findViewById<TextView>(R.id.ob_skip_text)
+        assertEquals(controller.get().getString(R.string.ob_skip), text.text.toString())
+        assertEquals(View.GONE, fragment.requireView().findViewById<View>(R.id.ob_skip_close).visibility)
         main.idleFor(1000, MILLISECONDS)
         assertEquals(View.GONE, skip.visibility)
         main.idleFor(1000, MILLISECONDS)
         assertEquals(View.VISIBLE, skip.visibility)
         main.idleFor(10000, MILLISECONDS)
         assertTrue(controller.get().exits.isEmpty())
+        assertTrue(text.isShown)
+        text.performClick()
+        assertEquals(listOf("skip"), controller.get().exits)
     }
 
     @Test fun `leaving a page cancels its timer and a new visit starts a fresh one`() {

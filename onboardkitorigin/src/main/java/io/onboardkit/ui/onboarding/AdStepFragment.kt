@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Full-screen native step (OB3). No app content — the ad IS the page. Guarantees an exit:
@@ -141,7 +142,7 @@ class AdStepFragment : LazyStepFragment() {
             ?: definition.skipButtonDelaySec.toLong().coerceAtLeast(0)
         skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(delaySec * 1_000)
+            delay((delaySec * 1_000).milliseconds)
             b.obSkipButton.visibility = View.VISIBLE
         }
     }
@@ -153,7 +154,7 @@ class AdStepFragment : LazyStepFragment() {
         val durationMs = definition.autoNextDelayMs.coerceAtLeast(0)
         autoNextDeadlineMs = SystemClock.elapsedRealtime() + durationMs
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(durationMs)
+            delay(durationMs.milliseconds)
             completeStep(StepExit.AUTO_NEXT)
         }
     }

@@ -1,6 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Converted from design-assets/ob3-close.svg, Figma node 14:44699. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12Z" />
+    android:width="12dp"
+    android:height="12dp"
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <path
+        android:fillColor="@color/ob_white"
+        android:pathData="M7.09938 6.00982L11.7719 1.33712C12.076 1.03318 12.076 0.54175 11.7719 0.23781C11.468 -0.0661302 10.9766 -0.0661302 10.6726 0.23781L5.99993 4.91051L1.32737 0.23781C1.02329 -0.0661302 0.532002 -0.0661302 0.228062 0.23781C-0.0760207 0.54175 -0.0760207 1.03318 0.228062 1.33712L4.90062 6.00982L0.228062 10.6825C-0.0760207 10.9865 -0.0760207 11.4779 0.228062 11.7818C0.379533 11.9335 0.578696 12.0096 0.777716 12.0096C0.976736 12.0096 1.17576 11.9335 1.32737 11.7818L5.99993 7.10913L10.6726 11.7818C10.8243 11.9335 11.0233 12.0096 11.2223 12.0096C11.4213 12.0096 11.6203 11.9335 11.7719 11.7818C12.076 11.4779 12.076 10.9865 11.7719 10.6825L7.09938 6.00982Z" />
 </vector>

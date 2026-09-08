@@ -13,7 +13,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
 ```groovy
-def sdkVersion = '5.2.0'
+def sdkVersion = '5.2.1'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

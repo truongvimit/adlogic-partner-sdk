@@ -12,7 +12,7 @@ Firebase Analytics के लिए `suite-firebase` जोड़ें; यह 
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.0'
+def sdkVersion = '5.2.1'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

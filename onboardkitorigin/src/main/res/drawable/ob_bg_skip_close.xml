@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="6dp">
+    <ripple android:color="#33FFFFFF">
+        <item>
+            <shape android:shape="oval">
+                <solid android:color="@color/ob_skip_close_bg" />
+            </shape>
+        </item>
+        <item android:id="@android:id/mask">
+            <shape android:shape="oval">
+                <solid android:color="@color/ob_white" />
+            </shape>
+        </item>
+    </ripple>
+</inset>

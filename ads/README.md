@@ -12,7 +12,7 @@ adapters are bundled; [build.gradle](build.gradle) lists versions and dependenci
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.2.0'
+def sdkVersion = '5.2.1'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
