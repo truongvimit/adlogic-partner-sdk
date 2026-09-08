@@ -33,7 +33,7 @@ import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.banner_home
 import com.itg.template.ads.banner_home_fixed
 import com.itg.template.ads.inter_onboarding
-import com.itg.template.ads.open_resume
+import com.itg.template.ads.app_resume
 import com.itg.template.ads.native_welcome
 import com.itg.template.ads.inter_welcome
 import com.itg.template.ads.native_home
@@ -274,7 +274,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         mBinding.btnOpenAdminDialog.click { openAdminAdToggleDialog() }
 
         // ── Resume / Welcome Flow Mode Buttons ──
-        mBinding.btnModeOpenResume.click { setResumeMode(ResumeAdsEntryMode.OPEN_RESUME) }
+        mBinding.btnModeAppResume.click { setResumeMode(ResumeAdsEntryMode.APP_RESUME) }
         mBinding.btnModeWelcome.click { setResumeMode(ResumeAdsEntryMode.WELCOME) }
         mBinding.btnModeNone.click { setResumeMode(ResumeAdsEntryMode.NONE) }
 
@@ -439,12 +439,12 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             val instance = AdRemoteConfig.getInstance()
             val updatedAds = instance.ads.toMutableMap()
 
-            val openResumeConfig = updatedAds["open_resume"]
+            val appResumeConfig = updatedAds["app_resume"]
             val nativeWelcomeConfig = updatedAds["native_welcome"]
             val interWelcomeConfig = updatedAds["inter_welcome"]
 
-            if (openResumeConfig != null) {
-                updatedAds["open_resume"] = openResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.OPEN_RESUME))
+            if (appResumeConfig != null) {
+                updatedAds["app_resume"] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
             }
             if (nativeWelcomeConfig != null) {
                 updatedAds["native_welcome"] = nativeWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
@@ -456,9 +456,9 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             AdRemoteConfig.update(instance.copy(ads = updatedAds))
 
             // Dynamically enable/disable AppOpenManager based on mode
-            if (mode == ResumeAdsEntryMode.OPEN_RESUME) {
-                val openResumeId = AdRemoteConfig.open_resume.id
-                AppOpenManager.getInstance().setAppResumeAdId(openResumeId)
+            if (mode == ResumeAdsEntryMode.APP_RESUME) {
+                val appResumeId = AdRemoteConfig.app_resume.id
+                AppOpenManager.getInstance().setAppResumeAdId(appResumeId)
                 AppOpenManager.getInstance().enableAppResume()
             } else {
                 AppOpenManager.getInstance().disableAppResume()
@@ -477,16 +477,16 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         val mode = ResumeAdsEntryRule.currentMode()
         mBinding.tvCurrentResumeMode.text = "Current Mode: $mode"
 
-        val openResumeEnable = AdRemoteConfig.open_resume.isEnable
+        val appResumeEnable = AdRemoteConfig.app_resume.isEnable
         val nativeWelcomeEnable = AdRemoteConfig.native_welcome.isEnable
         val interWelcomeEnable = AdRemoteConfig.inter_welcome.isEnable
 
-        mBinding.tvResumeConfigsDetail.text = "open_resume: ${if (openResumeEnable) "ON" else "OFF"} • native_welcome: ${if (nativeWelcomeEnable) "ON" else "OFF"} • inter_welcome: ${if (interWelcomeEnable) "ON" else "OFF"}"
+        mBinding.tvResumeConfigsDetail.text = "app_resume: ${if (appResumeEnable) "ON" else "OFF"} • native_welcome: ${if (nativeWelcomeEnable) "ON" else "OFF"} • inter_welcome: ${if (interWelcomeEnable) "ON" else "OFF"}"
 
         // Highlight selected button
-        val allButtons = listOf(mBinding.btnModeOpenResume, mBinding.btnModeWelcome, mBinding.btnModeNone)
+        val allButtons = listOf(mBinding.btnModeAppResume, mBinding.btnModeWelcome, mBinding.btnModeNone)
         val selected = when (mode) {
-            ResumeAdsEntryMode.OPEN_RESUME -> mBinding.btnModeOpenResume
+            ResumeAdsEntryMode.APP_RESUME -> mBinding.btnModeAppResume
             ResumeAdsEntryMode.WELCOME -> mBinding.btnModeWelcome
             ResumeAdsEntryMode.NONE -> mBinding.btnModeNone
         }

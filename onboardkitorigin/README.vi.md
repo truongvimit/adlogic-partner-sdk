@@ -13,7 +13,7 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-def sdkVersion = '5.2.2'
+def sdkVersion = '5.2.3'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

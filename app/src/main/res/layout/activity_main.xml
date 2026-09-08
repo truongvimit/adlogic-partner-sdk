@@ -829,12 +829,12 @@
                         android:orientation="vertical">
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_mode_open_resume"
+                            android:id="@+id/btn_mode_app_resume"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                             android:layout_width="match_parent"
                             android:layout_height="40dp"
                             android:fontFamily="@font/medium"
-                            android:text="① AppOpenAd (OPEN_RESUME)"
+                            android:text="① AppOpenAd (APP_RESUME)"
                             android:textAllCaps="false"
                             android:textColor="@color/textPrimary"
                             android:textSize="11sp"
@@ -901,7 +901,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:fontFamily="@font/regular"
-                            android:text="open_resume: OFF • native_welcome: OFF • inter_welcome: OFF"
+                            android:text="app_resume: OFF • native_welcome: OFF • inter_welcome: OFF"
                             android:textColor="@color/color_text_secondary"
                             android:textSize="11sp" />
                     </LinearLayout>

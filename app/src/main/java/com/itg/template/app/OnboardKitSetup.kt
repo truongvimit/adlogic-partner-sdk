@@ -126,7 +126,7 @@ object OnboardKitSetup {
                 contentStepTemplate = ads.templateOf("native_ob1", default = NativeTemplate.CTA_TOP),
                 // Declared so app-resume is judged by the same gate as every other placement;
                 // leaving it null makes the gate report no_ad_unit instead of staying silent.
-                appResume = ads?.unit("open_resume").toInterstitial(),
+                appResume = ads?.unit("app_resume").toInterstitial(),
             )
         }
             .onSuccess { config ->
