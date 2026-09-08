@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import io.onboardkit.core.ObLog
 import com.ads.module.admob.AppOpenManager
+import io.onboardkit.ui.base.BaseOnboardActivity
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -48,6 +49,9 @@ class ObAppResume internal constructor(
      */
     fun sharedSkipReason(context: Context): AdSkipReason? {
         if (isSuppressed) return AdSkipReason.SUPPRESSED_BY_FLOW
+        if ((context as? BaseOnboardActivity)?.resumeBlockedByScreen == true) {
+            return AdSkipReason.SUPPRESSED_BY_FLOW
+        }
         val returnReason = AppOpenManager.getInstance().resumeReturnSkipReason
         if (returnReason == AdSkipReason.RETURNING_FROM_AD_CLICK.key) return AdSkipReason.RETURNING_FROM_AD_CLICK
         return guard.resumeEntrySkipReason(context)
@@ -62,8 +66,8 @@ class ObAppResume internal constructor(
     /**
      * Keeps app-resume off [activityClass] for as long as it exists.
      *
-     * The SDK calls this for its own screens, so a partner never has to list them by hand —
-     * forgetting one is invisible until an ad lands on the language picker in production.
+     * The SDK calls this for splash and dedicated ad screens. Language and onboarding content
+     * use the ordinary background/ready-only resume path, with transient screen checks above.
      */
     fun excludeScreen(activityClass: Class<out Activity>) {
         provider?.suppressAppResume(activityClass)

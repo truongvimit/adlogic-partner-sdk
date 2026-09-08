@@ -91,6 +91,7 @@ internal class ObConfirmLanguageDialog(
 ) {
 
     private var dialog: Dialog? = null
+    val isShowing: Boolean get() = dialog?.isShowing == true
 
     /** Guards the dismiss funnel: exactly one of accept/dismiss is reported per raise. */
     private var settled = false

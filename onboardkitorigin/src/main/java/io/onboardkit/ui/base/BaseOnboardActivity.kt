@@ -28,6 +28,13 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
 
     protected val sdk: OnboardingSdk get() = OnboardingSdk
 
+    /** Splash and dedicated ad screens stay excluded; content screens opt into genuine returns. */
+    protected open val excludeFromAppResume: Boolean = true
+
+    /** Queried again at return/show time; never registers a transient page as a permanent exclusion. */
+    internal open val resumeBlockedByScreen: Boolean
+        get() = excludeFromAppResume || restartedByGuard
+
     /** True when the activity is being relaunched after process death with no config. */
     protected var restartedByGuard: Boolean = false
         private set
@@ -50,10 +57,7 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
         lockPortraitIfConfigured()
         configureEdgeToEdge()
         applySystemBars()
-        // Every SDK screen is off-limits to app-resume ads: they all either show a full-screen ad
-        // of their own or are a step the user is mid-way through. Doing it here means a partner
-        // cannot forget one — the audited app listed them by hand in Application.onCreate.
-        OnboardingSdk.appResume().excludeScreen(javaClass)
+        if (excludeFromAppResume) OnboardingSdk.appResume().excludeScreen(javaClass)
         // Before onCreateSafe: a screen that navigates away from its own onCreate would otherwise
         // never be counted as viewed.
         screenName?.let { Tracker.screen(it, javaClass.simpleName) }

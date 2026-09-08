@@ -46,6 +46,15 @@ import kotlinx.coroutines.launch
 class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     override val screenName: String = "ob_onboarding"
+    override val excludeFromAppResume: Boolean = false
+
+    internal override val resumeBlockedByScreen: Boolean
+        get() {
+            if (super.resumeBlockedByScreen || !::binding.isInitialized || exitResolved ||
+                binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return true
+            val id = enabledStepIds.getOrNull(binding.obStepPager.currentItem) ?: return true
+            return sdk.configOrNull()?.stepById(id)?.type != StepType.CONTENT
+        }
 
     private lateinit var binding: ObActivityOnboardingBinding
     private lateinit var pagerAdapter: StepPagerAdapter

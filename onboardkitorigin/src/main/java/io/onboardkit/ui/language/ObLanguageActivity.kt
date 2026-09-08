@@ -44,6 +44,10 @@ import kotlinx.coroutines.launch
 class ObLanguageActivity : BaseOnboardActivity() {
 
     override val screenName: String = "ob_language"
+    override val excludeFromAppResume: Boolean = false
+
+    internal override val resumeBlockedByScreen: Boolean
+        get() = super.resumeBlockedByScreen || languageExitStarted || confirmDialog?.isShowing == true
 
     private lateinit var binding: ObActivityLanguageBinding
     private lateinit var adapter: LanguageAdapter

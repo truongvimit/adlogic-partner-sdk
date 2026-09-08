@@ -166,3 +166,27 @@ builds passed. No production SDK changes were required in this verification roun
 
 See [the device release report](qa/device-release-2026-09-08.md) for observations, build hashes,
 manual-step rerun history and the boundary between physical-device and deterministic coverage.
+
+
+## Early-flow resume eligibility — follow-up
+
+Resume is also permitted during LFO/language and onboarding content, before flow completion.
+The shared resume policy checks current screen state at background/return and before presentation:
+fullscreen pager pages, pager transitions, completed exits and the language confirmation modal
+remain blocked. Splash, dedicated fullscreen and Question Activities keep their exclusions.
+The existing delayed-background-only loading contract is unchanged, and no auto-next callback
+triggers resume. Explicit partner Activity exclusions remain authoritative.
+
+Validation: **449/449 unit tests** passed (ads 223, onboarding 217, trackkit 8, app 1),
+both release AAR builds passed, and the new device fixture passed separately on actual language
+and onboarding content Activities on Pixel 5 / Android 14. Each device case verified zero startup
+requests, physical Home, a background fill, automatic return/show, one real UI close and no refill.
+The language run also exercised real no-fill recovery before successful presentation.
+
+The eight new eligibility tests include fullscreen/content switching, language confirmation modal,
+partner exclusions, splash/dedicated fullscreen exclusions, nested suppression and consent. The
+fixture uses a separate Robolectric sandbox because SDK install retains the first process provider;
+initial full runs exposed cross-fixture contamination, fixed without changing SDK install behavior.
+Final full-build log: `/tmp/early-resume-final-verified.log`; device evidence:
+`/tmp/early-resume-language.{txt,log}` and `/tmp/early-resume-onboarding.{txt,log}`.
+Standards and Spec reviews passed after retaining Question's original exclusion. No tag created.

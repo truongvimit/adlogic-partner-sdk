@@ -272,3 +272,24 @@ auto-dismiss defaults and its foreground countdown behavior.
 for `inter_after_ob3`, even when the unit is configured and the remote switch is true.
 The remote key `ob_ads_inter_after_ob3_enabled` is still supported; both switches must be
 true. The partner can show an interstitial at its own point using the Ads module directly.
+
+
+## Resume during language and onboarding content
+
+Language selection (including first open) and onboarding content pages now permit the configured
+resume entry on a genuine background/foreground return, before onboarding completes. They use the
+same SDK background delay, ready-only presentation, retained cache and bounded recovery as in-app
+content; entering the flow or advancing a page does not request or show a resume ad.
+
+Splash, dedicated fullscreen and Question screens remain excluded. The pager dynamically blocks
+resume while an ad-only page is current, while scrolling, or after exit begins. The language
+confirmation dialog and language exit also block resume. Finishing the fullscreen auto-next timer
+does not queue a resume show: the next genuine eligible return is evaluated normally.
+
+Existing partner Activity exclusions, consent, premium, placement flags, ad-click suppression and
+active fullscreen ownership still apply. Partners that explicitly exclude LFO/onboarding classes
+need to remove their own exclusions to use this expansion; SDK opt-in never clears partner policy.
+
+The fullscreen three-second timer is not a policy guarantee. Google advises against displaying
+app-open over other ads or immediately adjacent to them; see the
+[AdMob implementation guidance](https://support.google.com/admob/answer/9341964?hl=en-GB).
