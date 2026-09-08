@@ -83,6 +83,14 @@ class NativeOwnershipRealGmaDeviceTest {
                     eventually("Rotation must rebind the same consumed native") { f.binds.size > before }
                     assertSame(first, f.binds.last())
                     assertEquals("Rotation must not load another ad", 1, f.fills.size)
+                    onMain {
+                        repeat(5) { host.helper.show() }
+                        assertTrue("The bound ad remains usable while its replacement loads", first.isUsable)
+                        assertTrue(NativeAdManager.isLoading(f.key))
+                    }
+                    eventually("An explicit show after bind must replace the consumed native", 40_000) { f.binds.last() !== first }
+                    assertEquals("Repeated show while loading joins that one new request", 2, f.fills.size)
+                    assertFalse(onMain { first.isUsable })
                 } else {
                     eventually("Visible refresh loads and swaps a second real ad: ${f.errors}", 40_000) { f.fills.size >= 2 && f.binds.last() !== first }
                     assertFalse(onMain { first.isUsable })
