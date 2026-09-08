@@ -73,7 +73,7 @@ class AppOpenEarlyFlowDeviceTest {
             manager.init(app, "")
             manager.setAppResumeAdId(UNIT)
             manager.enableAppResume()
-            AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":500}""")
+            AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":500}}""")
             manager.setEnableScreenContentCallback(true)
             manager.setFullScreenContentCallback(object : FullScreenContentCallback() {
                 override fun onAdShowedFullScreenContent() { shown.incrementAndGet() }

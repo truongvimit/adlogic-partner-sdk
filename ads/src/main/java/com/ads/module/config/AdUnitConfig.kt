@@ -26,6 +26,8 @@ data class AdUnitConfig(
      * exactly the behaviour of [id] alone, so a payload that declares no tiers keeps working.
      */
     val ids: List<String> = emptyList(),
+    /** Extra wait after process ON_STOP before loading the app-resume placement. */
+    val appResumeLoadDelayMs: Long = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
 ) {
 
     /**

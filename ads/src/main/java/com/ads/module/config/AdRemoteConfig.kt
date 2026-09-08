@@ -13,9 +13,11 @@ import java.io.InputStream
  */
 data class AdRemoteConfig @JvmOverloads constructor(
     val ads: Map<String, AdUnitConfig> = emptyMap(),
-    /** Extra wait after process ON_STOP; captured once for each background stay. */
-    val appResumeLoadDelayMs: Long = DEFAULT_APP_RESUME_LOAD_DELAY_MS,
 ) {
+
+    /** Extra wait configured inside open_resume; captured once for each background stay. */
+    val appResumeLoadDelayMs: Long
+        get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
     companion object {
         private const val TAG = "AdRemoteConfig"

@@ -84,7 +84,7 @@ class AppOpenResumeLoadStateTest {
     fun `previous request failure cannot shorten the next background remote delay`() {
         startRequest()
         manager.onResume()
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":60000}}""")
         manager.onStop()
         main.idleFor(1_000, TimeUnit.MILLISECONDS)
         fail(0)
@@ -98,7 +98,7 @@ class AppOpenResumeLoadStateTest {
     fun `previous request timeout cannot shorten the next background remote delay`() {
         startRequest()
         manager.onResume()
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":60000}}""")
         manager.onStop()
         main.idleFor(59_999, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
@@ -156,7 +156,7 @@ class AppOpenResumeLoadStateTest {
         startRequest()
         manager.onResume()
         main.idleFor(31_000, TimeUnit.MILLISECONDS)
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":60000}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":60000}}""")
         manager.onStop()
         ConsentCenter.setHostConsent(true, true)
         fill(0)
@@ -167,12 +167,12 @@ class AppOpenResumeLoadStateTest {
 
     @Test
     fun `remote delay is applied to next background without moving the current schedule`() {
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":500}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":500}}""")
         enable()
         manager.onStop()
         main.idleFor(499, TimeUnit.MILLISECONDS)
         assertTrue(requests.isEmpty())
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":5000}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":5000}}""")
         main.idleFor(1, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
         manager.onResume()
@@ -483,11 +483,12 @@ class AppOpenResumeLoadStateTest {
     @Test
     fun `remote zero starts on process stop and invalid values fall back without dropping placements`() {
         for (value in listOf("-1", "null", "true", "{}", "[]", "1.5", "\"oops\"", "9223372036854775808", "86400001")) {
-            val config = AdRemoteConfig.fromJson("""{"app_resume_load_delay_ms":$value,"open_resume":{"id":"qa","isEnable":true}}""")!!
+            val config = AdRemoteConfig.fromJson("""{"open_resume":{"app_resume_load_delay_ms":$value,"id":"qa","isEnable":true}}""")!!
             assertEquals(2000L, config.appResumeLoadDelayMs)
+            assertEquals(2000L, config.unit("open_resume").appResumeLoadDelayMs)
             assertEquals(listOf("qa"), config.tiersFor("open_resume"))
         }
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":0}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":0}}""")
         enable()
         manager.onStop()
         main.idle()
@@ -495,8 +496,27 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
+    fun `resume delay belongs to its placement and ignores the former root field`() {
+        val config = AdRemoteConfig.fromJson(
+            """{
+                "app_resume_load_delay_ms": 60000,
+                "open_resume": {"id":"qa","isEnable":true,"app_resume_load_delay_ms":"500"},
+                "banner_all": {"id":"banner","isEnable":true,"reloadIntervalSeconds":30,"app_resume_load_delay_ms":9000}
+            }""",
+        )!!
+        assertEquals(500L, config.unit("open_resume").appResumeLoadDelayMs)
+        assertEquals(500L, config.appResumeLoadDelayMs)
+        assertEquals(30, config.unit("banner_all").reloadIntervalSeconds)
+        assertEquals(listOf("qa"), config.tiersFor("open_resume"))
+        assertEquals(2000L, AdRemoteConfig.fromJson("""{"app_resume_load_delay_ms":60000}""")!!.appResumeLoadDelayMs)
+        assertEquals(2000L, AdRemoteConfig.fromJson("""{"open_resume":{"id":"qa","isEnable":true}}""")!!.appResumeLoadDelayMs)
+        val updated = config.copy(ads = config.ads + ("open_resume" to config.unit("open_resume").copy(appResumeLoadDelayMs = 7000)))
+        assertEquals(7000L, updated.appResumeLoadDelayMs)
+    }
+
+    @Test
     fun `long remote delay still permits the first load and its bounded retry window`() {
-        AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":"300000"}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":"300000"}}""")
         enable()
         manager.onStop()
         main.idleFor(299_999, TimeUnit.MILLISECONDS)

@@ -91,7 +91,7 @@ class AppOpenResumeLoadDeviceTest {
             manager.init(app, "")
             Tracker.install(app)
             Tracker.addSink(sink)
-            AdRemoteConfig.initializeFromJson("""{"app_resume_load_delay_ms":$delayMs}""")
+            AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":$delayMs}}""")
             manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
             manager.releaseCachedAds()
             // Explicit host authorization for GMA initialization; selected phase is applied below.

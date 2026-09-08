@@ -31,23 +31,17 @@ internal object AdConfigParser {
                 return AdRemoteConfig()
             }
             val units = LinkedHashMap<String, AdUnitConfig>()
-            var resumeDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
             reader.beginObject()
             while (reader.hasNext()) {
                 val key = reader.nextName()
-                if (key == "app_resume_load_delay_ms") {
-                    resumeDelayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(
-                        safeNextString(reader, "").toLongOrNull()
-                            ?: AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
-                    )
-                } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
                     units[key] = readAdUnit(reader)
                 } else {
                     reader.skipValue()
                 }
             }
             reader.endObject()
-            return AdRemoteConfig(units, resumeDelayMs)
+            return AdRemoteConfig(units)
         }
     }
 
@@ -56,6 +50,7 @@ internal object AdConfigParser {
         var isEnable = false
         var enableUaCheck = false
         var reloadIntervalSeconds: Int? = null
+        var appResumeLoadDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
         var colorCTA = DEFAULT_COLOR_CTA
         var heightCTA = DEFAULT_HEIGHT_CTA
         var positionCTA: String? = null
@@ -69,6 +64,11 @@ internal object AdConfigParser {
                 "isEnable" -> isEnable = safeNextBoolean(reader)
                 "enable_ua_check" -> enableUaCheck = safeNextBoolean(reader)
                 "reloadIntervalSeconds" -> reloadIntervalSeconds = safeNextInt(reader)
+                "app_resume_load_delay_ms" -> appResumeLoadDelayMs =
+                    AdRemoteConfig.normalizeAppResumeLoadDelayMs(
+                        safeNextString(reader, "").toLongOrNull()
+                            ?: AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
+                    )
                 "colorCTA" -> colorCTA = safeNextString(reader, DEFAULT_COLOR_CTA)
                 "heightCTA" -> heightCTA = readHeight(reader)
                 // Absent or null: the placement has no opinion, and `components` orders the
@@ -96,6 +96,7 @@ internal object AdConfigParser {
             positionCTA = positionCTA,
             components = components,
             ids = ids,
+            appResumeLoadDelayMs = appResumeLoadDelayMs,
         )
     }
 
