@@ -42,7 +42,6 @@ import com.ads.module.tracking.AdTracking;
 import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.SharePreferenceUtils;
 import com.facebook.shimmer.ShimmerFrameLayout;
-import com.ads.module.consent.ConsentCenter;
 import com.google.ads.mediation.admob.AdMobAdapter;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdListener;
@@ -254,26 +253,7 @@ public class Admob {
 
     @SuppressLint("VisibleForTests")
     public AdRequest getAdRequest() {
-        AdRequest.Builder builder = new AdRequest.Builder();
-        applyPersonalization(builder);
-        return builder.build();
-    }
-
-    /**
-     * Marks the request non-personalized when the user refused personalization.
-     * <p>
-     * The request still goes out — AdMob serves that user contextual (non-personalized) ads, and
-     * declining to request at all would forfeit the fill for no compliance gain. Google also
-     * enforces this server-side from the TC string; sending the extra states the same intent
-     * explicitly rather than relying on that alone.
-     */
-    static void applyPersonalization(AdRequest.Builder builder) {
-        if (ConsentCenter.canPersonalize()) {
-            return;
-        }
-        Bundle extras = new Bundle();
-        extras.putString("npa", "1");
-        builder.addNetworkExtrasBundle(AdMobAdapter.class, extras);
+        return new AdRequest.Builder().build();
     }
 
     public boolean interstitialSplashLoaded() {
@@ -1508,11 +1488,6 @@ public class Admob {
         AdRequest.Builder builder = new AdRequest.Builder();
         Bundle admobExtras = new Bundle();
         admobExtras.putString("collapsible", gravity);
-        // One bundle per adapter class — a second addNetworkExtrasBundle would replace this one,
-        // so the personalization flag goes in here rather than through applyPersonalization.
-        if (!ConsentCenter.canPersonalize()) {
-            admobExtras.putString("npa", "1");
-        }
         builder.addNetworkExtrasBundle(AdMobAdapter.class, admobExtras);
         return builder.build();
     }

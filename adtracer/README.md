@@ -10,7 +10,7 @@ Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add JitPack using the [root setup
 
 ```groovy
 // app/build.gradle — same published tag as the other SDK modules.
-def sdkVersion = '5.2.5'
+def sdkVersion = '5.2.6'
 dependencies {
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }

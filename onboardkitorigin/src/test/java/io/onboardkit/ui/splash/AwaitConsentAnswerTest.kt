@@ -139,6 +139,36 @@ class AwaitConsentAnswerTest {
     }
 
     @Test
+    fun `first launch timeout fallback releases splash with the newly opened request gate`() = runTest {
+        var mayRequestAds = false
+        var resolving = true
+        val answered = CompletableDeferred<Boolean>()
+        val step = async {
+            awaitConsentAnswer(
+                roundTripMs = 20_000,
+                isResolving = { resolving },
+                canRequestAds = { mayRequestAds },
+                request = { answered.await() },
+            )
+        }
+
+        // The splash timer can precede ConsentCenter's timer slightly; it must keep waiting.
+        advanceTimeBy(20_000)
+        runCurrent()
+        assertFalse(step.isCompleted)
+        assertFalse(mayRequestAds)
+
+        advanceTimeBy(50)
+        mayRequestAds = true
+        resolving = false
+        answered.complete(true)
+        runCurrent()
+
+        assertTrue(step.await())
+        assertEquals(20_050, testScheduler.currentTime)
+    }
+
+    @Test
     fun `an unanswered form waits until the owning scope cancels its request`() = runTest {
         var requestCancelled = false
         val step = async {

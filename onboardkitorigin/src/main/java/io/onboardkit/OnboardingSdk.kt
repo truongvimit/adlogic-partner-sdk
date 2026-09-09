@@ -179,7 +179,8 @@ object OnboardingSdk {
      * Host policy for onboarding ads, AND-ed with the current consent authority.
      *
      * `false` disables requests even if consent is later granted. `true` removes only this host
-     * restriction; it cannot grant consent. Defaults to `true` so UMP controls the standard flow.
+     * restriction; it cannot grant consent. Defaults to `true` so ConsentCenter controls requests,
+     * including its fallback after UMP errors or network timeouts.
      *
      * A host that runs another CMP must publish its result with [ConsentCenter.setHostConsent]
      * before completing `ObSplashActivity.onConsentRequired`. Step completion is not authorization.

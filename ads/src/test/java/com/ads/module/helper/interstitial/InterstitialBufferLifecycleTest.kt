@@ -15,6 +15,7 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.consent.ConsentOptions
 import com.ads.module.consent.PlatformUmpClient
 import com.ads.module.consent.UmpClient
 import com.google.android.ump.ConsentInformation
@@ -92,6 +93,7 @@ class InterstitialBufferLifecycleTest {
         InterstitialAdManager.releaseAll()
         AdRemoteConfig.reset()
         ConsentCenter.reset(host)
+        ConsentCenter.configure(ConsentOptions())
         ConsentCenter.umpClient = PlatformUmpClient
         ShadowDialog.getLatestDialog()?.dismiss()
         if (::controller.isInitialized && host.lifecycle.currentState != Lifecycle.State.DESTROYED) {
@@ -128,12 +130,27 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `unknown choice without UMP authority never requests either placement`() {
+    fun `unknown choice without UMP authority does not request while update is pending`() {
         umpAuthorityWithUnknownChoice(allowed = false)
         arm()
         advance(60_000)
         assertFalse(ConsentCenter.canRequestAds())
         assertEquals(0, requests.size)
+    }
+
+    @Test
+    fun `UMP timeout allows both placements without granting personalization`() {
+        umpAuthorityWithUnknownChoice(allowed = false, timeoutMs = 20_000)
+        arm()
+        advance(19_999)
+        assertFalse(ConsentCenter.canRequestAds())
+        assertEquals(0, requests.size)
+        advance(1)
+        assertTrue(ConsentCenter.canRequestAds())
+        assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
+        assertFalse(ConsentCenter.canPersonalize())
+        advance(10_000)
+        assertEquals(2, requests.size)
     }
 
     @Test
@@ -160,7 +177,10 @@ class InterstitialBufferLifecycleTest {
     }
 
     /** Replay the Pixel 5's UMP outputs through ConsentCenter, without overriding its state. */
-    private fun umpAuthorityWithUnknownChoice(allowed: Boolean): ConsentInformation {
+    private fun umpAuthorityWithUnknownChoice(
+        allowed: Boolean,
+        timeoutMs: Long = 120_000,
+    ): ConsentInformation {
         val information = mock(ConsentInformation::class.java)
         doReturn(ConsentInformation.ConsentStatus.UNKNOWN).`when`(information).getConsentStatus()
         doReturn(allowed).`when`(information).canRequestAds()
@@ -173,6 +193,9 @@ class InterstitialBufferLifecycleTest {
             ) = error("No form expected for this replay")
         }
         ConsentCenter.reset(host)
+        // Keep authority-only scenarios pending beyond the buffer interval. Timeout behavior
+        // has its own scenario using the SDK's normal deadline.
+        ConsentCenter.configure(ConsentOptions(timeoutMs = timeoutMs, debug = false))
         ConsentCenter.request(host) { }
         return information
     }

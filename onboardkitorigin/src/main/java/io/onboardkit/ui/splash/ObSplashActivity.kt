@@ -176,8 +176,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
         val cfg = sdk.requireConfig()
         awaitNetworkGate(cfg)
-        // The remote fetch requests no ads, so it may overlap consent; ad requests may not. A
-        // request that goes out before the user has answered is a policy violation, not a race.
+        // Remote config may overlap UMP. Splash ad loading waits for the consent step to settle,
+        // including ConsentCenter's fallback after a UMP failure or network timeout.
         coroutineScope {
             val consent = async {
                 attempt.consentAnswered ?: awaitConsentAnswer(
@@ -627,11 +627,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Whether ads may now be requested. Runs the SDK's own UMP flow by default, so an app that
-     * wants standard GDPR behaviour writes nothing.
+     * Whether ads may now be requested. Runs the SDK's UMP flow and failure fallback by default.
      *
-     * Returns current request authorization, independently of personalization. UMP can permit
-     * non-personalized requests after a refusal; a timeout cannot grant permission by itself.
+     * Returns SDK request eligibility independently of personalization. A UMP failure or network
+     * timeout permits ad requests through ConsentCenter without changing the stored consent.
      *
      * For a custom CMP, publish both decisions through [ConsentCenter.setHostConsent] before
      * returning. Returning `true` alone does not grant permission. The default UMP flow needs no

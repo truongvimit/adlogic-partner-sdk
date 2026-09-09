@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-This guide targets **5.2.5**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+This guide targets **5.2.6**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.5'
+def sdkVersion = '5.2.6'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

@@ -40,13 +40,13 @@ dependencyResolutionManagement {
 }
 ```
 
-Hướng dẫn này dành cho phiên bản **5.2.5**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
+Hướng dẫn này dành cho phiên bản **5.2.6**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
 
 Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.5'
+def sdkVersion = '5.2.6'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
@@ -65,6 +65,8 @@ Khai báo class `Application` của app trong manifest. Trong `Application.onCre
 | 4 · Onboarding | Install/configure `OnboardingSdk` rồi đăng ký Activity kế thừa `ObSplashActivity`. | [OnboardKit](onboardkitorigin/README.vi.md) |
 
 Khi dùng OnboardKit, splash tự chạy consent và bước notification. Nếu chỉ dùng ads, gọi `ConsentCenter.request(...)` từ Activity trước khi request quảng cáo. Firebase cần `google-services.json` của app và Google Services plugin; xem [hướng dẫn Firebase](suite-firebase/README.md).
+
+AdLogic cho phép thử request ads khi UMP báo lỗi hoặc hết timeout mạng (mặc định 20 giây), kể cả lần mở đầu tiên. Đây là fallback riêng của SDK: không ghi consent thành đồng ý, không thêm `npa`, và không bảo đảm có fill. Form đang hiển thị vẫn chờ user trả lời. Fallback không lưu qua lần chạy process mới; mỗi lần gọi lại UMP bắt đầu một lượt chờ mới, trừ khi UMP đã cho phép request. Host chủ động tắt ads vẫn được ưu tiên. Hành vi này khác hướng dẫn Google dùng riêng `ConsentInformation.canRequestAds()` làm gate.
 
 ## Giá trị app cần cung cấp
 

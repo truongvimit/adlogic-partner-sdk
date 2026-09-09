@@ -3,6 +3,7 @@ package com.ads.module.consent
 import android.app.Activity
 import android.content.Context
 import android.os.Looper
+import com.ads.module.helper.AdGate
 import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
@@ -12,6 +13,7 @@ import java.time.Duration
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -96,18 +98,29 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `first update error stays unknown and allows a retry`() {
+    fun `first update error opens the request gate without granting consent and allows a retry`() {
         val completions = mutableListOf<Boolean>()
-        ConsentCenter.request(activity, onCompleted = completions::add)
+        val answers = mutableListOf<Boolean>()
+        val prefs = activity.getSharedPreferences(activity.packageName + "_preferences", Context.MODE_PRIVATE)
+        val before = prefs.all.toMap()
+        ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
+        assertFalse(ConsentCenter.canRequestAds())
 
         vendor.information.updates.single().fail()
+        vendor.information.updates.single().fail()
 
-        assertEquals(listOf(false), completions)
+        assertEquals(listOf(true), completions)
         assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
         assertFalse(ConsentCenter.canPersonalize())
-        assertFalse(ConsentCenter.canRequestAds())
+        assertTrue(ConsentCenter.canRequestAds())
+        assertFalse(vendor.information.canRequestAds())
+        assertTrue(answers.isEmpty())
+        assertEquals(before, prefs.all)
+        assertNull(AdGate.skipReason(activity, enabled = true, checkNetwork = false))
+        assertEquals("disabled_config", AdGate.skipReason(activity, enabled = false, checkNetwork = false)?.key)
         assertFalse(ConsentCenter.isResolving())
         ConsentCenter.request(activity) {}
+        assertFalse(ConsentCenter.canRequestAds())
         assertEquals(2, vendor.information.updates.size)
     }
 
@@ -127,22 +140,31 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `first timeout stays unauthorized and stale callback cannot settle retry on same activity`() {
+    fun `first timeout opens the gate at twenty seconds and stale callback cannot settle retry`() {
         val first = mutableListOf<Boolean>()
         val second = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onCompleted = first::add)
         val staleUpdate = vendor.information.updates.single()
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
-        assertEquals(listOf(false), first)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(19_999))
+        assertFalse(ConsentCenter.canRequestAds())
+        assertTrue(first.isEmpty())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(listOf(true), first)
+        assertTrue(ConsentCenter.canRequestAds())
+        assertFalse(vendor.information.canRequestAds())
+        assertNull(AdGate.skipReason(activity, enabled = true, checkNetwork = false))
         assertFalse(ConsentCenter.canPersonalize())
         assertFalse(ConsentCenter.hasAnswered())
         ConsentCenter.request(activity, onCompleted = second::add)
+        assertFalse(ConsentCenter.canRequestAds())
         vendor.information.required()
         staleUpdate.succeed()
+        staleUpdate.fail()
 
         assertTrue(vendor.forms.isEmpty())
         assertTrue(second.isEmpty())
+        assertFalse(ConsentCenter.canRequestAds())
         assertTrue(ConsentCenter.isResolving())
         vendor.information.updates.last().succeed()
         assertEquals(1, vendor.forms.size)
@@ -162,14 +184,40 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `no available form with required consent remains unauthorized and retryable`() {
+    fun `form loading shares the twenty second budget and late loaded form is ignored`() {
+        val completions = mutableListOf<Boolean>()
+        val answers = mutableListOf<Boolean>()
+        ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(12))
+        vendor.information.required()
+        vendor.information.updates.single().succeed()
+        val pendingForm = vendor.forms.single()
+        assertFalse(ConsentCenter.canRequestAds())
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(8))
+
+        assertEquals(listOf(true), completions)
+        assertTrue(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.hasAnswered())
+        val lateForm = FakeConsentForm()
+        pendingForm.onLoaded(lateForm)
+        pendingForm.onError(FormError(2, "late failure"))
+        assertFalse(lateForm.shown)
+        assertEquals(listOf(true), completions)
+        assertTrue(answers.isEmpty())
+    }
+
+    @Test
+    fun `no available form opens the request fallback while consent stays unknown`() {
         val completions = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onCompleted = completions::add)
         vendor.information.required(formAvailable = false)
 
         vendor.information.updates.single().succeed()
 
-        assertEquals(listOf(false), completions)
+        assertEquals(listOf(true), completions)
+        assertTrue(ConsentCenter.canRequestAds())
         assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
         assertTrue(vendor.forms.isEmpty())
         ConsentCenter.request(activity) {}
@@ -177,14 +225,14 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `unknown successful update cannot manufacture consent`() {
+    fun `unknown successful update opens the failure fallback without manufacturing consent`() {
         val completions = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onCompleted = completions::add)
 
         vendor.information.updates.single().succeed()
 
-        assertEquals(listOf(false), completions)
-        assertFalse(ConsentCenter.canRequestAds())
+        assertEquals(listOf(true), completions)
+        assertTrue(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.hasAnswered())
         assertFalse(ConsentCenter.canPersonalize())
         ConsentCenter.request(activity) {}
@@ -278,7 +326,7 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `form load error does not answer the form and remains retryable`() {
+    fun `form load error opens request fallback without answering the form`() {
         val completions = mutableListOf<Boolean>()
         val answers = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
@@ -287,7 +335,8 @@ class ConsentCenterTest {
 
         vendor.forms.single().onError(FormError(2, "offline"))
 
-        assertEquals(listOf(false), completions)
+        assertEquals(listOf(true), completions)
+        assertTrue(ConsentCenter.canRequestAds())
         assertTrue(answers.isEmpty())
         assertFalse(ConsentCenter.isResolving())
         ConsentCenter.request(activity) {}
@@ -295,7 +344,7 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `form dismissal error never records an answer`() {
+    fun `form dismissal error opens request fallback without recording an answer`() {
         val completions = mutableListOf<Boolean>()
         val answers = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
@@ -303,7 +352,8 @@ class ConsentCenterTest {
 
         form.dismiss(FormError(2, "window gone"))
 
-        assertEquals(listOf(false), completions)
+        assertEquals(listOf(true), completions)
+        assertTrue(ConsentCenter.canRequestAds())
         assertTrue(answers.isEmpty())
         assertFalse(ConsentCenter.hasAnswered())
         assertFalse(ConsentCenter.isFormShowing())
@@ -455,13 +505,71 @@ class ConsentCenterTest {
         vendor.information.onUpdate = { vendor.information.notRequired() }
         ConsentCenter.request(activity, onCompleted = completions::add)
 
-        vendor.information.required(formAvailable = false)
+        vendor.information.required()
         vendor.information.updates.single().succeed()
 
-        assertEquals(listOf(false), completions)
+        assertTrue(completions.isEmpty())
+        assertEquals(1, vendor.forms.size)
         assertFalse(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.canPersonalize())
         assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
+    }
+
+    @Test
+    fun `host denial overrides a failure fallback and clearing host does not revive it`() {
+        ConsentCenter.request(activity) {}
+        val update = vendor.information.updates.single()
+        update.fail()
+        assertTrue(ConsentCenter.canRequestAds())
+
+        ConsentCenter.setHostConsent(canRequestAds = false, personalized = false)
+        update.fail()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
+        assertFalse(ConsentCenter.canRequestAds())
+        ConsentCenter.clearHostConsent()
+        assertFalse(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.hasAnswered())
+    }
+
+    @Test
+    fun `reset clears failure fallback and a fresh launch waits for its own error`() {
+        ConsentCenter.request(activity) {}
+        vendor.information.updates.single().fail()
+        assertTrue(ConsentCenter.canRequestAds())
+
+        ConsentCenter.reset(activity)
+        assertFalse(ConsentCenter.canRequestAds())
+        ConsentCenter.request(activity) {}
+        assertFalse(ConsentCenter.canRequestAds())
+        vendor.information.updates.last().fail()
+        assertTrue(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.canPersonalize())
+        assertFalse(ConsentCenter.hasAnswered())
+    }
+
+    @Test
+    fun `detaching a pending owner cannot open fallback via its timer or late error`() {
+        val completions = mutableListOf<Boolean>()
+        ConsentCenter.request(activity, onCompleted = completions::add)
+        val update = vendor.information.updates.single()
+
+        ConsentCenter.detach(activity)
+        update.fail()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(20))
+
+        assertFalse(ConsentCenter.canRequestAds())
+        assertTrue(completions.isEmpty())
+    }
+
+    @Test
+    fun `error delivered to a finishing activity does not open fallback`() {
+        ConsentCenter.request(activity) {}
+        activity.finish()
+
+        vendor.information.updates.single().fail()
+
+        assertFalse(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.hasAnswered())
     }
 
     private fun showRequiredForm(): FakeConsentForm {

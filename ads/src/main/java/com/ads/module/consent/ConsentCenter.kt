@@ -25,8 +25,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Coordinates UMP consent for this process. UMP's [canRequestAds] authority is separate from
- * [canPersonalize]: an answered form can allow an ad request without allowing personalization.
+ * Coordinates UMP consent and the SDK's ad-request gate for this process. A failed UMP flow can
+ * open [canRequestAds] through the SDK fallback without granting consent or [canPersonalize].
  * Hosts using their own consent provider must publish its decision with [setHostConsent].
  */
 object ConsentCenter {
@@ -60,6 +60,7 @@ object ConsentCenter {
     private val requested = AtomicBoolean(false)
     @Volatile private var consentInformation: ConsentInformation? = null
     @Volatile private var umpUpdateRequested = false
+    @Volatile private var umpFailureFallback = false
     @Volatile private var applicationContext: Context? = null
     @Volatile private var options = ConsentOptions()
     @Volatile private var hostConsent: HostConsent? = null
@@ -102,12 +103,12 @@ object ConsentCenter {
     fun options(): ConsentOptions = options
 
     /**
-     * Reads UMP's request authorization, or an explicit host-managed decision. A timeout, network
-     * error, remembered SDK preference, and personalization choice cannot grant this permission.
+     * Reads the SDK's request eligibility: explicit host policy, UMP authorization, or a completed
+     * UMP failure/timeout. The fallback is local to this process and is not a consent grant.
      */
     @JvmStatic
     fun canRequestAds(): Boolean = hostConsent?.allowed
-        ?: (umpUpdateRequested && consentInformation?.canRequestAds() == true)
+        ?: (umpFailureFallback || (umpUpdateRequested && consentInformation?.canRequestAds() == true))
 
     /**
      * Selects host-managed consent. Call on the main thread after the host consent provider has
@@ -117,6 +118,7 @@ object ConsentCenter {
     fun setHostConsent(canRequestAds: Boolean, personalized: Boolean) {
         val onCompleted = pendingFlow?.onCompleted
         invalidateFlow()
+        umpFailureFallback = false
         hostConsent = HostConsent(canRequestAds, canRequestAds && personalized)
         publishAuthority()
         onCompleted?.invoke(canRequestAds)
@@ -135,9 +137,10 @@ object ConsentCenter {
      * Refreshes UMP once per successful process flow. Errors and unanswered attempts remain
      * retryable. UMP is consulted on every new process, even when old SDK preferences exist.
      *
-     * [onCompleted] reports current request eligibility, not personalization. Previous UMP consent
-     * can permit requests while the update is pending. The network deadline does not time out a
-     * form the user is reading.
+     * [onCompleted] reports SDK request eligibility, not personalization. A terminal failure or
+     * network timeout opens the fallback even on the first launch. Each new attempt clears that
+     * fallback; previous UMP consent can still permit requests while an update is pending. The
+     * network deadline does not time out a form the user is reading.
      *
      * Call on the main thread. Completion runs at most once, except that [detach] abandons a dead
      * screen's callback. [onFormAnswered] runs only after a form shown by this call was answered.
@@ -163,6 +166,7 @@ object ConsentCenter {
             onCompleted(canRequestAds())
             return
         }
+        umpFailureFallback = false
         val flow = PendingFlow(++generation, activity, screen, onFormAnswered, onCompleted)
         pendingFlow = flow
         Tracker.track(TrackkitEvents.ConsentEvents.Requested())
@@ -206,7 +210,7 @@ object ConsentCenter {
     @JvmStatic
     fun hasAnswered(): Boolean = _state.value != ConsentState.UNKNOWN
 
-    /** Current UMP or explicit host authorization. Old SDK preference flags are intentionally ignored. */
+    /** Current SDK request eligibility, including the in-process UMP failure fallback. */
     @JvmStatic
     @Suppress("UNUSED_PARAMETER")
     fun isAlreadyResolved(context: Context): Boolean = canRequestAds()
@@ -323,6 +327,11 @@ object ConsentCenter {
         val onFormAnswered = flow.onFormAnswered
         flow.clearCallbacks()
         pendingFlow = null
+        val owner = flow.activity.get()
+        umpFailureFallback = error && owner != null && !owner.isFinishing && !owner.isDestroyed
+        if (umpFailureFallback) {
+            Log.w(TAG, "UMP flow failed; allowing ad requests without changing stored consent")
+        }
         publishAuthority()
         val allowed = canRequestAds()
         val personalized = canPersonalize()
@@ -374,6 +383,7 @@ object ConsentCenter {
         (consentInformation ?: umpClient.consentInformation(context.applicationContext)).reset()
         consentInformation = null
         umpUpdateRequested = false
+        umpFailureFallback = false
         hostConsent = null
         applicationContext = null
         context.applicationContext.getSharedPreferences(PREF_CONSENT, Context.MODE_PRIVATE).edit()

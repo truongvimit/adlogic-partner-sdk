@@ -12,9 +12,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * can still cancel the wait. ConsentCenter owns network timeouts and vendor error callbacks.
  *
  * On the default path [roundTripMs] rarely decides anything, because the consent flow arms a round
- * trip deadline of its own. A timeout finishes the step without inventing authorization. A host
- * using its own consent provider must publish that provider's authorization before completing
- * [request]; its wait is still bounded by [roundTripMs] when no SDK-owned flow is resolving.
+ * trip deadline of its own and opens its request fallback when that deadline expires. This wait
+ * only reads the resulting gate. A host using its own consent provider must publish that provider's
+ * decision before completing [request]; its wait is still bounded by [roundTripMs] when no SDK-owned
+ * flow is resolving.
  *
  * [canRequestAds] is the final authority, including after a successful callback. Permission can
  * be revoked between callback delivery and this coroutine resuming. Finishing the step and being

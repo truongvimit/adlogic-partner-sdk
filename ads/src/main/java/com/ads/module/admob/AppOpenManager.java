@@ -767,10 +767,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Creates and returns ad request.
      */
     private AdRequest getAdRequest() {
-        AdRequest.Builder builder = new AdRequest.Builder();
-        // Same rule as every other format: a refusal means non-personalized, not no request.
-        Admob.applyPersonalization(builder);
-        return builder.build();
+        return new AdRequest.Builder().build();
     }
 
     private boolean wasLoadTimeLessThanNHoursAgo(long loadTime, long numHours) {

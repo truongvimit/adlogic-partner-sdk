@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
+import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
@@ -106,11 +107,11 @@ class BannerRefreshOwnershipTest {
     }
 
     @Test
-    fun `initial collapsible request uses documented extras and preserves nonpersonalized request`() {
+    fun `initial collapsible request preserves collapsible extras without forcing npa`() {
         createHelper(canReload = true).requestAds(BannerAdParam.Request)
         val first = requests.single()
         assertEquals("bottom", extras(first).getString("collapsible"))
-        assertEquals("1", extras(first).getString("npa"))
+        assertFalse(extras(first).containsKey("npa"))
         assertFalse(extras(first).containsKey("collapsible_request_id"))
         assertFalse(extras(first).containsKey("_noRefresh"))
     }
@@ -220,7 +221,7 @@ class BannerRefreshOwnershipTest {
     }
 
     private fun extras(request: BannerVendorRequest) =
-        checkNotNull(request.request.getNetworkExtrasBundle(AdMobAdapter::class.java))
+        request.request.getNetworkExtrasBundle(AdMobAdapter::class.java) ?: Bundle.EMPTY
 
     // Dispatch callbacks after loadAd returns: current collapsible listener ordering is outside
     // this change, so a synchronous fake delivery would test an unrelated timing defect.
