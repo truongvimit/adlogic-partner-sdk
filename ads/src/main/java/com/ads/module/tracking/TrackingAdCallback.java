@@ -186,6 +186,21 @@ public class TrackingAdCallback extends AdCallback {
     }
 
     @Override
+    public void onInterstitialDisplayed() {
+        if (delegate != null) delegate.onInterstitialDisplayed();
+    }
+
+    @Override
+    public boolean usesActualInterstitialImpression() {
+        return delegate != null && delegate.usesActualInterstitialImpression();
+    }
+
+    @Override
+    public boolean canShowInterstitial() {
+        return delegate == null || delegate.canShowInterstitial();
+    }
+
+    @Override
     public void onAdFailedToShow(@Nullable AdError adError) {
         reportShowFailed(adError);
         if (delegate != null) delegate.onAdFailedToShow(adError);

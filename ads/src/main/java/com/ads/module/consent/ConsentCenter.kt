@@ -354,6 +354,7 @@ object ConsentCenter {
             else -> ConsentState.UNKNOWN
         }
         _state.value = choice
+        com.ads.module.helper.interstitial.InterstitialAutoBuffer.onGateChanged()
         Tracker.setConsent(analytics = true, ads = choice == ConsentState.GRANTED)
         MmpTracking.setConsent(true, choice == ConsentState.GRANTED)
     }

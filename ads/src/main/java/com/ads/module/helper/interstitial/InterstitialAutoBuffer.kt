@@ -11,7 +11,6 @@ import com.ads.module.helper.AdSkipReason
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
-import io.trackkit.ConsentState
 import java.util.concurrent.ConcurrentHashMap
 
 /** What the partner wants auto-buffered, and how hard. */
@@ -39,14 +38,44 @@ class InterstitialBufferOptions @JvmOverloads constructor(
 
     /** Legacy constructor parameter retained for source/binary compatibility. */
     val maxBackoffMs: Long = 5 * 60_000L,
-)
+) {
+    var independentIntervalPlacements: Set<String> = emptySet()
+        private set
+    var tapThresholds: Map<String, Int> = emptyMap()
+        private set
+    var intervalMsByPlacement: Map<String, Long> = emptyMap()
+        private set
+    var isPlacementEnabled: (String) -> Boolean = { true }
+        private set
+
+    /** Opt-in overload keeps the original Java and Kotlin default constructors intact. */
+    @JvmOverloads
+    constructor(
+        independentIntervalPlacements: Set<String>,
+        placements: List<String> = emptyList(),
+        tapThresholds: Map<String, Int> = emptyMap(),
+        intervalMsByPlacement: Map<String, Long> = emptyMap(),
+        isPlacementEnabled: (String) -> Boolean = { true },
+        tickMs: Long = 0L,
+        idleTickMs: Long = 30_000L,
+        minTickMs: Long = 5_000L,
+        backoffMs: Long = 30_000L,
+        maxBackoffMs: Long = 5 * 60_000L,
+    ) : this(placements, tickMs, idleTickMs, minTickMs, backoffMs, maxBackoffMs) {
+        this.independentIntervalPlacements = independentIntervalPlacements.toSet()
+        this.tapThresholds = tapThresholds.mapValues { it.value.coerceAtLeast(0) }
+        this.intervalMsByPlacement = intervalMsByPlacement.mapValues { it.value.coerceAtLeast(0L) }
+        this.isPlacementEnabled = isPlacementEnabled
+    }
+}
 
 /**
  * Keeps one interstitial buffered per placement, paced by the frequency clock instead of by
  * whichever screen the user happens to open.
  *
  * Configure the group and call [start] from the first content screen after onboarding,
- * including notification/restored entries. The first preload waits the remote interval.
+ * including notification/restored entries. Opted-in placements preload 2s before their interval;
+ * legacy placements wait the full remote interval.
  * Process background pauses scheduling but preserves both the gate and cached ads.
  * All placement-based loads share the manager's cache and in-flight request guard.
  *
@@ -62,6 +91,10 @@ object InterstitialAutoBuffer {
 
     private val handler = Handler(Looper.getMainLooper())
     private val reserved = ConcurrentHashMap.newKeySet<String>()
+    private val gateObservers = linkedSetOf<() -> Unit>()
+
+    internal fun observeGates(observer: () -> Unit) { gateObservers += observer }
+    internal fun removeGateObserver(observer: () -> Unit) { gateObservers -= observer }
 
     private var observing = false
     private val lifecycleObserver = LifecycleEventObserver { _, event ->
@@ -94,8 +127,8 @@ object InterstitialAutoBuffer {
         options = newOptions
         if (running) {
             InterstitialFrequency.activate()
-            schedule(1L)
         }
+        onGateChanged()
         Log.i(TAG, "configured for ${newOptions.placements}")
     }
 
@@ -116,13 +149,14 @@ object InterstitialAutoBuffer {
             observing = true
             ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
         }
-        schedule(InterstitialFrequency.groupRemainingMs().coerceAtLeast(1L))
+        schedule(nextPreloadDelay().coerceAtLeast(1L))
     }
 
     @JvmStatic
     fun stop() {
         running = false
         handler.removeCallbacks(tick)
+        onGateChanged()
     }
 
     @JvmStatic
@@ -159,20 +193,39 @@ object InterstitialAutoBuffer {
         if (!owns(placement)) return null
         if (!running) return AdSkipReason.DISABLED_CONFIG
         if (!isForeground()) return AdSkipReason.SHOW_IN_BACKGROUND
-        if (InterstitialFrequency.isPresenting() || InterstitialFrequency.groupRemainingMs() > 0L) {
+        if (InterstitialFrequency.isPresenting() ||
+            InterstitialFrequency.preloadRemainingMs(placement) > 0L ||
+            !InterstitialFrequency.hasTaps(placement)
+        ) {
             return AdSkipReason.CAPPED_BY_MODULE
         }
-        return null
+        return appContext?.let { placementSkipReason(it, placement) }
+    }
+
+    /** Current partner/config authority shared by preload, waiting and presentation. */
+    internal fun placementSkipReason(context: Context, placement: String): AdSkipReason? {
+        if (!InterstitialFrequency.isIndependent(placement)) return null
+        val config = AdRemoteConfig.getInstance()
+        return AdGate.skipReason(context,
+            enabled = options.isPlacementEnabled(placement) && config.tiersFor(placement).isNotEmpty(),
+            passesUaGate = AdGate.passesUaGate(config.unit(placement).enableUaCheck),
+            checkNetwork = false,
+        )
     }
 
     /** Recalculate wakeup when a show closes, a waterfall fails, or remote interval changes. */
     @JvmStatic
     fun onGateChanged() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            handler.post { onGateChanged() }
+            return
+        }
+        gateObservers.toList().forEach { runCatching { it() } }
         if (!running) return
-        val remaining = InterstitialFrequency.groupRemainingMs()
-        // A shorter remote interval can make the group eligible immediately. Do not add a
-        // fresh polling period. Zero-interval retries still use the idle polling pace.
-        schedule(if (remaining == 0L && InterstitialFrequency.intervalSeconds() > 0) 1L else remaining)
+        val remaining = nextPreloadDelay()
+        schedule(if (remaining == 0L &&
+            (options.independentIntervalPlacements.isNotEmpty() || InterstitialFrequency.intervalSeconds() > 0)
+        ) 1L else remaining)
     }
 
     private fun isForeground(): Boolean =
@@ -198,7 +251,7 @@ object InterstitialAutoBuffer {
         // A request is already walking the waterfall; a second would be the duplicate this exists
         // to avoid. The fill it produces becomes the buffer.
         isLoading -> Decision.SKIP_IN_FLIGHT
-        // Nothing may be shown for another `intervalRemainingMs`, so nothing needs buying yet.
+        // This receives the preload gate (the show gate is deliberately later for opt-in).
         // Explicit loads follow the same gate; a ready ad never needs replacing.
         intervalRemainingMs > 0L -> Decision.SKIP_INTERVAL
         nowMs < backoffUntilMs -> Decision.SKIP_BACKOFF
@@ -229,7 +282,9 @@ object InterstitialAutoBuffer {
     private fun topUp(): Long {
         val context = appContext ?: return options.minTickMs
         if (!running || !isForeground()) return 0L
-        if (ConsentCenter.state.value == ConsentState.UNKNOWN) return options.minTickMs
+        // Personalization may remain UNKNOWN while UMP already authorizes ad requests.
+        // Use the same request authority as AdGate, not the analytics consent state.
+        if (!ConsentCenter.canRequestAds()) return options.minTickMs
         if (AdGate.isPurchased(context)) return 0L
         options.placements.distinct().forEach { placement ->
             if (loadSkipReason(placement) != null) return@forEach
@@ -239,7 +294,7 @@ object InterstitialAutoBuffer {
                     nowMs = 0L,
                     isReady = InterstitialAdManager.isReady(placement),
                     isLoading = InterstitialAdManager.isLoading(placement),
-                    intervalRemainingMs = InterstitialFrequency.groupRemainingMs(),
+                    intervalRemainingMs = InterstitialFrequency.preloadRemainingMs(placement),
                     backoffUntilMs = 0L,
                     hasIds = ids.isNotEmpty(),
                     isReserved = placement in reserved,
@@ -257,15 +312,22 @@ object InterstitialAutoBuffer {
                 )),
             )
         }
-        return InterstitialFrequency.groupRemainingMs()
+        return nextPreloadDelay()
     }
+
+    private fun nextPreloadDelay(): Long = options.placements.asSequence()
+        .filter { owns(it) && InterstitialFrequency.hasTaps(it) }
+        .filter { placement -> appContext?.let { placementSkipReason(it, placement) } == null }
+        .filter { !InterstitialAdManager.isReady(it) && !InterstitialAdManager.isLoading(it) }
+        .map { InterstitialFrequency.preloadRemainingMs(it) }
+        .minOrNull() ?: 0L
 
     /** [delayMs] `0` uses the configured period; anything else is an exact wake-up. */
     private fun schedule(delayMs: Long = 0L) {
         handler.removeCallbacks(tick)
         if (!running || !isForeground()) return
         val period =
-            if (delayMs > 0L) delayMs.coerceAtLeast(MIN_WAKE_MS)
+            if (delayMs > 0L) delayMs.coerceAtLeast(if (options.independentIntervalPlacements.isEmpty()) MIN_WAKE_MS else 1L)
             else periodMs(
                 options.tickMs,
                 InterstitialFrequency.intervalSeconds(),

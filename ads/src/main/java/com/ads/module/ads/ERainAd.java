@@ -503,6 +503,21 @@ public class ERainAd {
             }
 
             @Override
+            public void onInterstitialDisplayed() {
+                callback.onInterstitialDisplayed();
+            }
+
+            @Override
+            public boolean usesActualInterstitialImpression() {
+                return callback.usesActualInterstitialImpression();
+            }
+
+            @Override
+            public boolean canShowInterstitial() {
+                return callback.canShowInterstitial();
+            }
+
+            @Override
             public void onInterstitialShow() {
                 super.onInterstitialShow();
                 callback.onInterstitialShow();

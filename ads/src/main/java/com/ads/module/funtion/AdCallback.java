@@ -101,6 +101,20 @@ public class AdCallback {
 
     }
 
+    /** Vendor-confirmed display, distinct from the legacy pre-show navigation marker. */
+    public void onInterstitialDisplayed() {
+    }
+
+    /** New content policy measures impressions from the vendor impression callback. */
+    public boolean usesActualInterstitialImpression() {
+        return false;
+    }
+
+    /** Rechecked immediately before dispatch, after the cosmetic preparation delay. */
+    public boolean canShowInterstitial() {
+        return true;
+    }
+
     public void onAdSplashHigh1Ready() {
 
     }

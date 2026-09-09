@@ -11,6 +11,10 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
@@ -74,11 +78,12 @@ class LanguageNativeSwapDeviceTest {
                 language = LanguageConfig(
                     languages = listOf(ObLanguages.find("en-US")!!, ObLanguages.find("es")!!),
                     tapHintEnabled = false,
-                    confirmDialogOnReselectEnabled = false,
+                    confirmDialogOnReselectEnabled = true,
                 )
                 ads = AdsConfig(
                     languageNative = NativeAdUnit("host-first-native"),
                     languageDupNative = NativeAdUnit("host-second-native"),
+                    languageConfirmNative = NativeAdUnit("host-confirm-native"),
                     splashInterstitial = InterstitialAdUnit("host-exit-interstitial"),
                 )
             }.getOrThrow()).getOrThrow()
@@ -86,6 +91,33 @@ class LanguageNativeSwapDeviceTest {
             OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking { OnboardingSdk.reset() }
+    }
+
+    @Test
+    fun confirmNativeLoadsOnlyOnReselectAndReusesTheBoundAd() = withScreen { screen ->
+        assertEquals("LFO entry must not preload its optional popup", 0, provider.confirmRequests)
+        tapLanguage(screen, 0)
+        tapLanguage(screen, 1)
+        assertEquals("Selecting different languages must not preload the popup", 0, provider.confirmRequests)
+        tapLanguage(screen, 1)
+        assertEquals("Reselect opens the popup and starts its first request", 1, provider.confirmRequests)
+        screen.onActivity { provider.deliverConfirmFill() }
+        eventually("The popup binds its fill") { provider.confirmBinds == 1 }
+        onView(withId(R.id.ob_confirm_cancel)).inRoot(isDialog()).perform(click())
+        tapLanguage(screen, 1)
+        assertEquals("Reopening reuses the bound view instead of buying a replacement", 1, provider.confirmRequests)
+        assertEquals(1, provider.confirmBinds)
+        onView(withId(R.id.ob_confirm_cancel)).inRoot(isDialog()).perform(click())
+    }
+
+    @Test
+    fun ordinaryLanguageContinueNeverRequestsConfirmNative() = withScreen { screen ->
+        tapLanguage(screen, 0)
+        screen.onActivity { activity -> activity.findViewById<View>(R.id.ob_language_confirm).performClick() }
+        assertEquals(0, provider.confirmRequests)
+        screen.onActivity { provider.finishExitInterstitial() }
+        eventually("Normal exit completes without the rare popup") { Fixture.outcomes.size == 1 }
+        assertEquals(0, provider.confirmRequests)
     }
 
     @Test
@@ -225,6 +257,11 @@ class LanguageNativeSwapDeviceTest {
 private class DelayedHostNativeProvider : OnboardingAdProvider {
     var firstView: TextView? = null
     var secondView: TextView? = null
+    var confirmRequests = 0
+    var confirmBinds = 0
+    private var confirmReady = false
+    private var confirmLoading = false
+    private var confirmListener: AdEventListener? = null
     var firstReleases = 0
     var secondRequests = 0
     var secondBinds = 0
@@ -237,6 +274,11 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
     fun reset() {
         firstView = null
         secondView = null
+        confirmRequests = 0
+        confirmBinds = 0
+        confirmReady = false
+        confirmLoading = false
+        confirmListener = null
         firstReleases = 0
         secondRequests = 0
         secondBinds = 0
@@ -249,10 +291,16 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
 
     override fun isPremium(context: Context) = false
     override fun isNativeReady(placement: AdPlacement) =
-        placement == AdPlacement.Language1 || placement == AdPlacement.Language2 && secondReady
-    override fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.Language2 && secondLoading
+        placement == AdPlacement.Language1 || placement == AdPlacement.Language2 && secondReady ||
+            placement == AdPlacement.LanguageConfirm && confirmReady
+    override fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.Language2 && secondLoading ||
+        placement == AdPlacement.LanguageConfirm && confirmLoading
 
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
+        if (request.placement == AdPlacement.LanguageConfirm && !confirmLoading && !confirmReady) {
+            confirmLoading = true
+            confirmRequests++
+        }
         if (request.placement == AdPlacement.Language2 && !secondLoading && !secondReady) {
             secondLoading = true
             secondRequests++
@@ -264,6 +312,7 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
             lastSecondListener = listener
             secondListenerRegistrations++
         }
+        if (placement == AdPlacement.LanguageConfirm && listener != null) confirmListener = listener
         if (!isNativeReady(placement)) return false
         val view = TextView(activity).apply {
             text = if (placement == AdPlacement.Language1) "First native" else "Second native"
@@ -272,13 +321,22 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
         container.addView(view)
         container.visibility = View.VISIBLE
         if (placement == AdPlacement.Language1) firstView = view
-        else {
+        else if (placement == AdPlacement.LanguageConfirm) {
+            confirmReady = false
+            confirmBinds++
+        } else {
             secondView = view
             secondReady = false
             secondBinds++
         }
         listener?.onImpression()
         return true
+    }
+
+    fun deliverConfirmFill() {
+        confirmLoading = false
+        confirmReady = true
+        confirmListener?.onLoaded()
     }
 
     fun deliverSecondFill() {
@@ -294,6 +352,11 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
     }
 
     override fun releaseNative(placement: AdPlacement) {
+        if (placement == AdPlacement.LanguageConfirm) {
+            confirmReady = false
+            confirmLoading = false
+            confirmListener = null
+        }
         if (placement == AdPlacement.Language1) firstReleases++
         if (placement == AdPlacement.Language2) {
             secondLoading = false

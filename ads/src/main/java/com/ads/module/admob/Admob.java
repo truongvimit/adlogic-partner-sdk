@@ -898,7 +898,17 @@ public class Admob {
             public void onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent();
                 AppOpenManager.getInstance().setInterstitialShowing(true);
-                if (callback != null) callback.onAdImpression();
+                if (callback != null) {
+                    callback.onInterstitialDisplayed();
+                    if (!callback.usesActualInterstitialImpression()) callback.onAdImpression();
+                }
+            }
+
+            @Override
+            public void onAdImpression() {
+                if (callback != null && callback.usesActualInterstitialImpression()) {
+                    callback.onAdImpression();
+                }
             }
 
             @Override
@@ -992,6 +1002,11 @@ public class Admob {
 
         new Handler().postDelayed(() -> {
             if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
+                if (callback != null && !callback.canShowInterstitial()) {
+                    if (dialog != null) dialog.dismiss();
+                    notifyShowFailed(callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd);
+                    return;
+                }
                 if (openNextUnderAd && callback != null) {
                     // Same tick as show() below, deliberately: the next Activity has to be queued
                     // before the ad's, or it is stacked on top of it instead of underneath.

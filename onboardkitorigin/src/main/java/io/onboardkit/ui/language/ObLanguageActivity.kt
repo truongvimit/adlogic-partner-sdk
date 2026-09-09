@@ -214,10 +214,6 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.track(
             AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
         )
-        // From here the next tap on this row can raise the modal, so its native is warmed now
-        // rather than on entry — most users never re-tap, and that request would be wasted.
-        sdk.preload().onLanguageSelected(this)
-
         if (secondSlotRequested) return
 
         val config = sdk.requireConfig()

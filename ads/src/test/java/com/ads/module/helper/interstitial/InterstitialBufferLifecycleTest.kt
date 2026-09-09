@@ -15,6 +15,11 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.consent.PlatformUmpClient
+import com.ads.module.consent.UmpClient
+import com.google.android.ump.ConsentInformation
+import io.trackkit.ConsentState
+import org.mockito.Mockito.*
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -86,6 +91,8 @@ class InterstitialBufferLifecycleTest {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAdManager.releaseAll()
         AdRemoteConfig.reset()
+        ConsentCenter.reset(host)
+        ConsentCenter.umpClient = PlatformUmpClient
         ShadowDialog.getLatestDialog()?.dismiss()
         if (::controller.isInitialized && host.lifecycle.currentState != Lifecycle.State.DESTROYED) {
             if (host.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) controller.pause()
@@ -94,6 +101,80 @@ class InterstitialBufferLifecycleTest {
         }
         advance(800)
         requests.clear()
+    }
+
+    @Test
+    fun `UMP request authority loads both placements even when personalization is unknown`() {
+        val information = umpAuthorityWithUnknownChoice(allowed = true)
+        assertEquals(ConsentState.UNKNOWN, ConsentCenter.state.value)
+        assertTrue(ConsentCenter.canRequestAds())
+        assertFalse(ConsentCenter.canPersonalize())
+
+        arm()
+        advance(29_999)
+        assertEquals("Consent authorization must not bypass the interval", 0, requests.size)
+        advance(1)
+        assertEquals("Both enabled placements must reach GMA when UMP authorizes requests", 2, requests.size)
+        fill(0, ALL)
+        fill(1, BACK)
+        assertTrue(InterstitialAdManager.canShow(host, ALL))
+        assertTrue(InterstitialAdManager.canShow(host, BACK))
+
+        doReturn(false).`when`(information).canRequestAds()
+        val denied = Outcome()
+        InterstitialAdManager.show(host, ALL, denied)
+        assertEquals(listOf(AdSkipReason.CONSENT_NOT_GRANTED), denied.skipped)
+        assertEquals(1, denied.completed)
+    }
+
+    @Test
+    fun `unknown choice without UMP authority never requests either placement`() {
+        umpAuthorityWithUnknownChoice(allowed = false)
+        arm()
+        advance(60_000)
+        assertFalse(ConsentCenter.canRequestAds())
+        assertEquals(0, requests.size)
+    }
+
+    @Test
+    fun `remote disabling all tiers still prevents buffering with UMP authority`() {
+        umpAuthorityWithUnknownChoice(allowed = true)
+        AdRemoteConfig.initializeFromJson("""{
+            "inter_all": {"id":"buffer-all-unit", "isEnable":false},
+            "inter_all_high": {"id":"all-high", "isEnable":false},
+            "inter_back": {"id":"buffer-back-unit", "isEnable":false},
+            "inter_back_high": {"id":"back-high", "isEnable":false}
+        }""")
+        arm()
+        advance(30_000)
+        assertEquals("Disabled remote tiers must never reach GMA", 0, requests.size)
+        AdRemoteConfig.initializeFromJson("""{
+            "inter_all": {"id":"buffer-all-unit", "isEnable":true},
+            "inter_back": {"id":"buffer-back-unit", "isEnable":false}
+        }""")
+        InterstitialAutoBuffer.topUpNow()
+        main.idle()
+        assertEquals("Only the enabled placement resumes loading", 1, requests.size)
+        fill(0, ALL)
+        assertFalse(InterstitialAdManager.isReady(BACK))
+    }
+
+    /** Replay the Pixel 5's UMP outputs through ConsentCenter, without overriding its state. */
+    private fun umpAuthorityWithUnknownChoice(allowed: Boolean): ConsentInformation {
+        val information = mock(ConsentInformation::class.java)
+        doReturn(ConsentInformation.ConsentStatus.UNKNOWN).`when`(information).getConsentStatus()
+        doReturn(allowed).`when`(information).canRequestAds()
+        ConsentCenter.umpClient = object : UmpClient {
+            override fun consentInformation(context: Context) = information
+            override fun loadForm(
+                context: Context,
+                onLoaded: (com.google.android.ump.ConsentForm) -> Unit,
+                onError: (com.google.android.ump.FormError) -> Unit,
+            ) = error("No form expected for this replay")
+        }
+        ConsentCenter.reset(host)
+        ConsentCenter.request(host) { }
+        return information
     }
 
     @Test

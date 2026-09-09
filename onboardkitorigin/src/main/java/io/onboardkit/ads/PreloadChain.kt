@@ -83,17 +83,11 @@ class PreloadChain internal constructor(
     }
 
     /**
-     * A language is selected, so the next tap on that same row can raise the confirm modal.
-     *
-     * Requested on selection rather than on LFO entry: before the first tap the modal is
-     * unreachable, and warming it then would spend a request on most users who never re-tap.
+     * Compatibility hook for existing hosts. Selection does not request the confirm native:
+     * the rare re-selection gesture opens the dialog, which loads its ad on demand.
      */
-    fun onLanguageSelected(activity: Activity) {
-        val cfg = config() ?: return
-        if (!cfg.language.confirmDialogOnReselectEnabled) return
-        if (!flags().showLanguageConfirmDialog) return
-        preloadNative(activity, AdPlacement.LanguageConfirm)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun onLanguageSelected(activity: Activity) = Unit
 
     /** Pager entry, including resumed flows. Empty flows never call this. */
     fun onOnboardingShown(activity: Activity) {

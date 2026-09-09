@@ -138,6 +138,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             // Bind every id to its placement before anything can load: the paid-event bridge reads
             // the placement back by ad unit id, and an unregistered unit reports as "unknown".
             AdPlacements.registerAll(newConfig)
+            com.ads.module.helper.interstitial.InterstitialAutoBuffer.onGateChanged()
         }
 
         @JvmStatic
