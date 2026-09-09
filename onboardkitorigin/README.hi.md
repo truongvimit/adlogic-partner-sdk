@@ -5,6 +5,8 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 [English](README.md) · [Tiếng Việt](README.vi.md)
 
+5.2.5 में LFO language-confirmation popup का native ad केवल चुनी हुई भाषा पर दोबारा tap करके dialog खोलने पर load होता है। LFO खोलने या दूसरी भाषा चुनने पर popup ad preload नहीं होता। Dialog दोबारा खोलने पर पहले से bound ad reuse होता है।
+
 ## शुरू करने से पहले
 
 - minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
@@ -13,7 +15,7 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
 ```groovy
-def sdkVersion = '5.2.4'
+def sdkVersion = '5.2.5'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

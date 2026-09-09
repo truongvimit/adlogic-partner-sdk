@@ -5,6 +5,8 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
+In 5.2.5, the optional LFO language-confirmation popup loads its native ad only when reselecting the current language opens the dialog. Entering LFO or selecting a different language does not preload that popup. Reopening the dialog reuses its bound ad.
+
 ## Before you start
 
 - Use minSdk 24, compileSdk 36 and JDK 17. Follow the [shared build setup](../README.md) and use the same published tag for every module.
@@ -13,7 +15,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
 ```groovy
-def sdkVersion = '5.2.4'
+def sdkVersion = '5.2.5'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

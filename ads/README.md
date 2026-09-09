@@ -12,7 +12,7 @@ adapters are bundled; [build.gradle](build.gradle) lists versions and dependenci
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.2.4'
+def sdkVersion = '5.2.5'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -264,6 +264,50 @@ starts the next interval. The SDK pauses scheduling in background and retains re
 Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass the interval.
 Use the manager APIs for these placements and remove app-side refill timers or temporary
 interval overrides. Call `stop()` only when you want to disable buffering.
+
+### Opt-in content wait and independent placement clocks
+
+For selected content placements, use the existing buffer with independent clocks. The buffer
+preloads at `max(0, interval - 2_000ms)`; presentation still requires the full interval and a
+new action. A final load failure retries after the full placement interval (or the positive
+idle cadence when the interval is zero).
+
+```kotlin
+InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+    independentIntervalPlacements = setOf("inter_all", "inter_back"),
+    placements = listOf("inter_all", "inter_back"),
+    tapThresholds = mapOf("inter_all" to 2),
+    intervalMsByPlacement = mapOf("inter_all" to 30_000L, "inter_back" to 30_000L),
+    isPlacementEnabled = { placement -> contentPlacementEnabled(placement) },
+))
+// Keep start() on actual content entry, as above.
+
+// One real content/navigation action. Coalesce repeated taps while this action is pending.
+InterstitialAdManager.loadAndShow(activity, placement, adUnitIds, callback,
+    InterLoadAndShowOptions(
+        allowWaitForAutoBuffer = true,
+        timeoutMs = 5_000L,
+        nextAction = InterNextAction.AfterDismiss,
+    ),
+)
+```
+
+Do not pre-check `canShow()` in this wrapper: the action must reach the manager to count once
+and take the ready/join/cold path. All independent placements share a two-action presentation
+guard; it does not gate preload or combine their clocks. Counters reset on the vendor's actual
+show callback. Back that exits the app is outside this flow. Wire navigation only to `onComplete`.
+
+The opt-in budget is clamped to 0–5,000ms from entry. Zero budget uses a ready ad or skips without
+starting a request for that invocation. Timeout/background detaches the UI wait; late fills stay
+cached and need a new action. The existing ~800ms show preparation is additional to the fill wait.
+Call `onGateChanged()` when a custom flag changes; SDK remote-config and consent changes already
+notify it. Preload, waiting and delayed show read the same current placement authority.
+
+The old options constructors and default managed cache-only behavior remain available. The new
+constructors require the opt-in boolean/set, preserving the old JVM constructor descriptors.
+Opted-in clicks emit `ad_interstitial_wait` with `placement`, `source` (`ready/join/cold`), `status`
+and `wait_ms`; `dispatch` means handing off to show, not an impression. Use existing actual
+`ad_impression` / `ad_skipped` events for presentation outcomes. Joining does not add `ad_request`.
 
 ## App-open on return
 
