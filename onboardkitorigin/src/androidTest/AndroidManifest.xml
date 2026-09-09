@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application>
+        <activity android:name="io.onboardkit.ui.onboarding.ReturnAdDestinationActivity"
+            android:exported="false" android:theme="@style/ob_Theme_OnboardKit" />
         <activity android:name="io.onboardkit.ads.NativeOwnershipDeviceActivity"
             android:exported="false" android:theme="@style/ob_Theme_OnboardKit" />
         <activity android:name="io.onboardkit.ui.splash.OrderingSplashDeviceActivity"

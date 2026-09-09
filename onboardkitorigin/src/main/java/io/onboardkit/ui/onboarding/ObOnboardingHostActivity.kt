@@ -62,6 +62,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private val _currentIndex = MutableStateFlow(0)
     private val _totalSteps = MutableStateFlow(0)
     private var lastSelectedPosition = -1
+    private var pageSelectionVersion = 0L
     private var advanceFlingDetector: AdvanceFlingDetector? = null
     private var gestureBeganOnRestingLastStep = false
     private var exitResolved = false
@@ -178,20 +179,12 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             next(StepExit.SWIPE)
             return
         }
-        binding.obStepPager.registerOnPageChangeCallback(
-            object : ViewPager2.OnPageChangeCallback() {
-                override fun onPageScrollStateChanged(state: Int) {
-                    if (state != ViewPager2.SCROLL_STATE_IDLE) return
-                    binding.obStepPager.unregisterOnPageChangeCallback(this)
-                    if (exitResolved) return
-                    if (binding.obStepPager.currentItem != last) return
-                    next(StepExit.SWIPE)
-                }
-            },
-        )
+        val visit = pageSelectionVersion
+        binding.obStepPager.post { completeStepWhenIdle(last, visit, StepExit.SWIPE) }
     }
 
     private fun dispatchPageChange(position: Int) {
+        val visit = ++pageSelectionVersion
         if (lastSelectedPosition >= 0 && lastSelectedPosition != position) {
             pagerAdapter.fragmentAt(lastSelectedPosition)?.dispatchUnselected()
         }
@@ -210,7 +203,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
         // The page may not be attached yet on first layout; post until the fragment exists
         binding.obStepPager.post {
-            pagerAdapter.fragmentAt(position)?.dispatchSelected()
+            if (!isFinishing && !isDestroyed && pageSelectionVersion == visit &&
+                binding.obStepPager.currentItem == position
+            ) {
+                pagerAdapter.fragmentAt(position)?.dispatchSelected()
+            }
         }
     }
 
@@ -259,23 +256,36 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     /**
      * Completes an ad page on failure, Skip, or timeout. A callback may arrive while the
-     * pager is settling onto that page, when [next] would drop it. Wait for idle and check
-     * the source page again so a late answer cannot complete the following page instead.
+     * pager is settling or FragmentManager is resuming it. Always leave the callback stack,
+     * then wait for idle. Bind completion to this visit so it cannot end a later page/visit.
      */
     override fun completeAdStep(stepId: StepId, exitReason: String) {
         val position = enabledStepIds.indexOf(stepId)
-        if (position < 0) return
+        if (position < 0 || binding.obStepPager.currentItem != position) return
+        val visit = pageSelectionVersion
+        binding.obStepPager.post { completeStepWhenIdle(position, visit, exitReason) }
+    }
+
+    private fun completeStepWhenIdle(position: Int, visit: Long, exitReason: String) {
+        if (isFinishing || isDestroyed || pageSelectionVersion != visit ||
+            binding.obStepPager.currentItem != position
+        ) return
         if (binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE) {
-            if (binding.obStepPager.currentItem == position) next(exitReason)
+            next(exitReason)
             return
         }
         binding.obStepPager.registerOnPageChangeCallback(
             object : ViewPager2.OnPageChangeCallback() {
+                private var posted = false
+
                 override fun onPageScrollStateChanged(state: Int) {
-                    if (state != ViewPager2.SCROLL_STATE_IDLE) return
-                    binding.obStepPager.unregisterOnPageChangeCallback(this)
-                    // The user may have swiped on in the meantime; only complete the source page.
-                    if (binding.obStepPager.currentItem == position) next(exitReason)
+                    if (state != ViewPager2.SCROLL_STATE_IDLE || posted) return
+                    posted = true
+                    binding.obStepPager.post {
+                        // ViewPager2 forbids changing its callback list during dispatch.
+                        binding.obStepPager.unregisterOnPageChangeCallback(this)
+                        completeStepWhenIdle(position, visit, exitReason)
+                    }
                 }
             },
         )

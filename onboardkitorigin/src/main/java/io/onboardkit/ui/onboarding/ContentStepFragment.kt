@@ -178,6 +178,7 @@ class ContentStepFragment : LazyStepFragment() {
         adRequested = true
         b.obAdBlock.visibility = View.VISIBLE
         val placement = AdPlacement.StepNative(stepId)
+        val visit = stepVisitVersion
         activity.showNativeAd(
             placement = placement,
             // nativeUnitFor, not contentStepNative: a page with its own entry in `stepNatives` is
@@ -185,12 +186,15 @@ class ContentStepFragment : LazyStepFragment() {
             // here requested a different unit than the one that was warmed.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onBound = { adBound = true },
-            onUnavailable = { if (!adBound) binding?.obAdBlock?.visibility = View.GONE },
-            onAdEngaged = { onStepAdEngaged() },
+            onBound = { if (isCurrentStepVisit(visit)) adBound = true },
+            onUnavailable = {
+                if (isCurrentStepVisit(visit) && !adBound) binding?.obAdBlock?.visibility = View.GONE
+            },
+            onAdEngaged = { if (isCurrentStepVisit(visit)) onStepAdEngaged() },
         )
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun startVideoIfAny() {
         val b = binding ?: return
         val style = remoteStyleIfReady() ?: return

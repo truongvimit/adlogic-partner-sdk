@@ -19,6 +19,8 @@ abstract class LazyStepFragment : Fragment() {
     private var selectedAtMs: Long = 0L
     private var adEngaged = false
     private var awayInAd = false
+    private var selected = false
+    private var selectionVersion = 0L
 
     protected val stepHost: StepHost?
         get() = activity as? StepHost
@@ -26,6 +28,12 @@ abstract class LazyStepFragment : Fragment() {
     /** Fail-fast host resolution — a silent null host made every ad slot no-op before. */
     protected fun requireStepHost(): StepHost =
         stepHost ?: error("${activity?.javaClass?.simpleName} must implement StepHost")
+
+    /** Capture when binding an ad; callbacks from a released ad must not affect a new visit. */
+    protected val stepVisitVersion: Long get() = selectionVersion
+
+    protected fun isCurrentStepVisit(version: Long): Boolean =
+        selected && selectionVersion == version && isAdded && view != null
 
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -36,6 +44,8 @@ abstract class LazyStepFragment : Fragment() {
 
     internal fun dispatchSelected() {
         if (!isAdded || view == null) return
+        selected = true
+        selectionVersion++
         selectedAtMs = System.currentTimeMillis()
         // Being selected again is the pager's doing, not a return from this page's ad.
         adEngaged = false
@@ -48,6 +58,8 @@ abstract class LazyStepFragment : Fragment() {
 
     internal fun dispatchUnselected() {
         if (!isAdded) return
+        selected = false
+        selectionVersion++
         // The pager moved on without waiting for the user; whatever they do in the ad now, it
         // is no longer this page's turn to end.
         adEngaged = false
@@ -62,6 +74,7 @@ abstract class LazyStepFragment : Fragment() {
      * click handling so nothing else fills the gap.
      */
     protected fun onStepAdEngaged() {
+        if (!selected) return
         if (OnboardingSdk.configOrNull()?.behavior?.adClickReturnCompletesStep != true) return
         adEngaged = true
     }
@@ -75,10 +88,8 @@ abstract class LazyStepFragment : Fragment() {
     }
 
     /**
-     * Back from the ad, which completes the page exactly like its CTA. Resume is both the
-     * moment the user is actually back and the only moment the host is safe to navigate; and
-     * since the pager resumes only the page in front of the user, a page the flow left while
-     * they were away can never complete itself behind them.
+     * Back from the ad. FragmentManager is still executing its resume transaction here;
+     * completion must enqueue navigation instead of changing the pager on this call stack.
      */
     override fun onResume() {
         super.onResume()
@@ -87,7 +98,33 @@ abstract class LazyStepFragment : Fragment() {
         adEngaged = false
         if (!awayInAd) return
         awayInAd = false
-        stepHost?.next(StepExit.AD_CLICK_RETURN)
+        onAdClickReturn()
+    }
+
+    /** Fullscreen steps override this to arbitrate click-return with their timer and Skip. */
+    protected open fun onAdClickReturn() {
+        val host = stepHost ?: return
+        val sourceView = view ?: return
+        val visit = selectionVersion
+        val position = host.currentIndex.value
+        sourceView.post {
+            // A CTA, swipe, view recreation or another visit may have won while queued.
+            if (isCurrentStepVisit(visit) && view === sourceView &&
+                activity?.isFinishing == false && activity?.isDestroyed == false &&
+                host.currentIndex.value == position
+            ) {
+                host.next(StepExit.AD_CLICK_RETURN)
+            }
+        }
+    }
+
+    override fun onDestroyView() {
+        selected = false
+        selectionVersion++
+        adEngaged = false
+        awayInAd = false
+        hasInitView.set(false)
+        super.onDestroyView()
     }
 
     /**

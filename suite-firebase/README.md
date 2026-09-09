@@ -20,7 +20,7 @@ buildscript {
 // app/build.gradle: keep your existing Android/Kotlin plugins.
 plugins { id 'com.google.gms.google-services' }
 
-def sdkVersion = '5.2.6' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.7' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

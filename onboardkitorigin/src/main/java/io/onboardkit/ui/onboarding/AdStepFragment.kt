@@ -92,6 +92,7 @@ class AdStepFragment : LazyStepFragment() {
         b.obNativeContainer.visibility = View.VISIBLE
         b.obSkipButton.visibility = View.GONE
         val placement = AdPlacement.StepFullScreen(stepId)
+        val visit = stepVisitVersion
         activity.showNativeAd(
             placement = placement,
             // nativeUnitFor, not fullScreenStepNative: a host that gave this page its own entry in
@@ -99,9 +100,9 @@ class AdStepFragment : LazyStepFragment() {
             // shared slot instead reported no_ad_unit for a page that had one.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onShown = { onAdImpression() },
-            onUnavailable = { onAdFailed() },
-            onAdEngaged = { onStepAdEngaged() },
+            onShown = { if (isCurrentStepVisit(visit)) onAdImpression() },
+            onUnavailable = { if (isCurrentStepVisit(visit)) onAdFailed() },
+            onAdEngaged = { if (isCurrentStepVisit(visit)) onStepAdEngaged() },
         )
     }
 
@@ -165,6 +166,10 @@ class AdStepFragment : LazyStepFragment() {
         if (autoNextDeadlineMs?.let { SystemClock.elapsedRealtime() >= it } == true) {
             completeStep(StepExit.AUTO_NEXT)
         }
+    }
+
+    override fun onAdClickReturn() {
+        completeStep(StepExit.AD_CLICK_RETURN)
     }
 
     private fun completeStep(reason: String) {

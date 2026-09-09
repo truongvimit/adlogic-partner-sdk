@@ -108,8 +108,8 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Hard exit while the user is here. Like OB3, each resume starts a full countdown;
-     * time before a pause is not accumulated, and an ad destination cannot be navigated over.
+     * Hard exit while the user is here. Each resume starts a full countdown; time before a
+     * pause is not accumulated, and an ad destination cannot be navigated over.
      */
     private fun scheduleAutoDismiss() {
         val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)

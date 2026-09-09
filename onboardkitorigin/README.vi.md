@@ -5,6 +5,8 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 
 [English](README.md) · [हिन्दी](README.hi.md)
 
+Phiên bản 5.2.7 sửa crash khi quay lại onboarding từ native ad. Pager chỉ chuyển trang sau khi callback lifecycle kết thúc; click-return, Skip và auto-next fullscreen chỉ hoàn thành mỗi lượt xem trang một lần. Deadline OB fullscreen vẫn tính thời gian background; OB5 standalone giữ cơ chế countdown khi ở foreground.
+
 Từ 5.2.5, popup xác nhận ngôn ngữ ở LFO chỉ load native ad khi người dùng chọn lại ngôn ngữ hiện tại để mở popup. Vào LFO hoặc chọn ngôn ngữ khác không preload ads cho popup. Mở lại popup dùng lại ad đã bind.
 
 ## Trước khi tích hợp
@@ -15,7 +17,7 @@ Từ 5.2.5, popup xác nhận ngôn ngữ ở LFO chỉ load native ad khi ngư�
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-def sdkVersion = '5.2.6'
+def sdkVersion = '5.2.7'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

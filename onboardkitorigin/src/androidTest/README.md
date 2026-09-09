@@ -9,6 +9,25 @@ adb install -r onboardkitorigin/build/outputs/apk/androidTest/debug/onboardkitor
 
 Run each parameter combination in a fresh instrumentation process with default test-package data. The remote-cache read and handled-notification phases intentionally retain data from their preceding write/deny phase.
 
+## Onboarding ad return and fullscreen deadlines
+
+```sh
+adb shell am instrument -w \
+  -e class io.onboardkit.ui.onboarding.OnboardingAdReturnDeviceTest \
+  -e returnCase content_click \
+  io.onboardkit.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Run `content_click`, `content_open`, `full_click`, `full_timeout`, `next_full_zero`, and
+`next_full_no_fill` separately. These open and close a real test destination Activity through a
+fake native provider, assert the selected pager page and completion reasons, and outwait the
+fullscreen timer to detect duplicate navigation. The last two cases cover leaving an incoming
+fullscreen page while the pager is settling (zero timeout and synchronous no-fill).
+
+Also run `io.onboardkit.ui.onboarding.Ob3BackgroundDeviceTest` and
+`io.onboardkit.ui.ob5.ObFullScreenAdPauseDeviceTest` in separate processes. OB3 counts background
+time; standalone OB5 restarts its foreground countdown after resume.
+
 ## Splash ordering
 
 ```sh
