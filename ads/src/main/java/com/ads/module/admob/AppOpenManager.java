@@ -333,7 +333,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** The registry may not know a blank/late-config unit yet; keep the known placement stable. */
     private static String resumePlacementFor(String adUnitId) {
-        return PlacementRegistry.placementOf(adUnitId, "app_resume");
+        return PlacementRegistry.placementOf(adUnitId, "open_resume");
     }
 
     /**

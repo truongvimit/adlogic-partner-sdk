@@ -3,7 +3,7 @@ package com.itg.template.app
 import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.inter_welcome
 import com.itg.template.ads.native_welcome
-import com.itg.template.ads.app_resume
+import com.itg.template.ads.open_resume
 
 enum class ResumeAdsEntryMode {
     APP_RESUME,
@@ -15,7 +15,7 @@ object ResumeAdsEntryRule {
     fun currentMode(): ResumeAdsEntryMode {
         if (!AdRemoteConfig.isInitialized()) return ResumeAdsEntryMode.NONE
 
-        val canUseAppResume = AdRemoteConfig.app_resume.isEnable
+        val canUseAppResume = AdRemoteConfig.open_resume.isEnable
         if (canUseAppResume) return ResumeAdsEntryMode.APP_RESUME
 
         val canUseWelcome = AdRemoteConfig.native_welcome.isEnable && AdRemoteConfig.inter_welcome.isEnable
@@ -25,5 +25,5 @@ object ResumeAdsEntryRule {
     fun shouldEnableAppResume(): Boolean = currentMode() == ResumeAdsEntryMode.APP_RESUME
 
     fun shouldShowWelcomeOnResume(): Boolean =
-        currentMode() == ResumeAdsEntryMode.WELCOME && !AdRemoteConfig.app_resume.isEnable
+        currentMode() == ResumeAdsEntryMode.WELCOME && !AdRemoteConfig.open_resume.isEnable
 }

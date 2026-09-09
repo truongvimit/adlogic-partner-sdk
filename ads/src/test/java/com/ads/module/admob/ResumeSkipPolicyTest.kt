@@ -122,7 +122,7 @@ class ResumeSkipPolicyTest {
         manager.enableAppResume()
         manager.onResume()
         assertEquals(listOf("suppressed_by_flow"), skipped.map { it["reason"] })
-        assertEquals(listOf("app_resume"), skipped.map { it["placement"] })
+        assertEquals(listOf("open_resume"), skipped.map { it["placement"] })
     }
 
     @Test

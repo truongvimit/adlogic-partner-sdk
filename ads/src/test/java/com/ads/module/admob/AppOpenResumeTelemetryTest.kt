@@ -28,7 +28,7 @@ import org.robolectric.annotation.LooperMode
 import java.util.concurrent.TimeUnit
 
 /**
- * `app_resume` reports its own load lifecycle, so its client-side funnel exists.
+ * `open_resume` reports its own load lifecycle, so its client-side funnel exists.
  *
  * Before this the manager emitted policy skips and nothing else, so a console showing many
  * matched requests against few impressions could not be attributed to a stage. The last test
@@ -76,12 +76,12 @@ class AppOpenResumeTelemetryTest {
     }
 
     @Test
-    fun `a background dispatch reports one request against the app_resume placement`() {
+    fun `a background dispatch reports one request against the open_resume placement`() {
         enable()
         background()
         assertEquals(1, requests.size)
         val request = named(AD_REQUEST).single()
-        assertEquals("app_resume", request["placement"])
+        assertEquals("open_resume", request["placement"])
         assertEquals("app_open", request["ad_format"])
         assertEquals(UNIT, request["ad_unit_id"])
     }
@@ -101,7 +101,7 @@ class AppOpenResumeTelemetryTest {
         background()
         fail(0)
         val failed = named(AD_LOAD_FAILED).single()
-        assertEquals("app_resume", failed["placement"])
+        assertEquals("open_resume", failed["placement"])
         assertEquals("app_open", failed["ad_format"])
         assertEquals(3, failed["error_code"])
     }
@@ -116,7 +116,7 @@ class AppOpenResumeTelemetryTest {
         // The vendor returned an ad, but a newer request now owns the buffer.
         assertEquals(1, named(AD_LOADED).size)
         val skipped = named(AD_SKIPPED).single()
-        assertEquals("app_resume", skipped["placement"])
+        assertEquals("open_resume", skipped["placement"])
         assertEquals("app_open", skipped["ad_format"])
         assertEquals("fill_discarded", skipped["reason"])
     }

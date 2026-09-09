@@ -33,7 +33,7 @@ import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.banner_home
 import com.itg.template.ads.banner_home_fixed
 import com.itg.template.ads.inter_onboarding
-import com.itg.template.ads.app_resume
+import com.itg.template.ads.open_resume
 import com.itg.template.ads.native_welcome
 import com.itg.template.ads.inter_welcome
 import com.itg.template.ads.native_home
@@ -439,12 +439,12 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             val instance = AdRemoteConfig.getInstance()
             val updatedAds = instance.ads.toMutableMap()
 
-            val appResumeConfig = updatedAds["app_resume"]
+            val appResumeConfig = updatedAds["open_resume"]
             val nativeWelcomeConfig = updatedAds["native_welcome"]
             val interWelcomeConfig = updatedAds["inter_welcome"]
 
             if (appResumeConfig != null) {
-                updatedAds["app_resume"] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
+                updatedAds["open_resume"] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
             }
             if (nativeWelcomeConfig != null) {
                 updatedAds["native_welcome"] = nativeWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
@@ -457,7 +457,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
             // Dynamically enable/disable AppOpenManager based on mode
             if (mode == ResumeAdsEntryMode.APP_RESUME) {
-                val appResumeId = AdRemoteConfig.app_resume.id
+                val appResumeId = AdRemoteConfig.open_resume.id
                 AppOpenManager.getInstance().setAppResumeAdId(appResumeId)
                 AppOpenManager.getInstance().enableAppResume()
             } else {
@@ -477,11 +477,11 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         val mode = ResumeAdsEntryRule.currentMode()
         mBinding.tvCurrentResumeMode.text = "Current Mode: $mode"
 
-        val appResumeEnable = AdRemoteConfig.app_resume.isEnable
+        val appResumeEnable = AdRemoteConfig.open_resume.isEnable
         val nativeWelcomeEnable = AdRemoteConfig.native_welcome.isEnable
         val interWelcomeEnable = AdRemoteConfig.inter_welcome.isEnable
 
-        mBinding.tvResumeConfigsDetail.text = "app_resume: ${if (appResumeEnable) "ON" else "OFF"} • native_welcome: ${if (nativeWelcomeEnable) "ON" else "OFF"} • inter_welcome: ${if (interWelcomeEnable) "ON" else "OFF"}"
+        mBinding.tvResumeConfigsDetail.text = "open_resume: ${if (appResumeEnable) "ON" else "OFF"} • native_welcome: ${if (nativeWelcomeEnable) "ON" else "OFF"} • inter_welcome: ${if (interWelcomeEnable) "ON" else "OFF"}"
 
         // Highlight selected button
         val allButtons = listOf(mBinding.btnModeAppResume, mBinding.btnModeWelcome, mBinding.btnModeNone)

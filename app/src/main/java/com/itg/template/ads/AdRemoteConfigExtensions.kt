@@ -16,7 +16,7 @@ val AdRemoteConfig.Companion.inter_splash: AdUnitConfig get() = unit("inter_spla
 
 val AdRemoteConfig.Companion.banner_splash: AdUnitConfig get() = unit("banner_splash")
 
-val AdRemoteConfig.Companion.app_resume: AdUnitConfig get() = unit("app_resume")
+val AdRemoteConfig.Companion.open_resume: AdUnitConfig get() = unit("open_resume")
 
 val AdRemoteConfig.Companion.native_onboarding_1_4: AdUnitConfig
     get() = unit("native_onboarding_1_4")

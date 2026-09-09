@@ -901,7 +901,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:fontFamily="@font/regular"
-                            android:text="app_resume: OFF • native_welcome: OFF • inter_welcome: OFF"
+                            android:text="open_resume: OFF • native_welcome: OFF • inter_welcome: OFF"
                             android:textColor="@color/color_text_secondary"
                             android:textSize="11sp" />
                     </LinearLayout>

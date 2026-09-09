@@ -84,7 +84,7 @@ sealed interface AdPlacement {
      * reasons — the audit found app-resume was the one format with its own private rule set.
      */
     data object AppResume : AdPlacement {
-        override val key: String = "app_resume"
+        override val key: String = "open_resume"
         override val format: AdFormat = AdFormat.APP_OPEN
     }
 }

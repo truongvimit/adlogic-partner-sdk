@@ -10,7 +10,7 @@
     "reloadIntervalSeconds": 30,
     "enable_ua_check": false
   },
-  "app_resume": {
+  "open_resume": {
     "app_resume_load_delay_ms": 2000,
     "id": "ca-app-pub-3940256099942544/9257395921",
     "isEnable": true,

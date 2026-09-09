@@ -12,7 +12,7 @@ adapters are bundled; [build.gradle](build.gradle) lists versions and dependenci
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.2.7'
+def sdkVersion = '5.2.8'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -332,12 +332,12 @@ OnboardKit handles its splash/fullscreen/survey exclusions. With OnboardKit, als
 
 The SDK loads on a genuine background transition and shows only an already-ready ad on an
 eligible return. It does not wait for a load on foreground entry. To tune background delay,
-add `"app_resume_load_delay_ms": 2000` inside the `app_resume` placement in
+add `"app_resume_load_delay_ms": 2000` inside the `open_resume` placement in
 `ad_config.json`, `ad_config_debug.json`, or remote `ad_remote_config`:
 
 ```json
 {
-  "app_resume": {
+  "open_resume": {
     "id": "your-app-open-ad-unit-id",
     "isEnable": true,
     "app_resume_load_delay_ms": 2000
@@ -345,8 +345,9 @@ add `"app_resume_load_delay_ms": 2000` inside the `app_resume` placement in
 }
 ```
 
-Since 5.2.3, the resume placement key is `app_resume`. When upgrading from 5.2.2,
-rename `open_resume` to `app_resume` in both asset files and remote config.
+Since 5.2.8, the resume placement key is `open_resume`, matching partner apps.
+If you adopted `app_resume` in 5.2.3–5.2.7, rename it to `open_resume` in both
+asset files and remote config. The nested field remains `app_resume_load_delay_ms`.
 
 Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid values
 use the default. The former top-level field is no longer read.

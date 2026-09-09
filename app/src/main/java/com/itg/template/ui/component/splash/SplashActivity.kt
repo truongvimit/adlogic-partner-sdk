@@ -6,7 +6,7 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.billing.Billing
 import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.RemoteConfigUtils
-import com.itg.template.ads.app_resume
+import com.itg.template.ads.open_resume
 import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
 import io.onboardkit.ads.NextScreenTiming
@@ -43,7 +43,7 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
         OnboardKitSetup.configure()
 
         if (ResumeAdsEntryRule.shouldEnableAppResume()) {
-            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.app_resume.id)
+            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.id)
             AppOpenManager.getInstance().enableAppResume()
         } else {
             AppOpenManager.getInstance().disableAppResume()

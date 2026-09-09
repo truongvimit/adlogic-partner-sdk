@@ -570,7 +570,7 @@ class AppOpenResumePresentationTest {
             showAfterLoading()
             ad.content!!.onAdShowedFullScreenContent()
             val shown = sink.of("ad_show").single()
-            assertEquals("app_resume", shown["placement"])
+            assertEquals("open_resume", shown["placement"])
             assertEquals("app_open", shown["ad_format"])
             assertEquals(UNIT, shown["ad_unit_id"])
             assertTrue(sink.of("ad_show_failed").isEmpty())
@@ -581,7 +581,7 @@ class AppOpenResumePresentationTest {
             showAfterLoading()
             second.content!!.onAdFailedToShowFullScreenContent(error())
             val failed = sink.of("ad_show_failed").single()
-            assertEquals("app_resume", failed["placement"])
+            assertEquals("open_resume", failed["placement"])
             assertEquals(1, failed["error_code"])
         } finally {
             Tracker.removeSink(sink)

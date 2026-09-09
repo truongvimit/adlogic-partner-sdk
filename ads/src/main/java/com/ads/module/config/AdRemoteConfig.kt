@@ -15,9 +15,9 @@ data class AdRemoteConfig @JvmOverloads constructor(
     val ads: Map<String, AdUnitConfig> = emptyMap(),
 ) {
 
-    /** Extra wait configured inside app_resume; captured once for each background stay. */
+    /** Extra wait configured inside open_resume; captured once for each background stay. */
     val appResumeLoadDelayMs: Long
-        get() = ads["app_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
+        get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
     companion object {
         private const val TAG = "AdRemoteConfig"
