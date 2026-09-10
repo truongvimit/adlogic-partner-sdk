@@ -64,3 +64,25 @@ The notification remains open longer than the test's splash wait budget. This ve
 - `io.onboardkit.remote.RemoteConfigCacheDeviceTest`: `-e cachePhase write`, then `read` in a new process without clearing data.
 
 Real GMA tests require connectivity and an actual fill. A vendor no-fill is reported as a failure to exercise the intended scenario, not silently counted as a pass. These tests do not establish revenue uplift or exhaust every mediation network. Natural one-hour expiry remains covered by virtual-clock unit tests.
+
+## Content insets fallback and screenshots (5.2.9)
+
+`io.onboardkit.ui.base.ContentInsetsScreenshotDeviceTest` opens the real language screen with
+system bars visible and no ad provider. It saves a screenshot and content-padding measurements
+inside the separate test package. Run each capture in a fresh instrumentation process:
+
+```sh
+adb shell am instrument -w \
+  -e class io.onboardkit.ui.base.ContentInsetsScreenshotDeviceTest \
+  -e captureName language-normal -e simulateMissingOverlay false \
+  io.onboardkit.test/androidx.test.runner.AndroidJUnitRunner
+adb exec-out run-as io.onboardkit.test cat files/insets-language-normal.png > language-normal.png
+adb exec-out run-as io.onboardkit.test cat files/insets-language-normal.txt
+```
+
+On an API 33 emulator only, set `simulateMissingOverlay=true` and use a distinct capture name.
+During one synchronous insets dispatch, the test temporarily reports SDK_INT=34 so AndroidX
+selects Impl34 against a framework without systemOverlays(); it restores SDK_INT in `finally`.
+This affects only the test process, not the ROM or device properties. The fixed listener must
+keep the screen alive and preserve bar/cutout padding. The original listener crashes instead.
+This is a controlled reproduction, not evidence that a particular production device spoofs its API.

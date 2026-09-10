@@ -8,7 +8,7 @@ catalogue, legal links and the places where it may appear. Firebase, ads and onb
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
 ```groovy
-def sdkVersion = '5.2.8' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.9' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
 }

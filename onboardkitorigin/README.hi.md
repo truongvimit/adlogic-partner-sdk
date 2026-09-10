@@ -5,6 +5,8 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 [English](README.md) · [Tiếng Việt](README.vi.md)
 
+Version 5.2.9 उन frameworks के लिए insets fallback जोड़ता है जिनमें `WindowInsets.Type.systemOverlays()` उपलब्ध नहीं है। Onboarding crash किए बिना status/navigation/caption bars और display cutout की padding रखता है; सामान्य platforms पर system overlays भी शामिल रहते हैं। इस release में 5.2.7 का lifecycle navigation fix भी है।
+
 Version 5.2.7 native ad से onboarding पर लौटने वाला crash ठीक करता है। Pager navigation lifecycle callbacks पूरे होने के बाद होता है; click-return, Skip और fullscreen auto-next हर page visit को अधिकतम एक बार पूरा करते हैं। OB fullscreen deadline में background का समय शामिल रहता है; standalone OB5 का foreground countdown व्यवहार पहले जैसा रहता है।
 
 5.2.5 में LFO language-confirmation popup का native ad केवल चुनी हुई भाषा पर दोबारा tap करके dialog खोलने पर load होता है। LFO खोलने या दूसरी भाषा चुनने पर popup ad preload नहीं होता। Dialog दोबारा खोलने पर पहले से bound ad reuse होता है।
@@ -17,7 +19,7 @@ Version 5.2.7 native ad से onboarding पर लौटने वाला cr
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
 ```groovy
-def sdkVersion = '5.2.8'
+def sdkVersion = '5.2.9'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"

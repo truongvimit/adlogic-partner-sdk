@@ -126,10 +126,9 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
             }
         }
         val content = findViewById<View>(android.R.id.content)
+        val insetsReader = ContentInsetsReader()
         ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
-            )
+            val bars = insetsReader.getInsets(insets)
             view.updatePadding(
                 left = bars.left,
                 top = bars.top,
