@@ -58,9 +58,6 @@ class GlobalApp : AdsMultiDexApplication() {
     companion object {
         @SuppressLint("StaticFieldLeak")
         lateinit var instance: GlobalApp
-
-        /** UMP logs this id on the first debug run; it is what forces the EEA form on that device. */
-        private const val CONSENT_TEST_DEVICE_HASHED_ID = "ED3576D8FCF2F8C52AD8E98B4CFA4005"
     }
 
     override fun onCreate() {
@@ -121,16 +118,7 @@ class GlobalApp : AdsMultiDexApplication() {
 
 
     private fun initAds() {
-        // The UMP knobs the removed GDPR module took from its callback: the same 20s budget for
-        // the round trip, and the hashed id that makes a debug build see the EEA form wherever it
-        // is actually running. Without the id, ConsentDebugSettings has no test device to force
-        // and a debug run outside the EEA never gets a form to look at.
-        ConsentCenter.configure(
-            ConsentOptions(
-                timeoutMs = AppConstants.DEFAULT_TIME_OUT_GDPR,
-                testDeviceHashedId = CONSENT_TEST_DEVICE_HASHED_ID,
-            ),
-        )
+        ConsentCenter.configure(ConsentOptions(timeoutMs = AppConstants.DEFAULT_TIME_OUT_GDPR))
 
         val environment =
             if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION

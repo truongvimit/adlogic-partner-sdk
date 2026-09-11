@@ -2,6 +2,8 @@
 
 # Trackkit
 
+**Partner integration (Vietnamese): [चरण-दर-चरण गाइड](../partner-integration/trackkit-integration.vi.md)** — ज़रूरी files, defaults, वैकल्पिक configuration और verification।
+
 SDK और ऐप के events को `Tracker` से Firebase या अपने analytics backend तक भेजें।
 
 [Build setup और module चयन](../README.hi.md) · minSdk 24+ · compileSdk 36+ · JDK 17
@@ -10,9 +12,11 @@ SDK और ऐप के events को `Tracker` से Firebase या अप�
 
 Firebase Analytics के लिए `suite-firebase` जोड़ें; यह Trackkit पहले से उपलब्ध कराता है। ऐप की `google-services.json` और Google Services plugin के साथ [Firebase setup](../suite-firebase/README.md) पूरा करें।
 
+App की `gradle.properties` में `adlogicSdkVersion` एक बार सेट करें; [shared build setup](../README.hi.md#build-setup) देखें।
+
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

@@ -9,7 +9,6 @@ import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
 import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
-import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.paykit.PayKit
 import kotlinx.coroutines.launch
@@ -20,9 +19,6 @@ import kotlinx.coroutines.launch
  * What remains here is this app's own product wiring.
  */
 class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
-
-    // Open LFO or the next destination underneath the splash interstitial.
-    override fun nextScreenTiming(): NextScreenTiming = NextScreenTiming.UNDER_AD
 
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on

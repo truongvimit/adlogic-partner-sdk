@@ -1,18 +1,25 @@
 # suite-firebase
 
+**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/firebase-integration.vi.md)** — required files, defaults, optional configuration and verification.
+
 Connects SDK analytics to Firebase Analytics and optionally reads ad/paywall JSON from Firebase
 Remote Config. Use only the integrations your app needs; this module does not include ads or PayKit.
 
 ## Install
 
 Follow the [root build setup](../README.md). Add `google-services.json` for your app to `app/`,
-then configure the plugin if your project does not already have it:
+then configure the plugin if your project does not already have it. Set `googleServicesVersion`
+in your app's `gradle.properties` to the Google Services plugin version your project uses;
+see [versions.gradle](../versions.gradle) for the repository configuration:
+
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
 
 ```groovy
 // Root build.gradle
 buildscript {
+    def googleServicesVersion = project.providers.gradleProperty('googleServicesVersion').get()
     repositories { google(); mavenCentral() }
-    dependencies { classpath "com.google.gms:google-services:4.4.3" }
+    dependencies { classpath "com.google.gms:google-services:$googleServicesVersion" }
 }
 ```
 
@@ -20,7 +27,7 @@ buildscript {
 // app/build.gradle: keep your existing Android/Kotlin plugins.
 plugins { id 'com.google.gms.google-services' }
 
-def sdkVersion = '5.2.10' // Use the same published tag for every SDK module.
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

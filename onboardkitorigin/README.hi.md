@@ -5,13 +5,9 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 [English](README.md) · [Tiếng Việt](README.vi.md)
 
-Version 5.2.10 में navigation bar डिफ़ॉल्ट रूप से छिपता है और ऊपर के bars दिखते हैं। अधूरा onboarding दोबारा Splash → LFO → OB से शुरू होता है। Language popup चौथे item tap से खुलता है। Native click पर preload और वापसी पर show होता है; OB steps/OB5 में यह बंद है और step click-return navigation पहले की तरह चालू है। [पूरी जानकारी](README.md#version-5210-flow-and-native-return-behavior)।
+[Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough (Vietnamese)](../partner-integration/ads-onboarding-integration.vi.md)
 
-Version 5.2.9 उन frameworks के लिए insets fallback जोड़ता है जिनमें `WindowInsets.Type.systemOverlays()` उपलब्ध नहीं है। Onboarding crash किए बिना status/navigation/caption bars और display cutout की padding रखता है; सामान्य platforms पर system overlays भी शामिल रहते हैं। इस release में 5.2.7 का lifecycle navigation fix भी है।
-
-Version 5.2.7 native ad से onboarding पर लौटने वाला crash ठीक करता है। Pager navigation lifecycle callbacks पूरे होने के बाद होता है; click-return, Skip और fullscreen auto-next हर page visit को अधिकतम एक बार पूरा करते हैं। OB fullscreen deadline में background का समय शामिल रहता है; standalone OB5 का foreground countdown व्यवहार पहले जैसा रहता है।
-
-5.2.5 में LFO language-confirmation popup का native ad केवल चुनी हुई भाषा पर दोबारा tap करके dialog खोलने पर load होता है। LFO खोलने या दूसरी भाषा चुनने पर popup ad preload नहीं होता। Dialog दोबारा खोलने पर पहले से bound ad reuse होता है।
+[Default flow behavior](README.md#default-flow-behavior): system bars, language popup और native ad-return के default व्यवहार देखें।
 
 ## शुरू करने से पहले
 
@@ -20,8 +16,10 @@ Version 5.2.7 native ad से onboarding पर लौटने वाला cr
 - Funnel चाहिए तो OnboardKit से पहले `Tracker` और sink install करें; [Trackkit](../trackkit/README.md) देखें।
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
+App की `gradle.properties` में `adlogicSdkVersion` एक बार सेट करें; [shared build setup](../README.hi.md#build-setup) देखें।
+
 ```groovy
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -88,7 +86,7 @@ class App : Application() {
 
 `configure()` से पहले `install()` बुलाएँ। Config बनाना और configure करना दोनों `Result` देते हैं; उदाहरण गलत setup को स्पष्ट दिखाने के लिए `getOrThrow()` इस्तेमाल करता है।
 Listener तीनों outcomes संभालता है। `Completed.selectedLanguage` चुनी गई भाषा भी देता है।
-अंतिम handoff में `NEW_TASK` रखें, `CLEAR_TASK` न जोड़ें: splash ad को अभी अपनी Activity की जरूरत हो सकती है।
+अंतिम handoff में `NEW_TASK` रखें, `CLEAR_TASK` न जोड़ें: splash ad या onboarding के अंत का ad अभी इसी task में दिख रहा हो सकता है।
 
 ## 2. अपना launcher splash जोड़ें
 
@@ -105,7 +103,7 @@ class SplashActivity : ObSplashActivity()
         android:name=".SplashActivity"
         android:exported="true"
         android:screenOrientation="portrait"
-        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
         android:theme="@style/ob_Theme_OnboardKit">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
@@ -122,9 +120,9 @@ class SplashActivity : ObSplashActivity()
 
 - `notificationPermissionEnabled = true`: Android 13+ / target 33+ पर consent के बाद notification permission माँगी जाती है। Grant या पिछले automatic request का दर्ज परिणाम अगली prompt रोकता है; मना करने पर भी flow चलता है। App खुद prompt संभाले तो `false` रखें।
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
-- `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
+- `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। ऊपर दिए splash `configChanges` बनाए रखें, ताकि lock, dark mode या font scale बदलने पर Activity दोबारा न बने। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
 - `consentTimeoutMs = 20_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
-- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है; `UNDER_AD` बचे हुए minimum के बाद अगली स्क्रीन खोलता है और तुरंत interstitial दिखाता है। `AFTER_AD` में ad पहले दिख सकता है, लेकिन navigation dismissal और minimum दोनों का इंतज़ार करता है।
+- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, और onboarding पूरा होने के बाद launcher से खुली destination (आपकी app या पुराने user का प्रश्न) `UNDER_AD` इस्तेमाल करती है; notification, widget और uninstall entries हमेशा `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
 
 ### Splash और भाषा के विकल्प
 
@@ -133,7 +131,7 @@ class SplashActivity : ObSplashActivity()
 
 | विकल्प | Default / उपयोग |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | Navigation से पहले 3000 ms; `UNDER_AD` में show भी इंतज़ार करता है, `AFTER_AD` में ad पहले दिख सकता है। |
+| `SplashConfig.minDisplayTimeMs` | Splash interstitial दिखने से पहले 3000 ms, या ad न होने पर navigation से पहले। Remote `ob_splash_min_display_ms` (default 3000) 0 से बड़ा हो तो इस field को override करता है, इसलिए यह field तभी लागू होता है जब Firebase में वह value `0` हो; Firebase के बिना minimum हमेशा 3000 ms रहता है। |
 | `ob_splash_ad_budget_ms` | Notification पूरा होने और splash को focus मिलने के बाद ads के लिए अधिकतम 60000 ms। |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: splash waterfall पूरा होने या wait समाप्त होने पर पहला language native preload करें। `true`: splash ads के साथ preload करें। |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | भाषा चुनने का hand hint दिखाने के लिए दोनों enabled हों। |
@@ -190,8 +188,11 @@ page खुलता है। Manual completion के लिए `autoNextEnabl
 हैं: 3 सेकंड का skip delay और 15 सेकंड का auto-dismiss।
 
 `inter_after_ob3` splash से अलग placement है। दिया गया provider pager entry पर preload करता
-है और completion पर fill के लिए अधिकतम 8 सेकंड इंतज़ार करता है; dismissal या skip पर आगे बढ़ता
-है। `afterOnboardingInterstitialEnabled` और remote `ob_ads_inter_after_ob3_enabled` दोनों true
+है और completion पर fill के लिए अधिकतम 8 सेकंड इंतज़ार करता है। Default रूप से
+(`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) अगली स्क्रीन ad के नीचे
+खुलती है; notification, widget और uninstall entries dismissal का इंतज़ार करती हैं। हमेशा इंतज़ार के लिए
+`NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) रखें।
+`afterOnboardingInterstitialEnabled` और remote `ob_ads_inter_after_ob3_enabled` दोनों true
 हों। ऐप इस ad trigger को संभालता हो तो local switch `false` रखें; इससे automatic preload और
 show दोनों बंद होते हैं। इसे content AutoBuffer group में शामिल न करें।
 
@@ -241,7 +242,7 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 ```
 
 ऊपर का listener `Completed`/`Skipped` के extras आगे भेजता है। Destination के `onCreate` और `onNewIntent` दोनों में इन्हें पढ़ें।
-Entries `inter_noti`, `inter_widget` या `inter_uninstall` इस्तेमाल करती हैं; fallback सामान्य splash unit है। ये entries ad के बाद navigate करती हैं, जबकि launcher सामान्यतः अगली screen ad के नीचे खोलता है।
+Entries `inter_noti`, `inter_widget` या `inter_uninstall` इस्तेमाल करती हैं; fallback सामान्य splash unit है। ये entries हमेशा ad बंद होने के बाद navigate करती हैं, क्योंकि उनकी destination अपनी एक screen खोलती है, जो दिख रहे ad को ढक देगी। Launcher start पहली बार ad के बाद LFO खोलता है, और onboarding पूरा होने पर आपकी app ad के नीचे खोलता है।
 
 ## समस्या निवारण
 

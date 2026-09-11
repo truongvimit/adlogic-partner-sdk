@@ -1,5 +1,7 @@
 # AdTracer
 
+**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/adtracer-integration.vi.md)** — required files, defaults, optional configuration and verification.
+
 A local dashboard for ad requests, fills, shows and failures during development. AdTracer only
 records events sent to it; connect the sample Trackkit sink to observe this SDK's events.
 No Firebase account or analytics service is needed.
@@ -8,9 +10,11 @@ No Firebase account or analytics service is needed.
 
 Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add JitPack using the [root setup](../README.md).
 
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
+
 ```groovy
 // app/build.gradle — same published tag as the other SDK modules.
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     debugImplementation "com.github.truongvimit.adlogic-partner-sdk:adtracer:$sdkVersion"
 }
@@ -86,11 +90,6 @@ Use `io.adtracer.AdFormat` for the format; signatures are in
 [AdTracer](src/main/java/io/adtracer/AdTracer.kt). Do not also report events sent by the bridge,
 or they count twice. Up to 10 session journals are retained; pending events can be lost when the
 process stops.
-
-## Moving from the main / 5.0 setup
-
-The integration is unchanged: debug dependency, Trackkit sink and a release no-op. No new
-initialization step is needed. Keep the full sample sink instead of forwarding raw event names.
 
 ## Troubleshooting
 

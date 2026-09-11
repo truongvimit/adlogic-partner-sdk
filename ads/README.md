@@ -1,5 +1,7 @@
 # Ads
 
+**Partner integration (Vietnamese): [Ads + OnboardKit step-by-step guide](../partner-integration/ads-onboarding-integration.vi.md)** — required files, sample ad JSON, defaults, optional configuration (including app-screen native/interstitial/app-open samples) and verification.
+
 Load and show AdMob ads from named placements. Start with local config and preload interstitials;
 Firebase, Adjust, billing and app-open ads are optional. Using the supplied splash/onboarding?
 Follow [onboardkitorigin](../onboardkitorigin/README.md) for that flow; it owns the consent request.
@@ -10,9 +12,11 @@ Use `minSdk 24+`, `compileSdk 36+` and JDK 17. Add the repositories from the
 [root setup](../README.md), including the mediation repositories. Google Mobile Ads and mediation
 adapters are bundled; [build.gradle](build.gradle) lists versions and dependencies.
 
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
+
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -116,9 +120,11 @@ override fun onDestroy() {
 }
 ```
 
-When `allowed` is false, continue without ads. A timeout or personalization choice does not grant
-request permission. The default network timeout is 20 seconds and stops while a form is visible.
-Optional test-device settings: [ConsentOptions](src/main/java/com/ads/module/consent/ConsentOptions.kt).
+`allowed` means ads may be requested; it is not a consent grant. A failed UMP flow (an error, or a
+required form that is unavailable) or the network timeout (20 seconds by default, stopped before a
+form is shown) opens an in-process request fallback, so `allowed` can be `true` without consent or
+personalization. When `allowed` is false, continue without ads. By default, debuggable builds treat
+every device as an EEA test device, so no hashed device ID is needed to see the form. Timeout and debug geography: [ConsentOptions](src/main/java/com/ads/module/consent/ConsentOptions.kt).
 
 ## 4. Preload interstitials; show only when ready
 
@@ -226,6 +232,28 @@ nativeHelper.show()
 - Do not call `NativeAdManager.release(placement)` for routine screen cleanup: it invalidates
   shared pending/unused ads. Use it only when deliberately discarding that placement's inventory.
 
+### Native click return
+
+`NativeAdConfig.reloadOnAdClick` defaults to `true`. A click/open immediately preloads an
+unused replacement for that placement. On return, `NativeAdHelper` consumes a ready ad or
+waits for the same in-flight request; it never binds the preload while the user is away.
+This also supports pause-only destinations and is independent of `canReloadAds`, debounce
+and refresh timers. Normal consent, purchase and network gates still apply.
+
+Disable this behavior for a screen that navigates away on ad return:
+
+```kotlin
+val config = NativeAdConfig(ids, true, false, R.layout.native_home).apply {
+    reloadOnAdClick = false
+}
+// Or configure an existing helper before the interaction:
+helper.setReloadOnAdClick(false)
+```
+
+The built-in onboarding provider disables it for all content/fullscreen step natives and
+OB5. Language slots, the language popup, question native, and ordinary partner natives keep
+it enabled. Step click-return navigation remains enabled by default.
+
 ## Optional integrations
 
 | Need | Add or configure |
@@ -303,8 +331,6 @@ cached and need a new action. The existing ~800ms show preparation is additional
 Call `onGateChanged()` when a custom flag changes; SDK remote-config and consent changes already
 notify it. Preload, waiting and delayed show read the same current placement authority.
 
-The old options constructors and default managed cache-only behavior remain available. The new
-constructors require the opt-in boolean/set, preserving the old JVM constructor descriptors.
 Opted-in clicks emit `ad_interstitial_wait` with `placement`, `source` (`ready/join/cold`), `status`
 and `wait_ms`; `dispatch` means handing off to show, not an impression. Use existing actual
 `ad_impression` / `ad_skipped` events for presentation outcomes. Joining does not add `ad_request`.
@@ -345,12 +371,11 @@ add `"app_resume_load_delay_ms": 2000` inside the `open_resume` placement in
 }
 ```
 
-Since 5.2.8, the resume placement key is `open_resume`, matching partner apps.
-If you adopted `app_resume` in 5.2.3–5.2.7, rename it to `open_resume` in both
-asset files and remote config. The nested field remains `app_resume_load_delay_ms`.
+Use `open_resume` as the placement key in both asset files and remote config.
+Place `app_resume_load_delay_ms` inside that entry.
 
 Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid values
-use the default. The former top-level field is no longer read.
+use the default.
 Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
 
 ## Troubleshooting
@@ -381,23 +406,3 @@ AdSystemBars.setFullscreen(window, showNavigationBar = true)
 Call after creating your window and when it regains focus (`onWindowFocusChanged(true)`).
 This API changes bar visibility; apply visible-bar insets to your own content as needed.
 Java supports `AdSystemBars.setFullscreen(getWindow())` with the same defaults.
-
-`NativeAdConfig.reloadOnAdClick` defaults to `true`. A click/open immediately preloads an
-unused replacement for that placement. On return, `NativeAdHelper` consumes a ready ad or
-waits for the same in-flight request; it never binds the preload while the user is away.
-This also supports pause-only destinations and is independent of `canReloadAds`, debounce
-and refresh timers. Normal consent, purchase and network gates still apply.
-
-Disable this behavior for a screen that navigates away on ad return:
-
-```kotlin
-val config = NativeAdConfig(ids, true, false, R.layout.native_home).apply {
-    reloadOnAdClick = false
-}
-// Or configure an existing helper before the interaction:
-helper.setReloadOnAdClick(false)
-```
-
-The built-in onboarding provider disables it for all content/fullscreen step natives and
-OB5. Language slots, the language popup, question native, and ordinary partner natives keep
-it enabled. Step click-return navigation remains enabled by default.

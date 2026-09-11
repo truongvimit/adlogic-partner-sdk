@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import androidx.recyclerview.widget.GridLayoutManager
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -199,8 +200,9 @@ class ObQuestionActivity : BaseOnboardActivity() {
         showInterstitial(AdPlacement.QuestionInterstitial, onFinished = { forwardToNext() })
     }
 
+    // Can be created behind an interstitial, so it forwards only once it is in front.
     private fun forwardWithoutShowing() {
-        forwardToNext()
+        lifecycleScope.launch { lifecycle.withResumed { forwardToNext() } }
     }
 
     private fun forwardToNext() {

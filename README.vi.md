@@ -4,7 +4,7 @@
 
 Bộ SDK Android cho quảng cáo, onboarding, analytics, billing và paywall. Chọn tính năng cần dùng, cấu hình build chung rồi làm theo quickstart của module tương ứng.
 
-**Partner bắt đầu tại [Hướng dẫn tích hợp](docs/README.md)** — [Ads + OnboardKit từng bước](docs/ads-onboarding-integration.vi.md), kèm JSON quảng cáo test và bảng cấu hình tùy chọn.
+**Partner bắt đầu tại [Hướng dẫn tích hợp](partner-integration/README.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit và AdTracer; kèm file mẫu và bảng cấu hình tùy chọn.
 
 ## Chọn module
 
@@ -22,7 +22,7 @@ Chỉ thêm module cần dùng. Ads, onboarding, billing, paywall và Firebase �
 
 ## Cấu hình build
 
-Dùng JDK 17, `minSdk 24+` và `compileSdk 36+`. Repo đang build với Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 và targetSdk 36.
+Dùng JDK 17, `minSdk 24+` và `compileSdk 36+`. Xem [versions.gradle](versions.gradle) và [Gradle wrapper](gradle/wrapper/gradle-wrapper.properties) để đối chiếu cấu hình build của repo.
 
 Gộp các repository sau vào cấu hình Gradle đang có; không tạo thêm một khối `dependencyResolutionManagement` thứ hai. Ba repository mediation chỉ cần khi dùng ads/onboarding.
 
@@ -42,13 +42,19 @@ dependencyResolutionManagement {
 }
 ```
 
-Hướng dẫn này dành cho phiên bản **5.2.10**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
+Chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags), rồi đặt một lần trong `gradle.properties` ở root project của app. Thay `<published-tag>` bằng tag đã chọn; mọi ví dụ module đều đọc cùng property này.
+
+```properties
+adlogicSdkVersion=<published-tag>
+```
+
+Khi nâng SDK, đổi property này và đọc tài liệu tại tag đã chọn.
 
 Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

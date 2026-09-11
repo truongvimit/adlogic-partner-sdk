@@ -17,13 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Main">
 
-        <!--
-            Portrait plus configChanges is the pair BehaviorConfig.lockPortrait needs. The lock is
-            set from onCreate, and setting it while the device is held sideways is itself a
-            configuration change — without these the first sideways launch pays for a whole extra
-            runSplash before the lock takes hold. uiMode and fontScale are here for the same
-            reason: a dark-mode or text-size change mid-splash would otherwise restart it too.
-        -->
+        <!-- configChanges stop the portrait lock, dark mode or font scale recreating splash. -->
         <activity
             android:name=".ui.component.splash.SplashActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"

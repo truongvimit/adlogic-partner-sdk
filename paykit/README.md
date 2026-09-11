@@ -1,5 +1,7 @@
 # PayKit
 
+**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/paywall-integration.vi.md)** — required files, defaults, optional configuration and verification.
+
 PayKit provides a purchase screen backed by Google Play Billing. You supply your product
 catalogue, legal links and the places where it may appear. Firebase, ads and onboarding are optional.
 
@@ -7,8 +9,10 @@ catalogue, legal links and the places where it may appear. Firebase, ads and onb
 
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
+
 ```groovy
-def sdkVersion = '5.2.10' // Use the same published tag for every SDK module.
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:paykit:$sdkVersion"
 }

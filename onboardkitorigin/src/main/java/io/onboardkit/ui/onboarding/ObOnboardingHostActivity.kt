@@ -12,6 +12,7 @@ import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.loadAndShowInterstitial
 import io.onboardkit.core.FinishReason
 import io.onboardkit.core.ObLog
@@ -33,6 +34,8 @@ import io.onboardkit.ui.pager.StepPagerAdapter
 import io.onboardkit.ui.pager.pageHasHorizontallyScrollableViewUnder
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
+import io.onboardkit.ui.splash.SplashEntry
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
@@ -66,6 +69,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private var advanceFlingDetector: AdvanceFlingDetector? = null
     private var gestureBeganOnRestingLastStep = false
     private var exitResolved = false
+    private var exitAdGone: CompletableDeferred<Unit>? = null
 
     override val currentIndex: StateFlow<Int> get() = _currentIndex
     override val totalSteps: StateFlow<Int> get() = _totalSteps
@@ -301,23 +305,41 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     override fun finishFlow(reason: FinishReason) {
         lifecycleScope.launch {
             presentAfterOnboardingPaywall()
+            // A paywall opened under the exit ad can close itself before the ad does.
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) exitAdGone?.await()
             OnboardingSdk.completeFlow(this@ObOnboardingHostActivity)
-            finish()
+            finishAfterExitAd()
         }
     }
 
     // ── Exit handoff ──
 
     private fun resolveExit() {
+        val adGone = CompletableDeferred<Unit>().also { exitAdGone = it }
+        val timing = sdk.requireConfig().ads.afterOnboardingInterstitialTiming
+        val entry = SplashEntry.from(OnboardingSdk.session.passthrough)
+        val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
             timeoutMs = 8_000L,
+            onNext = { if (underAd) continueWhenResumed() },
             onFinished = {
-                // The page can complete in the background. Android only permits the next
-                // Activity/paywall presentation once this task is back in front.
-                lifecycleScope.launch { lifecycle.withResumed { continueAfterOnboardingAd() } }
+                adGone.complete(Unit)
+                if (!underAd) continueWhenResumed()
             },
         )
+    }
+
+    private fun continueWhenResumed() {
+        // The page can complete in the background. Android only permits the next
+        // Activity/paywall presentation once this task is back in front.
+        lifecycleScope.launch { lifecycle.withResumed { continueAfterOnboardingAd() } }
+    }
+
+    // The host must outlive the exit ad, so it finishes only once the ad is gone.
+    private suspend fun finishAfterExitAd() {
+        exitAdGone?.await()
+        finish()
     }
 
     private fun continueAfterOnboardingAd() {
@@ -336,12 +358,12 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
             ExitDecision.GoToOb5 -> {
                 ObFullScreenAdActivity.start(this)
-                finish()
+                lifecycleScope.launch { finishAfterExitAd() }
             }
 
             ExitDecision.GoToQuestion -> {
                 ObQuestionActivity.start(this, QuestionSource.NEW_USER)
-                finish()
+                lifecycleScope.launch { finishAfterExitAd() }
             }
 
             ExitDecision.Complete -> finishFlow(FinishReason.COMPLETED)

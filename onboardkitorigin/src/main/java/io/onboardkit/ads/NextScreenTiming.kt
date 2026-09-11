@@ -3,15 +3,15 @@ package io.onboardkit.ads
 /**
  * When a screen starts its destination, relative to the interstitial it just showed.
  *
- * This is a property of the destination, not of the app: it answers "may this screen exist behind
- * the ad?", and only the launch that picked the destination knows. See
- * [io.onboardkit.ui.splash.ObSplashActivity.nextScreenTiming].
+ * Answers "may the destination exist behind the ad?". The splash asks
+ * [io.onboardkit.ui.splash.ObSplashActivity.nextScreenTiming] per launch; the end-of-onboarding ad
+ * reads [io.onboardkit.config.AdsConfig.afterOnboardingInterstitialTiming].
  */
 enum class NextScreenTiming {
 
     /**
      * The destination starts while the ad is on screen, so it is inflated and painted by the time
-     * the ad closes. The default, and the right answer for a screen the user simply lands on.
+     * the ad closes. The right answer for a screen the user simply lands on, such as the app home.
      */
     UNDER_AD,
 

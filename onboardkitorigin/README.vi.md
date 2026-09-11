@@ -5,20 +5,7 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 
 [English](README.md) · [हिन्दी](README.hi.md)
 
-## Phiên bản 5.2.10
-
-- Mặc định chỉ ẩn navigation bar; status bar và caption bar hiển thị. Cấu hình qua `SystemBarConfig(showStatusBar = true, showNavigationBar = false, showCaptionBar = true)`.
-- Chưa hoàn thành toàn bộ flow thì mở app lại phải đi Splash → LFO → OB từ đầu, bất kể checkpoint và `ob_pass_lfo_if_completed`. Đổi cấu hình trong cùng process vẫn giữ màn; Android khôi phục process đã kill sẽ được chuyển về launcher.
-- Click/open native sẽ preload ngay; quay lại sẽ show ad có sẵn hoặc chờ đúng request đang tải. `NativeAdConfig.reloadOnAdClick` mặc định `true`, độc lập với refresh theo thời gian. Provider tích hợp tắt chức năng này cho toàn bộ step OB content/fullscreen và OB5. `behavior.adClickReturnCompletesStep` giữ mặc định `true` để quay về thì next bước; LFO, popup và question native vẫn bật preload khi click.
-- Popup LFO hiện từ click item thứ 4 và mọi click sau đó, tính cả ngôn ngữ đã selected. Popup xác nhận ngôn ngữ vừa click. Vẫn có thể tắt qua `confirmDialogOnReselectEnabled` hoặc `ob_show_language_confirm_dialog`; SETTINGS không hiện popup.
-
-App có thể dùng `com.ads.module.util.AdSystemBars.setFullscreen(window)` cho màn riêng; xem [API system bar](../ads/README.md#system-bar-api).
-
-Phiên bản 5.2.9 bổ sung fallback khi framework thiếu `WindowInsets.Type.systemOverlays()`. Onboarding vẫn tính padding cho status bar, navigation bar, caption bar và camera cutout để tránh crash; máy bình thường vẫn tính cả system overlays. Bản này cũng bao gồm fix điều hướng lifecycle từ 5.2.7.
-
-Phiên bản 5.2.7 sửa crash khi quay lại onboarding từ native ad. Pager chỉ chuyển trang sau khi callback lifecycle kết thúc; click-return, Skip và auto-next fullscreen chỉ hoàn thành mỗi lượt xem trang một lần. Deadline OB fullscreen vẫn tính thời gian background; OB5 standalone giữ cơ chế countdown khi ở foreground.
-
-Từ 5.2.5, popup xác nhận ngôn ngữ ở LFO chỉ load native ad khi người dùng chọn lại ngôn ngữ hiện tại để mở popup. Vào LFO hoặc chọn ngôn ngữ khác không preload ads cho popup. Mở lại popup dùng lại ad đã bind.
+[Hướng dẫn cho partner](../partner-integration/README.md) · [Tích hợp Ads + OnboardKit từng bước](../partner-integration/ads-onboarding-integration.vi.md)
 
 ## Trước khi tích hợp
 
@@ -27,8 +14,10 @@ Từ 5.2.5, popup xác nhận ngôn ngữ ở LFO chỉ load native ad khi ngư�
 - Nếu cần funnel, cài `Tracker` và sink trước OnboardKit; xem [Trackkit](../trackkit/README.md).
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
+Đặt `adlogicSdkVersion` một lần trong `gradle.properties` của app; xem [cấu hình build chung](../README.vi.md#cấu-hình-build).
+
 ```groovy
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -95,7 +84,7 @@ class App : Application() {
 
 Gọi `install()` trước `configure()`. Cả bước tạo config và configure đều trả về `Result`; ví dụ dùng `getOrThrow()` để lỗi tích hợp hiện rõ.
 Listener xử lý đủ ba kết quả. `Completed.selectedLanguage` còn trả về ngôn ngữ đã chọn.
-Khi chuyển tới app, dùng `NEW_TASK` và không thêm `CLEAR_TASK`: quảng cáo splash có thể vẫn cần Activity đang giữ nó.
+Khi chuyển tới app, dùng `NEW_TASK` và không thêm `CLEAR_TASK`: quảng cáo splash hoặc inter cuối onboarding có thể vẫn đang hiển thị trong task này.
 
 ## 2. Thêm splash làm launcher
 
@@ -112,7 +101,7 @@ class SplashActivity : ObSplashActivity()
         android:name=".SplashActivity"
         android:exported="true"
         android:screenOrientation="portrait"
-        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
         android:theme="@style/ob_Theme_OnboardKit">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
@@ -125,13 +114,19 @@ class SplashActivity : ObSplashActivity()
 Ghép các khai báo vào manifest; giữ metadata và permission theo hướng dẫn ads. Thư viện đã khai báo các màn SDK.
 Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` quản lý luồng này.
 
-Các mặc định cần biết:
+### Hành vi mặc định
+
+- Hiện status/caption bar, ẩn navigation bar; dùng `SystemBarConfig` khi cần đổi.
+- Chưa hoàn thành flow thì lần mở mới chạy lại Splash → LFO → OB. Đã hoàn thành thì bỏ qua onboarding.
+- Popup ngôn ngữ hiện từ lần click item thứ tư. Native được tải khi mở popup; click/open preload ad thay thế để hiện khi quay lại.
+- Quay lại từ ad ở bước OB mặc định hoàn thành bước (`BehaviorConfig.adClickReturnCompletesStep = true`). Provider tắt click replacement cho bước OB/OB5; native ngôn ngữ, popup và khảo sát vẫn bật.
+
 
 - `notificationPermissionEnabled = true`: Android 13+ / target 33+ hỏi quyền thông báo sau consent. Đã cấp quyền hoặc đã ghi nhận kết quả hỏi tự động thì không hỏi lại; từ chối vẫn đi tiếp. Đặt `false` nếu app tự quản lý lời nhắc này.
 - `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
-- `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
+- `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. Giữ `configChanges` của splash như mẫu trên để việc khóa dọc, đổi dark mode hay cỡ chữ không tạo lại Activity. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
-- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. `UNDER_AD` chờ phần minimum còn thiếu rồi mở màn và show inter liên tiếp. `AFTER_AD` có thể show inter sớm, nhưng chuyển màn phải chờ cả đóng ads và đủ minimum.
+- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Mặc định luồng lần đầu (ngôn ngữ/onboarding) dùng `AFTER_AD`, mở từ launcher khi onboarding đã xong (vào app hoặc khảo sát người dùng cũ) dùng `UNDER_AD`; entry notification, widget, uninstall luôn dùng `AFTER_AD`; override `nextScreenTiming()` trong splash và gọi `super` cho trường hợp giữ mặc định. Cả hai kiểu đều chờ đủ minimum rồi mới show inter: `UNDER_AD` mở màn và show inter liên tiếp, còn `AFTER_AD` chuyển màn ngay khi đóng quảng cáo.
 
 ### Tùy chọn splash và ngôn ngữ
 
@@ -140,7 +135,7 @@ không thêm timer chờ vào luồng này.
 
 | Tùy chọn | Mặc định / cách dùng |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi chuyển màn; `UNDER_AD` cũng chờ trước khi show, còn `AFTER_AD` có thể show sớm. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi show inter splash, hoặc trước khi chuyển màn nếu không có quảng cáo. Remote `ob_splash_min_display_ms` (mặc định 3000) ghi đè trường này khi lớn hơn 0, nên trường này chỉ có tác dụng khi giá trị đó trên Firebase là `0`; không có Firebase thì thời gian tối thiểu luôn là 3000 ms. |
 | `ob_splash_ad_budget_ms` | Chờ quảng cáo tối đa 60000 ms, tính sau khi notification hoàn tất và splash có focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload native ngôn ngữ đầu sau khi waterfall splash kết thúc hoặc hết thời gian chờ. `true`: preload cùng quảng cáo splash. |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Cần bật cả hai để hiện bàn tay gợi ý chọn ngôn ngữ. |
@@ -198,7 +193,10 @@ từ ad của step sẽ hoàn thành bước, nên các placement này không pr
 hiện nút sau 3 giây và tự đóng sau 15 giây.
 
 `inter_after_ob3` là placement riêng với splash. Provider có sẵn preload khi vào pager và
-chờ fill tối đa 8 giây lúc hoàn thành, rồi đi tiếp sau khi đóng hoặc bỏ qua quảng cáo.
+chờ fill tối đa 8 giây lúc hoàn thành. Mặc định
+(`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) màn tiếp theo mở dưới
+quảng cáo; entry notification, widget, uninstall chờ đóng quảng cáo. Đặt
+`NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) để luôn chờ đóng.
 Cần bật cả `afterOnboardingInterstitialEnabled` và remote `ob_ads_inter_after_ob3_enabled`.
 Đặt switch local thành `false` nếu app tự quản lý thời điểm hiện ad này; SDK sẽ tắt cả preload
 lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
@@ -249,7 +247,7 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 ```
 
 Listener bên trên chuyển tiếp extras cho `Completed`/`Skipped`. Đọc chúng ở cả `onCreate` và `onNewIntent` của màn đích.
-Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`, dự phòng bằng unit splash thường; các entry này điều hướng sau quảng cáo, còn launcher thường mở màn tiếp theo ở dưới quảng cáo.
+Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`, dự phòng bằng unit splash thường; các entry này luôn điều hướng sau khi đóng quảng cáo, vì màn đích của chúng tự mở thêm một màn và màn đó sẽ che quảng cáo đang hiển thị. Mở từ launcher thì lần đầu vào LFO sau khi đóng quảng cáo, onboarding đã xong thì mở app dưới quảng cáo.
 
 ## Xử lý lỗi tích hợp
 

@@ -1,5 +1,7 @@
 # BillingKit
 
+**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/billing-integration.vi.md)** — required files, defaults, optional configuration and verification.
+
 Use BillingKit when your app has its own purchase UI. It connects to Google Play, loads your
 product catalogue, launches purchases and exposes premium state. For a ready-made purchase
 screen, start with [PayKit](../paykit/README.md); PayKit initializes BillingKit for you.
@@ -8,16 +10,19 @@ screen, start with [PayKit](../paykit/README.md); PayKit initializes BillingKit 
 
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
+
 ```groovy
-def sdkVersion = '5.2.10' // Use the same published tag for every SDK module.
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
+def lifecycleVersion = providers.gradleProperty('lifecycleVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
-    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0" // Activity examples below.
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion" // Activity examples below.
 }
 ```
 
-Requires minSdk 24. Keep your app's existing Lifecycle version if already configured. Ads and
-Firebase are optional. The module includes Play Billing 9.0.0; no separate BillingClient is needed.
+Requires minSdk 24. Set `lifecycleVersion` in your app's `gradle.properties` to the Lifecycle version your app uses, or reuse its existing dependency declaration. See [versions.gradle](../versions.gradle) for the repository dependency configuration. Ads and
+Firebase are optional. The module includes Play Billing; no separate BillingClient is needed.
 
 ## 1. Register your products
 

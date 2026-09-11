@@ -20,13 +20,12 @@
         android:orientation="horizontal"
         android:padding="@dimen/ob_confirm_native_padding">
 
-        <!-- Figma "image 20": half the panel, 112dp tall, 4dp corners. clipToOutline rounds the
-             MediaView's own image child, which draws outside the background otherwise. -->
+        <!-- Keep native video's 120dp minimum on narrow dialogs; the text column takes the
+             remaining width. clipToOutline rounds the image child to its 4dp background. -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
-            android:layout_width="0dp"
+            android:layout_width="120dp"
             android:layout_height="@dimen/ob_confirm_media_height"
-            android:layout_weight="1"
             android:background="@drawable/ob_bg_confirm_media"
             android:clipToOutline="true" />
 

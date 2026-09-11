@@ -2,6 +2,8 @@
 
 # Trackkit
 
+**Partner bắt đầu tại [Hướng dẫn tích hợp Trackkit](../partner-integration/trackkit-integration.vi.md)** — các bước cơ bản, catalog event và bảng tùy chọn.
+
 Dùng `Tracker` để gửi event của SDK và app tới Firebase hoặc backend analytics riêng.
 
 [Cấu hình build và chọn module](../README.vi.md) · minSdk 24+ · compileSdk 36+ · JDK 17
@@ -10,9 +12,11 @@ Dùng `Tracker` để gửi event của SDK và app tới Firebase hoặc backen
 
 Với Firebase Analytics, thêm `suite-firebase`; module này đã cung cấp Trackkit. Hoàn tất [cấu hình Firebase](../suite-firebase/README.md) với `google-services.json` của app và Google Services plugin.
 
+Đặt `adlogicSdkVersion` một lần trong `gradle.properties` của app; xem [cấu hình build chung](../README.vi.md#cấu-hình-build).
+
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

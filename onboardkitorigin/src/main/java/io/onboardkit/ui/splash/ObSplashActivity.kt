@@ -492,11 +492,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private suspend fun proceed() {
         if (!attempt.showRequested) {
-            val timing = attempt.nextScreenTiming ?: nextScreenTiming().also { attempt.nextScreenTiming = it }
-            // UnderAd queues the destination immediately before the vendor's show(). Any wait
-            // belongs before that pair, otherwise the destination can cover an already visible ad.
-            // Wait before the paywall too: recreation during the minimum must not replay it.
-            if (timing == NextScreenTiming.UNDER_AD) awaitMinimumDisplay()
+            if (attempt.nextScreenTiming == null) attempt.nextScreenTiming = nextScreenTiming()
+            // Must precede the paywall and show for every timing: a dismissed ad navigates at once.
+            awaitMinimumDisplay()
             awaitPresentationWindow()
             val purchased = sdk.presentPaywall(this, PaywallPlacement.SPLASH_INTER) == PaywallOutcome.Purchased
             awaitPresentationWindow()
@@ -532,7 +530,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // AFTER_AD, no-ad, or an owner lost before onNext: never replay navigation on top
             // of an existing ad. A recreated owner continues once the presentation has ended.
             attempt.showFinished.await()
-            awaitMinimumDisplay()
             awaitSplashFocus()
             startFlow()
         }
@@ -557,19 +554,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Whether the destination this launch hands off to may exist behind the splash interstitial.
-     *
-     * Asked once per launch, immediately before the ad is shown, so it can read `intent` — which
-     * is the point: the answer belongs to the entry that chose the destination, never to the app
-     * as a whole, which is why it is a hook here rather than a field on `SplashConfig`.
-     *
-     * The default answers it from [SplashEntry]: a launch that came through one names a feature
-     * or screen to open, and `AFTER_AD` is always safe there — it only gives up the head start.
-     * A launcher tap keeps `UNDER_AD`. Override for a finer split, e.g. a notification action
-     * whose destination is where the user stays.
+     * Asked once, right before the splash ad shows. Default: AFTER_AD for the first-open flow and
+     * every [SplashEntry] launch, UNDER_AD when a launcher start goes past completed onboarding.
      */
     protected open fun nextScreenTiming(): NextScreenTiming =
-        if (SplashEntry.from(intent) != null) NextScreenTiming.AFTER_AD else NextScreenTiming.UNDER_AD
+        defaultNextScreenTiming(SplashEntry.from(intent), attempt.startDecision)
 
     private fun startFlow() {
         if (attempt.flowStarted) return
@@ -636,12 +625,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * returning. Returning `true` alone does not grant permission. The default UMP flow needs no
      * host wiring, and a host's explicit `OnboardingSdk.setCanRequestAds(false)` remains in force.
      *
-     * The splash gives the default all the time it needs: `consentTimeoutMs` bounds only the round
-     * trip. Once an SDK-owned consent flow is resolving, wait for its result without a deadline
-     * on the user's reading time. Destroying this Activity cancels its wait.
-     * An override that resolves consent
-     * without going through `ConsentCenter` has no flow for the splash to see, so that one is still
-     * bounded by `consentTimeoutMs` — resolve promptly, or run the slow part elsewhere.
+     * The default flow's UMP round trip is bounded by ConsentOptions.timeoutMs and a visible form
+     * is never timed out. An override that resolves consent without ConsentCenter is bounded by
+     * `consentTimeoutMs` instead. Destroying this Activity cancels the wait.
      */
     protected open suspend fun onConsentRequired(): Boolean =
         suspendCancellableCoroutine { continuation ->

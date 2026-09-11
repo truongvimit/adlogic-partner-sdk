@@ -1,6 +1,7 @@
 package io.onboardkit.config
 
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.core.StepId
 
 /**
@@ -161,6 +162,8 @@ data class AdsConfig(
     val afterOnboardingInterstitial: InterstitialAdUnit? = null,
     /** False disables both preload and presentation by the onboarding flow. */
     val afterOnboardingInterstitialEnabled: Boolean = true,
+    /** UNDER_AD starts the next screen under this ad; only an entry launch waits for close. */
+    val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.UNDER_AD,
     /** Shared Skip/X appearance for OB3 and standalone OB5. */
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.CLOSE_ICON,
 ) {

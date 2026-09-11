@@ -5,20 +5,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
-## Version 5.2.10: flow and native return behavior
-
-- System bars default to `SystemBarConfig(showStatusBar = true, showNavigationBar = false, showCaptionBar = true)`. OB screens and their dialogs apply the same policy.
-- An incomplete flow always starts again through Splash → LFO → OB, regardless of saved step or `ob_pass_lfo_if_completed`. A configuration recreation in the same process keeps its screen; restoring a killed process returns through the launcher.
-- Native click/open immediately preloads the next ad; return shows a ready ad or waits for that same request. `NativeAdConfig.reloadOnAdClick` defaults to `true` and is independent of timer/resume refresh. The built-in provider disables it for all OB content/fullscreen steps and OB5. Pager click-return navigation remains `behavior.adClickReturnCompletesStep = true` by default; language, popup and question natives keep click preload enabled.
-- The LFO confirmation popup appears on item tap 4 and every subsequent tap, counting taps on the selected language. It confirms the newly tapped language. `confirmDialogOnReselectEnabled` retains its API name and, together with `ob_show_language_confirm_dialog`, can disable the popup. SETTINGS stays a plain picker.
-
-For partner screens, see the [system-bar API](../ads/README.md#system-bar-api).
-
-Version 5.2.9 adds an insets fallback for frameworks missing `WindowInsets.Type.systemOverlays()`. Onboarding retains status/navigation/caption bar and display-cutout padding without crashing; normal platforms continue to include system overlays. This release also includes the lifecycle navigation fix from 5.2.7.
-
-Version 5.2.7 fixes the crash when returning from a native ad to onboarding. Pager navigation waits until lifecycle callbacks finish, and click-return, Skip and fullscreen auto-next complete each page visit at most once. OB fullscreen deadlines still include background time; standalone OB5 keeps its foreground countdown behavior.
-
-In 5.2.5, the optional LFO language-confirmation popup loads its native ad only when reselecting the current language opens the dialog. Entering LFO or selecting a different language does not preload that popup. Reopening the dialog reuses its bound ad.
+[Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough (Vietnamese)](../partner-integration/ads-onboarding-integration.vi.md)
 
 ## Before you start
 
@@ -27,8 +14,10 @@ In 5.2.5, the optional LFO language-confirmation popup loads its native ad only 
 - Install `Tracker` and a sink before OnboardKit if you need the funnel; see [Trackkit](../trackkit/README.md).
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
+Set `adlogicSdkVersion` once in your app's `gradle.properties`; see the [shared build setup](../README.md#build-setup).
+
 ```groovy
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -95,7 +84,7 @@ class App : Application() {
 
 Call `install()` before `configure()`. Both config building and configuration return a `Result`; this example fails visibly on invalid setup.
 The listener handles all three outcomes. `Completed.selectedLanguage` also provides the chosen language.
-Use `NEW_TASK` without `CLEAR_TASK` for the final handoff: the splash ad may still own its Activity.
+Use `NEW_TASK` without `CLEAR_TASK` for the final handoff: the splash ad or the end-of-onboarding ad may still be on screen in this task.
 
 ## 2. Add your launcher splash
 
@@ -112,7 +101,7 @@ class SplashActivity : ObSplashActivity()
         android:name=".SplashActivity"
         android:exported="true"
         android:screenOrientation="portrait"
-        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"
         android:theme="@style/ob_Theme_OnboardKit">
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
@@ -125,13 +114,19 @@ class SplashActivity : ObSplashActivity()
 Merge these declarations into your manifest; keep the ads guide's metadata and permissions. SDK screens are already declared by the library.
 Do not call `OnboardingSdk.start()` or finish splash yourself; `ObSplashActivity` owns the flow.
 
-Defaults to account for:
+### Default flow behavior
+
+- System bars show status/caption bars and hide navigation by default; use `SystemBarConfig` to customize them.
+- An incomplete flow starts again through Splash → LFO → OB on a new launch. A completed flow skips onboarding.
+- The language popup appears from the fourth item tap onward. Its native loads when the popup opens; click/open preloads a replacement to show on return.
+- OB step ad-return completes the step by default (`BehaviorConfig.adClickReturnCompletesStep = true`). The provider disables click replacement for OB steps/OB5; language, popup and question natives keep it enabled.
+
 
 - `notificationPermissionEnabled = true`: Android 13+ / target 33+ requests notifications after consent. A grant or a recorded automatic request result skips later prompts; denial still continues. Set it to `false` if your app owns this prompt.
 - `noInternetPromptEnabled = true`: splash asks the user to connect before continuing. Set it to `false` if your app should allow an offline start.
-- `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Landscape apps must set it to `false` and review merged manifest orientation rules too.
+- `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Keep the splash `configChanges` above so the lock, dark mode or font scale does not recreate it. Landscape apps must set it to `false` and review merged manifest orientation rules too.
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
-- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI; `UNDER_AD` waits out the remaining minimum before opening the destination and showing the interstitial together. `AFTER_AD` may show a ready interstitial early, but navigation waits for both dismissal and the minimum.
+- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI. By default the first-open flow (language/onboarding) uses `AFTER_AD`, and a launcher start past completed onboarding (your app or the returning-user question) uses `UNDER_AD`; notification, widget and uninstall entries always use `AFTER_AD`; override `nextScreenTiming()` in your splash and call `super` for the cases that keep the default. Both timings wait out the remaining minimum before showing the interstitial: `UNDER_AD` opens the destination and shows the ad together, while `AFTER_AD` opens the destination as soon as the ad is dismissed.
 
 ### Splash and language options
 
@@ -140,7 +135,7 @@ this flow. Configure only the defaults you need to change:
 
 | Option | Default / use |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms before navigation; `UNDER_AD` also waits before showing, while `AFTER_AD` may show early. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms before the splash interstitial shows, or before navigation when there is no ad. Remote `ob_splash_min_display_ms` (default 3000) overrides this field when greater than 0, so this field applies only after that Firebase value is set to `0`; without Firebase the minimum stays 3000 ms. |
 | `ob_splash_ad_budget_ms` | 60000 ms of ad waiting, starting after notification completes and splash has focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload the first language native after the splash waterfall settles or its wait expires. `true`: preload alongside splash ads. |
 | `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Both must be enabled to show the language selection hand. |
@@ -198,8 +193,11 @@ the step by default, so these placements do not preload/show a replacement on cl
 its own 3-second skip and 15-second auto-dismiss defaults.
 
 `inter_after_ob3` is a separate placement from splash. The built-in provider preloads it on
-pager entry and waits up to 8 seconds for a fill on completion, then continues after dismissal
-or a skip. Both `afterOnboardingInterstitialEnabled` and remote `ob_ads_inter_after_ob3_enabled`
+pager entry and waits up to 8 seconds for a fill on completion. By default
+(`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) the next screen starts
+underneath the ad; notification, widget and uninstall entries wait for dismissal. Set
+`NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) to always wait. Both
+`afterOnboardingInterstitialEnabled` and remote `ob_ads_inter_after_ob3_enabled`
 must be true. Set the local switch to `false` if your app owns this ad trigger; this disables
 both automatic preload and show. Keep this placement out of your content AutoBuffer group.
 
@@ -249,7 +247,7 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 ```
 
 The listener above forwards extras for `Completed`/`Skipped`. Read them in your destination's `onCreate` and `onNewIntent`.
-Entries use `inter_noti`, `inter_widget` or `inter_uninstall`, falling back to the normal splash unit; these entries navigate after the ad, while a launcher start normally opens the next screen underneath it.
+Entries use `inter_noti`, `inter_widget` or `inter_uninstall`, falling back to the normal splash unit; these entries always navigate after the ad is dismissed, because their destination opens a screen of its own, which would cover an ad still on screen. A launcher start opens LFO after the ad on first open, and your app underneath it once onboarding is done.
 
 ## Troubleshooting
 

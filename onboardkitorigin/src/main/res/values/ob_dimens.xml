@@ -61,7 +61,8 @@
     <dimen name="ob_confirm_native_radius">8dp</dimen>
     <dimen name="ob_confirm_native_padding">8dp</dimen>
     <dimen name="ob_confirm_native_gap">8dp</dimen>
-    <dimen name="ob_confirm_media_height">112dp</dimen>
+    <!-- Native video MediaView must be at least 120dp on each axis. -->
+    <dimen name="ob_confirm_media_height">120dp</dimen>
     <dimen name="ob_confirm_media_radius">4dp</dimen>
     <dimen name="ob_confirm_ad_column_gap">12dp</dimen>
     <dimen name="ob_confirm_ad_text_gap">8dp</dimen>

@@ -4,6 +4,8 @@
 
 विज्ञापन, onboarding, analytics, billing और paywall के लिए Android SDK। पहले ज़रूरी सुविधा चुनें, साझा build setup करें और फिर उस module की quickstart पढ़ें।
 
+**Partner integration guides (Vietnamese): [Start here](partner-integration/README.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit and AdTracer.
+
 ## अपना मॉड्यूल चुनें
 
 | ऐप को क्या चाहिए | Dependency | गाइड |
@@ -20,7 +22,7 @@
 
 ## Build setup
 
-JDK 17, `minSdk 24+` और `compileSdk 36+` इस्तेमाल करें। यह repo Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 और targetSdk 36 से build होता है।
+JDK 17, `minSdk 24+` और `compileSdk 36+` इस्तेमाल करें। Repo की build configuration के लिए [versions.gradle](versions.gradle) और [Gradle wrapper](gradle/wrapper/gradle-wrapper.properties) देखें।
 
 इन repositories को मौजूदा Gradle configuration में मिलाएँ; दूसरा `dependencyResolutionManagement` block न बनाएँ। अंतिम तीन mediation repositories केवल ads/onboarding के लिए चाहिए।
 
@@ -40,13 +42,19 @@ dependencyResolutionManagement {
 }
 ```
 
-यह गाइड version **5.2.10** के लिए है। सभी modules का version एक रखें। बाद में upgrade करते समय उपलब्ध [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) चुनें और उसी tag की README पढ़ें।
+एक [published tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) चुनें और app project की root `gradle.properties` में एक बार सेट करें। `<published-tag>` को चुने हुए tag से बदलें; सभी module examples यही property पढ़ते हैं।
+
+```properties
+adlogicSdkVersion=<published-tag>
+```
+
+SDK upgrade करते समय यह property बदलें और चुने हुए tag के docs पढ़ें।
 
 उदाहरण: ads और onboarding वाला ऐप। दूसरी ज़रूरत के लिए ऊपर की तालिका के अनुसार artifact नाम बदलें।
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

@@ -62,11 +62,6 @@
     public <methods>;
 }
 
-# Keep classes that use reflection-based adapters (KotlinJsonAdapterFactory)
-# AdRemoteConfig uses KotlinJsonAdapterFactory, so we need to keep it
--keep class com.itg.template.ads.AdRemoteConfig { *; }
--keep class com.itg.template.ads.AdRemoteConfig$Companion { *; }
-
 # =====================
 # Other libs
 # =====================
@@ -75,5 +70,4 @@
 -keepclassmembers class androidx.lifecycle.ViewModel { *; }
 -keepnames class androidx.lifecycle.LiveData { *; }
 
--keep class com.itg.template.ads.AdUnitConfig
 -keep class com.itg.template.data.model.ForceUpdateConfig

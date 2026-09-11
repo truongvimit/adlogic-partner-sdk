@@ -84,6 +84,7 @@ class SplashLongPromptTest {
             trackkitAutoTracking(false)
             analyticsPlugin(AnalyticsPlugin {
                 if (it is AnalyticsEvent.FlowStarted) LongPromptFixture.flowStarts++
+                if (it is AnalyticsEvent.SplashCompleted) LongPromptFixture.splashHandoffs++
             })
         }
         OnboardingSdk.setCanRequestAds(true)
@@ -310,17 +311,18 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun afterAdCanShowEarlyButFailedShowStillWaitsBeforeHandoff() {
+    fun afterAdWaitsForTheMinimumBeforeShowingAndHandsOffWhenShowFails() {
         LongPromptFixture.timing = io.onboardkit.ads.NextScreenTiming.AFTER_AD
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
-        assertEquals("Min time must not delay showing a ready inter", listOf("native", "show"), LongPromptFixture.provider.order)
-        assertEquals("An immediately skipped show still owes the remaining splash minimum", 0, LongPromptFixture.flowStarts)
+        assertEquals("A ready inter waits out the splash minimum", listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.flowStarts)
         main.idleFor(Duration.ofSeconds(4))
-        drainUntil("One handoff after the remaining minimum") { LongPromptFixture.flowStarts == 1 }
+        drainUntil("Show after the minimum, then one handoff") { LongPromptFixture.flowStarts == 1 }
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
     }
 
     @Test
@@ -339,6 +341,39 @@ class SplashLongPromptTest {
         assertEquals("The original banner deadline must release the ready inter", listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+    }
+
+    @Test
+    fun defaultTimingOpensFirstOpenFlowOnlyAfterTheAdCloses() {
+        LongPromptFixture.useDefaultTiming = true
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertTrue("The minimum is spent before the ad shows", "show" !in LongPromptFixture.provider.order)
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
+        assertEquals("LFO must not start under the ad", 0, LongPromptFixture.provider.handoffsAtVendorShow)
+        assertEquals(0, LongPromptFixture.splashHandoffs)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        drainUntil("LFO opens as soon as the ad is dismissed") { LongPromptFixture.splashHandoffs == 1 }
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun defaultTimingOpensTheDestinationUnderTheAdOnceOnboardingIsDone() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        LongPromptFixture.useDefaultTiming = true
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
+        assertEquals("The destination starts inside the vendor callback", 1, LongPromptFixture.provider.handoffsAtVendorShow)
     }
 
     @Test
@@ -579,7 +614,8 @@ class SplashLongPromptTest {
 class LongPromptVendorActivity : Activity()
 
 class LongPromptSplashActivity : ObSplashActivity() {
-    override fun nextScreenTiming() = LongPromptFixture.timing
+    override fun nextScreenTiming() =
+        if (LongPromptFixture.useDefaultTiming) super.nextScreenTiming() else LongPromptFixture.timing
     override suspend fun onInitBilling() {
         LongPromptFixture.billingEntered = true
         LongPromptFixture.billing?.await()
@@ -602,6 +638,8 @@ private object LongPromptFixture {
     var paywallEnabled = false
     var paywallCalls = 0
     var timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
+    var useDefaultTiming = false
+    var splashHandoffs = 0
     var flags = io.onboardkit.remote.RemoteFlags()
     var strategy = io.onboardkit.config.AdLoadStrategy.ALTERNATE
     var billing: CompletableDeferred<Unit>? = null
@@ -619,6 +657,9 @@ private object LongPromptFixture {
         paywallEnabled = false
         paywallCalls = 0
         timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
+        useDefaultTiming = false
+        splashHandoffs = 0
+        provider.handoffsAtVendorShow = -1
         provider.successfulShow = false
         provider.holdNext = false
         provider.flowStartsAtVendorShow = -1
@@ -640,6 +681,7 @@ private class LongPromptProvider : OnboardingAdProvider {
     var successfulShow = false
     var holdNext = false
     var flowStartsAtVendorShow = -1
+    var handoffsAtVendorShow = -1
     var presentation: ObInterstitialCallback? = null
     var settleBanner = true
     var immediateInterResult = 0
@@ -680,6 +722,7 @@ private class LongPromptProvider : OnboardingAdProvider {
             if (!holdNext) {
                 callback.onNextAction()
                 flowStartsAtVendorShow = LongPromptFixture.flowStarts
+                handoffsAtVendorShow = LongPromptFixture.splashHandoffs
             }
         }
         else callback.onAdSkipped(AdSkipReason.NOT_READY)

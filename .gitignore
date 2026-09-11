@@ -10,6 +10,8 @@ release/
 # …but not the release source set: `release/` was swallowing app/src/release, so release-only
 # sources were never committed and a fresh clone could not build the release variant.
 !*/src/release/
+# …and the release source-set sample shipped with the AdTracer partner guide.
+!/partner-integration/examples/adtracer/release/
 
 # Compiled artifacts
 *.apk
@@ -109,16 +111,7 @@ desktop.ini
 /CLAUDE.md
 /AGENTS.md
 /CONTEXT.md
-# Share partner guides and their examples; keep local research/diagnostics ignored.
-/docs/*
-!/docs/README.md
-!/docs/ads-onboarding-integration.vi.md
-!/docs/examples/
-/docs/examples/*
-!/docs/examples/ads-onboarding/
-/docs/examples/ads-onboarding/*
-!/docs/examples/ads-onboarding/ad_config.json
-!/docs/examples/ads-onboarding/ad_config_debug.json
+/docs/
 /.scratch/
 /SDK_ACTION_PLAN.md
 /MIGRATION-*.md

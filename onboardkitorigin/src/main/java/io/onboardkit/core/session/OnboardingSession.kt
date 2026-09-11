@@ -24,7 +24,7 @@ internal class OnboardingSession {
     /** CAS guard: the completion callback must fire exactly once per run. */
     val finished = AtomicBoolean(false)
 
-    /** Stamped by `OnboardingSdk.start`; end-to-end duration of the whole first-open flow. */
+    /** Stamped at the flow handoff, including the splash's already-resolved entry path. */
     @Volatile
     var startedAtMs: Long = 0L
 
@@ -41,6 +41,15 @@ internal class OnboardingSession {
      */
     fun seedLanguage(code: String?) {
         if (selectedLanguage == null) selectedLanguage = code
+    }
+
+    /** Starts a new run while retaining the language shared by the app's onboarding screens. */
+    fun begin(passthrough: Bundle?, nowMs: Long = System.currentTimeMillis()) {
+        this.passthrough = passthrough
+        stepsShown.clear()
+        answers.clear()
+        finished.set(false)
+        startedAtMs = nowMs
     }
 
     fun reset() {

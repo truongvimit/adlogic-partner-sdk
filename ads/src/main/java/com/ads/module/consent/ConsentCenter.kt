@@ -243,7 +243,6 @@ object ConsentCenter {
                 if (isDebugFlow(activity)) {
                     val debugSettings = ConsentDebugSettings.Builder(activity)
                         .setDebugGeography(ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA)
-                        .apply { options.testDeviceHashedId?.let(::addTestDeviceHashedId) }
                         .setForceTesting(true)
                         .build()
                     setConsentDebugSettings(debugSettings)

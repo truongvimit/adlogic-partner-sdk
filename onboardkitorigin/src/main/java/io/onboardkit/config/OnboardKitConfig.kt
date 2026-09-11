@@ -20,15 +20,7 @@ data class SplashConfig(
     @StringRes val appNameRes: Int = 0,
     val minDisplayTimeMs: Long = 3_000,
     val remoteFetchTimeoutMs: Long = 10_000,
-    /**
-     * Bounds the initial wait for consent. ConsentCenter separately bounds its own UMP round trip.
-     * A custom consent hook with no SDK-owned flow still resolving is limited to this wait.
-     *
-     * If an SDK-owned flow remains open, splash waits a further 180-second window. At its end,
-     * a background splash waits another whole window; a visible splash may continue using current
-     * authorization. These are wall-time windows, not accumulated foreground time. A timeout
-     * never grants consent. Set this consistently with ConsentOptions.timeoutMs for the host.
-     */
+    /** Bounds a consent hook that bypasses ConsentCenter; UMP uses ConsentOptions.timeoutMs. */
     val consentTimeoutMs: Long = 20_000,
     val billingTimeoutMs: Long = 5_000,
     val adLoadStrategy: AdLoadStrategy = AdLoadStrategy.ALTERNATE,
@@ -118,28 +110,7 @@ data class BehaviorConfig(
      * step ads count; a click on the language or question screen never moves the pager.
      */
     val adClickReturnCompletesStep: Boolean = true,
-    /**
-     * Pins **every** screen that extends `BaseOnboardActivity` to portrait — the app's own splash
-     * included, not just the pager. The rest of this class is about the pager and the onboarding
-     * steps; this one is not.
-     *
-     * The SDK's four screens are already portrait in its manifest. The splash cannot be, because
-     * it is a base class the app registers its own subclass of, so it was the one screen that
-     * rotated — and every rotation recreates it: the min-display clock restarts and the consent
-     * flow has to be handed back and re-run. Locking it removes the commonest source of that.
-     *
-     * It does not remove the recreate itself. A dark-mode switch, a font-scale change and process
-     * death all still recreate the splash, which is why the consent flow survives one on its own.
-     *
-     * **Declare `configChanges` on your splash Activity or this costs you a recreate.** Setting
-     * the orientation from `onCreate` while the device is in landscape *is* a configuration change,
-     * so a first launch held sideways pays for one `runSplash` before the lock takes hold. The
-     * SDK's own screens declare `orientation|screenSize|keyboardHidden` to absorb it; a splash
-     * holds three seconds of nothing, so it can afford two more:
-     * `android:configChanges="orientation|screenSize|keyboardHidden|uiMode|fontScale"`.
-     *
-     * Set `false` for a landscape or tablet app.
-     */
+    /** Also locks the app splash; configChanges orientation|screenSize stops that recreating it. */
     val lockPortrait: Boolean = true,
 )
 

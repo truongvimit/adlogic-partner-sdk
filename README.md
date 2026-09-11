@@ -4,7 +4,7 @@
 
 Android SDKs for ads, onboarding, analytics, billing and paywalls. Choose the feature you need, complete the shared build setup, then follow that module's quickstart.
 
-**Partner integration guides (Vietnamese): [Start here](docs/README.md)** — [Ads + OnboardKit step by step](docs/ads-onboarding-integration.vi.md), with test ad JSON files and optional configuration tables.
+**Partner integration guides (Vietnamese): [Start here](partner-integration/README.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit and AdTracer, with copyable samples and optional configuration tables.
 
 ## Choose your modules
 
@@ -22,7 +22,7 @@ Add only the modules you use. Trackkit is already exposed by ads, onboarding, bi
 
 ## Build setup
 
-Use JDK 17, `minSdk 24+` and `compileSdk 36+`. This repository builds with Kotlin 2.1.0, AGP 8.12.0, Gradle 8.13 and targetSdk 36.
+Use JDK 17, `minSdk 24+` and `compileSdk 36+`. See [versions.gradle](versions.gradle) and the [Gradle wrapper](gradle/wrapper/gradle-wrapper.properties) for the repository build configuration.
 
 Merge these repositories into your existing Gradle repository block; do not create a second `dependencyResolutionManagement` block. The three mediation repositories are needed only for ads/onboarding.
 
@@ -42,13 +42,19 @@ dependencyResolutionManagement {
 }
 ```
 
-This guide targets **5.2.10**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+Choose a [published tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and set it once in your app project's `gradle.properties`. Replace `<published-tag>` with that tag; all module examples read this same property.
+
+```properties
+adlogicSdkVersion=<published-tag>
+```
+
+To upgrade, change this property and read the documentation at the selected tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.10'
+def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

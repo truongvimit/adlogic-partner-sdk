@@ -263,9 +263,6 @@ object OnboardingSdk {
             )
             return
         }
-        session.reset()
-        session.startedAtMs = System.currentTimeMillis()
-        session.passthrough = options.passthrough
         session.selectedLanguage = stateStore?.current()?.languageSelected
 
         if (options.forceRestart) {
@@ -292,9 +289,9 @@ object OnboardingSdk {
         decision: StartDecision,
         options: StartOptions = StartOptions(),
     ) {
-        // Splash reaches this without going through start(), so the carrier has to be seeded here
-        // too — otherwise completeFlow() reads back a null passthrough on that path.
-        session.passthrough = options.passthrough
+        // Both public start() and splash enter here. Reset completion and per-run results once
+        // at this handoff, retaining the language already loaded from preferences or selected.
+        session.begin(options.passthrough)
         ObLog.d(ObLog.Section.NAV, "startResolved decision=$decision")
         eventBus.emit(OnboardingEvent.FlowStarted)
         // Before the skip/start branch on purpose: it is the denominator of every `fo_` rate,
