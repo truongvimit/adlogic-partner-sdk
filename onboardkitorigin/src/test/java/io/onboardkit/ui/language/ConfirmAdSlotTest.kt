@@ -49,7 +49,7 @@ class ConfirmAdSlotTest {
 
         val second = container()
         assertTrue(slot.attach(second))
-        assertSame("the same ad view, not a reload", ad, second.getChildAt(0))
+        assertSame("the same ad view, not a reload", ad, (second.getChildAt(0) as FrameLayout).getChildAt(0))
     }
 
     @Test
@@ -62,8 +62,9 @@ class ConfirmAdSlotTest {
 
         val second = container()
         assertTrue(slot.attach(second))
-        assertSame(ad, second.getChildAt(0))
-        assertNull("must be off the old dialog's container", ad.parent?.takeIf { it === first })
+        assertSame(ad, (second.getChildAt(0) as FrameLayout).getChildAt(0))
+        assertSame("the provider must still own the same binding container", first, ad.parent)
+        assertSame(second, first.parent)
     }
 
     @Test
@@ -76,7 +77,7 @@ class ConfirmAdSlotTest {
 
         val second = container().apply { addView(TextView(context)) }
         assertTrue(slot.attach(second))
-        assertSame(ad, second.getChildAt(0))
+        assertSame(ad, (second.getChildAt(0) as FrameLayout).getChildAt(0))
         assertSame("the skeleton must be gone, not stacked under the ad", 1, second.childCount)
     }
 
@@ -90,8 +91,22 @@ class ConfirmAdSlotTest {
             slot.detach()
             val next = container()
             assertTrue("raise ${it + 2} must still re-show the kept ad", slot.attach(next))
-            assertSame(ad, next.getChildAt(0))
+            assertSame(ad, (next.getChildAt(0) as FrameLayout).getChildAt(0))
         }
+    }
+
+    @Test
+    fun `a replacement bound after reopening appears in the visible dialog`() {
+        val slot = ConfirmAdSlot()
+        val (bindingContainer, _) = containerWithAd()
+        slot.capture(bindingContainer)
+        slot.detach()
+        val visible = container()
+        slot.attach(visible)
+        val replacement = TextView(context)
+        bindingContainer.removeAllViews()
+        bindingContainer.addView(replacement)
+        assertSame(replacement, (visible.getChildAt(0) as FrameLayout).getChildAt(0))
     }
 
     @Test
@@ -102,7 +117,7 @@ class ConfirmAdSlotTest {
         slot.clear()
 
         assertFalse("a cleared slot must not hand the ad back", slot.attach(container()))
-        assertNull("and it must not be left attached anywhere", ad.parent)
+        assertNull("the binding container is detached from the dialog", first.parent)
     }
 
     @Test

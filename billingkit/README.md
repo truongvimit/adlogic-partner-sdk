@@ -9,7 +9,7 @@ screen, start with [PayKit](../paykit/README.md); PayKit initializes BillingKit 
 Follow the [root build setup](../README.md), then add this to `app/build.gradle`:
 
 ```groovy
-def sdkVersion = '5.2.9' // Use the same published tag for every SDK module.
+def sdkVersion = '5.2.10' // Use the same published tag for every SDK module.
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0" // Activity examples below.

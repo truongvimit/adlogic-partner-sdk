@@ -12,7 +12,7 @@ adapters are bundled; [build.gradle](build.gradle) lists versions and dependenci
 
 ```groovy
 // app/build.gradle — use the same published tag for every SDK module.
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 android {
     defaultConfig {
         manifestPlaceholders = [app_id: 'YOUR_ADMOB_APP_ID'] // ca-app-pub-...~...
@@ -365,3 +365,39 @@ Returning before the delay cancels the scheduled load. No app-side lifecycle tim
 
 Consumer ProGuard rules ship with the library. Bundled adapters are listed in [build.gradle](build.gradle).
 License: [MIT](../LICENSE).
+
+## System-bar API
+
+```kotlin
+import com.ads.module.util.AdSystemBars
+
+// Default: hide navigation; show status and desktop caption bars.
+AdSystemBars.setFullscreen(window)
+
+// Optional overrides, including restoring bars previously hidden by another window.
+AdSystemBars.setFullscreen(window, showNavigationBar = true)
+```
+
+Call after creating your window and when it regains focus (`onWindowFocusChanged(true)`).
+This API changes bar visibility; apply visible-bar insets to your own content as needed.
+Java supports `AdSystemBars.setFullscreen(getWindow())` with the same defaults.
+
+`NativeAdConfig.reloadOnAdClick` defaults to `true`. A click/open immediately preloads an
+unused replacement for that placement. On return, `NativeAdHelper` consumes a ready ad or
+waits for the same in-flight request; it never binds the preload while the user is away.
+This also supports pause-only destinations and is independent of `canReloadAds`, debounce
+and refresh timers. Normal consent, purchase and network gates still apply.
+
+Disable this behavior for a screen that navigates away on ad return:
+
+```kotlin
+val config = NativeAdConfig(ids, true, false, R.layout.native_home).apply {
+    reloadOnAdClick = false
+}
+// Or configure an existing helper before the interaction:
+helper.setReloadOnAdClick(false)
+```
+
+The built-in onboarding provider disables it for all content/fullscreen step natives and
+OB5. Language slots, the language popup, question native, and ordinary partner natives keep
+it enabled. Step click-return navigation remains enabled by default.

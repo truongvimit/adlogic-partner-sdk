@@ -64,6 +64,7 @@ class OnboardingAdReturnDeviceTest {
                 })
             }
             OnboardingSdk.configure(onboardKitConfig {
+                behavior = io.onboardkit.config.BehaviorConfig(adClickReturnCompletesStep = true)
                 step(if (fullscreen) AdFullScreenStepDefinition(StepId.OB1)
                     else ContentStepDefinition(StepId.OB1, title = "Source page"))
                 step(if (nextFullscreen) AdFullScreenStepDefinition(StepId.OB2,

@@ -119,6 +119,7 @@ class NativeAdHelper(
     private var pendingRestoration: NativePresentationStore.Presentation? = null
     private var awaitingHost = false
     private var restartOnResume = false
+    private var adClickPending = false
     private var requestVersion = 0L
     /** Disable when a containing integration owns request analytics. */
     var reportTelemetry: Boolean = true
@@ -149,15 +150,32 @@ class NativeAdHelper(
 
         override fun onAdClicked() {
             if (isActiveState() && nativeAd != null) {
+                prepareAdClickReturn()
                 listeners.forEach { it.onAdClicked() }
             }
         }
 
         override fun onAdOpened() {
             if (isActiveState() && nativeAd != null) {
+                // Some mediation adapters report only opened for a native destination.
+                prepareAdClickReturn()
                 listeners.forEach { it.onAdOpened() }
             }
         }
+    }
+
+    private fun prepareAdClickReturn() {
+        if (adClickPending) return
+        adClickPending = true
+        mainHandler.removeCallbacks(reloadByTimeRunnable)
+        mainHandler.removeCallbacks(resumeReloadRunnable)
+        if (!config.reloadOnAdClick) return
+        // Keep the current presentation until departure. Only the unused cache loads here;
+        // it must never bind a replacement while the click destination is opening.
+        requestVersion++
+        loadSubscription?.cancel()
+        NativeAdManager.preload(activity.applicationContext, storeKey, config,
+            reportTelemetry = reportTelemetry && placement != null)
     }
 
     private val reloadByTimeRunnable = Runnable { reloadWhenVisible() }
@@ -269,6 +287,11 @@ class NativeAdHelper(
         listeners.clear()
     }
 
+    /** Enables click-time preload and return-time show for this native slot. Default: true. */
+    fun setReloadOnAdClick(enabled: Boolean): NativeAdHelper = apply {
+        config.reloadOnAdClick = enabled
+    }
+
     /** Explicit show: after a successful bind, calling again requests a different ad. */
     fun show() = requestAds(NativeAdParam.Request)
 
@@ -326,6 +349,7 @@ class NativeAdHelper(
         pendingRestoration = null
         awaitingHost = false
         restartOnResume = false
+        adClickPending = false
         loadSubscription?.cancel()
         eventSubscription?.cancel()
         flagActive.compareAndSet(true, false)
@@ -351,7 +375,7 @@ class NativeAdHelper(
 
     /** Reload is allowed only after the last bind has been visible for a minimum time. */
     fun conditionReloadAdAvailable(): Boolean =
-        _nativeAdState.value !is AdNativeState.Loading &&
+        !adClickPending && _nativeAdState.value !is AdNativeState.Loading &&
             android.os.SystemClock.elapsedRealtime() - timeShowAdRecent > maxValueDebounceAdLoaded &&
             canReloadAd() &&
             isActiveState()
@@ -365,7 +389,16 @@ class NativeAdHelper(
                     cancel()
                     return
                 }
-                if (restartOnResume) {
+                if (adClickPending && isActiveState()) {
+                    if (!config.reloadOnAdClick) {
+                        // The containing flow may navigate on this return. Do not let either
+                        // stop/resume restoration or resume refresh request an unseen ad.
+                        adClickPending = false
+                        return
+                    }
+                    cancel()
+                    show() // Consume the click preload, or join that same in-flight request.
+                } else if (restartOnResume) {
                     restartOnResume = false
                     show()
                 } else if (awaitingHost && isActiveState() && contentView != null) {
@@ -383,6 +416,7 @@ class NativeAdHelper(
 
             Lifecycle.Event.ON_STOP -> {
                 if (!activity.isChangingConfigurations) {
+                    if (adClickPending && !config.reloadOnAdClick) return
                     val restart = isActiveState()
                     cancel()
                     restartOnResume = restart
@@ -392,9 +426,13 @@ class NativeAdHelper(
             Lifecycle.Event.ON_DESTROY -> {
                 if (activity.isChangingConfigurations && isActiveState()) {
                     presentationStore?.let { store ->
+                        if (adClickPending && config.reloadOnAdClick) {
+                            nativeAd?.let(::destroyNative)
+                            nativeAd = null
+                        }
                         store.retain(storeKey, pendingRestoration ?: NativePresentationStore.Presentation(
                             nativeAd, timeShowAdRecent, nextReloadAtMs,
-                            _nativeAdState.value is AdNativeState.Loading))
+                            (adClickPending && config.reloadOnAdClick) || _nativeAdState.value is AdNativeState.Loading))
                         nativeAd = null
                         pendingRestoration = null
                     }
@@ -470,7 +508,7 @@ class NativeAdHelper(
 
     private fun armReload() {
         mainHandler.removeCallbacks(reloadByTimeRunnable)
-        if (reloadByTimeMs <= 0 || !isResumed() || !isActiveState() || !canReloadAd()) return
+        if (adClickPending || reloadByTimeMs <= 0 || !isResumed() || !isActiveState() || !canReloadAd()) return
         val due = maxOf(nextReloadAtMs, timeShowAdRecent + maxValueDebounceAdLoaded + 1)
         val delay = (due - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0)
         mainHandler.postDelayed(reloadByTimeRunnable, delay)
@@ -485,7 +523,7 @@ class NativeAdHelper(
     }
 
     private fun onLoadedAd(ad: ApNativeAd) {
-        if (isActiveState() && canShowAds() && ad.isUsable && (contentView == null || !isResumed())) {
+        if (isActiveState() && canShowAds() && ad.isUsable && (adClickPending || contentView == null || !isResumed())) {
             NativeAdManager.returnUnused(storeKey, ad)
             awaitingHost = true
             setState(AdNativeState.Loading)

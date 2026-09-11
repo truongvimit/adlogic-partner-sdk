@@ -141,8 +141,7 @@ class OnboardingResumeEligibilityTest {
         shadowOf(Looper.getMainLooper()).idle()
         val list = activity.findViewById<RecyclerView>(R.id.ob_language_list)
         val row = requireNotNull(list.findViewHolderForAdapterPosition(0)).itemView
-        row.performClick()
-        row.performClick()
+        repeat(4) { row.performClick() }
         shadowOf(Looper.getMainLooper()).idle()
         val modal = requireNotNull(ShadowDialog.getLatestDialog())
         assertTrue(modal.isShowing)

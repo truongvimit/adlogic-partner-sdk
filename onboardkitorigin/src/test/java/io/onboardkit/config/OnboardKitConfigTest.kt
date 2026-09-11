@@ -12,6 +12,14 @@ import org.junit.Test
 class OnboardKitConfigTest {
 
     @Test
+    fun `system bar defaults hide navigation and keep both top bars visible`() {
+        val system = onboardKitConfig {}.getOrThrow().system
+        assertTrue(system.showStatusBar)
+        assertTrue(system.showCaptionBar)
+        assertEquals(false, system.showNavigationBar)
+    }
+
+    @Test
     fun `splash notification permission defaults on and supports opting out`() {
         assertTrue(SplashConfig().notificationPermissionEnabled)
         val config = onboardKitConfig {
@@ -252,8 +260,8 @@ class OnboardKitConfigTest {
     }
 
     @Test
-    fun `adClickReturnCompletesStep is on out of the box and read by the step pages`() {
-        assertTrue(BehaviorConfig().adClickReturnCompletesStep)
+    fun `adClickReturnCompletesStep defaults on and is read by the step pages`() {
+        assertEquals(true, BehaviorConfig().adClickReturnCompletesStep)
         val source = java.io.File(
             "src/main/java/io/onboardkit/ui/pager/LazyStepFragment.kt",
         ).readText()

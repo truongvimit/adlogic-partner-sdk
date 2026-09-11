@@ -50,6 +50,22 @@ class LanguageTapHintTest {
     }
 
     @Test
+    fun `popup starts on fourth tap including selected language and repeats thereafter`() {
+        launch(language = LanguageConfig(defaultCode = "en-US"))
+        repeat(3) {
+            row(0).itemView.performClick()
+            assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing != true)
+        }
+        row(0).itemView.performClick()
+        val fourth = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertTrue(fourth?.isShowing == true)
+        fourth.findViewById<View>(R.id.ob_confirm_cancel).performClick()
+        row(1).itemView.performClick()
+        assertEquals("es", adapter.selectedCode)
+        assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true)
+    }
+
+    @Test
     fun `default hand stays hidden until three seconds after entry`() {
         launch()
         main.idleFor(Duration.ofSeconds(2))

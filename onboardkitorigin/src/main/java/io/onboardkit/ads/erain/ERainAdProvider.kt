@@ -170,7 +170,10 @@ class ERainAdProvider(
         ids.forEach { PlacementRegistry.register(it, key) }
         ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
             ?.let { nativeStyles[key] = it.toNativeStyle() }
-        val config = nativeConfig(ids, request.layoutRes)
+        val config = nativeConfig(ids, request.layoutRes).apply {
+            reloadOnAdClick = request.placement !is AdPlacement.StepNative &&
+                request.placement !is AdPlacement.StepFullScreen && request.placement != AdPlacement.Ob5
+        }
         nativeConfigs[key] = config
         ensureNativeBridge(key)
         val covered =

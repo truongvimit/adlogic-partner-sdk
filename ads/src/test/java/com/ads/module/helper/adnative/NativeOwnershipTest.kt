@@ -91,6 +91,127 @@ class NativeOwnershipTest {
         requests.clear()
     }
 
+    @Test fun `click return reloads only the clicked native even without stop or auto reload`() {
+        val clicked = helper("clicked")
+        clicked.show()
+        val first = NativeVendorAd()
+        requests.last().fill(first)
+        val untouched = helper("untouched")
+        untouched.show()
+        val other = NativeVendorAd()
+        requests.last().fill(other)
+        requests.first().listener.onAdClicked()
+        assertEquals("Preload starts in the click callback, before pause", 3, requests.size)
+        requests.first().listener.onAdOpened()
+        assertEquals("Click plus open must share one preload", 3, requests.size)
+        controller.pause().resume()
+        assertEquals("A pause-only return joins the click preload", 3, requests.size)
+        assertTrue(clicked.nativeAdState.value is AdNativeState.Loading)
+        val replacement = NativeVendorAd()
+        requests.last().fill(replacement)
+        assertSame(replacement, clicked.nativeAd?.admobNativeAd)
+        assertTrue(first.destroyed)
+        assertSame(other, untouched.nativeAd?.admobNativeAd)
+        controller.pause().resume()
+        assertEquals("The click is consumed exactly once", 3, requests.size)
+    }
+
+    @Test fun `click preload filled before pause stays unused until return then shows immediately`() {
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        requests.single().listener.onAdClicked()
+        val next = NativeVendorAd()
+        requests.last().fill(next)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertSame(next, preload.getAdNative("a")?.admobNativeAd)
+        controller.pause().resume()
+        assertSame(next, helper.nativeAd?.admobNativeAd)
+        assertFalse(preload.isPreloadAvailable("a"))
+        assertEquals(2, requests.size)
+    }
+
+    @Test fun `click preload completes while stopped and is consumed without another load on return`() {
+        val helper = helper()
+        helper.show()
+        requests.single().fill(NativeVendorAd())
+        requests.single().listener.onAdClicked()
+        controller.pause().stop()
+        val next = NativeVendorAd()
+        requests.last().fill(next)
+        assertNull(helper.nativeAd)
+        assertSame(next, preload.getAdNative("a")?.admobNativeAd)
+        controller.restart().start().resume()
+        assertSame(next, helper.nativeAd?.admobNativeAd)
+        assertEquals(2, requests.size)
+    }
+
+    @Test fun `click joins existing preload instead of adding a request`() {
+        val helper = helper()
+        helper.show()
+        requests.single().fill(NativeVendorAd())
+        preload.preloadWithKey("a", activity, config)
+        requests.first().listener.onAdClicked()
+        controller.pause().stop().restart().start().resume()
+        assertEquals(2, requests.size)
+        val next = NativeVendorAd()
+        requests.last().fill(next)
+        assertSame(next, helper.nativeAd?.admobNativeAd)
+    }
+
+    @Test fun `disabled click reload neither preloads nor reloads after pause or stop`() {
+        val helper = helper(reload = true).setReloadOnAdClick(false)
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        main.idleFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        requests.single().listener.onAdClicked()
+        controller.pause().resume()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1, requests.size)
+        requests.single().listener.onAdOpened()
+        controller.pause().stop().restart().start().resume()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1, requests.size)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        helper.destroy()
+        assertTrue(first.destroyed)
+    }
+
+    @Test fun `rotation after clicking does not restore the clicked presentation`() {
+        val old = helper()
+        old.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        requests.single().listener.onAdClicked()
+        controller.configurationChange(android.content.res.Configuration(activity.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        controller.visible()
+        val restored = helper()
+        restored.show()
+        assertTrue(first.destroyed)
+        assertNull(restored.nativeAd)
+        assertEquals(2, requests.size)
+        val replacement = NativeVendorAd()
+        requests.last().fill(replacement)
+        assertSame(replacement, restored.nativeAd?.admobNativeAd)
+    }
+
+    @Test fun `open only destination reloads after stop once and no fill never restores clicked ad`() {
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        requests.single().listener.onAdOpened()
+        controller.pause().stop().restart().start().resume()
+        assertEquals(2, requests.size)
+        requests.last().fail()
+        assertTrue(first.destroyed)
+        assertNull(helper.nativeAd)
+    }
+
     @Test fun `repeated preload does not queue new loads behind an existing fill`() {
         repeat(5) { preload.preloadWithKey("a", activity, config) }
         assertEquals(1, requests.size)

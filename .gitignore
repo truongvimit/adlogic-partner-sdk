@@ -109,8 +109,20 @@ desktop.ini
 /CLAUDE.md
 /AGENTS.md
 /CONTEXT.md
-/docs/
+# Share partner guides and their examples; keep local research/diagnostics ignored.
+/docs/*
+!/docs/README.md
+!/docs/ads-onboarding-integration.vi.md
+!/docs/examples/
+/docs/examples/*
+!/docs/examples/ads-onboarding/
+/docs/examples/ads-onboarding/*
+!/docs/examples/ads-onboarding/ad_config.json
+!/docs/examples/ads-onboarding/ad_config_debug.json
 /.scratch/
 /SDK_ACTION_PLAN.md
 /MIGRATION-*.md
 **/ARCHITECTURE.md
+
+# Local device validation screenshots, traces and reports
+/onboardkitorigin/validation/

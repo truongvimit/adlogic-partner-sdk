@@ -12,7 +12,7 @@ Với Firebase Analytics, thêm `suite-firebase`; module này đã cung cấp Tr
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:suite-firebase:$sdkVersion"
 }

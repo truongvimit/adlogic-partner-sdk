@@ -4,6 +4,8 @@
 
 Bộ SDK Android cho quảng cáo, onboarding, analytics, billing và paywall. Chọn tính năng cần dùng, cấu hình build chung rồi làm theo quickstart của module tương ứng.
 
+**Partner bắt đầu tại [Hướng dẫn tích hợp](docs/README.md)** — [Ads + OnboardKit từng bước](docs/ads-onboarding-integration.vi.md), kèm JSON quảng cáo test và bảng cấu hình tùy chọn.
+
 ## Chọn module
 
 | App cần | Khai báo | Bắt đầu tại |
@@ -40,13 +42,13 @@ dependencyResolutionManagement {
 }
 ```
 
-Hướng dẫn này dành cho phiên bản **5.2.9**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
+Hướng dẫn này dành cho phiên bản **5.2.10**. Giữ mọi module cùng phiên bản. Khi nâng cấp sau này, chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) và đọc README tại tag đó.
 
 Ví dụ app dùng ads và onboarding. Với tổ hợp khác, thay tên artifact theo bảng trên.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

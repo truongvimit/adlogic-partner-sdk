@@ -12,8 +12,7 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import com.ads.module.util.AdSystemBars
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
@@ -22,59 +21,40 @@ import io.onboardkit.config.ObLanguage
 import io.onboardkit.core.analytics.AnalyticsEvent
 
 /**
- * The confirm modal's native, held by the LFO instead of by any one dialog instance.
- *
- * The modal is raisable again on every re-tap, and a dialog that released its ad on dismiss made
- * the second raise start from nothing: a fresh request, a shimmer, and — whenever that request did
- * not fill — a skeleton spinning until the waterfall timed out. The ad the user has already been
- * shown is still perfectly good, so it is kept and re-attached instead.
- *
- * Only the *view* moves between dialogs. The `ApNativeAd` behind it stays in the provider's bound
- * map untouched, so nothing is re-requested and no second impression is reported; the Activity
- * releases both when the LFO itself goes away.
+ * Keeps the provider's actual binding container across popup openings. Moving only its child
+ * would leave the helper reloading into the dismissed dialog after an ad click return.
  */
 internal class ConfirmAdSlot {
+    private var boundContainer: ViewGroup? = null
 
-    private var adView: View? = null
-
-    /**
-     * Takes the bound ad view out of [container] and keeps it.
-     *
-     * Called on bind rather than on dismiss so it also catches the load that lands *after* the
-     * dialog is gone — that ad is bound into an orphaned container, and without this it would be
-     * paid for and never seen.
-     */
     fun capture(container: ViewGroup) {
-        adView = container.getChildAt(0)
+        if (container.childCount > 0) boundContainer = container
     }
 
-    /** Re-shows the kept ad in [container]. `false` when there is nothing to re-show. */
     fun attach(container: ViewGroup): Boolean {
-        val view = adView ?: return false
-        // The old parent is the previous dialog's container; a View may only have one.
-        (view.parent as? ViewGroup)?.removeView(view)
+        val bound = boundContainer ?: return false
+        if (bound === container) return true
+        (bound.parent as? ViewGroup)?.removeView(bound)
         container.removeAllViews()
-        container.addView(view)
+        container.addView(bound)
         return true
     }
 
-    /** Lets the dying dialog go without taking the ad view down with it. */
     fun detach() {
-        (adView?.parent as? ViewGroup)?.removeView(adView)
+        val bound = boundContainer ?: return
+        (bound.parent as? ViewGroup)?.removeView(bound)
     }
 
-    /** The LFO is finishing: forget the view so the provider's release can destroy the ad. */
     fun clear() {
         detach()
-        adView = null
+        boundContainer = null
     }
 }
 
 /**
  * Figma "Modal" (node 3584:24369) — the LFO's Confirm Language prompt.
  *
- * Raised when the user taps the language they already have selected: previously an inert gesture,
- * now both a genuine confirmation and a second native impression on the same screen.
+ * Raised from the fourth language-item tap onward, including the selected language.
  *
  * The ad is optional by construction. [AdPlacement.LanguageConfirm] going unfilled collapses the
  * slot and leaves a plain two-button confirm — a prompt that trapped the user because its ad did
@@ -226,11 +206,9 @@ internal class ObConfirmLanguageDialog(
     // so the bars would pop back for as long as the card is up unless it matches the host.
     private fun Window.matchHostSystemBars() {
         val system = OnboardingSdk.configOrNull()?.system ?: return
-        val controller = WindowInsetsControllerCompat(this, decorView)
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (!system.showStatusBar) controller.hide(WindowInsetsCompat.Type.statusBars())
-        if (!system.showNavigationBar) controller.hide(WindowInsetsCompat.Type.navigationBars())
+        AdSystemBars.setFullscreen(
+            this, system.showStatusBar, system.showNavigationBar, system.showCaptionBar,
+        )
     }
 
     private companion object {

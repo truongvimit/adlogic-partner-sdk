@@ -25,16 +25,12 @@ sealed interface ExitDecision {
 
 /**
  * Pure flow decisions from (persisted state, remote flags, config) — no Android types, fully
- * unit-testable. Uses two independent persisted flags plus the per-step checkpoint, fixing
- * the shared-preference-key bug and the restart-from-language loop of the original.
+ * unit-testable. Only whole-flow completion allows a new launch to bypass language.
  */
 object FlowNavigator {
 
-    /**
-     * @param isPremium and [canShowAdStep] must be the same pair the pager host will use. The
-     *   resume index is an index into [enabledSteps]; computing it from a longer list than the one
-     *   the pager builds lands the user on the wrong page.
-     */
+    /** Legacy filtering arguments remain source-compatible; incomplete runs always start at LFO. */
+    @Suppress("UNUSED_PARAMETER")
     fun decideStart(
         state: OnboardingState,
         flags: RemoteFlags,
@@ -50,28 +46,9 @@ object FlowNavigator {
             }
         }
 
-        if (!state.isLfoCompleted) {
-            return StartDecision.Start(FlowDestination.LANGUAGE, 0)
-        }
-
-        // LFO done but flow not finished (user killed the app mid-onboarding)
-        if (!flags.passLfoIfCompleted) {
-            return StartDecision.Start(FlowDestination.LANGUAGE, 0)
-        }
-
-        val enabled = enabledSteps(config, flags, isPremium, canShowAdStep)
-        if (enabled.isNotEmpty()) {
-            val resume = resumeIndex(state, enabled, config.steps.map { it.id })
-            if (resume < enabled.size) {
-                return StartDecision.Start(FlowDestination.ONBOARDING, resume)
-            }
-        }
-
-        if (flags.enableQuestion && config.question != null) {
-            return StartDecision.Start(FlowDestination.QUESTION_NEW_USER, 0)
-        }
-
-        return StartDecision.Skip(SkipReason.DISABLED_BY_REMOTE)
+        // A persisted checkpoint is diagnostic progress, not completion. Every new
+        // launch must run Splash -> LFO -> the first enabled onboarding page.
+        return StartDecision.Start(FlowDestination.LANGUAGE, 0)
     }
 
     /**

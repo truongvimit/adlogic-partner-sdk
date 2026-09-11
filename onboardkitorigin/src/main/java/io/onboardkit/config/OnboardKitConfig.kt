@@ -82,22 +82,19 @@ data class LanguageConfig(
      */
     val saveButtonOnBackEnabled: Boolean = true,
     /**
-     * Tapping the language that is already selected raises a "Confirm Language" modal — a second
-     * ad slot on a gesture that was previously inert, and a genuine confirmation for a user who
-     * re-tapped because they were unsure.
-     *
-     * The modal never blocks the flow: Confirm behaves exactly like the screen's own confirm
-     * button, and Cancel/close/back return to the list with the selection untouched. AND-ed with
-     * the `ob_show_language_confirm_dialog` remote flag.
+     * Show confirmation from the fourth language-item tap onward, including taps on the
+     * selected language. Kept under its original API name for source compatibility.
+     * AND-ed with `ob_show_language_confirm_dialog`.
      */
     val confirmDialogOnReselectEnabled: Boolean = true,
     @LayoutRes val layoutRes: Int = 0,
     @LayoutRes val itemLayoutRes: Int = 0,
 )
 
-data class SystemBarConfig(
+data class SystemBarConfig @JvmOverloads constructor(
     val showStatusBar: Boolean = true,
-    val showNavigationBar: Boolean = true,
+    val showNavigationBar: Boolean = false,
+    val showCaptionBar: Boolean = true,
 )
 
 data class BehaviorConfig(
@@ -115,7 +112,8 @@ data class BehaviorConfig(
      */
     val swipeCompletesLastStep: Boolean = true,
     /**
-     * Coming back from a step ad's click completes that step exactly like its CTA — the next
+     * Default navigation on return from a step ad. Step natives disable click replacement.
+     * When enabled, coming back from a step ad's click completes that step exactly like its CTA — the next
      * step on a middle page, the flow exit on the last one. Only clicks on the pager's own
      * step ads count; a click on the language or question screen never moves the pager.
      */

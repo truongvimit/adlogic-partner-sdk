@@ -3,8 +3,8 @@ package io.onboardkit.core.state
 import kotlinx.serialization.Serializable
 
 /**
- * Persisted onboarding progress. Two independent flags (LFO vs whole flow) plus a per-step
- * checkpoint so a user killed mid-flow resumes where they left off instead of restarting.
+ * Persisted onboarding progress. Only [isFlowCompleted] skips the first-open flow on a
+ * new launch; partial LFO/step progress never resumes a killed onboarding run.
  */
 @Serializable
 data class OnboardingState(

@@ -11,13 +11,13 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
+import com.ads.module.util.AdSystemBars
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.ObLog
 import io.trackkit.Tracker
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Base for every SDK screen: applies the chosen locale before inflate, system-bar policy,
@@ -39,16 +39,22 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
     protected var restartedByGuard: Boolean = false
         private set
 
+    protected open val restartFlowAfterProcessDeath: Boolean
+        get() = this !is io.onboardkit.ui.splash.ObSplashActivity
+
     override fun attachBaseContext(newBase: Context) {
         val code = OnboardingSdk.selectedLanguageOrNull()
         super.attachBaseContext(if (code == null) newBase else wrapLocale(newBase, code))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        val restoredFromPreviousProcess = restartFlowAfterProcessDeath &&
+            savedInstanceState != null && savedInstanceState.getString(PROCESS_STATE_KEY) != processId
+        // Do not restore the old pager's fragments before redirecting a killed run to Splash.
+        super.onCreate(if (restoredFromPreviousProcess) null else savedInstanceState)
         ObLog.d(ObLog.Section.SCREEN, "create ${javaClass.simpleName} ready=${OnboardingSdk.isReady()}")
-        if (!OnboardingSdk.isReady()) {
-            ObLog.w(ObLog.Section.SCREEN, "${javaClass.simpleName} SDK not ready — restarting from launcher")
+        if (!OnboardingSdk.isReady() || restoredFromPreviousProcess) {
+            ObLog.w(ObLog.Section.SCREEN, "${javaClass.simpleName} restarting flow from launcher")
             restartedByGuard = true
             OnboardingSdk.restartFromLauncher(this)
             finish()
@@ -100,6 +106,11 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
     /** Called only when the SDK is ready — subclasses build their UI here. */
     protected abstract fun onCreateSafe(savedInstanceState: Bundle?)
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(PROCESS_STATE_KEY, processId)
+        super.onSaveInstanceState(outState)
+    }
+
     /** Default policy: leave the app. Screens that can go back override this. */
     protected open fun handleBack() {
         finishAffinity()
@@ -142,13 +153,9 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
     private fun applySystemBars() {
         val system = OnboardingSdk.configOrNull()?.system ?: return
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        // Transient-by-swipe (sticky immersive below API 30) is the one behavior under which a
-        // swiped-in bar overlays the content and hides again by itself.
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (!system.showStatusBar) controller.hide(WindowInsetsCompat.Type.statusBars())
-        if (!system.showNavigationBar) controller.hide(WindowInsetsCompat.Type.navigationBars())
+        AdSystemBars.setFullscreen(
+            window, system.showStatusBar, system.showNavigationBar, system.showCaptionBar,
+        )
     }
 
     protected fun hideViewCompletely(view: View) {
@@ -162,5 +169,10 @@ abstract class BaseOnboardActivity : AppCompatActivity() {
         val configuration = Configuration(base.resources.configuration)
         configuration.setLocale(locale)
         return base.createConfigurationContext(configuration)
+    }
+
+    private companion object {
+        const val PROCESS_STATE_KEY = "ob_process_id"
+        val processId: String = UUID.randomUUID().toString()
     }
 }

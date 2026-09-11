@@ -225,8 +225,7 @@ object OnboardingSdk {
     suspend fun shouldStart(): StartDecision {
         val cfg = config ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         val store = stateStore ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
-        // Same pair the pager host will apply. The resume index is an index into that list, so a
-        // decision taken over a longer one lands the user on the wrong page.
+        // Only whole-flow completion bypasses LFO on a new launch.
         return FlowNavigator.decideStart(
             store.current(),
             flags(),

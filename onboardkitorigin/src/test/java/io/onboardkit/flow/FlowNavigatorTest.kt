@@ -25,6 +25,19 @@ class FlowNavigatorTest {
 
     private val flags = RemoteFlags()
 
+    @Test
+    fun `every incomplete checkpoint restarts at language after splash`() {
+        for (step in listOf(null, "ob1", "ob2", "ob3", "ob4", "ob5")) {
+            for (passLfo in listOf(false, true)) {
+                val state = OnboardingState(languageSelected = "en-US", lfoCompletedAtMs = 1L,
+                    lastCompletedStep = step)
+                assertEquals("checkpoint=$step passLfo=$passLfo",
+                    StartDecision.Start(FlowDestination.LANGUAGE, 0),
+                    FlowNavigator.decideStart(state, flags.copy(passLfoIfCompleted = passLfo), config))
+            }
+        }
+    }
+
     // State matrix from the architecture report §1.4
 
     @Test
@@ -46,10 +59,10 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `LFO done resumes onboarding instead of repeating language`() {
+    fun `LFO done restarts language until the entire flow completes`() {
         val state = OnboardingState(languageSelected = "en-US", lfoCompletedAtMs = 1L)
         assertEquals(
-            StartDecision.Start(FlowDestination.ONBOARDING, 0),
+            StartDecision.Start(FlowDestination.LANGUAGE, 0),
             FlowNavigator.decideStart(state, flags, config),
         )
     }
@@ -63,17 +76,17 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `checkpoint resumes after last completed step`() {
+    fun `checkpoint does not skip language on a new launch`() {
         val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = "ob2")
         val decision = FlowNavigator.decideStart(state, flags, config)
-        assertEquals(StartDecision.Start(FlowDestination.ONBOARDING, 2), decision)
+        assertEquals(StartDecision.Start(FlowDestination.LANGUAGE, 0), decision)
     }
 
     @Test
-    fun `checkpoint past the end falls through to question`() {
+    fun `checkpoint past the pager still restarts language`() {
         val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = "ob4")
         val decision = FlowNavigator.decideStart(state, flags, config)
-        assertEquals(StartDecision.Start(FlowDestination.QUESTION_NEW_USER, 0), decision)
+        assertEquals(StartDecision.Start(FlowDestination.LANGUAGE, 0), decision)
     }
 
     @Test
@@ -94,7 +107,7 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `all steps disabled goes to question`() {
+    fun `disabled pager still starts at language`() {
         val state = OnboardingState(lfoCompletedAtMs = 1L)
         val noSteps = flags.copy(
             enableStepOb1 = false,
@@ -103,13 +116,13 @@ class FlowNavigatorTest {
             enableStepOb4 = false,
         )
         assertEquals(
-            StartDecision.Start(FlowDestination.QUESTION_NEW_USER, 0),
+            StartDecision.Start(FlowDestination.LANGUAGE, 0),
             FlowNavigator.decideStart(state, noSteps, config),
         )
     }
 
     @Test
-    fun `everything disabled skips with remote reason`() {
+    fun `disabled downstream screens still start at language`() {
         val state = OnboardingState(lfoCompletedAtMs = 1L)
         val allOff = flags.copy(
             enableStepOb1 = false,
@@ -119,7 +132,7 @@ class FlowNavigatorTest {
             enableQuestion = false,
         )
         assertEquals(
-            StartDecision.Skip(SkipReason.DISABLED_BY_REMOTE),
+            StartDecision.Start(FlowDestination.LANGUAGE, 0),
             FlowNavigator.decideStart(state, allOff, config),
         )
     }
@@ -160,41 +173,10 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `dropping an ad-only page moves the resume target with it`() {
-        // The resume index is an index into the list the pager builds, so both must be computed
-        // with the same filter. OB2 is done; the page after it is OB3, the ad page. With no ad to
-        // show, resuming has to land on OB4 — reading the index against the unfiltered list is how
-        // a resuming user lands one page off.
-        val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = StepId.OB2.value)
-        val noAdStep = { _: StepId -> false }
-
-        val pages = FlowNavigator.enabledSteps(config, flags, canShowAdStep = noAdStep)
-        val decision =
-            FlowNavigator.decideStart(state, flags, config, canShowAdStep = noAdStep)
-                as StartDecision.Start
-
-        assertEquals(StepId.OB4, pages[decision.resumeStepIndex])
-        // Unfiltered, the very same index names the ad page instead
-        assertEquals(
-            StepId.OB3,
-            FlowNavigator.enabledSteps(config, flags)[decision.resumeStepIndex],
-        )
-    }
-
-    @Test
-    fun `a checkpoint whose step left the flow resumes after it, not from zero`() {
-        // OB3 done, then its ad-only page drops out because there is no ad. The user is one page
-        // from the end — resuming at 0 would replay the whole onboarding.
+    fun `remote ad filtering cannot resume a killed run past language`() {
         val state = OnboardingState(lfoCompletedAtMs = 1L, lastCompletedStep = StepId.OB3.value)
-        val noAdStep = { _: StepId -> false }
-        val pages = FlowNavigator.enabledSteps(config, flags, canShowAdStep = noAdStep)
-
-        val decision =
-            FlowNavigator.decideStart(state, flags, config, canShowAdStep = noAdStep)
-                as StartDecision.Start
-
-        assertEquals(listOf(StepId.OB1, StepId.OB2, StepId.OB4), pages)
-        assertEquals(StepId.OB4, pages[decision.resumeStepIndex])
+        assertEquals(StartDecision.Start(FlowDestination.LANGUAGE, 0),
+            FlowNavigator.decideStart(state, flags, config, canShowAdStep = { false }))
     }
 
     @Test

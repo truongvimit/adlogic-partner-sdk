@@ -8,8 +8,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.view.Window
 import android.widget.TextView
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import com.ads.module.util.AdSystemBars
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 
@@ -56,11 +55,9 @@ internal class ObNoInternetDialog(
     // would pop back for as long as the card is up unless this window hides them too.
     private fun Window.matchHostSystemBars() {
         val system = OnboardingSdk.configOrNull()?.system ?: return
-        val controller = WindowInsetsControllerCompat(this, decorView)
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (!system.showStatusBar) controller.hide(WindowInsetsCompat.Type.statusBars())
-        if (!system.showNavigationBar) controller.hide(WindowInsetsCompat.Type.navigationBars())
+        AdSystemBars.setFullscreen(
+            this, system.showStatusBar, system.showNavigationBar, system.showCaptionBar,
+        )
     }
 
     private companion object {

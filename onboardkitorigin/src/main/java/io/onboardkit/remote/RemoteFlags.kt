@@ -23,6 +23,7 @@ data class RemoteFlags(
     val enableQuestion: Boolean = ObRemoteKeys.ENABLE_QUESTION.default,
     val enableQuestionOldUser: Boolean = ObRemoteKeys.ENABLE_QUESTION_OLD_USER.default,
     val enableLanguageNative2: Boolean = ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2.default,
+    /** Legacy remote value; partial progress no longer bypasses LFO on a new launch. */
     val passLfoIfCompleted: Boolean = ObRemoteKeys.PASS_LFO_IF_COMPLETED.default,
     val showLanguageTapHint: Boolean = ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.default,
     val showLanguageConfirmBeforeSelect: Boolean =

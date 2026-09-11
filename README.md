@@ -4,6 +4,8 @@
 
 Android SDKs for ads, onboarding, analytics, billing and paywalls. Choose the feature you need, complete the shared build setup, then follow that module's quickstart.
 
+**Partner integration guides (Vietnamese): [Start here](docs/README.md)** — [Ads + OnboardKit step by step](docs/ads-onboarding-integration.vi.md), with test ad JSON files and optional configuration tables.
+
 ## Choose your modules
 
 | Your app needs | Declare | Start here |
@@ -40,13 +42,13 @@ dependencyResolutionManagement {
 }
 ```
 
-This guide targets **5.2.9**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
+This guide targets **5.2.10**. Keep every module on the same version. When upgrading later, choose an available [release tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and read the README at that tag.
 
 Example: an app with ads and onboarding. For another combination, replace the artifact names using the table above.
 
 ```groovy
 // app/build.gradle
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"

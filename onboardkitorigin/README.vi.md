@@ -5,6 +5,15 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 
 [English](README.md) · [हिन्दी](README.hi.md)
 
+## Phiên bản 5.2.10
+
+- Mặc định chỉ ẩn navigation bar; status bar và caption bar hiển thị. Cấu hình qua `SystemBarConfig(showStatusBar = true, showNavigationBar = false, showCaptionBar = true)`.
+- Chưa hoàn thành toàn bộ flow thì mở app lại phải đi Splash → LFO → OB từ đầu, bất kể checkpoint và `ob_pass_lfo_if_completed`. Đổi cấu hình trong cùng process vẫn giữ màn; Android khôi phục process đã kill sẽ được chuyển về launcher.
+- Click/open native sẽ preload ngay; quay lại sẽ show ad có sẵn hoặc chờ đúng request đang tải. `NativeAdConfig.reloadOnAdClick` mặc định `true`, độc lập với refresh theo thời gian. Provider tích hợp tắt chức năng này cho toàn bộ step OB content/fullscreen và OB5. `behavior.adClickReturnCompletesStep` giữ mặc định `true` để quay về thì next bước; LFO, popup và question native vẫn bật preload khi click.
+- Popup LFO hiện từ click item thứ 4 và mọi click sau đó, tính cả ngôn ngữ đã selected. Popup xác nhận ngôn ngữ vừa click. Vẫn có thể tắt qua `confirmDialogOnReselectEnabled` hoặc `ob_show_language_confirm_dialog`; SETTINGS không hiện popup.
+
+App có thể dùng `com.ads.module.util.AdSystemBars.setFullscreen(window)` cho màn riêng; xem [API system bar](../ads/README.md#system-bar-api).
+
 Phiên bản 5.2.9 bổ sung fallback khi framework thiếu `WindowInsets.Type.systemOverlays()`. Onboarding vẫn tính padding cho status bar, navigation bar, caption bar và camera cutout để tránh crash; máy bình thường vẫn tính cả system overlays. Bản này cũng bao gồm fix điều hướng lifecycle từ 5.2.7.
 
 Phiên bản 5.2.7 sửa crash khi quay lại onboarding từ native ad. Pager chỉ chuyển trang sau khi callback lifecycle kết thúc; click-return, Skip và auto-next fullscreen chỉ hoàn thành mỗi lượt xem trang một lần. Deadline OB fullscreen vẫn tính thời gian background; OB5 standalone giữ cơ chế countdown khi ở foreground.
@@ -19,7 +28,7 @@ Từ 5.2.5, popup xác nhận ngôn ngữ ở LFO chỉ load native ad khi ngư�
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 ```groovy
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -182,7 +191,8 @@ afterOnboardingInterstitialEnabled = true,
 ```
 
 Trang fullscreen mặc định hiện X sau 1 giây và tự chuyển sau 3 giây tính từ lúc chọn trang;
-đặt `autoNextEnabled = false` nếu chỉ muốn chuyển bằng thao tác người dùng. Remote
+đặt `autoNextEnabled = false` nếu chỉ muốn chuyển bằng thao tác người dùng. Mặc định quay về
+từ ad của step sẽ hoàn thành bước, nên các placement này không preload/show ad thay thế khi click. Remote
 `ob_skip_button_delay_sec >= 0` ghi đè delay local; `-1` dùng local.
 `AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho OB3/OB5. OB5 độc lập có mặc định riêng:
 hiện nút sau 3 giây và tự đóng sau 15 giây.

@@ -35,6 +35,13 @@ open class NativeAdConfig(
      */
     var autoShimmer: Boolean = true
 
+    /**
+     * Preload an unused replacement immediately on click/open, then show it on return (or
+     * wait for the in-flight load). Independent of [canReloadAds]. Disable for slots whose
+     * host navigates away on click-return, such as onboarding steps.
+     */
+    var reloadOnAdClick: Boolean = true
+
     /** Trailing debounce for the reload-on-resume trigger. */
     var timeDebounceResume: Long = DEFAULT_TIME_DEBOUNCE_RESUME_MS
 

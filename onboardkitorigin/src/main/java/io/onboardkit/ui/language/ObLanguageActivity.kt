@@ -51,6 +51,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
     override val screenName: String = "ob_language"
     override val excludeFromAppResume: Boolean = false
 
+    override val restartFlowAfterProcessDeath: Boolean
+        get() = intent.getStringExtra(EXTRA_MODE) != LanguageScreenMode.SETTINGS.name
+
     internal override val resumeBlockedByScreen: Boolean
         get() = super.resumeBlockedByScreen || languageExitStarted || confirmDialog?.isShowing == true
 
@@ -71,14 +74,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val secondSwapTimeout = Runnable { keepFirstNativeSlot() }
 
-    /**
-     * True once the user has picked a language themselves.
-     *
-     * Distinct from `selectedCode != null`, which is already true at entry when the partner ships
-     * a `LanguageConfig.defaultCode` — without this, that user's genuine first tap would look
-     * like a re-tap and be answered with a confirmation instead of a selection.
-     */
-    private var userHasSelected = false
+    private var languageTapCount = 0
     private var tapHintJob: Job? = null
 
     private var confirmDialog: ObConfirmLanguageDialog? = null
@@ -101,7 +97,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
             ?: LanguageScreenMode.FIRST_OPEN
         reuseLfo1Preload = savedInstanceState?.getBoolean("ob_lfo1_preload_handoff")
             ?: (mode == LanguageScreenMode.FIRST_OPEN && sdk.preload().takeLanguage1Preload())
-        selectedCode = sdk.configOrNull()?.language?.defaultCode
+        selectedCode = savedInstanceState?.getString("ob_selected_language")
+            ?: sdk.configOrNull()?.language?.defaultCode
+        languageTapCount = savedInstanceState?.getInt("ob_language_tap_count") ?: 0
 
         languages = resolveLanguages()
         val hintCode = resolveHintCode()
@@ -193,15 +191,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     private fun onLanguageTapped(language: ObLanguage) {
         if (languageExitStarted) return
-        // Tapping the row that is already selected is the confirm gesture, not a new selection:
-        // the list does not change, so none of the selection work below runs for it.
-        if (isReselect(language)) {
-            showConfirmDialog(language)
-            return
+        if (mode == LanguageScreenMode.FIRST_OPEN) {
+            languageTapCount = (languageTapCount + 1).coerceAtMost(4)
         }
-
         tapHintJob?.cancel()
-        userHasSelected = true
         selectedCode = language.code
         adapter.selectedCode = language.code
         bindConfirmVisibility()
@@ -214,6 +207,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.track(
             AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
         )
+        if (shouldShowConfirmDialog()) showConfirmDialog(language)
         if (secondSlotRequested) return
 
         val config = sdk.requireConfig()
@@ -227,18 +221,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
         showSecondNativeSlot(language.code)
     }
 
-    /**
-     * Whether this tap re-selects what is already selected — the gesture the confirm modal answers.
-     *
-     * SETTINGS is excluded: there the screen is a plain picker the user opened deliberately, and
-     * a confirmation over an ad would be asking them to pay for a decision they already made.
-     */
-    private fun isReselect(language: ObLanguage): Boolean {
-        if (mode != LanguageScreenMode.FIRST_OPEN) return false
-        if (!userHasSelected || language.code != selectedCode) return false
-        if (!sdk.requireConfig().language.confirmDialogOnReselectEnabled) return false
-        return sdk.flags().showLanguageConfirmDialog
-    }
+    private fun shouldShowConfirmDialog(): Boolean =
+        mode == LanguageScreenMode.FIRST_OPEN && languageTapCount >= 4 &&
+            sdk.requireConfig().language.confirmDialogOnReselectEnabled &&
+            sdk.flags().showLanguageConfirmDialog
 
     /**
      * Confirm runs the screen's own exit, so the modal can never become a second way to leave the
@@ -425,6 +411,8 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("ob_language_tap_count", languageTapCount)
+        outState.putString("ob_selected_language", selectedCode)
         outState.putBoolean("ob_lfo1_preload_handoff", reuseLfo1Preload)
         super.onSaveInstanceState(outState)
     }

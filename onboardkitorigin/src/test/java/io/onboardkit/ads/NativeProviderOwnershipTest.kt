@@ -194,9 +194,67 @@ class NativeProviderOwnershipTest {
             override fun onAdOpened() { opens++ }
         }))
         vendorEvents.single().onAdClicked()
-        vendorEvents.single().onAdOpened()
+        vendorEvents.first().onAdOpened()
         assertEquals(1, clicks)
         assertEquals(1, opens)
+    }
+
+    @Test fun `all step placements disable click replacement on pause-only and stopped returns`() {
+        val host = controller.get()
+        val pages = listOf(
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB1),
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB2),
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.OB3),
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB4), AdPlacement.Ob5,
+        )
+        pages.forEach { page ->
+            val container = FrameLayout(host).also(host::setContentView)
+            provider.preloadNative(host, request.copy(placement = page))
+            val first = mock(NativeAd::class.java)
+            requests.last().onNativeAdLoaded(first)
+            var shown = 0
+            assertTrue(provider.bindNative(host, page, container, null, object : AdEventListener {
+                override fun onImpression() { shown++ }
+            }))
+            val count = requests.size
+            val events = vendorEvents.last()
+            events.onAdClicked()
+            controller.pause().resume()
+            main.idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+            assertEquals(page.key, count, requests.size)
+            events.onAdOpened()
+            controller.pause().stop().restart().start().resume()
+            main.idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+            assertEquals(page.key, count, requests.size)
+            assertEquals(page.key, 1, shown)
+            provider.releaseNative(page)
+            verify(first).destroy()
+        }
+    }
+
+    @Test fun `language popup and question preload at click and bind only on return`() {
+        val host = controller.get()
+        listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
+            AdPlacement.QuestionNative).forEach { page ->
+            val container = FrameLayout(host).also(host::setContentView)
+            provider.preloadNative(host, request.copy(placement = page))
+            requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+            var shown = 0
+            assertTrue(provider.bindNative(host, page, container, null, object : AdEventListener {
+                override fun onImpression() { shown++ }
+            }))
+            val count = requests.size
+            vendorEvents.last().onAdClicked()
+            assertEquals(page.key, count + 1, requests.size)
+            requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+            assertEquals("No bind before departure: ${page.key}", 1, shown)
+            assertTrue(provider.isNativeReady(page))
+            controller.pause().stop().restart().start().resume()
+            assertEquals(page.key, 2, shown)
+            assertEquals(page.key, count + 1, requests.size)
+            assertFalse(provider.isNativeReady(page))
+            provider.releaseNative(page)
+        }
     }
 
     @Test fun `content pager departure consumes old ad and return joins a pending preload`() {

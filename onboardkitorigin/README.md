@@ -5,6 +5,15 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
+## Version 5.2.10: flow and native return behavior
+
+- System bars default to `SystemBarConfig(showStatusBar = true, showNavigationBar = false, showCaptionBar = true)`. OB screens and their dialogs apply the same policy.
+- An incomplete flow always starts again through Splash → LFO → OB, regardless of saved step or `ob_pass_lfo_if_completed`. A configuration recreation in the same process keeps its screen; restoring a killed process returns through the launcher.
+- Native click/open immediately preloads the next ad; return shows a ready ad or waits for that same request. `NativeAdConfig.reloadOnAdClick` defaults to `true` and is independent of timer/resume refresh. The built-in provider disables it for all OB content/fullscreen steps and OB5. Pager click-return navigation remains `behavior.adClickReturnCompletesStep = true` by default; language, popup and question natives keep click preload enabled.
+- The LFO confirmation popup appears on item tap 4 and every subsequent tap, counting taps on the selected language. It confirms the newly tapped language. `confirmDialogOnReselectEnabled` retains its API name and, together with `ob_show_language_confirm_dialog`, can disable the popup. SETTINGS stays a plain picker.
+
+For partner screens, see the [system-bar API](../ads/README.md#system-bar-api).
+
 Version 5.2.9 adds an insets fallback for frameworks missing `WindowInsets.Type.systemOverlays()`. Onboarding retains status/navigation/caption bar and display-cutout padding without crashing; normal platforms continue to include system overlays. This release also includes the lifecycle navigation fix from 5.2.7.
 
 Version 5.2.7 fixes the crash when returning from a native ad to onboarding. Pager navigation waits until lifecycle callbacks finish, and click-return, Skip and fullscreen auto-next complete each page visit at most once. OB fullscreen deadlines still include background time; standalone OB5 keeps its foreground countdown behavior.
@@ -19,7 +28,7 @@ In 5.2.5, the optional LFO language-confirmation popup loads its native ad only 
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
 ```groovy
-def sdkVersion = '5.2.9'
+def sdkVersion = '5.2.10'
 dependencies {
     implementation "com.github.truongvimit.adlogic-partner-sdk:onboardkitorigin:$sdkVersion"
     implementation "com.github.truongvimit.adlogic-partner-sdk:ads:$sdkVersion"
@@ -182,7 +191,8 @@ afterOnboardingInterstitialEnabled = true,
 ```
 
 The fullscreen page defaults to an X after 1 second and automatic advance after 3 seconds from
-page selection; set `autoNextEnabled = false` for manual completion. Remote
+page selection; set `autoNextEnabled = false` for manual completion. Step ad return completes
+the step by default, so these placements do not preload/show a replacement on click. Remote
 `ob_skip_button_delay_sec >= 0` overrides the local skip delay; `-1` uses the local value.
 `AdsConfig.fullScreenSkipStyle` sets the shared appearance for OB3/OB5. Standalone OB5 uses
 its own 3-second skip and 15-second auto-dismiss defaults.

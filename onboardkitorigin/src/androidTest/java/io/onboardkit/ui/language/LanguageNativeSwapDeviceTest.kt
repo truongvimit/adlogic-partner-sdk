@@ -94,13 +94,24 @@ class LanguageNativeSwapDeviceTest {
     }
 
     @Test
-    fun confirmNativeLoadsOnlyOnReselectAndReusesTheBoundAd() = withScreen { screen ->
+    fun confirmNativeStartsOnFourthTapAndReusesItsBindingContainer() = withScreen { screen ->
+        eventually("Default system bars show status and hide navigation") {
+            var matches = false
+            screen.onActivity { activity ->
+                val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                matches = insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.statusBars()) == true &&
+                    !insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+            }
+            matches
+        }
         assertEquals("LFO entry must not preload its optional popup", 0, provider.confirmRequests)
         tapLanguage(screen, 0)
         tapLanguage(screen, 1)
         assertEquals("Selecting different languages must not preload the popup", 0, provider.confirmRequests)
         tapLanguage(screen, 1)
-        assertEquals("Reselect opens the popup and starts its first request", 1, provider.confirmRequests)
+        assertEquals("Third tap still does not open the popup", 0, provider.confirmRequests)
+        tapLanguage(screen, 1)
+        assertEquals("Fourth tap opens the popup and starts its first request", 1, provider.confirmRequests)
         screen.onActivity { provider.deliverConfirmFill() }
         eventually("The popup binds its fill") { provider.confirmBinds == 1 }
         onView(withId(R.id.ob_confirm_cancel)).inRoot(isDialog()).perform(click())
