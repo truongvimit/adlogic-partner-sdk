@@ -16,6 +16,7 @@ import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.android.gms.ads.rewarded.RewardedAd
 import io.trackkit.AdFormat
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Outcomes of one rewarded presentation, in the order GMA reports them. */
 open class RewardShowCallback {
@@ -149,6 +150,34 @@ object RewardAdManager {
             return
         }
         showInternal(activity, cached.ad, callback)
+    }
+
+    /**
+     * [show] for a caller that only reacts to the outcome: [onComplete] runs exactly once with
+     * whether the user earned. A failure to show reports `false` — nothing was earned either way.
+     *
+     * Take the [RewardShowCallback] overload instead when the screen needs `onEarned` while the ad
+     * is still up, the vendor error code, or clicks.
+     */
+    @JvmStatic
+    fun show(activity: Activity, placement: String, onComplete: (earned: Boolean) -> Unit) =
+        show(activity, placement, completionOnly(onComplete))
+
+    /**
+     * Unlike the interstitial store, nothing below this guarantees a single terminal callback:
+     * `onClosed` and `onFailedToShow` are separate vendor paths. The latch is what makes the
+     * lambda's once-only contract true.
+     */
+    private fun completionOnly(action: (Boolean) -> Unit) = object : RewardShowCallback() {
+        private val settled = AtomicBoolean(false)
+
+        override fun onClosed(earned: Boolean) {
+            if (settled.compareAndSet(false, true)) action(earned)
+        }
+
+        override fun onFailedToShow(codeError: Int) {
+            if (settled.compareAndSet(false, true)) action(false)
+        }
     }
 
     /**

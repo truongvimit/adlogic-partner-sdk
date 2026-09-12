@@ -336,15 +336,14 @@ Preload cho Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NA
 Preload sau consent, show tại lần điều hướng mới. Không áp mẫu/AutoBuffer cho `inter_splash`, `inter_after_ob3` vì OB tự quản lý.
 
 ```kotlin
-import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
 InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
-InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
-    override fun onComplete() = goNext()
-})
+InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNext() }
 ```
+
+Chỉ cần điều hướng thì dùng dạng lambda; cần thêm sự kiện (`onShowed`/`onClosed`/`onSkipped`/`onClicked`) thì dùng overload nhận `InterShowCallback`. App không cần file wrapper nào.
 
 SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval và readiness của placement. Chỉ điều hướng ở `onComplete`, chạy đúng một lần kể cả thiếu ad/show lỗi; không dùng `onClosed`, không tự kiểm tra `canShow()` trước. `load` không request lại nếu đang tải/đã có ad. Có ad thì chờ dialog khoảng 800 ms rồi show.
 

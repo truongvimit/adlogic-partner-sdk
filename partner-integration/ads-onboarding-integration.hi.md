@@ -336,15 +336,14 @@ Main के लिए preload: `SplashActivity.onRemoteFetched()` में `Nat
 consent के बाद preload करें और नए navigation के मौके पर show करें। यह नमूना या AutoBuffer `inter_splash` या `inter_after_ob3` पर लागू न करें; वे OB के हैं।
 
 ```kotlin
-import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
 InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
-InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
-    override fun onComplete() = goNext()
-})
+InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNext() }
 ```
+
+सिर्फ navigation चाहिए तो lambda रूप इस्तेमाल करें; साथ में `onShowed`/`onClosed`/`onSkipped`/`onClicked` भी चाहिए तो `InterShowCallback` वाला overload लें। App को कोई wrapper file नहीं चाहिए।
 
 placement का waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval और readiness SDK खुद तय करता है। Navigate सिर्फ `onComplete` से करें; यह ठीक एक बार चलता है, ad न होने या show fail होने पर भी। `onClosed` इस्तेमाल न करें और पहले से `canShow()` न जाँचें। load चल रहा हो या ad cache में हो तो `load` दोबारा request नहीं करता। Ad तैयार हो तो show से पहले लगभग 800 ms का dialog चलता है।
 

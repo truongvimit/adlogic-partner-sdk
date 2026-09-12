@@ -191,6 +191,77 @@ class InterstitialLifecycleRestoreTest {
         assertSame(raw, original.interstitialAd)
     }
 
+    /**
+     * The lambda overload is syntax only: same dispatch, same timing, same once-only completion.
+     * Each test below runs one scenario through both overloads and compares what the caller saw.
+     */
+    @Test
+    fun `lambda and callback overloads complete identically on a shown-then-dismissed ad`() {
+        val viaCallback = RecordingShow()
+        val rawA = Int02VendorAd(UNIT)
+        loadAndFill(rawA)
+        InterstitialAdManager.show(activity, PLACEMENT, viaCallback)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        rawA.callback.onAdShowedFullScreenContent()
+        rawA.callback.onAdDismissedFullScreenContent()
+
+        var lambdaCompletions = 0
+        val rawB = Int02VendorAd(UNIT)
+        loadAndFill(rawB)
+        InterstitialAdManager.show(activity, PLACEMENT) { lambdaCompletions++ }
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        rawB.callback.onAdShowedFullScreenContent()
+        rawB.callback.onAdDismissedFullScreenContent()
+
+        assertEquals(1, viaCallback.completed)
+        assertEquals(viaCallback.completed, lambdaCompletions)
+        assertEquals(listOf(activity), rawB.hosts)
+        assertTrue(viaCallback.skipped.isEmpty())
+    }
+
+    @Test
+    fun `lambda and callback overloads complete once when there is no fill to show`() {
+        val viaCallback = RecordingShow()
+        InterstitialAdManager.show(activity, PLACEMENT, viaCallback)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        var lambdaCompletions = 0
+        InterstitialAdManager.show(activity, PLACEMENT) { lambdaCompletions++ }
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        assertEquals(listOf("not_ready"), viaCallback.skipped.map { it.key })
+        assertEquals(1, viaCallback.completed)
+        assertEquals(viaCallback.completed, lambdaCompletions)
+    }
+
+    @Test
+    fun `lambda overload resolves nextAction exactly as the callback overload does`() {
+        // UnderAd completes while the ad is on screen; AfterDismiss waits for the dismissal.
+        val underAd = Int02VendorAd(UNIT)
+        loadAndFill(underAd)
+        var underAdCompletions = 0
+        InterstitialAdManager.show(
+            activity, PLACEMENT, nextAction = InterNextAction.UnderAd,
+        ) { underAdCompletions++ }
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals("UnderAd completes before the dismissal", 1, underAdCompletions)
+        underAd.callback.onAdShowedFullScreenContent()
+        underAd.callback.onAdDismissedFullScreenContent()
+        assertEquals("and never a second time", 1, underAdCompletions)
+
+        val afterDismiss = Int02VendorAd(UNIT)
+        loadAndFill(afterDismiss)
+        var afterDismissCompletions = 0
+        InterstitialAdManager.show(
+            activity, PLACEMENT, nextAction = InterNextAction.AfterDismiss,
+        ) { afterDismissCompletions++ }
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals("AfterDismiss has not completed yet", 0, afterDismissCompletions)
+        afterDismiss.callback.onAdShowedFullScreenContent()
+        afterDismiss.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, afterDismissCompletions)
+    }
+
     @Test
     fun `show with a non-Activity context keeps the fill for a later trigger`() {
         val raw = Int02VendorAd(UNIT)

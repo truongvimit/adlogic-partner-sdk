@@ -159,16 +159,17 @@ These are methods in your `AppCompatActivity`. Preload earlier, after consent; c
 method only at a new navigation opportunity. `goNextScreen()` is your app's navigation.
 
 ```kotlin
-import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
 fun preloadInterBack() = InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
 fun showInterBackOrContinue() =
-    InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
-        override fun onComplete() = goNextScreen()
-    })
+    InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNextScreen() }
 ```
+
+Use the lambda when all you do is navigate; take the `InterShowCallback` overload when the screen
+also needs `onShowed`, `onClosed`, `onSkipped` or `onClicked`. `loadAndShow` and
+`RewardAdManager.show` have the same pair — rewarded passes `earned` to its lambda.
 
 Both calls resolve the placement from your ad JSON: waterfall, on/off switch, `enable_ua_check`,
 consent, premium, interval and readiness. Navigate only from `onComplete` — it runs exactly once,
@@ -255,7 +256,7 @@ it enabled. Step click-return navigation remains enabled by default.
 | Remote placements / Firebase analytics | [suite-firebase](../suite-firebase/README.md); install `FirebaseAdConfigSource`, then call `AdConfig.refresh()` from a custom splash. The supplied onboarding splash already refreshes. |
 | Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
-| Rewarded ads | `RewardAdManager.loadAndShow(activity, AppAdPlacement.REWARD_EXAMPLE, onSuccess, onFailed)`, or `load` then `show`; grant only when `onClosed(earned)` has `earned=true`. `show` applies the placement's config gate for any key your JSON declares, so `onFailedToShow` also covers a disabled slot, the UA gate, premium and consent. |
+| Rewarded ads | `RewardAdManager.loadAndShow(activity, AppAdPlacement.REWARD_EXAMPLE, onSuccess, onFailed)`, or `load` then `show(activity, placement) { earned -> }`; grant only when `earned` is true. `show` applies the placement's config gate for any key your JSON declares, so `onFailedToShow` also covers a disabled slot, the UA gate, premium and consent. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
 | App-open on return | Set `ERainAdConfig.idAdResume` from the `open_resume` placement before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [App-open on return](#app-open-on-return). |
 
@@ -382,7 +383,18 @@ Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid 
 use the default.
 Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
 
-## Behaviour changes in 5.3.0
+## Version notes
+
+**5.3.2 (suggested, additive only).** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`
+and `RewardAdManager.show` gained overloads that take the completion as a lambda. Nothing else
+changed: the callback-taking overloads keep their signatures and are not deprecated, Java call sites
+are untouched, and the lambda simply binds `onComplete` — same gates, same order, same timing, same
+once-on-every-outcome guarantee. Rewarded passes `earned` to its lambda, since that is its outcome.
+Nothing to do on upgrade.
+
+**5.3.1.** No code change; it only stops shipping `/docs` in the repo.
+
+### Behaviour changes in 5.3.0
 
 Suggested release number for the placement-driven entry points above. The API of 5.2.x is unchanged
 — the id-taking overloads and the `NativeAdConfig` / `BannerAdConfig` constructors all still work —

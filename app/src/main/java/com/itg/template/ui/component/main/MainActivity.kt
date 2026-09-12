@@ -185,17 +185,17 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         // ── Interstitial Onboarding ──
         mBinding.btnLoadInterOnboarding.click {
             ensureAdRemoteConfig()
-            AdsManager.loadInterOnboarding(this, ignoreLimit = true)
+            AdsManager.loadInterOnboarding(this)
             mBinding.tvInterOnboardingStatus.text = "Loading…"
             Handler(Looper.getMainLooper()).postDelayed({
                 mBinding.tvInterOnboardingStatus.text = "Loaded ✓"
             }, 2000)
         }
         mBinding.btnShowInterOnboarding.click {
-            AdsManager.showInterOnboarding(this, ignoreLimit = true) {
+            AdsManager.showInterOnboarding(this) {
                 Timber.d("Inter Onboarding shown or skipped")
                 mBinding.tvInterOnboardingStatus.text = "Shown – reloading…"
-                AdsManager.loadInterOnboarding(this, ignoreLimit = true)
+                AdsManager.loadInterOnboarding(this)
                 Handler(Looper.getMainLooper()).postDelayed({
                     mBinding.tvInterOnboardingStatus.text = "Loaded ✓"
                 }, 2000)
@@ -205,17 +205,17 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         // ── Interstitial Welcome ──
         mBinding.btnLoadInterWelcome.click {
             ensureAdRemoteConfig()
-            AdsManager.loadInterWelcome(this, ignoreLimit = true)
+            AdsManager.loadInterWelcome(this)
             mBinding.tvInterWelcomeStatus.text = "Loading…"
             Handler(Looper.getMainLooper()).postDelayed({
                 mBinding.tvInterWelcomeStatus.text = "Loaded ✓"
             }, 2000)
         }
         mBinding.btnShowInterWelcome.click {
-            AdsManager.showInterWelcome(this, ignoreLimit = true) {
+            AdsManager.showInterWelcome(this) {
                 Timber.d("Inter Welcome shown or skipped")
                 mBinding.tvInterWelcomeStatus.text = "Shown – reloading…"
-                AdsManager.loadInterWelcome(this, ignoreLimit = true)
+                AdsManager.loadInterWelcome(this)
                 Handler(Looper.getMainLooper()).postDelayed({
                     mBinding.tvInterWelcomeStatus.text = "Loaded ✓"
                 }, 2000)

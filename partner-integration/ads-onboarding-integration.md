@@ -336,15 +336,14 @@ Preload for Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NA
 Preload after consent and show at a new navigation opportunity. Do not apply this sample or AutoBuffer to `inter_splash` or `inter_after_ob3`; OB owns those.
 
 ```kotlin
-import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
 InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
-InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
-    override fun onComplete() = goNext()
-})
+InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNext() }
 ```
+
+Use the lambda when all you do is navigate; take the `InterShowCallback` overload when you also need `onShowed`/`onClosed`/`onSkipped`/`onClicked`. Your app needs no wrapper file.
 
 The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval and readiness itself. Navigate only from `onComplete`; it runs exactly once, including when there is no ad or the show fails. Do not use `onClosed` and do not pre-check `canShow()`. `load` does not request again while a load is in flight or an ad is cached. With an ad ready, a dialog runs for about 800 ms before the show.
 

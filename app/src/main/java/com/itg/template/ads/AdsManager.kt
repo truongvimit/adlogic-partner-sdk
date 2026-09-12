@@ -8,11 +8,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.config.toNativeStyle
-import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
-import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
@@ -52,18 +50,14 @@ object AdsManager {
             .also { it.placement = placement }
     }
 
-    fun loadInterOnboarding(context: Context, ignoreLimit: Boolean = false) {
-        val config = AdRemoteConfig.inter_onboarding
-        InterstitialAdManager.load(
-            context,
-            AppAdPlacement.INTER_ONBOARDING,
-            AdGate.adUnitIds(AppAdPlacement.INTER_ONBOARDING),
-            InterLoadOptions(
-                enabled = AdGate.placementEnabled(AppAdPlacement.INTER_ONBOARDING),
-                passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
-            ),
-        )
-    }
+    /**
+     * Load and show read the same placement configuration, so a fill is only ever bought for an
+     * ad that may actually be presented. There is deliberately no bypass: [InterstitialAdManager]
+     * applies `enable_ua_check` at show time whatever a caller passed at load time, so bypassing
+     * here would only spend a request on an ad the store would then refuse.
+     */
+    fun loadInterOnboarding(context: Context) =
+        InterstitialAdManager.load(context, AppAdPlacement.INTER_ONBOARDING)
 
     /**
      * [nextAction] decides *when* [onAction] runs. [InterNextAction.UnderAd] — the app-wide
@@ -74,7 +68,6 @@ object AdsManager {
      */
     fun showInterOnboarding(
         context: Context,
-        ignoreLimit: Boolean = false,
         nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
         onAction: () -> Unit,
     ) {
@@ -86,23 +79,13 @@ object AdsManager {
         )
     }
 
-    fun loadInterWelcome(context: Context, ignoreLimit: Boolean = false) {
-        val config = AdRemoteConfig.inter_welcome
-        InterstitialAdManager.load(
-            context,
-            AppAdPlacement.INTER_WELCOME,
-            AdGate.adUnitIds(AppAdPlacement.INTER_WELCOME),
-            InterLoadOptions(
-                enabled = AdGate.placementEnabled(AppAdPlacement.INTER_WELCOME),
-                passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
-            ),
-        )
-    }
+    /** See [loadInterOnboarding] for why there is no bypass. */
+    fun loadInterWelcome(context: Context) =
+        InterstitialAdManager.load(context, AppAdPlacement.INTER_WELCOME)
 
     /** See [showInterOnboarding] for what [nextAction] changes. */
     fun showInterWelcome(
         context: Context,
-        ignoreLimit: Boolean = false,
         nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
         onAction: () -> Unit,
     ) {

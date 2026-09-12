@@ -339,6 +339,27 @@ object InterstitialAdManager {
         options.forPlacement(placement),
     )
 
+    /** [loadAndShow] for a caller that only navigates; see [show] for what [onComplete] binds. */
+    @JvmStatic
+    @JvmOverloads
+    fun loadAndShow(
+        activity: AppCompatActivity,
+        placement: String,
+        options: InterLoadAndShowOptions = InterLoadAndShowOptions(),
+        onComplete: () -> Unit,
+    ) = loadAndShow(activity, placement, completionOnly(onComplete), options)
+
+    /** The id-taking [loadAndShow] for a caller that only navigates. */
+    @JvmStatic
+    @JvmOverloads
+    fun loadAndShow(
+        activity: AppCompatActivity,
+        placement: String,
+        adUnitIds: List<String>,
+        options: InterLoadAndShowOptions = InterLoadAndShowOptions(),
+        onComplete: () -> Unit,
+    ) = loadAndShow(activity, placement, adUnitIds, completionOnly(onComplete), options)
+
     /** [options] AND-ed with what the placement's own configuration allows. */
     private fun InterLoadAndShowOptions.forPlacement(placement: String) = InterLoadAndShowOptions(
         allowWaitForAutoBuffer = allowWaitForAutoBuffer,
@@ -512,6 +533,31 @@ object InterstitialAdManager {
     ) {
         InterstitialFrequency.recordAction(placement)
         showInternal(context, placement, callback, reportTelemetry, nextAction)
+    }
+
+    /**
+     * [show] for a caller that only navigates: [onComplete] is [InterShowCallback.onComplete],
+     * with the same once-on-every-outcome guarantee and the same [nextAction] timing.
+     *
+     * Take the [InterShowCallback] overload instead when the screen also needs `onShowed`,
+     * `onClosed`, `onSkipped` or `onClicked`.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun show(
+        context: Context,
+        placement: String,
+        reportTelemetry: Boolean = true,
+        nextAction: InterNextAction = defaultNextAction,
+        onComplete: () -> Unit,
+    ) = show(context, placement, completionOnly(onComplete), reportTelemetry, nextAction)
+
+    /**
+     * The module dispatches every outcome through one [InterShowCallback]; this binds only the
+     * terminal one. Nothing here decides anything — [showInternal] still owns when it fires.
+     */
+    private fun completionOnly(action: () -> Unit) = object : InterShowCallback() {
+        override fun onComplete() = action()
     }
 
     private fun showInternal(
