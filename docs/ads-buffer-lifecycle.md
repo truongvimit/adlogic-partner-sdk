@@ -27,18 +27,20 @@ screens are not changed. The integration steps below must be applied when adopti
 - Ready ads survive foreground/background cycles. Their four-hour lifetime starts at request time,
   including when the callback arrives late. A result arriving already four hours old is rejected.
   Fill success ends recovery. Dismissal/failure to show does not refill; wait for the next background.
-- Existing consent, premium, external-action suppression, and fullscreen exclusion still apply.
+- Existing consent, premium, external-action suppression, fullscreen exclusion and the placement's
+  own `open_resume.enable_ua_check` UA/organic gate still apply.
   Suppression is decided for the departure/return; an ad Activity is not a new user visit.
 - Android may suspend or kill a background process. A scheduled load is best effort; an ad
   cache lives only in that process and is not persisted through process death.
 
 ## Remote delay and A/B testing
 
-Edit the existing Firebase Remote Config JSON parameter `ad_remote_config`. Add this top-level
-numeric field **alongside the existing placement objects**, preserving their IDs and settings:
+Edit the existing Firebase Remote Config JSON parameter `ad_remote_config`. The field lives
+**inside the `open_resume` object**, next to its `id` and `isEnable`; the parser skips every
+top-level value that is not a placement object, so a root-level copy is read as absent:
 
 ```json
-"app_resume_load_delay_ms": 2000
+"open_resume": { "id": "…", "isEnable": true, "app_resume_load_delay_ms": 2000 }
 ```
 
 - Milliseconds, accepted range **0–86,400,000** (up to 24 hours). `0` means no additional SDK wait

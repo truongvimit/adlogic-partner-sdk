@@ -1,6 +1,8 @@
 package com.ads.module.helper.banner
 
 import com.ads.module.ads.AdWaterfall
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.helper.AdGate
 import com.ads.module.helper.IAdsConfig
 
 /**
@@ -16,7 +18,7 @@ import com.ads.module.helper.IAdsConfig
  */
 open class BannerAdConfig @JvmOverloads constructor(
     tiers: List<String>,
-    override val canShowAds: Boolean,
+    canShowAds: Boolean,
     override val canReloadAds: Boolean,
     val bannerType: BannerType = BannerType.Normal,
 ) : IAdsConfig {
@@ -29,8 +31,21 @@ open class BannerAdConfig @JvmOverloads constructor(
         bannerType: BannerType = BannerType.Normal,
     ) : this(listOf(idAds), canShowAds, canReloadAds, bannerType)
 
+    /**
+     * Set by [forPlacement]. While it stands the waterfall and the on/off switch are re-read from
+     * `ad_config.json` on every request, so a remote refresh reaches a helper already on screen.
+     */
+    private var placementKey: String? = null
+
+    private val declaredCanShowAds: Boolean = canShowAds
+    private val declaredAdUnitIds: List<String> = AdWaterfall.usableIds(tiers)
+
+    override val canShowAds: Boolean
+        get() = placementKey?.let { AdGate.placementEnabled(it) } ?: declaredCanShowAds
+
     /** Declared tiers minus blanks and repeats, in request order. */
-    val adUnitIds: List<String> = AdWaterfall.usableIds(tiers)
+    val adUnitIds: List<String>
+        get() = placementKey?.let { AdGate.adUnitIds(it) } ?: declaredAdUnitIds
 
     override val idAds: String get() = adUnitIds.firstOrNull().orEmpty()
 
@@ -51,6 +66,21 @@ open class BannerAdConfig @JvmOverloads constructor(
     var forceUaCheck: Boolean = false
 
     companion object {
+        /**
+         * The config for [placement], resolved from `ad_config.json`: waterfall, on/off switch and
+         * `enable_ua_check`, re-read on every request.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun forPlacement(
+            placement: String,
+            bannerType: BannerType = BannerType.Normal,
+            canReloadAds: Boolean = false,
+        ): BannerAdConfig = BannerAdConfig(emptyList(), true, canReloadAds, bannerType).apply {
+            placementKey = placement
+            forceUaCheck = AdRemoteConfig.getInstance().ads[placement]?.enableUaCheck == true
+        }
+
         const val DEFAULT_AUTO_RELOAD_MS: Long = 15_000L
         const val MIN_AUTO_RELOAD_MS: Long = 1_000L
         const val DEFAULT_TIME_DEBOUNCE_RESUME_MS: Long = 500L

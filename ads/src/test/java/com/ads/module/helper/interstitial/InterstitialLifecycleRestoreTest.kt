@@ -192,6 +192,24 @@ class InterstitialLifecycleRestoreTest {
     }
 
     @Test
+    fun `show with a non-Activity context keeps the fill for a later trigger`() {
+        val raw = Int02VendorAd(UNIT)
+        val original = loadAndFill(raw)
+        val result = RecordingShow()
+
+        InterstitialAdManager.show(
+            ApplicationProvider.getApplicationContext<Application>(), PLACEMENT, result,
+        )
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        assertEquals(listOf("show_in_background"), result.skipped.map { it.key })
+        assertEquals(1, result.completed)
+        assertEquals(0, raw.hosts.size)
+        assertTrue(InterstitialAdManager.isReady(PLACEMENT))
+        assertSame(original, cachedThroughPublicLoad())
+    }
+
+    @Test
     fun `replacement B arriving before A rejection wins the cache`() {
         val rawA = Int02VendorAd(UNIT)
         loadAndFill(rawA)

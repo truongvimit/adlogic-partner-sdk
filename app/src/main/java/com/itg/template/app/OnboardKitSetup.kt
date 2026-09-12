@@ -1,8 +1,8 @@
 package com.itg.template.app
 
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.AdUnitConfig
 import com.itg.template.R
+import com.itg.template.ads.AppAdPlacement
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
@@ -92,39 +92,39 @@ object OnboardKitSetup {
             // `<key>` — resolved in that order by AdRemoteConfig.tiersFor. Giving a placement one
             // more floor is a remote-config change, never a code change.
             this.ads = AdsConfig(
-                splashBanner = ads?.unit("banner_splash").toBanner(),
-                splashInterstitial = ads.interstitial("inter_splash"),
-                afterOnboardingInterstitial = ads.interstitial("inter_after_ob3"),
+                splashBanner = ads.banner(AppAdPlacement.BANNER_SPLASH),
+                splashInterstitial = ads.interstitial(AppAdPlacement.INTER_SPLASH),
+                afterOnboardingInterstitial = ads.interstitial(AppAdPlacement.INTER_AFTER_OB3),
                 // Set false when the partner presents this interstitial after its own next screen.
                 afterOnboardingInterstitialEnabled = true,
                 // Optional: declare this key to bid a different floor for returning users. Absent
                 // from remote config, the splash falls back to `inter_splash` for everyone.
-                splashInterstitialOldUser = ads.interstitial("inter_splash_old_user"),
-                languageNative = ads.native("native_lang"),
-                languageDupNative = ads.native("native_lang_alt"),
+                splashInterstitialOldUser = ads.interstitial(AppAdPlacement.INTER_SPLASH_OLD_USER),
+                languageNative = ads.native(AppAdPlacement.NATIVE_LANG),
+                languageDupNative = ads.native(AppAdPlacement.NATIVE_LANG_ALT),
                 // The "Confirm Language" modal, raised by re-tapping the selected language.
-                languageConfirmNative = ads.native("native_popup_lang"),
+                languageConfirmNative = ads.native(AppAdPlacement.NATIVE_POPUP_LANG),
                 stepNatives = listOfNotNull(
-                    ads.native("native_ob1")?.let { Page.CONTENT_1 to it },
-                    ads.native("native_ob2")?.let { Page.CONTENT_2 to it },
-                    ads.native("native_ob3")?.let { Page.CONTENT_3 to it },
-                    ads.native("native_fs")?.let { Page.AD_FULL_SCREEN to it },
+                    ads.native(AppAdPlacement.NATIVE_OB1)?.let { Page.CONTENT_1 to it },
+                    ads.native(AppAdPlacement.NATIVE_OB2)?.let { Page.CONTENT_2 to it },
+                    ads.native(AppAdPlacement.NATIVE_OB3)?.let { Page.CONTENT_3 to it },
+                    ads.native(AppAdPlacement.NATIVE_FS)?.let { Page.AD_FULL_SCREEN to it },
                 ).toMap(),
                 // Used by any page with no key of its own in the map above
-                contentStepNative = ads.native("native_ob1"),
-                fullScreenStepNative = ads.native("native_fs"),
-                ob5Native = ads?.unit("native_onboarding_fullscreen_1_4").toNative(),
+                contentStepNative = ads.native(AppAdPlacement.NATIVE_OB1),
+                fullScreenStepNative = ads.native(AppAdPlacement.NATIVE_FS),
+                ob5Native = ads.native(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_4),
                 // No template is set here: `components` in ad_config.json decides block order and
                 // visibility, so one edit there moves onboarding along with every other slot.
 
                 // The onboarding screens ship one layout per CTA position, so the position from
                 // ad_config picks the layout. Blocks are not reordered there — `components` only
                 // shows or hides them.
-                languageTemplate = ads.templateOf("native_lang"),
-                contentStepTemplate = ads.templateOf("native_ob1", default = NativeTemplate.CTA_TOP),
+                languageTemplate = ads.templateOf(AppAdPlacement.NATIVE_LANG),
+                contentStepTemplate = ads.templateOf(AppAdPlacement.NATIVE_OB1, default = NativeTemplate.CTA_TOP),
                 // Declared so app-resume is judged by the same gate as every other placement;
                 // leaving it null makes the gate report no_ad_unit instead of staying silent.
-                appResume = ads?.unit("open_resume").toInterstitial(),
+                appResume = ads.interstitial(AppAdPlacement.OPEN_RESUME),
             )
         }
             .onSuccess { config ->
@@ -157,13 +157,7 @@ object OnboardKitSetup {
     private fun AdRemoteConfig?.interstitial(baseKey: String): InterstitialAdUnit? =
         this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }
 
-    private fun AdUnitConfig?.toNative(): NativeAdUnit? =
-        this?.takeIf { it.isUsable }?.let { NativeAdUnit(tiers = it.waterfallIds) }
-
-    private fun AdUnitConfig?.toInterstitial(): InterstitialAdUnit? =
-        this?.takeIf { it.isUsable }?.let { InterstitialAdUnit(tiers = it.waterfallIds) }
-
     /** Banners have no waterfall in the SDK — the top tier is the only id that can be used. */
-    private fun AdUnitConfig?.toBanner(): BannerAdUnit? =
-        this?.takeIf { it.isUsable }?.let { BannerAdUnit(id = it.waterfallIds.first()) }
+    private fun AdRemoteConfig?.banner(baseKey: String): BannerAdUnit? =
+        this?.tiersFor(baseKey)?.firstOrNull()?.let { BannerAdUnit(id = it) }
 }

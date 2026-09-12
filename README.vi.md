@@ -4,7 +4,7 @@
 
 Bộ SDK Android cho quảng cáo, onboarding, analytics, billing và paywall. Chọn tính năng cần dùng, cấu hình build chung rồi làm theo quickstart của module tương ứng.
 
-**Partner bắt đầu tại [Hướng dẫn tích hợp](partner-integration/README.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit và AdTracer; kèm file mẫu và bảng cấu hình tùy chọn.
+**Partner bắt đầu tại [Hướng dẫn tích hợp](partner-integration/README.vi.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit và AdTracer; kèm file mẫu và bảng cấu hình tùy chọn.
 
 ## Chọn module
 

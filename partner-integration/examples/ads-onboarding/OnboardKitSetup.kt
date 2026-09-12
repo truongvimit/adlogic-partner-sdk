@@ -35,8 +35,7 @@ object OnboardKitSetup {
                 ),
             )
             ads = AdsConfig(
-                splashBanner = adConfig.unit(AppAdPlacement.BANNER_SPLASH)
-                    .takeIf { it.isUsable }?.let { BannerAdUnit(it.waterfallIds.first()) },
+                splashBanner = adConfig.banner(AppAdPlacement.BANNER_SPLASH),
                 splashInterstitial = adConfig.interstitial(AppAdPlacement.INTER_SPLASH),
                 languageNative = adConfig.native(AppAdPlacement.NATIVE_LANG),
                 languageDupNative = adConfig.native(AppAdPlacement.NATIVE_LANG_ALT),
@@ -67,4 +66,8 @@ object OnboardKitSetup {
 
     private fun AdRemoteConfig.interstitial(key: String): InterstitialAdUnit? =
         tiersFor(key).takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }
+
+    /** Banners have no waterfall in the SDK — the top tier is the only id that can be used. */
+    private fun AdRemoteConfig.banner(key: String): BannerAdUnit? =
+        tiersFor(key).firstOrNull()?.let { BannerAdUnit(id = it) }
 }

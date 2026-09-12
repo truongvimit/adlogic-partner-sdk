@@ -2,7 +2,7 @@
 
 # Trackkit
 
-**Partner integration (Vietnamese): [चरण-दर-चरण गाइड](../partner-integration/trackkit-integration.vi.md)** — ज़रूरी files, defaults, वैकल्पिक configuration और verification।
+**Partner integration: [चरण-दर-चरण गाइड](../partner-integration/trackkit-integration.hi.md)** — ज़रूरी files, defaults, वैकल्पिक configuration और verification।
 
 SDK और ऐप के events को `Tracker` से Firebase या अपने analytics backend तक भेजें।
 

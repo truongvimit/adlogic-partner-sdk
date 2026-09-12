@@ -2,7 +2,7 @@
 
 # Trackkit
 
-**Partner bắt đầu tại [Hướng dẫn tích hợp Trackkit](../partner-integration/trackkit-integration.vi.md)** — các bước cơ bản, catalog event và bảng tùy chọn.
+**Tích hợp cho partner: [Hướng dẫn từng bước](../partner-integration/trackkit-integration.vi.md)** — file bắt buộc, giá trị mặc định, cấu hình tùy chọn và kiểm tra.
 
 Dùng `Tracker` để gửi event của SDK và app tới Firebase hoặc backend analytics riêng.
 

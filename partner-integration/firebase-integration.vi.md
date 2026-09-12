@@ -1,6 +1,6 @@
 # Firebase — Analytics và Remote Config
 
-[← Chọn hướng dẫn](README.md) · [API suite-firebase](../suite-firebase/README.md)
+[← Chọn hướng dẫn](README.vi.md) · [API suite-firebase](../suite-firebase/README.md)
 
 Làm bước 1, rồi chọn phần app cần: Analytics (bước 2), remote ads (bước 3), remote paywall (bước 4). `suite-firebase` đã cung cấp Firebase Analytics, Remote Config và Trackkit.
 

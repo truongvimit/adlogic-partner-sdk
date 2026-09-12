@@ -1,6 +1,6 @@
 # BillingKit — mua hàng với UI của app
 
-[← Chọn hướng dẫn](README.md) · [API BillingKit](../billingkit/README.md)
+[← Chọn hướng dẫn](README.vi.md) · [API BillingKit](../billingkit/README.md)
 
 Dùng khi app **tự dựng màn mua hàng**. Nếu dùng UI của [PayKit](paywall-integration.vi.md), theo guide đó; PayKit đã khởi tạo BillingKit và catalog.
 

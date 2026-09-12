@@ -2,7 +2,12 @@
 
 **Partner integration (Vietnamese): [Ads + OnboardKit step-by-step guide](../partner-integration/ads-onboarding-integration.vi.md)** — required files, sample ad JSON, defaults, optional configuration (including app-screen native/interstitial/app-open samples) and verification.
 
-Load and show AdMob ads from named placements. Start with local config and preload interstitials;
+Load and show AdMob ads from named placements. Every entry point takes a placement key and
+resolves the waterfall, the on/off switch and `enable_ua_check` from `ad_config.json` itself, so
+your app needs no layer that translates config into SDK objects — just the catalog of keys it owns.
+Keep those keys in one `object` of constants: a placement key is the only thing that tells two ad
+positions apart, since one ad unit id routinely serves many placements. Start with local config
+and preload interstitials;
 Firebase, Adjust, billing and app-open ads are optional. Using the supplied splash/onboarding?
 Follow [onboardkitorigin](../onboardkitorigin/README.md) for that flow; it owns the consent request.
 
@@ -97,8 +102,30 @@ Create `app/src/main/assets/ad_config.json`, replacing the placeholders with ad 
 
 Use test ad units in `ad_config_debug.json` for debug builds. If absent, debug falls back to
 `ad_config.json`; the SDK does not replace live IDs with test IDs. Missing placements are disabled.
-For waterfall floors, add `<placement>_high`, `_high1`…`_high9`; `tiersFor(placement)` returns
-enabled floors first and the base placement last. See [AdUnitConfig](src/main/java/com/ads/module/config/AdUnitConfig.kt).
+For waterfall floors, add `<placement>_high`, `_high1`…`_high9`; they are requested highest first
+and the base key last. The base key is the placement's master switch — `"isEnable": false` there
+turns off every floor. See [AdUnitConfig](src/main/java/com/ads/module/config/AdUnitConfig.kt).
+
+Then name those keys once, in your app:
+
+```kotlin
+object AppAdPlacement {
+    const val INTER_BACK = "inter_back"
+    const val INTER_ALL = "inter_all"
+    const val NATIVE_HOME = "native_home"
+    const val BANNER_HOME = "banner_home"
+    const val REWARD_EXAMPLE = "reward_example"
+    const val OPEN_RESUME = "open_resume"
+}
+```
+
+The key is the ad position's identity everywhere the SDK looks: the interstitial cache, the
+frequency clock, the auto-buffer group, native preload, and every `ad_request` / `ad_impression` /
+`ad_skipped` your dashboard slices by. Ad unit ids cannot stand in for it — Google's test units give
+one id per format, and production payloads reuse a unit across screens, so several placements share
+one id routinely. A raw string that drifts from the JSON does not fail either: `AdRemoteConfig.unit`
+logs a warning, returns a disabled placeholder, and the slot silently never fills. A constant turns
+that into a compile error. The samples below use this object.
 
 ## 3. Resolve consent before requesting ads
 
@@ -132,75 +159,48 @@ These are methods in your `AppCompatActivity`. Preload earlier, after consent; c
 method only at a new navigation opportunity. `goNextScreen()` is your app's navigation.
 
 ```kotlin
-import com.ads.module.config.AdRemoteConfig
-import com.ads.module.helper.AdGate
-import com.ads.module.helper.interstitial.InterLoadOptions
-import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
-fun preloadInterBack() {
-    val config = AdRemoteConfig.getInstance()
-    val unit = config.unit("inter_back")
-    InterstitialAdManager.load(applicationContext, "inter_back", config.tiersFor("inter_back"),
-        InterLoadOptions(enabled = unit.isUsable,
-            passesUaGate = AdGate.passesUaGate(unit.enableUaCheck)))
-}
+fun preloadInterBack() = InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
-fun showInterBackOrContinue() {
-    val unit = AdRemoteConfig.getInstance().unit("inter_back")
-    if (!unit.isUsable || !AdGate.passesUaGate(unit.enableUaCheck) ||
-        !InterstitialAdManager.canShow(this, "inter_back")) {
-        goNextScreen()
-        return
-    }
-    InterstitialAdManager.show(this, "inter_back", object : InterShowCallback() {
+fun showInterBackOrContinue() =
+    InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
         override fun onComplete() = goNextScreen()
-    }, nextAction = InterNextAction.AfterDismiss)
-}
+    })
 ```
 
-`canShow` checks the buffer, consent/premium and interval rules. A miss continues immediately;
-a later fill stays buffered for another opportunity and does not show itself. Load calls share
-an existing request/cache. Preload again after consumption, or use the optional auto-buffer below.
-The existing buffered show path still has an approximately 800 ms preparation dialog.
-Navigate only from `onComplete` after invoking `show`; it also runs when show fails or is skipped.
+Both calls resolve the placement from your ad JSON: waterfall, on/off switch, `enable_ua_check`,
+consent, premium, interval and readiness. Navigate only from `onComplete` — it runs exactly once,
+including when the ad is skipped or fails. Do not pre-check `canShow()`: the trigger has to reach
+`show` to count as an action. Load calls share an existing request/cache; preload again after
+consumption, or use the auto-buffer below. Pass `adUnitIds` to the id-taking overload only when
+your app supplies its own units.
 
 ## Native and banner slots
 
-Call after consent from a resumed `AppCompatActivity`. `binding.frAds` and `binding.frBanner` are empty
-`FrameLayout` containers. For a Fragment, pass its Activity and `viewLifecycleOwner`.
+Call after consent from a resumed `AppCompatActivity`. `binding.frAds` and `binding.frBanner` are
+empty `FrameLayout` containers. For a Fragment, pass its Activity and `viewLifecycleOwner`.
 
 ```kotlin
-import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.toNativeStyle
-import com.ads.module.helper.adnative.*
-import com.ads.module.helper.banner.*
+import com.ads.module.helper.adnative.NativeAdHelper
+import com.ads.module.helper.banner.BannerAdHelper
 
-val config = AdRemoteConfig.getInstance()
-val native = config.unit("native_home")
-val nativeConfig = NativeAdConfig(config.tiersFor("native_home"), native.isUsable, false,
-    com.ads.module.R.layout.custom_native_admob_medium).apply { forceUaCheck = native.enableUaCheck }
-NativeAdHelper(this, this, nativeConfig)
-    .setNativeContentView(binding.frAds)
-    .setNativeStyle(native.toNativeStyle())
-    .also { it.placement = "native_home" }
-    .requestAds(NativeAdParam.Request)
-
-val banner = config.unit("banner_home")
-val bannerConfig = BannerAdConfig(config.tiersFor("banner_home"), banner.isUsable, false)
-    .apply { forceUaCheck = banner.enableUaCheck }
-BannerAdHelper(this, this, bannerConfig)
-    .attachInto(binding.frBanner)
-    .also { it.placement = "banner_home" }
-    .requestAds(BannerAdParam.Request)
+NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, binding.frAds)
+BannerAdHelper.forPlacement(this, this, AppAdPlacement.BANNER_HOME, binding.frBanner)
 ```
+
+Both resolve the placement from your ad JSON — waterfall, on/off switch, `enable_ua_check`, CTA
+style — and the request is under way when they return. Pass `layoutRes` or a
+[`BannerType`](src/main/java/com/ads/module/helper/banner/BannerType.kt) to change the template;
+build [NativeAdConfig](src/main/java/com/ads/module/helper/adnative/NativeAdConfig.kt) or
+[BannerAdConfig](src/main/java/com/ads/module/helper/banner/BannerAdConfig.kt) yourself when the
+app supplies its own ad units.
 
 Native includes a generated loading skeleton. To customize it, copy the
 [supplied native layout](src/main/res/layout/custom_native_admob_medium.xml), keeping its
-`NativeAdView` root, asset IDs and ad badge. The banner example leaves refresh to AdMob:
-`canReloadAds=false` and `enableAutoReload=false`. SDK refresh requires disabling console refresh
-for every tier; see [BannerAdConfig](src/main/java/com/ads/module/helper/banner/BannerAdConfig.kt).
+`NativeAdView` root, asset IDs and ad badge. Both examples leave refresh to AdMob; SDK refresh
+requires disabling console refresh for every tier.
 
 ## Native preload, repeated show, and refresh
 
@@ -209,20 +209,18 @@ uses `viewLifecycleOwner`. The shared manager keeps one unused ad and one pendin
 placement, so a singleton helper holding an Activity is unnecessary.
 
 ```kotlin
-// Optional: preload earlier, after consent, using the nativeConfig from the previous example.
-NativeAdManager.preload(applicationContext, "native_home", nativeConfig)
+// Optional: preload earlier, after consent.
+val nativeConfig = NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, R.layout.custom_native_admob_medium)
+NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, nativeConfig)
 
 // Destination Activity; use viewLifecycleOwner for a Fragment.
-val nativeHelper = NativeAdHelper(this, this, nativeConfig)
-    .setNativeContentView(binding.frAds)
-    .setNativeStyle(native.toNativeStyle())
-    .also { it.placement = "native_home" }
-nativeHelper.show()
+val nativeHelper = NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, binding.frAds)
 ```
 
 - `show()` uses a ready ad, joins a pending request, or loads one. Repeated calls while loading
   share that request. Calling it again after a successful bind requests a replacement.
-- For timed refresh, set `NativeAdConfig.canReloadAds = true`, then call
+- For timed refresh, build the config with `NativeAdConfig.forPlacement(placement, layoutRes,
+  canReloadAds = true)` — it is a constructor value, not a settable property — and call
   `applyReloadByTime(intervalMs)` before `show()`. The current ad stays visible while loading;
   refresh pauses when the slot is hidden/stopped.
 - For retained pager pages or custom navigation, call `cancel()` when the page is unselected
@@ -243,10 +241,6 @@ and refresh timers. Normal consent, purchase and network gates still apply.
 Disable this behavior for a screen that navigates away on ad return:
 
 ```kotlin
-val config = NativeAdConfig(ids, true, false, R.layout.native_home).apply {
-    reloadOnAdClick = false
-}
-// Or configure an existing helper before the interaction:
 helper.setReloadOnAdClick(false)
 ```
 
@@ -261,9 +255,9 @@ it enabled. Step click-return navigation remains enabled by default.
 | Remote placements / Firebase analytics | [suite-firebase](../suite-firebase/README.md); install `FirebaseAdConfigSource`, then call `AdConfig.refresh()` from a custom splash. The supplied onboarding splash already refreshes. |
 | Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
-| Rewarded ads | Use `load`, `isReady` and `show`; grant only when `onClosed(earned)` has `earned=true`. See [RewardAdManager](src/main/java/com/ads/module/helper/reward/RewardAdManager.kt). |
+| Rewarded ads | `RewardAdManager.loadAndShow(activity, AppAdPlacement.REWARD_EXAMPLE, onSuccess, onFailed)`, or `load` then `show`; grant only when `onClosed(earned)` has `earned=true`. `show` applies the placement's config gate for any key your JSON declares, so `onFailedToShow` also covers a disabled slot, the UA gate, premium and consent. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
-| App-open on return | Set `ERainAdConfig.idAdResume` before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [AppOpenManager](src/main/java/com/ads/module/admob/AppOpenManager.java). |
+| App-open on return | Set `ERainAdConfig.idAdResume` from the `open_resume` placement before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [App-open on return](#app-open-on-return). |
 
 ## Automatic interstitial preload
 
@@ -278,7 +272,7 @@ import com.ads.module.helper.interstitial.InterstitialBufferOptions
 
 // Application.onCreate(), after ERainAd.init(...).
 InterstitialAutoBuffer.configure(
-    InterstitialBufferOptions(placements = listOf("inter_back", "inter_all")),
+    InterstitialBufferOptions(placements = listOf(AppAdPlacement.INTER_BACK, AppAdPlacement.INTER_ALL)),
 )
 
 // First actual content Activity, after onboarding/consent/remote setup.
@@ -286,7 +280,7 @@ InterstitialAutoBuffer.configure(
 InterstitialAutoBuffer.start(applicationContext)
 ```
 
-Keep using `InterstitialAdManager.canShow/show` at navigation opportunities. The first preload
+Keep using `InterstitialAdManager.show` at navigation opportunities. The first preload
 waits for the configured interstitial interval; closing a group ad or a final load failure
 starts the next interval. The SDK pauses scheduling in background and retains ready ads.
 Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass the interval.
@@ -302,16 +296,17 @@ idle cadence when the interval is zero).
 
 ```kotlin
 InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-    independentIntervalPlacements = setOf("inter_all", "inter_back"),
-    placements = listOf("inter_all", "inter_back"),
-    tapThresholds = mapOf("inter_all" to 2),
-    intervalMsByPlacement = mapOf("inter_all" to 30_000L, "inter_back" to 30_000L),
+    independentIntervalPlacements = setOf(AppAdPlacement.INTER_ALL, AppAdPlacement.INTER_BACK),
+    placements = listOf(AppAdPlacement.INTER_ALL, AppAdPlacement.INTER_BACK),
+    tapThresholds = mapOf(AppAdPlacement.INTER_ALL to 2),
+    intervalMsByPlacement = mapOf(AppAdPlacement.INTER_ALL to 30_000L, AppAdPlacement.INTER_BACK to 30_000L),
+    // Optional and purely additive: the buffer already applies isEnable and enable_ua_check.
     isPlacementEnabled = { placement -> contentPlacementEnabled(placement) },
 ))
 // Keep start() on actual content entry, as above.
 
 // One real content/navigation action. Coalesce repeated taps while this action is pending.
-InterstitialAdManager.loadAndShow(activity, placement, adUnitIds, callback,
+InterstitialAdManager.loadAndShow(activity, placement, callback,
     InterLoadAndShowOptions(
         allowWaitForAutoBuffer = true,
         timeoutMs = 5_000L,
@@ -337,12 +332,21 @@ and `wait_ms`; `dispatch` means handing off to show, not an impression. Use exis
 
 ## App-open on return
 
-Set the app-open unit before `ERainAd.init(...)`; the setter also enables resume ads:
+Declare the unit under `open_resume` in your ad JSON, then seed it before `ERainAd.init(...)`;
+the setter also enables resume ads:
 
 ```kotlin
 // Inside the ERainAdConfig(...).apply block from step 1:
-idAdResume = "YOUR_APP_OPEN_UNIT_ID" // Use a test unit in debug.
+idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()
 ```
+
+From then on the SDK re-points the unit at `open_resume` on every config update, so a remote
+refresh needs no extra call. Two limits: it only takes over once a non-empty unit exists, and
+`open_resume` must carry an ad unit id. Ship it enabled with a real id — `isEnable: false` empties
+the unit, and app-resume stays off until the config turns it back on.
+
+The app-resume load honours `open_resume.enable_ua_check` like every other placement, so a
+UA-gated slot does not request on an organic install.
 
 Exclude your custom splash and sensitive Activities during Application setup:
 
@@ -377,6 +381,20 @@ Place `app_resume_load_delay_ms` inside that entry.
 Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid values
 use the default.
 Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
+
+## Behaviour changes in 5.3.0
+
+Suggested release number for the placement-driven entry points above. The API of 5.2.x is unchanged
+— the id-taking overloads and the `NativeAdConfig` / `BannerAdConfig` constructors all still work —
+but five behaviours differ:
+
+| Change | What to do |
+|---|---|
+| `isEnable: false` on a **base key** now disables every `_high*` floor with it. Previously a floor stayed live. | Re-enable the base key if a payload meant to keep one floor. |
+| `show` applies the placement's config gate — `isEnable`, `enable_ua_check`, consent, premium — for any key your JSON **declares**, `InterstitialAdManager.show` and `RewardAdManager.show` alike, even with a fill already buffered. A key your JSON does not declare is unaffected. | Expect `DISABLED_CONFIG` / `UA_GATE` / `CONSENT_NOT_GRANTED` / `PURCHASED` on those paths. |
+| App-resume load honours `open_resume.enable_ua_check`; it used to ignore it. | Set it `false` to keep the old behaviour. |
+| The onboarding flow's `inter_after_ob3` is the one flow placement whose key is also a JSON key, so its `enable_ua_check` now gates that interstitial on both load and show. | Set it `false` to keep showing the end-of-onboarding interstitial on organic installs. |
+| `show` through a context that is not an `AppCompatActivity` reports `SHOW_IN_BACKGROUND` and keeps the fill, instead of `FAILED_TO_SHOW` and losing it. | Nothing; the fill survives for the next trigger. |
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 
 # Trackkit
 
-**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/trackkit-integration.vi.md)** — required files, defaults, optional configuration and verification.
+**Partner integration: [Step-by-step guide](../partner-integration/trackkit-integration.md)** — required files, defaults, optional configuration and verification.
 
 Send SDK and app events to Firebase or your own analytics backend through `Tracker`.
 

@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModelStoreOwner
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
@@ -707,5 +709,33 @@ class NativeAdHelper(
     companion object {
         const val DEFAULT_DEBOUNCE_AD_LOADED_MS: Long = 3_000L
         const val DEFAULT_RELOAD_BY_TIME_MS: Long = 15_000L
+
+        /**
+         * One native slot, fully configured from `ad_config.json`: waterfall, on/off switch,
+         * `enable_ua_check` and the CTA/template style all come from [placement], and the request
+         * is already under way when this returns.
+         *
+         * Use the constructor instead when the app supplies its own ad units or style.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun forPlacement(
+            activity: Activity,
+            lifecycleOwner: LifecycleOwner,
+            placement: String,
+            container: FrameLayout,
+            @LayoutRes layoutId: Int = com.ads.module.R.layout.custom_native_admob_medium,
+            canReloadAds: Boolean = false,
+        ): NativeAdHelper = NativeAdHelper(
+            activity,
+            lifecycleOwner,
+            NativeAdConfig.forPlacement(placement, layoutId, canReloadAds),
+        )
+            .setNativeContentView(container)
+            .setNativeStyle(AdRemoteConfig.getInstance().unit(placement).toNativeStyle())
+            .also {
+                it.placement = placement
+                it.requestAds(NativeAdParam.Request)
+            }
     }
 }

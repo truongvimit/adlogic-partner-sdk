@@ -29,9 +29,8 @@ import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.config.toNativeStyle
 import com.itg.template.ads.AdsManager
+import com.itg.template.ads.AppAdPlacement
 import com.itg.template.ads.RemoteConfigUtils
-import com.itg.template.ads.banner_home
-import com.itg.template.ads.banner_home_fixed
 import com.itg.template.ads.inter_onboarding
 import com.itg.template.ads.open_resume
 import com.itg.template.ads.native_welcome
@@ -59,7 +58,7 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
 
-    override val bannerConfig = BannerConfig(AdRemoteConfig.banner_home, BannerType.Collapsible())
+    override val bannerConfig = BannerConfig(AppAdPlacement.BANNER_HOME, BannerType.Collapsible())
 
     private val delayHandler = Handler(Looper.getMainLooper())
     private var delayRunnable: Runnable? = null
@@ -301,10 +300,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = nativeSmallHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig("native_language_1"),
+            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
             R.layout.layout_native_ad_small, bypassUaGate = true,
         ).setNativeContentView(mBinding.flNativeSmall).also { nativeSmallHelper = it }
-        helper.setNativeStyle(adConfig("native_language_1").toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -312,10 +311,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = nativeFullHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig("native_onboarding_fullscreen_1_3"),
+            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3),
             R.layout.layout_native_ad_full, bypassUaGate = true,
         ).setNativeContentView(mBinding.flNativeFull).also { nativeFullHelper = it }
-        helper.setNativeStyle(adConfig("native_onboarding_fullscreen_1_3").toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -323,10 +322,10 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = customizationHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig("native_language_1"),
+            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
             R.layout.layout_native_ad_small, bypassUaGate = true,
         ).setNativeContentView(mBinding.flCustomizationPreview).also { customizationHelper = it }
-        helper.setNativeStyle(adConfig("native_language_1").toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -439,18 +438,18 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
             val instance = AdRemoteConfig.getInstance()
             val updatedAds = instance.ads.toMutableMap()
 
-            val appResumeConfig = updatedAds["open_resume"]
-            val nativeWelcomeConfig = updatedAds["native_welcome"]
-            val interWelcomeConfig = updatedAds["inter_welcome"]
+            val appResumeConfig = updatedAds[AppAdPlacement.OPEN_RESUME]
+            val nativeWelcomeConfig = updatedAds[AppAdPlacement.NATIVE_WELCOME]
+            val interWelcomeConfig = updatedAds[AppAdPlacement.INTER_WELCOME]
 
             if (appResumeConfig != null) {
-                updatedAds["open_resume"] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
+                updatedAds[AppAdPlacement.OPEN_RESUME] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
             }
             if (nativeWelcomeConfig != null) {
-                updatedAds["native_welcome"] = nativeWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
+                updatedAds[AppAdPlacement.NATIVE_WELCOME] = nativeWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
             }
             if (interWelcomeConfig != null) {
-                updatedAds["inter_welcome"] = interWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
+                updatedAds[AppAdPlacement.INTER_WELCOME] = interWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
             }
 
             AdRemoteConfig.update(instance.copy(ads = updatedAds))
@@ -533,9 +532,9 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         // Google's demo unit ids are per-family: adaptive/inline/collapsible vs fixed-size
         if (currentBannerType is BannerType.Fixed) {
-            reloadBanner(currentBannerType, AdRemoteConfig.banner_home_fixed, "banner_home_fixed")
+            reloadBanner(currentBannerType, AppAdPlacement.BANNER_HOME_FIXED)
         } else {
-            reloadBanner(currentBannerType, AdRemoteConfig.banner_home)
+            reloadBanner(currentBannerType)
         }
     }
 

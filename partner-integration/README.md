@@ -1,47 +1,47 @@
-# Hướng dẫn tích hợp cho partner
+# Partner integration guides
 
-Chọn hướng dẫn theo tính năng app cần. Làm lần lượt phần tích hợp cơ bản; chỉ mở bảng tùy chọn khi app cần thay đổi hành vi mặc định.
+Pick the guide for the feature your app needs. Work through the basic integration in order; open the optional tables only when your app needs to change a default behaviour.
 
-| App cần | Đọc tài liệu | Module |
+| Your app needs | Guide to read | Module |
 | --- | --- | --- |
-| Splash → ngôn ngữ → onboarding có quảng cáo → màn chính | **[Tích hợp Ads + OnboardKit](ads-onboarding-integration.vi.md)** | `ads` + `onboardkitorigin` |
-| Ads trong các màn riêng của app | Đã làm guide Ads + OnboardKit: dùng mẫu [native](ads-onboarding-integration.vi.md#native-ở-màn-app-dùng-placement-constant), [inter](ads-onboarding-integration.vi.md#interstitial-ở-màn-app-dùng-placement-constant), [app-open](ads-onboarding-integration.vi.md#app-open-khi-quay-lại) với [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) của app. Không dùng OnboardKit: làm theo [Ads](../ads/README.md) từ init, placement đến consent. | `ads` |
-| Mua hàng với UI riêng | [Tích hợp BillingKit](billing-integration.vi.md) | `billingkit` |
-| Paywall dựng sẵn | [Tích hợp PayKit](paywall-integration.vi.md) | `paykit`, thêm `billingkit` khi gọi API trực tiếp |
-| Remote JSON / Firebase Analytics | [Tích hợp Firebase](firebase-integration.vi.md) | `suite-firebase` và module cần kết nối |
-| Event của app / chọn nơi nhận analytics | [Tích hợp Trackkit](trackkit-integration.vi.md) | `trackkit` đã được các kit cung cấp |
-| Dashboard debug quảng cáo | [Tích hợp AdTracer](adtracer-integration.vi.md) | `adtracer` chỉ trong debug |
+| Splash → language → onboarding with ads → main screen | **[Ads + OnboardKit integration](ads-onboarding-integration.md)** | `ads` + `onboardkitorigin` |
+| Ads in your app's own screens | Already did the Ads + OnboardKit guide: use the [native](ads-onboarding-integration.md#app-screen-native-with-a-placement-constant), [inter](ads-onboarding-integration.md#app-screen-interstitial-with-a-placement-constant), [app-open](ads-onboarding-integration.md#app-open-on-return) samples with your app's [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt). Not using OnboardKit: follow [Ads](../ads/README.md) from init and placements through consent. | `ads` |
+| Purchases with your own UI | [BillingKit integration](billing-integration.md) | `billingkit` |
+| A ready-made paywall | [PayKit integration](paywall-integration.md) | `paykit`, add `billingkit` when you call its APIs directly |
+| Remote JSON / Firebase Analytics | [Firebase integration](firebase-integration.md) | `suite-firebase` plus the module you connect |
+| Your app's events / choosing where analytics go | [Trackkit integration](trackkit-integration.md) | `trackkit` is already exposed by the kits |
+| Ad debugging dashboard | [AdTracer integration](adtracer-integration.md) | `adtracer`, debug only |
 
-## Thứ tự ghép vào app
+## Order to wire into your app
 
-1. **Chọn tính năng chính:** Ads/OB, BillingKit với UI riêng hoặc PayKit có UI sẵn. App có thể ghép ads và mua hàng; PayKit tự khởi tạo billing nên không đăng ký thêm catalog bằng `AppPurchase.initBilling`.
-2. **Nếu thu thập analytics:** install Tracker và sink trong Application trước các kit phát event. Firebase và AdTracer là các nơi nhận tùy chọn; Adjust nối theo [guide ads/Adjust](ads-onboarding-integration.vi.md#adjust-token-và-kiểm-tra).
-3. **Khởi tạo kit và dữ liệu local:** dùng Application hiện có. Với OB có paywall, install PayKit trước OnboardKit; chờ billing trong hook splash trước ads.
-4. **Nếu dùng remote:** cài nguồn Firebase sau local setup. Splash OB đã refresh ads; paywall cần `PayKit.sync()` riêng trước lúc cần remote config.
-5. **Kiểm thử:** làm checklist cuối guide đã chọn; thêm AdTracer nếu cần theo dõi luồng ads trên dashboard.
+1. **Pick the main feature:** Ads/OB, BillingKit with your own UI, or PayKit with its ready-made UI. An app can combine ads and purchases; PayKit initializes billing itself, so do not register another catalog with `AppPurchase.initBilling`.
+2. **If you collect analytics:** install Tracker and a sink in the Application before the kits emit events. Firebase and AdTracer are optional destinations; wire Adjust through the [ads/Adjust guide](ads-onboarding-integration.md#adjust-tokens-and-verification).
+3. **Initialize the kits and local data:** use your existing Application. With OB plus a paywall, install PayKit before OnboardKit; wait for billing in the splash hook before ads.
+4. **If you use remote:** add the Firebase sources after the local setup. The OB splash already refreshes ads; the paywall needs its own `PayKit.sync()` before you need remote config.
+5. **Test:** run the checklist at the end of the guide you chose; add AdTracer if you need to follow the ad flow on a dashboard.
 
-Không cần làm tất cả guide. Mỗi guide ghi rõ dependency, file cần có và phần tùy chọn; không copy nhiều Application hay nhiều lần install cùng một SDK.
+You do not need to do every guide. Each guide states its dependencies, the files you need and the optional parts; do not copy several Application classes or install the same SDK more than once.
 
-## Cách dùng tài liệu
+## How to use these guides
 
-- **Code cơ bản:** chỉ khai báo dữ liệu của app và phần nối SDK; giữ các hành vi mặc định SDK; JSON mẫu giữ cấu hình của example.
-- **Bảng tùy chọn:** nêu mặc định, lúc cần đổi và nơi cấu hình. Không cần chép cả bảng vào code hay Firebase.
-- **Placement app:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) tập trung key OB và các màn app; ad unit ID nằm trong JSON.
-- **File mẫu:** [ad_config.json](examples/ads-onboarding/ad_config.json) và [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) đều dùng ad ID test. Copy vào `app/src/main/assets/`; thay ID ở file thật trước khi phát hành.
-- **README module:** tra cứu thêm API, lifecycle và tùy biến khi cần.
+- **Basic code:** declares only your app's data and the SDK wiring; keeps the SDK defaults; the sample JSON keeps the example's configuration.
+- **Optional tables:** state the default, when to change it and where to configure it. You do not need to copy a whole table into your code or Firebase.
+- **App placements:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) collects the OB keys and your app screens in one place. The placement key is the only identity of an ad slot — an ad unit ID is shared across placements and so cannot tell them apart; ad unit IDs live in the JSON.
+- **Sample files:** [ad_config.json](examples/ads-onboarding/ad_config.json) and [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) both use test ad IDs. Copy them into `app/src/main/assets/`; replace the IDs in the real file before release.
+- **Module READMEs:** look up further APIs, lifecycle and customization when you need them.
 
-## File mẫu để copy
+## Sample files to copy
 
-| Tính năng | Mẫu | Nơi dùng |
+| Feature | Sample | Where it goes |
 | --- | --- | --- |
-| Ads + OB | [Production JSON](examples/ads-onboarding/ad_config.json), [debug JSON](examples/ads-onboarding/ad_config_debug.json), [AppAdPlacement](examples/ads-onboarding/AppAdPlacement.kt), [OnboardKitSetup](examples/ads-onboarding/OnboardKitSetup.kt), [PartnerApp](examples/ads-onboarding/PartnerApp.kt) | Assets, catalog và khởi tạo SDK; cả hai JSON dùng ad ID test. |
-| Billing UI riêng | [BillingProducts.kt](examples/billing/BillingProducts.kt) | Catalog product/base plan/offer; thay bằng sản phẩm Play của app. |
-| Paywall | [paywall_config.json](examples/paywall/paywall_config.json), [paywall_strings.xml](examples/paywall/paywall_strings.xml) | `res/raw`, `res/values`; đủ field example, thay catalog/copy/URL. |
-| Event app | [AppEvents.kt](examples/trackkit/AppEvents.kt) | Key event/param tập trung, chỉ giữ event app cần. |
-| Dashboard debug | [AdTracerSink](examples/adtracer/debug/AdTracerSink.kt), [debug entry](examples/adtracer/debug/DebugSinks.kt), [release no-op](examples/adtracer/release/DebugSinks.kt) | Source sets debug/release; cùng package app. |
+| Ads + OB | [Production JSON](examples/ads-onboarding/ad_config.json), [debug JSON](examples/ads-onboarding/ad_config_debug.json), [AppAdPlacement](examples/ads-onboarding/AppAdPlacement.kt), [OnboardKitSetup](examples/ads-onboarding/OnboardKitSetup.kt), [PartnerApp](examples/ads-onboarding/PartnerApp.kt) | Assets, catalog and SDK initialization; both JSON files use test ad IDs. |
+| Billing with your own UI | [BillingProducts.kt](examples/billing/BillingProducts.kt) | Product/base plan/offer catalog; replace with your app's Play products. |
+| Paywall | [paywall_config.json](examples/paywall/paywall_config.json), [paywall_strings.xml](examples/paywall/paywall_strings.xml) | `res/raw`, `res/values`; the example's fields are complete, replace the catalog/copy/URLs. |
+| App events | [AppEvents.kt](examples/trackkit/AppEvents.kt) | Event/param keys in one place, keep only the events your app needs. |
+| Debug dashboard | [AdTracerSink](examples/adtracer/debug/AdTracerSink.kt), [debug entry](examples/adtracer/debug/DebugSinks.kt), [release no-op](examples/adtracer/release/DebugSinks.kt) | debug/release source sets; same package as your app. |
 
-Firebase dùng `google-services.json` do Console cấp đúng app; không có file credentials mẫu để copy.
+Firebase uses the `google-services.json` the Console issues for your app; there is no sample credentials file to copy.
 
-Các ví dụ dependency đọc chung `adlogicSdkVersion` trong `gradle.properties` của app; xem [cấu hình build](../README.vi.md#cấu-hình-build). Khi nâng SDK, cập nhật property của app.
+All dependency examples read the same `adlogicSdkVersion` from your app's `gradle.properties`; see [build setup](../README.md#build-setup). To upgrade the SDK, update that property in your app.
 
-[README SDK](../README.vi.md) · [Bắt đầu tích hợp Ads + OnboardKit](ads-onboarding-integration.vi.md)
+[SDK README](../README.md) · [Start with Ads + OnboardKit](ads-onboarding-integration.md)

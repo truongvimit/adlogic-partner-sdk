@@ -356,6 +356,32 @@ class BannerAdHelper(
     companion object {
 
         /**
+         * One banner slot, fully configured from `ad_config.json`: waterfall, on/off switch and
+         * `enable_ua_check` all come from [placement], and the request is already under way when
+         * this returns.
+         *
+         * Use the constructor instead when the app supplies its own ad units.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun forPlacement(
+            activity: Activity,
+            lifecycleOwner: LifecycleOwner,
+            placement: String,
+            container: FrameLayout,
+            bannerType: BannerType = BannerType.Normal,
+        ): BannerAdHelper = BannerAdHelper(
+            activity,
+            lifecycleOwner,
+            BannerAdConfig.forPlacement(placement, bannerType),
+        )
+            .attachInto(container)
+            .also {
+                it.placement = placement
+                it.requestAds(BannerAdParam.Request)
+            }
+
+        /**
          * Destroys any [AdView] under [host]'s `banner_container` and resets [host] to the
          * module's shimmer placeholder — the teardown apps used to reimplement by reaching
          * into the module's resources.

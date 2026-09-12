@@ -44,6 +44,7 @@ import io.trackkit.TrackkitEvents;
 import com.ads.module.helper.AdSkipReason;
 import com.ads.module.consent.ConsentCenter;
 import com.ads.module.config.AdRemoteConfig;
+import com.ads.module.config.AdUnitConfig;
 import com.google.android.gms.ads.AdActivity;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
@@ -99,6 +100,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private FullScreenContentCallback fullScreenContentCallback;
 
     private String appResumeAdId;
+    /** True once {@link #applyRemoteConfig()} owns the unit; it may then restore a cleared id. */
+    private boolean resumeUnitFromConfig;
     private String splashAdId;
 
     private Activity currentActivity;
@@ -331,9 +334,12 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         AdTracking.skipped(resumePlacementFor(appResumeAdId), AdFormat.APP_OPEN, reason);
     }
 
+    /** The placement key app-resume reads its own configuration under. */
+    private static final String RESUME_PLACEMENT = "open_resume";
+
     /** The registry may not know a blank/late-config unit yet; keep the known placement stable. */
     private static String resumePlacementFor(String adUnitId) {
-        return PlacementRegistry.placementOf(adUnitId, "open_resume");
+        return PlacementRegistry.placementOf(adUnitId, RESUME_PLACEMENT);
     }
 
     /**
@@ -448,6 +454,33 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.splashActivity = splashActivity;
         splashAdId = adId;
         this.splashTimeout = timeoutInMillis;
+    }
+
+    /**
+     * Re-points the app-resume unit at what {@code open_resume} currently declares, including an
+     * empty id when that placement is switched off.
+     *
+     * Two no-ops keep this from taking over a decision it was not given: until a resume unit
+     * exists, because opting into app-resume stays the partner's own explicit call; and unless
+     * {@code open_resume} actually carries an ad unit id, because an entry that only tunes
+     * {@code app_resume_load_delay_ms} is not a statement about which unit to request.
+     *
+     * Once it has set the unit it keeps setting it, empty id included. Without that, switching
+     * {@code isEnable} off would empty the id and then re-tripping the first no-op forever, so
+     * switching it back on could never take effect in that process.
+     */
+    public void applyRemoteConfig() {
+        // A remote refresh lands on whatever thread fetched it; setAppResumeAdId is main-only.
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            resumeFetchHandler.post(this::applyRemoteConfig);
+            return;
+        }
+        if (!resumeUnitFromConfig && (appResumeAdId == null || appResumeAdId.isEmpty())) return;
+        AdUnitConfig unit = AdRemoteConfig.getInstance().getAds().get(RESUME_PLACEMENT);
+        if (unit == null || unit.getWaterfallIds().isEmpty()) return;
+        List<String> ids = AdGate.adUnitIds(RESUME_PLACEMENT);
+        resumeUnitFromConfig = true;
+        setAppResumeAdId(ids.isEmpty() ? "" : ids.get(0));
     }
 
     /** Changes the unit on main; pending results for the previous unit cannot fill this buffer. */
@@ -684,7 +717,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private boolean canFetchResume(boolean checkNetwork) {
         if (myApplication == null || !isInitialized) return false;
-        AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled, true, checkNetwork);
+        AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled,
+                AdGate.placementPassesUaGate(RESUME_PLACEMENT), checkNetwork);
         if (reason != null) Log.d(TAG, "fetchAd: resume gate=" + reason.getKey());
         return reason == null;
     }

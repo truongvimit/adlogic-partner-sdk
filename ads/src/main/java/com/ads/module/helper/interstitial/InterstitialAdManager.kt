@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.ads.module.admob.Admob
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.dialog.PrepareLoadingAdsDialog
@@ -158,6 +159,38 @@ object InterstitialAdManager {
         loadInternal(context, placement, adUnitIds, options, extra = null)
     }
 
+    /**
+     * The same load, with the waterfall and the placement's gates read from `ad_config.json`.
+     *
+     * Prefer this: the app names the placement and nothing else. The id-taking overload is for a
+     * caller that deliberately supplies its own units and owns the decision.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun load(
+        context: Context,
+        placement: String,
+        options: InterLoadOptions = InterLoadOptions(),
+        listener: AdCallback? = null,
+    ) {
+        listener?.let { listeners[placement] = it }
+        loadInternal(
+            context,
+            placement,
+            AdGate.adUnitIds(placement),
+            options.forPlacement(placement),
+            extra = null,
+        )
+    }
+
+    /** [options] AND-ed with what the placement's own configuration allows. */
+    private fun InterLoadOptions.forPlacement(placement: String) = InterLoadOptions(
+        enabled = enabled && AdGate.placementEnabled(placement),
+        passesUaGate = passesUaGate && AdGate.placementPassesUaGate(placement),
+        tierTimeoutMs = tierTimeoutMs,
+        reportTelemetry = reportTelemetry,
+    )
+
     private fun loadInternal(
         context: Context,
         placement: String,
@@ -288,6 +321,34 @@ object InterstitialAdManager {
         awaitAndShow(activity, placement, adUnitIds, callback, options, deadline, clickedAt, source)
     }
 
+    /**
+     * The same trigger, with the waterfall and the placement's gates read from `ad_config.json`.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun loadAndShow(
+        activity: AppCompatActivity,
+        placement: String,
+        callback: InterShowCallback,
+        options: InterLoadAndShowOptions = InterLoadAndShowOptions(),
+    ) = loadAndShow(
+        activity,
+        placement,
+        AdGate.adUnitIds(placement),
+        callback,
+        options.forPlacement(placement),
+    )
+
+    /** [options] AND-ed with what the placement's own configuration allows. */
+    private fun InterLoadAndShowOptions.forPlacement(placement: String) = InterLoadAndShowOptions(
+        allowWaitForAutoBuffer = allowWaitForAutoBuffer,
+        timeoutMs = timeoutMs,
+        enabled = enabled && AdGate.placementEnabled(placement),
+        passesUaGate = passesUaGate && AdGate.placementPassesUaGate(placement),
+        reportTelemetry = reportTelemetry,
+        nextAction = nextAction,
+    )
+
     private fun awaitAndShow(
         activity: AppCompatActivity,
         placement: String,
@@ -413,6 +474,10 @@ object InterstitialAdManager {
     @JvmStatic
     fun showSkipReason(context: Context, placement: String): AdSkipReason? =
         AdGate.skipReason(context, enabled = true, checkNetwork = false)
+            // Only for a placement the payload declares: a caller that loaded its own ad units
+            // under a key the config never mentions still owns that decision at show time.
+            ?: AdRemoteConfig.getInstance().takeIf { it.declares(placement) }
+                ?.let { AdGate.placementSkipReason(context, placement, checkNetwork = false) }
             ?: InterstitialAutoBuffer.placementSkipReason(context, placement) ?: when {
             !InterstitialFrequency.elapsed(context, placement) -> AdSkipReason.CAPPED_BY_MODULE
             !isReady(placement) -> AdSkipReason.NOT_READY

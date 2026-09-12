@@ -1,6 +1,6 @@
 # AdTracer — dashboard debug quảng cáo
 
-[← Chọn hướng dẫn](README.md) · [API AdTracer](../adtracer/README.md)
+[← Chọn hướng dẫn](README.vi.md) · [API AdTracer](../adtracer/README.md)
 
 Dùng để xem request, load/show, lỗi và timeline của luồng ads/OB khi QA. Ba bước: thêm dependency debug, copy bridge, mở dashboard.
 

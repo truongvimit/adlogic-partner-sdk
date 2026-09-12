@@ -5,15 +5,13 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 [English](README.md) · [Tiếng Việt](README.vi.md)
 
-[Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough (Vietnamese)](../partner-integration/ads-onboarding-integration.vi.md)
-
-[Default flow behavior](README.md#default-flow-behavior): system bars, language popup और native ad-return के default व्यवहार देखें।
+[Partner integration guides](../partner-integration/README.hi.md) · [Ads + OnboardKit walkthrough](../partner-integration/ads-onboarding-integration.hi.md)
 
 ## शुरू करने से पहले
 
-- minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
+- minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.hi.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
 - Built-in ad provider के लिए पहले [ads guide](../ads/README.md) पूरा करें: AdMob/Meta manifest values, ad config assets और Application में `ERainAd.init()`।
-- Funnel चाहिए तो OnboardKit से पहले `Tracker` और sink install करें; [Trackkit](../trackkit/README.md) देखें।
+- Funnel चाहिए तो OnboardKit से पहले `Tracker` और sink install करें; [Trackkit](../trackkit/README.hi.md) देखें।
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
 App की `gradle.properties` में `adlogicSdkVersion` एक बार सेट करें; [shared build setup](../README.hi.md#build-setup) देखें।
@@ -116,7 +114,13 @@ class SplashActivity : ObSplashActivity()
 इन declarations को अपने manifest में मिलाएँ; ads guide की metadata और permissions रखें। SDK की screens library manifest में पहले से हैं।
 खुद `OnboardingSdk.start()` न बुलाएँ और splash को finish न करें; यह flow `ObSplashActivity` संभालता है।
 
-इन defaults का ध्यान रखें:
+### Default flow behavior
+
+- Default रूप से status/caption bars दिखते हैं और navigation bar छिपता है; बदलने के लिए `SystemBarConfig` इस्तेमाल करें।
+- अधूरा flow अगली बार खुलने पर दोबारा Splash → LFO → OB से शुरू होता है। पूरा हो चुका flow onboarding छोड़ देता है।
+- Language popup चौथे item tap से खुलता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
+- OB step से ad-return default रूप से step पूरा करता है (`BehaviorConfig.adClickReturnCompletesStep = true`)। Provider, OB steps/OB5 के लिए click replacement बंद रखता है; language, popup और प्रश्न के natives में यह चालू रहता है।
+
 
 - `notificationPermissionEnabled = true`: Android 13+ / target 33+ पर consent के बाद notification permission माँगी जाती है। Grant या पिछले automatic request का दर्ज परिणाम अगली prompt रोकता है; मना करने पर भी flow चलता है। App खुद prompt संभाले तो `false` रखें।
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
@@ -152,13 +156,14 @@ Onboarding के बाहर native slots के लिए [Ads गाइड](
 | `contentStepNative`, `stepNatives[StepId.OB1]` | Content pages का साझा native / प्रति-step override |
 | `fullScreenStepNative` | सिर्फ ad वाला step; usable unit न हो तो skip होता है |
 | `afterOnboardingInterstitial` | Onboarding पूरा होने का अलग interstitial (`inter_after_ob3`) |
-| `appResume` | Language/content पर लौटने के लिए app-open eligibility |
+| `appResume` | Language/content के दौरान और in-app returns पर app-open eligibility |
 
 `defaultSteps()` OB1, OB2, OB3 (सिर्फ ad), OB4 बनाता है। अपनी सामग्री और images के लिए इसे `steps(ContentStepDefinition(...), ...)` से बदलें; [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt) देखें।
 Native/interstitial waterfall में `tiers = listOf(highId, fallbackId)` request के क्रम में दें; banner एक ID लेता है।
 
 `inter_splash` या `native_lang` जैसे JSON नामों को app को `AdsConfig` से जोड़ना होता है; SDK field name से हर mapping नहीं निकालता।
 `AdRemoteConfig.getInstance().tiersFor(key)` इस्तेमाल करें और refreshed IDs आने के बाद `onRemoteFetched()` में config दोबारा बनाएँ।
+जब base key `isEnable: false` घोषित हो तो `tiersFor` खाली list लौटाता है — base key placement का master switch है और हर `_high*` floor को साथ बंद करता है — इसलिए बंद slot null ad unit बनता है और flow उसे छोड़ देता है।
 Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) पूरी mapping और native templates दिखाता है।
 
 ## Fullscreen page और onboarding के बाद interstitial
@@ -167,23 +172,24 @@ Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/Onboar
 `io.onboardkit.core` है; बाकी types `io.onboardkit.config` में हैं।
 
 ```kotlin
-// steps(...) में content pages के साथ रखें।
+// Include this among your content pages in steps(...).
 AdFullScreenStepDefinition(
     StepId.OB3,
-    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // “Skip” के लिए TEXT
+    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
     autoNextDelayMs = 3_000,
 )
 
-// मौजूदा AdsConfig(...) में जोड़ें।
+// Add these fields to your existing AdsConfig(...).
 afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
 afterOnboardingInterstitialEnabled = true,
 ```
 
 Fullscreen page में default X 1 सेकंड बाद दिखता है और page selection से 3 सेकंड बाद अगला
-page खुलता है। Manual completion के लिए `autoNextEnabled = false` रखें। Remote
-`ob_skip_button_delay_sec >= 0` local delay को override करता है; `-1` local value लेता है।
+page खुलता है। Manual completion के लिए `autoNextEnabled = false` रखें। Step के ad से वापसी
+default रूप से step पूरा करती है, इसलिए ये placements click पर replacement preload/show नहीं
+करते। Remote `ob_skip_button_delay_sec >= 0` local delay को override करता है; `-1` local value लेता है।
 `AdsConfig.fullScreenSkipStyle` OB3/OB5 का साझा button style है। Standalone OB5 में अलग defaults
 हैं: 3 सेकंड का skip delay और 15 सेकंड का auto-dismiss।
 
@@ -198,8 +204,9 @@ show दोनों बंद होते हैं। इसे content AutoB
 
 ## App-open on return
 
-[Ads app-open setup](../ads/README.md#app-open-on-return) पूरा करें, फिर उसी ID से
-`appResume = InterstitialAdUnit("YOUR_APP_OPEN_UNIT_ID")` को `AdsConfig` में जोड़ें।
+[Ads app-open setup](../ads/README.md#app-open-on-return) पूरा करें, फिर
+`appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
+को `AdsConfig` में जोड़ें, ताकि दोनों एक ही `open_resume` placement पढ़ें।
 Language और onboarding content pages वास्तविक background/return पर तैयार resume ad दिखा
 सकते हैं। Splash, standalone fullscreen और survey excluded हैं; fullscreen pager pages,
 page transitions और language confirmation dialog अस्थायी रूप से resume रोकते हैं।

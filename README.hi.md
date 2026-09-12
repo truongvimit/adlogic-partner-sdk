@@ -4,7 +4,7 @@
 
 विज्ञापन, onboarding, analytics, billing और paywall के लिए Android SDK। पहले ज़रूरी सुविधा चुनें, साझा build setup करें और फिर उस module की quickstart पढ़ें।
 
-**Partner integration guides (Vietnamese): [Start here](partner-integration/README.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit and AdTracer.
+**Partner integration गाइड: [यहाँ शुरू करें](partner-integration/README.hi.md)** — Ads + OnboardKit, BillingKit, PayKit, Firebase, Trackkit और AdTracer; copy करने लायक नमूने और वैकल्पिक configuration tables के साथ।
 
 ## अपना मॉड्यूल चुनें
 
@@ -73,6 +73,8 @@ Manifest में अपनी `Application` class दर्ज करें।
 | 4 · Onboarding | `OnboardingSdk` install/configure करें और `ObSplashActivity` की अपनी subclass दर्ज करें। | [OnboardKit](onboardkitorigin/README.hi.md) |
 
 OnboardKit का splash consent और notification चरण चलाता है। केवल ads इस्तेमाल करने पर ad request से पहले Activity से `ConsentCenter.request(...)` बुलाएँ। Firebase के लिए ऐप की `google-services.json` और Google Services plugin भी चाहिए; [Firebase गाइड](suite-firebase/README.md) देखें।
+
+UMP error देने पर या network timeout पूरा होने पर (default 20 सेकंड) AdLogic ad request की कोशिश करने देता है, पहली बार खोलने पर भी। यह SDK का अपना fallback है: consent को सहमति के रूप में दर्ज नहीं करता, `npa` नहीं जोड़ता, और fill की गारंटी नहीं देता। दिख रहा form फिर भी user के जवाब का इंतज़ार करता है। Fallback नए process में सहेजा नहीं जाता; UMP पहले से request की अनुमति न दे चुका हो तो हर नई call नया इंतज़ार शुरू करती है। Host का जानबूझकर ads बंद करना फिर भी प्राथमिकता रखता है। यह व्यवहार केवल `ConsentInformation.canRequestAds()` को gate मानने वाली Google गाइड से अलग है।
 
 ## ऐप की अपनी जानकारी दें
 

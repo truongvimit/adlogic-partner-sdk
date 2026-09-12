@@ -954,10 +954,12 @@ public class Admob {
             return;
         }
 
-        // show() needs an Activity, and the delayed block reads its lifecycle. Reporting here
-        // turns what was a ClassCastException on a background thread into a normal skip.
+        // show() needs an Activity, and the delayed block reads its lifecycle. Reported in this
+        // module's own error domain so the caller restores the fill it already took out of the
+        // cache; a generic code 0 lost it for good.
         if (!(context instanceof AppCompatActivity)) {
-            notifyShowFailed(callback, 0, "Show fail: context is not an AppCompatActivity", openNextUnderAd);
+            notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND,
+                    "Show fail: context is not an AppCompatActivity", openNextUnderAd);
             return;
         }
 

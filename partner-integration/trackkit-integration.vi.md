@@ -1,6 +1,6 @@
 # Trackkit — event của app và SDK
 
-[← Chọn hướng dẫn](README.md) · [API Trackkit](../trackkit/README.vi.md)
+[← Chọn hướng dẫn](README.vi.md) · [API Trackkit](../trackkit/README.vi.md)
 
 Ba việc cần làm: install Tracker, thêm nơi nhận event (sink), rồi track event riêng của app. Ads, OnboardKit, BillingKit và PayKit đã tự phát event của chúng.
 

@@ -18,6 +18,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
@@ -118,9 +119,37 @@ class ERainInterstitialWaitTest {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         ShadowDialog.getLatestDialog()?.dismiss()
         ConsentCenter.setHostConsent(false, false)
+        AdRemoteConfig.reset()
         controller.pause().stop().destroy()
         main.idleFor(800, TimeUnit.MILLISECONDS)
         AppOpenManager.getInstance().setInterstitialShowing(false)
+    }
+
+    /**
+     * `inter_after_ob3` is the one flow placement whose key is also a key partners declare in
+     * `ad_config.json`, so the manager's show path reads its `enable_ua_check`. Loading past a
+     * gate that show will then apply would buy a fill nothing can present.
+     */
+    @Test
+    fun `a UA-gated after-onboarding placement is not loaded on an organic install`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"${placement.key}":{"id":"after-base","isEnable":true,"enable_ua_check":true}}""",
+        )
+
+        provider.loadInterstitial(activity, placement, unit)
+
+        assertTrue("The show path would refuse this fill", requests.isEmpty())
+    }
+
+    @Test
+    fun `an after-onboarding placement without the UA flag still preloads`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"${placement.key}":{"id":"after-base","isEnable":true,"enable_ua_check":false}}""",
+        )
+
+        provider.loadInterstitial(activity, placement, unit)
+
+        assertEquals(listOf("after-high"), ids)
     }
 
     @Test

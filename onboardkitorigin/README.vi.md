@@ -5,13 +5,13 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 
 [English](README.md) · [हिन्दी](README.hi.md)
 
-[Hướng dẫn cho partner](../partner-integration/README.md) · [Tích hợp Ads + OnboardKit từng bước](../partner-integration/ads-onboarding-integration.vi.md)
+[Hướng dẫn cho partner](../partner-integration/README.vi.md) · [Tích hợp Ads + OnboardKit từng bước](../partner-integration/ads-onboarding-integration.vi.md)
 
 ## Trước khi tích hợp
 
-- Dùng minSdk 24, compileSdk 36 và JDK 17. Làm theo [cấu hình build chung](../README.md) và dùng cùng một tag đã phát hành cho mọi module.
+- Dùng minSdk 24, compileSdk 36 và JDK 17. Làm theo [cấu hình build chung](../README.vi.md) và dùng cùng một tag đã phát hành cho mọi module.
 - Với provider quảng cáo tích hợp sẵn, hoàn thành [hướng dẫn ads](../ads/README.md) trước: metadata AdMob/Meta, asset cấu hình quảng cáo và `ERainAd.init()` trong Application.
-- Nếu cần funnel, cài `Tracker` và sink trước OnboardKit; xem [Trackkit](../trackkit/README.md).
+- Nếu cần funnel, cài `Tracker` và sink trước OnboardKit; xem [Trackkit](../trackkit/README.vi.md).
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
 Đặt `adlogicSdkVersion` một lần trong `gradle.properties` của app; xem [cấu hình build chung](../README.vi.md#cấu-hình-build).
@@ -156,13 +156,14 @@ Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự p
 | `contentStepNative`, `stepNatives[StepId.OB1]` | Native chung cho trang nội dung / ghi đè riêng từng bước |
 | `fullScreenStepNative` | Bước chỉ có quảng cáo; bỏ qua nếu không có unit dùng được |
 | `afterOnboardingInterstitial` | Interstitial riêng khi hoàn thành onboarding (`inter_after_ob3`) |
-| `appResume` | Điều kiện app-open khi quay lại màn ngôn ngữ/nội dung |
+| `appResume` | Điều kiện app-open ở màn ngôn ngữ/nội dung và khi quay lại app |
 
 `defaultSteps()` tạo OB1, OB2, OB3 (chỉ quảng cáo), OB4. Để dùng nội dung và ảnh riêng, thay bằng `steps(ContentStepDefinition(...), ...)`; xem [định nghĩa bước](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo thứ tự request; banner nhận một ID.
 
 Tên JSON như `inter_splash`, `native_lang` cần được app gắn vào `AdsConfig`; SDK không tự suy ra mọi ánh xạ từ tên trường.
 Dùng `AdRemoteConfig.getInstance().tiersFor(key)` và dựng lại config khi ID mới đã cập nhật trong `onRemoteFetched()`.
+`tiersFor` trả về rỗng khi key gốc khai báo `isEnable: false` — key gốc là công tắc tổng, tắt luôn mọi tầng `_high*` — nên slot đã tắt map thành ad unit null và flow bỏ qua.
 [OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
 
 ## Trang fullscreen và interstitial sau onboarding
@@ -171,16 +172,16 @@ Cấu hình trong cùng khối `onboardKitConfig` với nội dung của app. `S
 `io.onboardkit.core`; các kiểu còn lại bên dưới thuộc `io.onboardkit.config`.
 
 ```kotlin
-// Đặt cạnh các trang nội dung trong steps(...).
+// Include this among your content pages in steps(...).
 AdFullScreenStepDefinition(
     StepId.OB3,
-    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT để hiện chữ Skip
+    skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
     autoNextDelayMs = 3_000,
 )
 
-// Thêm vào AdsConfig(...) đang có.
+// Add these fields to your existing AdsConfig(...).
 afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
 afterOnboardingInterstitialEnabled = true,
 ```
@@ -204,7 +205,8 @@ lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của
 ## App-open khi quay lại app
 
 Hoàn tất [cấu hình app-open](../ads/README.md#app-open-on-return), rồi thêm
-`appResume = InterstitialAdUnit("YOUR_APP_OPEN_UNIT_ID")` vào `AdsConfig` với cùng ID.
+`appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
+vào `AdsConfig`, để cả hai cùng đọc placement `open_resume`.
 Màn ngôn ngữ và nội dung onboarding cho phép hiện resume ad đã sẵn sàng khi thực sự ra nền/quay lại.
 Splash, fullscreen độc lập và khảo sát được loại trừ; trang fullscreen trong pager,
 chuyển trang và dialog xác nhận ngôn ngữ tạm chặn resume.

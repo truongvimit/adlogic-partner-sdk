@@ -1,11 +1,10 @@
 package com.itg.template.ui.component.uninstall
 
 import android.widget.FrameLayout
-import com.ads.module.helper.adnative.NativeAdParam
+import com.ads.module.helper.adnative.NativeAdHelper
 import com.itg.template.R
-import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.AdsManager
-import com.itg.template.ads.native_confirm_uninstall
+import com.itg.template.ads.AppAdPlacement
 import com.itg.template.databinding.ActivityConfirmUninstallBinding
 import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
@@ -26,12 +25,9 @@ class ConfirmUninstallActivity : BaseActivity<ActivityConfirmUninstallBinding>()
     // Loading skeleton is auto-derived from the ad layout (config.autoShimmer)
     private fun setupNativeAd() {
         val frAds = mBinding.root.findViewById<FrameLayout>(R.id.fr_ads) ?: return
-        AdsManager.nativeHelper(
-            this, this, "native_confirm_uninstall", AdRemoteConfig.native_confirm_uninstall,
-            R.layout.layout_native_ad_medium,
+        NativeAdHelper.forPlacement(
+            this, this, AppAdPlacement.NATIVE_CONFIRM_UNINSTALL, frAds, R.layout.layout_native_ad_medium,
         )
-            .setNativeContentView(frAds)
-            .requestAds(NativeAdParam.Request)
     }
 
     override fun onClickViews() {

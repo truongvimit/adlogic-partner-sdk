@@ -1,6 +1,6 @@
 # PayKit — paywall dựng sẵn
 
-[← Chọn hướng dẫn](README.md) · [API PayKit](../paykit/README.md)
+[← Chọn hướng dẫn](README.vi.md) · [API PayKit](../paykit/README.md)
 
 App cung cấp catalog, nội dung, hai URL điều khoản/quyền riêng tư và nơi mở paywall; PayKit lo UI, giá Play, mua/restore và premium. **Không gọi thêm `AppPurchase.initBilling`**: PayKit đã khởi tạo BillingKit.
 

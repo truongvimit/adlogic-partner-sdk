@@ -28,22 +28,12 @@ import timber.log.Timber
 object AdsManager {
 
     /**
-     * The one native integration for every placement: waterfall + UA gate from
-     * [AdRemoteConfig], remote-config styling applied by the SDK to both the loaded ad and
-     * its auto-derived loading skeleton, telemetry keyed by the placement. A screen hands
-     * its container over and calls `requestAds` once:
+     * The dashboard's native previews, which deliberately do not follow a placement's own
+     * configuration: [bypassUaGate] loads on any install and a null [placement] skips placement
+     * registration, so a preview never re-maps a real ad unit's revenue attribution.
      *
-     * ```
-     * AdsManager.nativeHelper(this, this, "native_welcome", AdRemoteConfig.native_welcome, layout)
-     *     .setNativeContentView(binding.frAds)
-     *     .requestAds(NativeAdParam.Request)
-     * ```
-     *
-     * [bypassUaGate] is for dashboard/test slots that must load on any install. Pass a
-     * null [placement] for such slots: it skips placement registration, so preview loads
-     * never re-map the real ad units' revenue attribution. Chain `setShimmerLayoutView`/
-     * `setShimmerLayout` for a hand-made skeleton; call `setNativeStyle` again before a
-     * reload to restyle the next fill.
+     * An ordinary slot uses `NativeAdHelper.forPlacement(activity, owner, placement, container,
+     * layoutRes)` instead — see [com.itg.template.ui.component.welcome.WelcomeActivity].
      */
     fun nativeHelper(
         activity: Activity,
@@ -66,10 +56,10 @@ object AdsManager {
         val config = AdRemoteConfig.inter_onboarding
         InterstitialAdManager.load(
             context,
-            "inter_onboarding",
-            config.waterfallIds,
+            AppAdPlacement.INTER_ONBOARDING,
+            AdGate.adUnitIds(AppAdPlacement.INTER_ONBOARDING),
             InterLoadOptions(
-                enabled = config.isUsable,
+                enabled = AdGate.placementEnabled(AppAdPlacement.INTER_ONBOARDING),
                 passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
             ),
         )
@@ -90,7 +80,7 @@ object AdsManager {
     ) {
         InterstitialAdManager.show(
             context,
-            "inter_onboarding",
+            AppAdPlacement.INTER_ONBOARDING,
             onCompleteOnce(onAction),
             nextAction = nextAction,
         )
@@ -100,10 +90,10 @@ object AdsManager {
         val config = AdRemoteConfig.inter_welcome
         InterstitialAdManager.load(
             context,
-            "inter_welcome",
-            config.waterfallIds,
+            AppAdPlacement.INTER_WELCOME,
+            AdGate.adUnitIds(AppAdPlacement.INTER_WELCOME),
             InterLoadOptions(
-                enabled = config.isUsable,
+                enabled = AdGate.placementEnabled(AppAdPlacement.INTER_WELCOME),
                 passesUaGate = AdGate.passesUaGate(config.enableUaCheck, bypass = ignoreLimit),
             ),
         )
@@ -118,7 +108,7 @@ object AdsManager {
     ) {
         InterstitialAdManager.show(
             context,
-            "inter_welcome",
+            AppAdPlacement.INTER_WELCOME,
             onCompleteOnce(onAction),
             nextAction = nextAction,
         )
@@ -145,20 +135,17 @@ object AdsManager {
         onSuccess: () -> Unit,
         onFailed: () -> Unit
     ) {
-        val config = AdRemoteConfig.reward_example
         RewardAdManager.loadAndShow(
             activity,
-            "reward_example",
-            config.waterfallIds,
-            enabled = config.isEnable,
-            onSuccess = { onSuccess() },
-            onFailed = { onFailed() },
+            AppAdPlacement.REWARD_EXAMPLE,
+            { onSuccess() },
+            { onFailed() },
         )
     }
 
     fun clearAll() {
         // Per-key: the store is process-wide and OnboardKit owns placements of its own
-        InterstitialAdManager.release("inter_onboarding")
-        InterstitialAdManager.release("inter_welcome")
+        InterstitialAdManager.release(AppAdPlacement.INTER_ONBOARDING)
+        InterstitialAdManager.release(AppAdPlacement.INTER_WELCOME)
     }
 }

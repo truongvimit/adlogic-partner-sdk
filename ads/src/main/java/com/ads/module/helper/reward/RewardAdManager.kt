@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.ERainAd
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
 import com.ads.module.helper.AdGate
@@ -102,6 +103,19 @@ object RewardAdManager {
         )
     }
 
+    /**
+     * The same load, with the waterfall and the placement's gates read from `ad_config.json`.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun load(context: Context, placement: String, listener: AdCallback? = null) = load(
+        context,
+        placement,
+        AdGate.adUnitIds(placement),
+        enabled = AdGate.placementEnabled(placement) && AdGate.placementPassesUaGate(placement),
+        listener = listener,
+    )
+
     /** True when a fresh rewarded ad is buffered for [placement]. */
     @JvmStatic
     fun isReady(placement: String): Boolean {
@@ -116,6 +130,18 @@ object RewardAdManager {
     /** Shows the buffered ad. Single-use: the buffer is dropped before `show()`. */
     @JvmStatic
     fun show(activity: Activity, placement: String, callback: RewardShowCallback) {
+        // Only for a placement the payload declares; an explicitly loaded key the config never
+        // mentions stays the caller's decision.
+        val blocked = AdRemoteConfig.getInstance().takeIf { it.declares(placement) }
+            ?.let { AdGate.placementSkipReason(activity, placement, checkNetwork = false) }
+        if (blocked != null) {
+            // A bought entitlement must not leave a showable ad behind; a transient gate — consent
+            // form on screen, UA not yet attributed — still has a fill worth keeping.
+            if (blocked == AdSkipReason.PURCHASED) cache.remove(placement)
+            AdTracking.skipped(placement, AdFormat.REWARDED, blocked.key)
+            callback.onFailedToShow(0)
+            return
+        }
         val cached = cache.remove(placement)?.takeIf { it.isFresh }
         if (cached == null) {
             AdTracking.skipped(placement, AdFormat.REWARDED, AdSkipReason.NOT_READY.key)
@@ -182,6 +208,24 @@ object RewardAdManager {
             },
         )
     }
+
+    /**
+     * The same chain, with the waterfall and the placement's gates read from `ad_config.json`.
+     */
+    @JvmStatic
+    fun loadAndShow(
+        activity: Activity,
+        placement: String,
+        onSuccess: Runnable,
+        onFailed: Runnable,
+    ) = loadAndShow(
+        activity,
+        placement,
+        AdGate.adUnitIds(placement),
+        enabled = AdGate.placementEnabled(placement) && AdGate.placementPassesUaGate(placement),
+        onSuccess = onSuccess,
+        onFailed = onFailed,
+    )
 
     @JvmStatic
     fun release(placement: String) {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.ads.ERainAd
 import com.ads.module.helper.adnative.NativeAdPreload
@@ -43,6 +44,40 @@ object AdGate {
         ConsentCenter.isFormShowing() -> AdSkipReason.CONSENT_FORM_SHOWING
         else -> null
     }
+
+    /**
+     * The same answer as [skipReason], with the placement's own configuration filled in from
+     * `ad_config.json`: its on/off switch and `enable_ua_check`.
+     *
+     * A placement the payload does not declare is [AdSkipReason.DISABLED_CONFIG] — an ad the app
+     * never configured must not be requested just because a call site names it.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun placementSkipReason(
+        context: Context,
+        placement: String,
+        checkNetwork: Boolean = true,
+    ): AdSkipReason? = skipReason(
+        context,
+        enabled = placementEnabled(placement),
+        passesUaGate = placementPassesUaGate(placement),
+        checkNetwork = checkNetwork,
+    )
+
+    /** The waterfall configured for [placement], highest floor first; empty when it is off. */
+    @JvmStatic
+    fun adUnitIds(placement: String): List<String> =
+        AdRemoteConfig.getInstance().tiersFor(placement)
+
+    /** True when [placement] is switched on and has at least one usable ad unit id. */
+    @JvmStatic
+    fun placementEnabled(placement: String): Boolean = adUnitIds(placement).isNotEmpty()
+
+    /** The UA/organic gate resolved from the placement's own `enable_ua_check`. */
+    @JvmStatic
+    fun placementPassesUaGate(placement: String): Boolean =
+        passesUaGate(AdRemoteConfig.getInstance().ads[placement]?.enableUaCheck == true)
 
     /** UA/organic gate; [bypass] mirrors the app-side "ignoreLimit" switch. */
     @JvmStatic

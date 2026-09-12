@@ -1,6 +1,6 @@
 # Tích hợp Ads + OnboardKit
 
-[← Chọn hướng dẫn](README.md)
+[← Chọn hướng dẫn](README.vi.md)
 
 Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 → native fullscreen → nội dung 3 → inter cuối OB → MainActivity**. SDK quản lý consent, thông báo, ads và điều hướng; quảng cáo chỉ hiện khi đủ điều kiện và có fill.
 
@@ -136,13 +136,17 @@ Chỉ `SplashConfig.layoutRes` và `ContentStepDefinition.layoutRes` hỗ trợ 
 
 ### `AppAdPlacement.kt` — danh mục placement của app
 
-Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) vào package app, ví dụ `app/src/main/java/com/example/app/`. File có **35 key gốc**: 10 OB và các slot app. `tiersFor()` tự tìm `_high`, `_high1`…; không cần constant cho tầng.
+Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) vào package app, ví dụ `app/src/main/java/com/example/app/`. File có **35 key gốc**: 10 OB và các slot app. SDK tự tìm tầng `_high`, `_high1`…; không cần constant cho tầng.
+
+**Placement key là danh tính duy nhất của một vị trí ads.** Ad unit ID không phân biệt được: JSON mẫu khai 45 placement mà chỉ có **8 ad unit ID** — một ID native test dùng cho 25 placement — và payload production cũng thường dùng lại một unit cho nhiều màn. Mọi thứ SDK đánh khoá theo placement: cache interstitial, đồng hồ tần suất, nhóm AutoBuffer, preload native, và mọi `ad_request` / `ad_impression` / `ad_skipped` dashboard cắt theo. Vì vậy key phải được viết đúng một chỗ.
+
+Gõ sai một chuỗi thô không báo lỗi: `AdRemoteConfig.unit()` log warning rồi trả placeholder đã tắt, slot im lặng không bao giờ hiện. Dùng constant thì lỗi đó thành lỗi biên dịch.
 
 - `AppAdPlacement.NATIVE_HOME` là **key** `native_home`, dùng khi load/show.
 - JSON chứa **ad unit ID/config**; constants chỉ chứa key.
 - `io.onboardkit.ads.AdPlacement` cố định trong SDK; app thêm slot vào `AppAdPlacement`.
 
-Slot mới cần constant, cùng key trong hai JSON và code load/show tại màn app. Đọc `AdRemoteConfig.getInstance()` lúc dùng, không cache ID trong object. Không cần [AdRemoteConfigExtensions của example](../app/src/main/java/com/itg/template/ads/AdRemoteConfigExtensions.kt).
+Slot mới cần constant, cùng key trong hai JSON và code load/show tại màn app. Không cần file adapter nào khác cho ads: entry point nhận constant rồi tự đọc config.
 
 ### `OnboardKitSetup.kt` — nối các key OB vào SDK
 
@@ -290,8 +294,8 @@ Hai JSON giữ field/giá trị example debug, chỉ chuẩn hóa interstitial s
 | Field | Giá trị trong mẫu | Cách dùng / phạm vi áp dụng |
 | --- | --- | --- |
 | `id` | Ad unit test đúng format | Thay ID ở file thật khi phát hành; không sửa key placement. |
-| `isEnable` | Theo example: đa số `true`, welcome `false` | Bật/tắt entry. Muốn tắt placement có waterfall, tắt mọi tầng của nó. |
-| `enable_ua_check` | Có `true` và `false` | `true` chỉ cho paid/non-organic. Native/banner app dùng `forceUaCheck`; inter dùng `InterLoadOptions` và kiểm tra lại trước show. Mặc định organic tới khi Adjust trả attribution: chưa dùng Adjust phải đặt `false` cho slot app cần hiện. Provider OB không áp UA gate từ JSON. |
+| `isEnable` | Theo example: đa số `true`, welcome `false` | Bật/tắt placement. Key gốc là công tắc tổng: `false` ở key gốc tắt cả waterfall. |
+| `enable_ua_check` | Có `true` và `false` | `true` chỉ cho paid/non-organic; SDK tự áp khi load và show, gồm cả app-resume. Mặc định organic tới khi Adjust trả attribution: chưa dùng Adjust phải đặt `false` cho slot app cần hiện. Provider OB không áp UA gate từ JSON, **trừ `inter_after_ob3`** — key này trùng key JSON nên SDK áp cả `isEnable` lẫn `enable_ua_check` cho nó; đặt `true` là tắt inter cuối OB với install organic. |
 | `reloadIntervalSeconds` | Banner: `30` | Chỉ parse, helper không dùng; không đổi refresh kể cả splash. Muốn refresh xem [Banner ở màn app](#tích-hợp-bổ-sung). |
 | `colorCTA` | `"default"` | Giữ màu template; thay màu khi cần tùy biến native. |
 | `heightCTA` | Native thường `45`, popup `36` | Chiều cao CTA (dp); SDK dùng `40` nếu bỏ field và ép giá trị vào khoảng 36–52 khi áp dụng. |
@@ -311,37 +315,16 @@ Gọi ở màn app sau consent, khi `AppCompatActivity` resumed; `container` là
 **Chưa dùng Adjust:** đổi `enable_ua_check` của `native_home` thành `false` trong **cả hai JSON** để slot mẫu có thể hiện; giữ ID test khi QA.
 
 ```kotlin
-package com.example.app
-
-import android.widget.FrameLayout
-import androidx.appcompat.app.AppCompatActivity
-import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.toNativeStyle
-import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
-import com.ads.module.helper.adnative.NativeAdParam
 
-fun AppCompatActivity.showHomeNative(container: FrameLayout) {
-    val placement = AppAdPlacement.NATIVE_HOME
-    val ads = AdRemoteConfig.getInstance()
-    val unit = ads.unit(placement)
-    val config = NativeAdConfig(
-        ads.tiersFor(placement), unit.isUsable, false,
-        com.ads.module.R.layout.custom_native_admob_medium,
-    ).apply { forceUaCheck = unit.enableUaCheck }
-    NativeAdHelper(this, this, config)
-        .setNativeContentView(container)
-        .setNativeStyle(unit.toNativeStyle())
-        .also { it.placement = placement }
-        .requestAds(NativeAdParam.Request)
-}
+NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
-Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. `reloadOnAdClick` mặc định bật; chỉ tắt khi app tự điều hướng sau click-return, không thêm callback click/resume. Banner/reward xem [Ads](../ads/README.md), dùng constants tương tự.
+SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, CTA style của placement. Thêm `layoutRes` để đổi template; mặc định là `com.ads.module.R.layout.custom_native_admob_medium` (không có media — cần media dùng `custom_native_admob_free_size`). Layout riêng giữ root `NativeAdView`, `ad_container`, `block_icon_headline`, asset IDs và nhãn Ad.
 
-Preload cho Main: dùng chung `NativeAdConfig`, gọi `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, config)` (`com.ads.module.helper.adnative`) trong `SplashActivity.onRemoteFetched()`; hook chạy sau consent cả khi chỉ dùng asset. Helper cùng placement lấy ad khi `requestAds`; ad quá 60 phút bị tải lại. Xem [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
+Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. `reloadOnAdClick` mặc định bật; chỉ tắt khi app tự điều hướng sau click-return.
 
-`custom_native_admob_medium` không có media dù JSON khai báo; cần media dùng `com.ads.module.R.layout.custom_native_admob_free_size`. Layout riêng giữ root `NativeAdView`, `ad_container` (LinearLayout), `block_icon_headline`, asset IDs và nhãn Ad.
+Preload cho Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` trong `SplashActivity.onRemoteFetched()`. Helper cùng placement lấy ad khi hiện; ad quá 60 phút bị tải lại. Xem [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
 
 </details>
 
@@ -353,46 +336,19 @@ Preload cho Main: dùng chung `NativeAdConfig`, gọi `NativeAdManager.preload(a
 Preload sau consent, show tại lần điều hướng mới. Không áp mẫu/AutoBuffer cho `inter_splash`, `inter_after_ob3` vì OB tự quản lý.
 
 ```kotlin
-package com.example.app
-
-import androidx.appcompat.app.AppCompatActivity
-import com.ads.module.config.AdRemoteConfig
-import com.ads.module.helper.AdGate
-import com.ads.module.helper.interstitial.InterLoadOptions
-import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
-fun AppCompatActivity.preloadInterBack() {
-    val placement = AppAdPlacement.INTER_BACK
-    val ads = AdRemoteConfig.getInstance()
-    val unit = ads.unit(placement)
-    InterstitialAdManager.load(
-        applicationContext, placement, ads.tiersFor(placement),
-        InterLoadOptions(enabled = unit.isUsable, passesUaGate = AdGate.passesUaGate(unit.enableUaCheck)),
-    )
-}
+InterstitialAdManager.load(applicationContext, AppAdPlacement.INTER_BACK)
 
-fun AppCompatActivity.showInterBack(goNext: () -> Unit) {
-    val placement = AppAdPlacement.INTER_BACK
-    val unit = AdRemoteConfig.getInstance().unit(placement)
-    if (!unit.isUsable || !AdGate.passesUaGate(unit.enableUaCheck)) {
-        goNext()
-        return
-    }
-    InterstitialAdManager.show(
-        this, placement,
-        object : InterShowCallback() {
-            override fun onComplete() = goNext()
-        },
-        nextAction = InterNextAction.AfterDismiss,
-    )
-}
+InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK, object : InterShowCallback() {
+    override fun onComplete() = goNext()
+})
 ```
 
-Chỉ điều hướng ở `onComplete`, chạy một lần kể cả thiếu ad/show lỗi; không dùng `onClosed`. `load` không request lại nếu đang tải/đã có ad. Có ad thì chờ dialog khoảng 800 ms rồi show; sau đó preload lại nếu còn cần.
+SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval và readiness của placement. Chỉ điều hướng ở `onComplete`, chạy đúng một lần kể cả thiếu ad/show lỗi; không dùng `onClosed`, không tự kiểm tra `canShow()` trước. `load` không request lại nếu đang tải/đã có ad. Có ad thì chờ dialog khoảng 800 ms rồi show.
 
-Mẫu dùng `AfterDismiss`: callback sau khi đóng. Bỏ tham số sẽ dùng `UnderAd` sau `ERainTuning.install()`: callback khi ad vừa hiện. Chỉ dùng cách này cho `startActivity` mở màn thường; không `finish()` hay mở camera/audio/video dưới ad.
+Mặc định callback chạy sau khi ad đóng. Thêm `nextAction = InterNextAction.UnderAd` để callback chạy ngay khi ad hiện — chỉ dùng cho `startActivity` mở màn thường, không `finish()` hay mở camera/audio/video dưới ad.
 
 Tự giữ sẵn inter: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) `configure` sau `ERainAd.init`, `start` ở màn nội dung đầu tiên; show như trên. Khoảng cách/click cap ở [bảng mặc định](#mặc-định-của-luồng).
 
@@ -402,10 +358,10 @@ Tự giữ sẵn inter: [InterstitialAutoBuffer](../ads/README.md#automatic-inte
 
 | Nhu cầu | Mặc định / cách cấu hình |
 | --- | --- |
-| Tắt một slot | `isEnable: false`; thử asset cần khởi động lại. OB: tắt mọi tầng. Mẫu màn app gate bằng `isUsable` của key gốc nên tắt key gốc là đủ. LFO native thứ hai có fallback ở bước 4. |
+| Tắt một slot | `isEnable: false` ở **key gốc** là tắt cả waterfall, cho mọi format; thử asset cần khởi động lại. LFO native thứ hai có fallback ở bước 4. |
 | Thêm waterfall | `<key>_high`, `<key>_high1`…`<key>_high9`, rồi key gốc. Banner splash chỉ dùng ID đầu của `banner_splash`, không đọc tầng rời. |
 | CTA/native style | Giữ đủ field như example; [bảng field JSON](#field-trong-json-mẫu) giải thích giá trị và nơi áp dụng. Bước 4 đã nối `positionCTA` vào native template. |
-| Banner ở màn app | [Mẫu Ads](../ads/README.md#native-and-banner-slots) dùng `BannerType.Normal` (anchored adaptive). Đổi đối số thứ tư `bannerType` của `BannerAdConfig`, ví dụ `BannerType.Collapsible()`; xem [các loại](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt). Đổi loại: `flagUserEnableReload = false`, `cancel()` helper cũ rồi tạo mới. SDK refresh cần tắt refresh AdMob cho mọi tầng, đặt `canReloadAds = true`, `enableAutoReload = true`; `autoReloadTime` mặc định 15000 ms, dưới 1000 ném lỗi. |
+| Banner ở màn app | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; thêm đối số `bannerType`, ví dụ `BannerType.Collapsible()` ([các loại](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt)). Đổi loại: `flagUserEnableReload = false`, `cancel()` helper cũ rồi tạo mới. SDK refresh cần tắt refresh AdMob cho mọi tầng rồi dựng `BannerAdConfig.forPlacement("banner_home", bannerType, canReloadAds = true)` và truyền vào constructor `BannerAdHelper`. |
 | UA/Adjust | Điền resource và dùng wiring ở [bước 5](#adjust-token-và-kiểm-tra). `enable_ua_check` giữ giá trị example; xem phạm vi áp dụng trong bảng field JSON. |
 | JSON từ Firebase | [Setup Firebase](firebase-integration.vi.md), `AdConfig.install(FirebaseAdConfigSource())` sau asset trong Application. Publish String `ad_remote_config` chứa **toàn bộ JSON** để thay config hiện tại; thêm hook splash bên dưới. |
 | Firebase Analytics | Cài `suite-firebase`, đăng ký `Tracker.addSink(FirebaseSink())` ngay sau `Tracker.install`; chọn consent policy theo [hướng dẫn Firebase](firebase-integration.vi.md#consent-ban-đầu). |
@@ -438,8 +394,8 @@ SDK fetch trước hook; `configure()` dựng lại mapping. Không fetch lần 
 Chỉ làm khi sản phẩm dùng app-open. `AppOpenManager` thuộc `com.ads.module.admob`.
 
 1. **Bước 4**, trong `AdsConfig`: `appResume = adConfig.interstitial(AppAdPlacement.OPEN_RESUME)`. Thiếu trường này, OnboardKit chặn app-open ở **mọi màn**, kể cả màn app.
-2. **Bước 5**, trong khối `apply` của `ERainAdConfig`: `idAdResume = AdRemoteConfig.getInstance().tiersFor(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`.
-3. **Remote JSON:** trong `onRemoteFetched()`, thêm `AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.getInstance().tiersFor(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty())`. `configure()` chỉ cập nhật gate OnboardKit, không đổi ID app-open.
+2. **Bước 5**, trong khối `apply` của `ERainAdConfig`: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`.
+3. **Remote JSON:** không cần thêm gì — SDK tự trỏ lại ID app-resume theo `open_resume` mỗi lần config đổi, gồm cả bật/tắt bằng `isEnable`. Hai điều kiện: app đã đặt sẵn một ID app-resume khác rỗng ở bước 2, và `open_resume` có ad unit ID. Vì bước 2 đọc lúc init (khi đó mới có config từ asset), hãy ship `open_resume` **bật kèm ID thật** trong `ad_config.json`.
 4. **Intent ra ngoài** (browser/share/review): gọi `AppOpenManager.getInstance().disableAdResumeByClickAction()` ngay sau `startActivity(...)` để bỏ qua lần quay lại. `disableAppResume()`/`enableAppResume()` là công tắc cả process.
 
 Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy cảm của app. LFO/trang nội dung OB có thể hiện app-open sẵn có khi quay lại, trừ fullscreen, lúc chuyển trang hoặc mở popup. Delay/gate xem [app-open](../onboardkitorigin/README.vi.md#app-open-khi-quay-lại-app).
@@ -481,6 +437,6 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 | Application hiện có hoặc [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | Khởi tạo SDK một lần và chọn màn đích |
 | `SplashActivity.kt` | Kế thừa splash SDK |
 
-`MainActivity` là màn đích hiện có của app. Dùng `AppAdPlacement.kt` của app ở bước 4. Không cần sao chép `AppConstants`, `RemoteConfigUtils`, `ResumeAdsEntryRule`, `AppLifecycleObserver`, DevConfig, Hilt hay các màn paywall/welcome/uninstall từ example cho luồng cơ bản này.
+`MainActivity` là màn đích hiện có của app. Ngoài `AppAdPlacement.kt`, không cần file nào để dịch JSON sang config ads — mọi entry point nhận thẳng placement key. Không cần sao chép `AppConstants`, `RemoteConfigUtils`, `ResumeAdsEntryRule`, `AppLifecycleObserver`, DevConfig, Hilt hay các màn paywall/welcome/uninstall từ example cho luồng cơ bản này.
 
 [Tra cứu Ads](../ads/README.md) · [Tra cứu OnboardKit](../onboardkitorigin/README.vi.md)

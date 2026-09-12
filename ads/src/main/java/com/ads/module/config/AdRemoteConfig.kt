@@ -138,6 +138,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             // Bind every id to its placement before anything can load: the paid-event bridge reads
             // the placement back by ad unit id, and an unregistered unit reports as "unknown".
             AdPlacements.registerAll(newConfig)
+            com.ads.module.admob.AppOpenManager.getInstance().applyRemoteConfig()
             com.ads.module.helper.interstitial.InterstitialAutoBuffer.onGateChanged()
         }
 
@@ -212,10 +213,21 @@ data class AdRemoteConfig @JvmOverloads constructor(
      * tiersFor("banner_home")   // [banner_home] — single floor, still valid
      * ```
      */
-    fun tiersFor(baseKey: String): List<String> =
-        FLOOR_SUFFIXES
+    fun tiersFor(baseKey: String): List<String> {
+        // The base key is the placement's master switch: a declared `isEnable: false` there turns
+        // the whole waterfall off, so "disable a slot" is one edit rather than one per floor.
+        val base = ads[baseKey]
+        if (base != null && !base.isEnable) return emptyList()
+        return FLOOR_SUFFIXES
             .mapNotNull { suffix -> ads[baseKey + suffix] }
             .filter { it.isUsable }
             .flatMap { it.waterfallIds }
             .distinct()
+    }
+
+    /** True when the payload declares [baseKey] or any of its floors. */
+    fun declares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { ads.containsKey(baseKey + it) }
+
+    /** True when [baseKey] resolves to at least one requestable ad unit id. */
+    fun isPlacementEnabled(baseKey: String): Boolean = tiersFor(baseKey).isNotEmpty()
 }

@@ -5,7 +5,7 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
-[Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough (Vietnamese)](../partner-integration/ads-onboarding-integration.vi.md)
+[Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough](../partner-integration/ads-onboarding-integration.md)
 
 ## Before you start
 
@@ -163,6 +163,7 @@ Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in re
 
 JSON names such as `inter_splash` or `native_lang` must be mapped into `AdsConfig`; the SDK does not infer every mapping from the field name.
 Use `AdRemoteConfig.getInstance().tiersFor(key)` and rebuild the config after refreshed IDs arrive in `onRemoteFetched()`.
+`tiersFor` returns an empty list when the base key is declared `isEnable: false` — the base key is the placement's master switch and turns off every `_high*` floor with it — so a disabled slot maps to a null ad unit and the flow skips it.
 The sample's [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
 
 ## Fullscreen page and onboarding exit ad
@@ -204,7 +205,8 @@ both automatic preload and show. Keep this placement out of your content AutoBuf
 ## App-open on return
 
 Complete the [Ads app-open setup](../ads/README.md#app-open-on-return), then add
-`appResume = InterstitialAdUnit("YOUR_APP_OPEN_UNIT_ID")` to `AdsConfig` using the same unit.
+`appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
+to `AdsConfig`, so both read the same `open_resume` placement.
 Language and onboarding content pages allow a ready resume ad on a genuine background/return.
 Splash, standalone fullscreen and survey screens are excluded; fullscreen pager pages,
 page transitions and the language confirmation dialog temporarily block it.

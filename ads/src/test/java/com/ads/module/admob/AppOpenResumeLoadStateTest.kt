@@ -81,6 +81,51 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
+    fun `disabling open_resume then re-enabling it restores the unit in the same process`() {
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":true}}""")
+        enable()
+        nextBackground()
+        assertEquals(1, requests.size)
+
+        // isEnable:false empties the unit — the id is the only switch app-resume reads.
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":false}}""")
+        main.idle()
+        manager.onResume()
+        nextBackground()
+        assertEquals("A disabled placement must not request", 1, requests.size)
+
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":true}}""")
+        main.idle()
+        manager.onResume()
+        nextBackground()
+
+        assertEquals("Re-enabling must take effect without a process restart", 2, requests.size)
+    }
+
+    @Test
+    fun `open_resume enable_ua_check keeps the request from an organic install`() {
+        // No Adjust attribution has landed in this process, so the module reports it organic.
+        AdRemoteConfig.initializeFromJson(
+            """{"open_resume":{"id":"$UNIT","isEnable":true,"enable_ua_check":true}}""",
+        )
+        enable()
+        nextBackground()
+
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `open_resume without the UA flag still requests on an organic install`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"open_resume":{"id":"$UNIT","isEnable":true,"enable_ua_check":false}}""",
+        )
+        enable()
+        nextBackground()
+
+        assertEquals(1, requests.size)
+    }
+
+    @Test
     fun `previous request failure cannot shorten the next background remote delay`() {
         startRequest()
         manager.onResume()

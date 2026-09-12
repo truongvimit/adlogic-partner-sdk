@@ -6,6 +6,7 @@ import com.ads.module.admob.AppOpenManager
 import com.ads.module.helper.AdGate
 import com.ads.module.tracking.AdTracking
 import com.ads.module.config.AdRemoteConfig
+import com.itg.template.ads.AppAdPlacement
 import com.itg.template.ads.inter_welcome
 import io.trackkit.AdFormat
 import com.itg.template.utils.Routes
@@ -35,7 +36,7 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
         if (blockReason == null) {
             Routes.startWelcomeActivity(currentActivity)
         } else {
-            AdTracking.skipped("inter_welcome", AdFormat.INTERSTITIAL, blockReason)
+            AdTracking.skipped(AppAdPlacement.INTER_WELCOME, AdFormat.INTERSTITIAL, blockReason)
         }
     }
 

@@ -4,28 +4,22 @@ import android.os.Bundle
 import android.widget.FrameLayout
 import androidx.databinding.ViewDataBinding
 import com.ads.module.helper.AdGate
-import com.ads.module.helper.banner.BannerAdConfig
 import com.ads.module.helper.banner.BannerAdHelper
-import com.ads.module.helper.banner.BannerAdParam
 import com.ads.module.helper.banner.BannerType
 import com.itg.template.R
-import com.ads.module.config.AdUnitConfig
+import com.itg.template.ads.AppAdPlacement
 import com.itg.template.ui.bases.ext.goneView
 import com.itg.template.ui.bases.ext.visibleView
 
 data class BannerConfig(
-    val adUnitConfig: AdUnitConfig = AdUnitConfig(
-        id = "",
-        isEnable = false,
-        reloadIntervalSeconds = 0
-    ),
-    val bannerType: BannerType = BannerType.Normal
+    val placement: String = AppAdPlacement.BANNER_HOME,
+    val bannerType: BannerType = BannerType.Normal,
 )
 
 /**
  * Screens with a banner slot declare a [bannerConfig] and inherit the whole banner
- * lifecycle: [BannerAdHelper] owns load, waterfall fallback and teardown. This sample uses
- * AdMob console refresh; a positive legacy reloadIntervalSeconds does not add an SDK timer.
+ * lifecycle: [BannerAdHelper] owns config resolution, load, waterfall fallback and teardown.
+ * This sample uses AdMob console refresh, so it leaves the SDK timer off.
  */
 abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>() {
 
@@ -35,47 +29,31 @@ abstract class BaseActivityWithBanner<VB : ViewDataBinding> : BaseActivity<VB>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setupBanner(bannerConfig.bannerType, bannerConfig.adUnitConfig, DEFAULT_PLACEMENT)
+        setupBanner(bannerConfig.bannerType, bannerConfig.placement)
     }
 
     /** Rebuilds the slot with [type] — a helper's [BannerType] is fixed, so a switch needs a new one. */
     protected fun reloadBanner(
         type: BannerType,
-        adUnitConfig: AdUnitConfig = bannerConfig.adUnitConfig,
-        placement: String = DEFAULT_PLACEMENT,
+        placement: String = bannerConfig.placement,
     ) {
         // A dead target must not cost the live banner — validate before retiring
-        if (!adUnitConfig.isEnable || AdGate.isPurchased(this)) return
+        if (!AdGate.placementEnabled(placement) || AdGate.isPurchased(this)) return
         bannerAdHelper?.let {
             // cancel() alone is not final: an auto-reload config resurrects on the next resume
             it.flagUserEnableReload = false
             it.cancel()
         }
-        setupBanner(type, adUnitConfig, placement)
+        setupBanner(type, placement)
     }
 
-    private fun setupBanner(type: BannerType, unit: AdUnitConfig, placement: String) {
+    private fun setupBanner(type: BannerType, placement: String) {
         val frAds = findViewById<FrameLayout>(R.id.fr_banner) ?: return
-        if (!unit.isEnable || AdGate.isPurchased(this)) {
+        if (!AdGate.placementEnabled(placement) || AdGate.isPurchased(this)) {
             frAds.goneView()
             return
         }
         frAds.visibleView()
-        val config = BannerAdConfig(
-            unit.waterfallIds,
-            canShowAds = unit.isEnable,
-            canReloadAds = false,
-            bannerType = type,
-        )
-        bannerAdHelper = BannerAdHelper(this, this, config)
-            .attachInto(frAds)
-            .also {
-                it.placement = placement
-                it.requestAds(BannerAdParam.Request)
-            }
-    }
-
-    companion object {
-        private const val DEFAULT_PLACEMENT = "banner_home"
+        bannerAdHelper = BannerAdHelper.forPlacement(this, this, placement, frAds, type)
     }
 }

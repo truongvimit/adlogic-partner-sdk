@@ -314,7 +314,15 @@ class ERainAdProvider(
             context,
             key,
             unit.loadOrder,
-            InterLoadOptions(tierTimeoutMs = tierTimeoutMs, reportTelemetry = false),
+            // The show path reads the placement's own enable_ua_check for any key ad_config.json
+            // declares; loading past it would buy a fill that show then refuses.
+            // The show path reads the placement's own enable_ua_check for any key ad_config.json
+            // declares; loading past it would buy a fill that show then refuses.
+            InterLoadOptions(
+                passesUaGate = AdGate.placementPassesUaGate(key),
+                tierTimeoutMs = tierTimeoutMs,
+                reportTelemetry = false,
+            ),
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
@@ -377,6 +385,7 @@ class ERainAdProvider(
             interstitialCallback(placement.key, callback),
             InterLoadAndShowOptions(
                 timeoutMs = timeoutMs,
+                passesUaGate = AdGate.placementPassesUaGate(placement.key),
                 reportTelemetry = false,
                 nextAction = InterNextAction.UnderAd,
             ),
