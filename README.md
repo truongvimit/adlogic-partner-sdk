@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Choose a [published tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) and set it once in your app project's `gradle.properties`. Replace `<published-tag>` with that tag; all module examples read this same property.
+Set version `5.3.3` once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=<published-tag>
+adlogicSdkVersion=5.3.3
 ```
 
 To upgrade, change this property and read the documentation at the selected tag.

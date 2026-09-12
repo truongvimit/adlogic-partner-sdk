@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Chọn một [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags), rồi đặt một lần trong `gradle.properties` ở root project của app. Thay `<published-tag>` bằng tag đã chọn; mọi ví dụ module đều đọc cùng property này.
+Đặt phiên bản `5.3.3` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=<published-tag>
+adlogicSdkVersion=5.3.3
 ```
 
 Khi nâng SDK, đổi property này và đọc tài liệu tại tag đã chọn.

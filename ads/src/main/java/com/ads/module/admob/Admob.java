@@ -75,6 +75,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
@@ -2012,17 +2013,16 @@ public class Admob {
         RewardedAd.load(context, id, getAdRequest(), new RewardedAdLoadCallback() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
-                callback.onRewardAdLoaded(rewardedAd);
                 Admob.this.rewardedAd = rewardedAd;
-                Admob.this.rewardedAd.setOnPaidEventListener(adValue -> {
+                rewardedAd.setOnPaidEventListener(adValue -> {
                     ERainLogEventManager.logPaidAdImpression(context,
                             adValue,
                             rewardedAd.getAdUnitId(),
-                            Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
+                            rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
                     ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
-
+                callback.onRewardAdLoaded(rewardedAd);
             }
 
             @Override
@@ -2205,34 +2205,45 @@ public class Admob {
      * Shows a buffered rewarded ad and reports the outcome through {@code adCallback}.
      */
     public void showRewardAds(final Activity context, RewardedAd rewardedAd, final RewardCallback adCallback) {
+        showRewardAds(context, rewardedAd, adCallback, true);
+    }
+
+    /**
+     * Shows only the supplied ad when reload is false. The legacy overload keeps its refill.
+     */
+    public void showRewardAds(final Activity context, RewardedAd rewardedAd,
+                              final RewardCallback adCallback, final boolean reload) {
         if (AdGate.isPurchased(context)) {
             adCallback.onUserEarnedReward(null);
             return;
         }
         if (rewardedAd == null) {
-            initRewardAds(context, nativeId);
+            if (reload) initRewardAds(context, nativeId);
 
             adCallback.onRewardedAdFailedToShow(0);
             return;
         } else {
+            // A manager-loaded fill may also be referenced by the legacy buffer. Consume that
+            // alias before show so it cannot be presented again through the no-argument API.
+            if (!reload && Admob.this.rewardedAd == rewardedAd) {
+                Admob.this.rewardedAd = null;
+            }
+            final AtomicBoolean settled = new AtomicBoolean(false);
             final String shownUnitId = rewardedAd.getAdUnitId();
             final TrackingAdCallback presentationTracking = new TrackingAdCallback(
                     PlacementRegistry.placementOf(shownUnitId), AdFormat.REWARDED, shownUnitId, null);
             rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
-                    super.onAdDismissedFullScreenContent();
-                    if (adCallback != null)
-                        adCallback.onRewardedAdClosed();
-
-
+                    if (!settled.compareAndSet(false, true)) return;
                     AppOpenManager.getInstance().setInterstitialShowing(false);
-
+                    if (adCallback != null) adCallback.onRewardedAdClosed();
                 }
 
                 @Override
                 public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
-                    super.onAdFailedToShowFullScreenContent(adError);
+                    if (!settled.compareAndSet(false, true)) return;
+                    AppOpenManager.getInstance().setInterstitialShowing(false);
                     presentationTracking.onAdFailedToShow(adError);
                     if (adCallback != null)
                         adCallback.onRewardedAdFailedToShow(adError.getCode());
@@ -2240,15 +2251,22 @@ public class Admob {
 
                 @Override
                 public void onAdShowedFullScreenContent() {
-                    super.onAdShowedFullScreenContent();
+                    if (settled.get()) return;
 
                     AppOpenManager.getInstance().setInterstitialShowing(true);
                     presentationTracking.onAdImpression();
-                    initRewardAds(context, shownUnitId);
+                    if (reload) initRewardAds(context, shownUnitId);
+                    if (adCallback != null) adCallback.onRewardedAdShown();
+                }
+
+                @Override
+                public void onAdImpression() {
+                    if (settled.get()) return;
+                    if (adCallback != null) adCallback.onAdImpression();
                 }
 
                 public void onAdClicked() {
-                    super.onAdClicked();
+                    if (settled.get()) return;
                     if (disableAdResumeWhenClickAds)
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     if (adCallback != null) {

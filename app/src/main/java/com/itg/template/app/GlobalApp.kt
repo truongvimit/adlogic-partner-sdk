@@ -9,33 +9,22 @@ import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
 import com.ads.module.application.AdsMultiDexApplication
 import com.ads.module.billing.AppPurchase
-import com.ads.module.config.AdjustConfig
-import com.ads.module.config.ERainAdConfig
 import com.itg.devconfig.DevConfig
 import com.itg.template.BuildConfig
 import com.itg.template.R
-import com.ads.module.config.AdConfig
-import com.ads.module.config.AdRemoteConfig
+import com.itg.template.ads.AdsAppManager
 import com.itg.template.data.pref.AppSharedPreferencesApp
 import com.itg.template.tracking.installDebugSinks
 import com.itg.template.ui.component.main.MainActivity
-import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.ConfirmUninstallActivity
-import com.itg.template.ui.component.uninstall.SurveyActivity
-import com.itg.template.ui.component.welcome.WelcomeActivity
 import dagger.hilt.android.HiltAndroidApp
 import io.onboardkit.OnboardingSdk
 import io.paykit.PayKit
 import io.paykit.PayKitLogLevel
 import io.paykit.PaywallPlacement
 import io.suite.firebase.FirebaseConfigSource
-import com.ads.module.consent.ConsentCenter
-import com.ads.module.consent.ConsentOptions
-import io.suite.firebase.FirebaseAdConfigSource
 import io.paykit.integration.OnboardKitPaywallGate
 import io.paykit.payKitConfig
 import io.trackkit.Tracker
@@ -44,7 +33,6 @@ import io.trackkit.TrackkitEvents
 import io.suite.firebase.FirebaseSink
 import io.trackkit.sink.ConsoleSink
 import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.erain.ERainTuning
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.ui.splash.SplashEntry
@@ -79,13 +67,7 @@ class GlobalApp : AdsMultiDexApplication() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        // Loads assets/ad_config.json and binds every id to its placement; the SDK re-binds on
-        // each remote refresh, so there is nothing to call again later.
-        AdRemoteConfig.initializeFromAssets(this)
-        // Where fresher ad units come from. Installed here, applied by the SDK — no call site has
-        // to bridge remote config into the ad layer by hand.
-        AdConfig.install(FirebaseAdConfigSource())
-        initAds()
+        mERainAdConfig = AdsAppManager.initialize(this)
         // Before OnboardKit: its paywall gate calls straight into PayKit at the first checkpoint.
         initPayKit()
         initOnboardKit()
@@ -116,59 +98,6 @@ class GlobalApp : AdsMultiDexApplication() {
         installDebugSinks()
     }
 
-
-    private fun initAds() {
-        ConsentCenter.configure(ConsentOptions(timeoutMs = AppConstants.DEFAULT_TIME_OUT_GDPR))
-
-        val environment =
-            if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION
-        mERainAdConfig = ERainAdConfig(this, environment)
-
-        val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))
-        // Both tokens default to "" and nothing used to set them, so every impression and every
-        // purchase reached Adjust as AdjustEvent("") and was dropped server-side without a trace.
-        // Mint them on the Adjust dashboard; a blank one is skipped with a warning, never sent.
-        adjustConfig.eventAdImpression = getString(R.string.event_token)
-        adjustConfig.eventNamePurchase = getString(R.string.adjust_event_token_purchase)
-        // Without it Adjust has nothing to forward to Meta, so Meta-attributed campaigns stay
-        // empty in the Adjust dashboard.
-        adjustConfig.fbAppId = getString(R.string.facebook_app_id)
-        mERainAdConfig.adjustConfig = adjustConfig
-        mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)
-        // No adjustTokenTiktok here: every impression path falls back to
-        // adjustConfig.eventAdImpression (set above) — one token, one door.
-        // 0 = no interval until remote config says otherwise; SplashActivity applies
-        // `interstitial_interval_sec` on every fetch. With 35 baked in here the module silently
-        // swallowed the splash interstitial on any relaunch inside 35s, and nothing downstream
-        // could tell that apart from a dismissal.
-        mERainAdConfig.intervalInterstitialAd = 0
-
-        mERainAdConfig.idAdResume = ""
-        mERainAdConfig.listDeviceTest = listOf("1E25A7D66221E2116062EA114AFE2982")
-
-        ERainAd.getInstance().init(this, mERainAdConfig)
-
-        // Process-wide ad-module switches live in one place and are set once. Screen-by-screen
-        // toggling is what let a splash finish itself before its own interstitial could show.
-        //
-        // Among them: `InterstitialAdManager.defaultNextAction`, which install() sets to
-        // `InterNextAction.UnderAd` — every interstitial hands control back on the same tick as
-        // show(), so the next screen starts underneath the ad and is painted before it closes
-        // (Apero's `openActivityAfterShowInterAds = true`). Assign it here to change the app-wide
-        // default; one placement that needs the other timing passes `InterNextAction.AfterDismiss`
-        // to its own show call instead — see WelcomeActivity. An app without OnboardKit gets the
-        // SDK default, AfterDismiss, until it sets one.
-        ERainTuning.install()
-
-        // OnboardKit excludes its own screens from app-resume when they start, so only the
-        // app's own screens are listed here.
-        // Both resume paths read this one list, so a screen listed here is off-limits to the
-        // app-open ad and to the welcome-back screen alike.
-        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(WelcomeActivity::class.java)
-        AppOpenManager.getInstance().disableAppResumeWithActivity(SurveyActivity::class.java)
-    }
 
     private fun initPayKit() {
         payKitConfig {

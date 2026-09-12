@@ -5,7 +5,7 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 | Your app needs | Guide to read | Module |
 | --- | --- | --- |
 | Splash → language → onboarding with ads → main screen | **[Ads + OnboardKit integration](ads-onboarding-integration.md)** | `ads` + `onboardkitorigin` |
-| Ads in your app's own screens | Already did the Ads + OnboardKit guide: use the [native](ads-onboarding-integration.md#app-screen-native-with-a-placement-constant), [inter](ads-onboarding-integration.md#app-screen-interstitial-with-a-placement-constant), [app-open](ads-onboarding-integration.md#app-open-on-return) samples with your app's [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt). Not using OnboardKit: follow [Ads](../ads/README.md) from init and placements through consent. | `ads` |
+| Ads in your app's own screens | Already did the Ads + OnboardKit guide: use the [native](ads-onboarding-integration.md#app-screen-native-with-a-placement-constant), [inter](ads-onboarding-integration.md#app-screen-interstitial-with-a-placement-constant), [reward](ads-onboarding-integration.md#reward-on-an-app-screen), [app-open](ads-onboarding-integration.md#app-open-on-return) samples with your app's [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt). Not using OnboardKit: follow [Ads](../ads/README.md) from init and placements through consent. | `ads` |
 | Purchases with your own UI | [BillingKit integration](billing-integration.md) | `billingkit` |
 | A ready-made paywall | [PayKit integration](paywall-integration.md) | `paykit`, add `billingkit` when you call its APIs directly |
 | Remote JSON / Firebase Analytics | [Firebase integration](firebase-integration.md) | `suite-firebase` plus the module you connect |

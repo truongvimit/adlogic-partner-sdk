@@ -5,22 +5,34 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.LayoutRes
 import com.ads.module.ads.ERainAd
+import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.funtion.AdCallback
+import com.ads.module.helper.AdGate
+import com.ads.module.helper.AdSkipReason
+import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdParam
 import com.ads.module.helper.banner.BannerType
+import com.ads.module.helper.banner.BannerAdHelper
 import com.ads.module.helper.banner.FixedBannerSize
+import com.ads.module.helper.interstitial.InterShowCallback
+import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.ads.module.helper.reward.RewardAdManager
 import com.itg.devconfig.dialog.DialogAdminOrganicAds
 import com.google.android.material.button.MaterialButton
+import com.google.android.gms.ads.LoadAdError
 import com.hjq.permissions.dsl.xxPermissions
 import com.hjq.permissions.permission.PermissionLists
 import com.itg.template.BuildConfig
@@ -28,7 +40,6 @@ import com.itg.template.R
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.config.toNativeStyle
-import com.itg.template.ads.AdsManager
 import com.itg.template.ads.AppAdPlacement
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.inter_onboarding
@@ -42,9 +53,10 @@ import com.itg.template.ads.native_onboarding_fullscreen_1_4
 import com.itg.template.ads.native_permission
 import com.itg.template.data.model.ForceUpdateConfig
 import com.itg.template.databinding.ActivityMainBinding
-import com.itg.template.ui.bases.BannerConfig
-import com.itg.template.ui.bases.BaseActivityWithBanner
+import com.itg.template.ui.bases.BaseActivity
 import com.itg.template.ui.bases.ext.click
+import com.itg.template.ui.bases.ext.goneView
+import com.itg.template.ui.bases.ext.visibleView
 import com.itg.template.ui.component.main.dialog.ForceUpdateDialog
 import com.itg.template.ui.component.main.dialog.NoInternetDialog
 import com.itg.template.utils.ConnectionLiveData
@@ -54,11 +66,13 @@ import com.itg.template.app.ResumeAdsEntryRule
 import com.itg.template.app.ResumeAdsEntryMode
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
+import java.lang.ref.WeakReference
 
 @AndroidEntryPoint
-class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
+class MainActivity : BaseActivity<ActivityMainBinding>() {
 
-    override val bannerConfig = BannerConfig(AppAdPlacement.BANNER_HOME, BannerType.Collapsible())
+    private val defaultBannerType = BannerType.Collapsible()
+    private var bannerAdHelper: BannerAdHelper? = null
 
     private val delayHandler = Handler(Looper.getMainLooper())
     private var delayRunnable: Runnable? = null
@@ -70,7 +84,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     // Customization state
     private var currentCtaColor: String = "default"
     private var currentComponents: List<String> = listOf("icon_headline", "body", "media", "cta")
-    private var currentBannerType: BannerType = bannerConfig.bannerType
+    private var currentBannerType: BannerType = defaultBannerType
 
     // Dashboard native previews — one NativeAdHelper per slot, created on first load
     private var nativeSmallHelper: NativeAdHelper? = null
@@ -78,6 +92,11 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     private var customizationHelper: NativeAdHelper? = null
 
     override fun getLayoutActivity(): Int = R.layout.activity_main
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setupBanner(defaultBannerType, AppAdPlacement.BANNER_HOME)
+    }
 
     override fun initViews() {
         super.initViews()
@@ -89,7 +108,7 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         showSdkVersionInfo()
         buildFlagRows()
         updateResumeModeUI()
-        selectBannerType(bannerConfig.bannerType)
+        selectBannerType(defaultBannerType)
     }
 
     // ─── SDK Version ──────────────────────────────────────────
@@ -185,48 +204,55 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         // ── Interstitial Onboarding ──
         mBinding.btnLoadInterOnboarding.click {
             ensureAdRemoteConfig()
-            AdsManager.loadInterOnboarding(this)
             mBinding.tvInterOnboardingStatus.text = "Loading…"
-            Handler(Looper.getMainLooper()).postDelayed({
-                mBinding.tvInterOnboardingStatus.text = "Loaded ✓"
-            }, 2000)
+            InterstitialAdManager.load(this, AppAdPlacement.INTER_ONBOARDING,
+                listener = interLoadStatus(mBinding.tvInterOnboardingStatus))
         }
         mBinding.btnShowInterOnboarding.click {
-            AdsManager.showInterOnboarding(this) {
-                Timber.d("Inter Onboarding shown or skipped")
-                mBinding.tvInterOnboardingStatus.text = "Shown – reloading…"
-                AdsManager.loadInterOnboarding(this)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    mBinding.tvInterOnboardingStatus.text = "Loaded ✓"
-                }, 2000)
-            }
+            InterstitialAdManager.show(this, AppAdPlacement.INTER_ONBOARDING,
+                object : InterShowCallback() {
+                    override fun onSkipped(reason: AdSkipReason) {
+                        if (reason == AdSkipReason.FAILED_TO_SHOW) Timber.w("Interstitial show failed")
+                    }
+
+                    override fun onComplete() {
+                        Timber.d("Inter Onboarding shown or skipped")
+                        mBinding.tvInterOnboardingStatus.text = "Loading…"
+                        InterstitialAdManager.load(this@MainActivity, AppAdPlacement.INTER_ONBOARDING,
+                            listener = interLoadStatus(mBinding.tvInterOnboardingStatus))
+                    }
+                })
         }
 
         // ── Interstitial Welcome ──
         mBinding.btnLoadInterWelcome.click {
             ensureAdRemoteConfig()
-            AdsManager.loadInterWelcome(this)
             mBinding.tvInterWelcomeStatus.text = "Loading…"
-            Handler(Looper.getMainLooper()).postDelayed({
-                mBinding.tvInterWelcomeStatus.text = "Loaded ✓"
-            }, 2000)
+            InterstitialAdManager.load(this, AppAdPlacement.INTER_WELCOME,
+                listener = interLoadStatus(mBinding.tvInterWelcomeStatus))
         }
         mBinding.btnShowInterWelcome.click {
-            AdsManager.showInterWelcome(this) {
-                Timber.d("Inter Welcome shown or skipped")
-                mBinding.tvInterWelcomeStatus.text = "Shown – reloading…"
-                AdsManager.loadInterWelcome(this)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    mBinding.tvInterWelcomeStatus.text = "Loaded ✓"
-                }, 2000)
-            }
+            InterstitialAdManager.show(this, AppAdPlacement.INTER_WELCOME,
+                object : InterShowCallback() {
+                    override fun onSkipped(reason: AdSkipReason) {
+                        if (reason == AdSkipReason.FAILED_TO_SHOW) Timber.w("Interstitial show failed")
+                    }
+
+                    override fun onComplete() {
+                        Timber.d("Inter Welcome shown or skipped")
+                        mBinding.tvInterWelcomeStatus.text = "Loading…"
+                        InterstitialAdManager.load(this@MainActivity, AppAdPlacement.INTER_WELCOME,
+                            listener = interLoadStatus(mBinding.tvInterWelcomeStatus))
+                    }
+                })
         }
 
         // ── Reward Ads ──
         mBinding.btnLoadShowReward.click {
             // Dev show Dialog Loading
-            AdsManager.loadAndShowReward(
+            RewardAdManager.loadAndShow(
                 this@MainActivity,
+                AppAdPlacement.REWARD_EXAMPLE,
                 onSuccess = {
                     // Dev gone Dialog Loading and nextAction
                 },
@@ -287,6 +313,19 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         mBinding.btnRefreshFlags.click { refreshFlags() }
     }
 
+    private fun interLoadStatus(status: TextView): AdCallback {
+        val statusRef = WeakReference(status)
+        return object : AdCallback() {
+            override fun onApInterstitialLoad(ad: ApInterstitialAd?) {
+                statusRef.get()?.text = "Loaded ✓"
+            }
+
+            override fun onAdFailedToLoad(error: LoadAdError?) {
+                statusRef.get()?.text = "Unavailable"
+            }
+        }
+    }
+
     // ─── Native Ad Preview ────────────────────────────────────
     // Each slot is a NativeAdHelper with the auto-derived skeleton: requestAds() shows the
     // shimmer, binds the fill, and hides the slot on fail. Style is re-read per click so
@@ -296,12 +335,18 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         runCatching { AdRemoteConfig.getInstance().ads[key] }.getOrNull()
             ?: AdUnitConfig(id = "", isEnable = false)
 
+    // Dashboard previews keep the sample's UA bypass and do not register a real placement.
+    private fun nativePreviewConfig(config: AdUnitConfig, @LayoutRes layoutRes: Int) =
+        NativeAdConfig(config.waterfallIds, config.isUsable, false, layoutRes).apply {
+            forceUaCheck = false
+        }
+
     private fun loadNativeSmallPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        val helper = nativeSmallHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
-            R.layout.layout_native_ad_small, bypassUaGate = true,
+        val helper = nativeSmallHelper ?: NativeAdHelper(
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
+                R.layout.layout_native_ad_small),
         ).setNativeContentView(mBinding.flNativeSmall).also { nativeSmallHelper = it }
         helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
@@ -310,9 +355,9 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     private fun loadNativeFullPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        val helper = nativeFullHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3),
-            R.layout.layout_native_ad_full, bypassUaGate = true,
+        val helper = nativeFullHelper ?: NativeAdHelper(
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3),
+                R.layout.layout_native_ad_full),
         ).setNativeContentView(mBinding.flNativeFull).also { nativeFullHelper = it }
         helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
@@ -321,9 +366,9 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
     private fun loadCustomizationPreview() {
         ensureAdRemoteConfig()
         overrideAdConfig()
-        val helper = customizationHelper ?: AdsManager.nativeHelper(
-            this, this, placement = null, adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
-            R.layout.layout_native_ad_small, bypassUaGate = true,
+        val helper = customizationHelper ?: NativeAdHelper(
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
+                R.layout.layout_native_ad_small),
         ).setNativeContentView(mBinding.flCustomizationPreview).also { customizationHelper = it }
         helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
@@ -534,8 +579,28 @@ class MainActivity : BaseActivityWithBanner<ActivityMainBinding>() {
         if (currentBannerType is BannerType.Fixed) {
             reloadBanner(currentBannerType, AppAdPlacement.BANNER_HOME_FIXED)
         } else {
-            reloadBanner(currentBannerType)
+            reloadBanner(currentBannerType, AppAdPlacement.BANNER_HOME)
         }
+    }
+
+    private fun reloadBanner(type: BannerType, placement: String) {
+        if (!AdGate.placementEnabled(placement) || AdGate.isPurchased(this)) return
+        bannerAdHelper?.let {
+            it.flagUserEnableReload = false
+            it.cancel()
+        }
+        setupBanner(type, placement)
+    }
+
+    private fun setupBanner(type: BannerType, placement: String) {
+        val container = mBinding.frBanner
+        if (!AdGate.placementEnabled(placement) || AdGate.isPurchased(this)) {
+            container.goneView()
+            return
+        }
+        container.visibleView()
+        // SDK owns the XML slot's load/lifecycle; AdMob console keeps ownership of refresh.
+        bannerAdHelper = BannerAdHelper.forPlacement(this, this, placement, container, type)
     }
 
     private fun createFlagRow(name: String, enabled: Boolean): View {

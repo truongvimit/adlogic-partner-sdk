@@ -6,6 +6,8 @@ Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 
 
 Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, app-open và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
 
+**SDK 5.3.3:** phiên bản này có `preload` và flow cache/request reward dùng chung. Dùng `5.3.3` cho mọi module SDK; artifact `5.3.2` chưa chứa bản sửa reward này.
+
 ## 1. Thêm dependency
 
 Yêu cầu JDK 17, `minSdk 24+`, `compileSdk 36+`; AGP/Kotlin theo [versions.gradle](../versions.gradle) và [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties). Ghép code Groovy dưới vào block hiện có.
@@ -25,10 +27,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Thay `<published-tag>` bằng [tag đã phát hành](https://github.com/truongvimit/adlogic-partner-sdk/tags) trong `gradle.properties` ở root app:
+Đặt phiên bản `5.3.3` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=<published-tag>
+adlogicSdkVersion=5.3.3
 ```
 
 Mọi module dùng chung property này.
@@ -138,15 +140,9 @@ Chỉ `SplashConfig.layoutRes` và `ContentStepDefinition.layoutRes` hỗ trợ 
 
 Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) vào package app, ví dụ `app/src/main/java/com/example/app/`. File có **35 key gốc**: 10 OB và các slot app. SDK tự tìm tầng `_high`, `_high1`…; không cần constant cho tầng.
 
-**Placement key là danh tính duy nhất của một vị trí ads.** Ad unit ID không phân biệt được: JSON mẫu khai 45 placement mà chỉ có **8 ad unit ID** — một ID native test dùng cho 25 placement — và payload production cũng thường dùng lại một unit cho nhiều màn. Mọi thứ SDK đánh khoá theo placement: cache interstitial, đồng hồ tần suất, nhóm AutoBuffer, preload native, và mọi `ad_request` / `ad_impression` / `ad_skipped` dashboard cắt theo. Vì vậy key phải được viết đúng một chỗ.
+`AppAdPlacement.NATIVE_HOME` là key `native_home`; cả hai JSON chứa ad unit ID và cấu hình của key đó. Slot mới cần constant và key tương ứng trong JSON.
 
-Gõ sai một chuỗi thô không báo lỗi: `AdRemoteConfig.unit()` log warning rồi trả placeholder đã tắt, slot im lặng không bao giờ hiện. Dùng constant thì lỗi đó thành lỗi biên dịch.
-
-- `AppAdPlacement.NATIVE_HOME` là **key** `native_home`, dùng khi load/show.
-- JSON chứa **ad unit ID/config**; constants chỉ chứa key.
-- `io.onboardkit.ads.AdPlacement` cố định trong SDK; app thêm slot vào `AppAdPlacement`.
-
-Slot mới cần constant, cùng key trong hai JSON và code load/show tại màn app. Không cần file adapter nào khác cho ads: entry point nhận constant rồi tự đọc config.
+Khai báo slot native/banner trong XML của màn, gọi API SDK trực tiếp tại màn. SDK quản lý tải, cache và vòng đời ads. Nếu dùng `AdsAppManager`, chỉ gom cấu hình, khởi tạo và chính sách riêng của app.
 
 ### `OnboardKitSetup.kt` — nối các key OB vào SDK
 
@@ -310,13 +306,24 @@ Waterfall đọc `_high`, `_high1`… rồi key gốc; có thể dùng `ids` đ�
 <details>
 <summary>Mở ví dụ native và preload cho màn app</summary>
 
-Gọi ở màn app sau consent, khi `AppCompatActivity` resumed; `container` là `FrameLayout`. OB đã tự xử lý native.
+Khai báo slot trong XML của màn (mỗi native/banner dùng một slot riêng). OB tự quản lý slot của OB:
+
+```xml
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ad_slot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+```
+
+Gọi SDK tại màn sau consent, khi `AppCompatActivity` resumed:
 
 **Chưa dùng Adjust:** đổi `enable_ua_check` của `native_home` thành `false` trong **cả hai JSON** để slot mẫu có thể hiện; giữ ID test khi QA.
 
 ```kotlin
+import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdHelper
 
+val container = findViewById<FrameLayout>(R.id.ad_slot)
 NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
@@ -347,11 +354,43 @@ Chỉ cần điều hướng thì dùng dạng lambda; cần thêm sự kiện (
 
 SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval và readiness của placement. Chỉ điều hướng ở `onComplete`, chạy đúng một lần kể cả thiếu ad/show lỗi; không dùng `onClosed`, không tự kiểm tra `canShow()` trước. `load` không request lại nếu đang tải/đã có ad. Có ad thì chờ dialog khoảng 800 ms rồi show.
 
-Mặc định callback chạy sau khi ad đóng. Thêm `nextAction = InterNextAction.UnderAd` để callback chạy ngay khi ad hiện — chỉ dùng cho `startActivity` mở màn thường, không `finish()` hay mở camera/audio/video dưới ad.
+SDK mặc định `AfterDismiss`. Mẫu `PartnerApp` gọi `ERainTuning.install()` nên dùng `UnderAd`: điều hướng khi ad đang hiện. Truyền `nextAction = InterNextAction.AfterDismiss` khi cần đóng màn chứa ad hoặc mở camera/audio/video. Giữ nguyên timing của 5.3.2.
 
 Tự giữ sẵn inter: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) `configure` sau `ERainAd.init`, `start` ở màn nội dung đầu tiên; show như trên. Khoảng cách/click cap ở [bảng mặc định](#mặc-định-của-luồng).
 
 </details>
+
+### Reward tại màn app
+
+Gọi trên main thread từ Activity đang resumed, sau consent; ví dụ tại nút xem quảng cáo:
+
+```kotlin
+import com.ads.module.helper.reward.RewardAdManager
+
+RewardAdManager.loadAndShow(
+    this, AppAdPlacement.REWARD_EXAMPLE,
+    onSuccess = {
+        closeLoading()
+        grantReward()
+    },
+    onFailed = { closeLoading() },
+)
+```
+
+Hoặc preload trước, rồi chỉ show ad đã có khi bấm nút:
+
+```kotlin
+RewardAdManager.preload(applicationContext, AppAdPlacement.REWARD_EXAMPLE)
+
+// Tại nút xem quảng cáo:
+RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
+    if (earned) grantReward()
+}
+```
+
+`preload` và `load` dùng chung cache/request theo placement. `show` lấy ad sẵn có; `loadAndShow` dùng cache, chờ request đang chạy hoặc tải khi chưa có. Không tự refill. `onSuccess` chạy sau khi đã nhận reward và ad đóng; `onFailed` xử lý các kết quả còn lại. Lấy kết quả từ callback SDK, không suy đoán bằng timer.
+
+Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
 
 ### Tích hợp bổ sung
 

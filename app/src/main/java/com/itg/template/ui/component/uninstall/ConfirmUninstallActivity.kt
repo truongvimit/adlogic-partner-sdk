@@ -3,7 +3,6 @@ package com.itg.template.ui.component.uninstall
 import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.itg.template.R
-import com.itg.template.ads.AdsManager
 import com.itg.template.ads.AppAdPlacement
 import com.itg.template.databinding.ActivityConfirmUninstallBinding
 import com.itg.template.ui.bases.BaseActivity

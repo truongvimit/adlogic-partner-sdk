@@ -21,7 +21,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Outcomes of one rewarded presentation, in the order GMA reports them. */
 open class RewardShowCallback {
 
-    /** The user watched far enough to earn. Grant the reward from [onClosed]. */
+    /** GMA confirmed that the rewarded ad reached the screen. */
+    open fun onShown() {}
+
+    /** GMA recorded an impression. */
+    open fun onImpression() {}
+
+    /** The vendor confirmed a reward. Some mediation sources can report it after [onClosed]. */
     open fun onEarned(item: RewardItem?) {}
 
     /** Terminal: the ad is gone; [earned] says whether [onEarned] fired before it. */
@@ -46,9 +52,35 @@ open class RewardShowCallback {
 object RewardAdManager {
 
     private val cache = ConcurrentHashMap<String, CachedAd<RewardedAd>>()
-    private val inFlight = ConcurrentHashMap.newKeySet<String>()
-    // One observer per placement; the freshest caller hears the in-flight outcome
-    private val listeners = ConcurrentHashMap<String, AdCallback>()
+    private val requests = ConcurrentHashMap<String, LoadRequest>()
+    private val presentations = ConcurrentHashMap<String, Presentation>()
+
+    private class LoadRequest {
+        val listeners = mutableListOf<AdCallback>()
+    }
+
+    private class Presentation(val onSuccess: Runnable, val onFailed: Runnable) {
+        var showing = false
+        val settled = AtomicBoolean(false)
+    }
+
+    /** Buffers an ad using exactly the same placement cache and request as [load]. */
+    @JvmStatic
+    @JvmOverloads
+    fun preload(
+        context: Context,
+        placement: String,
+        adUnitIds: List<String>,
+        enabled: Boolean = true,
+        tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+        listener: AdCallback? = null,
+    ) = load(context, placement, adUnitIds, enabled, tierTimeoutMs, listener)
+
+    /** [preload] with the waterfall and gates from `ad_config.json`. */
+    @JvmStatic
+    @JvmOverloads
+    fun preload(context: Context, placement: String, listener: AdCallback? = null) =
+        load(context, placement, listener)
 
     /**
      * Buffers one rewarded ad for [placement], walking [adUnitIds] highest floor first;
@@ -64,9 +96,8 @@ object RewardAdManager {
         tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
         listener: AdCallback? = null,
     ) {
-        listener?.let { listeners[placement] = it }
         cache[placement]?.takeIf { it.isFresh }?.let { cached ->
-            notifyListener(placement) { it.onRewardAdLoaded(cached.ad) }
+            listener?.let { runCatching { it.onRewardAdLoaded(cached.ad) } }
             return
         }
         val ids = AdWaterfall.usableIds(adUnitIds)
@@ -75,33 +106,45 @@ object RewardAdManager {
         )
         if (skipReason != null) {
             AdTracking.skipped(placement, AdFormat.REWARDED, skipReason.key)
-            notifyListener(placement) { it.onAdFailedToLoad(null) }
+            listener?.let { runCatching { it.onAdFailedToLoad(null) } }
             return
         }
-        if (!inFlight.add(placement)) return
+        requests[placement]?.let { request ->
+            listener?.let { request.listeners += it }
+            return
+        }
+        val request = LoadRequest()
+        listener?.let { request.listeners += it }
+        requests[placement] = request
         ids.forEach { AdTracking.registerPlacement(it, placement) }
         AdTracking.request(placement, AdFormat.REWARDED, ids.first())
-        AdWaterfall.loadReward(
-            context,
-            ids,
-            tierTimeoutMs,
-            object : AdCallback() {
-                override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
-                    inFlight.remove(placement)
-                    if (rewardedAd == null) {
-                        notifyListener(placement) { it.onAdFailedToLoad(null) }
-                        return
+        try {
+            AdWaterfall.loadReward(
+                context,
+                ids,
+                tierTimeoutMs,
+                object : AdCallback() {
+                    override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
+                        if (!requests.remove(placement, request)) return
+                        if (rewardedAd == null) {
+                            notifyListeners(request) { it.onAdFailedToLoad(null) }
+                            return
+                        }
+                        cache[placement] = CachedAd(rewardedAd)
+                        notifyListeners(request) { it.onRewardAdLoaded(rewardedAd) }
                     }
-                    cache[placement] = CachedAd(rewardedAd)
-                    notifyListener(placement) { it.onRewardAdLoaded(rewardedAd) }
-                }
 
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    inFlight.remove(placement)
-                    notifyListener(placement) { it.onAdFailedToLoad(adError) }
-                }
-            },
-        )
+                    override fun onAdFailedToLoad(adError: LoadAdError?) {
+                        if (!requests.remove(placement, request)) return
+                        notifyListeners(request) { it.onAdFailedToLoad(adError) }
+                    }
+                },
+            )
+        } catch (_: RuntimeException) {
+            if (requests.remove(placement, request)) {
+                notifyListeners(request) { it.onAdFailedToLoad(null) }
+            }
+        }
     }
 
     /**
@@ -163,11 +206,7 @@ object RewardAdManager {
     fun show(activity: Activity, placement: String, onComplete: (earned: Boolean) -> Unit) =
         show(activity, placement, completionOnly(onComplete))
 
-    /**
-     * Unlike the interstitial store, nothing below this guarantees a single terminal callback:
-     * `onClosed` and `onFailedToShow` are separate vendor paths. The latch is what makes the
-     * lambda's once-only contract true.
-     */
+    /** Keeps the completion-only adapter once-only even when driven independently. */
     private fun completionOnly(action: (Boolean) -> Unit) = object : RewardShowCallback() {
         private val settled = AtomicBoolean(false)
 
@@ -181,8 +220,9 @@ object RewardAdManager {
     }
 
     /**
-     * The classic gate → request → load → show chain in one call: [onSuccess] only after
-     * the user earned and the ad closed, [onFailed] on every other outcome.
+     * Uses the placement's buffered ad, waits for its current load, or starts one if needed.
+     * [onSuccess] runs only after the user earned and the ad closed; [onFailed] covers every
+     * other outcome, including a duplicate call while this placement is waiting or showing.
      */
     @JvmStatic
     @JvmOverloads
@@ -204,35 +244,44 @@ object RewardAdManager {
             onFailed.run()
             return
         }
-        // The guard spans load AND show — loadAndShow's contract is one presentation
-        if (!inFlight.add(placement)) return
-        AdTracking.request(placement, AdFormat.REWARDED, ids.first())
-        ids.forEach { AdTracking.registerPlacement(it, placement) }
-        AdWaterfall.loadReward(
+        val presentation = Presentation(onSuccess, onFailed)
+        if (presentations.putIfAbsent(placement, presentation) != null) {
+            onFailed.run()
+            return
+        }
+        load(
             activity,
+            placement,
             ids,
+            enabled,
             tierTimeoutMs,
             object : AdCallback() {
                 override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
+                    if (presentations[placement] !== presentation || presentation.settled.get()) return
+                    // Another explicit show or a reentrant load listener may already have spent
+                    // or released this fill. Never show the callback's raw ad a second time.
+                    val cached = cache[placement]?.takeIf { it.ad === rewardedAd }
+                    if (cached == null || !cache.remove(placement, cached) || !cached.isFresh) {
+                        finishPresentation(placement, presentation, earned = false)
+                        return
+                    }
+                    presentation.showing = true
                     showInternal(
-                        activity, rewardedAd,
+                        activity, cached.ad,
                         object : RewardShowCallback() {
                             override fun onClosed(earned: Boolean) {
-                                inFlight.remove(placement)
-                                if (earned) onSuccess.run() else onFailed.run()
+                                finishPresentation(placement, presentation, earned)
                             }
 
                             override fun onFailedToShow(codeError: Int) {
-                                inFlight.remove(placement)
-                                onFailed.run()
+                                finishPresentation(placement, presentation, earned = false)
                             }
                         },
                     )
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    inFlight.remove(placement)
-                    onFailed.run()
+                    finishPresentation(placement, presentation, earned = false)
                 }
             },
         )
@@ -259,51 +308,87 @@ object RewardAdManager {
     @JvmStatic
     fun release(placement: String) {
         cache.remove(placement)
-        inFlight.remove(placement)
-        listeners.remove(placement)
+        val request = requests.remove(placement)
+        val presentation = presentations[placement]?.takeUnless { it.showing }
+        presentation?.let { finishPresentation(placement, it, earned = false) }
+        request?.let { notifyListeners(it) { listener -> listener.onAdFailedToLoad(null) } }
     }
 
     @JvmStatic
     fun releaseAll() {
         cache.clear()
-        inFlight.clear()
-        listeners.clear()
+        // Detach the old generation before notifying callers: a callback can start a new load.
+        val pendingRequests = requests.values.toList()
+        requests.clear()
+        val pendingPresentations = presentations.filterValues { !it.showing }
+        pendingPresentations.forEach { (placement, presentation) ->
+            presentations.remove(placement, presentation)
+        }
+        pendingPresentations.forEach { (placement, presentation) ->
+            finishPresentation(placement, presentation, earned = false)
+        }
+        pendingRequests.forEach { request ->
+            notifyListeners(request) { it.onAdFailedToLoad(null) }
+        }
     }
 
     private fun showInternal(activity: Activity, ad: RewardedAd?, callback: RewardShowCallback) {
         // The module answers purchased users with a lone onUserEarnedReward(null) and no
         // terminal callback; map that to a completed earn so the caller is never stranded
         if (AdGate.isPurchased(activity)) {
-            callback.onEarned(null)
-            callback.onClosed(earned = true)
+            runCatching { callback.onEarned(null) }
+            runCatching { callback.onClosed(earned = true) }
             return
         }
         var earned = false
-        ERainAd.getInstance().showRewardAds(
-            activity,
-            ad,
-            object : RewardCallback {
-                override fun onUserEarnedReward(item: RewardItem?) {
-                    earned = true
-                    callback.onEarned(item)
-                }
+        val settled = AtomicBoolean(false)
+        val vendorCallback = object : RewardCallback {
+            override fun onRewardedAdShown() {
+                if (!settled.get()) runCatching { callback.onShown() }
+            }
 
-                override fun onRewardedAdClosed() {
-                    callback.onClosed(earned)
-                }
+            override fun onAdImpression() {
+                if (!settled.get()) runCatching { callback.onImpression() }
+            }
 
-                override fun onRewardedAdFailedToShow(codeError: Int) {
-                    callback.onFailedToShow(codeError)
-                }
+            override fun onUserEarnedReward(item: RewardItem?) {
+                // Preserve 5.3.2's event ordering: close is a snapshot; a mediation source
+                // can still report its real earned event afterwards without revising close.
+                if (earned) return
+                earned = true
+                runCatching { callback.onEarned(item) }
+            }
 
-                override fun onAdClicked() {
-                    callback.onClicked()
-                }
-            },
-        )
+            override fun onRewardedAdClosed() {
+                if (settled.compareAndSet(false, true)) runCatching { callback.onClosed(earned) }
+            }
+
+            override fun onRewardedAdFailedToShow(codeError: Int) {
+                if (settled.compareAndSet(false, true)) runCatching { callback.onFailedToShow(codeError) }
+            }
+
+            override fun onAdClicked() {
+                if (!settled.get()) runCatching { callback.onClicked() }
+            }
+        }
+        try {
+            ERainAd.getInstance().showRewardAds(activity, ad, vendorCallback, false)
+        } catch (_: RuntimeException) {
+            vendorCallback.onRewardedAdFailedToShow(0)
+        }
     }
 
-    private fun notifyListener(placement: String, block: (AdCallback) -> Unit) {
-        listeners[placement]?.let { runCatching { block(it) } }
+    private fun finishPresentation(placement: String, presentation: Presentation, earned: Boolean) {
+        if (!presentation.settled.compareAndSet(false, true)) return
+        presentations.remove(placement, presentation)
+        runCatching {
+            if (earned) presentation.onSuccess.run() else presentation.onFailed.run()
+        }
+    }
+
+    private fun notifyListeners(request: LoadRequest, block: (AdCallback) -> Unit) {
+        val listeners = request.listeners.toList()
+        request.listeners.clear()
+        listeners.forEach { runCatching { block(it) } }
     }
 }

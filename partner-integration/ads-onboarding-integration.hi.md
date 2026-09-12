@@ -6,6 +6,8 @@
 
 कदम 1–6 करें और **package, app की जानकारी, सामग्री/images और destination स्क्रीन** बदलें। Code SDK के defaults रखता है; JSON example का debug configuration रखता है। Adjust चालू करने के लिए app token भरें; Firebase, app-open और purchases [वैकल्पिक tables](#7-सिर्फ-वही-configure-करें-जो-app-को-चाहिए) में हैं।
 
+**SDK 5.3.3:** इस संस्करण में `preload` और साझा reward cache/request flow शामिल हैं। सभी SDK modules के लिए `5.3.3` इस्तेमाल करें; `5.3.2` artifact में यह reward update नहीं है।
+
 ## 1. Dependencies जोड़ें
 
 JDK 17, `minSdk 24+` और `compileSdk 36+` चाहिए; AGP/Kotlin [versions.gradle](../versions.gradle) और [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties) के अनुसार। नीचे दिया Groovy अपने मौजूदा blocks में मिलाएँ।
@@ -25,10 +27,10 @@ dependencyResolutionManagement {
 }
 ```
 
-अपने app project की root `gradle.properties` में `<published-tag>` को [प्रकाशित tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) से बदलें:
+App project की root `gradle.properties` में संस्करण `5.3.3` एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
 
 ```properties
-adlogicSdkVersion=<published-tag>
+adlogicSdkVersion=5.3.3
 ```
 
 हर module यही property पढ़ता है।
@@ -138,15 +140,9 @@ LFO, popup, OB और native ads के layouts/Activities SDK पहले स�
 
 [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) को अपने app package में copy करें, उदाहरण के लिए `app/src/main/java/com/example/app/`। File में **35 base keys** हैं: 10 OB slots और आपकी app के slots। `_high`, `_high1`… floors SDK खुद ढूँढता है; floors के लिए constants नहीं चाहिए।
 
-**किसी ad position की एकमात्र पहचान placement key है।** Ad unit IDs positions में फर्क नहीं कर सकते: नमूना JSON 45 placements घोषित करता है पर उनमें सिर्फ **8 ad unit IDs** हैं — एक native test ID 25 placements के काम आता है — और production payloads भी आम तौर पर एक ही unit कई screens पर दोबारा इस्तेमाल करते हैं। SDK हर चीज placement से key करता है: interstitial cache, frequency clock, AutoBuffer group, native preload, और हर `ad_request` / `ad_impression` / `ad_skipped` जिनसे आपका dashboard slice करता है। इसलिए key ठीक एक ही जगह लिखी होनी चाहिए।
+`AppAdPlacement.NATIVE_HOME` की key `native_home` है; दोनों JSON files में उसके ad unit IDs और configuration रहते हैं। हर नए placement के लिए constant और वही JSON key जोड़ें।
 
-गलत टाइप हुई raw string भी fail नहीं होती: `AdRemoteConfig.unit()` warning log करता है और बंद placeholder लौटाता है, और slot चुपचाप कभी fill नहीं होता। Constant उसे compile error बना देता है।
-
-- `AppAdPlacement.NATIVE_HOME` यानी **key** `native_home`; load और show करते समय इसी का इस्तेमाल करें।
-- JSON में **ad unit IDs और config** रहते हैं; constants में सिर्फ keys।
-- `io.onboardkit.ads.AdPlacement` SDK के अंदर तय है; आपकी app अपने slots `AppAdPlacement` में जोड़ती है।
-
-नए slot के लिए एक constant, दोनों JSON files में वही key, और app स्क्रीन पर load/show code चाहिए। ads के लिए कोई और adapter file नहीं चाहिए: entry points constant लेते हैं और config खुद पढ़ते हैं।
+स्क्रीन के XML में native/banner slot घोषित करें और उसी स्क्रीन से SDK API सीधे बुलाएँ। Loading, cache और ad lifecycle SDK संभालता है। `AdsAppManager` इस्तेमाल करें तो उसमें सिर्फ configuration, initialization और app की अपनी policy रखें।
 
 ### `OnboardKitSetup.kt` — OB keys को SDK से जोड़ें
 
@@ -310,13 +306,24 @@ Waterfall `_high`, `_high1`… और फिर base key पढ़ता है;
 <details>
 <summary>App screens के लिए native और preload का उदाहरण खोलें</summary>
 
-इसे consent के बाद अपनी app स्क्रीन पर बुलाएँ, जब `AppCompatActivity` resumed हो; `container` एक `FrameLayout` है। OB अपने natives खुद संभालता है।
+स्क्रीन के XML में slot घोषित करें (हर native/banner का अलग slot रखें)। OB अपने slots खुद संभालता है:
+
+```xml
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ad_slot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+```
+
+consent के बाद, `AppCompatActivity` resumed होने पर स्क्रीन से SDK बुलाएँ:
 
 **Adjust के बिना:** नमूना slot दिख सके इसके लिए **दोनों JSON files** में `native_home` का `enable_ua_check` `false` करें; QA के दौरान test IDs रखें।
 
 ```kotlin
+import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdHelper
 
+val container = findViewById<FrameLayout>(R.id.ad_slot)
 NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
@@ -347,11 +354,43 @@ InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNext() }
 
 placement का waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval और readiness SDK खुद तय करता है। Navigate सिर्फ `onComplete` से करें; यह ठीक एक बार चलता है, ad न होने या show fail होने पर भी। `onClosed` इस्तेमाल न करें और पहले से `canShow()` न जाँचें। load चल रहा हो या ad cache में हो तो `load` दोबारा request नहीं करता। Ad तैयार हो तो show से पहले लगभग 800 ms का dialog चलता है।
 
-Default रूप से callback ad बंद होने के बाद चलता है। Ad दिखते ही callback चलाने के लिए `nextAction = InterNextAction.UnderAd` जोड़ें — इसे सिर्फ सामान्य स्क्रीन खोलने वाले `startActivity` के लिए इस्तेमाल करें, `finish()` के साथ या ad के नीचे camera/audio/video शुरू करने के लिए कभी नहीं।
+SDK का default `AfterDismiss` है। कॉपी किया गया `PartnerApp`, `ERainTuning.install()` से `UnderAd` चुनता है: ad दिखते समय navigation चलता है। Host बंद करना हो या camera/audio/video शुरू करना हो तो `nextAction = InterNextAction.AfterDismiss` दें। यह 5.3.2 की timing बनाए रखता है।
 
 Interstitial अपने आप तैयार रखने के लिए: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) — `ERainAd.init` के बाद `configure`, पहली content स्क्रीन पर `start`; show ऊपर की तरह। अंतराल और click cap [defaults तालिका](#flow-के-defaults) में हैं।
 
 </details>
+
+### App स्क्रीन पर reward
+
+Consent के बाद resumed Activity से main thread पर बुलाएँ; जैसे ad देखने वाले button पर:
+
+```kotlin
+import com.ads.module.helper.reward.RewardAdManager
+
+RewardAdManager.loadAndShow(
+    this, AppAdPlacement.REWARD_EXAMPLE,
+    onSuccess = {
+        closeLoading()
+        grantReward()
+    },
+    onFailed = { closeLoading() },
+)
+```
+
+या पहले preload करें और button click पर सिर्फ तैयार ad दिखाएँ:
+
+```kotlin
+RewardAdManager.preload(applicationContext, AppAdPlacement.REWARD_EXAMPLE)
+
+// Ad देखने वाले button पर:
+RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
+    if (earned) grantReward()
+}
+```
+
+`preload` और `load` हर placement के लिए एक ही cache/request इस्तेमाल करते हैं। `show` तैयार ad लेता है; `loadAndShow` cache इस्तेमाल करता है, चल रही request का इंतज़ार करता है, या दोनों न होने पर load शुरू करता है। Automatic refill नहीं होता। Reward मिलने और ad बंद होने के बाद `onSuccess` चलता है; बाकी परिणाम `onFailed` में आते हैं। परिणाम SDK callback से लें, timer से अनुमान न लगाएँ।
+
+Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
 
 ### अतिरिक्त integrations
 

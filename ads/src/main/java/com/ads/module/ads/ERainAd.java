@@ -655,6 +655,12 @@ public class ERainAd {
         Admob.getInstance().showRewardAds(context, rewardedAd, adCallback);
     }
 
+    /** Pass false when a placement manager owns loading and the supplied ad's cache. */
+    public void showRewardAds(Activity context, RewardedAd rewardedAd, RewardCallback adCallback,
+                              boolean reload) {
+        Admob.getInstance().showRewardAds(context, rewardedAd, adCallback, reload);
+    }
+
     public void loadInterSplashPriority4SameTime(final Context context,
                                                  String idAdsHigh1,
                                                  String idAdsHigh2,

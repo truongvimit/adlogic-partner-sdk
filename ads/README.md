@@ -96,7 +96,8 @@ Create `app/src/main/assets/ad_config.json`, replacing the placeholders with ad 
 {
   "inter_back":  { "id": "YOUR_INTERSTITIAL_UNIT_ID", "isEnable": true },
   "native_home": { "id": "YOUR_NATIVE_UNIT_ID",       "isEnable": true },
-  "banner_home": { "id": "YOUR_BANNER_UNIT_ID",       "isEnable": true }
+  "banner_home": { "id": "YOUR_BANNER_UNIT_ID",       "isEnable": true },
+  "reward_example": { "id": "YOUR_REWARDED_UNIT_ID",  "isEnable": true }
 }
 ```
 
@@ -256,7 +257,7 @@ it enabled. Step click-return navigation remains enabled by default.
 | Remote placements / Firebase analytics | [suite-firebase](../suite-firebase/README.md); install `FirebaseAdConfigSource`, then call `AdConfig.refresh()` from a custom splash. The supplied onboarding splash already refreshes. |
 | Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
-| Rewarded ads | `RewardAdManager.loadAndShow(activity, AppAdPlacement.REWARD_EXAMPLE, onSuccess, onFailed)`, or `load` then `show(activity, placement) { earned -> }`; grant only when `earned` is true. `show` applies the placement's config gate for any key your JSON declares, so `onFailedToShow` also covers a disabled slot, the UA gate, premium and consent. |
+| Rewarded ads | `RewardAdManager.preload(context, placement)` (or `load`) shares one cache/request per placement. `show(activity, placement) { earned -> }` consumes a ready ad; `loadAndShow(activity, placement, onSuccess, onFailed)` uses cache, waits for an active request, or loads. Grant only when earned; the manager does not refill automatically. `show` keeps the placement's config, UA, premium and consent gates. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
 | App-open on return | Set `ERainAdConfig.idAdResume` from the `open_resume` placement before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [App-open on return](#app-open-on-return). |
 
@@ -385,7 +386,13 @@ Returning before the delay cancels the scheduled load. No app-side lifecycle tim
 
 ## Version notes
 
-**5.3.2 (suggested, additive only).** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`
+**5.3.3 — rewarded cache update.** `preload` shares `load`'s cache/request;
+`loadAndShow` reuses a ready ad or joins an active load. The manager no longer triggers legacy
+refill. Shown/impression callbacks are optional; each terminal completes once. Timeout, premium
+gates and other formats keep 5.3.2 behavior. Set `adlogicSdkVersion=5.3.3` for every SDK module.
+Partner screens call SDK APIs directly; `AdsAppManager` groups initialization and app policy.
+
+**5.3.2 (released, additive only).** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`
 and `RewardAdManager.show` gained overloads that take the completion as a lambda. Nothing else
 changed: the callback-taking overloads keep their signatures and are not deprecated, Java call sites
 are untouched, and the lambda simply binds `onComplete` — same gates, same order, same timing, same

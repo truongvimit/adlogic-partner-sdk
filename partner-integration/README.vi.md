@@ -5,7 +5,7 @@ Chọn hướng dẫn theo tính năng app cần. Làm lần lượt phần tíc
 | App cần | Đọc tài liệu | Module |
 | --- | --- | --- |
 | Splash → ngôn ngữ → onboarding có quảng cáo → màn chính | **[Tích hợp Ads + OnboardKit](ads-onboarding-integration.vi.md)** | `ads` + `onboardkitorigin` |
-| Ads trong các màn riêng của app | Đã làm guide Ads + OnboardKit: dùng mẫu [native](ads-onboarding-integration.vi.md#native-ở-màn-app-dùng-placement-constant), [inter](ads-onboarding-integration.vi.md#interstitial-ở-màn-app-dùng-placement-constant), [app-open](ads-onboarding-integration.vi.md#app-open-khi-quay-lại) với [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) của app. Không dùng OnboardKit: làm theo [Ads](../ads/README.md) từ init, placement đến consent. | `ads` |
+| Ads trong các màn riêng của app | Đã làm guide Ads + OnboardKit: dùng mẫu [native](ads-onboarding-integration.vi.md#native-ở-màn-app-dùng-placement-constant), [inter](ads-onboarding-integration.vi.md#interstitial-ở-màn-app-dùng-placement-constant), [reward](ads-onboarding-integration.vi.md#reward-tại-màn-app), [app-open](ads-onboarding-integration.vi.md#app-open-khi-quay-lại) với [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) của app. Không dùng OnboardKit: làm theo [Ads](../ads/README.md) từ init, placement đến consent. | `ads` |
 | Mua hàng với UI riêng | [Tích hợp BillingKit](billing-integration.vi.md) | `billingkit` |
 | Paywall dựng sẵn | [Tích hợp PayKit](paywall-integration.vi.md) | `paykit`, thêm `billingkit` khi gọi API trực tiếp |
 | Remote JSON / Firebase Analytics | [Tích hợp Firebase](firebase-integration.vi.md) | `suite-firebase` và module cần kết nối |

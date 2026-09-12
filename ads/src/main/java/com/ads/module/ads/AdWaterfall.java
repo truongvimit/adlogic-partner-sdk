@@ -249,7 +249,7 @@ public final class AdWaterfall {
         if (!canContinue(context, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().initRewardAds(context, tiers.get(index), new AdCallback() {
+        AdCallback tierCallback = new AdCallback() {
             @Override
             public void onRewardAdLoaded(RewardedAd rewardedAd) {
                 if (!tier.settle()) return;
@@ -269,7 +269,14 @@ public final class AdWaterfall {
                         + " failed: " + (error == null ? "null" : error.getMessage()));
                 loadRewardTier(context, tiers, tierTimeoutMs, index + 1, callback);
             }
-        });
+        };
+        try {
+            ERainAd.getInstance().initRewardAds(context, tiers.get(index), tierCallback);
+        } catch (RuntimeException error) {
+            // A dispatch failure must settle the same tier as a vendor load failure; otherwise
+            // its already-armed timeout can start another request after the caller has finished.
+            tierCallback.onAdFailedToLoad(null);
+        }
     }
 
     /** The ids actually worth requesting: declared order, minus blanks and repeats. */

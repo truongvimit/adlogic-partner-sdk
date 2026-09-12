@@ -6,6 +6,8 @@ Sample flow: **Splash → language (LFO) → content 1 → content 2 → fullscr
 
 Do steps 1–6 and replace the **package, app details, content/images and destination screen**. The code keeps the SDK defaults; the JSON keeps the example debug configuration. Fill in the app token to enable Adjust; Firebase, app-open and purchases are in the [optional tables](#7-configure-only-what-your-app-needs).
 
+**SDK 5.3.3:** `preload` and the shared reward cache/request flow are included in this version. Use `5.3.3` for every SDK module; the `5.3.2` artifact does not contain this reward update.
+
 ## 1. Add the dependencies
 
 Requires JDK 17, `minSdk 24+` and `compileSdk 36+`; AGP/Kotlin follow [versions.gradle](../versions.gradle) and the [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties). Merge the Groovy below into your existing blocks.
@@ -25,10 +27,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Replace `<published-tag>` with a [published tag](https://github.com/truongvimit/adlogic-partner-sdk/tags) in your app project's root `gradle.properties`:
+Set version `5.3.3` once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=<published-tag>
+adlogicSdkVersion=5.3.3
 ```
 
 Every module reads this same property.
@@ -138,15 +140,9 @@ Only `SplashConfig.layoutRes` and `ContentStepDefinition.layoutRes` accept custo
 
 Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) into your app package, for example `app/src/main/java/com/example/app/`. The file holds **35 base keys**: the 10 OB slots and your app slots. The SDK finds the `_high`, `_high1`… floors itself; floors need no constants.
 
-**A placement key is the only identity an ad position has.** Ad unit IDs cannot tell positions apart: the sample JSON declares 45 placements with only **8 ad unit IDs** — one native test ID serves 25 placements — and production payloads routinely reuse one unit across screens. Everything the SDK keys by placement: the interstitial cache, the frequency clock, the AutoBuffer group, native preload, and every `ad_request` / `ad_impression` / `ad_skipped` your dashboard slices by. So the key must be written in exactly one place.
+`AppAdPlacement.NATIVE_HOME` is the key `native_home`; both JSON files contain its ad unit IDs and configuration. Add a constant and the matching JSON key for each new placement.
 
-A mistyped raw string does not fail either: `AdRemoteConfig.unit()` logs a warning and returns a disabled placeholder, and the slot silently never fills. A constant turns that into a compile error.
-
-- `AppAdPlacement.NATIVE_HOME` is the **key** `native_home`; use it when loading and showing.
-- The JSON holds the **ad unit IDs and config**; the constants hold only keys.
-- `io.onboardkit.ads.AdPlacement` is fixed inside the SDK; your app adds its slots to `AppAdPlacement`.
-
-A new slot needs a constant, the same key in both JSON files, and load/show code on the app screen. No other adapter file is needed for ads: the entry points take the constant and read the config themselves.
+Declare native/banner slots in the screen XML and call the SDK directly from that screen. The SDK owns loading, cache and the ad lifecycle. `AdsAppManager`, if used, only groups configuration, initialization and app-specific policy.
 
 ### `OnboardKitSetup.kt` — wire the OB keys into the SDK
 
@@ -310,13 +306,24 @@ The waterfall reads `_high`, `_high1`… and then the base key; you can also use
 <details>
 <summary>Open the native and preload example for app screens</summary>
 
-Call this on your app screen after consent, with the `AppCompatActivity` resumed; `container` is a `FrameLayout`. OB handles its own natives.
+Declare a slot in the screen XML (use a separate slot for each native/banner). OB handles its own slots:
+
+```xml
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ad_slot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+```
+
+Call the SDK from the screen after consent, with the `AppCompatActivity` resumed:
 
 **Without Adjust:** set `enable_ua_check` on `native_home` to `false` in **both JSON files** so the sample slot can show; keep the test IDs during QA.
 
 ```kotlin
+import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdHelper
 
+val container = findViewById<FrameLayout>(R.id.ad_slot)
 NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
@@ -347,11 +354,43 @@ Use the lambda when all you do is navigate; take the `InterShowCallback` overloa
 
 The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval and readiness itself. Navigate only from `onComplete`; it runs exactly once, including when there is no ad or the show fails. Do not use `onClosed` and do not pre-check `canShow()`. `load` does not request again while a load is in flight or an ad is cached. With an ad ready, a dialog runs for about 800 ms before the show.
 
-By default the callback runs after the ad is dismissed. Add `nextAction = InterNextAction.UnderAd` to run the callback as soon as the ad shows — use it only for a `startActivity` that opens an ordinary screen, never with `finish()` or to start camera/audio/video underneath the ad.
+The SDK default is `AfterDismiss`. The copied `PartnerApp` calls `ERainTuning.install()`, which selects `UnderAd`: navigation runs while the ad is showing. Pass `nextAction = InterNextAction.AfterDismiss` when finishing the host or starting camera/audio/video. This keeps the 5.3.2 timing.
 
 To keep an interstitial ready automatically: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) — `configure` after `ERainAd.init`, `start` on the first content screen; show as above. Interval and click cap are in the [defaults table](#flow-defaults).
 
 </details>
+
+### Reward on an app screen
+
+Call from a resumed Activity on the main thread, after consent; for example, from the watch-ad button:
+
+```kotlin
+import com.ads.module.helper.reward.RewardAdManager
+
+RewardAdManager.loadAndShow(
+    this, AppAdPlacement.REWARD_EXAMPLE,
+    onSuccess = {
+        closeLoading()
+        grantReward()
+    },
+    onFailed = { closeLoading() },
+)
+```
+
+Or preload earlier and show only the prepared ad on the button click:
+
+```kotlin
+RewardAdManager.preload(applicationContext, AppAdPlacement.REWARD_EXAMPLE)
+
+// On the watch-ad button:
+RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
+    if (earned) grantReward()
+}
+```
+
+`preload` and `load` share one cache/request per placement. `show` uses a ready ad; `loadAndShow` uses that cache, waits for the running request, or starts loading when neither exists. There is no automatic refill. `onSuccess` runs after a reward is earned and the ad closes; `onFailed` handles other outcomes. Use SDK callbacks for the result; do not infer it with a timer.
+
+Defaults: 30 seconds per load tier, one cached ad/request per placement, no automatic refill. An empty-cache `show` completes with `false`; a repeated `loadAndShow` while the same placement is waiting/showing calls `onFailed`. The lambda/Runnable result reflects reward received **before close**. For individual events, including a mediation reward reported after close, use [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); the completed result is not revised.
 
 ### Additional integrations
 

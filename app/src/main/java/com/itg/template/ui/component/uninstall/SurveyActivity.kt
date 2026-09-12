@@ -6,7 +6,6 @@ import android.widget.FrameLayout
 import androidx.core.net.toUri
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.itg.template.R
-import com.itg.template.ads.AdsManager
 import com.itg.template.ads.AppAdPlacement
 import com.itg.template.databinding.ActivitySurveyBinding
 import com.itg.template.ui.bases.BaseActivity
