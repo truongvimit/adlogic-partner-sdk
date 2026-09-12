@@ -107,7 +107,13 @@ img.png
 Thumbs.db
 desktop.ini
 
-# Local analysis, agent instructions and unreleased design notes
+# Local analysis, agent instructions and unreleased design notes.
+# partner-integration/ is the only documentation directory a partner ever clones: /docs/ holds
+# working notes, diagnostics, device reports and research that are written for this repo's own
+# maintainers and go stale on their own schedule. The rule below has always covered it, but two
+# files predated it and stayed in the index, so they shipped anyway — a .gitignore entry never
+# retroactively untracks a file. If a note under /docs/ is worth a partner reading, move it into
+# partner-integration/ rather than whitelisting it here.
 /CLAUDE.md
 /AGENTS.md
 /CONTEXT.md
