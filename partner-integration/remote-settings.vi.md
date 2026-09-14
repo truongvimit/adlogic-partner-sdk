@@ -4,7 +4,7 @@
 
 SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK.
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.4` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.5` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 | Parameter | File mặc định trong SDK |
 |---|---|
@@ -44,7 +44,7 @@ OnboardingSdk.configure(onboardKitConfig {
 | Slot | Key chuẩn trong ad_config |
 |---|---|
 | Splash banner/interstitial | `banner_splash` / `inter_splash` |
-| Splash người dùng cũ | `<key splash interstitial>_old_user` |
+| Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
 | Fullscreen OB3 | `native_fs` |

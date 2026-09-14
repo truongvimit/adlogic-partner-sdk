@@ -386,6 +386,9 @@ Returning before the delay cancels the scheduled load. No app-side lifecycle tim
 
 ## Version notes
 
+**5.3.5 — returning-user splash compatibility.** Restore the existing `inter_splash_o`
+placement key (including its waterfall tiers) for returning users. Use `adlogicSdkVersion=5.3.5`.
+
 **5.3.4 — grouped remote settings.** `ad_behavior_config` and `onboarding_config`
 add validated remote overrides with bundled/custom local defaults and last-good remote cache.
 OnboardKit resolves standard ad_config placements after fetch through `AdsConfig.fromAdConfig()`;

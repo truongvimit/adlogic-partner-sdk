@@ -81,6 +81,30 @@ class OnboardingSettingsTest {
         assertNull(disabled.ads.languageNative)
     }
 
+    @Test fun `returning splash uses original o key with full waterfall and live updates`() {
+        val config = onboardKitConfig { }.getOrThrow()
+        AdRemoteConfig.update(AdRemoteConfig(mapOf(
+            "inter_splash" to AdUnitConfig("new_user", true),
+            "inter_splash_o" to AdUnitConfig("returning_base", true),
+            "inter_splash_o_high" to AdUnitConfig("returning_high", true),
+            "inter_splash_o_high1" to AdUnitConfig("returning_high1", true),
+        )))
+        val resolved = OnboardingSettings.resolve(config).ads
+        assertEquals(listOf("new_user"), resolved.splashInterstitial!!.loadOrder)
+        assertEquals(listOf("returning_high", "returning_high1", "returning_base"), resolved.splashInterstitialOldUser!!.loadOrder)
+
+        AdRemoteConfig.update(AdRemoteConfig(mapOf(
+            "inter_splash" to AdUnitConfig("new_user", true),
+            "inter_splash_o" to AdUnitConfig("returning_base", false),
+        )))
+        assertTrue(OnboardingSettings.resolve(config).ads.splashInterstitialOldUser!!.loadOrder.isEmpty())
+
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("inter_splash" to AdUnitConfig("new_user", true))))
+        val missing = OnboardingSettings.resolve(config).ads
+        assertNull(missing.splashInterstitialOldUser)
+        assertEquals(listOf("new_user"), (missing.splashInterstitialOldUser ?: missing.splashInterstitial)!!.loadOrder)
+    }
+
     @Test fun `invalid remote default language retains host default`() {
         val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en") }.getOrThrow()
         OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"default_code":"missing-language"}}}""")

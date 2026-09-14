@@ -79,7 +79,7 @@ object ObRemoteKeys {
 
     // Splash interstitial ids — the returning-user segment and the SplashEntry keys
     // (`inter_noti` / `inter_widget` / `inter_uninstall`) included — come from the ads config
-    // (`inter_splash` / `inter_splash_old_user` / the entry keys) so each keeps its full waterfall.
+    // (`inter_splash` / `inter_splash_o` / the entry keys) so each keeps its full waterfall.
     // Interstitial interval and click cap belong to the ads module, which owns the counters they
     // read; a second cap over the same store silently subtracted impressions nobody could attribute.
 

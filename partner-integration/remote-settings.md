@@ -4,7 +4,7 @@
 
 For Console setup, follow [publishing the three String parameters](firebase-integration.md#remote-json). To supply custom offline defaults, follow [creating the two app-side JSON files](firebase-integration.md#local-defaults). Both full examples below match the SDK assets exactly.
 
-**Version requirement:** use SDK `5.3.4` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+**Version requirement:** use SDK `5.3.5` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
 
 ## Documents and ownership
 
@@ -35,7 +35,7 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
-| Returning-user splash | `<splash interstitial key>_old_user` |
+| Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
 | Fullscreen OB3 | `native_fs` |

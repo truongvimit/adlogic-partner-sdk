@@ -203,7 +203,7 @@ data class AdsConfig(
         fun tiers(p: AdPlacement): List<String>? = placementKeys[p]?.takeIf(config::declares)?.let(config::tiersFor)
         fun native(p: AdPlacement, local: NativeAdUnit?) = tiers(p)?.let(::NativeAdUnit) ?: local
         fun inter(p: AdPlacement, local: InterstitialAdUnit?) = tiers(p)?.let(::InterstitialAdUnit) ?: local
-        val oldSplashKey = placementKeys[AdPlacement.SplashInterstitial]?.plus("_old_user")
+        val oldSplashKey = placementKeys[AdPlacement.SplashInterstitial]?.plus("_o")
         return copy(
             splashBanner = tiers(AdPlacement.SplashBanner)?.let { BannerAdUnit(it.firstOrNull().orEmpty()) } ?: splashBanner,
             splashInterstitial = inter(AdPlacement.SplashInterstitial, splashInterstitial),

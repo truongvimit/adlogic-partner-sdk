@@ -27,7 +27,7 @@ object AppAdPlacement {
     const val INTER_SPLASH = "inter_splash"
 
     /** Optional floor for returning users; absent from the payload, the splash uses [INTER_SPLASH]. */
-    const val INTER_SPLASH_OLD_USER = "inter_splash_old_user"
+    const val INTER_SPLASH_OLD_USER = "inter_splash_o"
 
     const val INTER_WELCOME = "inter_welcome"
     const val NATIVE_CONFIRM_UNINSTALL = "native_confirm_uninstall"

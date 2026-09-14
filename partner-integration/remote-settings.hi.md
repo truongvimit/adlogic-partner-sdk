@@ -4,7 +4,7 @@
 
 Console setup के लिए [तीन String parameters publish करने के कदम](firebase-integration.hi.md#remote-json) देखें। Custom offline defaults के लिए [app में दो local JSON files बनाना](firebase-integration.hi.md#local-defaults) देखें। नीचे के पूरे उदाहरण SDK assets से मेल खाते हैं।
 
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.4` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.5` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
 
 ## Documents और field ownership
 
@@ -35,7 +35,7 @@ ads = AdsConfig.fromAdConfig()
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
-| Returning-user splash | `<splash interstitial key>_old_user` |
+| Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
 | Fullscreen OB3 | `native_fs` |
