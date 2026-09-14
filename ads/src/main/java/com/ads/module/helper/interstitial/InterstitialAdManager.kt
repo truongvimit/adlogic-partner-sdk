@@ -318,8 +318,10 @@ object InterstitialAdManager {
             return
         }
         InterstitialFrequency.recordAction(placement)
-        val configuredWait = behavior.long(if (captured.allowWaitForAutoBuffer) "load_and_show.buffer_wait_timeout_ms" else "load_and_show.wait_timeout_ms", captured.timeoutMs)
-        val waitMs = if (captured.allowWaitForAutoBuffer) configuredWait.coerceIn(0L, 5_000L) else configuredWait.coerceAtLeast(0L)
+        // Buffer policy must not shorten independent waits such as the onboarding exit ad.
+        val waitingForBuffer = captured.allowWaitForAutoBuffer && InterstitialAutoBuffer.owns(placement)
+        val configuredWait = behavior.long(if (waitingForBuffer) "load_and_show.buffer_wait_timeout_ms" else "load_and_show.wait_timeout_ms", captured.timeoutMs)
+        val waitMs = if (waitingForBuffer) configuredWait.coerceIn(0L, 5_000L) else configuredWait.coerceAtLeast(0L)
         val deadline = clickedAt + waitMs
         if ((InterstitialAutoBuffer.owns(placement) && !captured.allowWaitForAutoBuffer) || isReady(placement)) {
             reportWait(placement, source, "dispatch", clickedAt, captured)

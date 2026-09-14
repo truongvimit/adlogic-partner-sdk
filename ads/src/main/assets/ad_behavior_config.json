@@ -13,8 +13,8 @@
   },
   "banner": {
     "reload": {
-      "allowed": false,
-      "auto_enabled": false,
+      "allowed": true,
+      "auto_enabled": true,
       "resume_debounce_ms": 500
     },
     "presentation": {
@@ -56,8 +56,8 @@
     },
     "load_and_show": {
       "wait_timeout_ms": 8000,
-      "buffer_wait_timeout_ms": 5000,
-      "allow_wait_for_auto_buffer": false
+      "buffer_wait_timeout_ms": 8000,
+      "allow_wait_for_auto_buffer": true
     },
     "presentation": {
       "next_screen_timing": "AFTER_AD",

@@ -46,7 +46,7 @@ class SettingsOwnershipTest {
         app.getSharedPreferences("adlogic_settings_partner_settings", 0).edit().clear().commit()
         val d = SettingsDocument("partner_settings", BundledAdBehavior.VALUES)
         d.initialize(context)
-        assertFalse(d.snapshot.boolean("banner.reload.allowed", true)) // Explicit false equals SDK default.
+        assertFalse(d.snapshot.boolean("banner.reload.allowed", true)) // Explicit app false overrides the enabled SDK default.
         assertEquals(0L, d.snapshot.long("native.reload.resume_debounce_ms", 999))
         assertEquals(30000L, d.snapshot.long("native.load.tier_timeout_ms"))
         d.acceptSuccessfulFetch("""{"banner":{"reload":{"allowed":true}},"native":{"reload":{"resume_debounce_ms":300}}}""")

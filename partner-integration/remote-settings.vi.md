@@ -136,8 +136,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `consent.network_timeout_ms` | `20000` | Timeout network UMP, áp lần request consent sau; không đóng form đang đọc. |
 | `diagnostics.flow_logging_enabled` | `true` | OB_FLOW log; không đổi debug/test IDs. |
 | `diagnostics.ads_telemetry_enabled` | `true` | false tắt nguồn telemetry ads; true vẫn giữ ownership chống report trùng. |
-| `banner.reload.allowed` | `false` | Map canReloadAds; đây là policy có thể override, runtime flagUserEnableReload vẫn veto. |
-| `banner.reload.auto_enabled` | `false` | Bật timer SDK; false không tự tắt reload-on-resume. |
+| `banner.reload.allowed` | `true` | Map canReloadAds; đây là policy có thể override, runtime flagUserEnableReload vẫn veto. |
+| `banner.reload.auto_enabled` | `true` | Bật timer SDK; false không tự tắt reload-on-resume. |
 | `banner.reload.resume_debounce_ms` | `500` | Debounce resume. |
 | `banner.presentation.type` | `"NORMAL"` | NORMAL/LARGE_ANCHORED/COLLAPSIBLE/INLINE/INLINE_MAX_HEIGHT/FIXED. |
 | `banner.presentation.collapsible_gravity` | `"BOTTOM"` | TOP/BOTTOM. |
@@ -159,8 +159,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native.presentation.cta_corner_radius_dp` | `20` | Bo góc CTA (dp) khi có ctaBackgroundColor/colorCTA tường minh; màu default giữ XML. |
 | `interstitial.load.tier_timeout_ms` | `30000` | Mỗi tier. |
 | `interstitial.load_and_show.wait_timeout_ms` | `8000` | Budget đợi fill; không bao gồm chờ người dùng đóng ad. |
-| `interstitial.load_and_show.buffer_wait_timeout_ms` | `5000` | UI wait khi tham gia AutoBuffer; vẫn giữ giới hạn 0..5000ms của API hiện tại. |
-| `interstitial.load_and_show.allow_wait_for_auto_buffer` | `false` | Giữ opt-in buffer. |
+| `interstitial.load_and_show.buffer_wait_timeout_ms` | `8000` | UI wait khi tham gia AutoBuffer; vẫn giữ giới hạn 0..5000ms của API hiện tại. |
+| `interstitial.load_and_show.allow_wait_for_auto_buffer` | `true` | Mặc định chờ AutoBuffer; partner có thể tắt bằng override. |
 | `interstitial.presentation.next_screen_timing` | `"AFTER_AD"` | AFTER_AD/UNDER_AD, map InterNextAction; screen/explicit call timing ưu tiên cao hơn. |
 | `interstitial.presentation.loading_enabled` | `true` | Dialog loading khi chờ fill và chuẩn bị show; false không hủy yêu cầu ads. |
 | `interstitial.presentation.pre_show_delay_ms` | `800` | Nối delay preparation; không đồng nhất timeout đợi fill. |

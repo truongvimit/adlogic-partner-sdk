@@ -118,8 +118,8 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `consent.network_timeout_ms` | `20000` |
 | `diagnostics.flow_logging_enabled` | `true` |
 | `diagnostics.ads_telemetry_enabled` | `true` |
-| `banner.reload.allowed` | `false` |
-| `banner.reload.auto_enabled` | `false` |
+| `banner.reload.allowed` | `true` |
+| `banner.reload.auto_enabled` | `true` |
 | `banner.reload.resume_debounce_ms` | `500` |
 | `banner.presentation.type` | `"NORMAL"` |
 | `banner.presentation.collapsible_gravity` | `"BOTTOM"` |
@@ -141,8 +141,8 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native.presentation.cta_corner_radius_dp` | `20` |
 | `interstitial.load.tier_timeout_ms` | `30000` |
 | `interstitial.load_and_show.wait_timeout_ms` | `8000` |
-| `interstitial.load_and_show.buffer_wait_timeout_ms` | `5000` |
-| `interstitial.load_and_show.allow_wait_for_auto_buffer` | `false` |
+| `interstitial.load_and_show.buffer_wait_timeout_ms` | `8000` |
+| `interstitial.load_and_show.allow_wait_for_auto_buffer` | `true` |
 | `interstitial.presentation.next_screen_timing` | `"AFTER_AD"` |
 | `interstitial.presentation.loading_enabled` | `true` |
 | `interstitial.presentation.pre_show_delay_ms` | `800` |

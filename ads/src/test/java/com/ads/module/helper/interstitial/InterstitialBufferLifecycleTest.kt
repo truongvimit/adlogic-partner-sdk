@@ -355,7 +355,7 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `managed convenience show proceeds once when gated or loading and never joins a wait`() {
+    fun `managed convenience show defaults to a bounded buffer wait`() {
         arm()
         val gated = Outcome()
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), gated)
@@ -364,7 +364,34 @@ class InterstitialBufferLifecycleTest {
         assertEquals(0, requests.size)
         advance(30_000)
         val loading = Outcome()
+        val clickedAt = SystemClock.elapsedRealtime()
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), loading)
+        assertTrue(loading.skipped.isEmpty())
+        assertEquals(0, loading.completed)
+        advance(clickedAt + 4_999 - SystemClock.elapsedRealtime())
+        assertTrue(loading.skipped.isEmpty())
+        advance(1)
+        assertEquals(listOf(AdSkipReason.NOT_READY), loading.skipped)
+        assertEquals(1, loading.completed)
+        assertEquals(2, requests.size)
+        val raw = fill(0, ALL)
+        fill(1, BACK)
+        advance(10_000)
+        assertTrue("A late fill must not replay the earlier navigation trigger", raw.hosts.isEmpty())
+        assertEquals(1, loading.completed)
+    }
+
+    @Test
+    fun `managed convenience show can opt out of waiting`() {
+        arm()
+        val gated = Outcome()
+        InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), gated, InterLoadAndShowOptions(allowWaitForAutoBuffer = false))
+        assertEquals(listOf(AdSkipReason.CAPPED_BY_MODULE), gated.skipped)
+        assertEquals(1, gated.completed)
+        assertEquals(0, requests.size)
+        advance(30_000)
+        val loading = Outcome()
+        InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), loading, InterLoadAndShowOptions(allowWaitForAutoBuffer = false))
         assertEquals(listOf(AdSkipReason.NOT_READY), loading.skipped)
         assertEquals(1, loading.completed)
         assertEquals(2, requests.size)
