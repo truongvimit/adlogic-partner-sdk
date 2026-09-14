@@ -60,7 +60,7 @@ Keep the consent configuration your app has chosen. The library declares no init
 
 This is your app's choice, not an SDK default. `ConsentCenter` is already wired to Tracker and always maps analytics to granted and ads to the personalization answer; the UMP form is not a separate analytics consent dialog. For an app with its own consent flow, see [Trackkit](trackkit-integration.md#4-configuration-table). Collection options are in the [table below](#5-configuration-table).
 
-**Version requirement:** use SDK `5.3.7` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+Use the **newest SDK version** from [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) for every module. Adding Firebase keys alone does not update an older SDK already integrated in the app.
 
 ## 3. Remote ads and onboarding JSON
 

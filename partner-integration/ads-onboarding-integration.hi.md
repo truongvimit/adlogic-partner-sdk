@@ -8,9 +8,7 @@
 
 कदम 1–6 करें और **package, app की जानकारी, सामग्री/images और destination स्क्रीन** बदलें। Code SDK के defaults रखता है; JSON example का debug configuration रखता है। Adjust चालू करने के लिए app token भरें; Firebase, app-open और purchases [वैकल्पिक tables](#7-सिर्फ-वही-configure-करें-जो-app-को-चाहिए) में हैं।
 
-**SDK 5.3.7:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। सभी SDK modules के लिए `5.3.7` इस्तेमाल करें; `5.3.3` में ये सुविधाएँ नहीं हैं।
-
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.7` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+सभी modules के लिए [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) का **newest SDK version** इस्तेमाल करें। इसमें grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। केवल Firebase keys जोड़ने से app में पहले से integrated पुराना SDK update नहीं होता।
 
 ## 1. Dependencies जोड़ें
 
@@ -31,10 +29,10 @@ dependencyResolutionManagement {
 }
 ```
 
-App project की root `gradle.properties` में संस्करण `5.3.7` एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
+App project की root `gradle.properties` में newest JitPack version एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
 
 ```properties
-adlogicSdkVersion=5.3.7
+adlogicSdkVersion=NEWEST_VERSION
 ```
 
 हर module यही property पढ़ता है।
@@ -366,7 +364,7 @@ InterstitialAdManager.show(this, AppAdPlacement.INTER_BACK) { goNext() }
 
 placement का waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval और readiness SDK खुद तय करता है। Navigate सिर्फ `onComplete` से करें; यह ठीक एक बार चलता है, ad न होने या show fail होने पर भी। `onClosed` इस्तेमाल न करें और पहले से `canShow()` न जाँचें। load चल रहा हो या ad cache में हो तो `load` दोबारा request नहीं करता। Ad तैयार हो तो show से पहले लगभग 800 ms का dialog चलता है।
 
-SDK का default `AfterDismiss` है। कॉपी किया गया `PartnerApp`, `ERainTuning.install()` से `UnderAd` चुनता है: ad दिखते समय navigation चलता है। Host बंद करना हो या camera/audio/video शुरू करना हो तो `nextAction = InterNextAction.AfterDismiss` दें। यह 5.3.2 की timing बनाए रखता है।
+SDK का default `AfterDismiss` है। कॉपी किया गया `PartnerApp`, `ERainTuning.install()` से `UnderAd` चुनता है: ad दिखते समय navigation चलता है। Host बंद करना हो या camera/audio/video शुरू करना हो तो `nextAction = InterNextAction.AfterDismiss` दें। यह स्थापित timing बनाए रखता है।
 
 Interstitial अपने आप तैयार रखने के लिए: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) — `ERainAd.init` के बाद `configure`, पहली content स्क्रीन पर `start`; show ऊपर की तरह। अंतराल और click cap [defaults तालिका](#flow-के-defaults) में हैं।
 

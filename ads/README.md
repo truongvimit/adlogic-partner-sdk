@@ -384,46 +384,40 @@ Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid 
 use the default.
 Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
 
-## Version notes
+## Important behavior
 
-**5.3.6 — fullscreen placement correction.** OB fullscreen now uses `native_fsob`;
+**Fullscreen placement correction.** OB fullscreen uses `native_fsob`;
 `native_fs` is an independent optional screen after the splash interstitial and before LFO,
 disabled in the example JSON defaults. It preloads after the interstitial loads and only
 opens if ready after dismissal. The last content page uses `native_ob3`, with UA checks off
 in the example. OB defaults now show X after 5 seconds and auto-advance after 15 seconds.
-Use `adlogicSdkVersion=5.3.6`.
 
-**5.3.5 — returning-user splash compatibility.** Restore the existing `inter_splash_o`
-placement key (including its waterfall tiers) for returning users. Use `adlogicSdkVersion=5.3.5`.
+**Returning-user splash compatibility.** Returning users use the existing `inter_splash_o`
+placement key, including its waterfall tiers.
 
-**5.3.4 — grouped remote settings.** `ad_behavior_config` and `onboarding_config`
+**Grouped remote settings.** `ad_behavior_config` and `onboarding_config`
 add validated remote overrides with bundled/custom local defaults and last-good remote cache.
 OnboardKit resolves standard ad_config placements after fetch through `AdsConfig.fromAdConfig()`;
 native template, CTA radius and Skip/X presentation remain configurable for experiments.
 See the [Firebase setup](../partner-integration/firebase-integration.md#remote-json) and
-[all fields/defaults](../partner-integration/remote-settings.md). Set `adlogicSdkVersion=5.3.4`
-for all SDK modules.
+[all fields/defaults](../partner-integration/remote-settings.md).
 
-**5.3.3 — rewarded cache update.** `preload` shares `load`'s cache/request;
+**Rewarded cache.** `preload` shares `load`'s cache/request;
 `loadAndShow` reuses a ready ad or joins an active load. The manager no longer triggers legacy
 refill. Shown/impression callbacks are optional; each terminal completes once. Timeout, premium
-gates and other formats keep 5.3.2 behavior. This rewarded behavior is retained in 5.3.4.
+gates and other formats keep their established behavior.
 Partner screens call SDK APIs directly; `AdsAppManager` groups initialization and app policy.
 
-**5.3.2 (released, additive only).** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`
+**Lambda overloads.** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`
 and `RewardAdManager.show` gained overloads that take the completion as a lambda. Nothing else
 changed: the callback-taking overloads keep their signatures and are not deprecated, Java call sites
 are untouched, and the lambda simply binds `onComplete` — same gates, same order, same timing, same
 once-on-every-outcome guarantee. Rewarded passes `earned` to its lambda, since that is its outcome.
-Nothing to do on upgrade.
 
-**5.3.1.** No code change; it only stops shipping `/docs` in the repo.
+### Placement-driven entry point behavior
 
-### Behaviour changes in 5.3.0
-
-Suggested release number for the placement-driven entry points above. The API of 5.2.x is unchanged
-— the id-taking overloads and the `NativeAdConfig` / `BannerAdConfig` constructors all still work —
-but five behaviours differ:
+The id-taking overloads and the `NativeAdConfig` / `BannerAdConfig` constructors still work. The
+placement-driven entry points have these behaviors:
 
 | Change | What to do |
 |---|---|

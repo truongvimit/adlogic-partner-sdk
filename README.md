@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Set version `5.3.7` once in your app project's root `gradle.properties`; every SDK module reads this property:
+Check the [newest version on JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk), then set it once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=5.3.7
+adlogicSdkVersion=NEWEST_VERSION
 ```
 
 To upgrade, change this property and read the documentation at the selected tag.

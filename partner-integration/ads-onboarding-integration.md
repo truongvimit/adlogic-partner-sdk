@@ -8,9 +8,7 @@ Sample flow: **Splash → language (LFO) → content 1 → content 2 → fullscr
 
 Do steps 1–6 and replace the **package, app details, content/images and destination screen**. The code keeps the SDK defaults; the JSON keeps the example debug configuration. Fill in the app token to enable Adjust; Firebase, app-open and purchases are in the [optional tables](#7-configure-only-what-your-app-needs).
 
-**SDK 5.3.7:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings are included. Use `5.3.7` for all SDK modules; `5.3.3` does not contain these additions.
-
-**Version requirement:** use SDK `5.3.7` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+Use the **newest SDK version** from [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) for every module. It includes grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings. Adding Firebase keys alone does not update an older SDK already integrated in the app.
 
 ## 1. Add the dependencies
 
@@ -31,10 +29,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Set version `5.3.7` once in your app project's root `gradle.properties`; every SDK module reads this property:
+Set the newest JitPack version once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=5.3.7
+adlogicSdkVersion=NEWEST_VERSION
 ```
 
 Every module reads this same property.
@@ -366,7 +364,7 @@ Use the lambda when all you do is navigate; take the `InterShowCallback` overloa
 
 The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check`, consent/premium, interval and readiness itself. Navigate only from `onComplete`; it runs exactly once, including when there is no ad or the show fails. Do not use `onClosed` and do not pre-check `canShow()`. `load` does not request again while a load is in flight or an ad is cached. With an ad ready, a dialog runs for about 800 ms before the show.
 
-The SDK default is `AfterDismiss`. The copied `PartnerApp` calls `ERainTuning.install()`, which selects `UnderAd`: navigation runs while the ad is showing. Pass `nextAction = InterNextAction.AfterDismiss` when finishing the host or starting camera/audio/video. This keeps the 5.3.2 timing.
+The SDK default is `AfterDismiss`. The copied `PartnerApp` calls `ERainTuning.install()`, which selects `UnderAd`: navigation runs while the ad is showing. Pass `nextAction = InterNextAction.AfterDismiss` when finishing the host or starting camera/audio/video. This keeps the established timing.
 
 To keep an interstitial ready automatically: [InterstitialAutoBuffer](../ads/README.md#automatic-interstitial-preload) — `configure` after `ERainAd.init`, `start` on the first content screen; show as above. Interval and click cap are in the [defaults table](#flow-defaults).
 

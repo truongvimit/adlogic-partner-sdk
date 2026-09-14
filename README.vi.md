@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Đặt phiên bản `5.3.7` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
+Kiểm tra [version mới nhất trên JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk), rồi đặt một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=5.3.7
+adlogicSdkVersion=NEWEST_VERSION
 ```
 
 Khi nâng SDK, đổi property này và đọc tài liệu tại tag đã chọn.
