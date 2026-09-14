@@ -1,5 +1,6 @@
 package io.onboardkit.config
 
+import io.onboardkit.remote.OnboardingSettings
 import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
@@ -18,18 +19,18 @@ data class SplashConfig(
     @LayoutRes val layoutRes: Int = 0,
     @DrawableRes val logoRes: Int = 0,
     @StringRes val appNameRes: Int = 0,
-    val minDisplayTimeMs: Long = 3_000,
-    val remoteFetchTimeoutMs: Long = 10_000,
+    val minDisplayTimeMs: Long = OnboardingSettings.defaultNumber("splash.timing.min_display_ms"),
+    val remoteFetchTimeoutMs: Long = OnboardingSettings.defaultNumber("splash.load.remote_fetch_timeout_ms"),
     /** Bounds a consent hook that bypasses ConsentCenter; UMP uses ConsentOptions.timeoutMs. */
-    val consentTimeoutMs: Long = 20_000,
-    val billingTimeoutMs: Long = 5_000,
-    val adLoadStrategy: AdLoadStrategy = AdLoadStrategy.ALTERNATE,
+    val consentTimeoutMs: Long = OnboardingSettings.defaultNumber("splash.load.consent_hook_timeout_ms"),
+    val billingTimeoutMs: Long = OnboardingSettings.defaultNumber("splash.load.billing_timeout_ms"),
+    val adLoadStrategy: AdLoadStrategy = AdLoadStrategy.valueOf(OnboardingSettings.defaultText("splash.load.ad_strategy")),
     /**
      * Hold the splash behind a prompt until the device has validated internet. The flow cannot
      * run offline — consent, the remote fetch and every ad request need the network — so the
      * prompt has no way past it other than getting one.
      */
-    val noInternetPromptEnabled: Boolean = true,
+    val noInternetPromptEnabled: Boolean = OnboardingSettings.defaultBool("splash.permissions.no_internet_prompt_enabled"),
     /**
      * Requests POST_NOTIFICATIONS on Android 13+ after consent, when the splash is foreground.
      * Enabled by default. Authorized splash requests and the minimum display clock may run under
@@ -40,7 +41,7 @@ data class SplashConfig(
      * on later launches. The host may still request permission itself at a relevant user action.
      * Set false when the host owns notification onboarding or does not send notifications.
      */
-    val notificationPermissionEnabled: Boolean = true,
+    val notificationPermissionEnabled: Boolean = OnboardingSettings.defaultBool("splash.permissions.notification_enabled"),
 )
 
 data class LanguageConfig(
@@ -50,14 +51,14 @@ data class LanguageConfig(
      * On the first language tap, requests a swap to the second native preloaded on entry.
      * The first stays visible until the replacement binds; selection and scroll position remain.
      */
-    val secondNativeOnSelectEnabled: Boolean = true,
+    val secondNativeOnSelectEnabled: Boolean = OnboardingSettings.defaultBool("lfo.native2.enabled"),
     /**
      * Animated hand pointing at the row that matches the device language (English when the
      * device language is not on the list), shown only until the user picks something.
      * AND-ed with the `ob_show_language_tap_hint` remote flag. Appears after
      * `ob_language_tap_hint_delay_sec` seconds (default 3); the delay is ignored when disabled.
      */
-    val tapHintEnabled: Boolean = true,
+    val tapHintEnabled: Boolean = OnboardingSettings.defaultBool("lfo.tap_hint.enabled"),
     /**
      * Whether the confirm button is on screen before the user has picked anything.
      *
@@ -66,34 +67,34 @@ data class LanguageConfig(
      * is obvious from the start. AND-ed with the `ob_show_language_confirm_before_select` remote
      * flag; either side turning it off hides the button.
      */
-    val confirmVisibleBeforeSelect: Boolean = false,
+    val confirmVisibleBeforeSelect: Boolean = OnboardingSettings.defaultBool("lfo.confirm_button.visible_before_selection"),
     /**
      * Back on the first-open language screen never leaves the flow. When a language is already
      * picked, this also reveals a full-width Save button above the ad — the way out the screen
      * was not otherwise offering. `false` keeps back inert with no button.
      */
-    val saveButtonOnBackEnabled: Boolean = true,
+    val saveButtonOnBackEnabled: Boolean = OnboardingSettings.defaultBool("lfo.confirm_button.save_on_back"),
     /**
      * Show confirmation from the fourth language-item tap onward, including taps on the
      * selected language. Kept under its original API name for source compatibility.
      * AND-ed with `ob_show_language_confirm_dialog`.
      */
-    val confirmDialogOnReselectEnabled: Boolean = true,
+    val confirmDialogOnReselectEnabled: Boolean = OnboardingSettings.defaultBool("lfo.confirm_dialog.enabled"),
     @LayoutRes val layoutRes: Int = 0,
     @LayoutRes val itemLayoutRes: Int = 0,
 )
 
 data class SystemBarConfig @JvmOverloads constructor(
-    val showStatusBar: Boolean = true,
-    val showNavigationBar: Boolean = false,
-    val showCaptionBar: Boolean = true,
+    val showStatusBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_status"),
+    val showNavigationBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_navigation"),
+    val showCaptionBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_caption"),
 )
 
 data class BehaviorConfig(
     /** Locks all swipe navigation. When false, OB2, filled fullscreen and the last content page allow swipe. */
-    val lockPagerSwipe: Boolean = true,
+    val lockPagerSwipe: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.lock_pager_swipe"),
     /** Back returns to the previous step; on the first step it exits the app. */
-    val backNavigatesBack: Boolean = true,
+    val backNavigatesBack: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.back_navigates_back"),
     /** Compatibility only: a new page visit always consumes an unused ad or waits for a new one. */
     @Deprecated("Native presentations end on page departure; return always starts a new visit.")
     val reloadAdOnStepReturn: Boolean = false,
@@ -101,16 +102,16 @@ data class BehaviorConfig(
      * A forward swipe on an eligible last step completes it exactly like its CTA, including
      * the exit interstitial. Requires [lockPagerSwipe] to be false; fullscreen also needs a shown ad.
      */
-    val swipeCompletesLastStep: Boolean = true,
+    val swipeCompletesLastStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.swipe_completes_last_step"),
     /**
      * Default navigation on return from a step ad. Step natives disable click replacement.
      * When enabled, coming back from a step ad's click completes that step exactly like its CTA — the next
      * step on a middle page, the flow exit on the last one. Only clicks on the pager's own
      * step ads count; a click on the language or question screen never moves the pager.
      */
-    val adClickReturnCompletesStep: Boolean = true,
+    val adClickReturnCompletesStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.ad_click_return_completes_step"),
     /** Also locks the app splash; configChanges orientation|screenSize stops that recreating it. */
-    val lockPortrait: Boolean = true,
+    val lockPortrait: Boolean = OnboardingSettings.defaultBool("flow.lock_portrait"),
 )
 
 class ObConfigException(val errors: List<String>) :

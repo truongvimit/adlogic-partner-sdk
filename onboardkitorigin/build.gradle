@@ -57,6 +57,7 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-process:$androidx_lifecycle_version"
 
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:$coroutines_version"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
     implementation "androidx.datastore:datastore:1.2.1"
 
@@ -76,6 +77,8 @@ dependencies {
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
 
     testImplementation 'junit:junit:4.13.2'
+    // Real JSON on the JVM: constructor defaults are read before an Android Context exists.
+    testImplementation 'org.json:json:20250517'
     testImplementation 'org.mockito:mockito-core:5.14.2'
     // View-level tests (ConfirmAdSlot re-parents a bound ad between dialogs); same versions :ads uses.
     testImplementation 'org.robolectric:robolectric:4.13'
@@ -98,3 +101,9 @@ afterEvaluate {
         }
     }
 }
+
+// Generate typed defaults from the asset at build time: no startup JSON parsing.
+ext.settingsName = 'onboarding_config'
+ext.settingsPackage = 'io.onboardkit.remote'
+ext.settingsClass = 'BundledOnboarding'
+apply from: rootProject.file('gradle/settings-defaults.gradle')

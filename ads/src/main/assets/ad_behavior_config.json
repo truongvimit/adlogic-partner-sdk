@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "revision": 0,
+  "global": {
+    "ads_enabled": true
+  },
+  "consent": {
+    "network_timeout_ms": 20000
+  },
+  "diagnostics": {
+    "flow_logging_enabled": true,
+    "ads_telemetry_enabled": true
+  },
+  "banner": {
+    "reload": {
+      "allowed": false,
+      "auto_enabled": false,
+      "interval_ms": 15000,
+      "resume_debounce_ms": 500
+    },
+    "presentation": {
+      "type": "NORMAL",
+      "collapsible_gravity": "BOTTOM",
+      "inline_style": "LARGE",
+      "inline_max_height_dp": 50,
+      "fixed_size": "BANNER"
+    }
+  },
+  "native": {
+    "load": {
+      "tier_timeout_ms": 30000
+    },
+    "cache": {
+      "max_age_ms": 3600000
+    },
+    "reload": {
+      "allowed": false,
+      "on_ad_click": true,
+      "resume_debounce_ms": 500,
+      "min_after_bind_ms": 3000,
+      "timer_enabled": false,
+      "interval_ms": 15000
+    },
+    "preload": {
+      "enabled": false,
+      "after_show": false
+    },
+    "presentation": {
+      "auto_shimmer": true,
+      "empty_visibility": "GONE",
+      "cta_corner_radius_dp": 20
+    }
+  },
+  "interstitial": {
+    "load": {
+      "tier_timeout_ms": 30000
+    },
+    "load_and_show": {
+      "wait_timeout_ms": 8000,
+      "buffer_wait_timeout_ms": 5000,
+      "allow_wait_for_auto_buffer": false
+    },
+    "presentation": {
+      "next_screen_timing": "AFTER_AD",
+      "loading_enabled": true,
+      "pre_show_delay_ms": 800
+    },
+    "frequency": {
+      "interval_ms": 0,
+      "max_clicks_per_24h": 0
+    },
+    "auto_buffer": {
+      "enabled": false,
+      "tick_ms": 0,
+      "idle_tick_ms": 30000,
+      "min_tick_ms": 5000,
+      "preload_lead_ms": 2000,
+      "rules": {}
+    },
+    "cache": {
+      "max_age_ms": 3600000
+    }
+  },
+  "rewarded": {
+    "load": {
+      "tier_timeout_ms": 30000
+    },
+    "cache": {
+      "max_age_ms": 3600000
+    }
+  },
+  "app_open": {
+    "enabled": true,
+    "load": {
+      "background_delay_ms": 2000,
+      "timeout_ms": 30000,
+      "max_background_requests": 3,
+      "background_retry_window_ms": 120000,
+      "offline_recheck_ms": 5000,
+      "failure_backoff_ms": [
+        5000,
+        30000,
+        120000
+      ]
+    },
+    "presentation": {
+      "loading_timeout_ms": 3000,
+      "pre_show_delay_ms": 800,
+      "skip_after_ad_click": false,
+      "excluded_hosts": []
+    },
+    "cache": {
+      "max_age_ms": 14400000
+    }
+  },
+  "placement_overrides": {}
+}

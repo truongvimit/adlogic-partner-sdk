@@ -6,12 +6,16 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.os.Looper
+import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.admob.Admob
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
+import com.ads.module.config.settings.SettingsDocument
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdSkipReason
@@ -84,6 +88,7 @@ class InterstitialLoadAndShowTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.acceptSuccessfulFetch(null)
         InterstitialAutoBuffer.stop()
         vendorAds.filter { it.hosts.isNotEmpty() }.forEach {
             it.callback.onAdDismissedFullScreenContent()
@@ -100,6 +105,55 @@ class InterstitialLoadAndShowTest {
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         AppOpenManager.getInstance().setInterstitialShowing(false)
         requests.clear()
+    }
+
+    @Test
+    fun `slot timeout beats placement and remains captured after remote updates`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"load_and_show":{"wait_timeout_ms":400}},"placement_overrides":{"$PLACEMENT":{"interstitial":{"load_and_show":{"wait_timeout_ms":600}}}}}""")
+        val screen = SettingsDocument("screen", """{"slot":{"load_and_show":{"wait_timeout_ms":8000}}}""")
+        screen.acceptSuccessfulFetch("""{"slot":{"load_and_show":{"wait_timeout_ms":100}}}""")
+        val result = RecordingShow()
+        val options = InterLoadAndShowOptions().apply {
+            behavior = AdBehavior.values("interstitial", PLACEMENT, screen.snapshot, "slot")
+        }
+        val deadline = SystemClock.elapsedRealtime() + 100
+        InterstitialAdManager.loadAndShow(activity, PLACEMENT, listOf(UNIT), result, options)
+        assertEquals("The request must enter its fill wait: ${result.skipped}", 0, result.completed)
+        assertEquals(1, requests.size)
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"load_and_show":{"wait_timeout_ms":3000}}}""")
+        screen.acceptSuccessfulFetch("""{"slot":{"load_and_show":{"wait_timeout_ms":2000}}}""")
+        // Dialog attachment may advance Robolectric's clock; the budget starts at invocation.
+        mainLooper.idleFor(deadline - SystemClock.elapsedRealtime() - 1, TimeUnit.MILLISECONDS)
+        assertEquals("The original slot deadline has not elapsed: ${result.skipped}", 0, result.completed)
+        mainLooper.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(1, result.completed)
+        assertEquals(listOf(AdSkipReason.NOT_READY), result.skipped)
+    }
+
+    @Test
+    fun `legacy show captures remote timing and explicit timing still wins`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"UNDER_AD"}}}""")
+        var implicitNext = 0
+        val first = newVendor()
+        Admob.getInstance().forceShowInterstitial(activity, first, object : AdCallback() {
+            override fun onNextAction() { implicitNext++ }
+        })
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"AFTER_AD"}}}""")
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(1, implicitNext)
+        first.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, implicitNext)
+
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"UNDER_AD"}}}""")
+        var explicitNext = 0
+        val second = newVendor()
+        Admob.getInstance().forceShowInterstitial(activity, second, object : AdCallback() {
+            override fun onNextAction() { explicitNext++ }
+        }, false)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(0, explicitNext)
+        second.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, explicitNext)
     }
 
     @Test

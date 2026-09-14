@@ -1,5 +1,6 @@
 package com.ads.module.admob;
 
+import com.ads.module.config.settings.AdBehavior;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -104,12 +105,12 @@ public class Admob {
      * incremented, so "no cap" is the behaviour every existing partner build actually has. Turning
      * it on is an opt-in via {@link #setMaxClickAdsPerDay(int)}, typically driven by remote config.
      */
-    private volatile int maxClickAds = 0;
+    private volatile int maxClickAds = (int) AdBehavior.defaultNumber("interstitial.frequency.max_clicks_per_24h");
     private Handler handlerTimeout;
     private Runnable rdTimeout;
     private PrepareLoadingAdsDialog dialog;
     private boolean isTimeout;
-    private boolean disableAdResumeWhenClickAds = false;
+    private boolean disableAdResumeWhenClickAds = AdBehavior.defaultBool("app_open.presentation.skip_after_ad_click");
     private boolean isShowLoadingSplash = false;
     boolean isTimeDelay = false;
     /**
@@ -136,6 +137,8 @@ public class Admob {
      *                    loaded and shown. {@code 0} or negative disables the cap. Safe to call at
      *                    any time — remote config typically applies it once the fetch lands.
      */
+    private int effectiveMaxClicks() { return (int) AdBehavior.number("interstitial.frequency.max_clicks_per_24h", maxClickAds); }
+
     public void setMaxClickAdsPerDay(int maxClickAds) {
         if (this.maxClickAds == maxClickAds) {
             return;
@@ -154,7 +157,7 @@ public class Admob {
      * unit, so clicks on a native only ever gate that native's own unit.
      */
     public void recordAdClick(Context context, String adUnitId) {
-        if (maxClickAds <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
+        if (effectiveMaxClicks() <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
             return;
         }
         AdmobHelper.increaseNumClickAdsPerDay(context, adUnitId);
@@ -164,11 +167,11 @@ public class Admob {
      * True when {@code adUnitId} has burned through its daily click allowance.
      */
     private boolean isClickCapReached(Context context, String adUnitId) {
-        if (maxClickAds <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
+        if (effectiveMaxClicks() <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
             return false;
         }
         int clicks = AdmobHelper.getNumClickAdsPerDay(context, adUnitId);
-        if (clicks < maxClickAds) {
+        if (clicks < effectiveMaxClicks()) {
             return false;
         }
         Log.w(TAG, "Interstitial suppressed: ad unit hit the daily click cap ("
@@ -249,7 +252,8 @@ public class Admob {
     }
 
     public boolean isOpenActivityAfterShowInterAds() {
-        return openActivityAfterShowInterAds;
+        return "UNDER_AD".equals(AdBehavior.text("interstitial.presentation.next_screen_timing",
+                openActivityAfterShowInterAds ? "UNDER_AD" : "AFTER_AD"));
     }
 
     @SuppressLint("VisibleForTests")
@@ -275,7 +279,7 @@ public class Admob {
         isTimeDelay = false;
         isTimeout = false;
 
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -367,7 +371,7 @@ public class Admob {
         isTimeDelay = false;
         isTimeout = false;
 
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -454,6 +458,7 @@ public class Admob {
     }
 
     public void onShowSplash(AppCompatActivity activity, AdCallback adListener) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
 
         if (mInterstitialSplash == null) {
@@ -499,7 +504,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterstitialSplash = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -517,7 +522,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -530,7 +535,7 @@ public class Admob {
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
             }
@@ -548,7 +553,7 @@ public class Admob {
                     dialog.dismiss();
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                     AppOpenManager.getInstance().setInterstitialShowing(true);
                 } catch (Exception e) {
                     assert adListener != null;
@@ -561,7 +566,7 @@ public class Admob {
             }
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -588,7 +593,7 @@ public class Admob {
                     assert adListener != null;
                     adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
             isShowLoadingSplash = false;
@@ -596,6 +601,7 @@ public class Admob {
     }
 
     public void onShowSplash(AppCompatActivity activity, AdCallback adListener, InterstitialAd mInter) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         mInterstitialSplash = mInter;
         isShowLoadingSplash = true;
 
@@ -643,7 +649,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterstitialSplash = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -661,7 +667,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -674,7 +680,7 @@ public class Admob {
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
             }
@@ -692,7 +698,7 @@ public class Admob {
                     dialog.dismiss();
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                     AppOpenManager.getInstance().setInterstitialShowing(true);
                 } catch (Exception e) {
                     adListener.onNextAction();
@@ -704,7 +710,7 @@ public class Admob {
             }
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -731,7 +737,7 @@ public class Admob {
                     assert adListener != null;
                     adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
             isShowLoadingSplash = false;
@@ -753,7 +759,7 @@ public class Admob {
      * Requests an interstitial and returns it through {@code adCallback}.
      */
     public void getInterstitialAds(Context context, String id, AdCallback adCallback) {
-        if (AdGate.isPurchased(context) || isClickCapReached(context, id)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context) || isClickCapReached(context, id)) {
             adCallback.onInterstitialLoad(null);
             return;
         }
@@ -791,17 +797,18 @@ public class Admob {
      * Shows the interstitial after {@code timeDelay}, for the reopen-on-splash flow.
      */
     public void showInterstitialAdByTimes(final Context context, final InterstitialAd mInterstitialAd, final AdCallback callback, long timeDelay) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         if (timeDelay > 0) {
             handlerTimeout = new Handler();
             rdTimeout = new Runnable() {
                 @Override
                 public void run() {
-                    forceShowInterstitial(context, mInterstitialAd, callback);
+                    forceShowInterstitial(context, mInterstitialAd, callback, openNextUnderAd);
                 }
             };
             handlerTimeout.postDelayed(rdTimeout, timeDelay);
         } else {
-            forceShowInterstitial(context, mInterstitialAd, callback);
+            forceShowInterstitial(context, mInterstitialAd, callback, openNextUnderAd);
         }
     }
 
@@ -811,7 +818,7 @@ public class Admob {
      * can gate ads on "every Nth action" rather than on every action.
      */
     public void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback) {
-        showInterstitialAdByTimes(context, mInterstitialAd, callback, openActivityAfterShowInterAds);
+        showInterstitialAdByTimes(context, mInterstitialAd, callback, isOpenActivityAfterShowInterAds());
     }
 
     /**
@@ -827,7 +834,7 @@ public class Admob {
     private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
         // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
         // so it can no longer be skipped by the load-time gate that never called it.
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             callback.onNextAction();
             return;
         }
@@ -895,7 +902,7 @@ public class Admob {
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 if (callback != null) {
                     callback.onAdClicked();
@@ -918,7 +925,7 @@ public class Admob {
      * Shows the interstitial now, ignoring the click counter.
      */
     public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback) {
-        forceShowInterstitial(context, mInterstitialAd, callback, openActivityAfterShowInterAds);
+        forceShowInterstitial(context, mInterstitialAd, callback, isOpenActivityAfterShowInterAds());
     }
 
     /**
@@ -970,7 +977,7 @@ public class Admob {
                 dialog.dismiss();
             dialog = new PrepareLoadingAdsDialog(context);
             dialog.setCancelable(false);
-            dialog.show();
+            if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
             AppOpenManager.getInstance().setInterstitialShowing(true);
         } catch (Exception e) {
             dialog = null;
@@ -1006,7 +1013,7 @@ public class Admob {
                     dialog.dismiss();
                 notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail in background after show loading ad", openNextUnderAd);
             }
-        }, 800);
+        }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
     }
 
     /**
@@ -1227,7 +1234,7 @@ public class Admob {
     private void loadBanner(final Activity mActivity, String id,
                             final FrameLayout adContainer, final ShimmerFrameLayout containerShimmer,
                             final AdCallback callback, AdSize adSize, int shimmerHeightDp) {
-        if (AdGate.isPurchased(mActivity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1291,7 +1298,7 @@ public class Admob {
                 @Override
                 public void onAdClicked() {
                     super.onAdClicked();
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     if (callback != null) {
                         callback.onAdClicked();
@@ -1317,7 +1324,7 @@ public class Admob {
 
     private void loadCollapsibleBanner(final Activity mActivity, String id, String gravity, final FrameLayout adContainer,
                                        final ShimmerFrameLayout containerShimmer, final AdCallback callback) {
-        if (AdGate.isPurchased(mActivity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1376,7 +1383,7 @@ public class Admob {
                 @Override
                 public void onAdClicked() {
                     super.onAdClicked();
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     ERainLogEventManager.logClickAdsEvent(context, id);
                     if (callback != null) {
@@ -1391,7 +1398,7 @@ public class Admob {
 
     private void loadCollapsibleAutoSizeMedium(final Activity mActivity, String id, String gravity, AdSize sizeBanner, final FrameLayout adContainer,
                                                final ShimmerFrameLayout containerShimmer, final AdCallback callback) {
-        if (AdGate.isPurchased(mActivity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1450,7 +1457,7 @@ public class Admob {
                 @Override
                 public void onAdClicked() {
                     super.onAdClicked();
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     ERainLogEventManager.logClickAdsEvent(context, id);
                     if (callback != null) {
@@ -1523,7 +1530,7 @@ public class Admob {
     }
 
     public void loadNativeAd(Context context, String id, final AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         VideoOptions videoOptions = new VideoOptions.Builder()
@@ -1569,7 +1576,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
                             callback.onAdClicked();
@@ -1583,7 +1590,7 @@ public class Admob {
     }
 
     public void loadNativeAds(Context context, String id, final AdCallback callback, int countAd) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             callback.onAdClosed();
             return;
         }
@@ -1618,7 +1625,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
                             callback.onAdClicked();
@@ -1632,7 +1639,7 @@ public class Admob {
     }
 
     private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1685,7 +1692,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         ERainLogEventManager.logClickAdsEvent(context, id);
                     }
@@ -1697,7 +1704,7 @@ public class Admob {
     }
 
     private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1750,7 +1757,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
                             callback.onAdClicked();
@@ -1766,7 +1773,7 @@ public class Admob {
     }
 
     public void loadNativeAdsFullScreen(Context context, String id, final AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
 
@@ -1802,7 +1809,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
                             callback.onAdClicked();
@@ -1817,7 +1824,7 @@ public class Admob {
     }
 
     public void loadNativeAdsFullScreen(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1867,7 +1874,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
-                        if (disableAdResumeWhenClickAds)
+                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
                             callback.onAdClicked();
@@ -1978,7 +1985,7 @@ public class Admob {
      * Buffers a rewarded ad; premium users return without a request.
      */
     public void initRewardAds(Context context, String id) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         this.nativeId = id;
@@ -2006,7 +2013,7 @@ public class Admob {
      * Buffers a rewarded ad; premium users return without a request.
      */
     public void initRewardAds(Context context, String id, AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         this.nativeId = id;
@@ -2037,7 +2044,7 @@ public class Admob {
      * Buffers a rewarded interstitial; premium users return without a request.
      */
     public void getRewardInterstitial(Context context, String id, AdCallback callback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             // No helper wraps this format, so the skip is only visible if reported from here
             AdTracking.skipped(PlacementRegistry.placementOf(id), AdFormat.REWARDED_INTERSTITIAL,
                     AdSkipReason.PURCHASED.getKey());
@@ -2074,7 +2081,7 @@ public class Admob {
      * Shows the buffered rewarded ad and reports the outcome through {@code adCallback}.
      */
     public void showRewardAds(final Activity context, final RewardCallback adCallback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             adCallback.onUserEarnedReward(null);
             return;
         }
@@ -2117,7 +2124,7 @@ public class Admob {
 
                 public void onAdClicked() {
                     super.onAdClicked();
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
                 }
@@ -2138,7 +2145,7 @@ public class Admob {
      * Shows a rewarded interstitial and reports the outcome through {@code adCallback}.
      */
     public void showRewardInterstitial(final Activity activity, RewardedInterstitialAd rewardedInterstitialAd, final RewardCallback adCallback) {
-        if (AdGate.isPurchased(activity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             String adUnitId = rewardedInterstitialAd == null ? nativeId : rewardedInterstitialAd.getAdUnitId();
             AdTracking.skipped(PlacementRegistry.placementOf(adUnitId), AdFormat.REWARDED_INTERSTITIAL,
                     AdSkipReason.PURCHASED.getKey());
@@ -2185,7 +2192,7 @@ public class Admob {
                 public void onAdClicked() {
                     super.onAdClicked();
                     ERainLogEventManager.logClickAdsEvent(activity, rewardedAd.getAdUnitId());
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                 }
             });
@@ -2213,7 +2220,7 @@ public class Admob {
      */
     public void showRewardAds(final Activity context, RewardedAd rewardedAd,
                               final RewardCallback adCallback, final boolean reload) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             adCallback.onUserEarnedReward(null);
             return;
         }
@@ -2267,7 +2274,7 @@ public class Admob {
 
                 public void onAdClicked() {
                     if (settled.get()) return;
-                    if (disableAdResumeWhenClickAds)
+                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                     if (adCallback != null) {
                         adCallback.onAdClicked();
@@ -2835,7 +2842,7 @@ public class Admob {
     private void loadInterSplashHigh1(final Context context, String id, long timeOut, long timeDelay, boolean showSplashIfReady, AdCallback adListener) {
         isTimeDelayHigh1 = false;
         isTimeoutHigh1 = false;
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -2926,6 +2933,7 @@ public class Admob {
     }
 
     private void onShowSplashHigh1(AppCompatActivity activity, AdCallback adListener) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
         if (mInterSplashHigh1 == null) {
             adListener.onNextAction();
@@ -2969,7 +2977,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterSplashHigh1 = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -2988,7 +2996,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -3004,7 +3012,7 @@ public class Admob {
                 if (adListener != null) {
                     adListener.onAdClicked();
                 }
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh1.getAdUnitId());
             }
@@ -3028,7 +3036,7 @@ public class Admob {
                 }
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                 } catch (Exception e) {
                     adListener.onNextAction();
                     return;
@@ -3040,7 +3048,7 @@ public class Admob {
 
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -3065,7 +3073,7 @@ public class Admob {
                     Log.e(TAG, "onShowSplash:   show fail in background after show loading ad");
                     adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "MiaAd"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
         } else {
             adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "MiaAd"));
             Log.e(TAG, "onShowSplash: fail on background");
@@ -3083,7 +3091,7 @@ public class Admob {
     private void loadInterSplashHigh2(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayHigh2 = false;
         isTimeoutHigh2 = false;
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3165,6 +3173,7 @@ public class Admob {
     }
 
     private void onShowSplashHigh2(AppCompatActivity activity, AdCallback adListener) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
         if (mInterSplashHigh2 == null) {
             isShowLoadingSplash = false;
@@ -3211,7 +3220,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterSplashHigh2 = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -3231,7 +3240,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -3247,7 +3256,7 @@ public class Admob {
                 if (adListener != null) {
                     adListener.onAdClicked();
                 }
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh2.getAdUnitId());
             }
@@ -3271,7 +3280,7 @@ public class Admob {
                 }
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                 } catch (Exception e) {
                     adListener.onNextAction();
                     return;
@@ -3282,7 +3291,7 @@ public class Admob {
             }
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -3307,7 +3316,7 @@ public class Admob {
                     Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
                     adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
             adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
@@ -3325,7 +3334,7 @@ public class Admob {
     private void loadInterSplashHigh3(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayHigh3 = false;
         isTimeoutHigh3 = false;
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3407,6 +3416,7 @@ public class Admob {
     }
 
     private void onShowSplashHigh3(AppCompatActivity activity, AdCallback adListener) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
         if (mInterSplashHigh3 == null) {
             isShowLoadingSplash = false;
@@ -3453,7 +3463,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterSplashHigh3 = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -3473,7 +3483,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -3489,7 +3499,7 @@ public class Admob {
                 if (adListener != null) {
                     adListener.onAdClicked();
                 }
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh3.getAdUnitId());
             }
@@ -3513,7 +3523,7 @@ public class Admob {
                 }
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                 } catch (Exception e) {
                     adListener.onNextAction();
                     return;
@@ -3524,7 +3534,7 @@ public class Admob {
             }
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -3549,7 +3559,7 @@ public class Admob {
                     Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
                     adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
             adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
@@ -3567,7 +3577,7 @@ public class Admob {
     private void loadInterSplashNormal(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayNormal = false;
         isTimeoutNormal = false;
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3649,6 +3659,7 @@ public class Admob {
     }
 
     public void onShowSplashNormal(AppCompatActivity activity, AdCallback adListener) {
+        final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
 
         if (mInterSplashNormal == null) {
@@ -3695,7 +3706,7 @@ public class Admob {
                 AppOpenManager.getInstance().setInterstitialShowing(false);
                 mInterSplashNormal = null;
                 if (adListener != null) {
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
                     adListener.onAdClosed();
@@ -3713,7 +3724,7 @@ public class Admob {
                 isShowLoadingSplash = false;
                 if (adListener != null) {
                     adListener.onAdFailedToShow(adError);
-                    if (!openActivityAfterShowInterAds) {
+                    if (!openNextUnderAd) {
                         adListener.onNextAction();
                     }
 
@@ -3726,7 +3737,7 @@ public class Admob {
             @Override
             public void onAdClicked() {
                 super.onAdClicked();
-                if (disableAdResumeWhenClickAds)
+                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
                 ERainLogEventManager.logClickAdsEvent(context, mInterSplashNormal.getAdUnitId());
             }
@@ -3744,7 +3755,7 @@ public class Admob {
                     dialog.dismiss();
                 dialog = new PrepareLoadingAdsDialog(activity);
                 try {
-                    dialog.show();
+                    if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
                     AppOpenManager.getInstance().setInterstitialShowing(true);
                 } catch (Exception e) {
                     assert adListener != null;
@@ -3757,7 +3768,7 @@ public class Admob {
             }
             new Handler().postDelayed(() -> {
                 if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                    if (openActivityAfterShowInterAds && adListener != null) {
+                    if (openNextUnderAd && adListener != null) {
                         adListener.onNextAction();
                         new Handler().postDelayed(() -> {
                             if (dialog != null && dialog.isShowing() && !activity.isDestroyed())
@@ -3781,7 +3792,7 @@ public class Admob {
                     assert adListener != null;
                     adListener.onAdFailedToShow(new AdError(0, "Show fail in background after show loading ad", "LuanDT"));
                 }
-            }, 800);
+            }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
             isShowLoadingSplash = false;

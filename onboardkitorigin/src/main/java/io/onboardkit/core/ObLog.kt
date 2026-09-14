@@ -1,5 +1,6 @@
 package io.onboardkit.core
 
+import io.onboardkit.remote.OnboardingSettings
 import android.util.Log
 
 /**
@@ -16,7 +17,8 @@ object ObLog {
 
     /** Off in release by default; flip with [io.onboardkit.OnboardingSdk.setFlowLogging]. */
     @Volatile
-    var enabled: Boolean = true
+    var enabled: Boolean = com.ads.module.config.settings.AdBehavior.defaultBool("diagnostics.flow_logging_enabled")
+        get() = com.ads.module.config.settings.AdBehavior.bool("diagnostics.flow_logging_enabled", field)
 
     /** Wall clock of the first logged line, so every entry carries a flow-relative timestamp. */
     @Volatile

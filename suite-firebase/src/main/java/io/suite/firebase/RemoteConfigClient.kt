@@ -3,20 +3,26 @@ package io.suite.firebase
 import android.util.Log
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigValue
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * The suite's single Firebase Remote Config client.
+ * Firebase adapter shared by the suite and hosts that opt into [fetchAndActivate].
  *
- * Kits used to fetch separately against the one `FirebaseRemoteConfig` singleton, each with its own
- * timeout and its own idea of whether an in-app default counts as a value. The paywall source and
- * the ad-config source now share this client: the first caller does the work, later callers await
- * the same result.
- *
- * Not yet the only fetch in the app: `:onboardkitorigin` still runs its own, and so does the
- * template's app-flag reader. Those are the remaining two to fold in.
+ * The process-owned supervisor keeps a caller's timeout/cancellation from cancelling another
+ * kit's fetch. Firebase's own fetch timeout bounds the underlying task; each caller separately
+ * chooses how long it can wait. Successful [fetchOnce] calls keep the existing per-process cache,
+ * while an explicit refresh still requests a new fetch (subject to Firebase's cache interval).
  */
 object RemoteConfigClient {
 
@@ -30,7 +36,7 @@ object RemoteConfigClient {
     private var cached: FirebaseRemoteConfig? = null
 
     @Volatile
-    private var inFlight: CompletableDeferred<Boolean>? = null
+    private var fetches = newFetchCoordinator()
 
     /** Overridable for tests; production resolves the real singleton. */
     @Volatile
@@ -45,50 +51,23 @@ object RemoteConfigClient {
         return resolved
     }
 
-    /**
-     * Fetches and activates once per launch, sharing the result with concurrent callers.
-     *
-     * @return true when values were fetched and activated.
-     */
-    suspend fun fetchOnce(timeoutMs: Long): Boolean {
-        inFlight?.let { pending ->
-            return withTimeoutOrNull(timeoutMs.milliseconds) { pending.await() } ?: false
-        }
-        val deferred = CompletableDeferred<Boolean>()
-        inFlight = deferred
+    /** True means the task succeeded, including when Firebase reports no newly activated values. */
+    suspend fun fetchOnce(timeoutMs: Long): Boolean = fetches.fetch(timeoutMs, reuseSuccess = true)
 
+    /** Explicit refresh: joins current work but does not reuse a previous completed fetch. */
+    suspend fun fetchAndActivate(timeoutMs: Long): Boolean =
+        fetches.fetch(timeoutMs, reuseSuccess = false)
+
+    /** Uses Firebase's configured task timeout when the caller has no additional deadline. */
+    suspend fun fetchAndActivate(): Boolean = fetches.fetch(null, reuseSuccess = false)
+
+    private fun newFetchCoordinator(
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ) = FetchCoordinator(scope) {
         val remote = remoteConfig()
-        if (remote == null) {
-            Log.w(TAG, "Firebase Remote Config unavailable — is Firebase initialised?")
-            deferred.complete(false)
-            inFlight = null
-            return false
-        }
-
-        val result = withTimeoutOrNull(timeoutMs.milliseconds) {
-            val awaited = CompletableDeferred<Boolean>()
-            try {
-                remote.fetchAndActivate()
-                    // The task's boolean only reports whether values changed, not success.
-                    .addOnSuccessListener { awaited.complete(true) }
-                    .addOnFailureListener {
-                        Log.w(TAG, "Remote config fetch failed: ${it.message}")
-                        awaited.complete(false)
-                    }
-            } catch (e: Exception) {
-                Log.w(TAG, "Remote config fetch threw: ${e.message}")
-                awaited.complete(false)
-            }
-            awaited.await()
-        } ?: false
-
-        deferred.complete(result)
-        // Only a success is memoised for the launch. Pinning a failure let the shortest-tempered
-        // caller decide for everyone: the paywall syncs with 3s and the ad config with 10s, so a
-        // paywall timeout used to hand the ad config an instant `false` and the ad units were
-        // never refreshed that session. Clearing it lets the next caller run its own fetch.
-        if (!result) inFlight = null
-        return result
+            ?: throw IllegalStateException("Firebase Remote Config unavailable; initialize Firebase first")
+        // This Boolean describes activation, not success. Await's normal return is success.
+        remote.fetchAndActivate().await()
     }
 
     /**
@@ -97,15 +76,69 @@ object RemoteConfigClient {
      * Rejects in-app defaults on purpose: a kit that treats its own default as a fetched value
      * cannot tell "the console says off" from "the console has never heard of this key".
      */
-    fun remoteString(key: String): String? {
+    fun remoteString(key: String): String? = remoteRawString(key)?.takeIf { it.isNotBlank() }
+
+    /** Documents distinguish an absent parameter from a present but malformed/blank payload. */
+    fun remoteRawString(key: String): String? {
         val value: FirebaseRemoteConfigValue = remoteConfig()?.getValue(key) ?: return null
         if (value.source != FirebaseRemoteConfig.VALUE_SOURCE_REMOTE) return null
-        return value.asString().takeIf { it.isNotBlank() }
+        return value.asString()
     }
 
-    /** Test seam: forget the memoised instance and any in-flight fetch. */
+    /** Test seam: forget the memoised instance and cancel any work owned by this client. */
     fun reset() {
         cached = null
-        inFlight = null
+        val previous = fetches
+        fetches = newFetchCoordinator()
+        previous.cancel()
+    }
+
+    internal fun reset(scope: CoroutineScope) {
+        cached = null
+        val previous = fetches
+        fetches = newFetchCoordinator(scope)
+        previous.cancel()
+    }
+
+    private class FetchCoordinator(
+        private val scope: CoroutineScope,
+        private val activate: suspend () -> Unit,
+    ) {
+        private val lock = Any()
+        private var inFlight: Deferred<Boolean>? = null
+        private var succeeded = false
+
+        suspend fun fetch(timeoutMs: Long?, reuseSuccess: Boolean): Boolean {
+            currentCoroutineContext().ensureActive()
+            if (timeoutMs != null && timeoutMs <= 0) return false
+            val task = synchronized(lock) {
+                if (inFlight == null && reuseSuccess && succeeded) return true
+                inFlight ?: scope.async(start = CoroutineStart.LAZY) {
+                    try {
+                        activate()
+                        synchronized(lock) { succeeded = true }
+                        true
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Remote config fetch failed: ${error.message}")
+                        false
+                    }
+                }.also { pending ->
+                    inFlight = pending
+                    pending.invokeOnCompletion {
+                        synchronized(lock) {
+                            if (inFlight === pending) inFlight = null
+                        }
+                    }
+                }
+            }
+            // Once started, work survives an individual waiter's deadline.
+            task.start()
+            return if (timeoutMs == null) task.await()
+            else withTimeoutOrNull(timeoutMs) { task.await() } ?: false
+        }
+
+        fun cancel() = scope.cancel()
     }
 }

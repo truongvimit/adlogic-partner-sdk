@@ -1,0 +1,50 @@
+// The editable asset is the single source of truth, including values needed before Application.
+def settingsSource = file("src/main/assets/${settingsName}.json")
+def settingsGenerated = layout.buildDirectory.dir('generated/settingsDefaults')
+tasks.register('generateSettingsDefaults') {
+    inputs.file(settingsSource)
+    outputs.dir(settingsGenerated)
+    doLast {
+        def defaultsJson = settingsSource.getText('UTF-8')
+        def parsed = new groovy.json.JsonSlurper().parseText(defaultsJson)
+        assert parsed instanceof Map && parsed.schema_version == 1 : "Invalid settings schema: ${settingsSource}"
+        def entries = [:]
+        Closure flatten
+        flatten = { value, path ->
+            assert value != null : "Null default: ${settingsSource}:${path}"
+            if (value instanceof Map && !value.isEmpty()) {
+                value.each { key, child -> flatten(child, path ? "${path}.${key}" : key) }
+            } else {
+                entries[path] = value
+            }
+        }
+        flatten(parsed, '')
+        Closure literal
+        literal = { value ->
+            assert value != null : "Null default: ${settingsSource}"
+            if (value instanceof String) return groovy.json.JsonOutput.toJson(value)
+            if (value instanceof Boolean) return value.toString()
+            if (value instanceof Number) return "${value.longValue()}L"
+            if (value instanceof List) return value.isEmpty() ? 'java.util.Collections.emptyList()' :
+                'java.util.Collections.unmodifiableList(java.util.Arrays.asList(' + value.collect { literal(it) }.join(', ') + '))'
+            assert value instanceof Map && value.isEmpty() : "Unsupported default: ${value}"
+            return 'java.util.Collections.emptyMap()'
+        }
+        def target = new File(settingsGenerated.get().asFile, settingsPackage.replace('.', '/') + "/${settingsClass}.java")
+        target.parentFile.mkdirs()
+        target.text = """package ${settingsPackage};
+public final class ${settingsClass} {
+    public static final String JSON = ${groovy.json.JsonOutput.toJson(defaultsJson)};
+    public static final java.util.Map<String, Object> VALUES;
+    static {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+${entries.collect { path, value -> '        values.put(' + groovy.json.JsonOutput.toJson(path) + ', ' + literal(value) + ');' }.join('\n')}
+        VALUES = java.util.Collections.unmodifiableMap(values);
+    }
+    private ${settingsClass}() {}
+}
+"""
+    }
+}
+android.sourceSets.main.java.srcDir(settingsGenerated)
+tasks.named('preBuild').configure { dependsOn('generateSettingsDefaults') }

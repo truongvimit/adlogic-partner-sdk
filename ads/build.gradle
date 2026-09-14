@@ -97,6 +97,8 @@ dependencies {
     api 'com.google.android.ump:user-messaging-platform:4.0.0'
 
     testImplementation 'junit:junit:4.13.2'
+    // Real JSON on the JVM: constructor defaults are read before an Android Context exists.
+    testImplementation 'org.json:json:20250517'
     testImplementation 'org.mockito:mockito-core:5.14.2'
     testImplementation 'org.robolectric:robolectric:4.13'
     testImplementation 'androidx.test:core:1.6.1'
@@ -114,3 +116,9 @@ afterEvaluate {
         }
     }
 }
+
+// Generate typed defaults from the asset at build time: no startup JSON parsing.
+ext.settingsName = 'ad_behavior_config'
+ext.settingsPackage = 'com.ads.module.config.settings'
+ext.settingsClass = 'BundledAdBehavior'
+apply from: rootProject.file('gradle/settings-defaults.gradle')

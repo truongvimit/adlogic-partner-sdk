@@ -1,5 +1,6 @@
 package com.ads.module.helper.reward
 
+import com.ads.module.config.settings.AdBehavior
 import android.app.Activity
 import android.content.Context
 import com.ads.module.ads.AdWaterfall
@@ -72,7 +73,7 @@ object RewardAdManager {
         placement: String,
         adUnitIds: List<String>,
         enabled: Boolean = true,
-        tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+        tierTimeoutMs: Long = AdBehavior.defaultNumber("rewarded.load.tier_timeout_ms"),
         listener: AdCallback? = null,
     ) = load(context, placement, adUnitIds, enabled, tierTimeoutMs, listener)
 
@@ -93,7 +94,7 @@ object RewardAdManager {
         placement: String,
         adUnitIds: List<String>,
         enabled: Boolean = true,
-        tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+        tierTimeoutMs: Long = AdBehavior.defaultNumber("rewarded.load.tier_timeout_ms"),
         listener: AdCallback? = null,
     ) {
         cache[placement]?.takeIf { it.isFresh }?.let { cached ->
@@ -118,11 +119,13 @@ object RewardAdManager {
         requests[placement] = request
         ids.forEach { AdTracking.registerPlacement(it, placement) }
         AdTracking.request(placement, AdFormat.REWARDED, ids.first())
+        val behavior = AdBehavior.values("rewarded", placement)
+        val maxAgeMs = behavior.long("cache.max_age_ms", AdBehavior.defaultNumber("rewarded.cache.max_age_ms"))
         try {
             AdWaterfall.loadReward(
                 context,
                 ids,
-                tierTimeoutMs,
+                behavior.long("load.tier_timeout_ms", tierTimeoutMs),
                 object : AdCallback() {
                     override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
                         if (!requests.remove(placement, request)) return
@@ -130,7 +133,7 @@ object RewardAdManager {
                             notifyListeners(request) { it.onAdFailedToLoad(null) }
                             return
                         }
-                        cache[placement] = CachedAd(rewardedAd)
+                        cache[placement] = CachedAd(rewardedAd, maxAgeMs = maxAgeMs)
                         notifyListeners(request) { it.onRewardAdLoaded(rewardedAd) }
                     }
 
@@ -231,7 +234,7 @@ object RewardAdManager {
         placement: String,
         adUnitIds: List<String>,
         enabled: Boolean = true,
-        tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+        tierTimeoutMs: Long = AdBehavior.defaultNumber("rewarded.load.tier_timeout_ms"),
         onSuccess: Runnable,
         onFailed: Runnable,
     ) {

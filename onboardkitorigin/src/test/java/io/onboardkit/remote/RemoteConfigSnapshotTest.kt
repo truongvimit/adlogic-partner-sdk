@@ -5,15 +5,22 @@ import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -48,5 +55,26 @@ class RemoteConfigSnapshotTest {
         assertEquals(expected, reader.flags.value)
         assertEquals(expected, RemoteConfigSyncer(context) { null }.flags.value)
         job.cancel()
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun `standalone timeout keeps cache and does not duplicate unfinished Firebase work`() = runTest {
+        val expected = RemoteFlags(splashLfoParallelPreloadEnabled = true, skipButtonDelaySec = 9)
+        val firebase = mock(FirebaseRemoteConfig::class.java)
+        val result = TaskCompletionSource<Boolean>()
+        `when`(firebase.fetchAndActivate()).thenReturn(result.task)
+        val reader = RemoteConfigSyncer(context) { firebase }
+        reader.applySnapshot(expected)
+
+        val impatient = async { reader.fetchAndSync(100) }
+        val patient = async { reader.fetchAndSync(1_000) }
+        runCurrent()
+        assertFalse(impatient.await())
+        assertFalse(patient.isCompleted)
+        result.setException(IllegalStateException("offline"))
+        assertFalse(patient.await())
+        assertEquals(expected, reader.flags.value)
+        assertEquals(expected, RemoteConfigSyncer(context) { null }.flags.value)
+        verify(firebase, times(1)).fetchAndActivate()
     }
 }

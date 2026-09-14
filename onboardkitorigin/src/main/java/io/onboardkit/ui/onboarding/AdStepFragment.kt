@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import io.onboardkit.remote.OnboardingSettings
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.LayoutInflater
@@ -137,7 +138,10 @@ class AdStepFragment : LazyStepFragment() {
         val b = binding ?: return
         val definition = definition() ?: return
         val flags = OnboardingSdk.flags()
-        val skipAllowed = definition.showSkipButton && flags.showSkipOb3
+        val skipAllowed = OnboardingSettings.values.boolean(
+            "onboarding.steps.${definition.id.value}.fullscreen.skip.enabled",
+            definition.showSkipButton && flags.showSkipOb3,
+        )
         // Always keep one exit path: no skip + no auto-next would trap the user
         val mustForceSkip = !skipAllowed && !definition.autoNextEnabled
         if (!skipAllowed && !mustForceSkip) return
@@ -145,7 +149,8 @@ class AdStepFragment : LazyStepFragment() {
             ?: definition.skipButtonDelaySec.toLong().coerceAtLeast(0)
         skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay((delaySec * 1_000).milliseconds)
+            delay(OnboardingSettings.values.long("onboarding.steps.${definition.id.value}.fullscreen.skip.delay_ms",
+                OnboardingSettings.values.long("onboarding.fullscreen.skip.delay_ms", delaySec * 1000)).milliseconds)
             b.obSkipButton.visibility = View.VISIBLE
         }
     }

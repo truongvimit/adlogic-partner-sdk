@@ -32,14 +32,14 @@ internal class TrackedAdListener(
 
     override fun onFailedToLoad() {
         if (failureReported.compareAndSet(false, true)) {
-            OnboardingSdk.track(AnalyticsEvent.AdFailed(placementKey, format))
+            if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) OnboardingSdk.track(AnalyticsEvent.AdFailed(placementKey, format))
         }
         delegate?.onFailedToLoad()
     }
 
     override fun onImpression() {
         if (impressionReported.compareAndSet(false, true)) {
-            OnboardingSdk.track(AnalyticsEvent.AdImpression(placementKey, format))
+            if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) OnboardingSdk.track(AnalyticsEvent.AdImpression(placementKey, format))
         }
         delegate?.onImpression()
     }
@@ -64,7 +64,7 @@ internal fun AdPlacement.tracked(
 
 /** A load is about to go out for this placement. */
 internal fun AdPlacement.trackRequest() {
-    OnboardingSdk.track(AnalyticsEvent.AdRequested(key, format))
+    if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) OnboardingSdk.track(AnalyticsEvent.AdRequested(key, format))
 }
 
 /**
@@ -72,5 +72,5 @@ internal fun AdPlacement.trackRequest() {
  * that cannot tell "premium" from "no fill" cannot act on either.
  */
 internal fun AdPlacement.trackSkipped(reason: AdSkipReason) {
-    OnboardingSdk.track(AnalyticsEvent.AdSkipped(key, format, reason.key))
+    if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) OnboardingSdk.track(AnalyticsEvent.AdSkipped(key, format, reason.key))
 }

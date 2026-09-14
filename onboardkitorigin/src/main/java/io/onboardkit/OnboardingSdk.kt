@@ -131,6 +131,7 @@ object OnboardingSdk {
         // Async preload (per DataStore guidance): seeds the language so attachBaseContext, which
         // cannot suspend, can wrap the locale for a returning user.
         stateStore?.let { store -> sdkScope.launch { session.seedLanguage(store.current().languageSelected) } }
+        io.onboardkit.remote.OnboardingSettings.initialize(app)
         remote = ObRemote(app)
         adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
         appResumeGuard = ObAppResume(adsGuard, adProvider)
@@ -333,17 +334,17 @@ object OnboardingSdk {
 
     // ── Internal wiring for SDK screens ──
 
-    internal fun configOrNull(): OnboardKitConfig? = config
+    internal fun configOrNull(): OnboardKitConfig? = config?.let(io.onboardkit.remote.OnboardingSettings::resolve)
 
     internal fun requireConfig(): OnboardKitConfig =
-        requireNotNull(config) { "OnboardKit not configured" }
+        requireNotNull(configOrNull()) { "OnboardKit not configured" }
 
     internal fun stateStoreOrNull(): OnboardingStateStore? = stateStore
 
     internal fun remoteOrNull(): ObRemote? = remote
 
     internal fun flags(): io.onboardkit.remote.RemoteFlags =
-        remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags()
+        io.onboardkit.remote.OnboardingSettings.resolveFlags(remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags())
 
     internal fun provider(): OnboardingAdProvider? = adProvider
 

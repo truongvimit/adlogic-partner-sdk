@@ -13,7 +13,12 @@ import com.ads.module.config.AdConfigSource
  */
 class FirebaseAdConfigSource @JvmOverloads constructor(
     private val key: String = "ad_remote_config",
-) : AdConfigSource {
+) : AdConfigSource, com.ads.module.config.settings.SettingsConfigSource {
+
+    override suspend fun fetchSettings(timeoutMs: Long): Map<String, String?>? {
+        if (!RemoteConfigClient.fetchOnce(timeoutMs)) return null
+        return listOf("ad_behavior_config", "onboarding_config").associateWith(RemoteConfigClient::remoteRawString)
+    }
 
     override val id: String = "firebase"
 

@@ -1,5 +1,6 @@
 package io.onboardkit.config
 
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.core.StepId
@@ -108,7 +109,7 @@ enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
  */
 data class AdsConfig(
     /** Master switch. `false` disables every placement below without unsetting them. */
-    val enabled: Boolean = true,
+    val enabled: Boolean = OnboardingSettings.defaultBool("flow.ads_enabled"),
     val splashBanner: BannerAdUnit? = null,
     val splashInterstitial: InterstitialAdUnit? = null,
     /**
@@ -153,19 +154,19 @@ data class AdsConfig(
     val questionInterstitial: InterstitialAdUnit? = null,
     /** App-resume / app-open ad, shown when the app returns to the foreground. */
     val appResume: InterstitialAdUnit? = null,
-    val contentStepTemplate: NativeTemplate = NativeTemplate.CTA_TOP,
-    val languageTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
-    val questionTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
+    val contentStepTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("onboarding.ads.content_template")),
+    val languageTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("lfo.native_template")),
+    val questionTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("question.native.template")),
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
-    val skipAdOnlyStepsWhenPremium: Boolean = true,
+    val skipAdOnlyStepsWhenPremium: Boolean = OnboardingSettings.defaultBool("flow.skip_ad_only_steps_when_premium"),
     /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */
     val afterOnboardingInterstitial: InterstitialAdUnit? = null,
     /** False disables both preload and presentation by the onboarding flow. */
-    val afterOnboardingInterstitialEnabled: Boolean = true,
+    val afterOnboardingInterstitialEnabled: Boolean = OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"),
     /** UNDER_AD starts the next screen under this ad; only an entry launch waits for close. */
-    val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.UNDER_AD,
+    val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.valueOf(OnboardingSettings.defaultText("onboarding.exit_interstitial.next_screen_timing")),
     /** Shared Skip/X appearance for OB3 and standalone OB5. */
-    val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.CLOSE_ICON,
+    val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
 ) {
 
     /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */

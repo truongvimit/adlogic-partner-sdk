@@ -36,7 +36,7 @@ object AdGate {
         passesUaGate: Boolean = true,
         checkNetwork: Boolean = true,
     ): AdSkipReason? = when {
-        !enabled -> AdSkipReason.DISABLED_CONFIG
+        !enabled || !com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") -> AdSkipReason.DISABLED_CONFIG
         isPurchased(context) -> AdSkipReason.PURCHASED
         checkNetwork && !isNetworkAvailable(context) -> AdSkipReason.OFFLINE
         !passesUaGate -> AdSkipReason.UA_GATE

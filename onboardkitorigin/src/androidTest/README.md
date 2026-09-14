@@ -9,6 +9,19 @@ adb install -r onboardkitorigin/build/outputs/apk/androidTest/debug/onboardkitor
 
 Run each parameter combination in a fresh instrumentation process with default test-package data. The remote-cache read and handled-notification phases intentionally retain data from their preceding write/deny phase.
 
+## Grouped remote settings
+
+Class: `io.onboardkit.remote.GroupedSettingsDeviceTest`. Run each method in a fresh process:
+
+- `sparseRemotePreservesHostOptionsAndLegacyFlags`: absent JSON retains explicit host options and legacy flags; a partial valid document overrides only present fields and cannot undo the host ads veto.
+- `invalidMissingAndFailedFetchKeepFallbacks`: malformed JSON and unsupported schema retain the last valid document; invalid/missing/null fields inherit defaults; unavailable Firebase retains both grouped and legacy snapshots.
+- `acceptedDocumentSurvivesColdProcess`: run with `-e groupedCachePhase write`, then `read` without clearing data. The read asserts a different Android PID and the persisted grouped document.
+- `pagerSwipeAndFullscreenSkipUseResolvedRemoteWithoutChangingCompletion`: run with `-e groupedMode default` and `remote`. Uses an actual swipe gesture, pager, native page and Skip button; checks the original locked/delayed behavior and explicit remote unlock/zero-delay behavior, followed by exactly one completion of the native page.
+
+Select a method with `-e class 'io.onboardkit.remote.GroupedSettingsDeviceTest#methodName'`.
+These tests use the actual Android JSON/preferences implementation and a controlled host native
+provider; they do not publish Firebase values or request/click production ads.
+
 ## Onboarding ad return and fullscreen deadlines
 
 ```sh

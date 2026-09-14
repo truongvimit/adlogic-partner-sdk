@@ -1,5 +1,6 @@
 package io.onboardkit.ui.splash
 
+import io.onboardkit.remote.OnboardingSettings
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -479,7 +480,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
      */
     protected open fun splashInterstitialOverride(): InterstitialAdUnit? =
         SplashEntry.from(intent)?.let { entry ->
-            AdRemoteConfig.getInstance().tiersFor(entry.interKey)
+            AdRemoteConfig.getInstance().tiersFor(OnboardingSettings.values.string("splash.entries.${entry.name.lowercase(java.util.Locale.ROOT)}.interstitial_placement", entry.interKey))
                 .takeIf { it.isNotEmpty() }
                 ?.let { InterstitialAdUnit(tiers = it) }
         }
@@ -558,7 +559,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * every [SplashEntry] launch, UNDER_AD when a launcher start goes past completed onboarding.
      */
     protected open fun nextScreenTiming(): NextScreenTiming =
-        defaultNextScreenTiming(SplashEntry.from(intent), attempt.startDecision)
+        if (SplashEntry.from(intent) != null) NextScreenTiming.AFTER_AD
+        else OnboardingSettings.text("splash.navigation.next_screen_timing").takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+            ?: defaultNextScreenTiming(null, attempt.startDecision)
 
     private fun startFlow() {
         if (attempt.flowStarted) return
@@ -579,7 +582,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun remainingMinDisplayMs(configured: Long): Long {
-        val target = checkNotNull(attempt.flags).splashMinDisplayMs.takeIf { it > 0 } ?: configured
+        val target = OnboardingSettings.values.long("splash.timing.min_display_ms", checkNotNull(attempt.flags).splashMinDisplayMs.takeIf { it > 0 } ?: configured)
         val elapsed = SystemClock.elapsedRealtime() - attempt.adPhaseStartedAtMs
         return (target - elapsed).coerceIn(0, target)
     }

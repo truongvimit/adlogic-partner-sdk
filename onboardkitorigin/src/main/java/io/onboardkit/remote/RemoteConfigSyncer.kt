@@ -3,14 +3,16 @@ package io.onboardkit.remote
 import android.content.Context
 import android.util.Log
 import androidx.core.content.edit
+import com.google.android.gms.tasks.Task
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.coroutines.resume
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Fetches remote config with a hard timeout and publishes an immutable [RemoteFlags] snapshot.
@@ -32,33 +34,62 @@ class RemoteConfigSyncer internal constructor(
     private val _flags = MutableStateFlow(loadCached())
     val flags: StateFlow<RemoteFlags> = _flags.asStateFlow()
 
-    /** Suspends at most [timeoutMs]; on timeout or error the last known snapshot stays active. */
+    private val fetchLock = Any()
+    private var fetchTask: Task<Boolean>? = null
+    private val snapshotLock = Any()
+    private var snapshotRevision = 0L
+
+    /** Bounds the fetch wait by [timeoutMs]; timeout/error keeps the last known snapshot active. */
     suspend fun fetchAndSync(timeoutMs: Long): Boolean {
         val remote = remoteConfigProvider() ?: return false
-        val fetched = withTimeoutOrNull(timeoutMs.milliseconds) {
-            suspendCancellableCoroutine { cont ->
-                remote.fetchAndActivate()
-                    .addOnSuccessListener { cont.resume(true) }
-                    .addOnFailureListener {
-                        Log.w(TAG, "Remote fetch failed: ${it.message}")
-                        cont.resume(false)
-                    }
-            }
-        } ?: false
+        val fetched = try {
+            fetchDelegate?.invoke(timeoutMs) ?: fetchLocally(remote, timeoutMs)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Remote fetch failed: ${error.message}")
+            false
+        }
 
         // A failed/timed-out fetch must not replace a valid disk assignment with SDK defaults.
         if (!fetched) return false
-        val snapshot = RemoteFlags.from(FirebaseReader(remote))
-        if (snapshot.configVersion != _flags.value.configVersion) {
-            prefs.edit { clear() }
+        val revision = synchronized(snapshotLock) { ++snapshotRevision }
+        val reader = FirebaseReader(remote)
+        com.ads.module.config.settings.SettingsRegistry.acceptSuccessfulFetch(
+            listOf("ad_behavior_config", "onboarding_config").associateWith(reader::string),
+        )
+        val snapshot = withContext(Dispatchers.Default) {
+            RemoteFlags.from(reader).also {
+                // Warm grouped/legacy JSON merging before the new flags become observable.
+                OnboardingSettings.resolveFlags(it)
+            }
         }
-        persist(snapshot)
-        _flags.value = snapshot
+        withContext(Dispatchers.IO) {
+            synchronized(snapshotLock) {
+                // Parsing/persistence can suspend; a newer manual assignment must not be lost.
+                if (revision == snapshotRevision) {
+                    persist(snapshot)
+                    _flags.value = snapshot
+                }
+            }
+        }
         return fetched
     }
 
+    private suspend fun fetchLocally(remote: FirebaseRemoteConfig, timeoutMs: Long): Boolean =
+        withTimeoutOrNull(timeoutMs) {
+            val task = synchronized(fetchLock) {
+                fetchTask?.takeUnless { it.isComplete }
+                    ?: remote.fetchAndActivate().also { fetchTask = it }
+            }
+            // Task.await does not cancel Firebase's task when this caller stops waiting.
+            task.await()
+            true
+        } ?: false
+
     /** For hosts that manage remote config themselves — inject values without Firebase. */
-    fun applySnapshot(snapshot: RemoteFlags) {
+    fun applySnapshot(snapshot: RemoteFlags) = synchronized(snapshotLock) {
+        snapshotRevision++
         persist(snapshot)
         _flags.value = snapshot
     }
@@ -147,8 +178,11 @@ class RemoteConfigSyncer internal constructor(
         }
     }
 
-    private companion object {
-        const val TAG = "OnboardKit.Remote"
-        const val PREFS_NAME = "ob_remote_cache"
+    internal companion object {
+        private const val TAG = "OnboardKit.Remote"
+        private const val PREFS_NAME = "ob_remote_cache"
+
+        @Volatile
+        var fetchDelegate: (suspend (Long) -> Boolean)? = null
     }
 }

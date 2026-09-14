@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import io.onboardkit.remote.OnboardingSettings
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -100,6 +101,7 @@ class ContentStepFragment : LazyStepFragment() {
 
         b.obStepIndicator.count = totalSteps()
         b.obStepIndicator.selectedIndex = position
+        b.obStepIndicator.visibility = if (OnboardingSettings.values.boolean("onboarding.steps.${definition.id.value}.progress_visible", definition.showsProgressIndicator)) View.VISIBLE else View.GONE
         b.obPrimaryCta.state =
             if (position == totalSteps() - 1) ObPrimaryButton.State.LAST
             else ObPrimaryButton.State.NEXT

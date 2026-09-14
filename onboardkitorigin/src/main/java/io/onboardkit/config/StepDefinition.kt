@@ -1,5 +1,6 @@
 package io.onboardkit.config
 
+import io.onboardkit.remote.OnboardingSettings
 import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
@@ -39,11 +40,11 @@ enum class FullScreenSkipStyle { TEXT, CLOSE_ICON }
 
 data class AdFullScreenStepDefinition(
     override val id: StepId,
-    val showSkipButton: Boolean = true,
-    val skipButtonDelaySec: Int = 1,
+    val showSkipButton: Boolean = OnboardingSettings.defaultBool("onboarding.fullscreen.skip.enabled"),
+    val skipButtonDelaySec: Int = (OnboardingSettings.defaultNumber("onboarding.fullscreen.skip.delay_ms") / 1000).toInt(),
     /** Counts from page selection, including time spent in the background. */
-    val autoNextEnabled: Boolean = true,
-    val autoNextDelayMs: Long = 3_000,
+    val autoNextEnabled: Boolean = OnboardingSettings.defaultBool("onboarding.fullscreen.auto_next.enabled"),
+    val autoNextDelayMs: Long = OnboardingSettings.defaultNumber("onboarding.fullscreen.auto_next.delay_ms"),
     @LayoutRes val layoutRes: Int = 0,
     /** Null inherits AdsConfig.fullScreenSkipStyle. */
     val skipButtonStyle: FullScreenSkipStyle? = null,

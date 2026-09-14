@@ -1,5 +1,6 @@
 package com.ads.module.admob;
 
+import com.ads.module.config.settings.AdBehavior;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
@@ -72,22 +73,20 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private AppOpenAd.AppOpenAdLoadCallback loadCallback;
 
     // Resume fetch state only; raw splash requests retain their own callbacks and buffer.
-    private static final long RESUME_FETCH_TIMEOUT_MS = 30_000L;
-    private static final int RESUME_MAX_BACKGROUND_REQUESTS = 3;
-    private static final long RESUME_BACKGROUND_RETRY_WINDOW_MS = 120_000L;
-    private static final long RESUME_OFFLINE_RECHECK_MS = 5_000L;
     private long resumeBackgroundDeadlineMs;
+    private long resumeBackgroundFirstEligibleMs;
     private int resumeBackgroundRequests;
     private boolean resumeBackground;
     private boolean resumeDispatchAllowed;
     private Runnable pendingBackgroundLoad;
-    private static final long RESUME_LOADING_TIMEOUT_MS = 3_000L;
-    private static final long RESUME_PRE_SHOW_DELAY_MS = 800L;
-    private static final long[] RESUME_FAILURE_BACKOFF_MS = {5_000L, 30_000L, 120_000L};
+    private java.util.List<Long> resumeFailureBackoffMs() {
+        return AdBehavior.document.getSnapshot().longList("app_open.load.failure_backoff_ms", java.util.Collections.emptyList());
+    }
     private final Handler resumeFetchHandler = new Handler(Looper.getMainLooper());
     private long resumeFetchGeneration;
     private boolean resumeFetchPending;
     private long resumeFetchDeadlineMs;
+    private long resumeFetchStartedAtMs;
     private int resumeFailureStreak;
     private long resumeRetryAfterMs;
     private Runnable resumeFetchTimeout;
@@ -352,22 +351,22 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     private static void reportResumeLoaded(String adUnitId, long requestedAtMs) {
-        Tracker.track(new TrackkitEvents.Ad.Loaded(resumePlacementFor(adUnitId), AdFormat.APP_OPEN,
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Loaded(resumePlacementFor(adUnitId), AdFormat.APP_OPEN,
                 adUnitId, System.currentTimeMillis() - requestedAtMs));
     }
 
     private static void reportResumeLoadFailed(String adUnitId, Integer errorCode) {
-        Tracker.track(new TrackkitEvents.Ad.LoadFailed(
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.LoadFailed(
                 resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId, errorCode));
     }
 
     private static void reportResumeShown(String adUnitId) {
-        Tracker.track(new TrackkitEvents.Ad.Show(
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Show(
                 resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId));
     }
 
     private static void reportResumeShowFailed(String adUnitId, Integer errorCode) {
-        Tracker.track(new TrackkitEvents.Ad.ShowFailed(
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.ShowFailed(
                 resumePlacementFor(adUnitId), AdFormat.APP_OPEN, adUnitId, errorCode));
     }
 
@@ -418,6 +417,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (activity == null) {
             return true;
         }
+        if (AdBehavior.document.getSnapshot().strings("app_open.presentation.excluded_hosts", null).contains(activity.getClass().getName())) return true;
         for (Class activityClass : disabledAppOpenList) {
             if (activityClass.isInstance(activity)) {
                 return true;
@@ -542,7 +542,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (!isSplash) {
             if (!canFetchResume(false)) return;
             if (!AdGate.isNetworkAvailable(myApplication)) {
-                scheduleBackgroundLoad(RESUME_OFFLINE_RECHECK_MS);
+                scheduleBackgroundLoad(AdBehavior.number("app_open.load.offline_recheck_ms"));
                 return;
             }
         }
@@ -654,7 +654,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 };
         if (isSplash) loadCallback = requestCallback;
         if (currentActivity != null) {
-            if (AdGate.isPurchased(currentActivity)) {
+            if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(currentActivity)) {
                 if (!isSplash && ownsResumeFetch(generation)) cancelResumeFetch(false);
                 return;
             }
@@ -673,13 +673,14 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 if (!Objects.equals(appResumeAdId, adUnitId) || !canFetchResume(false)
                         || ConsentCenter.canPersonalize() != personalized) return;
                 if (!AdGate.isNetworkAvailable(myApplication)) {
-                    scheduleBackgroundLoad(RESUME_OFFLINE_RECHECK_MS);
+                    scheduleBackgroundLoad(AdBehavior.number("app_open.load.offline_recheck_ms"));
                     return;
                 }
                 // Ownership changes only when a replacement is actually about to dispatch.
                 resumeFetchGeneration = generation;
                 resumeFetchPending = true;
-                resumeFetchDeadlineMs = SystemClock.elapsedRealtime() + RESUME_FETCH_TIMEOUT_MS;
+                resumeFetchStartedAtMs = SystemClock.elapsedRealtime();
+                resumeFetchDeadlineMs = resumeFetchStartedAtMs + AdBehavior.number("app_open.load.timeout_ms");
                 resumeFetchTimeout = () -> {
                     if (!ownsResumeFetch(generation)) return;
                     if (!canFetchResume(false)) {
@@ -689,7 +690,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                         AdTracking.skipped(resumePlacementFor(adUnitId), AdFormat.APP_OPEN, "load_timeout");
                     }
                 };
-                resumeFetchHandler.postDelayed(resumeFetchTimeout, RESUME_FETCH_TIMEOUT_MS);
+                resumeFetchHandler.postDelayed(resumeFetchTimeout, AdBehavior.number("app_open.load.timeout_ms"));
                 Log.d(TAG, "resume load dispatch generation=" + generation);
                 // After every gate, so the funnel counts requests that actually reach GMA.
                 resumeRequestReported.set(true);
@@ -703,7 +704,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 // Preparation sent nothing. Keep any previous late result and the bounded
                 // opportunity, without inventing a vendor request or failure in the funnel.
                 Log.w(TAG, "resume request preparation failed", error);
-                scheduleBackgroundLoad(RESUME_OFFLINE_RECHECK_MS);
+                scheduleBackgroundLoad(AdBehavior.number("app_open.load.offline_recheck_ms"));
                 return;
             }
             // A reported request must always reach a terminal event, or the funnel keeps a
@@ -717,7 +718,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private boolean canFetchResume(boolean checkNetwork) {
         if (myApplication == null || !isInitialized) return false;
-        AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled,
+        AdSkipReason reason = AdGate.skipReason(myApplication, (isAppResumeEnabled && AdBehavior.bool("app_open.enabled")),
                 AdGate.placementPassesUaGate(RESUME_PLACEMENT), checkNetwork);
         if (reason != null) Log.d(TAG, "fetchAd: resume gate=" + reason.getKey());
         return reason == null;
@@ -730,8 +731,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private boolean canContinueResumeFetch(long generation, String adUnitId, boolean personalized) {
         // A timeout frees the loading slot, but only replacement/invalidation revokes a result.
         if (resumeFetchGeneration != generation || resumeFetchDeadlineMs == 0) return false;
-        if (SystemClock.elapsedRealtime() - (resumeFetchDeadlineMs - RESUME_FETCH_TIMEOUT_MS)
-                >= 4 * 60 * 60 * 1_000L) {
+        if (SystemClock.elapsedRealtime() - resumeFetchStartedAtMs
+                >= AdBehavior.number("app_open.cache.max_age_ms")) {
             cancelResumeFetch(false);
             return false;
         }
@@ -763,9 +764,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private void failResumeFetch(long generation, String reason, boolean retainLateResult) {
         if (!ownsResumeFetch(generation)) return;
-        long delayMs = RESUME_FAILURE_BACKOFF_MS[
-                Math.min(resumeFailureStreak, RESUME_FAILURE_BACKOFF_MS.length - 1)];
-        resumeFailureStreak = Math.min(resumeFailureStreak + 1, RESUME_FAILURE_BACKOFF_MS.length);
+        java.util.List<Long> backoff = resumeFailureBackoffMs();
+        long delayMs = backoff.get(Math.min(resumeFailureStreak, backoff.size() - 1));
+        resumeFailureStreak = Math.min(resumeFailureStreak + 1, backoff.size());
         if (retainLateResult) {
             resumeFetchPending = false;
             if (resumeFetchTimeout != null) resumeFetchHandler.removeCallbacks(resumeFetchTimeout);
@@ -815,7 +816,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public boolean isAdAvailable(boolean isSplash) {
         long loadTime = isSplash ? splashLoadTime : appResumeLoadTime;
-        boolean wasLoadTimeLessThanNHoursAgo = wasLoadTimeLessThanNHoursAgo(loadTime, 4);
+        boolean wasLoadTimeLessThanNHoursAgo = (new Date()).getTime() - loadTime < AdBehavior.number("app_open.cache.max_age_ms");
         Log.d(TAG, "isAdAvailable: " + wasLoadTimeLessThanNHoursAgo);
         return (isSplash ? splashAd != null : appResumeAd != null)
                 && wasLoadTimeLessThanNHoursAgo;
@@ -998,7 +999,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** Live admission for the resume path only; raw splash retains its existing flow. */
     private boolean canShowResumeOn(Activity host) {
-        return isInitialized && isAppResumeEnabled && !isInterstitialShowing
+        return isInitialized && isAppResumeEnabled && AdBehavior.bool("app_open.enabled") && !isInterstitialShowing
                 && host != null && host == currentActivity && host == resumedActivity
                 && !host.isFinishing() && !host.isDestroyed() && !(host instanceof AdActivity)
                 && ProcessLifecycleOwner.get().getLifecycle().getCurrentState()
@@ -1098,7 +1099,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             } finally {
                 // GMA opens asynchronously. Bound only the cosmetic window, never ad ownership.
                 if (ownedDialog != null && dialog == ownedDialog && ownedDialog.isShowing()) {
-                    resumeFetchHandler.postDelayed(() -> dismissResumeDialog(ownedDialog), RESUME_LOADING_TIMEOUT_MS);
+                    resumeFetchHandler.postDelayed(() -> dismissResumeDialog(ownedDialog), AdBehavior.number("app_open.presentation.loading_timeout_ms"));
                 }
             }
         };
@@ -1124,7 +1125,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 });
                 pendingResumeShow = dispatch;
                 pendingResumeCancellation = cancelBeforeShow;
-                resumeFetchHandler.postDelayed(dispatch, RESUME_PRE_SHOW_DELAY_MS);
+                resumeFetchHandler.postDelayed(dispatch, AdBehavior.number("app_open.presentation.pre_show_delay_ms"));
             } else {
                 dispatch.run();
             }
@@ -1161,7 +1162,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         statusMedium = Type_Loading;
         statusAll = Type_Loading;
 
-        if (AdGate.isPurchased(activity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -1497,7 +1498,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         statusOpen = Type_Loading;
         statusInter = Type_Loading;
 
-        if (AdGate.isPurchased(activity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -1701,7 +1702,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         isTimeout = false;
         enableScreenContentCallback = true;
         // gated on the application: this is often called from onCreate, before currentActivity is set
-        if (AdGate.isPurchased(myApplication)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(myApplication)) {
             if (fullScreenContentCallback != null && enableScreenContentCallback) {
                 (new Handler()).postDelayed(() -> {
                     fullScreenContentCallback.onAdDismissedFullScreenContent();
@@ -1779,7 +1780,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     };
 
     public void loadAdOpenSplash2id(Class splashActivity, Activity activity, String idOpenHigh, String idOpenAll, int timeOutOpen, AdCallback adListener) {
-        if (AdGate.isPurchased(activity)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -2145,8 +2146,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         long delayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(
                 AdRemoteConfig.getInstance().getAppResumeLoadDelayMs());
         resumeBackgroundRequests = 0;
-        resumeBackgroundDeadlineMs = SystemClock.elapsedRealtime() + delayMs
-                + RESUME_BACKGROUND_RETRY_WINDOW_MS;
+        resumeBackgroundFirstEligibleMs = SystemClock.elapsedRealtime() + delayMs;
+        resumeBackgroundDeadlineMs = resumeBackgroundFirstEligibleMs
+                + AdBehavior.number("app_open.load.background_retry_window_ms");
         scheduleBackgroundLoad(delayMs);
     }
 
@@ -2155,16 +2157,15 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         long nowMs = SystemClock.elapsedRealtime();
         // A callback carried from the previous stay may retry, but cannot shorten this stay's
         // captured initial delay. The window begins at that first eligible instant.
-        long firstEligibleMs = resumeBackgroundDeadlineMs - RESUME_BACKGROUND_RETRY_WINDOW_MS;
-        delayMs = Math.max(delayMs, firstEligibleMs - nowMs);
+        delayMs = Math.max(delayMs, resumeBackgroundFirstEligibleMs - nowMs);
         if (!resumeBackground || !isAppResumeEnabled || !isInitialized
-                || resumeBackgroundRequests >= RESUME_MAX_BACKGROUND_REQUESTS
+                || resumeBackgroundRequests >= AdBehavior.number("app_open.load.max_background_requests")
                 || nowMs >= resumeBackgroundDeadlineMs
                 || delayMs >= resumeBackgroundDeadlineMs - nowMs) return;
         pendingBackgroundLoad = () -> {
             pendingBackgroundLoad = null;
             if (!resumeBackground || SystemClock.elapsedRealtime() >= resumeBackgroundDeadlineMs
-                    || resumeBackgroundRequests >= RESUME_MAX_BACKGROUND_REQUESTS) return;
+                    || resumeBackgroundRequests >= AdBehavior.number("app_open.load.max_background_requests")) return;
             resumeDispatchAllowed = true;
             try {
                 fetchAd(false);
@@ -2204,7 +2205,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     public void loadOpenAppAdSplash(final Context context, String idResumeSplash, final long timeDelay, long timeOut, final boolean isShowAdIfReady, final AdCallback adCallback) {
         this.splashAdId = idResumeSplash;
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adCallback != null) {
                 adCallback.onNextAction();
             }
@@ -2274,7 +2275,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     public void loadOpenAppAdSplashFloor(final Context context, final List<String> listIDResume, final boolean isShowAdIfReady, final AdCallback adCallback) {
-        if (AdGate.isPurchased(context)) {
+        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adCallback != null) {
                 adCallback.onNextAction();
             }

@@ -49,7 +49,7 @@ abstract class AdsHelper<C : IAdsConfig, P : IAdsParam>(
     protected fun isResumed(): Boolean =
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
-    open fun canShowAds(): Boolean = config.canShowAds && !AdGate.isPurchased(context) &&
+    open fun canShowAds(): Boolean = config.canShowAds && com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") && !AdGate.isPurchased(context) &&
         ConsentCenter.canRequestAds() && !ConsentCenter.isFormShowing()
 
     open fun canRequestAds(): Boolean = canShowAds() && AdGate.isNetworkAvailable(context)

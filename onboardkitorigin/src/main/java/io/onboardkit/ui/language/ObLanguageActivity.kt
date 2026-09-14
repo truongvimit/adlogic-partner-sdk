@@ -1,5 +1,6 @@
 package io.onboardkit.ui.language
 
+import io.onboardkit.remote.OnboardingSettings
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -112,6 +113,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         adapter.submitList(languages)
         scheduleTapHint(hintCode)
 
+        OnboardingSettings.text("lfo.confirm_button.image_url").takeIf { it.isNotBlank() }?.let {
+            com.bumptech.glide.Glide.with(this).load(it).error(io.onboardkit.R.drawable.ob_ic_check).into(binding.obLanguageConfirm)
+        }
+        OnboardingSettings.text("lfo.confirm_button.tint_color").takeIf { it.isNotBlank() }
+            ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
+            ?.let { binding.obLanguageConfirm.imageTintList = android.content.res.ColorStateList.valueOf(it) }
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
         binding.obLanguageSave.setOnClickListener { onConfirm() }
@@ -157,7 +164,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         val delaySec = sdk.flags().languageTapHintDelaySec.takeIf { it >= 0 }
             ?: ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default
         tapHintJob = lifecycleScope.launch {
-            delay(delaySec.seconds)
+            delay(OnboardingSettings.values.long("lfo.tap_hint.delay_ms", delaySec * 1000))
             if (!languageExitStarted && !isFinishing && selectedCode == null) {
                 adapter.hintCode = hintCode
             }
@@ -192,7 +199,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private fun onLanguageTapped(language: ObLanguage) {
         if (languageExitStarted) return
         if (mode == LanguageScreenMode.FIRST_OPEN) {
-            languageTapCount = (languageTapCount + 1).coerceAtMost(4)
+            languageTapCount = (languageTapCount + 1).coerceAtMost(Int.MAX_VALUE)
         }
         tapHintJob?.cancel()
         selectedCode = language.code
@@ -223,7 +230,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     private fun shouldShowConfirmDialog(): Boolean =
-        mode == LanguageScreenMode.FIRST_OPEN && languageTapCount >= 4 &&
+        mode == LanguageScreenMode.FIRST_OPEN && languageTapCount >= OnboardingSettings.number("lfo.confirm_dialog.show_from_tap") &&
             sdk.requireConfig().language.confirmDialogOnReselectEnabled &&
             sdk.flags().showLanguageConfirmDialog
 
@@ -246,7 +253,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         secondSwapPending = true
         pendingSwapCode = code
         binding.obAdBlock2.visibility = View.GONE
-        mainHandler.postDelayed(secondSwapTimeout, SECOND_NATIVE_SWAP_TIMEOUT_MS)
+        mainHandler.postDelayed(secondSwapTimeout, OnboardingSettings.number("lfo.native2.swap_wait_timeout_ms"))
         showNativeAd(
             placement = AdPlacement.Language2,
             unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.Language2),
@@ -437,7 +444,6 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     companion object {
-        private const val SECOND_NATIVE_SWAP_TIMEOUT_MS = 8_000L
         private const val EXTRA_MODE = "ob_extra_mode"
 
         const val RESULT_LANGUAGE_CODE = "ob_result_language_code"

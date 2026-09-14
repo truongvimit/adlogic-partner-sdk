@@ -1,5 +1,6 @@
 package com.ads.module.ads.wrapper;
 
+import com.ads.module.config.settings.AdBehavior;
 import android.view.View;
 
 import com.google.android.gms.ads.nativead.NativeAd;
@@ -10,7 +11,7 @@ public class ApNativeAd extends ApAdBase {
 
     public boolean isUsable() {
         return !destroyed && isReady()
-                && android.os.SystemClock.elapsedRealtime() - loadedAtMs < 60 * 60 * 1000L;
+                && android.os.SystemClock.elapsedRealtime() - loadedAtMs < AdBehavior.number("native.cache.max_age_ms");
     }
 
     /** Releases a consumed or expired ad exactly once. */

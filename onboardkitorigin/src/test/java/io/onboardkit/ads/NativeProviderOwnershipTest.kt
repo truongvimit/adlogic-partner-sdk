@@ -84,6 +84,27 @@ class NativeProviderOwnershipTest {
         ConsentCenter.clearHostConsent()
     }
 
+    @Test fun `plain Activity banner retains direct load and listener callbacks`() {
+        val activity = mock(android.app.Activity::class.java)
+        val ads = mock(com.ads.module.ads.ERainAd::class.java)
+        val listener = mock(AdEventListener::class.java)
+        var callback: com.ads.module.funtion.AdCallback? = null
+        doAnswer {
+            callback = it.getArgument(2)
+            null
+        }.`when`(ads).loadBanner(eq(activity), eq("banner-unit"), any(com.ads.module.funtion.AdCallback::class.java))
+        mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
+            singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(ads)
+            provider.loadBanner(activity, io.onboardkit.config.BannerAdUnit("banner-unit"), listener)
+        }
+        checkNotNull(callback).onAdLoaded()
+        checkNotNull(callback).onAdFailedToLoad(null)
+        checkNotNull(callback).onAdClicked()
+        verify(listener).onLoaded()
+        verify(listener).onFailedToLoad()
+        verify(listener).onClicked()
+    }
+
     @Test fun `new preload while stopped waits for foreground and remains deduplicated`() {
         val host = controller.get()
         controller.pause().stop()
@@ -471,7 +492,12 @@ class NativeProviderOwnershipTest {
 
 }
 
-class NativeProviderHost : AppCompatActivity() {
+class NativeProviderHost : AppCompatActivity(), io.onboardkit.core.StepHost {
+    override val currentIndex = kotlinx.coroutines.flow.MutableStateFlow(0)
+    override val totalSteps = kotlinx.coroutines.flow.MutableStateFlow(4)
+    override fun next(exitReason: String?) = Unit
+    override fun back() = false
+    override fun finishFlow(reason: io.onboardkit.core.FinishReason) = Unit
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(com.ads.module.R.style.AppTheme)
         super.onCreate(savedInstanceState)

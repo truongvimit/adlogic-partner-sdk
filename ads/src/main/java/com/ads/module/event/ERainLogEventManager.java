@@ -71,7 +71,7 @@ public class ERainLogEventManager {
     public static void logClickAdsEvent(Context context, String adUnitId) {
         Log.d(TAG, String.format("User click ad for ad unit %s.", adUnitId));
         String unitId = orEmpty(adUnitId);
-        Tracker.track(new TrackkitEvents.Ad.Click(
+        if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Click(
                 PlacementRegistry.placementOf(unitId), AdFormatRegistry.formatOf(unitId), unitId));
         // Being the sole click emitter makes this the only place the daily cap can count from
         // without a new ad format silently escaping it. No-op while the cap is off.

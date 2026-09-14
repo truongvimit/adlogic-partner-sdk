@@ -1,5 +1,6 @@
 package io.onboardkit.ui.question
 
+import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -51,12 +52,13 @@ class ObQuestionActivity : BaseOnboardActivity() {
     /** Remote JSON fully replaces the option list when valid; otherwise compile-time config. */
     private fun resolveQuestion(): QuestionConfig? {
         val compiled = sdk.requireConfig().question
-        val remote = RemoteQuestionParser.parse(sdk.flags().questionConfigJson) ?: return compiled
-        val base = compiled ?: QuestionConfig()
-        return base.copy(
-            title = remote.title ?: base.title,
-            options = remote.options,
-        )
+        val remote = RemoteQuestionParser.parse(sdk.flags().questionConfigJson)
+        val base = compiled ?: if (remote != null) QuestionConfig() else return null
+        val title = OnboardingSettings.values.string("question.content.title", remote?.title?.takeIf { it.isNotBlank() } ?: base.title?.toString().orEmpty())
+        return OnboardingSettings.resolveQuestion(base.copy(
+            title = title.takeIf { it.isNotBlank() } ?: base.title,
+            options = remote?.options ?: base.options,
+        ))
     }
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
@@ -81,6 +83,7 @@ class ObQuestionActivity : BaseOnboardActivity() {
             ?: question.titleRes.takeIf { it != 0 }?.let(::getString)
             ?: getString(R.string.ob_question_title_default)
         if (question.ctaTextRes != 0) binding.obQuestionCta.setText(question.ctaTextRes)
+        OnboardingSettings.text("question.content.cta_text").takeIf { it.isNotBlank() }?.let { binding.obQuestionCta.text = it }
 
         adapter = QuestionAdapter(question) { option, selected -> onOptionToggled(option.id, selected) }
         binding.obQuestionList.layoutManager = GridLayoutManager(this, GRID_SPAN)
@@ -127,7 +130,7 @@ class ObQuestionActivity : BaseOnboardActivity() {
     /** Keep the 2s attempt throttle; each successful bind also restarts the visible ad's cooldown. */
     private fun refreshAdThrottled() {
         val now = SystemClock.elapsedRealtime()
-        if (nativeLoadPending || now - lastAdRefreshMs < AD_REFRESH_THROTTLE_MS) return
+        if (nativeLoadPending || now - lastAdRefreshMs < OnboardingSettings.number("question.native.refresh_throttle_ms")) return
         lastAdRefreshMs = now
         nativeLoadPending = true
         // The helper may show its shimmer, so hide its parent while the current native remains.
@@ -229,7 +232,6 @@ class ObQuestionActivity : BaseOnboardActivity() {
     companion object {
         private const val EXTRA_SOURCE = "ob_extra_question_source"
         private const val GRID_SPAN = 2
-        private const val AD_REFRESH_THROTTLE_MS = 2_000L
 
         fun start(activity: Activity, source: QuestionSource) {
             activity.startActivity(

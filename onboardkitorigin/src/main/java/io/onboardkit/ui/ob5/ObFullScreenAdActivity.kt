@@ -1,5 +1,6 @@
 package io.onboardkit.ui.ob5
 
+import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -68,7 +69,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
 
-        binding.obSkipButton.applyFullScreenSkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle)
+        binding.obSkipButton.applyFullScreenSkipStyle(io.onboardkit.config.FullScreenSkipStyle.valueOf(OnboardingSettings.values.string("ob5.skip.style", sdk.requireConfig().ads.fullScreenSkipStyle.name)))
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()
@@ -101,7 +102,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         }
         skipJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay((flags.skipButtonDelaySec.takeIf { it >= 0 } ?: 3L) * 1_000)
+                delay(OnboardingSettings.values.long("ob5.skip.delay_ms", (flags.skipButtonDelaySec.takeIf { it >= 0 } ?: (OnboardingSettings.number("ob5.skip.delay_ms") / 1000)) * 1_000))
                 binding.obSkipButton.visibility = View.VISIBLE
             }
         }
@@ -115,7 +116,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)
         autoDismissJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(seconds * 1_000)
+                delay(OnboardingSettings.values.long("ob5.auto_dismiss_ms", seconds * 1000))
                 navigateNext(StepExit.AUTO_DISMISS)
             }
         }

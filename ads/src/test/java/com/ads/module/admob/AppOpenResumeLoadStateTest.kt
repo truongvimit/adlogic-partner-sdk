@@ -9,6 +9,7 @@ import android.net.NetworkInfo
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -72,6 +73,7 @@ class AppOpenResumeLoadStateTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.acceptSuccessfulFetch(null)
         manager.disableAppResume()
         manager.setAppResumeAdId("")
         manager.releaseCachedAds()
@@ -132,6 +134,21 @@ class AppOpenResumeLoadStateTest {
         AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":60000}}""")
         manager.onStop()
         main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        fail(0)
+        main.idleFor(58_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `remote retry window change cannot shorten captured background delay`() {
+        startRequest()
+        manager.onResume()
+        AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"load":{"background_delay_ms":60000}}}""")
+        manager.onStop()
+        main.idleFor(1_000, TimeUnit.MILLISECONDS)
+        AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"load":{"background_delay_ms":60000,"background_retry_window_ms":240000}}}""")
         fail(0)
         main.idleFor(58_999, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)

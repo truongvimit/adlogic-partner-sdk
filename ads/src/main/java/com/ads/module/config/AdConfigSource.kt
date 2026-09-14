@@ -1,6 +1,9 @@
 package com.ads.module.config
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Where a fresher ad configuration comes from, vendor-free.
@@ -53,6 +56,17 @@ object AdConfig {
     @JvmStatic
     suspend fun refresh(timeoutMs: Long = 10_000): Boolean {
         val current = source ?: return false
+        if (current is com.ads.module.config.settings.SettingsConfigSource) {
+            val settings = try {
+                current.fetchSettings(timeoutMs)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.w(TAG, "Settings fetch failed: ${failure.message}")
+                null
+            } ?: return false
+            com.ads.module.config.settings.SettingsRegistry.acceptSuccessfulFetch(settings)
+        }
         // A debuggable build stays on the ids it shipped in assets/ad_config_debug.json. Those are
         // the test units; the live document holds the real ones, and letting it land here is how a
         // debug run generates invalid traffic on the app's own account.
@@ -60,17 +74,22 @@ object AdConfig {
             Log.i(TAG, "Debug build — keeping ${AdRemoteConfig.DEBUG_FILE_NAME}, remote ignored")
             return false
         }
-        val json = runCatching { current.fetch(timeoutMs) }
-            .onFailure { Log.w(TAG, "Ad config fetch failed: ${it.message}") }
-            .getOrNull()
+        val json = try {
+            current.fetch(timeoutMs)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Log.w(TAG, "Ad config fetch failed: ${failure.message}")
+            null
+        }
         if (json.isNullOrBlank()) return false
-        val parsed = AdRemoteConfig.fromJson(json) ?: return false
+        val parsed = withContext(Dispatchers.Default) { AdRemoteConfig.fromJson(json) } ?: return false
         if (parsed.ads.isEmpty()) {
             // An empty document would silently disable every placement; keep what we have.
             Log.w(TAG, "Ad config from ${current.id} has no placements — ignoring")
             return false
         }
-        AdRemoteConfig.update(parsed)
+        withContext(Dispatchers.Main.immediate) { AdRemoteConfig.update(parsed) }
         Log.i(TAG, "Ad config refreshed from ${current.id}: ${parsed.ads.size} placements")
         return true
     }

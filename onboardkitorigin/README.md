@@ -276,3 +276,7 @@ Use `OnboardingSdk.setFlowLogging(true)` during integration (`OB_FLOW` in Logcat
 For a later language change, call `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
 
 [Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
+
+## Grouped remote settings
+
+`ad_behavior_config` and `onboarding_config` add JSON behavior settings while retaining `ad_remote_config`, `ad_config.json`, and `ad_config_debug.json`. See the [complete field/default reference](../partner-integration/remote-settings.vi.md). Missing or invalid fields preserve local options; failed fetches preserve the last valid snapshot.

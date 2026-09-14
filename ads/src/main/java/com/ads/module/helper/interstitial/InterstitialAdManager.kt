@@ -1,5 +1,7 @@
 package com.ads.module.helper.interstitial
 
+import com.ads.module.config.settings.AdBehavior
+import com.ads.module.config.settings.BehaviorValues
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -33,15 +35,21 @@ class InterLoadOptions @JvmOverloads constructor(
     /** Pre-resolved UA/organic gate — see [AdGate.passesUaGate]. */
     val passesUaGate: Boolean = true,
     /** How long one waterfall tier may take before the next floor is tried. */
-    val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
+    val tierTimeoutMs: Long = AdBehavior.defaultNumber("interstitial.load.tier_timeout_ms"),
     /** Off when the caller owns request/skip analytics itself (OnboardKit's AdTelemetry). */
     val reportTelemetry: Boolean = true,
-)
+) {
+    /** Optional screen-specific values, captured by the caller for this load. */
+    var behavior: BehaviorValues? = null
+
+    internal fun behaviorValues(placement: String): BehaviorValues =
+        behavior ?: AdBehavior.values("interstitial", placement)
+}
 
 /** Options for an explicit partner trigger that may wait for an interstitial fill. */
 class InterLoadAndShowOptions @JvmOverloads constructor(
     /** UI wait only; expiry does not cancel a shared load or bound the waterfall's lifetime. */
-    val timeoutMs: Long = 8_000L,
+    val timeoutMs: Long = AdBehavior.defaultNumber("interstitial.load_and_show.wait_timeout_ms"),
     /** Off skips even when this placement already has a ready fill. */
     val enabled: Boolean = true,
     /** Pre-resolved UA/organic gate, applied before using either a buffer or a new request. */
@@ -51,14 +59,29 @@ class InterLoadAndShowOptions @JvmOverloads constructor(
     /** Captured for this invocation; load time cannot change the eventual navigation mode. */
     val nextAction: InterNextAction = InterstitialAdManager.defaultNextAction,
 ) {
-    var allowWaitForAutoBuffer: Boolean = false
+    var allowWaitForAutoBuffer: Boolean = AdBehavior.defaultBool("interstitial.load_and_show.allow_wait_for_auto_buffer")
         private set
+
+    /** Slot values retain precedence over common format/placement values. */
+    var behavior: BehaviorValues? = null
+
+    internal fun capture(placement: String): InterLoadAndShowOptions {
+        val values = behavior ?: AdBehavior.values("interstitial", placement)
+        return InterLoadAndShowOptions(
+            allowWaitForAutoBuffer = values.boolean("load_and_show.allow_wait_for_auto_buffer", allowWaitForAutoBuffer),
+            timeoutMs = timeoutMs,
+            enabled = enabled,
+            passesUaGate = passesUaGate,
+            reportTelemetry = reportTelemetry,
+            nextAction = nextAction,
+        ).also { it.behavior = values }
+    }
 
     /** Separate overload preserves the legacy Kotlin default-constructor descriptor. */
     @JvmOverloads
     constructor(
         allowWaitForAutoBuffer: Boolean,
-        timeoutMs: Long = 5_000L,
+        timeoutMs: Long = AdBehavior.defaultNumber("interstitial.load_and_show.buffer_wait_timeout_ms"),
         enabled: Boolean = true,
         passesUaGate: Boolean = true,
         reportTelemetry: Boolean = true,
@@ -122,7 +145,7 @@ object InterstitialAdManager {
      */
     @JvmStatic
     var defaultNextAction: InterNextAction
-        get() = if (ERainAd.getInstance().isOpenActivityAfterShowInterAds) {
+        get() = if (AdBehavior.text("interstitial.presentation.next_screen_timing", if (ERainAd.getInstance().isOpenActivityAfterShowInterAds) "UNDER_AD" else "AFTER_AD") == "UNDER_AD") {
             InterNextAction.UnderAd
         } else {
             InterNextAction.AfterDismiss
@@ -189,7 +212,7 @@ object InterstitialAdManager {
         passesUaGate = passesUaGate && AdGate.placementPassesUaGate(placement),
         tierTimeoutMs = tierTimeoutMs,
         reportTelemetry = reportTelemetry,
-    )
+    ).also { it.behavior = behavior }
 
     private fun loadInternal(
         context: Context,
@@ -226,10 +249,12 @@ object InterstitialAdManager {
         if (options.reportTelemetry) {
             AdTracking.request(placement, AdFormat.INTERSTITIAL, ids.first())
         }
+        val behavior = options.behaviorValues(placement)
+        val maxAgeMs = behavior.long("cache.max_age_ms", AdBehavior.defaultNumber("interstitial.cache.max_age_ms"))
         AdWaterfall.loadInterstitial(
             context,
             ids,
-            options.tierTimeoutMs,
+            behavior.long("load.tier_timeout_ms", options.tierTimeoutMs),
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     inFlight.remove(placement)
@@ -238,7 +263,7 @@ object InterstitialAdManager {
                         notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(null) }
                         return
                     }
-                    cache[placement] = CachedAd(apInterstitialAd)
+                    cache[placement] = CachedAd(apInterstitialAd, maxAgeMs = maxAgeMs)
                     notifyLoadResult(placement, null) { it.onApInterstitialLoad(apInterstitialAd) }
                 }
 
@@ -272,11 +297,13 @@ object InterstitialAdManager {
         callback: InterShowCallback,
         options: InterLoadAndShowOptions = InterLoadAndShowOptions(),
     ) {
+        val captured = options.capture(placement)
+        val behavior = checkNotNull(captured.behavior)
         val clickedAt = SystemClock.elapsedRealtime()
         val source = if (isReady(placement)) "ready" else if (isLoading(placement)) "join" else "cold"
         fun reportSkipped(reason: AdSkipReason) {
-            reportWait(placement, source, reason.key, clickedAt, options)
-            if (options.reportTelemetry) {
+            reportWait(placement, source, reason.key, clickedAt, captured)
+            if (captured.reportTelemetry) {
                 runCatching { AdTracking.skipped(placement, AdFormat.INTERSTITIAL, reason.key) }
             }
             runCatching { callback.onSkipped(reason) }
@@ -284,25 +311,25 @@ object InterstitialAdManager {
         }
 
         // A ready fill can show offline, but does not bypass placement or authority gates.
-        val entryGate = AdGate.skipReason(activity, options.enabled, options.passesUaGate, checkNetwork = false)
+        val entryGate = AdGate.skipReason(activity, captured.enabled, captured.passesUaGate, checkNetwork = false)
         if (entryGate != null) {
             if (entryGate == AdSkipReason.PURCHASED) cache.remove(placement)
             reportSkipped(entryGate)
             return
         }
         InterstitialFrequency.recordAction(placement)
-        val waitMs = if (options.allowWaitForAutoBuffer) options.timeoutMs.coerceIn(0L, 5_000L)
-            else options.timeoutMs.coerceAtLeast(0L)
+        val configuredWait = behavior.long(if (captured.allowWaitForAutoBuffer) "load_and_show.buffer_wait_timeout_ms" else "load_and_show.wait_timeout_ms", captured.timeoutMs)
+        val waitMs = if (captured.allowWaitForAutoBuffer) configuredWait.coerceIn(0L, 5_000L) else configuredWait.coerceAtLeast(0L)
         val deadline = clickedAt + waitMs
-        if ((InterstitialAutoBuffer.owns(placement) && !options.allowWaitForAutoBuffer) || isReady(placement)) {
-            reportWait(placement, source, "dispatch", clickedAt, options)
-            showInternal(activity, placement, callback, options.reportTelemetry, options.nextAction)
+        if ((InterstitialAutoBuffer.owns(placement) && !captured.allowWaitForAutoBuffer) || isReady(placement)) {
+            reportWait(placement, source, "dispatch", clickedAt, captured)
+            showInternal(activity, placement, callback, captured.reportTelemetry, captured.nextAction)
             return
         }
         val blockReason = showSkipReason(activity, placement)
             ?.takeUnless { it == AdSkipReason.NOT_READY }
-            ?: AdGate.skipReason(activity, AdWaterfall.usableIds(adUnitIds).isNotEmpty(), options.passesUaGate,
-                checkNetwork = !options.allowWaitForAutoBuffer || !isLoading(placement))
+            ?: AdGate.skipReason(activity, AdWaterfall.usableIds(adUnitIds).isNotEmpty(), captured.passesUaGate,
+                checkNetwork = !captured.allowWaitForAutoBuffer || !isLoading(placement))
         if (blockReason != null) {
             reportSkipped(blockReason)
             return
@@ -314,11 +341,11 @@ object InterstitialAdManager {
             return
         }
 
-        if (options.allowWaitForAutoBuffer && waitMs == 0L) {
+        if (captured.allowWaitForAutoBuffer && waitMs == 0L) {
             reportSkipped(AdSkipReason.NOT_READY)
             return
         }
-        awaitAndShow(activity, placement, adUnitIds, callback, options, deadline, clickedAt, source)
+        awaitAndShow(activity, placement, adUnitIds, callback, captured, deadline, clickedAt, source)
     }
 
     /**
@@ -368,7 +395,7 @@ object InterstitialAdManager {
         passesUaGate = passesUaGate && AdGate.placementPassesUaGate(placement),
         reportTelemetry = reportTelemetry,
         nextAction = nextAction,
-    )
+    ).also { it.behavior = behavior }
 
     private fun awaitAndShow(
         activity: AppCompatActivity,
@@ -447,7 +474,7 @@ object InterstitialAdManager {
         activity.lifecycle.addObserver(observer)
         handler.postDelayed(timeout, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
         // Cosmetic only. This captured dialog cannot dismiss a later invocation's UI.
-        dialog = runCatching {
+        dialog = if (!checkNotNull(options.behavior).boolean("presentation.loading_enabled", AdBehavior.defaultBool("interstitial.presentation.loading_enabled"))) null else runCatching {
             PrepareLoadingAdsDialog(activity).apply {
                 setCancelable(false)
                 show()
@@ -465,14 +492,14 @@ object InterstitialAdManager {
                 enabled = options.enabled,
                 passesUaGate = options.passesUaGate,
                 reportTelemetry = options.reportTelemetry,
-            ), extra = waiter)
+            ).also { it.behavior = options.behavior }, extra = waiter)
         }
     }
 
     /** One diagnostic per opted-in click. Dispatch is not an impression. */
     private fun reportWait(placement: String, source: String, result: String,
                            clickedAt: Long, options: InterLoadAndShowOptions) {
-        if (!options.allowWaitForAutoBuffer || !options.reportTelemetry) return
+        if (!options.allowWaitForAutoBuffer || !options.reportTelemetry || !AdBehavior.bool("diagnostics.ads_telemetry_enabled")) return
         runCatching { Tracker.track(SimpleEvent("ad_interstitial_wait", mapOf(
             "placement" to placement, "source" to source, "status" to result,
             "wait_ms" to (SystemClock.elapsedRealtime() - clickedAt).coerceAtLeast(0L),

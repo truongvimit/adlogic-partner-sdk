@@ -30,7 +30,7 @@ public class ERainAdConfig {
      * intervalInterstitialAd: time between two interstitial ad impressions
      * unit: seconds
      */
-    private int intervalInterstitialAd = 0;
+    private int intervalInterstitialAd = (int) (com.ads.module.config.settings.AdBehavior.defaultNumber("interstitial.frequency.interval_ms") / 1000);
 
     public ERainAdConfig(Application application) {
         this.application = application;

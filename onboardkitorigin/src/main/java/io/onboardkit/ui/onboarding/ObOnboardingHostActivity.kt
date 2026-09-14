@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -350,7 +351,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
-            timeoutMs = 8_000L,
+            timeoutMs = OnboardingSettings.number("onboarding.exit_interstitial.wait_timeout_ms"),
             onNext = { if (underAd) continueWhenResumed() },
             onFinished = {
                 adGone.complete(Unit)

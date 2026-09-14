@@ -1,5 +1,6 @@
 package com.ads.module.tracking;
 
+import com.ads.module.config.settings.AdBehavior;
 import androidx.annotation.Nullable;
 
 import com.ads.module.funtion.AdCallback;
@@ -39,13 +40,13 @@ public final class AdTracking {
      */
     public static void request(String placement, AdFormat format, String adUnitId) {
         PlacementRegistry.register(adUnitId, placement);
-        Tracker.track(new TrackkitEvents.Ad.Request(placement, format, adUnitId));
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Request(placement, format, adUnitId));
     }
 
     /**
      * A show opportunity policy declined — purchased user, remote flag off, no fill.
      */
     public static void skipped(String placement, AdFormat format, String reason) {
-        Tracker.track(new TrackkitEvents.Ad.Skipped(placement, format, reason));
+        if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Skipped(placement, format, reason));
     }
 }

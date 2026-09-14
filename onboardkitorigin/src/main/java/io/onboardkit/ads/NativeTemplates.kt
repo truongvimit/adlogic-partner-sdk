@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import io.onboardkit.remote.OnboardingSettings
 import androidx.annotation.LayoutRes
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -33,11 +34,14 @@ object NativeTemplates {
      *
      * The template only picks the layout frame. Which blocks show and in what order is `components`
      * in the ad config, applied at bind time — so one edit there moves every slot, onboarding
-     * included. There is no remote override for the template: a second source for the same decision
-     * let a global change land everywhere except here.
+     * included. Template defaults and content-step overrides come from onboarding_config;
+     * ad_config retains components and CTA styling.
      */
     internal fun templateForPlacement(placement: AdPlacement): NativeTemplate {
         val ads = OnboardingSdk.configOrNull()?.ads
+        if (placement is AdPlacement.StepNative) {
+            OnboardingSettings.values.string("onboarding.steps.${placement.stepId.value}.native_template", "").takeIf { it.isNotBlank() }?.let { return NativeTemplate.valueOf(it) }
+        }
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->
                 ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM

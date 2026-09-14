@@ -1,5 +1,6 @@
 package com.ads.module.helper.adnative
 
+import com.ads.module.config.settings.AdBehavior
 import androidx.annotation.ColorInt
 
 /**
@@ -35,10 +36,10 @@ data class NativeAdStyle(
     @ColorInt val ctaBackgroundColor: Int? = null,
 
     /** Corner radius of the CTA background when [ctaBackgroundColor] is set. */
-    val ctaCornerRadiusDp: Int = DEFAULT_CTA_CORNER_RADIUS_DP,
+    val ctaCornerRadiusDp: Int = AdBehavior.defaultNumber("native.presentation.cta_corner_radius_dp").toInt(),
 ) {
     companion object {
-        const val DEFAULT_CTA_CORNER_RADIUS_DP = 20
+        @JvmField val DEFAULT_CTA_CORNER_RADIUS_DP = AdBehavior.defaultNumber("native.presentation.cta_corner_radius_dp").toInt()
     }
 }
 

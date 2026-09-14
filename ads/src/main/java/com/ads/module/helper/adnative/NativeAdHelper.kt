@@ -1,5 +1,6 @@
 package com.ads.module.helper.adnative
 
+import com.ads.module.config.settings.AdBehavior
 import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
@@ -77,16 +78,19 @@ class NativeAdHelper(
     /** Analytics key. When set, the helper reports request/skip events itself. */
     var placement: String? = null
 
-    var adVisibility: AdOptionVisibility = AdOptionVisibility.GONE
+    var adVisibility: AdOptionVisibility = AdOptionVisibility.valueOf(AdBehavior.defaultText("native.presentation.empty_visibility"))
+        get() = AdOptionVisibility.valueOf(config.behaviorValues().string("presentation.empty_visibility", field.name))
 
     /** Minimum gap after the last bind before a reload may fire. */
-    var maxValueDebounceAdLoaded: Long = DEFAULT_DEBOUNCE_AD_LOADED_MS
+    var maxValueDebounceAdLoaded: Long = AdBehavior.defaultNumber("native.reload.min_after_bind_ms")
+        get() = config.behaviorValues().long("reload.min_after_bind_ms", field)
         set(value) {
             require(value > 0) { "maxValueDebounceAdLoaded must be > 0" }
             field = value
         }
 
-    var isEnablePreload: Boolean = false
+    var isEnablePreload: Boolean = AdBehavior.defaultBool("native.preload.enabled")
+        get() = config.behaviorValues().boolean("preload.enabled", field)
         private set
 
     var preloadKey: String = NativeAdPreload.getInstance().keyOf(config)
@@ -98,6 +102,11 @@ class NativeAdHelper(
     private var contentView: FrameLayout? = null
     private var shimmerView: ShimmerFrameLayout? = null
     private var nativeStyle: NativeAdStyle? = null
+        get() {
+            if (field == null && !config.behaviorValues().hasOverride("presentation.cta_corner_radius_dp")) return null
+            val local = field ?: NativeAdStyle()
+            return local.copy(ctaCornerRadiusDp = config.behaviorValues().long("presentation.cta_corner_radius_dp", local.ctaCornerRadiusDp.toLong()).toInt())
+        }
 
     /** Skeleton the helper itself created and inserted; app-supplied views never land here. */
     private var generatedShimmer: ShimmerFrameLayout? = null
@@ -114,6 +123,8 @@ class NativeAdHelper(
     private val resumeCount = AtomicInteger(0)
     private var timeShowAdRecent = 0L
     private var reloadByTimeMs = 0L
+        get() = if (config.behaviorValues().boolean("reload.timer_enabled", field > 0))
+            config.behaviorValues().long("reload.interval_ms", field.takeIf { it > 0 } ?: AdBehavior.number("native.reload.interval_ms")) else 0L
     private var nextReloadAtMs = 0L
     private var restoring = false
     private var restoreChecked = false
@@ -672,7 +683,7 @@ class NativeAdHelper(
     }
 
     private fun refillAfterShow() {
-        if (!isEnablePreload || !preloadClientOption.preloadAfterShow) return
+        if (!isEnablePreload || !config.behaviorValues().boolean("preload.after_show", preloadClientOption.preloadAfterShow)) return
         val preload = NativeAdPreload.getInstance()
         if (preload.getNativeAdBuffer(preloadKey).isEmpty() &&
             !preload.isPreloadInProgress(preloadKey)
@@ -707,8 +718,8 @@ class NativeAdHelper(
     }
 
     companion object {
-        const val DEFAULT_DEBOUNCE_AD_LOADED_MS: Long = 3_000L
-        const val DEFAULT_RELOAD_BY_TIME_MS: Long = 15_000L
+        @JvmField val DEFAULT_DEBOUNCE_AD_LOADED_MS: Long = AdBehavior.defaultNumber("native.reload.min_after_bind_ms")
+        @JvmField val DEFAULT_RELOAD_BY_TIME_MS: Long = AdBehavior.defaultNumber("native.reload.interval_ms")
 
         /**
          * One native slot, fully configured from `ad_config.json`: waterfall, on/off switch,

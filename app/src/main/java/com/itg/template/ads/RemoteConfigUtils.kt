@@ -13,11 +13,19 @@ import com.itg.template.app.GlobalApp
 import com.itg.template.data.model.ForceUpdateConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import io.suite.firebase.RemoteConfigClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.collections.set
 import kotlin.math.max
 import kotlin.math.min
 
 object RemoteConfigUtils {
+
+    private val fetchScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Volatile: written on the fetch callback thread, read from the main thread by every getter. */
     @Volatile
@@ -107,7 +115,10 @@ object RemoteConfigUtils {
                 defaults[key] = value
             }
             setDefaultsAsync(defaults)
-            fetchAndActivate().addOnCompleteListener {
+        }
+        fetchScope.launch {
+            RemoteConfigClient.fetchAndActivate()
+            withContext(Dispatchers.Main.immediate) {
                 // completed FIRST: every getter here returns its hardcoded default while this is
                 // false, so a listener reading remote values saw defaults, never the fetched ones.
                 completed = true

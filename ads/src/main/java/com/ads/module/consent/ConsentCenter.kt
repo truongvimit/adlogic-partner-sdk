@@ -226,7 +226,7 @@ object ConsentCenter {
             finish(flow, retryable = true, error = true)
         }
         timeoutRunnable = runnable
-        timeoutHandler.postDelayed(runnable, options.timeoutMs)
+        timeoutHandler.postDelayed(runnable, com.ads.module.config.settings.AdBehavior.number("consent.network_timeout_ms", options.timeoutMs))
     }
 
     private fun cancelTimeout() {

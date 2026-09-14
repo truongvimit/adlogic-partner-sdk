@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.ObLog
@@ -53,6 +54,7 @@ class PreloadChain internal constructor(
         when (destination) {
             FlowDestination.LANGUAGE -> {
                 if (!language1AlreadyScheduled) preloadLanguage1(activity)
+                if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "SPLASH_HANDOFF") preloadInitialContent(activity)
             }
 
             FlowDestination.ONBOARDING ->
@@ -76,9 +78,11 @@ class PreloadChain internal constructor(
     /** The LFO is on screen; slot 2 is buffered before the user's first tap swaps it into view. */
     fun onLanguageShown(activity: Activity) {
         val cfg = config() ?: return
-        if (cfg.language.secondNativeOnSelectEnabled && flags().enableLanguageNative2) {
+        if (OnboardingSettings.text("lfo.native2.preload_trigger") == "LFO_SHOWN" && cfg.language.secondNativeOnSelectEnabled && flags().enableLanguageNative2) {
             preloadNative(activity, AdPlacement.Language2)
         }
+        if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "LFO_SHOWN") preloadInitialContent(activity)
+        if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "LFO_SHOWN") preloadNative(activity, AdPlacement.LanguageConfirm)
     }
 
     /**
@@ -86,17 +90,20 @@ class PreloadChain internal constructor(
      * Fullscreen stays on the pager-entry chain; the confirm dialog loads on demand.
      */
     fun onLanguageSelected(activity: Activity) {
-        preloadInitialContent(activity)
+        if (OnboardingSettings.text("lfo.native2.preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.Language2)
+        if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.LanguageConfirm)
+        if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "FIRST_LANGUAGE_SELECTION") preloadInitialContent(activity)
     }
 
     private fun preloadInitialContent(activity: Activity) {
         val cfg = config() ?: return
         enabledSteps().filter { cfg.stepById(it)?.type == StepType.CONTENT }
-            .take(2).forEach { preloadForStep(activity, it) }
+            .take(OnboardingSettings.number("onboarding.preload.initial_content_count").toInt()).forEach { preloadForStep(activity, it) }
     }
 
     /** Pager entry, including resumed flows. Empty flows never call this. */
     fun onOnboardingShown(activity: Activity) {
+        if (!OnboardingSettings.bool("onboarding.exit_interstitial.preload_on_entry")) return
         val unit = config()?.ads?.afterOnboardingInterstitial ?: return
         val placement = AdPlacement.AfterOnboardingInterstitial
         if (guard.skipReason(activity, placement) == null) {
@@ -106,18 +113,18 @@ class PreloadChain internal constructor(
 
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {
         val next = enabledSteps.getOrNull(index + 1)
-        if (next != null) preloadForStep(activity, next)
+        if (next != null && OnboardingSettings.bool("onboarding.preload.next_step_enabled")) preloadForStep(activity, next)
 
         // An ad-only page has no content of its own: arriving there without a filled ad leaves the
         // user staring at a spinner. It gets the longest lead time available — requested from the
         // first page that precedes it, not just from the one immediately before.
-        nextAdOnlyStep(enabledSteps, index)?.let { preloadForStep(activity, it) }
+        nextAdOnlyStep(enabledSteps, index)?.takeIf { OnboardingSettings.bool("onboarding.preload.upcoming_fullscreen_enabled") }?.let { preloadForStep(activity, it) }
 
         if (next != null) return
         // Last pager step: warm every possible exit. OB5 used to have a preload nobody called, so
         // its native was never ready and the whole screen was unreachable.
-        if (flags().enableStepOb5) preloadOb5(activity)
-        preloadQuestion(activity)
+        if (flags().enableStepOb5 && OnboardingSettings.bool("onboarding.preload.ob5_on_last_step")) preloadOb5(activity)
+        if (OnboardingSettings.bool("onboarding.preload.question_on_last_step")) preloadQuestion(activity)
     }
 
     private fun nextAdOnlyStep(enabledSteps: List<StepId>, index: Int): StepId? {

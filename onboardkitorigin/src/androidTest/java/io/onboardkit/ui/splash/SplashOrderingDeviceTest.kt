@@ -109,13 +109,15 @@ class SplashOrderingDeviceTest {
                     return@use
                 }
                 eventually("Interstitial request") { f.interLoads.get() == 1 }
-                eventually("Splash regains actual focus") { onMain { host.hasWindowFocus() } }
                 if (case == "same_time") {
+                    // The immediate provider can finish the 200ms splash during ActivityScenario
+                    // startup. Its destination then owns focus; do not wait on the finished host.
                     eventually("Early inter terminal result must not be lost") { f.handoffs.get() == 1 }
                     assertEquals(1, f.splashLfo.get())
                     assertEquals(1, f.shows.get())
                     return@use
                 }
+                eventually("Splash regains actual focus") { onMain { host.hasWindowFocus() } }
                 if (parallel && case != "other_route") eventually("Parallel starts LFO1") { f.splashLfo.get() == 1 }
                 else assertEquals(0, f.splashLfo.get())
                 assertEquals("OB1/LFO2 must not be pulled into the early request phase", emptyList<String>(), f.splashOther.toList())

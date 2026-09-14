@@ -124,6 +124,7 @@ class GlobalApp : AdsMultiDexApplication() {
     }
 
     private fun initOnboardKit() {
+        io.onboardkit.remote.ObRemote.installFetchDelegate(io.suite.firebase.RemoteConfigClient::fetchAndActivate)
         OnboardingSdk.install(this) {
             adProvider = ERainAdProvider()
             // Wired after initPayKit(): the gate answers from PayKit's state, so onboarding would

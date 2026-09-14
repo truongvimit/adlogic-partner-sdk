@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import io.onboardkit.remote.OnboardingSettings
 import android.content.Context
 import io.onboardkit.config.AdUnitTiers
 import io.onboardkit.config.OnboardKitConfig
@@ -73,7 +74,7 @@ class AdsGuard internal constructor(
         if (provider == null) return AdSkipReason.NO_PROVIDER
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
         if (!cfg.ads.enabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
+        if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") || !flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
         return null
     }
 
@@ -86,7 +87,7 @@ class AdsGuard internal constructor(
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
         if (placement == AdPlacement.AfterOnboardingInterstitial &&
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
+        if (!OnboardingSettings.slotEnabled(placement) || !flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT

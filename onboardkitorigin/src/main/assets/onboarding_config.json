@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "revision": 0,
+  "flow": {
+    "ads_enabled": true,
+    "skip_ad_only_steps_when_premium": true,
+    "lock_portrait": true,
+    "fullscreen_skip_style": "CLOSE_ICON",
+    "system_bars": {
+      "show_status": true,
+      "show_navigation": false,
+      "show_caption": true
+    }
+  },
+  "splash": {
+    "ads": {
+      "banner": {
+        "enabled": true,
+        "placement": "",
+        "behavior": {}
+      },
+      "interstitial": {
+        "enabled": true,
+        "placement": "",
+        "behavior": {},
+        "old_user_placement": ""
+      }
+    },
+    "timing": {
+      "min_display_ms": 3000,
+      "ad_budget_ms": 60000,
+      "banner_wait_ms": 0,
+      "notification_settle_ms": 0
+    },
+    "load": {
+      "ad_strategy": "ALTERNATE",
+      "lfo1_preload_mode": "SEQUENTIAL",
+      "remote_fetch_timeout_ms": 10000,
+      "consent_hook_timeout_ms": 20000,
+      "billing_timeout_ms": 5000
+    },
+    "permissions": {
+      "no_internet_prompt_enabled": true,
+      "notification_enabled": true
+    },
+    "navigation": {
+      "next_screen_timing": "AUTO"
+    },
+    "entries": {
+      "notification": {
+        "interstitial_placement": "inter_noti"
+      },
+      "widget": {
+        "interstitial_placement": "inter_widget"
+      },
+      "uninstall": {
+        "interstitial_placement": "inter_uninstall"
+      }
+    }
+  },
+  "lfo": {
+    "ads_enabled": true,
+    "native_template": "CTA_BOTTOM",
+    "native1": {
+      "enabled": true,
+      "placement": "",
+      "behavior": {}
+    },
+    "native2": {
+      "enabled": true,
+      "placement": "",
+      "behavior": {},
+      "swap_wait_timeout_ms": 8000,
+      "preload_trigger": "LFO_SHOWN"
+    },
+    "tap_hint": {
+      "enabled": true,
+      "delay_ms": 3000
+    },
+    "confirm_button": {
+      "visible_before_selection": false,
+      "save_on_back": true,
+      "image_url": "",
+      "tint_color": ""
+    },
+    "confirm_dialog": {
+      "enabled": true,
+      "show_from_tap": 4,
+      "native_enabled": true,
+      "native_placement": "",
+      "native_preload_trigger": "DIALOG_OPEN",
+      "native_behavior": {}
+    },
+    "languages": {
+      "supported_codes": [],
+      "default_code": ""
+    },
+    "exit": {
+      "reuse_splash_inter": true
+    }
+  },
+  "onboarding": {
+    "navigation": {
+      "lock_pager_swipe": true,
+      "swipe_completes_last_step": true,
+      "back_navigates_back": true,
+      "ad_click_return_completes_step": true
+    },
+    "ads": {
+      "content_native_enabled": true,
+      "fullscreen_native_enabled": true,
+      "content_native_placement": "",
+      "fullscreen_native_placement": "",
+      "content_template": "CTA_TOP",
+      "content_native_behavior": {
+        "reload": {
+          "on_ad_click": false
+        }
+      },
+      "fullscreen_native_behavior": {
+        "reload": {
+          "on_ad_click": false
+        }
+      }
+    },
+    "fullscreen": {
+      "skip": {
+        "enabled": true,
+        "delay_ms": 1000,
+        "style": "CLOSE_ICON"
+      },
+      "auto_next": {
+        "enabled": true,
+        "delay_ms": 3000
+      }
+    },
+    "steps": {
+      "ob1": {
+        "enabled": true,
+        "native_enabled": true,
+        "native_placement": "",
+        "native_template": "",
+        "progress_visible": true,
+        "behavior": {}
+      },
+      "ob2": {
+        "enabled": true,
+        "native_enabled": true,
+        "native_placement": "",
+        "native_template": "",
+        "progress_visible": true,
+        "behavior": {}
+      },
+      "ob3": {
+        "enabled": true,
+        "native_enabled": true,
+        "native_placement": "",
+        "behavior": {}
+      },
+      "ob4": {
+        "enabled": true,
+        "native_enabled": true,
+        "native_placement": "",
+        "native_template": "",
+        "progress_visible": true,
+        "behavior": {}
+      }
+    },
+    "preload": {
+      "initial_content_trigger": "FIRST_LANGUAGE_SELECTION",
+      "initial_content_count": 2,
+      "next_step_enabled": true,
+      "upcoming_fullscreen_enabled": true,
+      "ob5_on_last_step": true,
+      "question_on_last_step": true
+    },
+    "exit_interstitial": {
+      "enabled": true,
+      "placement": "",
+      "preload_on_entry": true,
+      "wait_timeout_ms": 8000,
+      "next_screen_timing": "UNDER_AD",
+      "behavior": {}
+    }
+  },
+  "ob5": {
+    "enabled": false,
+    "native": {
+      "enabled": true,
+      "placement": "",
+      "behavior": {
+        "reload": {
+          "on_ad_click": false
+        }
+      }
+    },
+    "skip": {
+      "enabled": true,
+      "delay_ms": 3000,
+      "style": "CLOSE_ICON"
+    },
+    "auto_dismiss_ms": 15000
+  },
+  "question": {
+    "enabled": true,
+    "old_user_enabled": false,
+    "native": {
+      "enabled": true,
+      "placement": "",
+      "behavior": {},
+      "template": "CTA_BOTTOM",
+      "refresh_on_select": false,
+      "refresh_throttle_ms": 2000
+    },
+    "interstitial": {
+      "enabled": true,
+      "placement": "",
+      "behavior": {}
+    },
+    "selection": {
+      "mode": "MULTIPLE",
+      "min_count": 1
+    },
+    "content": {
+      "title": "",
+      "cta_text": "",
+      "options": []
+    }
+  },
+  "app_resume": {
+    "enabled": true
+  },
+  "ui": {
+    "enabled": true,
+    "content": {
+      "steps": []
+    },
+    "design_tokens": {
+      "custom_colors": []
+    }
+  }
+}

@@ -1,5 +1,6 @@
 package com.ads.module.tracking;
 
+import com.ads.module.config.settings.AdBehavior;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -260,7 +261,7 @@ public class TrackingAdCallback extends AdCallback {
     @Override
     public void onAdClosed() {
         if (closedReported.compareAndSet(false, true)) {
-            Tracker.track(new TrackkitEvents.Ad.Closed(placement, format, adUnitId));
+            if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Closed(placement, format, adUnitId));
         }
         if (delegate != null) delegate.onAdClosed();
     }
@@ -285,26 +286,26 @@ public class TrackingAdCallback extends AdCallback {
 
     private void reportLoaded() {
         if (loadedReported.compareAndSet(false, true)) {
-            Tracker.track(new TrackkitEvents.Ad.Loaded(
+            if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Loaded(
                     placement, format, adUnitId, System.currentTimeMillis() - requestedAtMs));
         }
     }
 
     private void reportLoadFailed(@Nullable Integer errorCode) {
         if (loadFailedReported.compareAndSet(false, true)) {
-            Tracker.track(new TrackkitEvents.Ad.LoadFailed(placement, format, adUnitId, errorCode));
+            if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.LoadFailed(placement, format, adUnitId, errorCode));
         }
     }
 
     private void reportShown() {
         if (shownReported.compareAndSet(false, true)) {
-            Tracker.track(new TrackkitEvents.Ad.Show(placement, format, adUnitId));
+            if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.Show(placement, format, adUnitId));
         }
     }
 
     private void reportShowFailed(@Nullable AdError adError) {
         if (showFailedReported.compareAndSet(false, true)) {
-            Tracker.track(new TrackkitEvents.Ad.ShowFailed(
+            if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) Tracker.track(new TrackkitEvents.Ad.ShowFailed(
                     placement, format, adUnitId, adError == null ? null : adError.getCode()));
         }
     }

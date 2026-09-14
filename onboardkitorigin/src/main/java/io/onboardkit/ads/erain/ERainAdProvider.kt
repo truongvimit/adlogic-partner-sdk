@@ -1,5 +1,6 @@
 package io.onboardkit.ads.erain
 
+import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Context
 import android.view.View
@@ -171,8 +172,8 @@ class ERainAdProvider(
         ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
             ?.let { nativeStyles[key] = it.toNativeStyle() }
         val config = nativeConfig(ids, request.layoutRes).apply {
-            reloadOnAdClick = request.placement !is AdPlacement.StepNative &&
-                request.placement !is AdPlacement.StepFullScreen && request.placement != AdPlacement.Ob5
+            behavior = OnboardingSettings.behavior(request.placement)
+            reloadOnAdClick = OnboardingSettings.nativeClickDefault(request.placement)
         }
         nativeConfigs[key] = config
         ensureNativeBridge(key)
@@ -322,7 +323,7 @@ class ERainAdProvider(
                 passesUaGate = AdGate.placementPassesUaGate(key),
                 tierTimeoutMs = tierTimeoutMs,
                 reportTelemetry = false,
-            ),
+            ).apply { behavior = OnboardingSettings.behavior(placement) },
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
@@ -388,7 +389,7 @@ class ERainAdProvider(
                 passesUaGate = AdGate.placementPassesUaGate(placement.key),
                 reportTelemetry = false,
                 nextAction = InterNextAction.UnderAd,
-            ),
+            ).apply { behavior = OnboardingSettings.behavior(placement) },
         )
     }
 
@@ -426,23 +427,24 @@ class ERainAdProvider(
         runCatching { AdmobHelper.getNumClickAdsPerDay(context, adUnitId) }.getOrDefault(0)
 
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
-        ERainAd.getInstance().loadBanner(
-            activity,
-            unit.id,
-            object : AdCallback() {
-                override fun onAdLoaded() {
-                    listener?.onLoaded()
-                }
-
-                override fun onAdFailedToLoad(error: LoadAdError?) {
-                    listener?.onFailedToLoad()
-                }
-
-                override fun onAdClicked() {
-                    listener?.onClicked()
-                }
-            },
-        )
+        val callback = object : AdCallback() {
+            override fun onAdLoaded() { listener?.onLoaded() }
+            override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
+            override fun onAdClicked() { listener?.onClicked() }
+        }
+        val owner = activity as? LifecycleOwner
+        if (owner == null) {
+            // The public provider also accepts plain Activities without lifecycle integration.
+            ERainAd.getInstance().loadBanner(activity, unit.id, callback)
+            return
+        }
+        val config = com.ads.module.helper.banner.BannerAdConfig(unit.id, true, false).apply {
+            behavior = OnboardingSettings.behavior(AdPlacement.SplashBanner)
+        }
+        com.ads.module.helper.banner.BannerAdHelper(activity, owner, config).apply {
+            registerAdListener(callback)
+            requestAds(com.ads.module.helper.banner.BannerAdParam.Request)
+        }
     }
 
     override fun suppressAppResume(activityClass: Class<out Activity>) {

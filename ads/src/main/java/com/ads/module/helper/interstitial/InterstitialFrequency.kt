@@ -1,5 +1,6 @@
 package com.ads.module.helper.interstitial
 
+import com.ads.module.config.settings.AdBehavior
 import android.content.Context
 import android.os.SystemClock
 import com.ads.module.ads.ERainAd
@@ -24,11 +25,13 @@ object InterstitialFrequency {
         InterstitialAutoBuffer.owns(placement) &&
             placement in InterstitialAutoBuffer.options().independentIntervalPlacements
 
+    private fun globalIntervalMs(): Long = AdBehavior.number("interstitial.frequency.interval_ms", (ERainAd.getInstance().adConfig?.intervalInterstitialAd ?: 0).coerceAtLeast(0) * 1000L)
+
     internal fun intervalMs(placement: String): Long =
         if (isIndependent(placement)) {
             InterstitialAutoBuffer.options().intervalMsByPlacement[placement]
-                ?: (intervalSeconds().coerceAtLeast(0) * 1_000L)
-        } else intervalSeconds().coerceAtLeast(0) * 1_000L
+                ?: (globalIntervalMs())
+        } else globalIntervalMs()
 
     private fun threshold(placement: String): Int =
         if (InterstitialAutoBuffer.owns(placement)) {
@@ -59,7 +62,7 @@ object InterstitialFrequency {
         val interval = intervalMs(placement)
         val anchor = maxOf(state.activatedAt, state.closedAt)
         val cycleAt = if (anchor < 0) 0L else anchor +
-            (interval - if (preload) 2_000L else 0L).coerceAtLeast(0L)
+            (interval - if (preload) AdBehavior.number("interstitial.auto_buffer.preload_lead_ms") else 0L).coerceAtLeast(0L)
         val retryAt = if (state.failedAt < 0) 0L else state.failedAt +
             if (interval > 0L) interval else InterstitialAutoBuffer.options().idleTickMs.coerceAtLeast(1L)
         return (maxOf(cycleAt, retryAt) - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
@@ -83,7 +86,7 @@ object InterstitialFrequency {
     }
 
     @JvmStatic
-    fun intervalSeconds(): Int = ERainAd.getInstance().adConfig?.intervalInterstitialAd ?: 0
+    fun intervalSeconds(): Int = ((globalIntervalMs() + 999) / 1000).toInt()
 
     /** Time remaining for the entire configured group; background time counts too. */
     @JvmStatic
@@ -101,7 +104,7 @@ object InterstitialFrequency {
     internal fun groupRemainingMs(): Long {
         val anchor = maxOf(activatedAt, closedAt, failedAt)
         if (anchor < 0) return 0L
-        val interval = intervalSeconds().coerceAtLeast(0) * 1_000L
+        val interval = globalIntervalMs()
         return (interval - (SystemClock.elapsedRealtime() - anchor)).coerceIn(0L, interval)
     }
 

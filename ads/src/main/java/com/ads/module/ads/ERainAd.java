@@ -138,6 +138,7 @@ public class ERainAd {
     }
 
     public void init(Application context, ERainAdConfig adConfig) {
+        com.ads.module.config.settings.AdBehavior.initialize(context);
         if (adConfig == null) {
             throw new RuntimeException("Cant not set ERainAdConfig null");
         }

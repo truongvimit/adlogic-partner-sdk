@@ -17,21 +17,21 @@ sealed class RemoteKey<T>(val key: String, val default: T) {
 
 object ObRemoteKeys {
     // Kill switches
-    val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", true)
-    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true)
+    val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", OnboardingSettings.defaultBool("flow.ads_enabled"))
+    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", OnboardingSettings.defaultBool("ui.enabled"))
 
     // Step gating — order is fixed in code; remote can only toggle
-    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", true)
-    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", true)
-    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", true)
-    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", true)
-    val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", false)
-    val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", true)
-    val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", false)
+    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", OnboardingSettings.defaultBool("onboarding.steps.ob1.enabled"))
+    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", OnboardingSettings.defaultBool("onboarding.steps.ob2.enabled"))
+    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", OnboardingSettings.defaultBool("onboarding.steps.ob3.enabled"))
+    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", OnboardingSettings.defaultBool("onboarding.steps.ob4.enabled"))
+    val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", OnboardingSettings.defaultBool("ob5.enabled"))
+    val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", OnboardingSettings.defaultBool("question.enabled"))
+    val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", OnboardingSettings.defaultBool("question.old_user_enabled"))
 
     // Language flow
     /** Second native shown in-place on the LFO after the first language tap. */
-    val ENABLE_LANGUAGE_NATIVE_2 = RemoteKey.BoolKey("ob_enable_language_native_2", true)
+    val ENABLE_LANGUAGE_NATIVE_2 = RemoteKey.BoolKey("ob_enable_language_native_2", OnboardingSettings.defaultBool("lfo.native2.enabled"))
     val PASS_LFO_IF_COMPLETED = RemoteKey.BoolKey("ob_pass_lfo_if_completed", true)
 
     /**
@@ -42,16 +42,16 @@ object ObRemoteKeys {
      * re-tap behaviour entirely and a second tap goes back to being inert.
      */
     val SHOW_LANGUAGE_CONFIRM_DIALOG =
-        RemoteKey.BoolKey("ob_show_language_confirm_dialog", true)
+        RemoteKey.BoolKey("ob_show_language_confirm_dialog", OnboardingSettings.defaultBool("lfo.confirm_dialog.enabled"))
 
     /**
      * Animated hand nudging the row the device locale points at, while nothing is selected yet.
      * Purely a UX nudge, so it is safe to switch off remotely without touching the flow.
      */
-    val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", true)
+    val SHOW_LANGUAGE_TAP_HINT = RemoteKey.BoolKey("ob_show_language_tap_hint", OnboardingSettings.defaultBool("lfo.tap_hint.enabled"))
 
     /** Seconds before the hand appears; ignored when tap hints are disabled. */
-    val LANGUAGE_TAP_HINT_DELAY_SEC = RemoteKey.LongKey("ob_language_tap_hint_delay_sec", 3)
+    val LANGUAGE_TAP_HINT_DELAY_SEC = RemoteKey.LongKey("ob_language_tap_hint_delay_sec", OnboardingSettings.defaultNumber("lfo.tap_hint.delay_ms") / 1000)
 
     /**
      * Whether the LFO confirm button is on screen before a language is picked. Off hides it until
@@ -64,18 +64,18 @@ object ObRemoteKeys {
 
     // Per-placement switches. One key per placement, all AND-ed with ENABLE_ALL_ADS by
     // RemoteFlags — a placement can never out-vote the master kill switch.
-    val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", true)
-    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
-    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", true)
-    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
-    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
+    val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", OnboardingSettings.defaultBool("lfo.exit.reuse_splash_inter"))
+    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", OnboardingSettings.defaultBool("splash.ads.banner.enabled"))
+    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
+    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", OnboardingSettings.defaultBool("splash.ads.interstitial.enabled"))
+    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", OnboardingSettings.defaultBool("lfo.ads_enabled"))
     val ADS_LANGUAGE_CONFIRM_NATIVE =
-        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true)
-    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true)
-    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true)
-    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true)
-    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
-    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
+        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", OnboardingSettings.defaultBool("lfo.confirm_dialog.native_enabled"))
+    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", OnboardingSettings.defaultBool("onboarding.ads.content_native_enabled"))
+    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", OnboardingSettings.defaultBool("onboarding.ads.fullscreen_native_enabled"))
+    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", OnboardingSettings.defaultBool("question.native.enabled"))
+    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", OnboardingSettings.defaultBool("question.interstitial.enabled"))
+    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", OnboardingSettings.defaultBool("app_resume.enabled"))
 
     // Splash interstitial ids — the returning-user segment and the SplashEntry keys
     // (`inter_noti` / `inter_widget` / `inter_uninstall`) included — come from the ads config
@@ -86,8 +86,8 @@ object ObRemoteKeys {
     // Timing
     val SPLASH_LFO_PARALLEL_PRELOAD_ENABLED = RemoteKey.BoolKey("ob_splash_lfo_parallel_preload_enabled", false)
     /** Optional pause after the notification result; zero preserves the existing default. */
-    val SPLASH_NOTIFICATION_SETTLE_MS = RemoteKey.LongKey("ob_splash_notification_settle_ms", 0)
-    val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", 3_000)
+    val SPLASH_NOTIFICATION_SETTLE_MS = RemoteKey.LongKey("ob_splash_notification_settle_ms", OnboardingSettings.defaultNumber("splash.timing.notification_settle_ms"))
+    val SPLASH_MIN_DISPLAY_MS = RemoteKey.LongKey("ob_splash_min_display_ms", OnboardingSettings.defaultNumber("splash.timing.min_display_ms"))
 
     /**
      * Shared banner/interstitial wait budget, armed after notification and foreground focus.
@@ -97,21 +97,21 @@ object ObRemoteKeys {
      * cover: at 30 s per ad unit anything lower silently denies the lower floors their turn. The
      * audit hard-coded it; here it is remote-tunable per app.
      */
-    val SPLASH_AD_BUDGET_MS = RemoteKey.LongKey("ob_splash_ad_budget_ms", 60_000)
+    val SPLASH_AD_BUDGET_MS = RemoteKey.LongKey("ob_splash_ad_budget_ms", OnboardingSettings.defaultNumber("splash.timing.ad_budget_ms"))
 
     /**
      * How long the splash holds for its banner/native slot to render before the full-screen ad
      * is allowed to cover it, capped by the shared splash budget. `0` means do not wait.
      */
-    val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", 0)
+    val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", OnboardingSettings.defaultNumber("splash.timing.banner_wait_ms"))
 
     /** Negative inherits the page default: OB3 1s, standalone OB5 3s. */
     val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", -1)
-    val FULLSCREEN_AUTO_DISMISS_SEC = RemoteKey.LongKey("ob_fullscreen_auto_dismiss_sec", 15)
+    val FULLSCREEN_AUTO_DISMISS_SEC = RemoteKey.LongKey("ob_fullscreen_auto_dismiss_sec", OnboardingSettings.defaultNumber("ob5.auto_dismiss_ms") / 1000)
 
     // Skip buttons on ad-only screens
-    val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", true)
-    val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", true)
+    val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", OnboardingSettings.defaultBool("onboarding.fullscreen.skip.enabled"))
+    val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", OnboardingSettings.defaultBool("ob5.skip.enabled"))
 
     // Server-driven UI payloads
     val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")

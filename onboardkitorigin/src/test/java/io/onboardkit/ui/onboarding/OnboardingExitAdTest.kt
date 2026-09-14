@@ -66,6 +66,9 @@ class OnboardingExitAdTest {
 
     @Before
     fun setUp() {
+        // SDK installation is process-scoped; each test must own its provider/listener.
+        // Other Robolectric classes may share this sandbox before this class runs.
+        org.robolectric.util.ReflectionHelpers.setStaticField(OnboardingSdk::class.java, "application", null)
         loads.clear()
         waits = 0
         bufferedShows = 0
@@ -133,6 +136,7 @@ class OnboardingExitAdTest {
         controller?.pause()?.stop()?.destroy()
         main.idle()
         ConsentCenter.setHostConsent(false, false)
+        org.robolectric.util.ReflectionHelpers.setStaticField(OnboardingSdk::class.java, "application", null)
     }
 
     @Test

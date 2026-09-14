@@ -13,7 +13,7 @@ package com.ads.module.consent
  *   directed at children.
  */
 data class ConsentOptions(
-    val timeoutMs: Long = 20_000,
+    val timeoutMs: Long = com.ads.module.config.settings.AdBehavior.defaultNumber("consent.network_timeout_ms"),
     val debug: Boolean? = null,
     val underAgeOfConsent: Boolean = false,
 )

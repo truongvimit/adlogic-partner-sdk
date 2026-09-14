@@ -8,7 +8,7 @@ import com.ads.module.helper.AdGate
 
 /** Optional preparation of the next unused ad; refresh timing belongs to the visible helper. */
 class NativeAdPreloadClientOption @JvmOverloads constructor(
-    val preloadAfterShow: Boolean = false,
+    val preloadAfterShow: Boolean = com.ads.module.config.settings.AdBehavior.defaultBool("native.preload.after_show"),
     /** Retained for source compatibility. The shared placement store now holds one unused ad. */
     @Deprecated("One unused ad per placement; repeated requests never append batches")
     val preloadBuffer: Int = 1,

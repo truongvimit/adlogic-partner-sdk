@@ -17,7 +17,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
     /** Extra wait configured inside open_resume; captured once for each background stay. */
     val appResumeLoadDelayMs: Long
-        get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
+        get() = com.ads.module.config.settings.AdBehavior.number("app_open.load.background_delay_ms", ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS)
 
     companion object {
         private const val TAG = "AdRemoteConfig"
@@ -85,6 +85,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
          */
         @JvmStatic
         fun initializeFromAssets(context: Context) {
+            com.ads.module.config.settings.AdBehavior.initialize(context)
             val debug = isDebuggable(context)
             val fileName = if (debug) DEBUG_FILE_NAME else RELEASE_FILE_NAME
             val loaded = fromAssets(context, fileName)

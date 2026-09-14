@@ -9,8 +9,9 @@ package com.ads.module.helper
 internal class CachedAd<T : Any>(
     val ad: T,
     private val loadedAtMs: Long = System.currentTimeMillis(),
+    private val maxAgeMs: Long = MAX_AGE_MS,
 ) {
-    val isFresh: Boolean get() = System.currentTimeMillis() - loadedAtMs < MAX_AGE_MS
+    val isFresh: Boolean get() = System.currentTimeMillis() - loadedAtMs < maxAgeMs
 
     companion object {
         /** GMA's ~1 hour staleness cutoff for unshown full-screen and native ads. */
