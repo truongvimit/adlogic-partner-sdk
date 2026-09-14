@@ -6,7 +6,9 @@ Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 
 
 Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, app-open và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
 
-**SDK 5.3.3:** phiên bản này có `preload` và flow cache/request reward dùng chung. Dùng `5.3.3` cho mọi module SDK; artifact `5.3.2` chưa chứa bản sửa reward này.
+**SDK 5.3.4:** đã có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Dùng `5.3.4` cho mọi module SDK; `5.3.3` chưa có các bổ sung này.
+
+**Yêu cầu phiên bản:** dùng SDK `5.3.4` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 ## 1. Thêm dependency
 
@@ -27,10 +29,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Đặt phiên bản `5.3.3` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
+Đặt phiên bản `5.3.4` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=5.3.3
+adlogicSdkVersion=5.3.4
 ```
 
 Mọi module dùng chung property này.
@@ -108,6 +110,12 @@ SDK chọn file theo debuggable. Debug thiếu/sai JSON sẽ dùng file thật, 
 
 ID mẫu từ [Google demo ad units](https://developers.google.com/admob/android/test-ads#demo_ad_units) và [AdMob App ID](https://developers.google.com/admob/android/quick-start). Fullscreen dùng **native ID**. Mẫu dùng chung ID test cùng format; production cần ID riêng để tách cấu hình/style/báo cáo theo placement.
 
+### Tùy chọn: settings remote theo nhóm và local default riêng
+
+SDK đã đóng gói thêm [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) và [onboarding_config.json](examples/ads-onboarding/onboarding_config.json). Muốn điều khiển qua remote, làm theo [Firebase: publish ba parameter String](firebase-integration.vi.md#remote-json). Giữ `ad_remote_config` cho ad unit; thêm `ad_behavior_config` và `onboarding_config` là hai String riêng, value chứa object JSON tương ứng.
+
+Muốn custom fallback, tạo file cùng tên trong `app/src/main/assets/`, copy toàn bộ default hoặc chỉ khai báo field muốn đổi, rồi build lại. Nếu dùng default SDK thì không cần tạo hai file ở app. Field remote/cache hợp lệ ưu tiên hơn local; fetch offline giữ remote cache hợp lệ cũ thay vì ép dùng local. Xem [ví dụ hai JSON local và quy tắc fallback](firebase-integration.vi.md#local-defaults), cùng [reference field/default](remote-settings.vi.md).
+
 ## 3. Chuẩn bị nội dung onboarding
 
 Dùng `app_name`, icon launcher sẵn có. Thêm sáu string vào `app/src/main/res/values/strings.xml`, thay nội dung theo sản phẩm:
@@ -146,11 +154,11 @@ Khai báo slot native/banner trong XML của màn, gọi API SDK trực tiếp t
 
 ### `OnboardKitSetup.kt` — nối các key OB vào SDK
 
-Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) cùng package. Đổi `com.example.app` trong mọi file Kotlin; import `R`, `BuildConfig`, `MainActivity` nếu ở package khác. Mẫu đã nối ba trang nội dung + fullscreen, tầng ad đang bật và template theo JSON. Bước 5 gọi `configure()` sau `OnboardingSdk.install`.
+Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) cùng package, đổi `com.example.app` và giữ resource của app. Mẫu khai báo ba trang nội dung + fullscreen, dùng **`AdsConfig.fromAdConfig()`** để liên kết các placement chuẩn. Bước 5 configure một lần sau `OnboardingSdk.install`; ID, gate và template được resolve từ settings hiện hành, không setup lại sau fetch. App dùng key khác chỉ truyền các association đó vào `fromAdConfig(mapOf(...))`; [bảng mapping](remote-settings.vi.md) liệt kê key mặc định.
 
-Mẫu không đặt `contentStepNative`: tắt mọi tầng `native_ob2` thì trang 2 không lấy ad trang 1. Riêng `languageDupNative = null` fallback về native đầu; tắt thay native bằng `secondNativeOnSelectEnabled = false`.
+Placement đã khai báo nhưng bị tắt giữ unit rỗng, không lấy quảng cáo của slot khác. Chỉ khi LFO2 không có unit mới fallback LFO1; tắt hành động thay native bằng `onboarding_config.lfo.native2.enabled = false`.
 
-Template theo `positionCTA`: `languageTemplate` đọc `native_lang`; `contentStepTemplate` đọc `native_ob1` cho mọi trang nội dung. Fullscreen/popup dùng layout cố định. Provider áp màu, chiều cao CTA và visibility từ ad config.
+Template native điều khiển qua `lfo.native_template`, `onboarding.ads.content_template`, `onboarding.steps.<id>.native_template` và `question.native.template`. Template override tường minh ưu tiên trước; khi thiếu thì từng placement đọc `positionCTA` riêng rồi template host/SDK. Fullscreen/popup giữ layout cố định. Màu, chiều cao CTA và components vẫn ở ad_config; reference resource/layout của app vẫn trong code.
 
 ## 5. Khởi tạo trong Application
 
@@ -252,15 +260,17 @@ Hoàn thành bước 1–6 là chạy được luồng chuẩn. Kiểm tra theo 
 
 ### Mặc định của luồng
 
+Bảng dưới mô tả default SDK và API local/legacy đang dùng làm fallback. Khi thử remote hoặc đổi default qua JSON local, dùng field tương ứng trong [reference settings theo nhóm](remote-settings.vi.md); override hợp lệ của JSON mới ưu tiên hơn các giá trị fallback này.
+
 Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `ERainAd`/`ConsentCenter` gọi tại nơi ghi trong bảng. Key `ob_*` thuộc Firebase Remote Config, **không nằm trong JSON ads**; chưa có Firebase dùng cache/default.
 
 | Hành vi | Mặc định | Chỉ đổi khi / nơi đổi |
 | --- | --- | --- |
-| Màn splash | Layout SDK, tối thiểu 3 giây từ lúc tải ads | `ob_splash_min_display_ms` (3000) > 0 ghi đè `SplashConfig.minDisplayTimeMs`; remote = `0` mới dùng local. Chưa có Firebase luôn 3000 ms |
+| Màn splash | Layout SDK; minimum display 3000 ms tính từ pha tải ads | `onboarding_config.splash.timing.min_display_ms`; `0` hợp lệ nghĩa là không giữ minimum này. Local/legacy hiện có là fallback. |
 | Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu: chờ đóng inter. Launcher → app/khảo sát người dùng cũ: mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định |
 | Chờ quảng cáo splash | Tối đa 60 giây sau notification và khi splash có focus | Remote `ob_splash_ad_budget_ms`; không tự thêm timer |
-| Fetch và load ads | `AdLoadStrategy.ALTERNATE`: chờ remote trước khi load | `SplashConfig.adLoadStrategy` khi app chấp nhận dùng ID trước fetch |
-| Preload native LFO đầu | Sau waterfall inter splash kết thúc/hết budget | Remote `ob_splash_lfo_parallel_preload_enabled = true` nếu cần tải song song |
+| Fetch và tải ads | `ALTERNATE`: chờ bước remote rồi mới request ads splash | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` cho banner/interstitial splash request sớm hơn. Strategy được chọn lúc vào splash. |
+| Preload native LFO đầu | Sau remote, rồi chờ interstitial splash tải xong (`SEQUENTIAL`) | `onboarding_config.splash.load.lfo1_preload_mode = "PARALLEL"` bỏ chờ tải interstitial, không bỏ chờ remote. |
 | Không có mạng | Hiện yêu cầu kết nối, chưa đi tiếp | `SplashConfig.noInternetPromptEnabled = false` để mở offline qua fallback UMP bên dưới; splash lần sau hỏi UMP lại |
 | Consent | Timeout mạng 20 giây; form chờ người dùng | Trong Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Giữ hook SDK; `SplashConfig.consentTimeoutMs` không đổi timeout UMP |
 | Form UMP khi QA | Debuggable: mọi máy là EEA (`setForceTesting`), không cần hashed id; release: địa lý thật | `ConsentOptions(debug = false)` để debug theo địa lý thật. `configure` thay toàn bộ option; muốn đổi cả timeout dùng một lần `ConsentOptions(timeoutMs = ..., debug = false)` |
@@ -269,7 +279,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Back ở LFO | Chưa chọn: bỏ qua Back. Đã chọn: hiện Save, vẫn ở màn ngôn ngữ | `LanguageConfig.saveButtonOnBackEnabled = false`: bỏ qua Back cả sau khi chọn. SETTINGS Back đóng màn |
 | Thay native sau chọn ngôn ngữ | Bật; native đầu giữ nguyên đến khi ad thay thế bind được | `LanguageConfig.secondNativeOnSelectEnabled = false` để tắt |
 | Popup ngôn ngữ | Từ click thứ 4, kể cả chọn lại item; native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
-| Native template | SDK: LFO CTA dưới, nội dung CTA trên; JSON mẫu chọn `BOTTOM` cho cả hai qua mapping bước 4 | Đổi `positionCTA` của `native_lang` / `native_ob1` hoặc fallback trong setup |
+| Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
 | Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại; không bật lại click preload ở provider |
 | Click native ở LFO/popup hoặc màn app | Preload ngay khi click/open; quay lại bind ad sẵn có hoặc chờ request đang chạy | `NativeAdConfig.reloadOnAdClick = true` mặc định, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
@@ -291,11 +301,11 @@ Hai JSON giữ field/giá trị example debug, chỉ chuẩn hóa interstitial s
 | --- | --- | --- |
 | `id` | Ad unit test đúng format | Thay ID ở file thật khi phát hành; không sửa key placement. |
 | `isEnable` | Theo example: đa số `true`, welcome `false` | Bật/tắt placement. Key gốc là công tắc tổng: `false` ở key gốc tắt cả waterfall. |
-| `enable_ua_check` | Có `true` và `false` | `true` chỉ cho paid/non-organic; SDK tự áp khi load và show, gồm cả app-resume. Mặc định organic tới khi Adjust trả attribution: chưa dùng Adjust phải đặt `false` cho slot app cần hiện. Provider OB không áp UA gate từ JSON, **trừ `inter_after_ob3`** — key này trùng key JSON nên SDK áp cả `isEnable` lẫn `enable_ua_check` cho nó; đặt `true` là tắt inter cuối OB với install organic. |
+| `enable_ua_check` | Có `true` và `false` | `true` yêu cầu paid/non-organic; chưa có kết quả Adjust thì mặc định organic. Liên kết chuẩn `AdsConfig.fromAdConfig()` áp gate này cho placement OB tương ứng, gồm native LFO/OB và inter cuối OB. Không dùng Adjust thì đặt `false` cho các placement muốn hiện. |
 | `reloadIntervalSeconds` | Banner: `30` | Chỉ parse, helper không dùng; không đổi refresh kể cả splash. Muốn refresh xem [Banner ở màn app](#tích-hợp-bổ-sung). |
 | `colorCTA` | `"default"` | Giữ màu template; thay màu khi cần tùy biến native. |
 | `heightCTA` | Native thường `45`, popup `36` | Chiều cao CTA (dp); SDK dùng `40` nếu bỏ field và ép giá trị vào khoảng 36–52 khi áp dụng. |
-| `positionCTA` | `"BOTTOM"` hoặc `null` | Mapping bước 4 chọn template LFO/nội dung từ key gốc. `null` dùng fallback SDK; fullscreen/popup vẫn dùng layout riêng. |
+| `positionCTA` | `"BOTTOM"` hoặc `null` | Chọn khung LFO/content/question theo từng placement khi chưa có template onboarding override tường minh. `null` giữ host/SDK fallback; fullscreen/popup dùng layout cố định. |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Khối thiếu bị ẩn, mảng rỗng hiện đủ. OB chỉ đổi visibility; [native màn app](#native-ở-màn-app-dùng-placement-constant) dùng cả thứ tự khi `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | Thời gian chờ tải app-open sau khi app ra background; chỉ có tác dụng khi đã bật app-resume. |
 
@@ -401,28 +411,24 @@ Mặc định: 30 giây/tầng tải, một cache/request theo placement, không
 | CTA/native style | Giữ đủ field như example; [bảng field JSON](#field-trong-json-mẫu) giải thích giá trị và nơi áp dụng. Bước 4 đã nối `positionCTA` vào native template. |
 | Banner ở màn app | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; thêm đối số `bannerType`, ví dụ `BannerType.Collapsible()` ([các loại](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt)). Đổi loại: `flagUserEnableReload = false`, `cancel()` helper cũ rồi tạo mới. SDK refresh cần tắt refresh AdMob cho mọi tầng rồi dựng `BannerAdConfig.forPlacement("banner_home", bannerType, canReloadAds = true)` và truyền vào constructor `BannerAdHelper`. |
 | UA/Adjust | Điền resource và dùng wiring ở [bước 5](#adjust-token-và-kiểm-tra). `enable_ua_check` giữ giá trị example; xem phạm vi áp dụng trong bảng field JSON. |
-| JSON từ Firebase | [Setup Firebase](firebase-integration.vi.md), `AdConfig.install(FirebaseAdConfigSource())` sau asset trong Application. Publish String `ad_remote_config` chứa **toàn bộ JSON** để thay config hiện tại; thêm hook splash bên dưới. |
+| JSON từ Firebase | [Publish ba parameter String](firebase-integration.vi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Cài `FirebaseAdConfigSource()` một lần sau assets; splash SDK tự refresh. [Custom fallback local](firebase-integration.vi.md#local-defaults) là tùy chọn. |
 | Firebase Analytics | Cài `suite-firebase`, đăng ký `Tracker.addSink(FirebaseSink())` ngay sau `Tracker.install`; chọn consent policy theo [hướng dẫn Firebase](firebase-integration.vi.md#consent-ban-đầu). |
 | App-open khi quay lại | Chưa bật; JSON có sẵn `open_resume` nhưng chỉ thêm JSON chưa bật tính năng. Làm theo [App-open khi quay lại](#app-open-khi-quay-lại). |
 | App có premium / paywall | Làm [BillingKit](billing-integration.vi.md) / [PayKit](paywall-integration.vi.md) và [hook chờ billing trước ads](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). `onInitBilling()` mặc định trống; gọi install billing chưa có nghĩa đã khôi phục premium. |
 | Đổi ngôn ngữ từ Settings | `registerForActivityResult(StartActivityForResult())`, rồi `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (kiểu trong `io.onboardkit.ui.language`). `RESULT_OK`: lấy `ObLanguageActivity.RESULT_LANGUAGE_CODE`, lưu như bước 5 và `recreate()`; Back không trả mã. Màn này không ads. `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` không trả result; đọc lựa chọn qua `OnboardingSdk.selectedLanguage()`. |
 | Entry từ notification/widget | Dùng `SplashEntry` và giữ passthrough trong listener; xem [OnboardKit](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). Không cần các entry này cho launcher thông thường. |
 
-Khi dùng remote JSON, thay class splash ở bước 6 bằng:
+Với liên kết placement hiện hành ở bước 4, dùng remote JSON không cần override splash thêm:
 
 ```kotlin
 package com.example.app
 
 import io.onboardkit.ui.splash.ObSplashActivity
 
-class SplashActivity : ObSplashActivity() {
-    override fun onRemoteFetched() {
-        OnboardKitSetup.configure()
-    }
-}
+class SplashActivity : ObSplashActivity()
 ```
 
-SDK fetch trước hook; `configure()` dựng lại mapping. Không fetch lần hai hay copy `RemoteConfigUtils`. Không dùng remote/preload/app-open thì giữ splash một dòng.
+SDK refresh các document trước điểm luồng cần dùng. Không gọi lại `OnboardKitSetup.configure()` trong `onRemoteFetched` chỉ để chép giá trị vừa fetch. Giữ hook nếu app có preload/tích hợp riêng. `ALTERNATE` chờ bước remote; LFO1 preload sau bước đó ở cả hai strategy. [Thời điểm áp dụng và QA](firebase-integration.vi.md#remote-notes).
 
 ### App-open khi quay lại
 
@@ -431,7 +437,7 @@ SDK fetch trước hook; `configure()` dựng lại mapping. Không fetch lần 
 
 Chỉ làm khi sản phẩm dùng app-open. `AppOpenManager` thuộc `com.ads.module.admob`.
 
-1. **Bước 4**, trong `AdsConfig`: `appResume = adConfig.interstitial(AppAdPlacement.OPEN_RESUME)`. Thiếu trường này, OnboardKit chặn app-open ở **mọi màn**, kể cả màn app.
+1. **Bước 4:** `AdsConfig.fromAdConfig()` đã liên kết `open_resume`. Nếu tự dựng `AdsConfig(...)`, truyền `appResume = InterstitialAdUnit(...)`; nếu thiếu, OnboardKit chặn app-open ở mọi màn.
 2. **Bước 5**, trong khối `apply` của `ERainAdConfig`: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`.
 3. **Remote JSON:** không cần thêm gì — SDK tự trỏ lại ID app-resume theo `open_resume` mỗi lần config đổi, gồm cả bật/tắt bằng `isEnable`. Hai điều kiện: app đã đặt sẵn một ID app-resume khác rỗng ở bước 2, và `open_resume` có ad unit ID. Vì bước 2 đọc lúc init (khi đó mới có config từ asset), hãy ship `open_resume` **bật kèm ID thật** trong `ad_config.json`.
 4. **Intent ra ngoài** (browser/share/review): gọi `AppOpenManager.getInstance().disableAdResumeByClickAction()` ngay sau `startActivity(...)` để bỏ qua lần quay lại. `disableAppResume()`/`enableAppResume()` là công tắc cả process.
@@ -442,6 +448,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 
 ## 8. Kiểm tra hoàn tất
 
+- [ ] Nếu dùng settings mới, thử remote override, offline lần đầu dùng local và offline giữ remote cache hợp lệ theo [checklist Firebase](firebase-integration.vi.md#remote-notes).
 - [ ] Debug build mở được splash, Logcat tag `AdRemoteConfig` có dòng `Loaded ad_config_debug.json with 45 placements (debug=true)`, `OB_FLOW` không báo config/provider lỗi.
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn item lần thứ 4 mở popup.
@@ -458,7 +465,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 | OB trống hoặc bỏ qua | `install` trước `configure`; dùng `steps(...)` ở bước 4 để có nội dung app, kiểm tra remote cache đã tắt flow/step chưa |
 | Không có ads | File được nạp, key ánh xạ, `isEnable`, trạng thái consent/premium, các cờ remote; không tạo timer show bù |
 | Debug dùng sai ID | Có đủ file debug hợp lệ; không bật `setAllowRemoteOverrideInDebug(true)` trong cấu hình chuẩn |
-| Remote đổi ID nhưng OB vẫn dùng ID cũ | Đã cài `FirebaseAdConfigSource` và gọi lại setup trong `onRemoteFetched()`; debug mặc định cố ý giữ asset |
+| Remote đổi ID nhưng OB còn dùng ID cũ | Cài `FirebaseAdConfigSource`, dùng `AdsConfig.fromAdConfig()` đúng key và để splash refresh. Debug mặc định pin ID ads; hai settings JSON vẫn áp dụng. |
 | Native style/reporting không tách từng slot khi test | ID demo cùng format đang dùng chung; provider có chỗ tra ngược style/placement theo ID. Dùng ID riêng khi kiểm tra cấu hình thực tế |
 
 ## Các file app thực sự cần
@@ -469,9 +476,10 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 | `app/src/main/AndroidManifest.xml` | Metadata, Application và launcher splash |
 | `app/src/main/res/values/id_ads.xml` | AdMob App ID, Meta credential và Adjust token/event token |
 | `app/src/main/assets/ad_config.json`, `ad_config_debug.json` | Copy hai JSON mẫu |
+| `app/src/main/assets/ad_behavior_config.json`, `onboarding_config.json` (tùy chọn) | Tạo/copy khi cần đổi default local; xem [quy tắc fallback](firebase-integration.vi.md#local-defaults). |
 | `strings.xml` và drawable của app | Nội dung, bản dịch, ảnh cho ba trang |
 | `AppAdPlacement.kt` | Danh mục key OB và key riêng của app; không chứa ad unit ID |
-| [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) | Ánh xạ nội dung, placement constants và native template |
+| [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) | Nội dung/resource app và liên kết trực tiếp các placement ad_config chuẩn |
 | Application hiện có hoặc [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | Khởi tạo SDK một lần và chọn màn đích |
 | `SplashActivity.kt` | Kế thừa splash SDK |
 

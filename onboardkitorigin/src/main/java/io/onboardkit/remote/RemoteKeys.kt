@@ -18,7 +18,7 @@ sealed class RemoteKey<T>(val key: String, val default: T) {
 object ObRemoteKeys {
     // Kill switches
     val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", OnboardingSettings.defaultBool("flow.ads_enabled"))
-    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", OnboardingSettings.defaultBool("ui.enabled"))
+    val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true)
 
     // Step gating — order is fixed in code; remote can only toggle
     val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", OnboardingSettings.defaultBool("onboarding.steps.ob1.enabled"))
@@ -65,17 +65,17 @@ object ObRemoteKeys {
     // Per-placement switches. One key per placement, all AND-ed with ENABLE_ALL_ADS by
     // RemoteFlags — a placement can never out-vote the master kill switch.
     val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", OnboardingSettings.defaultBool("lfo.exit.reuse_splash_inter"))
-    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", OnboardingSettings.defaultBool("splash.ads.banner.enabled"))
+    val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
     val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
-    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", OnboardingSettings.defaultBool("splash.ads.interstitial.enabled"))
-    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", OnboardingSettings.defaultBool("lfo.ads_enabled"))
+    val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
+    val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
     val ADS_LANGUAGE_CONFIRM_NATIVE =
-        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", OnboardingSettings.defaultBool("lfo.confirm_dialog.native_enabled"))
-    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", OnboardingSettings.defaultBool("onboarding.ads.content_native_enabled"))
-    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", OnboardingSettings.defaultBool("onboarding.ads.fullscreen_native_enabled"))
-    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", OnboardingSettings.defaultBool("question.native.enabled"))
-    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", OnboardingSettings.defaultBool("question.interstitial.enabled"))
-    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", OnboardingSettings.defaultBool("app_resume.enabled"))
+        RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true)
+    val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true)
+    val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true)
+    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true)
+    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
+    val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
 
     // Splash interstitial ids — the returning-user segment and the SplashEntry keys
     // (`inter_noti` / `inter_widget` / `inter_uninstall`) included — come from the ads config

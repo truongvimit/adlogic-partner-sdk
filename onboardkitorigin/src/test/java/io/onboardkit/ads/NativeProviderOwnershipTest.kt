@@ -84,6 +84,95 @@ class NativeProviderOwnershipTest {
         ConsentCenter.clearHostConsent()
     }
 
+    @Test fun `remote template and CTA radius reach a native filled before splash fetch without another load`() {
+        verifyTemplateAfterPreload(fillBeforeFetch = true)
+    }
+
+    @Test fun `remote template reaches a waiting helper when the fill arrives after splash fetch`() {
+        verifyTemplateAfterPreload(fillBeforeFetch = false)
+    }
+
+    @Test fun `an existing helper refreshes presentation for the next preloaded fill`() {
+        verifyTemplateAfterPreload(fillBeforeFetch = true, refreshForNextFill = true)
+    }
+
+    private fun verifyTemplateAfterPreload(fillBeforeFetch: Boolean, refreshForNextFill: Boolean = false) {
+        val sdk = io.onboardkit.OnboardingSdk
+        val settings = io.onboardkit.remote.OnboardingSettings
+        val adConfig = com.ads.module.config.AdRemoteConfig
+        val behavior = com.ads.module.config.settings.AdBehavior
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig {
+            ads = io.onboardkit.config.AdsConfig.fromAdConfig()
+        }.getOrThrow())
+        adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_lang" to
+            com.ads.module.config.AdUnitConfig("native-test", true))))
+        val container = FrameLayout(host).also(host::setContentView)
+        val ad = mock(NativeAd::class.java)
+        doReturn("Install").`when`(ad).callToAction
+        try {
+            settings.document.acceptSuccessfulFetch(null)
+            behavior.document.acceptSuccessfulFetch(null)
+            provider.preloadNative(host, request.copy(layoutRes = io.onboardkit.R.layout.ob_layout_native_cta_bottom))
+            if (fillBeforeFetch) requests.single().onNativeAdLoaded(ad)
+            else assertFalse(provider.bindNative(host, placement, container, null))
+            settings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_TOP","native1":{"behavior":{"presentation":{"cta_corner_radius_dp":7}}}}}""")
+            behavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"cta_corner_radius_dp":3}}}""")
+            adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_lang" to
+                com.ads.module.config.AdUnitConfig("native-test", true, colorCTA = "#ff0000"))))
+            if (!fillBeforeFetch) requests.single().onNativeAdLoaded(ad)
+            assertTrue(provider.bindNative(host, placement, container, null))
+            assertEquals("Keep the already requested ad", 1, requests.size)
+            val root = container.getChildAt(0) as com.google.android.gms.ads.nativead.NativeAdView
+            val column = root.getChildAt(0) as android.widget.LinearLayout
+            assertEquals("The CTA_TOP frame must actually be inflated", io.onboardkit.R.id.ad_call_to_action, column.getChildAt(0).id)
+            val background = column.getChildAt(0).background as android.graphics.drawable.GradientDrawable
+            assertEquals((7 * host.resources.displayMetrics.density).toInt().toFloat(), background.cornerRadius, 0f)
+            verify(ad, never()).destroy()
+            if (refreshForNextFill) {
+                provider.preloadNative(host, request.copy(layoutRes = io.onboardkit.R.layout.ob_layout_native_cta_top))
+                val replacement = mock(NativeAd::class.java)
+                doReturn("Install").`when`(replacement).callToAction
+                requests.last().onNativeAdLoaded(replacement)
+                settings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"COMPACT","native1":{"behavior":{"presentation":{"cta_corner_radius_dp":9}}}}}""")
+                assertTrue(provider.bindNative(host, placement, container, null))
+                val cta = container.findViewById<android.view.View>(io.onboardkit.R.id.ad_call_to_action)
+                assertEquals((9 * host.resources.displayMetrics.density).toInt().toFloat(),
+                    (cta.background as android.graphics.drawable.GradientDrawable).cornerRadius, 0f)
+                assertEquals("Only the explicitly requested replacement was loaded", 2, requests.size)
+                verify(ad).destroy()
+                verify(replacement, never()).destroy()
+            }
+        } finally {
+            settings.document.acceptSuccessfulFetch(null)
+            behavior.document.acceptSuccessfulFetch(null)
+            adConfig.reset()
+        }
+    }
+
+    @Test fun `remote SDK template cannot replace a custom layout supplied by the host`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val settings = io.onboardkit.remote.OnboardingSettings
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig {
+            ads = io.onboardkit.config.AdsConfig(languageNative = request.unit)
+        }.getOrThrow())
+        val container = FrameLayout(host).also(host::setContentView)
+        try {
+            settings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_TOP"}}""")
+            provider.preloadNative(host, request)
+            requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+            assertTrue(provider.bindNative(host, placement, container, null))
+            val root = container.getChildAt(0) as com.google.android.gms.ads.nativead.NativeAdView
+            assertEquals(com.ads.module.R.id.ad_container, root.getChildAt(0).id)
+            assertEquals(1, requests.size)
+        } finally {
+            settings.document.acceptSuccessfulFetch(null)
+        }
+    }
+
     @Test fun `plain Activity banner retains direct load and listener callbacks`() {
         val activity = mock(android.app.Activity::class.java)
         val ads = mock(com.ads.module.ads.ERainAd::class.java)

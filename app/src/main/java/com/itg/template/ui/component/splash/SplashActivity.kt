@@ -7,7 +7,6 @@ import com.ads.module.billing.Billing
 import com.ads.module.config.AdRemoteConfig
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.open_resume
-import com.itg.template.app.OnboardKitSetup
 import com.itg.template.app.ResumeAdsEntryRule
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.paykit.PayKit
@@ -35,8 +34,6 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
         // The ad units already refreshed inside the SDK's remote step. This fetch is for the app's
         // own flags — force update, the uninstall widget — which the SDK knows nothing about.
         RemoteConfigUtils.init(this, this)
-        // Ad unit ids may have changed remotely — rebuild the OnboardKit config with fresh ids
-        OnboardKitSetup.configure()
 
         if (ResumeAdsEntryRule.shouldEnableAppResume()) {
             AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.id)

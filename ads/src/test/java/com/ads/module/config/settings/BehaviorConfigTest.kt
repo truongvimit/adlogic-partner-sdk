@@ -15,7 +15,7 @@ class BehaviorConfigTest {
         val native = NativeAdConfig("test", true, false, 1).apply { reloadOnAdClick = false }
         AdBehavior.document.acceptSuccessfulFetch("""{"banner":{"reload":{"allowed":true,"interval_ms":12000},"presentation":{"type":"LARGE_ANCHORED"}},"native":{"reload":{"on_ad_click":true}}}""")
         assertTrue(banner.canReloadAds)
-        assertEquals(12_000L, banner.autoReloadTime)
+        assertEquals(22_000L, banner.autoReloadTime) // Removed JSON alias cannot override ad_config/local cadence.
         assertEquals(BannerType.LargeAnchored, banner.bannerType)
         assertTrue(native.reloadOnAdClick)
         AdBehavior.document.acceptSuccessfulFetch(null)

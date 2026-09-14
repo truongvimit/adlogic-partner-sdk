@@ -480,7 +480,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
      */
     protected open fun splashInterstitialOverride(): InterstitialAdUnit? =
         SplashEntry.from(intent)?.let { entry ->
-            AdRemoteConfig.getInstance().tiersFor(OnboardingSettings.values.string("splash.entries.${entry.name.lowercase(java.util.Locale.ROOT)}.interstitial_placement", entry.interKey))
+            AdRemoteConfig.getInstance().tiersFor(entry.interKey)
                 .takeIf { it.isNotEmpty() }
                 ?.let { InterstitialAdUnit(tiers = it) }
         }

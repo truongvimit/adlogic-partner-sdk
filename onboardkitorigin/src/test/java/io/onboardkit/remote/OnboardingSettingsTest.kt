@@ -55,45 +55,30 @@ class OnboardingSettingsTest {
     @Test fun `missing remote preserves original config and repeated resolution reuses snapshots`() {
         val config = onboardKitConfig { defaultSteps() }.getOrThrow()
         assertSame(config, OnboardingSettings.resolve(config))
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"fullscreen_skip_style":"TEXT"}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"navigation":{"lock_pager_swipe":false}}}""")
         val resolved = OnboardingSettings.resolve(config)
         assertSame(resolved, OnboardingSettings.resolve(config))
-        assertEquals(FullScreenSkipStyle.TEXT, (resolved.steps[2] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertFalse(resolved.behavior.lockPagerSwipe)
         val flags = RemoteFlags()
         assertSame(OnboardingSettings.resolveFlags(flags), OnboardingSettings.resolveFlags(flags.copy()))
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         assertSame(config, OnboardingSettings.resolve(config))
     }
 
-    @Test fun `native placement remapping uses override for the mapped ad key`() {
-        AdBehavior.document.acceptSuccessfulFetch("""{"placement_overrides":{"custom_native":{"native":{"load":{"tier_timeout_ms":2345}}}}}""")
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"native_placement":"custom_native"}}},"lfo":{"confirm_dialog":{"native_placement":"custom_native"}}}""")
-        assertEquals(2345L, OnboardingSettings.behavior(AdPlacement.StepNative(StepId.OB1)).long("load.tier_timeout_ms", 30000))
-        assertEquals(2345L, OnboardingSettings.behavior(AdPlacement.LanguageConfirm).long("load.tier_timeout_ms", 30000))
-    }
-
-    @Test fun `disabled mappings suppress fallback and ad unit update invalidates resolved cache`() {
-        val custom = StepId("custom")
-        val config = onboardKitConfig {
-            step(ContentStepDefinition(custom))
-            ads = AdsConfig(
-                splashInterstitial = InterstitialAdUnit("local_inter"),
-                contentStepNative = NativeAdUnit("local_native"),
-                languageNative = NativeAdUnit("local_language"),
-            )
-        }.getOrThrow()
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"ads":{"interstitial":{"old_user_placement":"remote_inter"}}},"lfo":{"native2":{"placement":"remote_native"}},"onboarding":{"steps":{"custom":{"native_placement":"remote_native"}}}}""")
-        val unavailable = OnboardingSettings.resolve(config)
-        assertTrue(unavailable.ads.splashInterstitialOldUser!!.loadOrder.isEmpty())
-        assertTrue(unavailable.ads.nativeUnitFor(AdPlacement.Language2)!!.loadOrder.isEmpty())
-        assertTrue(unavailable.ads.nativeUnitFor(AdPlacement.StepNative(custom))!!.loadOrder.isEmpty())
+    @Test fun `ad config binding resolves IDs without repeated host setup and invalidates cache`() {
+        val config = onboardKitConfig { defaultSteps() }.getOrThrow()
+        assertNull(OnboardingSettings.resolve(config).ads.languageNative)
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
-            "remote_inter" to AdUnitConfig("remote_i", true),
-            "remote_native" to AdUnitConfig("remote_n", true),
+            "native_lang" to AdUnitConfig("remote_n", true),
+            "native_fs" to AdUnitConfig("remote_fs", true),
         )))
         val available = OnboardingSettings.resolve(config)
-        assertEquals(listOf("remote_i"), available.ads.splashInterstitialOldUser!!.loadOrder)
-        assertEquals(listOf("remote_n"), available.ads.nativeUnitFor(AdPlacement.StepNative(custom))!!.loadOrder)
+        assertEquals(listOf("remote_n"), available.ads.languageNative!!.loadOrder)
+        assertEquals(listOf("remote_fs"), available.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder)
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("remote_fs", false))))
+        val disabled = OnboardingSettings.resolve(config)
+        assertTrue(disabled.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder.isEmpty())
+        assertNull(disabled.ads.languageNative)
     }
 
     @Test fun `invalid remote default language retains host default`() {
@@ -102,11 +87,18 @@ class OnboardingSettingsTest {
         assertEquals("en", OnboardingSettings.resolve(config).language.defaultCode)
     }
 
-    @Test fun `OB5-only mapping is resolved without another group changing`() {
-        val config = onboardKitConfig { ads = AdsConfig(ob5Native = NativeAdUnit("local_ob5")) }.getOrThrow()
+    @Test fun `removed mapping and UI aliases cannot override ad units or local UI`() {
+        val config = onboardKitConfig {
+            ads = AdsConfig(ob5Native = NativeAdUnit("local_ob5"), languageTemplate = NativeTemplate.COMPACT)
+            system = SystemBarConfig(showStatusBar = false)
+        }.getOrThrow()
         AdRemoteConfig.update(AdRemoteConfig(mapOf("remote_ob5" to AdUnitConfig("remote_ob5_id", true))))
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"ob5":{"native":{"placement":"remote_ob5"}}}""")
-        assertEquals(listOf("remote_ob5_id"), OnboardingSettings.resolve(config).ads.ob5Native!!.loadOrder)
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"ob5":{"native":{"placement":"remote_ob5","enabled":false}},"lfo":{"native_template":"CTA_TOP"},"flow":{"system_bars":{"show_status":true}},"ui":{"content":{"steps":[{"id":"ob1","title":"ignored"}]}}}""")
+        val resolved = OnboardingSettings.resolve(config)
+        assertEquals(listOf("local_ob5"), resolved.ads.ob5Native!!.loadOrder)
+        assertEquals(NativeTemplate.CTA_TOP, resolved.ads.languageTemplate)
+        assertFalse(resolved.system.showStatusBar)
+        assertEquals(RemoteFlags(), OnboardingSettings.resolveFlags(RemoteFlags()))
     }
 
     @Test fun `custom step enabled flag changes flow membership and missing field restores it`() {
@@ -118,6 +110,49 @@ class OnboardingSettingsTest {
         assertEquals(listOf(custom), io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(config), RemoteFlags()))
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         assertEquals(listOf(custom), io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(config), RemoteFlags()))
+    }
+
+    @Test fun `skip style scopes preserve local resources and unrelated timing`() {
+        val config = onboardKitConfig {
+            ads = AdsConfig(fullScreenSkipStyle = FullScreenSkipStyle.TEXT)
+            behavior = BehaviorConfig(lockPortrait = false)
+            system = SystemBarConfig(showStatusBar = false, showNavigationBar = true, showCaptionBar = false)
+            steps(ContentStepDefinition(StepId.OB1, layoutRes = 456, showsProgressIndicator = false),
+                AdFullScreenStepDefinition(StepId.OB3, skipButtonDelaySec = 7, autoNextEnabled = false),
+                AdFullScreenStepDefinition(StepId("custom_ad"), skipButtonStyle = FullScreenSkipStyle.TEXT))
+        }.getOrThrow()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"lock_portrait":true,"system_bars":{"show_status":true,"show_navigation":false,"show_caption":true},"fullscreen_skip_style":"CLOSE_ICON"},"onboarding":{"fullscreen":{"skip":{"style":"TEXT"}},"steps":{"ob1":{"progress_visible":true},"ob3":{"fullscreen":{"skip":{"style":"CLOSE_ICON"}}}}},"ob5":{"skip":{"style":"TEXT"}}}""")
+        val resolved = OnboardingSettings.resolve(config)
+        assertSame(config.system, resolved.system)
+        assertFalse(resolved.behavior.lockPortrait)
+        val content = resolved.steps[0] as ContentStepDefinition
+        assertEquals(456, content.layoutRes)
+        assertFalse(content.showsProgressIndicator)
+        val ob3 = resolved.steps[1] as AdFullScreenStepDefinition
+        assertEquals(FullScreenSkipStyle.CLOSE_ICON, ob3.skipButtonStyle)
+        assertEquals(7, ob3.skipButtonDelaySec)
+        assertFalse(ob3.autoNextEnabled)
+        assertEquals(FullScreenSkipStyle.TEXT, (resolved.steps[2] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertEquals(FullScreenSkipStyle.TEXT, OnboardingSettings.ob5SkipStyle(resolved.ads.fullScreenSkipStyle))
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"fullscreen_skip_style":"CLOSE_ICON"},"ob5":{"skip":{"style":"invalid"}}}""")
+        assertEquals(FullScreenSkipStyle.CLOSE_ICON, (OnboardingSettings.resolve(config).steps[1] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertEquals(FullScreenSkipStyle.CLOSE_ICON, OnboardingSettings.ob5SkipStyle(OnboardingSettings.resolve(config).ads.fullScreenSkipStyle))
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertSame(config, OnboardingSettings.resolve(config))
+        assertEquals(FullScreenSkipStyle.TEXT, OnboardingSettings.ob5SkipStyle(config.ads.fullScreenSkipStyle))
+    }
+
+    @Test fun `language experiments use the app catalog and missing fields retain its default`() {
+        val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en") }.getOrThrow()
+        val supported = config.language.languages.last().code
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"default_code":"$supported","supported_codes":["$supported"]},"confirm_button":{"image_url":"https://example.com/confirm.png","tint_color":"#ff0000"}}}""")
+        assertEquals(supported, OnboardingSettings.resolve(config).language.defaultCode)
+        assertEquals(supported, OnboardingSettings.resolveFlags(RemoteFlags()).languageSupportedCodes)
+        assertEquals("#ff0000", OnboardingSettings.text("lfo.confirm_button.tint_color"))
+        OnboardingSettings.document.acceptSuccessfulFetch("{}")
+        assertEquals("en", OnboardingSettings.resolve(config).language.defaultCode)
+        assertEquals("", OnboardingSettings.text("lfo.confirm_button.image_url"))
+        assertEquals("", OnboardingSettings.text("lfo.confirm_button.tint_color"))
     }
 
 }

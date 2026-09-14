@@ -1,6 +1,7 @@
 package io.onboardkit.config
 
 import io.onboardkit.remote.OnboardingSettings
+import com.ads.module.config.AdRemoteConfig
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.core.StepId
@@ -167,7 +168,66 @@ data class AdsConfig(
     val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.valueOf(OnboardingSettings.defaultText("onboarding.exit_interstitial.next_screen_timing")),
     /** Shared Skip/X appearance for OB3 and standalone OB5. */
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
+    /** App-owned association with ad_config keys; never duplicated in behavior JSON. */
+    val placementKeys: Map<AdPlacement, String> = emptyMap(),
 ) {
+    companion object {
+        /** Standard partner keys. Override only associations whose names differ in your app. */
+        @JvmStatic
+        @JvmOverloads
+        fun fromAdConfig(placements: Map<AdPlacement, String> = emptyMap()): AdsConfig = AdsConfig(
+            placementKeys = mapOf(
+                AdPlacement.SplashBanner to "banner_splash",
+                AdPlacement.SplashInterstitial to "inter_splash",
+                AdPlacement.AfterOnboardingInterstitial to "inter_after_ob3",
+                AdPlacement.Language1 to "native_lang",
+                AdPlacement.Language2 to "native_lang_alt",
+                AdPlacement.LanguageConfirm to "native_popup_lang",
+                AdPlacement.StepNative(StepId.OB1) to "native_ob1",
+                AdPlacement.StepNative(StepId.OB2) to "native_ob2",
+                AdPlacement.StepNative(StepId.OB4) to "native_ob3",
+                AdPlacement.StepFullScreen(StepId.OB3) to "native_fs",
+                AdPlacement.Ob5 to "native_onboarding_fullscreen_1_4",
+                AdPlacement.QuestionNative to "native_question",
+                AdPlacement.QuestionInterstitial to "inter_question",
+                AdPlacement.AppResume to "open_resume",
+            ) + placements,
+        )
+    }
+
+    internal fun placementKeyFor(placement: AdPlacement): String? = placementKeys[placement]
+
+    /** Resolve from the current ad document for both flow eligibility and ad requests. */
+    internal fun resolvePlacements(config: AdRemoteConfig): AdsConfig {
+        if (placementKeys.isEmpty()) return this
+        fun tiers(p: AdPlacement): List<String>? = placementKeys[p]?.takeIf(config::declares)?.let(config::tiersFor)
+        fun native(p: AdPlacement, local: NativeAdUnit?) = tiers(p)?.let(::NativeAdUnit) ?: local
+        fun inter(p: AdPlacement, local: InterstitialAdUnit?) = tiers(p)?.let(::InterstitialAdUnit) ?: local
+        val oldSplashKey = placementKeys[AdPlacement.SplashInterstitial]?.plus("_old_user")
+        return copy(
+            splashBanner = tiers(AdPlacement.SplashBanner)?.let { BannerAdUnit(it.firstOrNull().orEmpty()) } ?: splashBanner,
+            splashInterstitial = inter(AdPlacement.SplashInterstitial, splashInterstitial),
+            splashInterstitialOldUser = oldSplashKey?.takeIf(config::declares)?.let { InterstitialAdUnit(config.tiersFor(it)) } ?: splashInterstitialOldUser,
+            languageNative = native(AdPlacement.Language1, languageNative),
+            languageDupNative = native(AdPlacement.Language2, languageDupNative),
+            languageConfirmNative = native(AdPlacement.LanguageConfirm, languageConfirmNative),
+            stepNatives = stepNatives.toMutableMap().apply {
+                placementKeys.keys.forEach { p ->
+                    val id = when (p) {
+                        is AdPlacement.StepNative -> p.stepId
+                        is AdPlacement.StepFullScreen -> p.stepId
+                        else -> null
+                    }
+                    if (id != null) tiers(p)?.let { put(id, NativeAdUnit(it)) }
+                }
+            },
+            ob5Native = native(AdPlacement.Ob5, ob5Native),
+            questionNative = native(AdPlacement.QuestionNative, questionNative),
+            questionInterstitial = inter(AdPlacement.QuestionInterstitial, questionInterstitial),
+            afterOnboardingInterstitial = inter(AdPlacement.AfterOnboardingInterstitial, afterOnboardingInterstitial),
+            appResume = inter(AdPlacement.AppResume, appResume),
+        )
+    }
 
     /** [unitFor] narrowed to the native placements, so a screen cannot ask for the wrong type. */
     fun nativeUnitFor(placement: AdPlacement): NativeAdUnit? = unitFor(placement) as? NativeAdUnit

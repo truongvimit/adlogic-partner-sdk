@@ -145,7 +145,7 @@ class AppOpenResumeLoadStateTest {
     fun `remote retry window change cannot shorten captured background delay`() {
         startRequest()
         manager.onResume()
-        AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"load":{"background_delay_ms":60000}}}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":60000}}""")
         manager.onStop()
         main.idleFor(1_000, TimeUnit.MILLISECONDS)
         AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"load":{"background_delay_ms":60000,"background_retry_window_ms":240000}}}""")

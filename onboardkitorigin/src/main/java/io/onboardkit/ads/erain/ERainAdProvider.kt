@@ -101,6 +101,7 @@ class ERainAdProvider(
         val owner: LifecycleOwner,
         val container: FrameLayout,
         val helper: NativeAdHelper,
+        val config: NativeAdConfig,
     ) {
         var inBind = false
         var justBound = false
@@ -171,9 +172,11 @@ class ERainAdProvider(
         ids.forEach { PlacementRegistry.register(it, key) }
         ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
             ?.let { nativeStyles[key] = it.toNativeStyle() }
-        val config = nativeConfig(ids, request.layoutRes).apply {
+        val config = nativeConfig(ids, request.layoutRes, request.placement).apply {
             behavior = OnboardingSettings.behavior(request.placement)
             reloadOnAdClick = OnboardingSettings.nativeClickDefault(request.placement)
+            forceUaCheck = io.onboardkit.OnboardingSdk.configuredPlacementKey(request.placement)
+                ?.let { AdRemoteConfig.getInstance().ads[it]?.enableUaCheck } == true
         }
         nativeConfigs[key] = config
         ensureNativeBridge(key)
@@ -233,6 +236,17 @@ class ERainAdProvider(
             owner.lifecycle.addObserver(observer)
             observing = true
         }
+        // A native may have been preloaded before the splash remote fetch completed.
+        nativeConfigs[key]?.let { config ->
+            config.behavior = OnboardingSettings.behavior(placement)
+            // Preloading a replacement can replace nativeConfigs while the helper keeps its config.
+            nativeBindings[key]?.config?.behavior = config.behavior
+            val ads = AdRemoteConfig.getInstance()
+            val unit = io.onboardkit.OnboardingSdk.configuredPlacementKey(placement)?.let { ads.ads[it] }
+                ?: config.adUnitIds.firstNotNullOfOrNull(ads::unitForAdId)
+            if (unit == null) nativeStyles.remove(key) else nativeStyles[key] = unit.toNativeStyle()
+            nativeBindings[key]?.helper?.setNativeStyle(nativeStyles[key])
+        }
         pendingNativeBinds.add(key)
         deferredNativeFailures.remove(key)
         val current = nativeBindings[key]
@@ -244,7 +258,7 @@ class ERainAdProvider(
                 .setNativeStyle(nativeStyles[key])
                 .also { it.placement = key; it.reportTelemetry = false }
             (shimmer as? ShimmerFrameLayout)?.let(helper::setShimmerLayoutView)
-            NativeBinding(activity, owner, frame, helper).also { created ->
+            NativeBinding(activity, owner, frame, helper, config).also { created ->
                 nativeBindings[key] = created
                 helper.registerAdListener(object : AdCallback() {
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
@@ -317,10 +331,8 @@ class ERainAdProvider(
             unit.loadOrder,
             // The show path reads the placement's own enable_ua_check for any key ad_config.json
             // declares; loading past it would buy a fill that show then refuses.
-            // The show path reads the placement's own enable_ua_check for any key ad_config.json
-            // declares; loading past it would buy a fill that show then refuses.
             InterLoadOptions(
-                passesUaGate = AdGate.placementPassesUaGate(key),
+                passesUaGate = AdGate.placementPassesUaGate(io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: key),
                 tierTimeoutMs = tierTimeoutMs,
                 reportTelemetry = false,
             ).apply { behavior = OnboardingSettings.behavior(placement) },
@@ -386,7 +398,7 @@ class ERainAdProvider(
             interstitialCallback(placement.key, callback),
             InterLoadAndShowOptions(
                 timeoutMs = timeoutMs,
-                passesUaGate = AdGate.placementPassesUaGate(placement.key),
+                passesUaGate = AdGate.placementPassesUaGate(io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: placement.key),
                 reportTelemetry = false,
                 nextAction = InterNextAction.UnderAd,
             ).apply { behavior = OnboardingSettings.behavior(placement) },
@@ -438,7 +450,10 @@ class ERainAdProvider(
             ERainAd.getInstance().loadBanner(activity, unit.id, callback)
             return
         }
-        val config = com.ads.module.helper.banner.BannerAdConfig(unit.id, true, false).apply {
+        val placementKey = io.onboardkit.OnboardingSdk.configuredPlacementKey(AdPlacement.SplashBanner)
+        val config = (if (placementKey != null && AdRemoteConfig.getInstance().declares(placementKey))
+            com.ads.module.helper.banner.BannerAdConfig.forPlacement(placementKey)
+        else com.ads.module.helper.banner.BannerAdConfig(unit.id, true, false)).apply {
             behavior = OnboardingSettings.behavior(AdPlacement.SplashBanner)
         }
         com.ads.module.helper.banner.BannerAdHelper(activity, owner, config).apply {
@@ -470,10 +485,19 @@ class ERainAdProvider(
         listeners.clear()
     }
 
-    private fun nativeConfig(ids: List<String>, layoutRes: Int): NativeAdConfig =
-        NativeAdConfig(ids, true, false, layoutRes).also {
+    private fun nativeConfig(ids: List<String>, layoutRes: Int, placement: AdPlacement): NativeAdConfig {
+        val sdkTemplate = io.onboardkit.config.NativeTemplate.entries.any {
+            io.onboardkit.ads.NativeTemplates.layoutFor(it) == layoutRes
+        }
+        return object : NativeAdConfig(ids, true, false, layoutRes) {
+            // Resolve SDK frames at bind too, retaining the fill and any custom host layout.
+            override val layoutId: Int
+                get() = if (sdkTemplate && io.onboardkit.OnboardingSdk.configOrNull() != null)
+                    io.onboardkit.ads.NativeTemplates.layoutForPlacement(placement) else layoutRes
+        }.also {
             it.tierTimeoutMs = tierTimeoutMs
         }
+    }
 
     private fun ensureNativeBridge(key: String) {
         nativeBridges.computeIfAbsent(key) {

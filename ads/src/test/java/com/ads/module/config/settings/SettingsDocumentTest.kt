@@ -33,14 +33,14 @@ class SettingsDocumentTest {
 
     @Test fun `corrupt or unsupported document preserves last success and removal restores local`() {
         val d = document()
-        d.acceptSuccessfulFetch("""{"banner":{"reload":{"interval_ms":21000}}}""")
+        d.acceptSuccessfulFetch("""{"native":{"reload":{"interval_ms":21000}}}""")
         assertFalse(d.acceptSuccessfulFetch("{broken"))
         assertFalse(d.acceptSuccessfulFetch("""{"schema_version":2}"""))
-        assertEquals(21_000L, d.snapshot.long("banner.reload.interval_ms"))
+        assertEquals(21_000L, d.snapshot.long("native.reload.interval_ms"))
         d.acceptSuccessfulFetch("{}")
-        assertEquals(15_000L, d.snapshot.long("banner.reload.interval_ms"))
+        assertEquals(15_000L, d.snapshot.long("native.reload.interval_ms"))
         d.acceptSuccessfulFetch(null)
-        assertEquals(18_000L, d.snapshot.long("banner.reload.interval_ms", 18_000L))
+        assertEquals(18_000L, d.snapshot.long("native.reload.interval_ms", 18_000L))
     }
 
     @Test fun `last valid remote survives restart and deletion removes disk assignment`() {
@@ -63,7 +63,7 @@ class SettingsDocumentTest {
         assertFalse(d.snapshot.hasOverride("banner"))
         assertFalse(d.snapshot.hasOverride("native"))
         assertFalse(d.snapshot.hasOverride("app_open"))
-        assertEquals(22_000L, d.snapshot.long("banner.reload.interval_ms", 22_000L))
+        assertEquals(22_000L, d.snapshot.long("native.reload.interval_ms", 22_000L))
     }
 
     @Test fun `identical accepted payload preserves the immutable snapshot`() {
@@ -83,9 +83,9 @@ class SettingsDocumentTest {
 
     @Test fun `invalid numeric ranges do not reach scheduling or enum constructors`() {
         val d = document()
-        d.acceptSuccessfulFetch("""{"native":{"load":{"tier_timeout_ms":0}},"banner":{"reload":{"interval_ms":1}},"app_open":{"cache":{"max_age_ms":999999999}},"interstitial":{"presentation":{"next_screen_timing":"AUTO"}}}""")
+        d.acceptSuccessfulFetch("""{"native":{"load":{"tier_timeout_ms":0},"reload":{"interval_ms":0}},"app_open":{"cache":{"max_age_ms":999999999}},"interstitial":{"presentation":{"next_screen_timing":"AUTO"}}}""")
         assertEquals(30_000L, d.snapshot.long("native.load.tier_timeout_ms"))
-        assertEquals(15_000L, d.snapshot.long("banner.reload.interval_ms"))
+        assertEquals(15_000L, d.snapshot.long("native.reload.interval_ms"))
         assertEquals(14_400_000L, d.snapshot.long("app_open.cache.max_age_ms"))
         assertEquals("AFTER_AD", d.snapshot.string("interstitial.presentation.next_screen_timing"))
     }

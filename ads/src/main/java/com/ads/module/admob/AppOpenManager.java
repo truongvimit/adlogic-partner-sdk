@@ -417,7 +417,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (activity == null) {
             return true;
         }
-        if (AdBehavior.document.getSnapshot().strings("app_open.presentation.excluded_hosts", null).contains(activity.getClass().getName())) return true;
         for (Class activityClass : disabledAppOpenList) {
             if (activityClass.isInstance(activity)) {
                 return true;
@@ -718,7 +717,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     private boolean canFetchResume(boolean checkNetwork) {
         if (myApplication == null || !isInitialized) return false;
-        AdSkipReason reason = AdGate.skipReason(myApplication, (isAppResumeEnabled && AdBehavior.bool("app_open.enabled")),
+        AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled,
                 AdGate.placementPassesUaGate(RESUME_PLACEMENT), checkNetwork);
         if (reason != null) Log.d(TAG, "fetchAd: resume gate=" + reason.getKey());
         return reason == null;
@@ -999,7 +998,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** Live admission for the resume path only; raw splash retains its existing flow. */
     private boolean canShowResumeOn(Activity host) {
-        return isInitialized && isAppResumeEnabled && AdBehavior.bool("app_open.enabled") && !isInterstitialShowing
+        return isInitialized && isAppResumeEnabled && !isInterstitialShowing
                 && host != null && host == currentActivity && host == resumedActivity
                 && !host.isFinishing() && !host.isDestroyed() && !(host instanceof AdActivity)
                 && ProcessLifecycleOwner.get().getLifecycle().getCurrentState()

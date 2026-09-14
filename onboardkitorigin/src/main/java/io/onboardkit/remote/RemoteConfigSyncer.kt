@@ -59,10 +59,7 @@ class RemoteConfigSyncer internal constructor(
             listOf("ad_behavior_config", "onboarding_config").associateWith(reader::string),
         )
         val snapshot = withContext(Dispatchers.Default) {
-            RemoteFlags.from(reader).also {
-                // Warm grouped/legacy JSON merging before the new flags become observable.
-                OnboardingSettings.resolveFlags(it)
-            }
+            RemoteFlags.from(reader)
         }
         withContext(Dispatchers.IO) {
             synchronized(snapshotLock) {

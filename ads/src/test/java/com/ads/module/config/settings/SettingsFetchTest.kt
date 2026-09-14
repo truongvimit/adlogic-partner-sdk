@@ -19,7 +19,7 @@ class SettingsFetchTest {
 
     @Test fun `failed fetch leaves last success and does not consume a second timeout`() = runBlocking {
         AdBehavior.initialize(ApplicationProvider.getApplicationContext<Context>())
-        AdBehavior.document.acceptSuccessfulFetch("""{"banner":{"reload":{"interval_ms":12000}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"interval_ms":12000}}}""")
         var adFetches = 0
         AdConfig.install(object : AdConfigSource, SettingsConfigSource {
             override val id = "test"
@@ -27,7 +27,7 @@ class SettingsFetchTest {
             override suspend fun fetch(timeoutMs: Long): String? { adFetches++; return null }
         })
         assertFalse(AdConfig.refresh(10))
-        assertEquals(12000L, AdBehavior.number("banner.reload.interval_ms"))
+        assertEquals(12000L, AdBehavior.number("native.reload.interval_ms"))
         assertEquals(0, adFetches)
     }
 

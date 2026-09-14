@@ -1,6 +1,5 @@
 package io.onboardkit.ads
 
-import io.onboardkit.remote.OnboardingSettings
 import android.content.Context
 import io.onboardkit.config.AdUnitTiers
 import io.onboardkit.config.OnboardKitConfig
@@ -87,10 +86,13 @@ class AdsGuard internal constructor(
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
         if (placement == AdPlacement.AfterOnboardingInterstitial &&
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!OnboardingSettings.slotEnabled(placement) || !flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
+        if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT
+        cfg.ads.placementKeyFor(placement)?.let { key ->
+            if (!com.ads.module.helper.AdGate.placementPassesUaGate(key)) return AdSkipReason.UA_GATE
+        }
 
         // Interstitial interval and click cap are enforced by the ads module, which owns the
         // counters both rules read. Enforcing them here as well meant one impression could be

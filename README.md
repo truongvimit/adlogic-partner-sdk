@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Set version `5.3.3` once in your app project's root `gradle.properties`; every SDK module reads this property:
+Set version `5.3.4` once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=5.3.3
+adlogicSdkVersion=5.3.4
 ```
 
 To upgrade, change this property and read the documentation at the selected tag.

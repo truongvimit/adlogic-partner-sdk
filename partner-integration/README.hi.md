@@ -28,6 +28,7 @@
 - **वैकल्पिक tables:** default, कब बदलना है और कहाँ configure करना है यह बताते हैं। पूरी table अपने code या Firebase में copy करना जरूरी नहीं।
 - **App placements:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) OB keys और आपकी app screens को एक जगह रखता है। Placement key ही किसी ad slot की एकमात्र पहचान है — ad unit ID कई placements में साझा होता है इसलिए उनमें फर्क नहीं कर सकता; ad unit IDs JSON में रहते हैं।
 - **नमूना files:** [ad_config.json](examples/ads-onboarding/ad_config.json) और [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) दोनों test ad IDs इस्तेमाल करते हैं। इन्हें `app/src/main/assets/` में copy करें; release से पहले असली file के IDs बदलें।
+- **Grouped settings:** [remote setup](firebase-integration.hi.md#remote-json), [custom local defaults](firebase-integration.hi.md#local-defaults), [सभी fields/defaults](remote-settings.hi.md)। दो String parameters जोड़ें; SDK defaults पहले से bundled हैं। Offline में local fallback से पहले valid remote cache बना रहता है।
 - **Module READMEs:** जरूरत पड़ने पर और APIs, lifecycle और customization यहाँ देखें।
 
 ## Copy करने के लिए नमूना files
@@ -35,6 +36,7 @@
 | Feature | नमूना | कहाँ जाता है |
 | --- | --- | --- |
 | Ads + OB | [Production JSON](examples/ads-onboarding/ad_config.json), [debug JSON](examples/ads-onboarding/ad_config_debug.json), [AppAdPlacement](examples/ads-onboarding/AppAdPlacement.kt), [OnboardKitSetup](examples/ads-onboarding/OnboardKitSetup.kt), [PartnerApp](examples/ads-onboarding/PartnerApp.kt) | Assets, catalog और SDK initialization; दोनों JSON files test ad IDs इस्तेमाल करती हैं। |
+| Ads behavior + OB defaults | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json), [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | उसी नाम के Firebase String parameters में paste करें। Custom fallback चाहिए तो app में same-named assets बनाएँ। |
 | अपने UI के साथ billing | [BillingProducts.kt](examples/billing/BillingProducts.kt) | Product/base plan/offer catalog; अपनी app के Play products से बदलें। |
 | Paywall | [paywall_config.json](examples/paywall/paywall_config.json), [paywall_strings.xml](examples/paywall/paywall_strings.xml) | `res/raw`, `res/values`; example के fields पूरे हैं, catalog/copy/URLs बदलें। |
 | App events | [AppEvents.kt](examples/trackkit/AppEvents.kt) | Event/param keys एक जगह, सिर्फ अपनी app को चाहिए वही events रखें। |

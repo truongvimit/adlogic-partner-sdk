@@ -17,7 +17,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
     /** Extra wait configured inside open_resume; captured once for each background stay. */
     val appResumeLoadDelayMs: Long
-        get() = com.ads.module.config.settings.AdBehavior.number("app_open.load.background_delay_ms", ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS)
+        get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
     companion object {
         private const val TAG = "AdRemoteConfig"

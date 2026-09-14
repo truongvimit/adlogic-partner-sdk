@@ -1,10 +1,11 @@
 package io.onboardkit.ads
 
-import io.onboardkit.remote.OnboardingSettings
+import com.ads.module.config.AdRemoteConfig
 import androidx.annotation.LayoutRes
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.config.NativeTemplate
+import io.onboardkit.remote.OnboardingSettings
 
 /** Maps template names (compile-time enum or remote string) to the SDK's Figma layouts. */
 object NativeTemplates {
@@ -34,13 +35,28 @@ object NativeTemplates {
      *
      * The template only picks the layout frame. Which blocks show and in what order is `components`
      * in the ad config, applied at bind time — so one edit there moves every slot, onboarding
-     * included. Template defaults and content-step overrides come from onboarding_config;
-     * ad_config retains components and CTA styling.
+     * included. Explicit onboarding template overrides pick the SDK frame; otherwise ad_config's
+     * positionCTA is used before the host template. Colors, height and components stay in ad_config.
      */
     internal fun templateForPlacement(placement: AdPlacement): NativeTemplate {
         val ads = OnboardingSdk.configOrNull()?.ads
-        if (placement is AdPlacement.StepNative) {
-            OnboardingSettings.values.string("onboarding.steps.${placement.stepId.value}.native_template", "").takeIf { it.isNotBlank() }?.let { return NativeTemplate.valueOf(it) }
+        val values = OnboardingSettings.values
+        val templatePaths = when (placement) {
+            AdPlacement.Language1, AdPlacement.Language2 -> listOf("lfo.native_template")
+            is AdPlacement.StepNative -> listOf("onboarding.steps.${placement.stepId.value}.native_template", "onboarding.ads.content_template")
+            AdPlacement.QuestionNative -> listOf("question.native.template")
+            else -> emptyList()
+        }
+        templatePaths.firstNotNullOfOrNull { path ->
+            values.string(path, "").takeIf { values.hasOverride(path) && it.isNotBlank() }
+        }?.let { return NativeTemplate.valueOf(it) }
+        if (placement == AdPlacement.Language1 || placement == AdPlacement.Language2 ||
+            placement is AdPlacement.StepNative || placement == AdPlacement.QuestionNative) {
+            val key = ads?.placementKeyFor(placement)
+            when (key?.let { AdRemoteConfig.getInstance().ads[it]?.positionCTA }) {
+                "TOP" -> return NativeTemplate.CTA_TOP
+                "BOTTOM" -> return NativeTemplate.CTA_BOTTOM
+            }
         }
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->

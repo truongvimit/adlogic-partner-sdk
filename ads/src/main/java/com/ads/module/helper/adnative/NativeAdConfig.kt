@@ -18,7 +18,7 @@ open class NativeAdConfig(
     tiers: List<String>,
     canShowAds: Boolean,
     canReloadAds: Boolean,
-    @LayoutRes val layoutId: Int,
+    @LayoutRes open val layoutId: Int,
 ) : IAdsConfig {
 
     constructor(

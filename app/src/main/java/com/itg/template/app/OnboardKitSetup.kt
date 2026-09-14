@@ -1,25 +1,18 @@
 package com.itg.template.app
 
-import com.ads.module.config.AdRemoteConfig
 import com.itg.template.R
-import com.itg.template.ads.AppAdPlacement
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
-import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.ContentStepDefinition
-import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.LanguageConfig
-import io.onboardkit.config.NativeAdUnit
-import io.onboardkit.config.NativeTemplate
 import io.onboardkit.config.SplashConfig
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
 import timber.log.Timber
 
 /**
- * Builds the OnboardKit config from the app's AdRemoteConfig. Called at startup with
- * asset defaults and again from splash once remote ad ids are fresh.
+ * App-owned resources plus live ad_config placement bindings. Configure once at startup.
  */
 object OnboardKitSetup {
 
@@ -48,15 +41,12 @@ object OnboardKitSetup {
     }
 
     fun configure() {
-        val ads = runCatching { AdRemoteConfig.getInstance() }.getOrNull()
         onboardKitConfig {
             splash = SplashConfig(
                 logoRes = R.mipmap.ic_launcher,
                 appNameRes = R.string.app_name,
             )
             language = LanguageConfig(
-                tapHintEnabled = true,
-                confirmVisibleBeforeSelect = false,
             )
 
             // Same shape as the removed handwritten flow: 4 content pages,
@@ -82,50 +72,10 @@ object OnboardKitSetup {
                     imageRes = R.drawable.img_onboard_sample_4,
                 ),
             )
-            // ── Which screen spends which remote key ─────────────────────────────────────────
-            // This block is the whole app-side mapping. The one exception lives in the SDK: a
-            // launch tagged with a SplashEntry spends its entry's own key (inter_noti /
-            // inter_widget / inter_uninstall) and falls back to splashInterstitial below.
-            //
-            // Each name below is a *base* key. How many ids it actually spends is decided by how
-            // many floors exist in remote config for that name — `<key>_high`, `<key>_high1`, …,
-            // `<key>` — resolved in that order by AdRemoteConfig.tiersFor. Giving a placement one
-            // more floor is a remote-config change, never a code change.
-            this.ads = AdsConfig(
-                splashBanner = ads.banner(AppAdPlacement.BANNER_SPLASH),
-                splashInterstitial = ads.interstitial(AppAdPlacement.INTER_SPLASH),
-                afterOnboardingInterstitial = ads.interstitial(AppAdPlacement.INTER_AFTER_OB3),
-                // Set false when the partner presents this interstitial after its own next screen.
-                afterOnboardingInterstitialEnabled = true,
-                // Optional: declare this key to bid a different floor for returning users. Absent
-                // from remote config, the splash falls back to `inter_splash` for everyone.
-                splashInterstitialOldUser = ads.interstitial(AppAdPlacement.INTER_SPLASH_OLD_USER),
-                languageNative = ads.native(AppAdPlacement.NATIVE_LANG),
-                languageDupNative = ads.native(AppAdPlacement.NATIVE_LANG_ALT),
-                // The "Confirm Language" modal, raised by re-tapping the selected language.
-                languageConfirmNative = ads.native(AppAdPlacement.NATIVE_POPUP_LANG),
-                stepNatives = listOfNotNull(
-                    ads.native(AppAdPlacement.NATIVE_OB1)?.let { Page.CONTENT_1 to it },
-                    ads.native(AppAdPlacement.NATIVE_OB2)?.let { Page.CONTENT_2 to it },
-                    ads.native(AppAdPlacement.NATIVE_OB3)?.let { Page.CONTENT_3 to it },
-                    ads.native(AppAdPlacement.NATIVE_FS)?.let { Page.AD_FULL_SCREEN to it },
-                ).toMap(),
-                // Used by any page with no key of its own in the map above
-                contentStepNative = ads.native(AppAdPlacement.NATIVE_OB1),
-                fullScreenStepNative = ads.native(AppAdPlacement.NATIVE_FS),
-                ob5Native = ads.native(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_4),
-                // No template is set here: `components` in ad_config.json decides block order and
-                // visibility, so one edit there moves onboarding along with every other slot.
+            // Standard placement keys resolve directly from the current ad_config on each use.
+            // Behavioral defaults/overrides come from the two bundled settings JSON documents.
+            this.ads = AdsConfig.fromAdConfig()
 
-                // The onboarding screens ship one layout per CTA position, so the position from
-                // ad_config picks the layout. Blocks are not reordered there — `components` only
-                // shows or hides them.
-                languageTemplate = ads.templateOf(AppAdPlacement.NATIVE_LANG),
-                contentStepTemplate = ads.templateOf(AppAdPlacement.NATIVE_OB1, default = NativeTemplate.CTA_TOP),
-                // Declared so app-resume is judged by the same gate as every other placement;
-                // leaving it null makes the gate report no_ad_unit instead of staying silent.
-                appResume = ads.interstitial(AppAdPlacement.OPEN_RESUME),
-            )
         }
             .onSuccess { config ->
                 OnboardingSdk.configure(config)
@@ -134,30 +84,4 @@ object OnboardKitSetup {
             .onFailure { Timber.e(it, "OnboardKit config invalid") }
     }
 
-    /**
-     * The onboarding layout for a placement, from its `positionCTA` in ad_config.
-     *
-     * `TOP` puts the call-to-action above the media, `BOTTOM` below it. Anything else — including
-     * the `null` every non-onboarding placement carries — keeps [default]; those screens order
-     * their blocks through `components` instead.
-     */
-    private fun AdRemoteConfig?.templateOf(
-        key: String,
-        default: NativeTemplate = NativeTemplate.CTA_BOTTOM,
-    ): NativeTemplate = when (this?.unit(key)?.positionCTA) {
-        "TOP" -> NativeTemplate.CTA_TOP
-        "BOTTOM" -> NativeTemplate.CTA_BOTTOM
-        else -> default
-    }
-
-    /** `<baseKey>_high` then `<baseKey>`; null when neither floor is configured or enabled. */
-    private fun AdRemoteConfig?.native(baseKey: String): NativeAdUnit? =
-        this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { NativeAdUnit(tiers = it) }
-
-    private fun AdRemoteConfig?.interstitial(baseKey: String): InterstitialAdUnit? =
-        this?.tiersFor(baseKey)?.takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }
-
-    /** Banners have no waterfall in the SDK — the top tier is the only id that can be used. */
-    private fun AdRemoteConfig?.banner(baseKey: String): BannerAdUnit? =
-        this?.tiersFor(baseKey)?.firstOrNull()?.let { BannerAdUnit(id = it) }
 }

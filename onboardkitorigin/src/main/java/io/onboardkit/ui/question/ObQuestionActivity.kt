@@ -54,9 +54,9 @@ class ObQuestionActivity : BaseOnboardActivity() {
         val compiled = sdk.requireConfig().question
         val remote = RemoteQuestionParser.parse(sdk.flags().questionConfigJson)
         val base = compiled ?: if (remote != null) QuestionConfig() else return null
-        val title = OnboardingSettings.values.string("question.content.title", remote?.title?.takeIf { it.isNotBlank() } ?: base.title?.toString().orEmpty())
+        val title = remote?.title?.takeIf { it.isNotBlank() } ?: base.title
         return OnboardingSettings.resolveQuestion(base.copy(
-            title = title.takeIf { it.isNotBlank() } ?: base.title,
+            title = title,
             options = remote?.options ?: base.options,
         ))
     }
@@ -83,7 +83,6 @@ class ObQuestionActivity : BaseOnboardActivity() {
             ?: question.titleRes.takeIf { it != 0 }?.let(::getString)
             ?: getString(R.string.ob_question_title_default)
         if (question.ctaTextRes != 0) binding.obQuestionCta.setText(question.ctaTextRes)
-        OnboardingSettings.text("question.content.cta_text").takeIf { it.isNotBlank() }?.let { binding.obQuestionCta.text = it }
 
         adapter = QuestionAdapter(question) { option, selected -> onOptionToggled(option.id, selected) }
         binding.obQuestionList.layoutManager = GridLayoutManager(this, GRID_SPAN)

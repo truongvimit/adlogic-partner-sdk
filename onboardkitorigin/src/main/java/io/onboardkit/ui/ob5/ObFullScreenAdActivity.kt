@@ -69,7 +69,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
 
-        binding.obSkipButton.applyFullScreenSkipStyle(io.onboardkit.config.FullScreenSkipStyle.valueOf(OnboardingSettings.values.string("ob5.skip.style", sdk.requireConfig().ads.fullScreenSkipStyle.name)))
+        binding.obSkipButton.applyFullScreenSkipStyle(OnboardingSettings.ob5SkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle))
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()

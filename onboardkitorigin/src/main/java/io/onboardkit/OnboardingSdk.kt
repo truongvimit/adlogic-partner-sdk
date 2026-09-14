@@ -224,7 +224,7 @@ object OnboardingSdk {
     }
 
     suspend fun shouldStart(): StartDecision {
-        val cfg = config ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
+        val cfg = configOrNull() ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         val store = stateStore ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         // Only whole-flow completion bypasses LFO on a new launch.
         return FlowNavigator.decideStart(
@@ -245,7 +245,7 @@ object OnboardingSdk {
      */
     fun canFillAdOnlyStep(stepId: StepId): Boolean {
         val app = application ?: return true
-        val cfg = config ?: return true
+        val cfg = configOrNull() ?: return true
         val placement = AdPlacement.StepFullScreen(stepId)
         return adsGuard.canFillAdOnlyStep(app, placement, cfg.ads.unitFor(placement))
     }
@@ -333,6 +333,9 @@ object OnboardingSdk {
     }
 
     // ── Internal wiring for SDK screens ──
+
+    internal fun configuredPlacementKey(placement: AdPlacement): String? =
+        config?.ads?.placementKeyFor(placement)
 
     internal fun configOrNull(): OnboardKitConfig? = config?.let(io.onboardkit.remote.OnboardingSettings::resolve)
 

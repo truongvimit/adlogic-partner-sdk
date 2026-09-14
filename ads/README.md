@@ -386,10 +386,18 @@ Returning before the delay cancels the scheduled load. No app-side lifecycle tim
 
 ## Version notes
 
+**5.3.4 — grouped remote settings.** `ad_behavior_config` and `onboarding_config`
+add validated remote overrides with bundled/custom local defaults and last-good remote cache.
+OnboardKit resolves standard ad_config placements after fetch through `AdsConfig.fromAdConfig()`;
+native template, CTA radius and Skip/X presentation remain configurable for experiments.
+See the [Firebase setup](../partner-integration/firebase-integration.md#remote-json) and
+[all fields/defaults](../partner-integration/remote-settings.md). Set `adlogicSdkVersion=5.3.4`
+for all SDK modules.
+
 **5.3.3 — rewarded cache update.** `preload` shares `load`'s cache/request;
 `loadAndShow` reuses a ready ad or joins an active load. The manager no longer triggers legacy
 refill. Shown/impression callbacks are optional; each terminal completes once. Timeout, premium
-gates and other formats keep 5.3.2 behavior. Set `adlogicSdkVersion=5.3.3` for every SDK module.
+gates and other formats keep 5.3.2 behavior. This rewarded behavior is retained in 5.3.4.
 Partner screens call SDK APIs directly; `AdsAppManager` groups initialization and app policy.
 
 **5.3.2 (released, additive only).** `InterstitialAdManager.show`, `InterstitialAdManager.loadAndShow`

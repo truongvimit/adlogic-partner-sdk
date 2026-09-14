@@ -88,7 +88,7 @@ class GroupedSettingsDeviceTest {
         assertTrue(AdBehavior.document.acceptSuccessfulFetch(
             """{"banner":{"reload":{"allowed":true,"interval_ms":12000}}}""",
         ))
-        assertEquals(12_000L, banner.autoReloadTime)
+        assertEquals(22_345L, banner.autoReloadTime) // Removed alias is ignored.
         assertTrue(banner.canReloadAds)
         AdBehavior.document.acceptSuccessfulFetch(null)
         assertEquals(22_345L, banner.autoReloadTime)

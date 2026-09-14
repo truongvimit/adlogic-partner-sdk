@@ -85,9 +85,9 @@ data class LanguageConfig(
 )
 
 data class SystemBarConfig @JvmOverloads constructor(
-    val showStatusBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_status"),
-    val showNavigationBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_navigation"),
-    val showCaptionBar: Boolean = OnboardingSettings.defaultBool("flow.system_bars.show_caption"),
+    val showStatusBar: Boolean = true,
+    val showNavigationBar: Boolean = false,
+    val showCaptionBar: Boolean = true,
 )
 
 data class BehaviorConfig(
@@ -111,7 +111,7 @@ data class BehaviorConfig(
      */
     val adClickReturnCompletesStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.ad_click_return_completes_step"),
     /** Also locks the app splash; configChanges orientation|screenSize stops that recreating it. */
-    val lockPortrait: Boolean = OnboardingSettings.defaultBool("flow.lock_portrait"),
+    val lockPortrait: Boolean = true,
 )
 
 class ObConfigException(val errors: List<String>) :
@@ -139,7 +139,7 @@ class OnboardKitConfigBuilder internal constructor() {
     var splash: SplashConfig = SplashConfig()
     var language: LanguageConfig = LanguageConfig()
     var question: QuestionConfig? = null
-    var ads: AdsConfig = AdsConfig()
+    var ads: AdsConfig = AdsConfig.fromAdConfig()
     var system: SystemBarConfig = SystemBarConfig()
     var behavior: BehaviorConfig = BehaviorConfig()
 

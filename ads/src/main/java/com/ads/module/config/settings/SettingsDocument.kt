@@ -44,12 +44,18 @@ class SettingsDocument(
         if (initialized) return
         initialized = true
         preferences = runCatching { context.applicationContext.getSharedPreferences("adlogic_settings_$name", Context.MODE_PRIVATE) }.getOrNull()
-        val asset = runCatching { context.assets.open("$name.json").bufferedReader().use { it.readText() } }
-            .getOrNull()?.let(::parse).orEmpty().filter { (path, value) -> !sameValue(value, defaults[path]) }
+        val assetJson = runCatching { context.assets.open("$name.json").bufferedReader().use { it.readText() } }.getOrNull()
+        val asset = localOverrides(assetJson)
         val cached = runCatching { preferences?.getString("remote", null) }.getOrNull()?.let(::parse).orEmpty()
         local = SettingsSnapshot(defaults, asset, emptyMap())
         state.value = SettingsSnapshot(defaults, asset, cached)
         revision++
+    }
+
+    /** A sparse/custom app asset is an explicit assignment, including false/zero SDK values. */
+    internal fun localOverrides(json: String?): Map<String, Any> {
+        val parsed = json?.let(::parse) ?: return emptyMap()
+        return if (sameValue(parsed, defaults)) emptyMap() else parsed
     }
 
     /** Synchronous host/test entry point; production fetches use [acceptFetched] off main. */

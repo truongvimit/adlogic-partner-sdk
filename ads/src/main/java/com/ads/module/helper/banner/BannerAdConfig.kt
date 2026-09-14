@@ -59,8 +59,12 @@ open class BannerAdConfig @JvmOverloads constructor(
     override val idAds: String get() = adUnitIds.firstOrNull().orEmpty()
 
     /** Re-load cadence once [enableAutoReload] is on. */
-    var autoReloadTime: Long = AdBehavior.defaultNumber("banner.reload.interval_ms")
-        get() = behaviorValues().long("reload.interval_ms", field)
+    var autoReloadTime: Long = DEFAULT_AUTO_RELOAD_MS
+        get() {
+            val unit = placementKey?.let { AdRemoteConfig.getInstance().ads[it] }
+            val seconds = unit?.reloadIntervalSeconds?.takeIf { it > 0 }
+            return seconds?.toLong()?.times(1_000) ?: field
+        }
         set(value) {
             require(value >= MIN_AUTO_RELOAD_MS) { "Time can not < ${MIN_AUTO_RELOAD_MS}ms" }
             field = value

@@ -28,6 +28,7 @@ Không cần làm tất cả guide. Mỗi guide ghi rõ dependency, file cần c
 - **Bảng tùy chọn:** nêu mặc định, lúc cần đổi và nơi cấu hình. Không cần chép cả bảng vào code hay Firebase.
 - **Placement app:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) tập trung key OB và các màn app. Placement key là danh tính duy nhất của một vị trí ads — ad unit ID dùng chung giữa nhiều placement nên không phân biệt được; ad unit ID nằm trong JSON.
 - **File mẫu:** [ad_config.json](examples/ads-onboarding/ad_config.json) và [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) đều dùng ad ID test. Copy vào `app/src/main/assets/`; thay ID ở file thật trước khi phát hành.
+- **Settings theo nhóm:** [setup remote](firebase-integration.vi.md#remote-json), [custom default local](firebase-integration.vi.md#local-defaults), [toàn bộ field/default](remote-settings.vi.md). Thêm hai parameter String; default SDK đã đóng gói sẵn. Offline ưu tiên giữ remote cache hợp lệ trước fallback local.
 - **README module:** tra cứu thêm API, lifecycle và tùy biến khi cần.
 
 ## File mẫu để copy
@@ -35,6 +36,7 @@ Không cần làm tất cả guide. Mỗi guide ghi rõ dependency, file cần c
 | Tính năng | Mẫu | Nơi dùng |
 | --- | --- | --- |
 | Ads + OB | [Production JSON](examples/ads-onboarding/ad_config.json), [debug JSON](examples/ads-onboarding/ad_config_debug.json), [AppAdPlacement](examples/ads-onboarding/AppAdPlacement.kt), [OnboardKitSetup](examples/ads-onboarding/OnboardKitSetup.kt), [PartnerApp](examples/ads-onboarding/PartnerApp.kt) | Assets, catalog và khởi tạo SDK; cả hai JSON dùng ad ID test. |
+| Hành vi ads + default OB | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json), [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Dán vào hai parameter String cùng tên trên Firebase. Tùy chọn tạo asset app cùng tên để custom default fallback. |
 | Billing UI riêng | [BillingProducts.kt](examples/billing/BillingProducts.kt) | Catalog product/base plan/offer; thay bằng sản phẩm Play của app. |
 | Paywall | [paywall_config.json](examples/paywall/paywall_config.json), [paywall_strings.xml](examples/paywall/paywall_strings.xml) | `res/raw`, `res/values`; đủ field example, thay catalog/copy/URL. |
 | Event app | [AppEvents.kt](examples/trackkit/AppEvents.kt) | Key event/param tập trung, chỉ giữ event app cần. |
