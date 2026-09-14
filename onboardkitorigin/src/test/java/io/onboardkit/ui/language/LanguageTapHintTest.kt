@@ -50,18 +50,19 @@ class LanguageTapHintTest {
     }
 
     @Test
-    fun `popup starts on fourth tap including selected language and repeats thereafter`() {
+    fun `reselect opens popup immediately and still counts toward later threshold`() {
         launch(language = LanguageConfig(defaultCode = "en-US"))
-        repeat(3) {
-            row(0).itemView.performClick()
-            assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing != true)
-        }
         row(0).itemView.performClick()
-        val fourth = org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        assertTrue(fourth?.isShowing == true)
-        fourth.findViewById<View>(R.id.ob_confirm_cancel).performClick()
+        val reselect = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertTrue(reselect?.isShowing == true)
+        reselect.findViewById<View>(R.id.ob_confirm_cancel).performClick()
+
         row(1).itemView.performClick()
         assertEquals("es", adapter.selectedCode)
+        assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing != true)
+        row(0).itemView.performClick()
+        assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing != true)
+        row(1).itemView.performClick()
         assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true)
     }
 

@@ -118,7 +118,7 @@ Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` 
 
 - Hiện status/caption bar, ẩn navigation bar; dùng `SystemBarConfig` khi cần đổi.
 - Chưa hoàn thành flow thì lần mở mới chạy lại Splash → LFO → OB. Đã hoàn thành thì bỏ qua onboarding.
-- Popup ngôn ngữ hiện từ lần click item thứ tư. Native được tải khi mở popup; click/open preload ad thay thế để hiện khi quay lại.
+- Chọn lại ngôn ngữ hiện tại thì popup mở ngay. Chọn ngôn ngữ khác chỉ mở khi đủ tổng số click đã cấu hình; click chọn lại vẫn được cộng count. Native được tải khi mở popup; click/open preload ad thay thế để hiện khi quay lại.
 - Quay lại từ ad ở bước OB mặc định hoàn thành bước (`BehaviorConfig.adClickReturnCompletesStep = true`). Provider tắt click replacement cho bước OB/OB5; native ngôn ngữ, popup và khảo sát vẫn bật.
 
 

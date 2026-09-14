@@ -118,7 +118,7 @@ class SplashActivity : ObSplashActivity()
 
 - Default रूप से status/caption bars दिखते हैं और navigation bar छिपता है; बदलने के लिए `SystemBarConfig` इस्तेमाल करें।
 - अधूरा flow अगली बार खुलने पर दोबारा Splash → LFO → OB से शुरू होता है। पूरा हो चुका flow onboarding छोड़ देता है।
-- Language popup चौथे item tap से खुलता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
+- मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है। दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है; re-select tap भी count होता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
 - OB step से ad-return default रूप से step पूरा करता है (`BehaviorConfig.adClickReturnCompletesStep = true`)। Provider, OB steps/OB5 के लिए click replacement बंद रखता है; language, popup और प्रश्न के natives में यह चालू रहता है।
 
 

@@ -198,6 +198,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     private fun onLanguageTapped(language: ObLanguage) {
         if (languageExitStarted) return
+        val reselected = selectedCode == language.code
         if (mode == LanguageScreenMode.FIRST_OPEN) {
             languageTapCount = (languageTapCount + 1).coerceAtMost(Int.MAX_VALUE)
         }
@@ -215,7 +216,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.track(
             AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
         )
-        if (shouldShowConfirmDialog()) showConfirmDialog(language)
+        if (shouldShowConfirmDialog(reselected)) showConfirmDialog(language)
         if (secondSlotRequested) return
 
         val config = sdk.requireConfig()
@@ -229,8 +230,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
         showSecondNativeSlot(language.code)
     }
 
-    private fun shouldShowConfirmDialog(): Boolean =
-        mode == LanguageScreenMode.FIRST_OPEN && languageTapCount >= OnboardingSettings.number("lfo.confirm_dialog.show_from_tap") &&
+    private fun shouldShowConfirmDialog(reselected: Boolean): Boolean =
+        mode == LanguageScreenMode.FIRST_OPEN &&
+            (reselected || languageTapCount >= OnboardingSettings.number("lfo.confirm_dialog.show_from_tap")) &&
             sdk.requireConfig().language.confirmDialogOnReselectEnabled &&
             sdk.flags().showLanguageConfirmDialog
 

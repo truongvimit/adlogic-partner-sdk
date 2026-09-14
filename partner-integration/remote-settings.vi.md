@@ -226,7 +226,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.confirm_button.image_url` | `""` | Rỗng giữ drawable check hiện tại; URL lỗi giữ icon dự phòng. |
 | `lfo.confirm_button.tint_color` | `""` | Rỗng giữ tint local; màu không parse được bị bỏ qua. |
 | `lfo.confirm_dialog.enabled` | `true` | Thay ob_show_language_confirm_dialog. |
-| `lfo.confirm_dialog.show_from_tap` | `4` | Số nguyên >=1; gồm tap lại selected item. |
+| `lfo.confirm_dialog.show_from_tap` | `4` | Số nguyên >=1; chỉ gate khi chọn ngôn ngữ khác. Chọn lại ngôn ngữ hiện tại mở popup ngay nhưng vẫn cộng count. |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` | DIALOG_OPEN/LFO_SHOWN/FIRST_SELECTION; mặc định on-demand. |
 | `lfo.confirm_dialog.native_behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `lfo.languages.supported_codes` | `[]` | Rỗng giữ catalog; mã lạ bị loại, lọc rỗng trở về catalog. |

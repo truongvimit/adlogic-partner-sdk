@@ -123,7 +123,7 @@ Do not call `OnboardingSdk.start()` or finish splash yourself; `ObSplashActivity
 
 - System bars show status/caption bars and hide navigation by default; use `SystemBarConfig` to customize them.
 - An incomplete flow starts again through Splash → LFO → OB on a new launch. A completed flow skips onboarding.
-- The language popup appears from the fourth item tap onward. Its native loads when the popup opens; click/open preloads a replacement to show on return.
+- Re-selecting the current language opens the popup immediately. Selecting another language opens it from the configured total tap count onward; re-select taps still count. Its native loads when the popup opens; click/open preloads a replacement to show on return.
 - OB step ad-return completes the step by default (`BehaviorConfig.adClickReturnCompletesStep = true`). The provider disables click replacement for OB steps/OB5; language, popup and question natives keep it enabled.
 
 

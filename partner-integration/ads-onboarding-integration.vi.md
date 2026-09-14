@@ -280,7 +280,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Ngôn ngữ | 21 ngôn ngữ, hand hint sau 3 giây, ẩn xác nhận trước chọn | `LanguageConfig.languages`: giữ ngôn ngữ đã dịch; `tapHintEnabled`, `confirmVisibleBeforeSelect` còn cần cờ remote tương ứng bật |
 | Back ở LFO | Chưa chọn: bỏ qua Back. Đã chọn: hiện Save, vẫn ở màn ngôn ngữ | `LanguageConfig.saveButtonOnBackEnabled = false`: bỏ qua Back cả sau khi chọn. SETTINGS Back đóng màn |
 | Thay native sau chọn ngôn ngữ | Bật; native đầu giữ nguyên đến khi ad thay thế bind được | `LanguageConfig.secondNativeOnSelectEnabled = false` để tắt |
-| Popup ngôn ngữ | Từ click thứ 4, kể cả chọn lại item; native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
+| Popup ngôn ngữ | Chọn lại ngôn ngữ hiện tại thì mở ngay. Chọn ngôn ngữ khác chỉ mở từ tổng click thứ 4; click chọn lại vẫn được cộng count. Native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
 | Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
 | Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại; không bật lại click preload ở provider |
@@ -453,7 +453,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 - [ ] Nếu dùng settings mới, thử remote override, offline lần đầu dùng local và offline giữ remote cache hợp lệ theo [checklist Firebase](firebase-integration.vi.md#remote-notes).
 - [ ] Debug build mở được splash, Logcat tag `AdRemoteConfig` có dòng `Loaded ad_config_debug.json with 45 placements (debug=true)`, `OB_FLOW` không báo config/provider lỗi.
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
-- [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn item lần thứ 4 mở popup.
+- [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn lại ngôn ngữ hiện tại mở popup ngay, còn chọn ngôn ngữ khác phải chờ đủ tổng số click đã cấu hình.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Click native ở trang OB rồi quay lại chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.
 - [ ] Tắt cả `native_ob2` và `native_ob2_high`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt cả `native_fsob` và `native_fsob_high`: bỏ trang chỉ quảng cáo. Tắt `inter_splash`, `inter_after_ob3` và mọi tầng `_high*` của chúng: vẫn tới màn đích.
 - [ ] Thử mất mạng: mặc định hiện prompt kết nối; nếu chọn hỗ trợ offline thì luồng vẫn đi tiếp theo timeout SDK, không treo vì callback app.
