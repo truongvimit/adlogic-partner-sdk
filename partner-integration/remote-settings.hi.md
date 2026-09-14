@@ -6,7 +6,7 @@
 
 Console setup के लिए [तीन String parameters publish करने के कदम](firebase-integration.hi.md#remote-json) देखें। Custom offline defaults के लिए [app में दो local JSON files बनाना](firebase-integration.hi.md#local-defaults) देखें। नीचे के पूरे उदाहरण SDK assets से मेल खाते हैं।
 
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.6` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.7` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
 
 ## Documents और field ownership
 

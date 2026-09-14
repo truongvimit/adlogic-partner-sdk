@@ -6,7 +6,7 @@
 
 For Console setup, follow [publishing the three String parameters](firebase-integration.md#remote-json). To supply custom offline defaults, follow [creating the two app-side JSON files](firebase-integration.md#local-defaults). Both full examples below match the SDK assets exactly.
 
-**Version requirement:** use SDK `5.3.6` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+**Version requirement:** use SDK `5.3.7` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
 
 ## Documents and ownership
 

@@ -6,7 +6,7 @@
 
 SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK.
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.6` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.7` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 | Parameter | File mặc định trong SDK |
 |---|---|

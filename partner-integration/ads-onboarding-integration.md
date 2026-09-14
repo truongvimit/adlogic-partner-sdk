@@ -8,9 +8,9 @@ Sample flow: **Splash → language (LFO) → content 1 → content 2 → fullscr
 
 Do steps 1–6 and replace the **package, app details, content/images and destination screen**. The code keeps the SDK defaults; the JSON keeps the example debug configuration. Fill in the app token to enable Adjust; Firebase, app-open and purchases are in the [optional tables](#7-configure-only-what-your-app-needs).
 
-**SDK 5.3.6:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings are included. Use `5.3.6` for all SDK modules; `5.3.3` does not contain these additions.
+**SDK 5.3.7:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings are included. Use `5.3.7` for all SDK modules; `5.3.3` does not contain these additions.
 
-**Version requirement:** use SDK `5.3.6` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+**Version requirement:** use SDK `5.3.7` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
 
 ## 1. Add the dependencies
 
@@ -31,10 +31,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Set version `5.3.6` once in your app project's root `gradle.properties`; every SDK module reads this property:
+Set version `5.3.7` once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=5.3.6
+adlogicSdkVersion=5.3.7
 ```
 
 Every module reads this same property.

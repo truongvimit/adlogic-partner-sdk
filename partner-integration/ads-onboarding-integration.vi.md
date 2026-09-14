@@ -8,9 +8,9 @@ Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 
 
 Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, app-open và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
 
-**SDK 5.3.6:** đã có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Dùng `5.3.6` cho mọi module SDK; `5.3.3` chưa có các bổ sung này.
+**SDK 5.3.7:** đã có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Dùng `5.3.7` cho mọi module SDK; `5.3.3` chưa có các bổ sung này.
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.6` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.7` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 ## 1. Thêm dependency
 
@@ -31,10 +31,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Đặt phiên bản `5.3.6` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
+Đặt phiên bản `5.3.7` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=5.3.6
+adlogicSdkVersion=5.3.7
 ```
 
 Mọi module dùng chung property này.
