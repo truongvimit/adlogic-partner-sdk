@@ -211,6 +211,10 @@ class OnboardingAdLifecycleTest {
     @Test fun `fullscreen swipe requires successful show on each visit`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
         assertFalse(pager.isUserInputEnabled)
+        listener(true).onLoaded()
+        assertFalse("Load and bind must leave fullscreen swipe locked", pager.isUserInputEnabled)
+        flingForward()
+        assertEquals(0, pager.currentItem)
         listener(true).onImpression()
         assertTrue(pager.isUserInputEnabled)
         val oldAd = listener(true)

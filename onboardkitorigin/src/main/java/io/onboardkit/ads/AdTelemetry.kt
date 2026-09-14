@@ -5,6 +5,11 @@ import io.onboardkit.core.analytics.AnalyticsEvent
 import io.trackkit.AdFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Internal bind signal keeps flow analytics separate from the public display callback. */
+internal interface NativeBindListener {
+    fun onNativeBound()
+}
+
 /**
  * Reports the lifecycle of one ad slot, then forwards to the screen's own listener.
  *
@@ -21,9 +26,9 @@ internal class TrackedAdListener(
     private val placementKey: String,
     private val format: AdFormat,
     private val delegate: AdEventListener?,
-) : AdEventListener {
+) : AdEventListener, NativeBindListener {
 
-    private val impressionReported = AtomicBoolean(false)
+    private val boundReported = AtomicBoolean(false)
     private val failureReported = AtomicBoolean(false)
 
     override fun onLoaded() {
@@ -37,10 +42,20 @@ internal class TrackedAdListener(
         delegate?.onFailedToLoad()
     }
 
-    override fun onImpression() {
-        if (impressionReported.compareAndSet(false, true)) {
+    private fun reportBound() {
+        if (boundReported.compareAndSet(false, true)) {
             if (com.ads.module.config.settings.AdBehavior.bool("diagnostics.ads_telemetry_enabled")) OnboardingSdk.track(AnalyticsEvent.AdImpression(placementKey, format))
         }
+    }
+
+    override fun onNativeBound() {
+        reportBound()
+        (delegate as? NativeBindListener)?.onNativeBound()
+    }
+
+    override fun onImpression() {
+        // Compatibility for partner providers that only report impressions.
+        reportBound()
         delegate?.onImpression()
     }
 

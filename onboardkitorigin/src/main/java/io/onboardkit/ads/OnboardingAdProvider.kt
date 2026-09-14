@@ -14,6 +14,7 @@ import io.onboardkit.config.NativeAdUnit
 interface AdEventListener {
     fun onLoaded() {}
     fun onFailedToLoad() {}
+    /** The native was displayed, not merely loaded or bound into a view. */
     fun onImpression() {}
     fun onClicked() {}
 

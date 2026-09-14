@@ -87,7 +87,14 @@ object NativeAdShimmer {
             )
         }
         val root = inflateForSkeleton(context, adLayoutId, shimmer)
-        toSkeleton(root, depth = 0)
+        // Fullscreen templates must occupy their host before media arrives; card templates
+        // retain WRAP_CONTENT so their shimmer cannot consume the rest of a content page.
+        if (root.layoutParams?.height == ViewGroup.LayoutParams.MATCH_PARENT) {
+            shimmer.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        val fullBleedMedia = root.findViewById<View>(R.id.ad_media)?.layoutParams?.height ==
+            ViewGroup.LayoutParams.MATCH_PARENT
+        toSkeleton(root, depth = 0, fullBleedMedia = fullBleedMedia)
         shimmer.addView(root)
         return shimmer
     }
@@ -125,11 +132,12 @@ object NativeAdShimmer {
         if (!isAdRoot || vg.isEmpty()) return inflated
         val content = vg.getChildAt(0)
         vg.removeView(content)
-        if (content.layoutParams == null) content.layoutParams = vg.layoutParams
+        // The removed NativeAdView owns the outer sizing contract, not its content child.
+        vg.layoutParams?.let { content.layoutParams = FrameLayout.LayoutParams(it) }
         return content
     }
 
-    private fun toSkeleton(view: View, depth: Int) {
+    private fun toSkeleton(view: View, depth: Int, fullBleedMedia: Boolean) {
         if (depth > MAX_DEPTH || view.tag == TAG_SHIMMER_KEEP) return
         when (view) {
             is StubMediaView -> skeletonizeMedia(view)
@@ -139,7 +147,7 @@ object NativeAdShimmer {
 
             is ViewGroup -> {
                 view.background = rounded(view, CONTAINER_COLOR)
-                for (i in 0 until view.childCount) toSkeleton(view.getChildAt(i), depth + 1)
+                for (i in 0 until view.childCount) toSkeleton(view.getChildAt(i), depth + 1, fullBleedMedia)
             }
 
             // Covers RatingBar: stars/spinners must not draw on the skeleton, space stays
@@ -153,7 +161,15 @@ object NativeAdShimmer {
                 view.setCompoundDrawables(null, null, null, null)
                 view.setCompoundDrawablesRelative(null, null, null, null)
                 // wrap_content with no placeholder text would collapse to a zero-width bar
-                if (view.text.isNullOrBlank()) view.minimumWidth = view.dp(EMPTY_TEXT_MIN_WIDTH_DP)
+                if (view.text.isNullOrBlank()) {
+                    val widthDp = if (fullBleedMedia) when (view.id) {
+                        R.id.ad_headline -> 160
+                        R.id.ad_body -> 240
+                        R.id.ad_advertiser -> 96
+                        else -> EMPTY_TEXT_MIN_WIDTH_DP
+                    } else EMPTY_TEXT_MIN_WIDTH_DP
+                    view.minimumWidth = view.dp(widthDp)
+                }
             }
 
             is ImageView -> {

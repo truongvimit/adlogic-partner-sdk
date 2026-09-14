@@ -106,6 +106,9 @@ class ERainAdProvider(
         var inBind = false
         var justBound = false
     }
+    // Reattaching the same impressed ad after rotation must not wait for a second vendor
+    // impression (vendors normally count an ad once). Weak keys do not retain destroyed ads.
+    private val impressedNatives = java.util.WeakHashMap<ApNativeAd, Boolean>()
     private val nativeBindings = mutableMapOf<String, NativeBinding>()
     private val nativeConfigs = mutableMapOf<String, NativeAdConfig>()
     private val nativeOwners = mutableMapOf<String, LifecycleOwner>()
@@ -261,14 +264,25 @@ class ERainAdProvider(
             NativeBinding(activity, owner, frame, helper, config).also { created ->
                 nativeBindings[key] = created
                 helper.registerAdListener(object : AdCallback() {
+                    private var boundAd: ApNativeAd? = null
+
                     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                        if (nativeBindings[key] !== created) return
+                        boundAd = nativeAd
                         pendingNativeBinds.remove(key)
                         created.justBound = true
                         if (!created.inBind) {
                             try { notifyListener(key) { it.onLoaded() } }
                             finally { created.justBound = false }
                         }
-                        // Existing onboarding dwell timers use this bind signal, not paid analytics.
+                        notifyListener(key) { (it as? io.onboardkit.ads.NativeBindListener)?.onNativeBound() }
+                        // Only a previously impressed ad restored into this owner is already
+                        // eligible. A fresh bind is not evidence that the user has seen the ad.
+                        if (impressedNatives[nativeAd] == true) notifyListener(key) { it.onImpression() }
+                    }
+                    override fun onAdImpression() {
+                        if (nativeBindings[key] !== created) return
+                        boundAd?.let { impressedNatives[it] = true }
                         notifyListener(key) { it.onImpression() }
                     }
                     override fun onAdFailedToLoad(error: LoadAdError?) {
@@ -474,6 +488,7 @@ class ERainAdProvider(
         nativeBridges.clear()
         nativeBindings.values.forEach { it.helper.destroy() }
         nativeBindings.clear()
+        impressedNatives.clear()
         nativeOwners.keys.toList().forEach(::detachNativeOwner)
         deferredNativeFailures.clear()
         pendingNativeBinds.clear()

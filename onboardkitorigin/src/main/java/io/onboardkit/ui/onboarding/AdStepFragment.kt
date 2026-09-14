@@ -68,6 +68,8 @@ class AdStepFragment : LazyStepFragment() {
         if (selected) return
         selected = true
         completed = false
+        impressionHandled.set(false)
+        requireStepHost().setAdStepSwipeEnabled(stepId, false)
         scheduleAutoNext()
         requestAd()
         if (!completed) scheduleSkipButton()
@@ -108,7 +110,7 @@ class AdStepFragment : LazyStepFragment() {
         )
     }
 
-    /** A provider may repeat its impression callback; emit the page signal once per visit. */
+    /** Only a display confirmation unlocks swipe; load/bind and shimmer never do. */
     private fun onAdImpression() {
         if (!selected || completed || !impressionHandled.compareAndSet(false, true)) return
         requireStepHost().setAdStepSwipeEnabled(stepId, true)

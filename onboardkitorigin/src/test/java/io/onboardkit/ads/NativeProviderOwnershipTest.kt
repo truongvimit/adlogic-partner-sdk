@@ -284,6 +284,8 @@ class NativeProviderOwnershipTest {
         doReturn("Native ad").`when`(ad).headline
         requests.single().onNativeAdLoaded(ad)
         assertEquals(org.robolectric.shadows.ShadowLog.getLogs().filter { it.tag == "NativeAdHelper" }.joinToString("\n") { it.throwable?.stackTraceToString().orEmpty() }, 1, binds)
+        assertEquals(0, shown)
+        vendorEvents.single().onAdImpression()
         assertEquals(1, shown)
         assertEquals(1, container.childCount)
         assertFalse(provider.isNativeReady(placement))
@@ -328,6 +330,7 @@ class NativeProviderOwnershipTest {
             }))
             val count = requests.size
             val events = vendorEvents.last()
+            events.onAdImpression()
             events.onAdClicked()
             controller.pause().resume()
             main.idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -354,12 +357,15 @@ class NativeProviderOwnershipTest {
                 override fun onImpression() { shown++ }
             }))
             val count = requests.size
+            vendorEvents.last().onAdImpression()
             vendorEvents.last().onAdClicked()
             assertEquals(page.key, count + 1, requests.size)
             requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
             assertEquals("No bind before departure: ${page.key}", 1, shown)
             assertTrue(provider.isNativeReady(page))
             controller.pause().stop().restart().start().resume()
+            assertEquals("Replacement bind alone is not another impression: ${page.key}", 1, shown)
+            vendorEvents.last().onAdImpression()
             assertEquals(page.key, 2, shown)
             assertEquals(page.key, count + 1, requests.size)
             assertFalse(provider.isNativeReady(page))
@@ -521,6 +527,26 @@ class NativeProviderOwnershipTest {
         assertEquals(if (fail) 1 else 0, failures)
     }
 
+    @Test fun `fullscreen does not announce display until the vendor records an impression`() {
+        val host = controller.get()
+        val fullscreen = AdPlacement.StepFullScreen(io.onboardkit.core.StepId.OB3)
+        val fullscreenRequest = request.copy(placement = fullscreen,
+            layoutRes = io.onboardkit.R.layout.ob_layout_native_fullscreen)
+        val container = FrameLayout(host).also(host::setContentView)
+        var impressions = 0
+        var bound = 0
+        provider.preloadNative(host, fullscreenRequest)
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertTrue(provider.bindNative(host, fullscreen, container, null, object : AdEventListener, NativeBindListener {
+            override fun onImpression() { impressions++ }
+            override fun onNativeBound() { bound++ }
+        }))
+        assertEquals("Bind analytics remain available before the vendor impression", 1, bound)
+        assertEquals("A filled/bound view must not unlock fullscreen swipe", 0, impressions)
+        vendorEvents.first().onAdImpression()
+        assertEquals("Only the displayed ad may unlock fullscreen swipe", 1, impressions)
+    }
+
     @Test fun `preloading after display keeps the next fill unused until an explicit bind`() {
         val host = controller.get()
         val container = FrameLayout(host).also(host::setContentView)
@@ -556,14 +582,17 @@ class NativeProviderOwnershipTest {
         doReturn("Native ad").`when`(ad).headline
         requests.single().onNativeAdLoaded(ad)
         assertTrue(provider.bindNative(host, placement, container, null))
+        vendorEvents.single().onAdImpression()
         var newContainer: FrameLayout? = null
         var restoredBinds = 0
+        var restoredImpressions = 0
         NativeProviderHost.onCreated = { recreated ->
             newContainer = FrameLayout(recreated).also(recreated::setContentView)
             val listener = object : AdEventListener {
                 override fun onLoaded() {
                     if (provider.bindNative(recreated, placement, newContainer!!, null)) restoredBinds++
                 }
+                override fun onImpression() { restoredImpressions++ }
             }
             if (!provider.bindNative(recreated, placement, newContainer!!, null, listener)) {
                 provider.preloadNative(recreated, request)
@@ -574,6 +603,7 @@ class NativeProviderOwnershipTest {
         })
         assertEquals(1, requests.size)
         assertEquals(1, restoredBinds)
+        assertEquals("An already impressed ad can be shown after rotation without another vendor event", 1, restoredImpressions)
         assertEquals(1, newContainer!!.childCount)
         assertFalse(provider.isNativeReady(placement))
         verify(ad, never()).destroy()
