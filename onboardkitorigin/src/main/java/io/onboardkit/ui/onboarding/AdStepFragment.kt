@@ -74,6 +74,7 @@ class AdStepFragment : LazyStepFragment() {
 
     override fun onStepUnselected(dwellMs: Long) {
         selected = false
+        requireStepHost().setAdStepSwipeEnabled(stepId, false)
         skipJob?.cancel()
         autoNextJob?.cancel()
         OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
@@ -109,6 +110,7 @@ class AdStepFragment : LazyStepFragment() {
     /** A provider may repeat its impression callback; emit the page signal once per visit. */
     private fun onAdImpression() {
         if (!selected || completed || !impressionHandled.compareAndSet(false, true)) return
+        requireStepHost().setAdStepSwipeEnabled(stepId, true)
         OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
     }
 
@@ -175,6 +177,7 @@ class AdStepFragment : LazyStepFragment() {
     private fun completeStep(reason: String) {
         if (!selected || completed) return
         completed = true
+        requireStepHost().setAdStepSwipeEnabled(stepId, false)
         skipJob?.cancel()
         autoNextJob?.cancel()
         requireStepHost().completeAdStep(stepId, reason)
@@ -182,6 +185,7 @@ class AdStepFragment : LazyStepFragment() {
 
     override fun onDestroyView() {
         selected = false
+        requireStepHost().setAdStepSwipeEnabled(stepId, false)
         skipJob?.cancel()
         autoNextJob?.cancel()
         binding = null

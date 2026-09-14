@@ -121,7 +121,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
             binding.obAdBlock2.visibility = View.GONE
         } else {
             setupNativeAd(AdPlacement.Language1)
-            // Preloads the slot-2 native (and the first content step) while the user reads LFO
+            // Preloads only slot 2 while the user reads LFO1.
             sdk.preload().onLanguageShown(this)
         }
 
@@ -201,6 +201,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.emitEvent(OnboardingEvent.LanguageSelected(language.code))
 
         if (mode != LanguageScreenMode.FIRST_OPEN) return
+        if (languageTapCount == 1) sdk.preload().onLanguageSelected(this)
 
         // The tap itself. The audited SDK had no equivalent — it could not distinguish "picked a
         // language then hesitated" from "never engaged", because the only LFO signal was the exit.

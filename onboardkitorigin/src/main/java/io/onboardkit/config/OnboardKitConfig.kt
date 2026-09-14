@@ -90,7 +90,7 @@ data class SystemBarConfig @JvmOverloads constructor(
 )
 
 data class BehaviorConfig(
-    /** Buttons are the single navigation source; swipe is locked. */
+    /** Locks all swipe navigation. When false, OB2, filled fullscreen and the last content page allow swipe. */
     val lockPagerSwipe: Boolean = true,
     /** Back returns to the previous step; on the first step it exits the app. */
     val backNavigatesBack: Boolean = true,
@@ -98,9 +98,8 @@ data class BehaviorConfig(
     @Deprecated("Native presentations end on page departure; return always starts a new visit.")
     val reloadAdOnStepReturn: Boolean = false,
     /**
-     * A forward swipe on the last step completes it exactly like its CTA. Independent of
-     * [lockPagerSwipe]: the gesture is read off the window, not the pager, so it works while
-     * the pager itself stays locked.
+     * A forward swipe on an eligible last step completes it exactly like its CTA, including
+     * the exit interstitial. Requires [lockPagerSwipe] to be false; fullscreen also needs a shown ad.
      */
     val swipeCompletesLastStep: Boolean = true,
     /**

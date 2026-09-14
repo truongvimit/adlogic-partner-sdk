@@ -3,6 +3,11 @@
 Splash → language → onboarding → optional question/paywall → your app.
 The SDK owns screen transitions, ad preloading and saved progress; your app supplies content and the final destination.
 
+In the default flow, splash preloads only LFO1. LFO1 entry preloads LFO2; the first language
+selection starts the existing LFO2 wait/show and preloads the first two content natives (OB1/OB2).
+Entering OB1 warms the fullscreen native, and entering fullscreen warms the third content native.
+In code, fullscreen is `StepId.OB3` and the third content page is `StepId.OB4`.
+
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
 [Partner integration guides](../partner-integration/README.md) · [Ads + OnboardKit walkthrough](../partner-integration/ads-onboarding-integration.md)
@@ -192,6 +197,12 @@ the step by default, so these placements do not preload/show a replacement on cl
 `ob_skip_button_delay_sec >= 0` overrides the local skip delay; `-1` uses the local value.
 `AdsConfig.fullScreenSkipStyle` sets the shared appearance for OB3/OB5. Standalone OB5 uses
 its own 3-second skip and 15-second auto-dismiss defaults.
+
+With `BehaviorConfig.lockPagerSwipe = false`, OB1 stays locked, OB2 permits swipe, and fullscreen
+permits swipe only after its ad is shown for the current visit. Loading or failure keeps fullscreen
+swipe locked; X, timeout and automatic no-fill completion still work. Forward swipe on the last
+content page uses the same exit interstitial as its CTA when `swipeCompletesLastStep = true`.
+`lockPagerSwipe = true` disables this last-page gesture as well.
 
 `inter_after_ob3` is a separate placement from splash. The built-in provider preloads it on
 pager entry and waits up to 8 seconds for a fill on completion. By default

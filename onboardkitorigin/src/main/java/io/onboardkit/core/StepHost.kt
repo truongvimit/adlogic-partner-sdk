@@ -35,6 +35,9 @@ interface StepHost {
     /** Completes only the source ad page, waiting for a pager transition if necessary. */
     fun completeAdStep(stepId: StepId, exitReason: String) = next(exitReason)
 
+    /** Fullscreen swipe is available only while the current visit has a shown ad. */
+    fun setAdStepSwipeEnabled(stepId: StepId, enabled: Boolean) = Unit
+
     /** Returns false when already at the first step (caller may then exit or ignore). */
     fun back(): Boolean
 

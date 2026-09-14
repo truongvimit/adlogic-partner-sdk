@@ -14,6 +14,7 @@ import io.onboardkit.remote.RemoteFlags
  *
  *   splash ready     → only the ads of the screen the flow is actually about to open
  *   LFO shown        → language native slot 2 (when the second slot is on)
+ *   language picked  → first two content natives
  *   step n selected  → ad of step n+1
  *   last step shown  → OB5 and question
  */
@@ -52,7 +53,6 @@ class PreloadChain internal constructor(
         when (destination) {
             FlowDestination.LANGUAGE -> {
                 if (!language1AlreadyScheduled) preloadLanguage1(activity)
-                firstEnabledStep()?.let { preloadForStep(activity, it) }
             }
 
             FlowDestination.ONBOARDING ->
@@ -66,7 +66,7 @@ class PreloadChain internal constructor(
         }
     }
 
-    /** Only LFO1 belongs to the splash ordering experiment; OB1 keeps its handoff trigger. */
+    /** Splash warms only LFO1; content natives wait for language selection. */
     @JvmOverloads
     fun preloadLanguage1(activity: Activity, allowWhileVisible: Boolean = false) {
         language1HandoffPending = true
@@ -79,15 +79,21 @@ class PreloadChain internal constructor(
         if (cfg.language.secondNativeOnSelectEnabled && flags().enableLanguageNative2) {
             preloadNative(activity, AdPlacement.Language2)
         }
-        firstEnabledStep()?.let { preloadForStep(activity, it) }
     }
 
     /**
-     * Compatibility hook for existing hosts. Selection does not request the confirm native:
-     * the rare re-selection gesture opens the dialog, which loads its ad on demand.
+     * The first language selection warms OB1 and OB2 alongside the slot-2 wait/show.
+     * Fullscreen stays on the pager-entry chain; the confirm dialog loads on demand.
      */
-    @Suppress("UNUSED_PARAMETER")
-    fun onLanguageSelected(activity: Activity) = Unit
+    fun onLanguageSelected(activity: Activity) {
+        preloadInitialContent(activity)
+    }
+
+    private fun preloadInitialContent(activity: Activity) {
+        val cfg = config() ?: return
+        enabledSteps().filter { cfg.stepById(it)?.type == StepType.CONTENT }
+            .take(2).forEach { preloadForStep(activity, it) }
+    }
 
     /** Pager entry, including resumed flows. Empty flows never call this. */
     fun onOnboardingShown(activity: Activity) {
@@ -167,8 +173,6 @@ class PreloadChain internal constructor(
             NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement), allowWhileVisible),
         )
     }
-
-    private fun firstEnabledStep(): StepId? = enabledSteps().firstOrNull()
 
     /**
      * Premium is not applied here: the guard already declines every preload for those users, and

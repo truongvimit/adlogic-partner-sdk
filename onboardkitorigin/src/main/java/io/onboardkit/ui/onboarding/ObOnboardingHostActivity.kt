@@ -68,6 +68,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private var pageSelectionVersion = 0L
     private var advanceFlingDetector: AdvanceFlingDetector? = null
     private var gestureBeganOnRestingLastStep = false
+    private var swipeEnabledAdStep: StepId? = null
     private var exitResolved = false
     private var exitAdGone: CompletableDeferred<Unit>? = null
 
@@ -97,7 +98,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
         pagerAdapter = StepPagerAdapter(this)
         binding.obStepPager.adapter = pagerAdapter
-        binding.obStepPager.isUserInputEnabled = !config.behavior.lockPagerSwipe
+        binding.obStepPager.isUserInputEnabled = false
         binding.obStepPager.offscreenPageLimit = 1
         pagerAdapter.submit(buildPages(), visibleIndex = -1)
         _totalSteps.value = enabledStepIds.size
@@ -114,7 +115,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             .coerceIn(0, enabledStepIds.size - 1)
         if (resume > 0) binding.obStepPager.setCurrentItem(resume, false)
 
-        if (config.behavior.swipeCompletesLastStep) {
+        if (!config.behavior.lockPagerSwipe && config.behavior.swipeCompletesLastStep) {
             advanceFlingDetector = AdvanceFlingDetector(
                 this,
                 rtl = { binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL },
@@ -160,6 +161,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             // A horizontally scrollable child under the finger keeps its own gesture.
             if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
                 gestureBeganOnRestingLastStep =
+                    canSwipeCurrentPage() &&
                     binding.obStepPager.scrollState == ViewPager2.SCROLL_STATE_IDLE &&
                     binding.obStepPager.currentItem == enabledStepIds.size - 1 &&
                     !binding.obStepPager.pageHasHorizontallyScrollableViewUnder(ev.x, ev.y)
@@ -176,6 +178,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
      */
     private fun completeLastStepBySwipe() {
         if (exitResolved) return
+        if (!canSwipeCurrentPage()) return
         if (!gestureBeganOnRestingLastStep) return
         val last = enabledStepIds.size - 1
         if (binding.obStepPager.currentItem != last) return
@@ -189,11 +192,13 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     private fun dispatchPageChange(position: Int) {
         val visit = ++pageSelectionVersion
+        swipeEnabledAdStep = null
         if (lastSelectedPosition >= 0 && lastSelectedPosition != position) {
             pagerAdapter.fragmentAt(lastSelectedPosition)?.dispatchUnselected()
         }
         lastSelectedPosition = position
         _currentIndex.value = position
+        updatePagerSwipe()
 
         val stepId = enabledStepIds.getOrNull(position) ?: return
         OnboardingSdk.session.recordStepShown(stepId)
@@ -217,6 +222,29 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     // ── StepHost ──
 
+    private fun canSwipeCurrentPage(): Boolean {
+        val config = sdk.requireConfig()
+        if (config.behavior.lockPagerSwipe || exitResolved) return false
+        val position = binding.obStepPager.currentItem
+        val stepId = enabledStepIds.getOrNull(position) ?: return false
+        return when (config.stepById(stepId)?.type) {
+            StepType.AD_FULL_SCREEN -> swipeEnabledAdStep == stepId
+            StepType.CONTENT -> stepId == StepId.OB2 ||
+                (stepId != StepId.OB1 && position == enabledStepIds.lastIndex)
+            null -> false
+        }
+    }
+
+    private fun updatePagerSwipe() {
+        binding.obStepPager.isUserInputEnabled = canSwipeCurrentPage()
+    }
+
+    override fun setAdStepSwipeEnabled(stepId: StepId, enabled: Boolean) {
+        if (enabledStepIds.getOrNull(binding.obStepPager.currentItem) != stepId) return
+        swipeEnabledAdStep = stepId.takeIf { enabled }
+        updatePagerSwipe()
+    }
+
     /**
      * The single completion point for a step, whichever page type it was.
      *
@@ -237,6 +265,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         if (position >= enabledStepIds.size - 1) {
             if (exitResolved) return
             exitResolved = true
+            updatePagerSwipe()
         }
         enabledStepIds.getOrNull(position)?.let { stepId ->
             val dwellMs = pagerAdapter.fragmentAt(position)?.dwellMs() ?: 0L

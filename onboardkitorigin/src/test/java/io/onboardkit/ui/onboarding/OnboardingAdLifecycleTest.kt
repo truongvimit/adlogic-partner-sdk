@@ -2,6 +2,8 @@ package io.onboardkit.ui.onboarding
 
 import android.app.Application
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
@@ -10,6 +12,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
@@ -99,6 +102,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @After fun cleanup() {
+        interstitial?.onAdSkipped(AdSkipReason.NOT_READY)
         controller?.pause()?.stop()?.destroy()
         main.idle()
         ConsentCenter.clearHostConsent()
@@ -109,6 +113,8 @@ class OnboardingAdLifecycleTest {
         clickReturn: Boolean = true,
         second: StepDefinition = ContentStepDefinition(StepId.OB2, title = "Two"),
         lastOnly: Boolean = false,
+        lockSwipe: Boolean = true,
+        swipeCompletesLastStep: Boolean = true,
     ) {
         OnboardingSdk.configure(onboardKitConfig {
             step(first)
@@ -116,7 +122,8 @@ class OnboardingAdLifecycleTest {
                 step(second)
                 step(ContentStepDefinition(StepId.OB4, title = "Three"))
             }
-            behavior = BehaviorConfig(adClickReturnCompletesStep = clickReturn)
+            behavior = BehaviorConfig(adClickReturnCompletesStep = clickReturn,
+                lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
             ads = AdsConfig(contentStepNative = NativeAdUnit("test-content"),
                 fullScreenStepNative = NativeAdUnit("test-fullscreen"),
                 afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly })
@@ -147,6 +154,110 @@ class OnboardingAdLifecycleTest {
         assertEquals(1, pager.currentItem)
         assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
         assertEquals(listOf(reason), completions.map { it.exitReason })
+    }
+
+    private fun flingForward() {
+        val start = SystemClock.uptimeMillis()
+        listOf(Triple(0L, MotionEvent.ACTION_DOWN, 900f),
+            Triple(20L, MotionEvent.ACTION_MOVE, 650f),
+            Triple(40L, MotionEvent.ACTION_MOVE, 400f),
+            Triple(60L, MotionEvent.ACTION_UP, 100f)).forEach { (time, action, x) ->
+            MotionEvent.obtain(start, start + time, action, x, 500f, 0).also {
+                activity.dispatchTouchEvent(it)
+                it.recycle()
+            }
+        }
+        // Distinct gestures must not share timestamps or become a GestureDetector double tap.
+        main.idleFor(400, MILLISECONDS)
+    }
+
+    @Test fun `swipe enabled keeps OB1 locked and unlocks OB2`() {
+        launch(lockSwipe = false)
+        assertFalse(pager.isUserInputEnabled)
+        flingForward()
+        assertEquals(0, pager.currentItem)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `fullscreen swipe requires successful show on each visit`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
+        assertFalse(pager.isUserInputEnabled)
+        listener(true).onImpression()
+        assertTrue(pager.isUserInputEnabled)
+        val oldAd = listener(true)
+        pager.setCurrentItem(1, false)
+        layout()
+        pager.setCurrentItem(0, false)
+        layout()
+        assertFalse(pager.isUserInputEnabled)
+        oldAd.onImpression()
+        assertFalse(pager.isUserInputEnabled)
+        listener(true).onImpression()
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `last fullscreen cannot fling past loading but can exit after show`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false),
+            lastOnly = true, lockSwipe = false)
+        flingForward()
+        assertEquals(0, interstitialLoads)
+        assertTrue(completions.isEmpty())
+        listener(true).onImpression()
+        assertTrue(pager.isUserInputEnabled)
+        assertEquals(ViewPager2.SCROLL_STATE_IDLE, pager.scrollState)
+        flingForward()
+        assertEquals(1, interstitialLoads)
+        assertEquals(listOf(StepExit.SWIPE), completions.map { it.exitReason })
+    }
+
+    @Test fun `last content fling uses the CTA exit interstitial once`() {
+        launch(ContentStepDefinition(StepId.OB4), lastOnly = true, lockSwipe = false)
+        flingForward()
+        flingForward()
+        assertEquals(1, interstitialLoads)
+        assertEquals(listOf(StepExit.SWIPE), completions.map { it.exitReason })
+    }
+
+    @Test fun `disabled swipe cannot complete last content through window detector`() {
+        launch(ContentStepDefinition(StepId.OB4), lastOnly = true)
+        flingForward()
+        assertEquals(0, interstitialLoads)
+        assertTrue(completions.isEmpty())
+    }
+
+    @Test fun `fullscreen success cannot override the global swipe lock`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false))
+        listener(true).onImpression()
+        assertFalse(pager.isUserInputEnabled)
+    }
+
+    @Test fun `fullscreen failure locks swipe before queued automatic completion`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
+        listener(true).onImpression()
+        assertTrue(pager.isUserInputEnabled)
+        listener(true).onFailedToLoad()
+        assertFalse(pager.isUserInputEnabled)
+        settle()
+        assertOneCompletion(StepExit.AD_FAILED)
+    }
+
+    @Test fun `fullscreen X still advances while loading keeps swipe locked`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
+        main.idleFor(1_000, MILLISECONDS)
+        assertFalse(pager.isUserInputEnabled)
+        activity.findViewById<View>(R.id.ob_skip_close).performClick()
+        settle()
+        assertOneCompletion(StepExit.SKIP)
+    }
+
+    @Test fun `last page completion flag can disable the exit fling`() {
+        launch(ContentStepDefinition(StepId.OB4), lastOnly = true,
+            lockSwipe = false, swipeCompletesLastStep = false)
+        flingForward()
+        assertEquals(0, interstitialLoads)
+        assertTrue(completions.isEmpty())
     }
 
     @Test fun `click only vendor returns and advances once`() {
@@ -240,7 +351,8 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen foreground timeout advances once`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1))
+        launch(AdFullScreenStepDefinition(StepId.OB1), lockSwipe = false)
+        assertFalse(pager.isUserInputEnabled)
         main.idleFor(2_500, MILLISECONDS)
         assertEquals(0, pager.currentItem)
         main.idleFor(500, MILLISECONDS)
