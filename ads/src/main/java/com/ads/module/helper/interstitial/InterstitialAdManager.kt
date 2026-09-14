@@ -279,7 +279,7 @@ object InterstitialAdManager {
     /**
      * Explicit partner trigger: ready fill, join an existing request, or start one cold load.
      * AutoBuffer remains cache-only unless [InterLoadAndShowOptions.allowWaitForAutoBuffer]
-     * opts in. The opt-in wait is capped at 5 seconds from entry.
+     * opts in. The wait uses the captured buffer_wait_timeout_ms configuration from entry.
      *
      * [InterLoadAndShowOptions.timeoutMs] limits waiting for a fill, not the waterfall,
      * the existing 800ms show preparation, or an ad awaiting dismissal. Timeout/destroy removes
@@ -321,7 +321,7 @@ object InterstitialAdManager {
         // Buffer policy must not shorten independent waits such as the onboarding exit ad.
         val waitingForBuffer = captured.allowWaitForAutoBuffer && InterstitialAutoBuffer.owns(placement)
         val configuredWait = behavior.long(if (waitingForBuffer) "load_and_show.buffer_wait_timeout_ms" else "load_and_show.wait_timeout_ms", captured.timeoutMs)
-        val waitMs = if (waitingForBuffer) configuredWait.coerceIn(0L, 5_000L) else configuredWait.coerceAtLeast(0L)
+        val waitMs = configuredWait.coerceAtLeast(0L)
         val deadline = clickedAt + waitMs
         if ((InterstitialAutoBuffer.owns(placement) && !captured.allowWaitForAutoBuffer) || isReady(placement)) {
             reportWait(placement, source, "dispatch", clickedAt, captured)

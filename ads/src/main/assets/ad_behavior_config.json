@@ -68,17 +68,17 @@
       "interval_ms": 0,
       "max_clicks_per_24h": 0
     },
-    "auto_buffer": {
-      "enabled": false,
-      "tick_ms": 0,
-      "idle_tick_ms": 30000,
-      "min_tick_ms": 5000,
-      "preload_lead_ms": 2000,
-      "rules": {}
-    },
     "cache": {
       "max_age_ms": 3600000
     }
+  },
+  "interstitial_auto_buffer": {
+    "enabled": true,
+    "tick_ms": 0,
+    "idle_tick_ms": 30000,
+    "min_tick_ms": 5000,
+    "preload_lead_ms": 2000,
+    "rules": {}
   },
   "rewarded": {
     "load": {

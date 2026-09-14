@@ -62,7 +62,7 @@ object InterstitialFrequency {
         val interval = intervalMs(placement)
         val anchor = maxOf(state.activatedAt, state.closedAt)
         val cycleAt = if (anchor < 0) 0L else anchor +
-            (interval - if (preload) AdBehavior.number("interstitial.auto_buffer.preload_lead_ms") else 0L).coerceAtLeast(0L)
+            (interval - if (preload) AdBehavior.number("interstitial_auto_buffer.preload_lead_ms") else 0L).coerceAtLeast(0L)
         val retryAt = if (state.failedAt < 0) 0L else state.failedAt +
             if (interval > 0L) interval else InterstitialAutoBuffer.options().idleTickMs.coerceAtLeast(1L)
         return (maxOf(cycleAt, retryAt) - SystemClock.elapsedRealtime()).coerceAtLeast(0L)

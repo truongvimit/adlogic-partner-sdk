@@ -26,13 +26,13 @@ class InterstitialBufferOptions @JvmOverloads constructor(
      * How often to check, in milliseconds. `0` follows `ERainAdConfig.intervalInterstitialAd`,
      * which is the point: one ad per interval is exactly one ad per showable moment.
      */
-    val tickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.tick_ms"),
+    val tickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.tick_ms"),
 
     /** Used when the interval rule is switched off; something still has to pace the check. */
-    val idleTickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.idle_tick_ms"),
+    val idleTickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.idle_tick_ms"),
 
     /** Floor on the tick, so a tiny remote interval cannot turn this into a spin loop. */
-    val minTickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.min_tick_ms"),
+    val minTickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.min_tick_ms"),
 
     /** Legacy constructor parameter; retries now use the shared remote interval. */
     val backoffMs: Long = 30_000L,
@@ -57,9 +57,9 @@ class InterstitialBufferOptions @JvmOverloads constructor(
         tapThresholds: Map<String, Int> = emptyMap(),
         intervalMsByPlacement: Map<String, Long> = emptyMap(),
         isPlacementEnabled: (String) -> Boolean = { true },
-        tickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.tick_ms"),
-        idleTickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.idle_tick_ms"),
-        minTickMs: Long = AdBehavior.defaultNumber("interstitial.auto_buffer.min_tick_ms"),
+        tickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.tick_ms"),
+        idleTickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.idle_tick_ms"),
+        minTickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.min_tick_ms"),
         backoffMs: Long = 30_000L,
         maxBackoffMs: Long = 5 * 60_000L,
     ) : this(placements, tickMs, idleTickMs, minTickMs, backoffMs, maxBackoffMs) {
@@ -118,9 +118,9 @@ object InterstitialAutoBuffer {
         val local = configuredOptions
         val v = AdBehavior.document.snapshot
         if (resolvedLocal === local && resolvedSnapshot === v) return checkNotNull(resolved)
-        val remotePlacements = v.objectEntries("interstitial.auto_buffer.rules").keys.map { it.substringBefore('.') }
+        val remotePlacements = v.objectEntries("interstitial_auto_buffer.rules").keys.map { it.substringBefore('.') }
         val keys = (local.placements + remotePlacements).distinct()
-        fun path(key: String, field: String) = "interstitial.auto_buffer.rules.$key.$field"
+        fun path(key: String, field: String) = "interstitial_auto_buffer.rules.$key.$field"
         val result = InterstitialBufferOptions(
             independentIntervalPlacements = keys.filter { v.boolean(path(it, "independent_interval"), it in local.independentIntervalPlacements) }.toSet(),
             placements = keys,
@@ -130,9 +130,9 @@ object InterstitialAutoBuffer {
                 else local.intervalMsByPlacement[key]?.let { key to it }
             }.toMap(),
             isPlacementEnabled = { local.isPlacementEnabled(it) && v.boolean(path(it, "enabled"), it in local.placements) },
-            tickMs = v.long("interstitial.auto_buffer.tick_ms", local.tickMs),
-            idleTickMs = v.long("interstitial.auto_buffer.idle_tick_ms", local.idleTickMs),
-            minTickMs = v.long("interstitial.auto_buffer.min_tick_ms", local.minTickMs),
+            tickMs = v.long("interstitial_auto_buffer.tick_ms", local.tickMs),
+            idleTickMs = v.long("interstitial_auto_buffer.idle_tick_ms", local.idleTickMs),
+            minTickMs = v.long("interstitial_auto_buffer.min_tick_ms", local.minTickMs),
             backoffMs = local.backoffMs, maxBackoffMs = local.maxBackoffMs,
         )
         resolvedLocal = local; resolvedSnapshot = v; resolved = result
@@ -222,7 +222,7 @@ object InterstitialAutoBuffer {
 
     internal fun loadSkipReason(placement: String): AdSkipReason? {
         if (!owns(placement)) return null
-        if (!running || !AdBehavior.bool("interstitial.auto_buffer.enabled", true)) return AdSkipReason.DISABLED_CONFIG
+        if (!running || !AdBehavior.bool("interstitial_auto_buffer.enabled")) return AdSkipReason.DISABLED_CONFIG
         if (!isForeground()) return AdSkipReason.SHOW_IN_BACKGROUND
         if (InterstitialFrequency.isPresenting() ||
             InterstitialFrequency.preloadRemainingMs(placement) > 0L ||
@@ -314,7 +314,7 @@ object InterstitialAutoBuffer {
      */
     private fun topUp(): Long {
         val context = appContext ?: return options.minTickMs
-        if (!running || !AdBehavior.bool("interstitial.auto_buffer.enabled", true) || !isForeground()) return 0L
+        if (!running || !AdBehavior.bool("interstitial_auto_buffer.enabled") || !isForeground()) return 0L
         // Personalization may remain UNKNOWN while UMP already authorizes ad requests.
         // Use the same request authority as AdGate, not the analytics consent state.
         if (!ConsentCenter.canRequestAds()) return options.minTickMs
@@ -358,7 +358,7 @@ object InterstitialAutoBuffer {
     /** [delayMs] `0` uses the configured period; anything else is an exact wake-up. */
     private fun schedule(delayMs: Long = 0L) {
         handler.removeCallbacks(tick)
-        if (!running || !AdBehavior.bool("interstitial.auto_buffer.enabled", true) || !isForeground()) return
+        if (!running || !AdBehavior.bool("interstitial_auto_buffer.enabled") || !isForeground()) return
         val period =
             if (delayMs > 0L) delayMs.coerceAtLeast(if (options.independentIntervalPlacements.isEmpty()) MIN_WAKE_MS else 1L)
             else periodMs(

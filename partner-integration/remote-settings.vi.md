@@ -159,19 +159,19 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native.presentation.cta_corner_radius_dp` | `20` | Bo góc CTA (dp) khi có ctaBackgroundColor/colorCTA tường minh; màu default giữ XML. |
 | `interstitial.load.tier_timeout_ms` | `30000` | Mỗi tier. |
 | `interstitial.load_and_show.wait_timeout_ms` | `8000` | Budget đợi fill; không bao gồm chờ người dùng đóng ad. |
-| `interstitial.load_and_show.buffer_wait_timeout_ms` | `8000` | UI wait khi tham gia AutoBuffer; vẫn giữ giới hạn 0..5000ms của API hiện tại. |
+| `interstitial.load_and_show.buffer_wait_timeout_ms` | `8000` | UI wait khi tham gia AutoBuffer; dùng timeout đã resolve khi bắt đầu chờ, không có trần 5 giây; giá trị âm được xử lý thành 0. |
 | `interstitial.load_and_show.allow_wait_for_auto_buffer` | `true` | Mặc định chờ AutoBuffer; partner có thể tắt bằng override. |
 | `interstitial.presentation.next_screen_timing` | `"AFTER_AD"` | AFTER_AD/UNDER_AD, map InterNextAction; screen/explicit call timing ưu tiên cao hơn. |
 | `interstitial.presentation.loading_enabled` | `true` | Dialog loading khi chờ fill và chuẩn bị show; false không hủy yêu cầu ads. |
 | `interstitial.presentation.pre_show_delay_ms` | `800` | Nối delay preparation; không đồng nhất timeout đợi fill. |
 | `interstitial.frequency.interval_ms` | `0` | Giữ scope hiện tại AutoBuffer; không tự áp splash/OB. |
 | `interstitial.frequency.max_clicks_per_24h` | `0` | 0=tắt; counter theo inter ad unit. |
-| `interstitial.auto_buffer.enabled` | `false` | Remote chỉ chạy ở host content lifecycle đã tích hợp; không khởi động từ Application/splash. |
-| `interstitial.auto_buffer.tick_ms` | `0` | 0 theo interval chung. |
-| `interstitial.auto_buffer.idle_tick_ms` | `30000` | Cadence khi interval tắt. |
-| `interstitial.auto_buffer.min_tick_ms` | `5000` | Sàn tick, giữ trần 30 phút hiện tại. |
-| `interstitial.auto_buffer.preload_lead_ms` | `2000` | Khoảng preload sớm trước interval, giữ scope independent placements. |
-| `interstitial.auto_buffer.rules` | `{}` | Map theo placement: {enabled, independent_interval, tap_threshold, interval_ms}; đầy đủ placements/independentIntervalPlacements/tapThresholds/intervalMsByPlacement. rules={} xóa remote rules, không xóa cấu hình host. |
+| `interstitial_auto_buffer.enabled` | `true` | Công tắc remote cho preload/refill tự động. Host vẫn phải configure placements và gọi start() từ content lifecycle. Mặc định true; remote/asset false chặn buffer. Chỉ áp dụng placements của AutoBuffer, không áp dụng toàn bộ interstitial. |
+| `interstitial_auto_buffer.tick_ms` | `0` | 0 theo interval chung. |
+| `interstitial_auto_buffer.idle_tick_ms` | `30000` | Cadence khi interval tắt. |
+| `interstitial_auto_buffer.min_tick_ms` | `5000` | Sàn tick, giữ trần 30 phút hiện tại. |
+| `interstitial_auto_buffer.preload_lead_ms` | `2000` | Khoảng preload sớm trước interval, giữ scope independent placements. |
+| `interstitial_auto_buffer.rules` | `{}` | Map theo placement: {enabled, independent_interval, tap_threshold, interval_ms}; đầy đủ placements/independentIntervalPlacements/tapThresholds/intervalMsByPlacement. rules={} xóa remote rules, không xóa cấu hình host. |
 | `interstitial.cache.max_age_ms` | `3600000` | Chỉ giảm so với lifetime hiện tại. |
 | `rewarded.load.tier_timeout_ms` | `30000` | Giữ cache/request chung theo placement; không auto refill. |
 | `rewarded.cache.max_age_ms` | `3600000` | Một unused fill; không thêm buffer_count/refill policy. |
@@ -281,3 +281,5 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `question.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `question.selection.mode` | `"MULTIPLE"` | SINGLE/MULTIPLE. |
 | `question.selection.min_count` | `1` | >=1, không vượt số option hợp lệ. |
+
+`interstitial.auto_buffer` được chuyển thành nhóm cấp cao nhất `interstitial_auto_buffer`, mặc định `enabled: true`. Cập nhật remote config và asset tùy chỉnh của host sang key mới; SDK không còn đọc key cũ. Nhóm này chỉ điều khiển placements khai báo trong `InterstitialAutoBuffer` hoặc remote `rules`, trừ placements đã reserve. Host vẫn phải gọi `configure()` / `start()`; bật field này không tự khởi động buffer hoặc tự show quảng cáo. Các cấu hình interstitial khác vẫn nằm trong `interstitial`.

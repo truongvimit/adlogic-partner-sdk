@@ -12,7 +12,7 @@ object AdBehavior {
             val suffix = parts.drop(3).joinToString(".")
             return if (supportsPlacementField(format, suffix)) document.defaultValue("$format.$suffix") else null
         }
-        if (path.startsWith("interstitial.auto_buffer.rules.")) return when (path.substringAfterLast('.')) {
+        if (path.startsWith("interstitial_auto_buffer.rules.")) return when (path.substringAfterLast('.')) {
             "enabled", "independent_interval" -> false
             "tap_threshold", "interval_ms" -> 0L
             else -> null

@@ -12,6 +12,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
@@ -87,6 +88,7 @@ class InterstitialBufferLifecycleTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.acceptSuccessfulFetch(null)
         InterstitialAutoBuffer.stop()
         ads.filter { it.hosts.isNotEmpty() }.forEach { it.callback.onAdDismissedFullScreenContent() }
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
@@ -103,6 +105,40 @@ class InterstitialBufferLifecycleTest {
         }
         advance(800)
         requests.clear()
+    }
+
+    @Test
+    fun `remote auto buffer switch only blocks managed placements and can reenable them`() {
+        assertTrue(AdBehavior.defaultBool("interstitial_auto_buffer.enabled"))
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":false}}""")
+        arm(listOf(ALL))
+        advance(30_000)
+        assertEquals(0, requests.size)
+        InterstitialAdManager.load(host, ALL, listOf("buffer-all-unit"))
+        assertEquals(0, requests.size)
+        InterstitialAdManager.load(host, "outside", listOf("outside-unit"))
+        assertEquals(1, requests.size)
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true}}""")
+        InterstitialAutoBuffer.topUpNow()
+        main.idle()
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `remote buffer timeout above five seconds remains captured until its deadline`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":12000}}}""")
+        arm(listOf(ALL))
+        advance(30_000)
+        assertEquals(1, requests.size)
+        val result = Outcome()
+        val deadline = SystemClock.elapsedRealtime() + 12_000
+        InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), result)
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":1000}}}""")
+        advance(deadline - SystemClock.elapsedRealtime() - 1)
+        assertEquals("Remote 12000ms must not be capped at 5000ms or changed mid-wait", 0, result.completed)
+        advance(1)
+        assertEquals(1, result.completed)
+        assertEquals(listOf(AdSkipReason.NOT_READY), result.skipped)
     }
 
     @Test
@@ -355,7 +391,7 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `managed convenience show defaults to a bounded buffer wait`() {
+    fun `managed convenience show waits the full eight second default buffer timeout`() {
         arm()
         val gated = Outcome()
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), gated)
@@ -368,7 +404,7 @@ class InterstitialBufferLifecycleTest {
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), loading)
         assertTrue(loading.skipped.isEmpty())
         assertEquals(0, loading.completed)
-        advance(clickedAt + 4_999 - SystemClock.elapsedRealtime())
+        advance(clickedAt + 7_999 - SystemClock.elapsedRealtime())
         assertTrue(loading.skipped.isEmpty())
         advance(1)
         assertEquals(listOf(AdSkipReason.NOT_READY), loading.skipped)

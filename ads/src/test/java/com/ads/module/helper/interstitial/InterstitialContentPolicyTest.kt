@@ -94,15 +94,15 @@ class InterstitialContentPolicyTest {
     }
 
     @Test
-    fun `opted managed click joins preload and caps UI wait at five seconds`() {
+    fun `opted managed click joins preload and respects explicit timeout above five seconds`() {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL)))
         InterstitialAutoBuffer.start(host)
         InterstitialAdManager.load(host, ALL, listOf(UNIT))
         val clickedAt = SystemClock.elapsedRealtime()
-        val outcome = click(timeoutMs = 99_000)
+        val outcome = click(timeoutMs = 12_000)
         assertEquals("An in-flight preload must be awaited", 0, outcome.completed)
         assertEquals(1, requests.size)
-        advanceUntil(clickedAt + 4_999)
+        advanceUntil(clickedAt + 11_999)
         assertEquals(0, outcome.completed)
         advance(1)
         assertEquals(1, outcome.completed)

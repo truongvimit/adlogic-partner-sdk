@@ -148,12 +148,12 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `interstitial.presentation.pre_show_delay_ms` | `800` |
 | `interstitial.frequency.interval_ms` | `0` |
 | `interstitial.frequency.max_clicks_per_24h` | `0` |
-| `interstitial.auto_buffer.enabled` | `false` |
-| `interstitial.auto_buffer.tick_ms` | `0` |
-| `interstitial.auto_buffer.idle_tick_ms` | `30000` |
-| `interstitial.auto_buffer.min_tick_ms` | `5000` |
-| `interstitial.auto_buffer.preload_lead_ms` | `2000` |
-| `interstitial.auto_buffer.rules` | `{}` |
+| `interstitial_auto_buffer.enabled` | `true` |
+| `interstitial_auto_buffer.tick_ms` | `0` |
+| `interstitial_auto_buffer.idle_tick_ms` | `30000` |
+| `interstitial_auto_buffer.min_tick_ms` | `5000` |
+| `interstitial_auto_buffer.preload_lead_ms` | `2000` |
+| `interstitial_auto_buffer.rules` | `{}` |
 | `interstitial.cache.max_age_ms` | `3600000` |
 | `rewarded.load.tier_timeout_ms` | `30000` |
 | `rewarded.cache.max_age_ms` | `3600000` |
@@ -263,3 +263,5 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `question.interstitial.behavior` | `{}` |
 | `question.selection.mode` | `"MULTIPLE"` |
 | `question.selection.min_count` | `1` |
+
+`interstitial.auto_buffer` has moved to top-level `interstitial_auto_buffer` (default `enabled: true`). Update remote config and custom host assets to the new key; the old key is no longer read. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.
