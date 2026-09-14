@@ -60,7 +60,7 @@ Giữ cấu hình consent mà app đã chọn. Thư viện không khai báo giá
 
 Đây là lựa chọn của app, không phải default SDK. `ConsentCenter` đã nối sang Tracker và luôn map analytics thành granted, ads theo personalization; form UMP không phải dialog xin consent analytics riêng. App có flow consent riêng xem [Trackkit](trackkit-integration.vi.md#4-bảng-cấu-hình). Tùy chọn collection ở [bảng bên dưới](#5-bảng-cấu-hình).
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.5` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.6` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 ## 3. JSON ads và onboarding từ remote
 

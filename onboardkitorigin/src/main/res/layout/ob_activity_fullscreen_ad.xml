@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Standalone full-screen native activity (OB5 / native splash for returning users). -->
+<!-- Standalone full-screen native activity (OB5 or optional splash native before LFO). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"

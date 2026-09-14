@@ -19,9 +19,9 @@ class OnboardingSettingsTest {
 
     @Test fun `all defaults are available before application initialization`() {
         assertEquals(AdLoadStrategy.ALTERNATE, SplashConfig().adLoadStrategy)
-        assertTrue(BehaviorConfig().lockPagerSwipe)
+        assertFalse(BehaviorConfig().lockPagerSwipe)
         assertFalse(LanguageConfig().confirmVisibleBeforeSelect)
-        assertEquals(1000L, OnboardingSettings.number("onboarding.fullscreen.skip.delay_ms"))
+        assertEquals(5000L, OnboardingSettings.number("onboarding.fullscreen.skip.delay_ms"))
         assertEquals(3000L, OnboardingSettings.number("ob5.skip.delay_ms"))
     }
 
@@ -70,12 +70,12 @@ class OnboardingSettingsTest {
         assertNull(OnboardingSettings.resolve(config).ads.languageNative)
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
             "native_lang" to AdUnitConfig("remote_n", true),
-            "native_fs" to AdUnitConfig("remote_fs", true),
+            "native_fsob" to AdUnitConfig("remote_fs", true),
         )))
         val available = OnboardingSettings.resolve(config)
         assertEquals(listOf("remote_n"), available.ads.languageNative!!.loadOrder)
         assertEquals(listOf("remote_fs"), available.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder)
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("remote_fs", false))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fsob" to AdUnitConfig("remote_fs", false))))
         val disabled = OnboardingSettings.resolve(config)
         assertTrue(disabled.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder.isEmpty())
         assertNull(disabled.ads.languageNative)

@@ -100,6 +100,86 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun splashNativePreloadsWithLfoAfterInterLoadedAndFinishesBeforeLfoStarts() {
+        LongPromptFixture.nativeConfigured = true
+        LongPromptFixture.provider.nativeReady = false
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+        assertTrue(LongPromptFixture.provider.nativeRequests.isEmpty())
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertEquals(setOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests.toSet())
+        LongPromptFixture.provider.nativeReady = true
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals("An optional splash native prevents UNDER_AD from opening LFO early", 0, LongPromptFixture.flowStarts)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        val host = requireNotNull(controller).get()
+        val request = requireNotNull(shadowOf(host).nextStartedActivityForResult)
+        assertEquals(ObSplashNativeActivity::class.java.name, request.intent.component?.className)
+        assertEquals(0, LongPromptFixture.flowStarts)
+        host.activityResultRegistry.dispatchResult(request.requestCode, Activity.RESULT_OK, null)
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.splashHandoffs)
+    }
+
+    @Test
+    fun recreationWhileSplashNativeIsOpenWaitsForOneResultWithoutRelaunch() {
+        LongPromptFixture.nativeConfigured = true
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        LongPromptFixture.provider.nativeReady = true
+        main.idleFor(Duration.ofSeconds(4))
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        val request = requireNotNull(shadowOf(requireNotNull(controller).get()).nextStartedActivityForResult)
+        requireNotNull(controller).recreate().visible()
+        val recreated = requireNotNull(controller).get()
+        recreated.onWindowFocusChanged(true)
+        main.idle()
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertEquals(null, shadowOf(recreated).nextStartedActivityForResult)
+        recreated.activityResultRegistry.dispatchResult(request.requestCode, Activity.RESULT_OK, null)
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.splashHandoffs)
+    }
+
+    @Test
+    fun failedSplashNativeDoesNotDelayLfoOrAddAnEmptyScreen() {
+        LongPromptFixture.nativeConfigured = true
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(io.onboardkit.ui.language.ObLanguageActivity::class.java.name,
+            shadowOf(requireNotNull(controller).get()).nextStartedActivity.component?.className)
+    }
+
+    @Test
+    fun failedInterstitialDoesNotPreloadSplashNative() {
+        LongPromptFixture.nativeConfigured = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+        requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals(listOf(AdPlacement.Language1), LongPromptFixture.provider.nativeRequests)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
     fun loadingLoopsWhileUmpRequestAndFormArePending() {
         LongPromptFixture.ump.holdUpdate = true
         LongPromptFixture.ump.requireForm = true
@@ -580,7 +660,8 @@ class SplashLongPromptTest {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             ads = AdsConfig(splashBanner = BannerAdUnit("host-banner"),
                 splashInterstitial = InterstitialAdUnit("host-interstitial"),
-                languageNative = NativeAdUnit("host-language"))
+                languageNative = NativeAdUnit("host-language"),
+                splashNative = NativeAdUnit("host-splash-native").takeIf { LongPromptFixture.nativeConfigured })
         }.getOrThrow()).getOrThrow()
         controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java).setup().visible()
         requireNotNull(controller).get().onWindowFocusChanged(true)
@@ -635,6 +716,7 @@ private object LongPromptFixture {
     var ump = LongPromptConsentInformation()
     var form = LongPromptConsentForm()
     var flowStarts = 0
+    var nativeConfigured = false
     var paywallEnabled = false
     var paywallCalls = 0
     var timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
@@ -654,6 +736,9 @@ private object LongPromptFixture {
         ump = LongPromptConsentInformation()
         form = LongPromptConsentForm()
         flowStarts = 0
+        nativeConfigured = false
+        provider.nativeReady = false
+        provider.nativeRequests.clear()
         paywallEnabled = false
         paywallCalls = 0
         timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
@@ -692,8 +777,10 @@ private class LongPromptProvider : OnboardingAdProvider {
     var ready = false
     val order = mutableListOf<String>()
     override fun isPremium(context: Context) = premium
-    override fun preloadNative(activity: Activity, request: NativeAdRequest) { order += "native" }
-    override fun isNativeReady(placement: AdPlacement) = false
+    val nativeRequests = mutableListOf<AdPlacement>()
+    var nativeReady = false
+    override fun preloadNative(activity: Activity, request: NativeAdRequest) { order += "native"; nativeRequests += request.placement }
+    override fun isNativeReady(placement: AdPlacement) = placement == AdPlacement.SplashNative && nativeReady
     override fun isNativeLoading(placement: AdPlacement) = false
     override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?) = false
     override fun releaseNative(placement: AdPlacement) = Unit

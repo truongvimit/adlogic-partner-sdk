@@ -1,10 +1,12 @@
 # Cấu hình ads và hành vi onboarding
 
+**Mapping fullscreen:** `native_fsob` là trang fullscreen bên trong OB (`StepId.OB3`); trang nội dung cuối dùng `native_ob3` (`StepId.OB4`). `native_fs` là native splash riêng, tùy chọn: `inter_splash → native_fs → LFO`. Mặc định example tắt cả `native_fs` và các tier `_high*` của nó. Khi bật, slot này preload sau khi splash interstitial load thành công, cùng LFO1 ở chế độ SEQUENTIAL mặc định; chế độ PARALLEL có thể preload LFO1 sớm hơn. Chỉ mở sau khi interstitial đóng, khi màn đích là LFO và native đã sẵn sàng. Native splash bị tắt, load fail hoặc chưa sẵn sàng thì đi thẳng LFO. Slot có buffer riêng, không ảnh hưởng fullscreen OB. Example đặt `enable_ua_check = false` cho `native_ob3` và các tier để user organic cũng có thể thấy ads ở trang cuối.
+
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
 SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK.
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.5` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.6` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 | Parameter | File mặc định trong SDK |
 |---|---|
@@ -47,7 +49,7 @@ OnboardingSdk.configure(onboardKitConfig {
 | Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fs` |
+| Fullscreen OB3 | `native_fsob` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native/interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -207,6 +209,10 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.permissions.no_internet_prompt_enabled` | `true` | Giữ mặc định gating hiện tại. |
 | `splash.permissions.notification_enabled` | `true` | Vẫn giữ granted/đã hỏi/manifest/OS checks. |
 | `splash.navigation.next_screen_timing` | `"AUTO"` | AUTO/AFTER_AD/UNDER_AD; entry noti/widget/uninstall vẫn bảo đảm AFTER_AD. |
+| `splash.native.skip.delay_ms` | `3000` | Native splash trước LFO.
+| `splash.native.skip.style` | `"CLOSE_ICON"` | Native splash trước LFO.
+| `splash.native.auto_dismiss_ms` | `15000` | Native splash trước LFO.
+| `splash.native.behavior.reload.on_ad_click` | `false` | Native splash trước LFO.
 | `lfo.native_template` | `"CTA_BOTTOM"` | Preset layout native SDK cho LFO1/LFO2; xem thứ tự ưu tiên template. |
 | `lfo.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `lfo.native2.enabled` | `true` | Bật/tắt hành động đổi sang native thứ hai sau chọn ngôn ngữ; không bật lại ad unit bị tắt. |
@@ -226,7 +232,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.languages.supported_codes` | `[]` | Rỗng giữ catalog; mã lạ bị loại, lọc rỗng trở về catalog. |
 | `lfo.languages.default_code` | `""` | Rỗng giữ lựa chọn cũ; chỉ nhận mã có trong catalog app. |
 | `lfo.exit.reuse_splash_inter` | `true` | Chỉ nhánh thoát LFO không vào pager. |
-| `onboarding.navigation.lock_pager_swipe` | `true` | Giữ chính sách page eligibility hiện tại; false không tự mở swipe OB1 trong working tree. |
+| `onboarding.navigation.lock_pager_swipe` | `false` | Giữ chính sách page eligibility hiện tại; false không tự mở swipe OB1 trong working tree. |
 | `onboarding.navigation.swipe_completes_last_step` | `true` | Trong working tree còn cần !lock_pager_swipe. |
 | `onboarding.navigation.back_navigates_back` | `true` | Giữ behavior Back hiện tại. |
 | `onboarding.navigation.ad_click_return_completes_step` | `true` | Không bật cùng click replacement vô ích cho step đang tự next. |
@@ -234,10 +240,10 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` | Mặc định riêng OB: không tải ad thay thế khi click-return sẽ rời step. |
 | `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` | Mặc định riêng OB: không tải ad thay thế khi click-return sẽ rời step. |
 | `onboarding.fullscreen.skip.enabled` | `true` | Thay showSkipButton && ob_show_skip_ob3. |
-| `onboarding.fullscreen.skip.delay_ms` | `1000` | New >=0; legacy -1 kế thừa, không chuyển -1000 thành timer. |
+| `onboarding.fullscreen.skip.delay_ms` | `5000` | New >=0; legacy -1 kế thừa, không chuyển -1000 thành timer. |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của trang fullscreen trong OB. |
 | `onboarding.fullscreen.auto_next.enabled` | `true` | Không điều khiển OB5 standalone. |
-| `onboarding.fullscreen.auto_next.delay_ms` | `3000` | Timer từ page selection, tính background như hiện tại. |
+| `onboarding.fullscreen.auto_next.delay_ms` | `15000` | Timer từ page selection, tính background như hiện tại. |
 | `onboarding.steps.ob1.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
 | `onboarding.steps.ob1.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
 | `onboarding.steps.ob1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |

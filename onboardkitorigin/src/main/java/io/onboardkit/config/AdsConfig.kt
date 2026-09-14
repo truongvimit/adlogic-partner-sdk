@@ -170,6 +170,8 @@ data class AdsConfig(
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
     /** App-owned association with ad_config keys; never duplicated in behavior JSON. */
     val placementKeys: Map<AdPlacement, String> = emptyMap(),
+    /** Optional full-screen native between the splash interstitial and LFO; absent means off. */
+    val splashNative: NativeAdUnit? = null,
 ) {
     companion object {
         /** Standard partner keys. Override only associations whose names differ in your app. */
@@ -179,6 +181,7 @@ data class AdsConfig(
             placementKeys = mapOf(
                 AdPlacement.SplashBanner to "banner_splash",
                 AdPlacement.SplashInterstitial to "inter_splash",
+                AdPlacement.SplashNative to "native_fs",
                 AdPlacement.AfterOnboardingInterstitial to "inter_after_ob3",
                 AdPlacement.Language1 to "native_lang",
                 AdPlacement.Language2 to "native_lang_alt",
@@ -186,7 +189,7 @@ data class AdsConfig(
                 AdPlacement.StepNative(StepId.OB1) to "native_ob1",
                 AdPlacement.StepNative(StepId.OB2) to "native_ob2",
                 AdPlacement.StepNative(StepId.OB4) to "native_ob3",
-                AdPlacement.StepFullScreen(StepId.OB3) to "native_fs",
+                AdPlacement.StepFullScreen(StepId.OB3) to "native_fsob",
                 AdPlacement.Ob5 to "native_onboarding_fullscreen_1_4",
                 AdPlacement.QuestionNative to "native_question",
                 AdPlacement.QuestionInterstitial to "inter_question",
@@ -207,6 +210,7 @@ data class AdsConfig(
         return copy(
             splashBanner = tiers(AdPlacement.SplashBanner)?.let { BannerAdUnit(it.firstOrNull().orEmpty()) } ?: splashBanner,
             splashInterstitial = inter(AdPlacement.SplashInterstitial, splashInterstitial),
+            splashNative = native(AdPlacement.SplashNative, splashNative),
             splashInterstitialOldUser = oldSplashKey?.takeIf(config::declares)?.let { InterstitialAdUnit(config.tiersFor(it)) } ?: splashInterstitialOldUser,
             languageNative = native(AdPlacement.Language1, languageNative),
             languageDupNative = native(AdPlacement.Language2, languageDupNative),
@@ -241,6 +245,7 @@ data class AdsConfig(
     fun unitFor(placement: AdPlacement): AdUnitTiers? = when (placement) {
         AdPlacement.SplashBanner -> splashBanner?.let { NativeAdUnit(it.id) }
         AdPlacement.SplashInterstitial -> splashInterstitial
+        AdPlacement.SplashNative -> splashNative
         AdPlacement.AfterOnboardingInterstitial -> afterOnboardingInterstitial
         AdPlacement.Language1 -> languageNative
         AdPlacement.Language2 -> languageDupNative ?: languageNative

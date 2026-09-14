@@ -386,6 +386,13 @@ Returning before the delay cancels the scheduled load. No app-side lifecycle tim
 
 ## Version notes
 
+**5.3.6 — fullscreen placement correction.** OB fullscreen now uses `native_fsob`;
+`native_fs` is an independent optional screen after the splash interstitial and before LFO,
+disabled in the example JSON defaults. It preloads after the interstitial loads and only
+opens if ready after dismissal. The last content page uses `native_ob3`, with UA checks off
+in the example. OB defaults now show X after 5 seconds and auto-advance after 15 seconds.
+Use `adlogicSdkVersion=5.3.6`.
+
 **5.3.5 — returning-user splash compatibility.** Restore the existing `inter_splash_o`
 placement key (including its waterfall tiers) for returning users. Use `adlogicSdkVersion=5.3.5`.
 

@@ -34,6 +34,18 @@
     },
     "navigation": {
       "next_screen_timing": "AUTO"
+    },
+    "native": {
+      "skip": {
+        "delay_ms": 3000,
+        "style": "CLOSE_ICON"
+      },
+      "auto_dismiss_ms": 15000,
+      "behavior": {
+        "reload": {
+          "on_ad_click": false
+        }
+      }
     }
   },
   "lfo": {
@@ -73,7 +85,7 @@
   },
   "onboarding": {
     "navigation": {
-      "lock_pager_swipe": true,
+      "lock_pager_swipe": false,
       "swipe_completes_last_step": true,
       "back_navigates_back": true,
       "ad_click_return_completes_step": true
@@ -94,12 +106,12 @@
     "fullscreen": {
       "skip": {
         "enabled": true,
-        "delay_ms": 1000,
+        "delay_ms": 5000,
         "style": "CLOSE_ICON"
       },
       "auto_next": {
         "enabled": true,
-        "delay_ms": 3000
+        "delay_ms": 15000
       }
     },
     "steps": {

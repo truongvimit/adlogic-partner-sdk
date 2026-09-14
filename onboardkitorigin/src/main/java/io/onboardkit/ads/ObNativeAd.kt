@@ -37,6 +37,7 @@ internal fun Activity.showNativeAd(
     onUnavailable: (AdSkipReason) -> Unit = {},
     onAdEngaged: () -> Unit = {},
     reuseFailedPreload: Boolean = false,
+    bufferedOnly: Boolean = false,
 ) {
     val provider = OnboardingSdk.provider()
     if (provider == null || unit == null) {
@@ -75,6 +76,10 @@ internal fun Activity.showNativeAd(
     // Buffered by the preload chain on the common path, so the slot paints without a round trip
     if (bindBuffered(provider, placement, container, shimmer = null, listener)) {
         onBound()
+        return
+    }
+    if (bufferedOnly) {
+        placement.reportUnavailable(AdSkipReason.NOT_READY, onUnavailable)
         return
     }
     if (reuseFailedPreload && provider.isNativeLoadFailed(placement)) {

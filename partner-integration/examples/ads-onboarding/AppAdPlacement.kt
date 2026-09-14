@@ -11,6 +11,7 @@ object AppAdPlacement {
     const val NATIVE_OB1 = "native_ob1"
     const val NATIVE_OB2 = "native_ob2"
     const val NATIVE_FS = "native_fs"
+    const val NATIVE_FSOB = "native_fsob"
     const val NATIVE_OB3 = "native_ob3"
     const val INTER_AFTER_OB3 = "inter_after_ob3"
 

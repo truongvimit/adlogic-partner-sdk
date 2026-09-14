@@ -1,10 +1,12 @@
 # Ads behavior और onboarding settings
 
+**Fullscreen placement mapping:** OB के अंदर fullscreen page (`StepId.OB3`) के लिए `native_fsob` है; आखिरी content page (`StepId.OB4`) `native_ob3` इस्तेमाल करता है। `native_fs` अलग optional splash native है: `inter_splash → native_fs → LFO`। Example defaults में `native_fs` और इसके सभी `_high*` tiers बंद हैं। चालू होने पर splash interstitial load होने के बाद यह preload होता है, default SEQUENTIAL mode में LFO1 के साथ; PARALLEL mode में LFO1 पहले preload हो सकता है। यह interstitial बंद होने के बाद तभी खुलता है जब destination LFO हो और native तैयार हो। बंद, failed या unready native होने पर सीधे LFO खुलता है। इसका buffer अलग है और OB fullscreen पर कोई असर नहीं पड़ता। आखिरी page पर organic users भी ads देख सकें, इसलिए example में `native_ob3` और इसके tiers का `enable_ua_check = false` है.
+
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
 Console setup के लिए [तीन String parameters publish करने के कदम](firebase-integration.hi.md#remote-json) देखें। Custom offline defaults के लिए [app में दो local JSON files बनाना](firebase-integration.hi.md#local-defaults) देखें। नीचे के पूरे उदाहरण SDK assets से मेल खाते हैं।
 
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.5` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.6` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
 
 ## Documents और field ownership
 
@@ -38,7 +40,7 @@ ads = AdsConfig.fromAdConfig()
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fs` |
+| Fullscreen OB3 | `native_fsob` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -189,6 +191,10 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.permissions.no_internet_prompt_enabled` | `true` |
 | `splash.permissions.notification_enabled` | `true` |
 | `splash.navigation.next_screen_timing` | `"AUTO"` |
+| `splash.native.skip.delay_ms` | `3000` |
+| `splash.native.skip.style` | `"CLOSE_ICON"` |
+| `splash.native.auto_dismiss_ms` | `15000` |
+| `splash.native.behavior.reload.on_ad_click` | `false` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
 | `lfo.native1.behavior` | `{}` |
 | `lfo.native2.enabled` | `true` |
@@ -208,7 +214,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
-| `onboarding.navigation.lock_pager_swipe` | `true` |
+| `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
 | `onboarding.navigation.ad_click_return_completes_step` | `true` |
@@ -216,10 +222,10 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` |
 | `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
-| `onboarding.fullscreen.skip.delay_ms` | `1000` |
+| `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
-| `onboarding.fullscreen.auto_next.delay_ms` | `3000` |
+| `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
 | `onboarding.steps.ob1.enabled` | `true` |
 | `onboarding.steps.ob1.native_template` | `""` |
 | `onboarding.steps.ob1.behavior` | `{}` |

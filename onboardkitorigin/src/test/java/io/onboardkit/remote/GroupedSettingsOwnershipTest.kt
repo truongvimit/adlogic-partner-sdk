@@ -65,12 +65,12 @@ class GroupedSettingsOwnershipTest {
         fun pages() = FlowNavigator.enabledSteps(OnboardingSdk.requireConfig(), OnboardingSdk.flags(),
             canShowAdStep = OnboardingSdk::canFillAdOnlyStep)
         assertFalse(StepId.OB3 in pages())
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("remote_fs", true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", false), "native_fsob" to AdUnitConfig("remote_fs", true))))
         assertTrue(StepId.OB3 in pages())
         assertEquals(listOf("remote_fs"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder)
         // Behavior JSON cannot re-enable or remap the unit declared off in ad_config.
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob3":{"enabled":true,"native_enabled":true,"native_placement":"another"}}}}""")
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("remote_fs", false))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", true), "native_fsob" to AdUnitConfig("remote_fs", false))))
         assertFalse(StepId.OB3 in pages())
         assertEquals(0, OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.tierCount)
     }
@@ -100,6 +100,7 @@ class GroupedSettingsOwnershipTest {
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.QuestionNative))
         assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.StepFullScreen(StepId.OB3)))
         assertEquals(NativeTemplate.DIALOG, NativeTemplates.templateForPlacement(AdPlacement.LanguageConfirm))
+        assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.SplashNative))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":""},"ob2":{"native_template":"INVALID"}}}}""")
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
@@ -107,7 +108,7 @@ class GroupedSettingsOwnershipTest {
 
     @Test fun `grouped fetch changes navigation but cannot publish app UI payloads`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val config = onboardKitConfig { defaultSteps(); step(ContentStepDefinition(StepId("custom"), title = "App title", layoutRes = 0)) }.getOrThrow()
+        val config = onboardKitConfig { behavior = BehaviorConfig(lockPagerSwipe = true); defaultSteps(); step(ContentStepDefinition(StepId("custom"), title = "App title", layoutRes = 0)) }.getOrThrow()
         OnboardingSdk.configure(config)
         val remote = OnboardingSdk.remoteOrNull()!!
         remote.applySnapshot(RemoteFlags(uiContentJson = """{"steps":[{"id":"ob1","title":"Legacy title"}]}"""))

@@ -106,6 +106,7 @@ class OnboardingAdLifecycleTest {
         controller?.pause()?.stop()?.destroy()
         main.idle()
         ConsentCenter.clearHostConsent()
+        com.ads.module.config.AdRemoteConfig.reset()
     }
 
     private fun launch(
@@ -169,6 +170,32 @@ class OnboardingAdLifecycleTest {
         }
         // Distinct gestures must not share timestamps or become a GestureDetector double tap.
         main.idleFor(400, MILLISECONDS)
+    }
+
+    @Test fun `fsob binds fullscreen then final content binds its own native with splash native off`() {
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
+            "native_fs" to com.ads.module.config.AdUnitConfig("unused_splash_native", false),
+            "native_fsob" to com.ads.module.config.AdUnitConfig("ob_fullscreen", true),
+            "native_ob1" to com.ads.module.config.AdUnitConfig("content1", true),
+            "native_ob2" to com.ads.module.config.AdUnitConfig("content2", true),
+            "native_ob3" to com.ads.module.config.AdUnitConfig("content3", true, enableUaCheck = false),
+        )))
+        OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow()).getOrThrow()
+        controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
+        activity.setTheme(R.style.ob_Theme_OnboardKit)
+        requireNotNull(controller).setup().visible()
+        layout()
+        assertEquals(4, pager.adapter!!.itemCount)
+        pager.setCurrentItem(2, false)
+        layout()
+        assertTrue(listeners.containsKey(AdPlacement.StepFullScreen(StepId.OB3)))
+        pager.setCurrentItem(3, false)
+        layout()
+        assertTrue(listeners.containsKey(AdPlacement.StepNative(StepId.OB4)))
+        assertEquals(listOf("content3"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepNative(StepId.OB4))!!.loadOrder)
+        assertEquals(View.VISIBLE, activity.supportFragmentManager.fragments
+            .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
+            .findViewById<View>(R.id.ob_ad_block).visibility)
     }
 
     @Test fun `swipe enabled keeps OB1 locked and unlocks OB2`() {
@@ -245,7 +272,7 @@ class OnboardingAdLifecycleTest {
 
     @Test fun `fullscreen X still advances while loading keeps swipe locked`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
-        main.idleFor(1_000, MILLISECONDS)
+        main.idleFor(5_000, MILLISECONDS)
         assertFalse(pager.isUserInputEnabled)
         activity.findViewById<View>(R.id.ob_skip_close).performClick()
         settle()
@@ -351,7 +378,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen foreground timeout advances once`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1), lockSwipe = false)
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), lockSwipe = false)
         assertFalse(pager.isUserInputEnabled)
         main.idleFor(2_500, MILLISECONDS)
         assertEquals(0, pager.currentItem)
@@ -361,7 +388,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen timeout still counts background time and return cannot advance again`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1))
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000))
         main.idleFor(500, MILLISECONDS)
         listener(true).onClicked()
         pause()
@@ -372,7 +399,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen expired deadline catches up safely during resume`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1))
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000))
         pause()
         // Advance the clock without running the timer: Android may suspend the process/CPU.
         ShadowSystemClock.advanceBy(Duration.ofSeconds(4))
@@ -381,7 +408,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen click return wins once when its deadline also expired`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1))
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000))
         listener(true).onClicked()
         listener(true).onAdOpened()
         pause()
@@ -391,7 +418,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `fullscreen click return before timeout cancels the old timer`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1))
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000))
         listener(true).onAdOpened()
         pause(); resume()
         main.idleFor(5_000, MILLISECONDS)
@@ -406,7 +433,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `disabled click return does not disable fullscreen deadline catchup`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1), clickReturn = false)
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickReturn = false)
         listener(true).onClicked()
         pause()
         ShadowSystemClock.advanceBy(Duration.ofSeconds(4))
@@ -464,7 +491,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `last fullscreen completes in background but exit interstitial waits for resume`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1), lastOnly = true)
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), lastOnly = true)
         listener(true).onClicked()
         pause()
         main.idleFor(4_000, MILLISECONDS)

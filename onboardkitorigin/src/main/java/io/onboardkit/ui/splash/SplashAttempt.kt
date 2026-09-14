@@ -51,6 +51,10 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var adPhaseStartedAtMs = 0L
     var adsRequested = false
     var lfo1Scheduled = false
+    var nativeScheduled = false
+    var nativeScreenRequested = false
+    var nativeScreenResolved = false
+    val nativeScreenFinished = CompletableDeferred<Unit>()
     val bannerSettled = CompletableDeferred<Unit>()
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null

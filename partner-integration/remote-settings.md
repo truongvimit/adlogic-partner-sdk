@@ -1,10 +1,12 @@
 # Ads behavior and onboarding settings
 
+**Fullscreen placement mapping:** `native_fsob` is the fullscreen page inside OB (`StepId.OB3`); the final content page uses `native_ob3` (`StepId.OB4`). `native_fs` is a separate, optional splash native: `inter_splash → native_fs → LFO`. Both `native_fs` and its `_high*` tiers are disabled in the example defaults. When enabled, it preloads after the splash interstitial loads, alongside LFO1 in the default SEQUENTIAL mode; PARALLEL mode may start LFO1 earlier. It opens only after the interstitial closes, only when the destination is LFO and the native is ready. A disabled, failed or unready splash native goes straight to LFO. It has a separate buffer and does not change OB fullscreen eligibility. The example sets `enable_ua_check = false` for `native_ob3` and its tiers so the last page can show ads to organic users too.
+
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
 For Console setup, follow [publishing the three String parameters](firebase-integration.md#remote-json). To supply custom offline defaults, follow [creating the two app-side JSON files](firebase-integration.md#local-defaults). Both full examples below match the SDK assets exactly.
 
-**Version requirement:** use SDK `5.3.5` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+**Version requirement:** use SDK `5.3.6` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
 
 ## Documents and ownership
 
@@ -38,7 +40,7 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fs` |
+| Fullscreen OB3 | `native_fsob` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -189,6 +191,10 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.permissions.no_internet_prompt_enabled` | `true` |
 | `splash.permissions.notification_enabled` | `true` |
 | `splash.navigation.next_screen_timing` | `"AUTO"` |
+| `splash.native.skip.delay_ms` | `3000` |
+| `splash.native.skip.style` | `"CLOSE_ICON"` |
+| `splash.native.auto_dismiss_ms` | `15000` |
+| `splash.native.behavior.reload.on_ad_click` | `false` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
 | `lfo.native1.behavior` | `{}` |
 | `lfo.native2.enabled` | `true` |
@@ -208,7 +214,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
-| `onboarding.navigation.lock_pager_swipe` | `true` |
+| `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
 | `onboarding.navigation.ad_click_return_completes_step` | `true` |
@@ -216,10 +222,10 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` |
 | `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
-| `onboarding.fullscreen.skip.delay_ms` | `1000` |
+| `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
-| `onboarding.fullscreen.auto_next.delay_ms` | `3000` |
+| `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
 | `onboarding.steps.ob1.enabled` | `true` |
 | `onboarding.steps.ob1.native_template` | `""` |
 | `onboarding.steps.ob1.behavior` | `{}` |

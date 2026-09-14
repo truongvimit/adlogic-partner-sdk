@@ -28,7 +28,7 @@ object OnboardKitSetup {
      * |---|---|---|---|
      * | 1 | `OB1` | `native_ob1` | content |
      * | 2 | `OB2` | `native_ob2` | content |
-     * | 3 | `OB3` | `native_fs`  | **ad only, full screen** |
+     * | 3 | `OB3` | `native_fsob` | **ad only, full screen** |
      * | 4 | `OB4` | `native_ob3` | content |
      *
      * Remote on/off still follows the position: `ob_enable_step_ob3` hides the ad page.
@@ -49,8 +49,8 @@ object OnboardKitSetup {
             language = LanguageConfig(
             )
 
-            // Same shape as the removed handwritten flow: 4 content pages,
-            // full-screen native between pages 3 and 4 (remote-gated via ob_enable_step_ob3)
+            // Three content pages, with native_fsob between content pages 2 and 3.
+            // StepId.OB3 is the fullscreen position; StepId.OB4 reads native_ob3.
             steps(
                 ContentStepDefinition(
                     Page.CONTENT_1,

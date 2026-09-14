@@ -251,6 +251,7 @@ class OnboardKitConfigBuilder internal constructor() {
         checkTiers("languageConfirmNative", ads.languageConfirmNative)
         checkTiers("contentStepNative", ads.contentStepNative)
         checkTiers("fullScreenStepNative", ads.fullScreenStepNative)
+        checkTiers("splashNative", ads.splashNative)
         checkTiers("ob5Native", ads.ob5Native)
         checkTiers("questionNative", ads.questionNative)
         checkTiers("splashInterstitial", ads.splashInterstitial)

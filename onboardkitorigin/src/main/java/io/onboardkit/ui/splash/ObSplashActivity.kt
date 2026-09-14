@@ -77,6 +77,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private var noInternetDialog: ObNoInternetDialog? = null
     private val windowFocused = MutableStateFlow(false)
 
+    private val nativeScreenLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { attempt.nativeScreenFinished.complete(Unit) }
+
     // Unconditional registration lets AndroidX deliver a pending result to a recreated owner.
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -231,6 +235,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
                     else attempt.interstitialSettled.await().lfoReason
                 ensureLfo1Preload(reason)
             }
+            lifecycleScope.launch {
+                if (attempt.interstitialSettled.await() == InterResult.LOADED) ensureSplashNativePreload()
+            }
             notification.await()
         }
 
@@ -239,6 +246,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         awaitBanner()
         awaitInterstitial()
         ensureLfo1Preload(attempt.interstitialSettled.await().lfoReason)
+        if (attempt.interstitialSettled.await() == InterResult.LOADED) ensureSplashNativePreload()
         proceed()
     }
 
@@ -249,6 +257,36 @@ open class ObSplashActivity : BaseOnboardActivity() {
         attempt.lfo1Scheduled = true
         ObLog.d(ObLog.Section.PRELOAD, "splash_lfo attempt=${attempt.id} mode=${if (checkNotNull(attempt.flags).splashLfoParallelPreloadEnabled) "parallel" else "sequential"} reason=$reason")
         sdk.preload().preloadLanguage1(this, allowWhileVisible = attempt.notificationOpen.value)
+    }
+
+    private suspend fun ensureSplashNativePreload() {
+        if (attempt.nativeScheduled || (attempt.startDecision as? StartDecision.Start)?.destination != FlowDestination.LANGUAGE) return
+        awaitRequestWindow()
+        if (attempt.nativeScheduled) return
+        attempt.nativeScheduled = true
+        sdk.preload().preloadSplashNative(this, allowWhileVisible = attempt.notificationOpen.value)
+    }
+
+    private fun splashNativeEligible(): Boolean =
+        attempt.nativeScheduled &&
+            (attempt.startDecision as? StartDecision.Start)?.destination == FlowDestination.LANGUAGE &&
+            sdk.guard().skipReason(this, AdPlacement.SplashNative) == null
+
+    /** A cold/failed optional native never adds a blank screen or delays the destination. */
+    private suspend fun awaitSplashNativeScreen() {
+        if (attempt.nativeScreenResolved) return
+        if (!attempt.nativeScreenRequested) {
+            if (!splashNativeEligible() || sdk.provider()?.isNativeReady(AdPlacement.SplashNative) != true) {
+                sdk.provider()?.releaseNative(AdPlacement.SplashNative)
+                attempt.nativeScreenResolved = true
+                return
+            }
+            attempt.nativeScreenRequested = true
+            nativeScreenLauncher.launch(Intent(this, ObSplashNativeActivity::class.java))
+        }
+        attempt.nativeScreenFinished.await()
+        awaitSplashFocus()
+        attempt.nativeScreenResolved = true
     }
 
     private suspend fun awaitNotificationPermission(cfg: OnboardKitConfig) {
@@ -493,7 +531,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private suspend fun proceed() {
         if (!attempt.showRequested) {
-            if (attempt.nextScreenTiming == null) attempt.nextScreenTiming = nextScreenTiming()
+            if (attempt.nextScreenTiming == null) {
+                attempt.nextScreenTiming = if (splashNativeEligible()) NextScreenTiming.AFTER_AD else nextScreenTiming()
+            }
             // Must precede the paywall and show for every timing: a dismissed ad navigates at once.
             awaitMinimumDisplay()
             awaitPresentationWindow()
@@ -503,6 +543,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
             val state = attempt
             if (purchased || state.interstitialSettled.await() != InterResult.LOADED) {
                 if (purchased) AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PURCHASED_AT_PAYWALL)
+                state.nativeScreenResolved = true
+                sdk.provider()?.releaseNative(AdPlacement.SplashNative)
                 state.showNext.complete(Unit)
                 state.showFinished.complete(Unit)
             } else {
@@ -520,7 +562,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
                         }
                         state.showNext.complete(Unit)
                     },
-                    onFinished = { state.showFinished.complete(Unit) },
+                    onFinished = { reason ->
+                        if (reason != null) {
+                            state.nativeScreenResolved = true
+                            OnboardingSdk.provider()?.releaseNative(AdPlacement.SplashNative)
+                        }
+                        state.showFinished.complete(Unit)
+                    },
                 )
             }
         }
@@ -532,6 +580,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // of an existing ad. A recreated owner continues once the presentation has ended.
             attempt.showFinished.await()
             awaitSplashFocus()
+            awaitSplashNativeScreen()
             startFlow()
         }
         attempt.showFinished.await()

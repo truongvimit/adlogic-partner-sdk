@@ -32,6 +32,7 @@ object AppAdPlacement {
     const val INTER_WELCOME = "inter_welcome"
     const val NATIVE_CONFIRM_UNINSTALL = "native_confirm_uninstall"
     const val NATIVE_FS = "native_fs"
+    const val NATIVE_FSOB = "native_fsob"
     const val NATIVE_HOME = "native_home"
     const val NATIVE_LANG = "native_lang"
     const val NATIVE_LANG_ALT = "native_lang_alt"

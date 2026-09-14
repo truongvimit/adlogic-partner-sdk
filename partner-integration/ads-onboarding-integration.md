@@ -1,14 +1,16 @@
 # Ads + OnboardKit integration
 
+**Fullscreen placement mapping:** `native_fsob` is the fullscreen page inside OB (`StepId.OB3`); the final content page uses `native_ob3` (`StepId.OB4`). `native_fs` is a separate, optional splash native: `inter_splash → native_fs → LFO`. Both `native_fs` and its `_high*` tiers are disabled in the example defaults. When enabled, it preloads after the splash interstitial loads, alongside LFO1 in the default SEQUENTIAL mode; PARALLEL mode may start LFO1 earlier. It opens only after the interstitial closes, only when the destination is LFO and the native is ready. A disabled, failed or unready splash native goes straight to LFO. It has a separate buffer and does not change OB fullscreen eligibility. The example sets `enable_ua_check = false` for `native_ob3` and its tiers so the last page can show ads to organic users too.
+
 [← Choose a guide](README.md)
 
 Sample flow: **Splash → language (LFO) → content 1 → content 2 → fullscreen native → content 3 → end-of-onboarding interstitial → MainActivity**. The SDK owns consent, notifications, ads and navigation; an ad shows only when it is eligible and filled.
 
 Do steps 1–6 and replace the **package, app details, content/images and destination screen**. The code keeps the SDK defaults; the JSON keeps the example debug configuration. Fill in the app token to enable Adjust; Firebase, app-open and purchases are in the [optional tables](#7-configure-only-what-your-app-needs).
 
-**SDK 5.3.5:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings are included. Use `5.3.5` for all SDK modules; `5.3.3` does not contain these additions.
+**SDK 5.3.6:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings are included. Use `5.3.6` for all SDK modules; `5.3.3` does not contain these additions.
 
-**Version requirement:** use SDK `5.3.5` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
+**Version requirement:** use SDK `5.3.6` or newer for grouped settings and `AdsConfig.fromAdConfig()`, with the same version for all modules. Adding Firebase keys alone does not update an older SDK.
 
 ## 1. Add the dependencies
 
@@ -29,10 +31,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Set version `5.3.5` once in your app project's root `gradle.properties`; every SDK module reads this property:
+Set version `5.3.6` once in your app project's root `gradle.properties`; every SDK module reads this property:
 
 ```properties
-adlogicSdkVersion=5.3.5
+adlogicSdkVersion=5.3.6
 ```
 
 Every module reads this same property.
@@ -100,7 +102,7 @@ Ad unit IDs contain **`/`**. Each file holds **45 entries**, like the [debug exa
 | `native_popup_lang` | Native in the language confirmation popup | `languageConfirmNative` |
 | `native_ob1` | Content 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | Content 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fs` | Ad-only page — `StepId.OB3` | `fullScreenStepNative` |
+| `native_fsob` | Ad-only page — `StepId.OB3` | `stepNatives[StepId.OB3]` |
 | `native_ob3` | Content 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | After all of onboarding, before the destination screen | `afterOnboardingInterstitial` |
 
@@ -289,7 +291,7 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | OB navigation | Pager swipe locked; a forward swipe on the last page can still complete it; Back goes one page back and exits the app on the first page; portrait locked | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back always exits the app), `lockPortrait`; a landscape app must change the manifest too |
 | Interstitial interval | `ERainAdConfig.intervalInterstitialAd = 0` (no limit); it applies to the `InterstitialAutoBuffer` group only, not to splash/OB or interstitials you load yourself | Set it before init, or use `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` |
 | Interstitial click cap | Off (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: at most `n` clicks per ad unit per 24 hours, then loading/showing stops. Call it when needed, usually after the remote fetch |
-| OB5, question, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. A null `ob5Native` uses `fullScreenStepNative` (`native_fs`). The other features are not wired | `AdsConfig.ob5Native` to give it its own ID; wire the question/paywall/app-open only when you need them |
+| OB5, question, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. A null `ob5Native` uses `fullScreenStepNative` (host setup). The other features are not wired | `AdsConfig.ob5Native` to give it its own ID; wire the question/paywall/app-open only when you need them |
 
 A UMP error or timeout can allow an **attempted request** in-process through the [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt); it grants no consent and guarantees no fill. A host that turns ads off still wins; do not infer request permission from a timer or from personalization.
 
@@ -453,7 +455,7 @@ Splash, OB5 and the question screen exclude themselves; register only your app's
 - [ ] Walk LFO → OB → MainActivity on test ads; the fullscreen native sits between content 2 and 3, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; the fourth item tap opens the popup.
 - [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. A native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.
-- [ ] Disable both `native_ob2` and `native_ob2_high`: content page 2 still shows and does not borrow page 1's native. Disable both `native_fs` and `native_fs_high`: the ad-only page is skipped. Disable `inter_splash`, `inter_after_ob3` and all their `_high*` floors: the destination screen is still reached.
+- [ ] Disable both `native_ob2` and `native_ob2_high`: content page 2 still shows and does not borrow page 1's native. Disable both `native_fsob` and `native_fsob_high`: the ad-only page is skipped. Disable `inter_splash`, `inter_after_ob3` and all their `_high*` floors: the destination screen is still reached.
 - [ ] Test with no network: by default the connection prompt appears; if you opted into offline support the flow still continues on the SDK timeout and does not hang on an app callback.
 - [ ] Relaunch after completion: through the splash into your app, with no OB rerun; your screen is already there when the splash interstitial closes. Clear app data to test first-open; closing the app mid-OB and reopening must start at LFO after the splash.
 - [ ] Your app screens use the selected language; check both the translations and the language split configuration when shipping an AAB.

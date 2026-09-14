@@ -60,7 +60,7 @@ App events `Tracker` के ज़रिए भेजती है; sink उन�
 
 यह आपकी app का चुनाव है, SDK का default नहीं। `ConsentCenter` पहले से Tracker से जुड़ा है और हमेशा analytics को granted तथा ads को personalization के जवाब पर map करता है; UMP form अलग से analytics consent dialog नहीं है। अपना consent flow रखने वाली app के लिए [Trackkit](trackkit-integration.hi.md#4-configuration-table) देखें। Collection के विकल्प [नीचे की तालिका](#5-configuration-तालिका) में हैं।
 
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.5` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.6` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
 
 ## 3. Remote ads और onboarding JSON
 

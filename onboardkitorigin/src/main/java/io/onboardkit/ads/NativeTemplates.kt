@@ -70,7 +70,7 @@ object NativeTemplates {
 
             AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
 
-            is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> NativeTemplate.FULL_SCREEN
+            is AdPlacement.StepFullScreen, AdPlacement.Ob5, AdPlacement.SplashNative -> NativeTemplate.FULL_SCREEN
 
             AdPlacement.SplashBanner,
             AdPlacement.SplashInterstitial,

@@ -1,14 +1,16 @@
 # Tích hợp Ads + OnboardKit
 
+**Mapping fullscreen:** `native_fsob` là trang fullscreen bên trong OB (`StepId.OB3`); trang nội dung cuối dùng `native_ob3` (`StepId.OB4`). `native_fs` là native splash riêng, tùy chọn: `inter_splash → native_fs → LFO`. Mặc định example tắt cả `native_fs` và các tier `_high*` của nó. Khi bật, slot này preload sau khi splash interstitial load thành công, cùng LFO1 ở chế độ SEQUENTIAL mặc định; chế độ PARALLEL có thể preload LFO1 sớm hơn. Chỉ mở sau khi interstitial đóng, khi màn đích là LFO và native đã sẵn sàng. Native splash bị tắt, load fail hoặc chưa sẵn sàng thì đi thẳng LFO. Slot có buffer riêng, không ảnh hưởng fullscreen OB. Example đặt `enable_ua_check = false` cho `native_ob3` và các tier để user organic cũng có thể thấy ads ở trang cuối.
+
 [← Chọn hướng dẫn](README.vi.md)
 
 Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 → native fullscreen → nội dung 3 → inter cuối OB → MainActivity**. SDK quản lý consent, thông báo, ads và điều hướng; quảng cáo chỉ hiện khi đủ điều kiện và có fill.
 
 Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, app-open và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
 
-**SDK 5.3.5:** đã có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Dùng `5.3.5` cho mọi module SDK; `5.3.3` chưa có các bổ sung này.
+**SDK 5.3.6:** đã có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Dùng `5.3.6` cho mọi module SDK; `5.3.3` chưa có các bổ sung này.
 
-**Yêu cầu phiên bản:** dùng SDK `5.3.5` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
+**Yêu cầu phiên bản:** dùng SDK `5.3.6` trở lên cho settings theo nhóm và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key Firebase không nâng cấp SDK cũ.
 
 ## 1. Thêm dependency
 
@@ -29,10 +31,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Đặt phiên bản `5.3.5` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
+Đặt phiên bản `5.3.6` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=5.3.5
+adlogicSdkVersion=5.3.6
 ```
 
 Mọi module dùng chung property này.
@@ -100,7 +102,7 @@ Ad unit ID chứa **`/`**. Mỗi file có **45 entry** như [example debug](../a
 | `native_popup_lang` | Native trong popup xác nhận ngôn ngữ | `languageConfirmNative` |
 | `native_ob1` | Nội dung 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | Nội dung 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fs` | Trang chỉ quảng cáo — `StepId.OB3` | `fullScreenStepNative` |
+| `native_fsob` | Trang chỉ quảng cáo — `StepId.OB3` | `stepNatives[StepId.OB3]` |
 | `native_ob3` | Nội dung 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | Sau toàn bộ onboarding, trước màn đích | `afterOnboardingInterstitial` |
 
@@ -289,7 +291,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Điều hướng OB | Khóa swipe pager; vuốt tiến ở trang cuối vẫn có thể hoàn tất; Back lùi một trang, ở trang đầu thì thoát app; khóa portrait | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back luôn thoát app), `lockPortrait`; app ngang cần sửa cả manifest |
 | Khoảng cách interstitial | `ERainAdConfig.intervalInterstitialAd = 0` (không giới hạn); chỉ áp nhóm `InterstitialAutoBuffer`, không áp splash/OB/inter tự load | Đặt trước init hoặc dùng `ERainAd.getInstance().setIntervalInterstitialAd(giây)` |
 | Giới hạn click interstitial | Tắt (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: mỗi ad unit tối đa `n` click/24 giờ rồi ngừng load/show. Gọi lúc cần, thường sau fetch remote |
-| OB5, khảo sát, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (`native_fs`). Các tính năng còn lại chưa nối | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối khảo sát/paywall/app-open khi cần |
+| OB5, khảo sát, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (host setup). Các tính năng còn lại chưa nối | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối khảo sát/paywall/app-open khi cần |
 
 UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt ads vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
 
@@ -453,7 +455,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn item lần thứ 4 mở popup.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Click native ở trang OB rồi quay lại chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.
-- [ ] Tắt cả `native_ob2` và `native_ob2_high`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt cả `native_fs` và `native_fs_high`: bỏ trang chỉ quảng cáo. Tắt `inter_splash`, `inter_after_ob3` và mọi tầng `_high*` của chúng: vẫn tới màn đích.
+- [ ] Tắt cả `native_ob2` và `native_ob2_high`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt cả `native_fsob` và `native_fsob_high`: bỏ trang chỉ quảng cáo. Tắt `inter_splash`, `inter_after_ob3` và mọi tầng `_high*` của chúng: vẫn tới màn đích.
 - [ ] Thử mất mạng: mặc định hiện prompt kết nối; nếu chọn hỗ trợ offline thì luồng vẫn đi tiếp theo timeout SDK, không treo vì callback app.
 - [ ] Mở lại sau khi hoàn thành: đi qua splash rồi vào app, không chạy lại OB; màn app đã sẵn khi đóng inter splash. Clear app data để kiểm tra first-open; đóng app giữa OB rồi mở lại phải bắt đầu từ LFO sau splash.
 - [ ] Các màn app dùng đúng ngôn ngữ đã chọn; kiểm tra cả bản dịch và cấu hình language split khi phát hành AAB.

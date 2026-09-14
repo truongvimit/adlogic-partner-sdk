@@ -79,20 +79,20 @@ class AdStepTimingTest {
         ConsentCenter.clearHostConsent()
     }
 
-    @Test fun `default skip unlocks at one second`() {
+    @Test fun `default skip unlocks at five seconds`() {
         launch()
         val skip = fragment.requireView().findViewById<View>(R.id.ob_skip_button)
-        main.idleFor(999, MILLISECONDS)
+        main.idleFor(4999, MILLISECONDS)
         assertEquals(View.GONE, skip.visibility)
         main.idleFor(1, MILLISECONDS)
         assertEquals(View.VISIBLE, skip.visibility)
     }
 
-    @Test fun `default auto next completes once at three seconds including background time`() {
+    @Test fun `default auto next completes once at fifteen seconds including background time`() {
         launch()
         main.idleFor(500, MILLISECONDS)
         controller.pause().stop()
-        main.idleFor(2499, MILLISECONDS)
+        main.idleFor(14499, MILLISECONDS)
         assertTrue(controller.get().exits.isEmpty())
         main.idleFor(1, MILLISECONDS)
         assertEquals(listOf("auto_next"), controller.get().exits)
@@ -116,12 +116,12 @@ class AdStepTimingTest {
         assertNotNull(close.drawable)
         assertEquals(controller.get().getString(R.string.ob_skip), close.contentDescription)
         assertEquals(View.GONE, fragment.requireView().findViewById<View>(R.id.ob_skip_text).visibility)
-        main.idleFor(1000, MILLISECONDS)
+        main.idleFor(5000, MILLISECONDS)
         assertEquals(View.VISIBLE, skip.visibility)
         assertTrue(close.isShown)
         close.performClick()
         close.performClick()
-        main.idleFor(3000, MILLISECONDS)
+        main.idleFor(15000, MILLISECONDS)
         assertEquals(listOf("skip"), controller.get().exits)
     }
 
@@ -151,10 +151,10 @@ class AdStepTimingTest {
         launch()
         main.idleFor(500, MILLISECONDS)
         fragment.dispatchUnselected()
-        main.idleFor(3000, MILLISECONDS)
+        main.idleFor(15000, MILLISECONDS)
         assertTrue(controller.get().exits.isEmpty())
         fragment.dispatchSelected()
-        main.idleFor(2999, MILLISECONDS)
+        main.idleFor(14999, MILLISECONDS)
         assertTrue(controller.get().exits.isEmpty())
         main.idleFor(1, MILLISECONDS)
         assertEquals(listOf("auto_next"), controller.get().exits)

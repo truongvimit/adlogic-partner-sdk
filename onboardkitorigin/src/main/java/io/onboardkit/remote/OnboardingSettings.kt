@@ -52,6 +52,7 @@ object OnboardingSettings {
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"
         io.onboardkit.ads.AdPlacement.SplashInterstitial -> "splash.ads.interstitial"
+        io.onboardkit.ads.AdPlacement.SplashNative -> "splash.native"
         io.onboardkit.ads.AdPlacement.AfterOnboardingInterstitial -> "onboarding.exit_interstitial"
         io.onboardkit.ads.AdPlacement.Language1 -> "lfo.native1"
         io.onboardkit.ads.AdPlacement.Language2 -> "lfo.native2"
@@ -68,6 +69,7 @@ object OnboardingSettings {
         is io.onboardkit.ads.AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.reload.on_ad_click"
         is io.onboardkit.ads.AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.reload.on_ad_click"
         io.onboardkit.ads.AdPlacement.Ob5 -> "ob5.native.behavior.reload.on_ad_click"
+        io.onboardkit.ads.AdPlacement.SplashNative -> "splash.native.behavior.reload.on_ad_click"
         else -> null
         }
         return path?.let { document.localSnapshot.boolean(it) } ?: AdBehavior.defaultBool("native.reload.on_ad_click")

@@ -75,6 +75,11 @@ class PreloadChain internal constructor(
         preloadNative(activity, AdPlacement.Language1, allowWhileVisible)
     }
 
+    /** Called only after the splash interstitial loads; owns a separate buffer from OB. */
+    fun preloadSplashNative(activity: Activity, allowWhileVisible: Boolean = false) {
+        preloadNative(activity, AdPlacement.SplashNative, allowWhileVisible)
+    }
+
     /** The LFO is on screen; slot 2 is buffered before the user's first tap swaps it into view. */
     fun onLanguageShown(activity: Activity) {
         val cfg = config() ?: return

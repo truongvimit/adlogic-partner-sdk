@@ -42,10 +42,10 @@ dependencyResolutionManagement {
 }
 ```
 
-Đặt phiên bản `5.3.5` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
+Đặt phiên bản `5.3.6` một lần trong `gradle.properties` ở root project của app; mọi module SDK dùng chung property này:
 
 ```properties
-adlogicSdkVersion=5.3.5
+adlogicSdkVersion=5.3.6
 ```
 
 Khi nâng SDK, đổi property này và đọc tài liệu tại tag đã chọn.

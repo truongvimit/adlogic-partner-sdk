@@ -1,14 +1,16 @@
 # Ads + OnboardKit integration
 
+**Fullscreen placement mapping:** OB के अंदर fullscreen page (`StepId.OB3`) के लिए `native_fsob` है; आखिरी content page (`StepId.OB4`) `native_ob3` इस्तेमाल करता है। `native_fs` अलग optional splash native है: `inter_splash → native_fs → LFO`। Example defaults में `native_fs` और इसके सभी `_high*` tiers बंद हैं। चालू होने पर splash interstitial load होने के बाद यह preload होता है, default SEQUENTIAL mode में LFO1 के साथ; PARALLEL mode में LFO1 पहले preload हो सकता है। यह interstitial बंद होने के बाद तभी खुलता है जब destination LFO हो और native तैयार हो। बंद, failed या unready native होने पर सीधे LFO खुलता है। इसका buffer अलग है और OB fullscreen पर कोई असर नहीं पड़ता। आखिरी page पर organic users भी ads देख सकें, इसलिए example में `native_ob3` और इसके tiers का `enable_ua_check = false` है.
+
 [← गाइड चुनें](README.hi.md)
 
 नमूना flow: **Splash → भाषा (LFO) → सामग्री 1 → सामग्री 2 → fullscreen native → सामग्री 3 → onboarding के अंत का interstitial → MainActivity**। SDK consent, notifications, ads और navigation संभालता है; ad तभी दिखता है जब वह eligible हो और fill मिले।
 
 कदम 1–6 करें और **package, app की जानकारी, सामग्री/images और destination स्क्रीन** बदलें। Code SDK के defaults रखता है; JSON example का debug configuration रखता है। Adjust चालू करने के लिए app token भरें; Firebase, app-open और purchases [वैकल्पिक tables](#7-सिर्फ-वही-configure-करें-जो-app-को-चाहिए) में हैं।
 
-**SDK 5.3.5:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। सभी SDK modules के लिए `5.3.5` इस्तेमाल करें; `5.3.3` में ये सुविधाएँ नहीं हैं।
+**SDK 5.3.6:** grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। सभी SDK modules के लिए `5.3.6` इस्तेमाल करें; `5.3.3` में ये सुविधाएँ नहीं हैं।
 
-**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.5` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
+**Version requirement:** grouped settings और `AdsConfig.fromAdConfig()` के लिए SDK `5.3.6` या नया इस्तेमाल करें और सभी modules की version समान रखें। Firebase keys जोड़ना पुराने SDK को update नहीं करता।
 
 ## 1. Dependencies जोड़ें
 
@@ -29,10 +31,10 @@ dependencyResolutionManagement {
 }
 ```
 
-App project की root `gradle.properties` में संस्करण `5.3.5` एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
+App project की root `gradle.properties` में संस्करण `5.3.6` एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
 
 ```properties
-adlogicSdkVersion=5.3.5
+adlogicSdkVersion=5.3.6
 ```
 
 हर module यही property पढ़ता है।
@@ -100,7 +102,7 @@ Ad unit IDs में **`/`** होता है। हर file में [debu
 | `native_popup_lang` | भाषा confirmation popup का native | `languageConfirmNative` |
 | `native_ob1` | सामग्री 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | सामग्री 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fs` | सिर्फ ad वाला page — `StepId.OB3` | `fullScreenStepNative` |
+| `native_fsob` | सिर्फ ad वाला page — `StepId.OB3` | `stepNatives[StepId.OB3]` |
 | `native_ob3` | सामग्री 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | पूरे onboarding के बाद, destination स्क्रीन से पहले | `afterOnboardingInterstitial` |
 
@@ -289,7 +291,7 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 | OB navigation | Pager swipe locked; आखिरी page पर आगे swipe करने से वह फिर भी पूरा हो सकता है; Back एक page पीछे जाता है और पहले page पर app से बाहर निकलता है; portrait locked | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back हमेशा app से बाहर निकालता है), `lockPortrait`; landscape app को manifest भी बदलना होगा |
 | Interstitial का अंतराल | `ERainAdConfig.intervalInterstitialAd = 0` (कोई सीमा नहीं); यह सिर्फ `InterstitialAutoBuffer` group पर लागू होता है, splash/OB या खुद load किए interstitials पर नहीं | init से पहले सेट करें, या `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` इस्तेमाल करें |
 | Interstitial click cap | बंद (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: हर ad unit पर 24 घंटे में ज्यादा से ज्यादा `n` clicks, उसके बाद load/show रुक जाता है। जरूरत पर बुलाएँ, आम तौर पर remote fetch के बाद |
-| OB5, प्रश्न, paywall, app-open | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `ob5Native` null हो तो `fullScreenStepNative` (`native_fs`) इस्तेमाल होता है। बाकी features जुड़े नहीं हैं | अपनी अलग ID देने के लिए `AdsConfig.ob5Native`; प्रश्न/paywall/app-open तभी जोड़ें जब जरूरत हो |
+| OB5, प्रश्न, paywall, app-open | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `ob5Native` null हो तो `fullScreenStepNative` (host setup) इस्तेमाल होता है। बाकी features जुड़े नहीं हैं | अपनी अलग ID देने के लिए `AdsConfig.ob5Native`; प्रश्न/paywall/app-open तभी जोड़ें जब जरूरत हो |
 
 UMP की error या timeout [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt) के जरिए process में **request की कोशिश** की अनुमति दे सकती है; यह न consent देता है, न fill की गारंटी। ads बंद करने वाला host फिर भी जीतता है; request की अनुमति timer या personalization से न मानें।
 
@@ -453,7 +455,7 @@ Splash, OB5 और प्रश्न स्क्रीन खुद को ब
 - [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; fullscreen native सामग्री 2 और 3 के बीच रहता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
 - [ ] LFO: भाषा चुनकर Back दबाने पर Save दिखता है और स्क्रीन बनी रहती है; item पर चौथा tap popup खोलता है।
 - [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।
-- [ ] `native_ob2` और `native_ob2_high` दोनों बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_fs` और `native_fs_high` दोनों बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash`, `inter_after_ob3` और उनके सभी `_high*` floors बंद करें: destination स्क्रीन फिर भी मिलती है।
+- [ ] `native_ob2` और `native_ob2_high` दोनों बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_fsob` और `native_fsob_high` दोनों बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash`, `inter_after_ob3` और उनके सभी `_high*` floors बंद करें: destination स्क्रीन फिर भी मिलती है।
 - [ ] बिना नेटवर्क टेस्ट करें: default रूप से connection prompt दिखता है; offline support चुना हो तो flow SDK के timeout पर फिर भी आगे बढ़ता है और किसी app callback पर अटकता नहीं।
 - [ ] पूरा होने के बाद दोबारा खोलें: splash से होते हुए आपकी app में, OB दोबारा नहीं चलता; splash interstitial बंद होने पर आपकी स्क्रीन पहले से मौजूद होती है। First-open टेस्ट करने के लिए app data clear करें; OB के बीच app बंद करके दोबारा खोलने पर splash के बाद LFO से शुरू होना चाहिए।
 - [ ] आपकी app की screens चुनी हुई भाषा इस्तेमाल करती हैं; AAB भेजते समय अनुवाद और language split configuration दोनों जाँचें।
