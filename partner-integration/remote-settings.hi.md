@@ -149,6 +149,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `interstitial.frequency.interval_ms` | `0` |
 | `interstitial.frequency.max_clicks_per_24h` | `0` |
 | `interstitial_auto_buffer.enabled` | `true` |
+| `interstitial_auto_buffer.shared_config` | `true` — preserves existing group policy and independent_interval overrides. `false` gives every placement its own cooldown, retry and tap counter, using rules.<placement>.interval_ms/tap_threshold or host options; disables the shared two-action guard. |
 | `interstitial_auto_buffer.tick_ms` | `0` |
 | `interstitial_auto_buffer.idle_tick_ms` | `30000` |
 | `interstitial_auto_buffer.min_tick_ms` | `5000` |

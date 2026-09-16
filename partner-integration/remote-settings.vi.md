@@ -167,6 +167,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `interstitial.frequency.interval_ms` | `0` | Giữ scope hiện tại AutoBuffer; không tự áp splash/OB. |
 | `interstitial.frequency.max_clicks_per_24h` | `0` | 0=tắt; counter theo inter ad unit. |
 | `interstitial_auto_buffer.enabled` | `true` | Công tắc remote cho preload/refill tự động. Host vẫn phải configure placements và gọi start() từ content lifecycle. Mặc định true; remote/asset false chặn buffer. Chỉ áp dụng placements của AutoBuffer, không áp dụng toàn bộ interstitial. |
+| `interstitial_auto_buffer.shared_config` | `true` | true giữ hành vi hiện tại (interval chung, vẫn hỗ trợ independent_interval và guard 2 thao tác chung). false tách toàn bộ placement: cooldown/retry và bộ đếm tap riêng, bỏ guard 2 thao tác chung; dùng rules.<placement>.interval_ms/tap_threshold hoặc cấu hình host. Không cần bật independent_interval khi false. |
 | `interstitial_auto_buffer.tick_ms` | `0` | 0 theo interval chung. |
 | `interstitial_auto_buffer.idle_tick_ms` | `30000` | Cadence khi interval tắt. |
 | `interstitial_auto_buffer.min_tick_ms` | `5000` | Sàn tick, giữ trần 30 phút hiện tại. |

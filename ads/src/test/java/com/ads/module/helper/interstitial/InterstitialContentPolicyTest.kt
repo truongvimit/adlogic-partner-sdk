@@ -13,6 +13,7 @@ import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.Entitlement
@@ -48,9 +49,11 @@ class InterstitialContentPolicyTest {
 
     @Before
     fun setUp() {
+        AdBehavior.document.acceptSuccessfulFetch(null)
         val app = ApplicationProvider.getApplicationContext<Application>()
         InterstitialAutoBuffer.stop()
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
+        InterstitialFrequency.reset()
         InterstitialAdManager.releaseAll()
         ConsentCenter.setHostConsent(true, false)
         Entitlement.install(object : EntitlementSource {
@@ -81,6 +84,7 @@ class InterstitialContentPolicyTest {
     @After
     fun tearDown() {
         InterstitialAutoBuffer.stop()
+        AdBehavior.document.acceptSuccessfulFetch(null)
         vendors.filter { it.hosts.isNotEmpty() }.forEach { it.callback.onAdDismissedFullScreenContent() }
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAdManager.releaseAll()
@@ -368,6 +372,101 @@ class InterstitialContentPolicyTest {
         assertTrue(requests.isEmpty())
         advance(1)
         assertEquals(1, requests.size)
+        assertTrue(InterstitialAdManager.isLoading(ALL))
+        assertFalse(InterstitialAdManager.isLoading(BACK))
+    }
+
+    @Test
+    fun `shared config off gives each placement its own interval and tap threshold`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "interstitial_auto_buffer": {"shared_config":false,"rules":{
+                "inter":{"enabled":true,"interval_ms":5000,"tap_threshold":1},
+                "inter_all":{"enabled":true,"interval_ms":10000,"tap_threshold":2},
+                "inter_back":{"enabled":true,"interval_ms":20000,"tap_threshold":3}
+            }}
+        }""")
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf("inter", ALL, BACK)))
+        InterstitialAutoBuffer.start(host)
+        assertEquals(5_000L, InterstitialFrequency.remainingMs(host, "inter"))
+        assertEquals(10_000L, InterstitialFrequency.remainingMs(host, ALL))
+        assertEquals(20_000L, InterstitialFrequency.remainingMs(host, BACK))
+        click("inter", timeoutMs = 0)
+        click(ALL, timeoutMs = 0)
+        click(BACK, timeoutMs = 0)
+        assertTrue(InterstitialFrequency.hasTaps("inter"))
+        assertFalse(InterstitialFrequency.hasTaps(ALL))
+        assertFalse(InterstitialFrequency.hasTaps(BACK))
+        click(ALL, timeoutMs = 0)
+        assertTrue(InterstitialFrequency.hasTaps(ALL))
+        assertFalse(InterstitialFrequency.hasTaps(BACK))
+        click(BACK, timeoutMs = 0)
+        click(BACK, timeoutMs = 0)
+        assertTrue(InterstitialFrequency.hasTaps(BACK))
+    }
+
+    @Test
+    fun `shared config off does not reset another placements satisfied taps after show`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "interstitial_auto_buffer": {"shared_config":false,"rules":{
+                "inter_all":{"interval_ms":0,"tap_threshold":1},
+                "inter_back":{"interval_ms":0,"tap_threshold":1}
+            }}
+        }""")
+        arm(0)
+        // Preload BACK after its own action, retaining that action until it actually shows.
+        click(BACK, timeoutMs = 0)
+        advance(1)
+        val back = fill()
+        val outcome = click(ALL)
+        val all = fill()
+        advance(800)
+        assertEquals(listOf(host), all.hosts)
+        all.callback.onAdShowedFullScreenContent()
+        all.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, outcome.completed)
+        assertFalse(InterstitialFrequency.hasTaps(ALL))
+        assertTrue(InterstitialAdManager.canShow(host, BACK))
+        val backOutcome = click(BACK)
+        advance(800)
+        assertEquals(listOf(host), back.hosts)
+        back.callback.onAdShowedFullScreenContent()
+        back.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, backOutcome.completed)
+    }
+
+    @Test
+    fun `shared config off isolates close cooldown and retry from other placements`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "interstitial_auto_buffer": {"shared_config":false,"rules":{
+                "inter_all":{"interval_ms":10000,"tap_threshold":1},
+                "inter_back":{"interval_ms":20000,"tap_threshold":1}
+            }}
+        }""")
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL, BACK)))
+        InterstitialAutoBuffer.start(host)
+        val startedAt = SystemClock.elapsedRealtime()
+        click(ALL, timeoutMs = 0)
+        click(BACK, timeoutMs = 0)
+        advance(8_000)
+        assertEquals(1, requests.size)
+        val all = fill()
+        advance(2_000)
+        click(ALL)
+        advance(800)
+        assertEquals(listOf(host), all.hosts)
+        all.callback.onAdShowedFullScreenContent()
+        all.callback.onAdDismissedFullScreenContent()
+        val closedAt = SystemClock.elapsedRealtime()
+        assertEquals(10_000L, InterstitialFrequency.remainingMs(host, ALL))
+        assertEquals(startedAt + 20_000L - closedAt, InterstitialFrequency.remainingMs(host, BACK))
+        click(ALL, timeoutMs = 0)
+        advanceUntil(startedAt + 18_000L)
+        assertTrue(InterstitialAdManager.isLoading(BACK))
+        requests.last().onAdFailedToLoad(LoadAdError(3, "no fill", "test", null, null))
+        assertEquals(20_000L, InterstitialFrequency.remainingMs(host, BACK))
+        assertEquals(closedAt + 10_000L - SystemClock.elapsedRealtime(),
+            InterstitialFrequency.remainingMs(host, ALL))
+        advanceUntil(closedAt + 8_000L)
         assertTrue(InterstitialAdManager.isLoading(ALL))
         assertFalse(InterstitialAdManager.isLoading(BACK))
     }

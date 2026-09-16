@@ -120,9 +120,12 @@ object InterstitialAutoBuffer {
         if (resolvedLocal === local && resolvedSnapshot === v) return checkNotNull(resolved)
         val remotePlacements = v.objectEntries("interstitial_auto_buffer.rules").keys.map { it.substringBefore('.') }
         val keys = (local.placements + remotePlacements).distinct()
+        val sharedConfig = v.boolean("interstitial_auto_buffer.shared_config")
         fun path(key: String, field: String) = "interstitial_auto_buffer.rules.$key.$field"
         val result = InterstitialBufferOptions(
-            independentIntervalPlacements = keys.filter { v.boolean(path(it, "independent_interval"), it in local.independentIntervalPlacements) }.toSet(),
+            independentIntervalPlacements = keys.filter {
+                !sharedConfig || v.boolean(path(it, "independent_interval"), it in local.independentIntervalPlacements)
+            }.toSet(),
             placements = keys,
             tapThresholds = keys.associateWith { v.long(path(it, "tap_threshold"), local.tapThresholds[it]?.toLong() ?: 0L).toInt() },
             intervalMsByPlacement = keys.mapNotNull { key ->

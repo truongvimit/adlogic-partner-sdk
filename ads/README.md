@@ -318,9 +318,36 @@ InterstitialAdManager.loadAndShow(activity, placement, callback,
 ```
 
 Do not pre-check `canShow()` in this wrapper: the action must reach the manager to count once
-and take the ready/join/cold path. All independent placements share a two-action presentation
-guard; it does not gate preload or combine their clocks. Counters reset on the vendor's actual
+and take the ready/join/cold path. With the default `interstitial_auto_buffer.shared_config: true`,
+independent placements share a two-action presentation guard; it does not gate preload or combine
+their clocks. Counters reset on the vendor's actual
 show callback. Back that exits the app is outside this flow. Wire navigation only to `onComplete`.
+
+Set `interstitial_auto_buffer.shared_config` to `false` in `ad_behavior_config` to isolate every
+buffer placement, including `inter`, `inter_all` and `inter_back`. Each uses its own `interval_ms`
+and `tap_threshold` from `rules` (or the host's `intervalMsByPlacement` / `tapThresholds`).
+The shared two-action guard is disabled: taps, actual shows, closes and final load failures only
+affect that placement. A threshold of `0` needs no taps; `1` allows the first action to show once
+the cooldown has elapsed. Ads still cannot present simultaneously.
+
+```json
+{
+  "interstitial_auto_buffer": {
+    "shared_config": false,
+    "rules": {
+      "inter": { "enabled": true, "interval_ms": 30000, "tap_threshold": 1 },
+      "inter_all": { "enabled": true, "interval_ms": 45000, "tap_threshold": 2 },
+      "inter_back": { "enabled": true, "interval_ms": 60000, "tap_threshold": 3 }
+    }
+  }
+}
+```
+
+`false` takes precedence over each rule's `independent_interval`; no per-placement opt-in is
+needed. Missing intervals inherit the global interval value but keep separate clocks; missing
+tap thresholds default to `0`. `true` preserves existing behavior, including explicit
+`independentIntervalPlacements` / `independent_interval` overrides. The flag does not start
+the buffer or enable disabled placements; keep the content-entry `start()` call above.
 
 The opt-in budget is clamped to 0–5,000ms from entry. Zero budget uses a ready ad or skips without
 starting a request for that invocation. Timeout/background detaches the UI wait; late fills stay

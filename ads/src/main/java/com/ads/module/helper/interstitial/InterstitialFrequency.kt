@@ -5,7 +5,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.ads.module.ads.ERainAd
 
-/** One process-local, monotonic clock for the placements owned by AutoBuffer. */
+/** Process-local monotonic clocks and tap counters for placements owned by AutoBuffer. */
 object InterstitialFrequency {
     private var activatedAt = -1L
     private var closedAt = -1L
@@ -38,6 +38,9 @@ object InterstitialFrequency {
             InterstitialAutoBuffer.options().tapThresholds[placement] ?: 0
         } else 0
 
+    private fun usesSharedActionGuard(placement: String): Boolean =
+        isIndependent(placement) && AdBehavior.bool("interstitial_auto_buffer.shared_config")
+
     internal fun hasTaps(placement: String): Boolean =
         (placements[placement]?.taps ?: 0) >= threshold(placement)
 
@@ -45,13 +48,13 @@ object InterstitialFrequency {
         if (!InterstitialAutoBuffer.owns(placement)) return
         val state = placements.getOrPut(placement) { PlacementClock() }
         state.taps = (state.taps + 1).coerceAtMost(threshold(placement))
-        if (isIndependent(placement)) actionsSinceShow = (actionsSinceShow + 1).coerceAtMost(2)
+        if (usesSharedActionGuard(placement)) actionsSinceShow = (actionsSinceShow + 1).coerceAtMost(2)
         InterstitialAutoBuffer.onGateChanged()
     }
 
     internal fun onShown(placement: String) {
         placements[placement]?.taps = 0
-        if (isIndependent(placement)) actionsSinceShow = 0
+        if (usesSharedActionGuard(placement)) actionsSinceShow = 0
     }
 
     internal fun preloadRemainingMs(placement: String): Long = remainingMs(placement, preload = true)
@@ -74,7 +77,7 @@ object InterstitialFrequency {
     fun remainingMs(context: Context, placement: String): Long = remainingMs(placement, preload = false)
 
     internal fun passesShowPolicy(placement: String): Boolean =
-        hasTaps(placement) && (!isIndependent(placement) || actionsSinceShow >= 2) &&
+        hasTaps(placement) && (!usesSharedActionGuard(placement) || actionsSinceShow >= 2) &&
             remainingMs(placement, preload = false) == 0L
 
     /** Kept for callers doing a pure wall-clock interval calculation. */

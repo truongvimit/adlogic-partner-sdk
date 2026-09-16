@@ -74,6 +74,7 @@
   },
   "interstitial_auto_buffer": {
     "enabled": true,
+    "shared_config": true,
     "tick_ms": 0,
     "idle_tick_ms": 30000,
     "min_tick_ms": 5000,
