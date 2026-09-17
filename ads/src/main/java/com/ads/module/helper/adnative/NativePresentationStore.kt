@@ -3,7 +3,7 @@ package com.ads.module.helper.adnative
 import androidx.lifecycle.ViewModel
 import com.ads.module.ads.wrapper.ApNativeAd
 
-/** Only configuration recreation transfers a presentation. Ordinary departures dispose it. */
+/** Configuration recreation transfers a presentation; final owner destruction disposes it. */
 internal class NativePresentationStore : ViewModel() {
     class Presentation(val ad: ApNativeAd?, val shownAtMs: Long, val refreshAtMs: Long, val awaiting: Boolean)
     private val retained = mutableMapOf<String, Presentation>()

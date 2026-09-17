@@ -107,6 +107,8 @@ class NativeOwnershipTest {
         controller.pause().resume()
         assertEquals("A pause-only return joins the click preload", 3, requests.size)
         assertTrue(clicked.nativeAdState.value is AdNativeState.Loading)
+        assertSame(first, clicked.nativeAd?.admobNativeAd)
+        assertFalse(first.destroyed)
         val replacement = NativeVendorAd()
         requests.last().fill(replacement)
         assertSame(replacement, clicked.nativeAd?.admobNativeAd)
@@ -114,6 +116,103 @@ class NativeOwnershipTest {
         assertSame(other, untouched.nativeAd?.admobNativeAd)
         controller.pause().resume()
         assertEquals("The click is consumed exactly once", 3, requests.size)
+    }
+
+    @Test fun `ordinary background resume retains native without requesting another ad`() {
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        controller.pause().stop().restart().start().resume()
+        main.idleFor(4, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1, requests.size)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertFalse(first.destroyed)
+    }
+
+    @Test fun `pause only click reload keeps the displayed view without shimmer through failure and retry`() {
+        verifyClickReplacement(stopped = false)
+    }
+
+    @Test fun `stopped click reload keeps the displayed view without shimmer through failure and retry`() {
+        verifyClickReplacement(stopped = true)
+    }
+
+    private fun verifyClickReplacement(stopped: Boolean) {
+        val container = android.widget.FrameLayout(activity)
+        val shimmer = com.facebook.shimmer.ShimmerFrameLayout(activity)
+        val root = android.widget.FrameLayout(activity).apply {
+            addView(container)
+            addView(shimmer)
+        }
+        val helper = helper(reload = true)
+            .setNativeContentView(container)
+            .setShimmerLayoutView(shimmer)
+            .setNativeAdBinder { _, ad, frame, _ ->
+                frame.removeAllViews()
+                frame.addView(android.view.View(activity).apply { tag = ad })
+            }
+        activity.setContentView(root)
+        helper.show()
+        assertEquals(android.view.View.VISIBLE, shimmer.visibility)
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        val oldView = container.getChildAt(0)
+        fun assertOldVisible() {
+            assertSame(first, helper.nativeAd?.admobNativeAd)
+            assertSame(oldView, container.getChildAt(0))
+            assertEquals(android.view.View.VISIBLE, container.visibility)
+            assertEquals(android.view.View.GONE, shimmer.visibility)
+            assertFalse(shimmer.isShimmerStarted)
+            assertFalse(first.destroyed)
+        }
+        requests.first().listener.onAdClicked()
+        assertEquals(2, requests.size)
+        assertOldVisible()
+        controller.pause()
+        if (stopped) controller.stop().restart().start()
+        controller.resume()
+        assertOldVisible()
+        // Another background trip while the replacement is pending must also retain it.
+        controller.pause().stop().restart().start().resume()
+        assertOldVisible()
+        requests.last().fail()
+        assertOldVisible()
+        requests.first().listener.onAdClicked()
+        assertEquals(3, requests.size)
+        controller.pause().resume()
+        assertOldVisible()
+        val replacement = NativeVendorAd()
+        requests.last().fill(replacement)
+        assertSame(replacement, helper.nativeAd?.admobNativeAd)
+        assertNotSame(oldView, container.getChildAt(0))
+        assertTrue(first.destroyed)
+        assertEquals(android.view.View.GONE, shimmer.visibility)
+        assertFalse(shimmer.isShimmerStarted)
+    }
+
+    @Test fun `click decision survives remote change before opening and returning`() {
+        val document = com.ads.module.config.settings.AdBehavior.document
+        try {
+            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"none"}}}""")
+            val helper = helper()
+            helper.show()
+            requests.single().fill(NativeVendorAd())
+            requests.single().listener.onAdClicked()
+            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"reload"}}}""")
+            requests.single().listener.onAdOpened()
+            controller.pause().stop().restart().start().resume()
+            assertEquals(1, requests.size)
+            // The new policy applies to the next click, not the trip already in progress.
+            requests.single().listener.onAdClicked()
+            assertEquals(2, requests.size)
+            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"auto_next"}}}""")
+            val replacement = NativeVendorAd()
+            requests.last().fill(replacement)
+            controller.pause().resume()
+            assertSame(replacement, helper.nativeAd?.admobNativeAd)
+            assertEquals(2, requests.size)
+        } finally { document.acceptSuccessfulFetch(null) }
     }
 
     @Test fun `click preload filled before pause stays unused until return then shows immediately`() {
@@ -135,15 +234,18 @@ class NativeOwnershipTest {
     @Test fun `click preload completes while stopped and is consumed without another load on return`() {
         val helper = helper()
         helper.show()
-        requests.single().fill(NativeVendorAd())
+        val first = NativeVendorAd()
+        requests.single().fill(first)
         requests.single().listener.onAdClicked()
         controller.pause().stop()
         val next = NativeVendorAd()
         requests.last().fill(next)
-        assertNull(helper.nativeAd)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertFalse(first.destroyed)
         assertSame(next, preload.getAdNative("a")?.admobNativeAd)
         controller.restart().start().resume()
         assertSame(next, helper.nativeAd?.admobNativeAd)
+        assertTrue(first.destroyed)
         assertEquals(2, requests.size)
     }
 
@@ -158,6 +260,24 @@ class NativeOwnershipTest {
         val next = NativeVendorAd()
         requests.last().fill(next)
         assertSame(next, helper.nativeAd?.admobNativeAd)
+    }
+
+    @Test fun `click during a pending replacement rejoins that request without clearing the ad`() {
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        helper.show()
+        assertEquals(2, requests.size)
+        requests.first().listener.onAdClicked()
+        controller.pause().stop().restart().start().resume()
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertFalse(first.destroyed)
+        assertEquals(2, requests.size)
+        val next = NativeVendorAd()
+        requests.last().fill(next)
+        assertSame(next, helper.nativeAd?.admobNativeAd)
+        assertTrue(first.destroyed)
     }
 
     @Test fun `disabled click reload neither preloads nor reloads after pause or stop`() {
@@ -179,7 +299,7 @@ class NativeOwnershipTest {
         assertTrue(first.destroyed)
     }
 
-    @Test fun `rotation after clicking does not restore the clicked presentation`() {
+    @Test fun `rotation after clicking retains the current ad until replacement loads`() {
         val old = helper()
         old.show()
         val first = NativeVendorAd()
@@ -191,15 +311,16 @@ class NativeOwnershipTest {
         controller.visible()
         val restored = helper()
         restored.show()
-        assertTrue(first.destroyed)
-        assertNull(restored.nativeAd)
+        assertFalse(first.destroyed)
+        assertSame(first, restored.nativeAd?.admobNativeAd)
         assertEquals(2, requests.size)
         val replacement = NativeVendorAd()
         requests.last().fill(replacement)
         assertSame(replacement, restored.nativeAd?.admobNativeAd)
+        assertTrue(first.destroyed)
     }
 
-    @Test fun `open only destination reloads after stop once and no fill never restores clicked ad`() {
+    @Test fun `open only destination reloads after stop once and no fill keeps current ad`() {
         val helper = helper()
         helper.show()
         val first = NativeVendorAd()
@@ -208,8 +329,9 @@ class NativeOwnershipTest {
         controller.pause().stop().restart().start().resume()
         assertEquals(2, requests.size)
         requests.last().fail()
-        assertTrue(first.destroyed)
-        assertNull(helper.nativeAd)
+        assertFalse(first.destroyed)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loaded)
     }
 
     @Test fun `repeated preload does not queue new loads behind an existing fill`() {
@@ -266,7 +388,7 @@ class NativeOwnershipTest {
         assertSame(ad, returned.nativeAd?.admobNativeAd)
     }
 
-    @Test fun `refresh keeps survivor on failure and leaving ends the displayed ad and timer`() {
+    @Test fun `refresh keeps survivor on failure and pauses timer while stopped`() {
         val helper = helper(reload = true).applyReloadByTime(10_000)
         helper.requestAds(NativeAdParam.Request)
         val first = NativeVendorAd()
@@ -278,12 +400,15 @@ class NativeOwnershipTest {
         assertSame(first, helper.nativeAd?.admobNativeAd)
         assertFalse(first.destroyed)
         controller.pause().stop()
-        assertTrue("departure ends the displayed ad even if Activity stays on back stack", first.destroyed)
+        assertFalse("background trips retain the displayed ad", first.destroyed)
         main.idleFor(30, java.util.concurrent.TimeUnit.SECONDS)
         assertEquals(2, requests.size)
         controller.restart().start().resume()
         helper.requestAds(NativeAdParam.Request)
         assertEquals(3, requests.size)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        helper.destroy()
+        assertTrue(first.destroyed)
     }
 
     @Test fun `rotation restores the displayed ad without a new request or resetting refresh time`() {

@@ -66,6 +66,13 @@ open class NativeAdConfig(
     var reloadOnAdClick: Boolean = AdBehavior.defaultBool("native.reload.on_ad_click")
         get() = behaviorValues().boolean("reload.on_ad_click", field)
 
+    /** New action overrides the legacy reload flag. AUTO_NEXT navigation belongs to the host. */
+    var clickAction: NativeClickAction? = null
+    open val resolvedClickAction: NativeClickAction
+        get() = NativeClickAction.fromRemote(behaviorValues().string("click.action", ""))
+            ?: clickAction
+            ?: if (reloadOnAdClick) NativeClickAction.RELOAD else NativeClickAction.NONE
+
     /** Trailing debounce for the reload-on-resume trigger. */
     var timeDebounceResume: Long = AdBehavior.defaultNumber("native.reload.resume_debounce_ms")
         get() = behaviorValues().long("reload.resume_debounce_ms", field)

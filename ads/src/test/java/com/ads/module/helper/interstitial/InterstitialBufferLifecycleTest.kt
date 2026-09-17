@@ -74,6 +74,8 @@ class InterstitialBufferLifecycleTest {
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
         ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("buffer-test") })
+        // This suite exercises the shared group policy, independently of bundled defaults.
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
         ERainAd.getInstance().setIntervalInterstitialAd(30)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
         ERainAd.getInstance().setCountClickToShowAds(1, 0)
@@ -110,7 +112,7 @@ class InterstitialBufferLifecycleTest {
     @Test
     fun `remote auto buffer switch only blocks managed placements and can reenable them`() {
         assertTrue(AdBehavior.defaultBool("interstitial_auto_buffer.enabled"))
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":false}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":false}}""")
         arm(listOf(ALL))
         advance(30_000)
         assertEquals(0, requests.size)
@@ -118,7 +120,7 @@ class InterstitialBufferLifecycleTest {
         assertEquals(0, requests.size)
         InterstitialAdManager.load(host, "outside", listOf("outside-unit"))
         assertEquals(1, requests.size)
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true}}""")
         InterstitialAutoBuffer.topUpNow()
         main.idle()
         assertEquals(2, requests.size)
@@ -126,14 +128,14 @@ class InterstitialBufferLifecycleTest {
 
     @Test
     fun `remote buffer timeout above five seconds remains captured until its deadline`() {
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":12000}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":12000}}}""")
         arm(listOf(ALL))
         advance(30_000)
         assertEquals(1, requests.size)
         val result = Outcome()
         val deadline = SystemClock.elapsedRealtime() + 12_000
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), result)
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":1000}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":1000}}}""")
         advance(deadline - SystemClock.elapsedRealtime() - 1)
         assertEquals("Remote 12000ms must not be capped at 5000ms or changed mid-wait", 0, result.completed)
         advance(1)
@@ -462,7 +464,10 @@ class InterstitialBufferLifecycleTest {
 
     @Test
     fun `a failed high tier does not gate the group when base is still loading`() {
-        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL, BACK)))
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+            independentIntervalPlacements = emptySet(), placements = listOf(ALL, BACK),
+            tapThresholds = mapOf(ALL to 0, BACK to 0),
+        ))
         // Explicit loading uses the same group policy and the same waterfall as the buffer.
         AdRemoteConfig.initializeFromJson("{}")
         InterstitialAutoBuffer.start(host)
@@ -506,7 +511,10 @@ class InterstitialBufferLifecycleTest {
     }
 
     private fun arm(placements: List<String> = listOf(ALL, BACK)) {
-        InterstitialAutoBuffer.configure(InterstitialBufferOptions(placements))
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+            independentIntervalPlacements = emptySet(), placements = placements,
+            tapThresholds = placements.associateWith { 0 },
+        ))
         InterstitialAutoBuffer.start(host)
     }
 

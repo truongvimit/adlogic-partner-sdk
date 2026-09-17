@@ -9,6 +9,8 @@ import com.ads.module.config.settings.SettingsSnapshot
 import io.onboardkit.config.*
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.core.StepId
+import com.ads.module.helper.adnative.NativeClickAction
+import io.onboardkit.ads.AdPlacement
 
 /** Defaults come from onboarding_config.json; only explicit valid overrides replace host options. */
 object OnboardingSettings {
@@ -24,7 +26,8 @@ object OnboardingSettings {
             val scope = path.substringBefore("behavior.") + "behavior"
             val stepScope = scope.split('.').let { it.size == 4 && it.take(2) == listOf("onboarding", "steps") && it.last() == "behavior" }
             val declaredScope = document.defaultValue(scope) is Map<*, *> ||
-                document.defaultValue("$scope.reload.on_ad_click") != null
+                document.defaultValue("$scope.reload.on_ad_click") != null ||
+                document.defaultValue("$scope.click.action") != null
             if (!stepScope && !declaredScope) return null
             val suffix = path.substringAfter("behavior.")
             val format = when {
@@ -64,30 +67,41 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.QuestionInterstitial -> "question.interstitial"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
-    internal fun nativeClickDefault(p: io.onboardkit.ads.AdPlacement): Boolean {
-        val path = when (p) {
-        is io.onboardkit.ads.AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.reload.on_ad_click"
-        is io.onboardkit.ads.AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.reload.on_ad_click"
-        io.onboardkit.ads.AdPlacement.Ob5 -> "ob5.native.behavior.reload.on_ad_click"
-        io.onboardkit.ads.AdPlacement.SplashNative -> "splash.native.behavior.reload.on_ad_click"
-        else -> null
+    internal fun nativeClickAction(p: AdPlacement): NativeClickAction {
+        val behavior = behavior(p)
+        // A new action always wins over both legacy switches, even when they conflict.
+        NativeClickAction.fromRemote(behavior.string("click.action", ""))?.let { return it }
+        if (behavior.hasOverride("reload.on_ad_click")) {
+            return if (behavior.boolean("reload.on_ad_click", true)) NativeClickAction.RELOAD else NativeClickAction.NONE
         }
-        return path?.let { document.localSnapshot.boolean(it) } ?: AdBehavior.defaultBool("native.reload.on_ad_click")
+        val path = when (p) {
+            is AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.click.action"
+            is AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.click.action"
+            else -> slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior.click.action" else ".behavior.click.action"
+        }
+        // Compatibility for hosts using the old step switch. It cannot override click.action.
+        if ((p is AdPlacement.StepNative || p is AdPlacement.StepFullScreen) &&
+            io.onboardkit.OnboardingSdk.configOrNull()?.behavior?.adClickReturnCompletesStep == false) {
+            return NativeClickAction.NONE
+        }
+        val defaultAction = if (document.defaultValue(path) != null) document.localSnapshot.string(path)
+            else AdBehavior.defaultText("native.click.action")
+        return NativeClickAction.fromRemote(defaultAction) ?: NativeClickAction.RELOAD
     }
-    internal fun behavior(p: io.onboardkit.ads.AdPlacement): com.ads.module.config.settings.BehaviorValues {
+    internal fun behavior(p: AdPlacement): com.ads.module.config.settings.BehaviorValues {
         val format = when (p) {
-            io.onboardkit.ads.AdPlacement.SplashBanner -> "banner"
-            io.onboardkit.ads.AdPlacement.SplashInterstitial, io.onboardkit.ads.AdPlacement.AfterOnboardingInterstitial,
-            io.onboardkit.ads.AdPlacement.QuestionInterstitial -> "interstitial"
-            io.onboardkit.ads.AdPlacement.AppResume -> "app_open"
+            AdPlacement.SplashBanner -> "banner"
+            AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial,
+            AdPlacement.QuestionInterstitial -> "interstitial"
+            AdPlacement.AppResume -> "app_open"
             else -> "native"
         }
         val base = when (p) {
-            is io.onboardkit.ads.AdPlacement.StepNative -> "onboarding.ads.content_native_behavior"
-            is io.onboardkit.ads.AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior"
+            is AdPlacement.StepNative -> "onboarding.ads.content_native_behavior"
+            is AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior"
             else -> null
         }
-        val path = slotPath(p) + if (p == io.onboardkit.ads.AdPlacement.LanguageConfirm) ".native_behavior" else ".behavior"
+        val path = slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior" else ".behavior"
         val snapshot = values
         val key = io.onboardkit.OnboardingSdk.configuredPlacementKey(p) ?: p.key
         return AdBehavior.values(format, key, snapshot, path, base)

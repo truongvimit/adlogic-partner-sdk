@@ -276,6 +276,49 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun allowNotificationReleasesFirstOpenWithLfoAlreadyPreloaded() {
+        answerNotificationWithReadyInterstitial(intArrayOf(PackageManager.PERMISSION_GRANTED))
+    }
+
+    @Test
+    fun denyNotificationReleasesFirstOpenWithLfoAlreadyPreloaded() {
+        answerNotificationWithReadyInterstitial(intArrayOf(PackageManager.PERMISSION_DENIED))
+    }
+
+    @Test
+    fun cancelledNotificationReleasesFirstOpenWithLfoAlreadyPreloaded() {
+        answerNotificationWithReadyInterstitial(intArrayOf())
+    }
+
+    private fun answerNotificationWithReadyInterstitial(grants: IntArray) {
+        LongPromptFixture.useDefaultTiming = true
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = true)
+        drainUntil("Inter must start under notification") { LongPromptFixture.provider.pending != null }
+        val host = requireNotNull(controller).get()
+        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
+        host.onWindowFocusChanged(false)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals("One LFO preload while the permission is unanswered", listOf("native"), LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.flowStarts)
+
+        host.onRequestPermissionsResult(permission.requestCode,
+            if (grants.isEmpty()) emptyArray() else permission.requestedPermissions, grants)
+        main.idle()
+        assertEquals("Permission result alone cannot show without window focus", listOf("native"), LongPromptFixture.provider.order)
+        host.onWindowFocusChanged(true)
+        drainUntil("Allow, denial and cancellation must all release show") { LongPromptFixture.provider.presentation != null }
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        assertEquals("Default first open still waits for ad dismissal", 0, LongPromptFixture.flowStarts)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        drainUntil("Dismissal must open the first-open flow exactly once") { LongPromptFixture.flowStarts == 1 }
+        assertEquals(1, LongPromptFixture.splashHandoffs)
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+    }
+
+    @Test
     fun resultWhileHomeUnderNotificationCannotStartLfoUntilTheSplashIsVisible() {
         launch(notification = true)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }

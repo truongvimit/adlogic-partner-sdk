@@ -99,7 +99,10 @@ class InterstitialContentPolicyTest {
 
     @Test
     fun `opted managed click joins preload and respects explicit timeout above five seconds`() {
-        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL)))
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+            independentIntervalPlacements = setOf(ALL), placements = listOf(ALL),
+            tapThresholds = mapOf(ALL to 0), intervalMsByPlacement = mapOf(ALL to 0L),
+        ))
         InterstitialAutoBuffer.start(host)
         InterstitialAdManager.load(host, ALL, listOf(UNIT))
         val clickedAt = SystemClock.elapsedRealtime()
@@ -261,7 +264,10 @@ class InterstitialContentPolicyTest {
 
     @Test
     fun `zero and negative budgets skip empty cache without starting an invocation request`() {
-        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL)))
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+            independentIntervalPlacements = setOf(ALL), placements = listOf(ALL),
+            tapThresholds = mapOf(ALL to 0), intervalMsByPlacement = mapOf(ALL to 0L),
+        ))
         InterstitialAutoBuffer.start(host)
         for (budget in listOf(0L, -10L)) {
             val result = click(timeoutMs = budget)
@@ -362,7 +368,7 @@ class InterstitialContentPolicyTest {
     fun `disabled due back cannot delay all preload with a different interval`() {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
             independentIntervalPlacements = setOf(ALL, BACK), placements = listOf(ALL, BACK),
-            tapThresholds = mapOf(ALL to 2), intervalMsByPlacement = mapOf(ALL to 30_000L, BACK to 0L),
+            tapThresholds = mapOf(ALL to 2, BACK to 0), intervalMsByPlacement = mapOf(ALL to 30_000L, BACK to 0L),
             isPlacementEnabled = { it != BACK },
         ))
         InterstitialAutoBuffer.start(host)
@@ -380,20 +386,16 @@ class InterstitialContentPolicyTest {
     fun `shared config off gives each placement its own interval and tap threshold`() {
         AdBehavior.document.acceptSuccessfulFetch("""{
             "interstitial_auto_buffer": {"shared_config":false,"rules":{
-                "inter":{"enabled":true,"interval_ms":5000,"tap_threshold":1},
                 "inter_all":{"enabled":true,"interval_ms":10000,"tap_threshold":2},
                 "inter_back":{"enabled":true,"interval_ms":20000,"tap_threshold":3}
             }}
         }""")
-        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf("inter", ALL, BACK)))
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL, BACK)))
         InterstitialAutoBuffer.start(host)
-        assertEquals(5_000L, InterstitialFrequency.remainingMs(host, "inter"))
         assertEquals(10_000L, InterstitialFrequency.remainingMs(host, ALL))
         assertEquals(20_000L, InterstitialFrequency.remainingMs(host, BACK))
-        click("inter", timeoutMs = 0)
         click(ALL, timeoutMs = 0)
         click(BACK, timeoutMs = 0)
-        assertTrue(InterstitialFrequency.hasTaps("inter"))
         assertFalse(InterstitialFrequency.hasTaps(ALL))
         assertFalse(InterstitialFrequency.hasTaps(BACK))
         click(ALL, timeoutMs = 0)
@@ -471,11 +473,54 @@ class InterstitialContentPolicyTest {
         assertFalse(InterstitialAdManager.isLoading(BACK))
     }
 
+    @Test
+    fun `configured preload lead still requires taps and never allows an early show`() {
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL, BACK)))
+        InterstitialAutoBuffer.start(host)
+        val startedAt = SystemClock.elapsedRealtime()
+        repeat(2) { click(ALL, timeoutMs = 0) }
+        advanceUntil(startedAt + 27_999L)
+        InterstitialAutoBuffer.topUpNow()
+        InterstitialAdManager.load(host, ALL)
+        InterstitialAdManager.load(host, BACK)
+        main.idle()
+        assertEquals("Enough taps cannot bypass interval minus preload lead", 0, requests.size)
+        advanceUntil(startedAt + 28_000L)
+        assertEquals(1, requests.size)
+        assertTrue(InterstitialAdManager.isLoading(ALL))
+        assertFalse("BACK still needs its own tap", InterstitialAdManager.isLoading(BACK))
+        val all = fill()
+        assertFalse("A preload lead is not an early show permission", InterstitialAdManager.canShow(host, ALL))
+        advanceUntil(startedAt + 30_000L)
+        InterstitialAutoBuffer.topUpNow()
+        InterstitialAdManager.load(host, BACK)
+        main.idle()
+        assertEquals("Elapsed time alone cannot preload BACK", 1, requests.size)
+        assertTrue(InterstitialAdManager.canShow(host, ALL))
+        click(BACK, timeoutMs = 0)
+        advance(1)
+        assertEquals(2, requests.size)
+        assertTrue(InterstitialAdManager.isLoading(BACK))
+        repeat(3) {
+            InterstitialAutoBuffer.topUpNow()
+            InterstitialAutoBuffer.resetBackoff()
+            InterstitialAdManager.load(host, ALL)
+            InterstitialAdManager.load(host, BACK)
+        }
+        main.idle()
+        assertEquals("A ready or in-flight placement cannot buy a duplicate", 2, requests.size)
+        assertTrue(all.hosts.isEmpty())
+    }
+
     private fun arm(intervalMs: Long = 30_000, isPlacementEnabled: (String) -> Boolean = { true }) {
+        // These scenarios explicitly exercise the legacy shared two-action guard.
+        if (!AdBehavior.document.snapshot.hasOverride("interstitial_auto_buffer.shared_config")) {
+            AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
+        }
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
             independentIntervalPlacements = setOf(ALL, BACK),
             placements = listOf(ALL, BACK),
-            tapThresholds = mapOf(ALL to 2),
+            tapThresholds = mapOf(ALL to 2, BACK to 0),
             intervalMsByPlacement = mapOf(ALL to intervalMs, BACK to intervalMs),
             isPlacementEnabled = isPlacementEnabled,
         ))

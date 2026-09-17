@@ -74,6 +74,7 @@ class OnboardingAdLifecycleTest {
         interstitial = null
         val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
             when (call.method.name) {
+                "nativeClickAction" -> io.onboardkit.remote.OnboardingSettings.nativeClickAction(call.getArgument(0))
                 "bindNative" -> {
                     call.getArgument<AdEventListener?>(4)?.let {
                         listeners[call.getArgument(1)] = it
@@ -107,6 +108,7 @@ class OnboardingAdLifecycleTest {
         main.idle()
         ConsentCenter.clearHostConsent()
         com.ads.module.config.AdRemoteConfig.reset()
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
     }
 
     private fun launch(
@@ -155,6 +157,30 @@ class OnboardingAdLifecycleTest {
         assertEquals(1, pager.currentItem)
         assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
         assertEquals(listOf(reason), completions.map { it.exitReason })
+    }
+
+    @Test fun `reload and none override legacy auto advance on content click return`() {
+        launch(clickReturn = true)
+        for (action in listOf("reload", "none")) {
+            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"$action"}}}}}}""")
+            listener().onClicked()
+            listener().onAdOpened()
+            pause()
+            resume()
+            settle()
+            assertEquals(action, 0, pager.currentItem)
+            assertTrue(completions.isEmpty())
+        }
+    }
+
+    @Test fun `explicit auto next overrides disabled legacy navigation and enabled reload`() {
+        launch(clickReturn = false)
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}}""")
+        listener().onClicked()
+        pause()
+        resume()
+        settle()
+        assertOneCompletion(StepExit.AD_CLICK_RETURN)
     }
 
     private fun flingForward() {

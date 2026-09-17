@@ -1,5 +1,7 @@
 package io.onboardkit.ui.language
 
+import com.ads.module.helper.adnative.NativeClickAction
+
 import io.onboardkit.remote.OnboardingSettings
 import android.content.Context
 import android.content.Intent
@@ -48,6 +50,8 @@ import kotlin.time.Duration.Companion.seconds
  * leaving the screen or losing selection and scroll position.
  */
 class ObLanguageActivity : BaseOnboardActivity() {
+    private var autoNextAdPlacement: AdPlacement? = null
+    private var awayAfterAdClick = false
 
     override val screenName: String = "ob_language"
     override val excludeFromAppResume: Boolean = false
@@ -198,6 +202,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     private fun onLanguageTapped(language: ObLanguage) {
         if (languageExitStarted) return
+        autoNextAdPlacement = null
         val reselected = selectedCode == language.code
         if (mode == LanguageScreenMode.FIRST_OPEN) {
             languageTapCount = (languageTapCount + 1).coerceAtMost(Int.MAX_VALUE)
@@ -262,6 +267,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
             container = binding.obNativeContainer2,
             onBound = ::commitSecondNativeSlot,
             onUnavailable = { keepFirstNativeSlot() },
+            onAdEngaged = { action -> onLanguageAdEngaged(AdPlacement.Language2, action) },
         )
     }
 
@@ -314,12 +320,59 @@ class ObLanguageActivity : BaseOnboardActivity() {
             container = containerFor(placement),
             reuseFailedPreload = placement == AdPlacement.Language1 && reuseLfo1Preload,
             onUnavailable = { adBlockFor(placement).visibility = View.GONE },
+            onAdEngaged = { action -> onLanguageAdEngaged(placement, action) },
         )
+    }
+
+    private fun onLanguageAdEngaged(
+        placement: AdPlacement,
+        action: NativeClickAction,
+    ) {
+        if (mode != LanguageScreenMode.FIRST_OPEN || languageExitStarted ||
+            action != NativeClickAction.AUTO_NEXT) return
+        val visiblePlacement = if (secondAdShown) AdPlacement.Language2 else AdPlacement.Language1
+        if (placement == visiblePlacement && !awayAfterAdClick) autoNextAdPlacement = placement
+    }
+
+    override fun onPause() {
+        if (autoNextAdPlacement != null) awayAfterAdClick = true
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val placement = autoNextAdPlacement
+        autoNextAdPlacement = null
+        val returned = awayAfterAdClick
+        awayAfterAdClick = false
+        if (!returned || placement == null || !::binding.isInitialized) return
+        binding.root.post {
+            if (languageExitStarted || isFinishing || isDestroyed) return@post
+            when (placement) {
+                AdPlacement.Language2 -> if (secondAdShown) onConfirm()
+                AdPlacement.Language1 -> if (!secondAdShown) {
+                    val code = selectedCode ?: sdk.configOrNull()?.language?.defaultCode
+                    val language = languages.firstOrNull { it.code == code } ?: languages.firstOrNull()
+                    language?.let(::onLanguageTapped)
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        // A touch on this screen means an earlier click opened no destination. Do not
+        // turn a later Home/app-resume trip into automatic language confirmation.
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN && !awayAfterAdClick) {
+            autoNextAdPlacement = null
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     private fun onConfirm() {
         if (languageExitStarted) return
         val code = selectedCode ?: return
+        autoNextAdPlacement = null
         languageExitStarted = true
         tapHintJob?.cancel()
         cancelSecondNativeSwap()

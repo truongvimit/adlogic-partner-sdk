@@ -104,7 +104,7 @@ data class BehaviorConfig(
      */
     val swipeCompletesLastStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.swipe_completes_last_step"),
     /**
-     * Default navigation on return from a step ad. Step natives disable click replacement.
+     * Legacy default for step click-return. An explicit behavior.click.action overrides this flag.
      * When enabled, coming back from a step ad's click completes that step exactly like its CTA — the next
      * step on a middle page, the flow exit on the last one. Only clicks on the pager's own
      * step ads count; a click on the language or question screen never moves the pager.

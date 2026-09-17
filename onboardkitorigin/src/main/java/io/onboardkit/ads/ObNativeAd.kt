@@ -1,5 +1,7 @@
 package io.onboardkit.ads
 
+import com.ads.module.helper.adnative.NativeClickAction
+
 import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
@@ -35,7 +37,7 @@ internal fun Activity.showNativeAd(
     onBound: () -> Unit = {},
     onShown: () -> Unit = {},
     onUnavailable: (AdSkipReason) -> Unit = {},
-    onAdEngaged: () -> Unit = {},
+    onAdEngaged: (NativeClickAction) -> Unit = {},
     reuseFailedPreload: Boolean = false,
     bufferedOnly: Boolean = false,
 ) {
@@ -58,9 +60,9 @@ internal fun Activity.showNativeAd(
                 if (bindBuffered(provider, placement, container, skeleton)) onBound()
             }
 
-            override fun onClicked() = onMainThread { notifyAdEngaged() }
+            override fun onClicked() = onMainThread { notifyAdEngaged(provider.nativeClickAction(placement)) }
 
-            override fun onAdOpened() = onMainThread { notifyAdEngaged() }
+            override fun onAdOpened() = onMainThread { notifyAdEngaged(provider.nativeClickAction(placement)) }
 
             override fun onFailedToLoad() = onMainThread {
                 skeleton?.stopShimmer()

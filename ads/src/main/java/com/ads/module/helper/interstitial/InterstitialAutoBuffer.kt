@@ -75,8 +75,8 @@ class InterstitialBufferOptions @JvmOverloads constructor(
  * whichever screen the user happens to open.
  *
  * Configure the group and call [start] from the first content screen after onboarding,
- * including notification/restored entries. Opted-in placements preload 2s before their interval;
- * legacy placements wait the full remote interval.
+ * including notification/restored entries. Opted-in placements preload according to
+ * preload_lead_ms once their tap threshold is met; showing still waits the full interval.
  * Process background pauses scheduling but preserves both the gate and cached ads.
  * All placement-based loads share the manager's cache and in-flight request guard.
  *
@@ -118,21 +118,32 @@ object InterstitialAutoBuffer {
         val local = configuredOptions
         val v = AdBehavior.document.snapshot
         if (resolvedLocal === local && resolvedSnapshot === v) return checkNotNull(resolved)
-        val remotePlacements = v.objectEntries("interstitial_auto_buffer.rules").keys.map { it.substringBefore('.') }
+        // Bundled rules supply values; only host options or explicit asset/remote rules opt in.
+        val remotePlacements = v.objectEntries("interstitial_auto_buffer.rules").keys
+            .map { it.substringBefore('.') }
+            .filter { v.hasOverride("interstitial_auto_buffer.rules.$it") }
         val keys = (local.placements + remotePlacements).distinct()
         val sharedConfig = v.boolean("interstitial_auto_buffer.shared_config")
         fun path(key: String, field: String) = "interstitial_auto_buffer.rules.$key.$field"
+        fun bundledNumber(key: String, field: String): Long? =
+            (AdBehavior.document.defaultValue(path(key, field)) as? Number)?.toLong()
         val result = InterstitialBufferOptions(
             independentIntervalPlacements = keys.filter {
                 !sharedConfig || v.boolean(path(it, "independent_interval"), it in local.independentIntervalPlacements)
             }.toSet(),
             placements = keys,
-            tapThresholds = keys.associateWith { v.long(path(it, "tap_threshold"), local.tapThresholds[it]?.toLong() ?: 0L).toInt() },
+            tapThresholds = keys.associateWith {
+                v.long(path(it, "tap_threshold"),
+                    local.tapThresholds[it]?.toLong() ?: bundledNumber(it, "tap_threshold") ?: 0L).toInt()
+            },
             intervalMsByPlacement = keys.mapNotNull { key ->
                 if (v.hasOverride(path(key, "interval_ms"))) key to v.long(path(key, "interval_ms"), 0L)
-                else local.intervalMsByPlacement[key]?.let { key to it }
+                else (local.intervalMsByPlacement[key] ?: bundledNumber(key, "interval_ms"))?.let { key to it }
             }.toMap(),
-            isPlacementEnabled = { local.isPlacementEnabled(it) && v.boolean(path(it, "enabled"), it in local.placements) },
+            isPlacementEnabled = { key ->
+                local.isPlacementEnabled(key) && v.boolean(path(key, "enabled"),
+                    key in local.placements && AdBehavior.document.defaultValue(path(key, "enabled")) != false)
+            },
             tickMs = v.long("interstitial_auto_buffer.tick_ms", local.tickMs),
             idleTickMs = v.long("interstitial_auto_buffer.idle_tick_ms", local.idleTickMs),
             minTickMs = v.long("interstitial_auto_buffer.min_tick_ms", local.minTickMs),
@@ -155,7 +166,7 @@ object InterstitialAutoBuffer {
     /** Replaces the configuration. Safe before or after [start]; takes effect on the next tick. */
     @JvmStatic
     fun configure(newOptions: InterstitialBufferOptions) {
-        if (options.placements.isEmpty() && newOptions.placements.isNotEmpty()) {
+        if (configuredOptions.placements.isEmpty() && newOptions.placements.isNotEmpty()) {
             InterstitialFrequency.reset()
         }
         configuredOptions = newOptions
@@ -287,7 +298,7 @@ object InterstitialAutoBuffer {
         // A request is already walking the waterfall; a second would be the duplicate this exists
         // to avoid. The fill it produces becomes the buffer.
         isLoading -> Decision.SKIP_IN_FLIGHT
-        // This receives the preload gate (the show gate is deliberately later for opt-in).
+        // This receives the preload gate; the show gate still requires the full interval.
         // Explicit loads follow the same gate; a ready ad never needs replacing.
         intervalRemainingMs > 0L -> Decision.SKIP_INTERVAL
         nowMs < backoffUntilMs -> Decision.SKIP_BACKOFF

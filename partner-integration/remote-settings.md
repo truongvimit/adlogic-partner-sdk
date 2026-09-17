@@ -77,13 +77,40 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | Format in placement_overrides | Supported fields |
 | --- | --- |
 | banner | `reload.allowed`, `reload.auto_enabled`, `reload.resume_debounce_ms`, `presentation.*` |
-| native | `load.tier_timeout_ms`, `reload.*`, `preload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
+| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `preload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
 OB interstitial slots support tier and wait timeouts. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`.
 
-Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). General native click replacement defaults to `true`; content/fullscreen OB and OB5 default to `false` because click-return advances/leaves those steps. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
+Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
+
+## Native click actions
+
+`click.action` accepts `auto_next`, `none`, or `reload`. Exactly one action is captured on the first click/open callback and retained until return, even if remote changes during the trip.
+
+- `reload`: request the replacement immediately on click/open; consume it, or wait for that same request, on return. No fixed click delay. Ordinary app resume does not trigger click reload.
+  Keep the old ad visible without shimmer until a replacement binds successfully. Failure keeps the old ad and slot visible. Shimmer is only for initial loading without an ad.
+- `auto_next`: advance the active onboarding page on return, without loading a replacement. On LFO2, confirm the selected language; on LFO1, select the current/default language to enter LFO2.
+- `none`: keep the current ad and page; no click replacement or automatic navigation.
+
+Defaults: LFO1/LFO2 and all other natives use `reload`; content/fullscreen onboarding pager steps use `auto_next`. The separate splash native and OB5 use `reload`. In the sample, the last content page uses step ID `ob4`; `ob3` is the fullscreen page.
+
+Set format/placement defaults in `ad_behavior_config` (`native.click.action`, `placement_overrides.<key>.click.action`). In `onboarding_config`, use screen/group paths below or `onboarding.steps.<id>.behavior.click.action`. An explicit valid action overrides both legacy `reload.on_ad_click` and `navigation.ad_click_return_completes_step` flags, so auto-next and click reload cannot run together. Timer/resume refresh and fullscreen page timeout are separate settings.
+
+Example override in `onboarding_config` (LFO2 defaults to `reload`, this changes it to automatic confirmation):
+
+```json
+{
+  "lfo": {
+    "native1": { "behavior": { "click": { "action": "reload" } } },
+    "native2": { "behavior": { "click": { "action": "auto_next" } } }
+  },
+  "onboarding": {
+    "steps": { "ob1": { "behavior": { "click": { "action": "none" } } } }
+  }
+}
+```
 
 ## Native templates, CTA and X/Skip experiments
 
@@ -129,7 +156,8 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native.load.tier_timeout_ms` | `30000` |
 | `native.cache.max_age_ms` | `3600000` |
 | `native.reload.allowed` | `false` |
-| `native.reload.on_ad_click` | `true` |
+| `native.click.action` | `"reload"` |
+| `native.reload.on_ad_click` (legacy fallback) | `true` |
 | `native.reload.resume_debounce_ms` | `500` |
 | `native.reload.min_after_bind_ms` | `3000` |
 | `native.reload.timer_enabled` | `false` |
@@ -149,12 +177,12 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `interstitial.frequency.interval_ms` | `0` |
 | `interstitial.frequency.max_clicks_per_24h` | `0` |
 | `interstitial_auto_buffer.enabled` | `true` |
-| `interstitial_auto_buffer.shared_config` | `true` — preserves existing group policy and independent_interval overrides. `false` gives every placement its own cooldown, retry and tap counter, using rules.<placement>.interval_ms/tap_threshold or host options; disables the shared two-action guard. |
+| `interstitial_auto_buffer.shared_config` | `false` by default. `true` preserves the shared group policy and independent_interval overrides. `false` gives every placement its own cooldown, retry and tap counter, using rules.<placement>.interval_ms/tap_threshold or host options; disables the shared two-action guard. |
 | `interstitial_auto_buffer.tick_ms` | `0` |
 | `interstitial_auto_buffer.idle_tick_ms` | `30000` |
 | `interstitial_auto_buffer.min_tick_ms` | `5000` |
-| `interstitial_auto_buffer.preload_lead_ms` | `2000` |
-| `interstitial_auto_buffer.rules` | `{}` |
+| `interstitial_auto_buffer.preload_lead_ms` | `2000` — preload requires both tap_threshold and max(0, interval_ms - preload_lead_ms). Showing requires the full interval_ms. |
+| `interstitial_auto_buffer.rules` | `inter_all: 30000ms / 2 taps; inter_back: 30000ms / 1 tap` |
 | `interstitial.cache.max_age_ms` | `3600000` |
 | `rewarded.load.tier_timeout_ms` | `30000` |
 | `rewarded.cache.max_age_ms` | `3600000` |
@@ -195,11 +223,11 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.auto_dismiss_ms` | `15000` |
-| `splash.native.behavior.reload.on_ad_click` | `false` |
+| `splash.native.behavior.click.action` | `"reload"` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
-| `lfo.native1.behavior` | `{}` |
+| `lfo.native1.behavior.click.action` | `"reload"` |
 | `lfo.native2.enabled` | `true` |
-| `lfo.native2.behavior` | `{}` |
+| `lfo.native2.behavior.click.action` | `"reload"` |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
 | `lfo.tap_hint.enabled` | `true` |
@@ -211,7 +239,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
-| `lfo.confirm_dialog.native_behavior` | `{}` |
+| `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` |
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
@@ -220,8 +248,8 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.navigation.back_navigates_back` | `true` |
 | `onboarding.navigation.ad_click_return_completes_step` | `true` |
 | `onboarding.ads.content_template` | `"CTA_TOP"` |
-| `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` |
-| `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` |
+| `onboarding.ads.content_native_behavior.click.action` | `"auto_next"` |
+| `onboarding.ads.fullscreen_native_behavior.click.action` | `"auto_next"` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
 | `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
@@ -250,14 +278,14 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` |
 | `onboarding.exit_interstitial.behavior` | `{}` |
 | `ob5.enabled` | `false` |
-| `ob5.native.behavior.reload.on_ad_click` | `false` |
+| `ob5.native.behavior.click.action` | `"reload"` |
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |
-| `question.native.behavior` | `{}` |
+| `question.native.behavior.click.action` | `"reload"` |
 | `question.native.template` | `"CTA_BOTTOM"` |
 | `question.native.refresh_on_select` | `false` |
 | `question.native.refresh_throttle_ms` | `2000` |

@@ -260,19 +260,6 @@ class OnboardKitConfigTest {
     }
 
     @Test
-    fun `adClickReturnCompletesStep defaults on and is read by the step pages`() {
-        assertEquals(true, BehaviorConfig().adClickReturnCompletesStep)
-        val source = java.io.File(
-            "src/main/java/io/onboardkit/ui/pager/LazyStepFragment.kt",
-        ).readText()
-        assertTrue(
-            "LazyStepFragment must gate the ad-click return on " +
-                "BehaviorConfig.adClickReturnCompletesStep",
-            source.contains("adClickReturnCompletesStep"),
-        )
-    }
-
-    @Test
     fun `the language save-on-back button ships on and is read by the screen`() {
         assertTrue(LanguageConfig().saveButtonOnBackEnabled)
         val source = java.io.File(

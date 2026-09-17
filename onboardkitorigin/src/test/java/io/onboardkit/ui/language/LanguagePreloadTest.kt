@@ -9,6 +9,8 @@ import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdEventListener
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.config.AdsConfig
@@ -39,6 +41,8 @@ class LanguagePreloadTest {
     private companion object {
         val preloads = mutableListOf<AdPlacement>()
         val binds = mutableListOf<AdPlacement>()
+        val listeners = mutableMapOf<AdPlacement, AdEventListener>()
+        val completions = mutableListOf<io.onboardkit.core.analytics.AnalyticsEvent.LanguageFlowCompleted>()
     }
     private var controller: ActivityController<ObLanguageActivity>? = null
     private val main get() = shadowOf(Looper.getMainLooper())
@@ -46,16 +50,28 @@ class LanguagePreloadTest {
     @Before fun setup() {
         preloads.clear()
         binds.clear()
+        listeners.clear()
+        completions.clear()
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
         val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
             when (call.method.name) {
+                "nativeClickAction" -> io.onboardkit.remote.OnboardingSettings.nativeClickAction(call.getArgument(0))
                 "preloadNative" -> { preloads += call.getArgument<NativeAdRequest>(1).placement; null }
-                "bindNative" -> { binds += call.getArgument<AdPlacement>(1); true }
+                "bindNative" -> {
+                    val placement = call.getArgument<AdPlacement>(1)
+                    binds += placement
+                    call.getArgument<AdEventListener?>(4)?.let { listeners[placement] = it }
+                    true
+                }
                 else -> Mockito.RETURNS_DEFAULTS.answer(call)
             }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
             adProvider = provider
             trackkitAutoTracking(false)
+            analyticsPlugin(io.onboardkit.core.analytics.AnalyticsPlugin { event ->
+                if (event is io.onboardkit.core.analytics.AnalyticsEvent.LanguageFlowCompleted) completions += event
+            })
         }
         ConsentCenter.setHostConsent(true, false)
         OnboardingSdk.setCanRequestAds(true)
@@ -67,6 +83,7 @@ class LanguagePreloadTest {
         controller?.pause()?.stop()?.destroy()
         main.idle()
         ConsentCenter.clearHostConsent()
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
     }
 
     private fun launch(secondSlot: Boolean = true) {
@@ -95,6 +112,52 @@ class LanguagePreloadTest {
             AdPlacement.StepNative(StepId.OB2)), preloads)
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.Language2), binds)
         assertEquals(View.VISIBLE, requireNotNull(controller).get().findViewById<View>(R.id.ob_ad_block_2).visibility)
+    }
+
+    @Test fun `LFO2 auto next confirms selected language once on actual click return`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}""")
+        launch()
+        tapLanguage()
+        val listener = requireNotNull(listeners[AdPlacement.Language2])
+        listener.onClicked()
+        listener.onAdOpened()
+        assertEquals(0, completions.size)
+        requireNotNull(controller).pause().resume()
+        main.idle()
+        assertEquals(1, completions.size)
+        listener.onClicked()
+        requireNotNull(controller).pause().resume()
+        main.idle()
+        assertEquals(1, completions.size)
+    }
+
+    @Test fun `LFO2 reload and none never confirm after ad return`() {
+        launch()
+        tapLanguage()
+        for (action in listOf("reload", "none")) {
+            OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"$action"}}}}}""")
+            requireNotNull(listeners[AdPlacement.Language2]).onClicked()
+            requireNotNull(controller).pause().stop().restart().start().resume()
+            main.idle()
+            assertEquals(action, 0, completions.size)
+        }
+    }
+
+    @Test fun `LFO2 auto next does not confirm on ordinary resume or failed ad launch`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"auto_next"}}}}}""")
+        launch()
+        tapLanguage()
+        requireNotNull(controller).pause().stop().restart().start().resume()
+        main.idle()
+        assertEquals(0, completions.size)
+        requireNotNull(listeners[AdPlacement.Language2]).onClicked()
+        android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 0f, 0f, 0).also {
+            requireNotNull(controller).get().dispatchTouchEvent(it)
+            it.recycle()
+        }
+        requireNotNull(controller).pause().resume()
+        main.idle()
+        assertEquals(0, completions.size)
     }
 
     @Test fun `selection still warms onboarding when LFO2 is disabled`() {

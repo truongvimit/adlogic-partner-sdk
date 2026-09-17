@@ -77,13 +77,40 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | placement_overrides में format | Supported fields |
 | --- | --- |
 | banner | `reload.allowed`, `reload.auto_enabled`, `reload.resume_debounce_ms`, `presentation.*` |
-| native | `load.tier_timeout_ms`, `reload.*`, `preload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
+| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `preload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
 OB interstitial slots tier और wait timeout support करते हैं। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं।
 
-Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। Interval सेट करना timer चालू नहीं करता। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। सामान्य native click replacement default `true` है; content/fullscreen OB और OB5 में `false`, क्योंकि click-return उन steps से आगे ले जाता है। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
+Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। Interval सेट करना timer चालू नहीं करता। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
+
+## Native click actions
+
+`click.action` में `auto_next`, `none` या `reload` चुनें। पहले click/open callback पर केवल एक action तय होता है; वापस आने तक remote बदलने पर भी वही action रहता है।
+
+- `reload`: click/open पर तुरंत replacement request शुरू होती है। वापस आने पर तैयार ad या उसी pending request का उपयोग होता है। कोई fixed delay नहीं; सामान्य app resume click reload नहीं है।
+  नया ad सफलतापूर्वक bind होने तक पुराना ad बिना shimmer दिखता रहता है। Load fail होने पर पुराना ad और slot बने रहते हैं। Shimmer केवल पहली loading में, जब कोई ad नहीं है, दिखता है।
+- `auto_next`: वापस आने पर onboarding page आगे जाता है; replacement request नहीं होती। LFO2 में चुनी हुई भाषा confirm होती है; LFO1 में current/default भाषा चुनकर LFO2 खुलता है।
+- `none`: मौजूदा ad/page रखें; click reload या automatic navigation नहीं।
+
+Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager के content/fullscreen pages `auto_next`। अलग splash native और OB5 `reload` हैं। Example में अंतिम content page का step ID `ob4` और fullscreen का `ob3` है।
+
+`ad_behavior_config` में `native.click.action` या `placement_overrides.<key>.click.action` उपयोग करें। `onboarding_config` में नीचे दिए screen/group paths या `onboarding.steps.<id>.behavior.click.action` उपयोग करें। Explicit valid action पुराने `reload.on_ad_click` और `navigation.ad_click_return_completes_step` flags से ऊपर है: auto-next और click reload साथ नहीं चलते। Timer/resume refresh और fullscreen timeout अलग settings हैं।
+
+`onboarding_config` example: LFO2 का default `reload` बदलकर automatic confirmation:
+
+```json
+{
+  "lfo": {
+    "native1": { "behavior": { "click": { "action": "reload" } } },
+    "native2": { "behavior": { "click": { "action": "auto_next" } } }
+  },
+  "onboarding": {
+    "steps": { "ob1": { "behavior": { "click": { "action": "none" } } } }
+  }
+}
+```
 
 ## Native template, CTA और X/Skip प्रयोग
 
@@ -129,7 +156,8 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native.load.tier_timeout_ms` | `30000` |
 | `native.cache.max_age_ms` | `3600000` |
 | `native.reload.allowed` | `false` |
-| `native.reload.on_ad_click` | `true` |
+| `native.click.action` | `"reload"` |
+| `native.reload.on_ad_click` (legacy fallback) | `true` |
 | `native.reload.resume_debounce_ms` | `500` |
 | `native.reload.min_after_bind_ms` | `3000` |
 | `native.reload.timer_enabled` | `false` |
@@ -149,12 +177,12 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `interstitial.frequency.interval_ms` | `0` |
 | `interstitial.frequency.max_clicks_per_24h` | `0` |
 | `interstitial_auto_buffer.enabled` | `true` |
-| `interstitial_auto_buffer.shared_config` | `true` — preserves existing group policy and independent_interval overrides. `false` gives every placement its own cooldown, retry and tap counter, using rules.<placement>.interval_ms/tap_threshold or host options; disables the shared two-action guard. |
+| `interstitial_auto_buffer.shared_config` | `false` by default. `true` preserves the shared group policy and independent_interval overrides. `false` gives every placement its own cooldown, retry and tap counter, using rules.<placement>.interval_ms/tap_threshold or host options; disables the shared two-action guard. |
 | `interstitial_auto_buffer.tick_ms` | `0` |
 | `interstitial_auto_buffer.idle_tick_ms` | `30000` |
 | `interstitial_auto_buffer.min_tick_ms` | `5000` |
-| `interstitial_auto_buffer.preload_lead_ms` | `2000` |
-| `interstitial_auto_buffer.rules` | `{}` |
+| `interstitial_auto_buffer.preload_lead_ms` | `2000` — preload requires both tap_threshold and max(0, interval_ms - preload_lead_ms). Showing requires the full interval_ms. |
+| `interstitial_auto_buffer.rules` | `inter_all: 30000ms / 2 taps; inter_back: 30000ms / 1 tap` |
 | `interstitial.cache.max_age_ms` | `3600000` |
 | `rewarded.load.tier_timeout_ms` | `30000` |
 | `rewarded.cache.max_age_ms` | `3600000` |
@@ -195,11 +223,11 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.auto_dismiss_ms` | `15000` |
-| `splash.native.behavior.reload.on_ad_click` | `false` |
+| `splash.native.behavior.click.action` | `"reload"` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
-| `lfo.native1.behavior` | `{}` |
+| `lfo.native1.behavior.click.action` | `"reload"` |
 | `lfo.native2.enabled` | `true` |
-| `lfo.native2.behavior` | `{}` |
+| `lfo.native2.behavior.click.action` | `"reload"` |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
 | `lfo.tap_hint.enabled` | `true` |
@@ -211,7 +239,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
-| `lfo.confirm_dialog.native_behavior` | `{}` |
+| `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` |
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
@@ -220,8 +248,8 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.navigation.back_navigates_back` | `true` |
 | `onboarding.navigation.ad_click_return_completes_step` | `true` |
 | `onboarding.ads.content_template` | `"CTA_TOP"` |
-| `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` |
-| `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` |
+| `onboarding.ads.content_native_behavior.click.action` | `"auto_next"` |
+| `onboarding.ads.fullscreen_native_behavior.click.action` | `"auto_next"` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
 | `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
@@ -250,14 +278,14 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` |
 | `onboarding.exit_interstitial.behavior` | `{}` |
 | `ob5.enabled` | `false` |
-| `ob5.native.behavior.reload.on_ad_click` | `false` |
+| `ob5.native.behavior.click.action` | `"reload"` |
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |
-| `question.native.behavior` | `{}` |
+| `question.native.behavior.click.action` | `"reload"` |
 | `question.native.template` | `"CTA_BOTTOM"` |
 | `question.native.refresh_on_select` | `false` |
 | `question.native.refresh_throttle_ms` | `2000` |

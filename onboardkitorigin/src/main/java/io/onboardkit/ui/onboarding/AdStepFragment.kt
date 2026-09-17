@@ -106,7 +106,7 @@ class AdStepFragment : LazyStepFragment() {
             container = b.obNativeContainer,
             onShown = { if (isCurrentStepVisit(visit)) onAdImpression() },
             onUnavailable = { if (isCurrentStepVisit(visit)) onAdFailed() },
-            onAdEngaged = { if (isCurrentStepVisit(visit)) onStepAdEngaged() },
+            onAdEngaged = { action -> if (isCurrentStepVisit(visit)) onStepAdEngaged(action) },
         )
     }
 

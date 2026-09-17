@@ -225,6 +225,10 @@ val nativeHelper = NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE
   canReloadAds = true)` — it is a constructor value, not a settable property — and call
   `applyReloadByTime(intervalMs)` before `show()`. The current ad stays visible while loading;
   refresh pauses when the slot is hidden/stopped.
+- Pause/stop retain the current native view and pending load, with or without refresh enabled.
+  A fill received in background waits for resume and binds once; returning does not restart
+  the initial request. Explicit resume/timer refresh still follows its configured interval
+  and keeps the current ad until a replacement binds. Click reload uses its own shared request.
 - For retained pager pages or custom navigation, call `cancel()` when the page is unselected
   and `show()` when selected. Use `destroy()` when permanently disposing the helper.
 - After rotation, recreate the helper with the same placement and call `show()`; an
@@ -232,23 +236,43 @@ val nativeHelper = NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE
 - Do not call `NativeAdManager.release(placement)` for routine screen cleanup: it invalidates
   shared pending/unused ads. Use it only when deliberately discarding that placement's inventory.
 
+`native.load.tier_timeout_ms` bounds each waterfall tier, not the whole screen or network
+transfer. An expired tier advances to the next floor; a late native from that tier is destroyed.
+The GMA `AdLoader` API used here has no public request-cancellation method, so this deadline
+does not abort an outstanding network operation. Shared placement loads prevent duplicate
+logical waterfalls, but do not impose a global limit on vendor requests across placements.
+
 ### Native click return
 
-`NativeAdConfig.reloadOnAdClick` defaults to `true`. A click/open immediately preloads an
-unused replacement for that placement. On return, `NativeAdHelper` consumes a ready ad or
-waits for the same in-flight request; it never binds the preload while the user is away.
-This also supports pause-only destinations and is independent of `canReloadAds`, debounce
-and refresh timers. Normal consent, purchase and network gates still apply.
+`native.click.action` in `ad_behavior_config` selects exactly one action:
 
-Disable this behavior for a screen that navigates away on ad return:
+- `reload` (default): click/open immediately preloads a replacement. On return, the helper
+  consumes a ready ad or joins that same request. It does not wait for resume to start loading.
+  The current ad stays visible while waiting, without shimmer. Only a successful replacement
+  bind removes the old ad; a failed reload keeps it. Shimmer is for initial loading without an ad.
+- `none`: keep the current ad, with no click replacement or automatic navigation.
+- `auto_next`: no click replacement; the onboarding host advances on ad return.
+
+The action is captured before notifying click listeners and stays fixed for that trip, even
+if remote settings change. Duplicate click/open callbacks share one request. Ordinary app
+resume does not count as an ad click. Popup destinations that pause without stopping the
+host are supported. Consent, purchase and network gates still apply.
+
+Host code can supply a fallback; a valid explicit remote/custom-asset `click.action` wins:
 
 ```kotlin
-helper.setReloadOnAdClick(false)
+nativeConfig.clickAction = NativeClickAction.NONE
 ```
 
-The built-in onboarding provider disables it for all content/fullscreen step natives and
-OB5. Language slots, the language popup, question native, and ordinary partner natives keep
-it enabled. Step click-return navigation remains enabled by default.
+The built-in onboarding provider defaults content/fullscreen pager steps to `auto_next`;
+LFO1, LFO2 and all other natives default to `reload`. Set
+`lfo.native2.behavior.click.action = "auto_next"` in `onboarding_config` to confirm the
+selected language on ad return. Screen/group/placement overrides are documented in the
+[remote settings guide](../partner-integration/remote-settings.md).
+
+The legacy `reloadOnAdClick` / `reload.on_ad_click` and step navigation flag are fallbacks
+only; an explicit `click.action` overrides them, so auto-next and click reload cannot both
+run. Explicit timer/resume refresh options remain separate and are disabled by default.
 
 ## Optional integrations
 
@@ -292,8 +316,11 @@ interval overrides. Call `stop()` only when you want to disable buffering.
 ### Opt-in content wait and independent placement clocks
 
 For selected content placements, use the existing buffer with independent clocks. The buffer
-preloads at `max(0, interval - 2_000ms)`; presentation still requires the full interval and a
-new action. A final load failure retries after the full placement interval (or the positive
+only requests an ad when both the placement's tap threshold and
+`max(0, interval_ms - preload_lead_ms)` have been satisfied. This applies to automatic preload,
+explicit manager loads and refills after dismissal. A ready or in-flight ad does not trigger
+another request. Presentation still requires the full interval and a new action.
+A final load failure retries after the full placement interval (or the positive
 idle cadence when the interval is zero).
 
 ```kotlin
@@ -318,13 +345,13 @@ InterstitialAdManager.loadAndShow(activity, placement, callback,
 ```
 
 Do not pre-check `canShow()` in this wrapper: the action must reach the manager to count once
-and take the ready/join/cold path. With the default `interstitial_auto_buffer.shared_config: true`,
+and take the ready/join/cold path. With `interstitial_auto_buffer.shared_config: true`,
 independent placements share a two-action presentation guard; it does not gate preload or combine
 their clocks. Counters reset on the vendor's actual
 show callback. Back that exits the app is outside this flow. Wire navigation only to `onComplete`.
 
 Set `interstitial_auto_buffer.shared_config` to `false` in `ad_behavior_config` to isolate every
-buffer placement, including `inter`, `inter_all` and `inter_back`. Each uses its own `interval_ms`
+buffer placement, including `inter_all` and `inter_back`. Each uses its own `interval_ms`
 and `tap_threshold` from `rules` (or the host's `intervalMsByPlacement` / `tapThresholds`).
 The shared two-action guard is disabled: taps, actual shows, closes and final load failures only
 affect that placement. A threshold of `0` needs no taps; `1` allows the first action to show once
@@ -335,17 +362,19 @@ the cooldown has elapsed. Ads still cannot present simultaneously.
   "interstitial_auto_buffer": {
     "shared_config": false,
     "rules": {
-      "inter": { "enabled": true, "interval_ms": 30000, "tap_threshold": 1 },
-      "inter_all": { "enabled": true, "interval_ms": 45000, "tap_threshold": 2 },
-      "inter_back": { "enabled": true, "interval_ms": 60000, "tap_threshold": 3 }
+      "inter_all": { "enabled": true, "interval_ms": 30000, "tap_threshold": 2 },
+      "inter_back": { "enabled": true, "interval_ms": 30000, "tap_threshold": 1 }
     }
   }
 }
 ```
 
-`false` takes precedence over each rule's `independent_interval`; no per-placement opt-in is
-needed. Missing intervals inherit the global interval value but keep separate clocks; missing
-tap thresholds default to `0`. `true` preserves existing behavior, including explicit
+The bundled asset uses `shared_config: false`, with ALL at 30 seconds / 2 taps and BACK at
+30 seconds / 1 tap. With the bundled 2-second preload lead, loading starts no earlier than
+28 seconds and still needs the placement's taps; showing waits the full 30 seconds. Remote or app-asset rules override host options, which override these
+bundled values. `false` takes precedence over each rule's `independent_interval`; no
+per-placement opt-in is needed. Placements without a rule or host value inherit the global
+interval with separate clocks and a tap threshold of `0`. `true` preserves the shared guard, including explicit
 `independentIntervalPlacements` / `independent_interval` overrides. The flag does not start
 the buffer or enable disabled placements; keep the content-entry `start()` call above.
 

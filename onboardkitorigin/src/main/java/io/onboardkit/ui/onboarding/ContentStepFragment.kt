@@ -191,7 +191,7 @@ class ContentStepFragment : LazyStepFragment() {
             onUnavailable = {
                 if (isCurrentStepVisit(visit) && !adBound) binding?.obAdBlock?.visibility = View.GONE
             },
-            onAdEngaged = { if (isCurrentStepVisit(visit)) onStepAdEngaged() },
+            onAdEngaged = { action -> if (isCurrentStepVisit(visit)) onStepAdEngaged(action) },
         )
     }
 

@@ -38,7 +38,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * hiding the slot for purchased users and keeping the old ad on a failed reload — is owned
  * here.
  *
- * While loading, the slot shows a shimmer skeleton. By default it is derived from the ad
+ * Initial loading shows a shimmer skeleton; replacements keep the current ad until bind.
+ * By default the skeleton is derived from the ad
  * layout itself ([NativeAdConfig.autoShimmer]); an explicit skeleton via [setShimmerLayoutView]
  * or [setShimmerLayout] takes precedence.
  *
@@ -131,8 +132,10 @@ class NativeAdHelper(
     private var destroyed = false
     private var pendingRestoration: NativePresentationStore.Presentation? = null
     private var awaitingHost = false
-    private var restartOnResume = false
     private var adClickPending = false
+    /** Frozen before listeners run, so navigation and reload use the same decision. */
+    var pendingClickAction: NativeClickAction? = null
+        private set
     private var requestVersion = 0L
     /** Disable when a containing integration owns request analytics. */
     var reportTelemetry: Boolean = true
@@ -180,10 +183,11 @@ class NativeAdHelper(
     private fun prepareAdClickReturn() {
         if (adClickPending) return
         adClickPending = true
+        pendingClickAction = config.resolvedClickAction
         mainHandler.removeCallbacks(reloadByTimeRunnable)
         mainHandler.removeCallbacks(resumeReloadRunnable)
-        if (!config.reloadOnAdClick) return
-        // Keep the current presentation until departure. Only the unused cache loads here;
+        if (pendingClickAction != NativeClickAction.RELOAD) return
+        // Keep the current presentation until a replacement binds. Only the unused cache loads here;
         // it must never bind a replacement while the click destination is opening.
         requestVersion++
         loadSubscription?.cancel()
@@ -361,8 +365,8 @@ class NativeAdHelper(
         pendingRestoration?.ad?.let(::destroyNative)
         pendingRestoration = null
         awaitingHost = false
-        restartOnResume = false
         adClickPending = false
+        pendingClickAction = null
         loadSubscription?.cancel()
         eventSubscription?.cancel()
         flagActive.compareAndSet(true, false)
@@ -403,17 +407,21 @@ class NativeAdHelper(
                     return
                 }
                 if (adClickPending && isActiveState()) {
-                    if (!config.reloadOnAdClick) {
+                    if (pendingClickAction != NativeClickAction.RELOAD) {
                         // The containing flow may navigate on this return. Do not let either
                         // stop/resume restoration or resume refresh request an unseen ad.
                         adClickPending = false
+                        pendingClickAction = null
                         return
                     }
-                    cancel()
+                    adClickPending = false
+                    pendingClickAction = null
+                    // Click detached any previous load subscription. Clear its re-entry
+                    // guard so we can join the shared request again, keeping the old view.
+                    if (_nativeAdState.value is AdNativeState.Loading) {
+                        setState(nativeAd?.let { AdNativeState.Loaded(it) } ?: AdNativeState.None)
+                    }
                     show() // Consume the click preload, or join that same in-flight request.
-                } else if (restartOnResume) {
-                    restartOnResume = false
-                    show()
                 } else if (awaitingHost && isActiveState() && contentView != null) {
                     if (!restorePresentation()) requestSharedAd()
                 } else if (nativeAd != null) armReload()
@@ -423,29 +431,18 @@ class NativeAdHelper(
             }
 
             Lifecycle.Event.ON_PAUSE -> {
+                // Pause/stop only suspend refresh. Retain the view and load subscription;
+                // a background fill waits for RESUMED through awaitingHost.
                 mainHandler.removeCallbacks(reloadByTimeRunnable)
                 mainHandler.removeCallbacks(resumeReloadRunnable)
-            }
-
-            Lifecycle.Event.ON_STOP -> {
-                if (!activity.isChangingConfigurations) {
-                    if (adClickPending && !config.reloadOnAdClick) return
-                    val restart = isActiveState()
-                    cancel()
-                    restartOnResume = restart
-                }
             }
 
             Lifecycle.Event.ON_DESTROY -> {
                 if (activity.isChangingConfigurations && isActiveState()) {
                     presentationStore?.let { store ->
-                        if (adClickPending && config.reloadOnAdClick) {
-                            nativeAd?.let(::destroyNative)
-                            nativeAd = null
-                        }
                         store.retain(storeKey, pendingRestoration ?: NativePresentationStore.Presentation(
                             nativeAd, timeShowAdRecent, nextReloadAtMs,
-                            (adClickPending && config.reloadOnAdClick) || _nativeAdState.value is AdNativeState.Loading))
+                            (adClickPending && pendingClickAction == NativeClickAction.RELOAD) || _nativeAdState.value is AdNativeState.Loading))
                         nativeAd = null
                         pendingRestoration = null
                     }

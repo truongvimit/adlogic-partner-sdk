@@ -97,13 +97,40 @@ Slot behavior > nhóm content/fullscreen OB > placement override > format overri
 | Format trong placement_overrides | Field được hỗ trợ |
 |---|---|
 | banner | reload.allowed, reload.auto_enabled, reload.resume_debounce_ms, presentation.* |
-| native | load.tier_timeout_ms, reload.*, preload.*, presentation.auto_shimmer, presentation.empty_visibility, presentation.cta_corner_radius_dp |
+| native | click.action, load.tier_timeout_ms, reload.*, preload.*, presentation.auto_shimmer, presentation.empty_visibility, presentation.cta_corner_radius_dp |
 | interstitial | load.tier_timeout_ms, load_and_show.wait_timeout_ms, load_and_show.buffer_wait_timeout_ms, presentation.loading_enabled, cache.max_age_ms |
 | rewarded | load.tier_timeout_ms, cache.max_age_ms |
 
 Slot interstitial OB hỗ trợ tier timeout và wait timeout. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}` và `.auto_next.{enabled,delay_ms}`. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
 
 Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Khai báo interval không tự bật timer. App-open delay chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms. Không thêm banner tier timeout khi loader chưa có timer đó.
+
+## Hành động khi click native
+
+`click.action` nhận `auto_next`, `none` hoặc `reload`. SDK chốt đúng một hành động ở callback click/open đầu tiên, giữ nguyên đến khi quay về kể cả remote thay đổi giữa chừng.
+
+- `reload`: request ad thay thế ngay lúc click/open, không đợi resume và không có delay cố định. Khi quay về, dùng ad đã tải hoặc chờ đúng request đang chạy. Resume app thông thường không kích hoạt click reload.
+  Trong lúc chờ vẫn hiển thị ad cũ, không hiện shimmer. Chỉ thay khi ad mới bind thành công; tải lỗi giữ ad cũ và khung quảng cáo. Shimmer chỉ dùng lúc tải ban đầu chưa có ad.
+- `auto_next`: quay về thì chuyển trang onboarding đang hiển thị, không tải ad thay thế. Ở LFO2: tự confirm ngôn ngữ đã chọn. Ở LFO1: chọn ngôn ngữ hiện tại/mặc định để sang LFO2.
+- `none`: giữ ad và trang hiện tại; không reload theo click, không tự chuyển trang.
+
+Mặc định LFO1/LFO2 và mọi native khác là `reload`; các trang content/fullscreen trong pager onboarding là `auto_next`. Native splash riêng và OB5 là `reload`. Trong example, trang content cuối mang step ID `ob4`, còn `ob3` là trang fullscreen.
+
+Cấu hình chung/placement trong `ad_behavior_config` qua `native.click.action` hoặc `placement_overrides.<key>.click.action`. Với `onboarding_config`, dùng scope từng màn/nhóm bên dưới hoặc `onboarding.steps.<id>.behavior.click.action`. Một `click.action` hợp lệ được khai báo tường minh sẽ thắng cả cờ cũ `reload.on_ad_click` và `navigation.ad_click_return_completes_step`: không thể vừa auto-next vừa click reload. Timer/resume refresh và timeout tự chuyển trang fullscreen là các cài đặt riêng.
+
+Ví dụ override trong `onboarding_config` (LFO2 mặc định là `reload`; ví dụ đổi sang tự confirm):
+
+```json
+{
+  "lfo": {
+    "native1": { "behavior": { "click": { "action": "reload" } } },
+    "native2": { "behavior": { "click": { "action": "auto_next" } } }
+  },
+  "onboarding": {
+    "steps": { "ob1": { "behavior": { "click": { "action": "none" } } } }
+  }
+}
+```
 
 ## Template và CTA để UA/MO thử nghiệm
 
@@ -147,7 +174,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native.load.tier_timeout_ms` | `30000` | Giữ timeout riêng đang cấu hình; provider OB cùng resolver format/slot. |
 | `native.cache.max_age_ms` | `3600000` | Có thể giảm tuổi cache; không tăng quá lifetime hiện tại. |
 | `native.reload.allowed` | `false` | Map canReloadAds; không là công tắc click reload. |
-| `native.reload.on_ad_click` | `true` | Giữ mặc định theo slot; với OB tự next khi ad click return thì không tải ad thay thế vô ích. |
+| `native.click.action` | `"reload"` | Hành động độc quyền: `auto_next`, `none`, `reload`. |
+| `native.reload.on_ad_click` | `true` | Legacy fallback; `click.action` tường minh được ưu tiên. |
 | `native.reload.resume_debounce_ms` | `500` | Debounce resume. |
 | `native.reload.min_after_bind_ms` | `3000` | >0; cooldown sau bind. |
 | `native.reload.timer_enabled` | `false` | Tách trạng thái timer khỏi interval để không tự bật khi chỉ đổi time. |
@@ -167,12 +195,12 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `interstitial.frequency.interval_ms` | `0` | Giữ scope hiện tại AutoBuffer; không tự áp splash/OB. |
 | `interstitial.frequency.max_clicks_per_24h` | `0` | 0=tắt; counter theo inter ad unit. |
 | `interstitial_auto_buffer.enabled` | `true` | Công tắc remote cho preload/refill tự động. Host vẫn phải configure placements và gọi start() từ content lifecycle. Mặc định true; remote/asset false chặn buffer. Chỉ áp dụng placements của AutoBuffer, không áp dụng toàn bộ interstitial. |
-| `interstitial_auto_buffer.shared_config` | `true` | true giữ hành vi hiện tại (interval chung, vẫn hỗ trợ independent_interval và guard 2 thao tác chung). false tách toàn bộ placement: cooldown/retry và bộ đếm tap riêng, bỏ guard 2 thao tác chung; dùng rules.<placement>.interval_ms/tap_threshold hoặc cấu hình host. Không cần bật independent_interval khi false. |
+| `interstitial_auto_buffer.shared_config` | `false` | true giữ hành vi hiện tại (interval chung, vẫn hỗ trợ independent_interval và guard 2 thao tác chung). false tách toàn bộ placement: cooldown/retry và bộ đếm tap riêng, bỏ guard 2 thao tác chung; dùng rules.<placement>.interval_ms/tap_threshold hoặc cấu hình host. Không cần bật independent_interval khi false. |
 | `interstitial_auto_buffer.tick_ms` | `0` | 0 theo interval chung. |
 | `interstitial_auto_buffer.idle_tick_ms` | `30000` | Cadence khi interval tắt. |
 | `interstitial_auto_buffer.min_tick_ms` | `5000` | Sàn tick, giữ trần 30 phút hiện tại. |
-| `interstitial_auto_buffer.preload_lead_ms` | `2000` | Khoảng preload sớm trước interval, giữ scope independent placements. |
-| `interstitial_auto_buffer.rules` | `{}` | Map theo placement: {enabled, independent_interval, tap_threshold, interval_ms}; đầy đủ placements/independentIntervalPlacements/tapThresholds/intervalMsByPlacement. rules={} xóa remote rules, không xóa cấu hình host. |
+| `interstitial_auto_buffer.preload_lead_ms` | `2000` | Preload/refill/load qua manager cần đủ tap_threshold và max(0, interval_ms - preload_lead_ms). Show vẫn phải đủ toàn bộ interval_ms. |
+| `interstitial_auto_buffer.rules` | `inter_all: 30000ms / 2 taps; inter_back: 30000ms / 1 tap` | Map theo placement: {enabled, independent_interval, tap_threshold, interval_ms}; đầy đủ placements/independentIntervalPlacements/tapThresholds/intervalMsByPlacement. rules={} xóa remote rules, không xóa cấu hình host hoặc mặc định SDK. |
 | `interstitial.cache.max_age_ms` | `3600000` | Chỉ giảm so với lifetime hiện tại. |
 | `rewarded.load.tier_timeout_ms` | `30000` | Giữ cache/request chung theo placement; không auto refill. |
 | `rewarded.cache.max_age_ms` | `3600000` | Một unused fill; không thêm buffer_count/refill policy. |
@@ -213,11 +241,11 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.native.skip.delay_ms` | `3000` | Native splash trước LFO.
 | `splash.native.skip.style` | `"CLOSE_ICON"` | Native splash trước LFO.
 | `splash.native.auto_dismiss_ms` | `15000` | Native splash trước LFO.
-| `splash.native.behavior.reload.on_ad_click` | `false` | Native splash trước LFO.
+| `splash.native.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.native_template` | `"CTA_BOTTOM"` | Preset layout native SDK cho LFO1/LFO2; xem thứ tự ưu tiên template. |
-| `lfo.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `lfo.native1.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.native2.enabled` | `true` | Bật/tắt hành động đổi sang native thứ hai sau chọn ngôn ngữ; không bật lại ad unit bị tắt. |
-| `lfo.native2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `lfo.native2.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` | Timeout giữ LFO1 nếu LFO2 chưa bind. |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` | LFO_SHOWN hoặc FIRST_SELECTION. Không tắt hiển thị slot 2. |
 | `lfo.tap_hint.enabled` | `true` | Thay ob_show_language_tap_hint. |
@@ -229,17 +257,17 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.confirm_dialog.enabled` | `true` | Thay ob_show_language_confirm_dialog. |
 | `lfo.confirm_dialog.show_from_tap` | `4` | Số nguyên >=1; chỉ gate khi chọn ngôn ngữ khác. Chọn lại ngôn ngữ hiện tại mở popup ngay nhưng vẫn cộng count. |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` | DIALOG_OPEN/LFO_SHOWN/FIRST_SELECTION; mặc định on-demand. |
-| `lfo.confirm_dialog.native_behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.languages.supported_codes` | `[]` | Rỗng giữ catalog; mã lạ bị loại, lọc rỗng trở về catalog. |
 | `lfo.languages.default_code` | `""` | Rỗng giữ lựa chọn cũ; chỉ nhận mã có trong catalog app. |
 | `lfo.exit.reuse_splash_inter` | `true` | Chỉ nhánh thoát LFO không vào pager. |
 | `onboarding.navigation.lock_pager_swipe` | `false` | Giữ chính sách page eligibility hiện tại; false không tự mở swipe OB1 trong working tree. |
 | `onboarding.navigation.swipe_completes_last_step` | `true` | Trong working tree còn cần !lock_pager_swipe. |
 | `onboarding.navigation.back_navigates_back` | `true` | Giữ behavior Back hiện tại. |
-| `onboarding.navigation.ad_click_return_completes_step` | `true` | Không bật cùng click replacement vô ích cho step đang tự next. |
+| `onboarding.navigation.ad_click_return_completes_step` | `true` | Legacy fallback; `click.action` tường minh được ưu tiên. |
 | `onboarding.ads.content_template` | `"CTA_TOP"` | Preset chung cho native các trang content OB. |
-| `onboarding.ads.content_native_behavior.reload.on_ad_click` | `false` | Mặc định riêng OB: không tải ad thay thế khi click-return sẽ rời step. |
-| `onboarding.ads.fullscreen_native_behavior.reload.on_ad_click` | `false` | Mặc định riêng OB: không tải ad thay thế khi click-return sẽ rời step. |
+| `onboarding.ads.content_native_behavior.click.action` | `"auto_next"` | Tự chuyển trang khi quay về từ ad; không click reload. |
+| `onboarding.ads.fullscreen_native_behavior.click.action` | `"auto_next"` | Tự chuyển trang khi quay về từ ad; không click reload. |
 | `onboarding.fullscreen.skip.enabled` | `true` | Thay showSkipButton && ob_show_skip_ob3. |
 | `onboarding.fullscreen.skip.delay_ms` | `5000` | New >=0; legacy -1 kế thừa, không chuyển -1000 thành timer. |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của trang fullscreen trong OB. |
@@ -268,14 +296,14 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` | AFTER_AD/UNDER_AD; entry đặc biệt vẫn AFTER_AD. |
 | `onboarding.exit_interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `ob5.enabled` | `false` | Standalone chỉ mở nếu ad ready như hiện tại. |
-| `ob5.native.behavior.reload.on_ad_click` | `false` | Mặc định riêng OB: không tải ad thay thế khi click-return sẽ rời step. |
+| `ob5.native.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `ob5.skip.enabled` | `true` | ob_show_skip_ob5. |
 | `ob5.skip.delay_ms` | `3000` | Tách override riêng với pager; legacy ob_skip_button_delay_sec áp cả hai như trước. |
 | `ob5.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của màn OB5 standalone. |
 | `ob5.auto_dismiss_ms` | `15000` | Thời gian đóng OB5; tối thiểu 5000ms. |
 | `question.enabled` | `true` | ob_enable_question. |
 | `question.old_user_enabled` | `false` | ob_enable_question_old_user. |
-| `question.native.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `question.native.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `question.native.template` | `"CTA_BOTTOM"` | Preset native màn question. |
 | `question.native.refresh_on_select` | `false` | Chỉ khi thêm selection. |
 | `question.native.refresh_throttle_ms` | `2000` | Còn cooldown sau bind. |

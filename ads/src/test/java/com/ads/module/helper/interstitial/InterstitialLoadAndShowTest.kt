@@ -355,6 +355,7 @@ class InterstitialLoadAndShowTest {
 
     @Test
     fun `managed frequency blocked cold trigger does not waste a new request`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(PLACEMENT)))
         InterstitialAutoBuffer.start(activity)
         val raw = newVendor()

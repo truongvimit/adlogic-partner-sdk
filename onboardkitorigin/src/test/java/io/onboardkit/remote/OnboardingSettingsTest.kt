@@ -11,6 +11,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OnboardingSettingsTest {
+    @Test fun `native click defaults and per step actions are exclusive`() {
+        val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
+        val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
+        listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
+            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.Ob5).forEach {
+            assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
+        }
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepFullScreen(StepId.OB3)))
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
+            {
+              "lfo": {"native2": {"behavior": {"click": {"action": "auto_next"}, "reload": {"on_ad_click": true}}}},
+              "onboarding": {
+                "steps": {"ob1": {"behavior": {"click": {"action": "reload"}}}},
+                "navigation": {"ad_click_return_completes_step": true}
+              }
+            }
+        """.trimIndent()))
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
+    }
+
     @After fun clearRemote() {
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         AdBehavior.document.acceptSuccessfulFetch(null)

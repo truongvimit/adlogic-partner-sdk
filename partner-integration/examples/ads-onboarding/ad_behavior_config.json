@@ -48,6 +48,9 @@
       "auto_shimmer": true,
       "empty_visibility": "GONE",
       "cta_corner_radius_dp": 20
+    },
+    "click": {
+      "action": "reload"
     }
   },
   "interstitial": {
@@ -74,12 +77,23 @@
   },
   "interstitial_auto_buffer": {
     "enabled": true,
-    "shared_config": true,
+    "shared_config": false,
     "tick_ms": 0,
     "idle_tick_ms": 30000,
     "min_tick_ms": 5000,
     "preload_lead_ms": 2000,
-    "rules": {}
+    "rules": {
+      "inter_all": {
+        "enabled": true,
+        "interval_ms": 30000,
+        "tap_threshold": 2
+      },
+      "inter_back": {
+        "enabled": true,
+        "interval_ms": 30000,
+        "tap_threshold": 1
+      }
+    }
   },
   "rewarded": {
     "load": {

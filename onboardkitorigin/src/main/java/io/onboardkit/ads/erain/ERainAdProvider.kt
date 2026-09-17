@@ -1,5 +1,7 @@
 package io.onboardkit.ads.erain
 
+import com.ads.module.helper.adnative.NativeClickAction
+
 import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Context
@@ -177,7 +179,6 @@ class ERainAdProvider(
             ?.let { nativeStyles[key] = it.toNativeStyle() }
         val config = nativeConfig(ids, request.layoutRes, request.placement).apply {
             behavior = OnboardingSettings.behavior(request.placement)
-            reloadOnAdClick = OnboardingSettings.nativeClickDefault(request.placement)
             forceUaCheck = io.onboardkit.OnboardingSdk.configuredPlacementKey(request.placement)
                 ?.let { AdRemoteConfig.getInstance().ads[it]?.enableUaCheck } == true
         }
@@ -228,8 +229,7 @@ class ERainAdProvider(
                         listeners.remove(key)
                     } else if (observing && event == Lifecycle.Event.ON_RESUME) {
                         if (deferredNativeFailures.remove(key)) {
-                            pendingNativeBinds.remove(key)
-                            notifyListener(key) { it.onFailedToLoad() }
+                            notifyNativeFailure(key)
                         } else if (key in pendingNativeBinds && !helperAwaitsNative(key) &&
                             preload.getAdNative(key) != null) notifyListener(key) { it.onLoaded() }
                     }
@@ -500,11 +500,16 @@ class ERainAdProvider(
         listeners.clear()
     }
 
+    override fun nativeClickAction(placement: AdPlacement): NativeClickAction =
+        nativeBindings[placement.key]?.helper?.pendingClickAction ?: OnboardingSettings.nativeClickAction(placement)
+
     private fun nativeConfig(ids: List<String>, layoutRes: Int, placement: AdPlacement): NativeAdConfig {
         val sdkTemplate = io.onboardkit.config.NativeTemplate.entries.any {
             io.onboardkit.ads.NativeTemplates.layoutFor(it) == layoutRes
         }
         return object : NativeAdConfig(ids, true, false, layoutRes) {
+            override val resolvedClickAction: NativeClickAction
+                get() = OnboardingSettings.nativeClickAction(placement)
             // Resolve SDK frames at bind too, retaining the fill and any custom host layout.
             override val layoutId: Int
                 get() = if (sdkTemplate && io.onboardkit.OnboardingSdk.configOrNull() != null)
@@ -541,6 +546,13 @@ class ERainAdProvider(
         nativeBindings[key]?.helper?.nativeAdState?.value is AdNativeState.Loading
 
     private fun notifyNativeFailure(key: String) {
+        // A failed replacement does not make the slot unavailable: its previous ad is
+        // still displayed. Screen-level failure handlers would otherwise hide that ad.
+        if (nativeBindings[key]?.helper?.nativeAd?.isUsable == true) {
+            pendingNativeBinds.remove(key)
+            deferredNativeFailures.remove(key)
+            return
+        }
         if (key !in pendingNativeBinds) return
         val owner = nativeOwners[key]
         if (owner != null && !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {

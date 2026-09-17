@@ -156,6 +156,7 @@ class SettingsDocument(
         }
         if (value is String) {
             val allowed = when {
+                path.endsWith("click.action") -> setOf("auto_next", "none", "reload")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")
                 path.endsWith("next_screen_timing") -> if (path == "splash.navigation.next_screen_timing") setOf("AUTO", "AFTER_AD", "UNDER_AD") else setOf("AFTER_AD", "UNDER_AD")

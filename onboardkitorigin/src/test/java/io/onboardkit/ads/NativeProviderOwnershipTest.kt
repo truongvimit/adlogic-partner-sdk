@@ -1,5 +1,7 @@
 package io.onboardkit.ads
 
+import android.view.View
+
 import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
@@ -82,6 +84,7 @@ class NativeProviderOwnershipTest {
         NativeProviderHost.onCreated = null
         builders.close()
         ConsentCenter.clearHostConsent()
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
     }
 
     @Test fun `remote template and CTA radius reach a native filled before splash fetch without another load`() {
@@ -291,8 +294,11 @@ class NativeProviderOwnershipTest {
         assertFalse(provider.isNativeReady(placement))
         verify(ad, never()).destroy()
         controller.pause().stop()
-        verify(ad).destroy()
+        verify(ad, never()).destroy()
         controller.restart().start().resume()
+        assertEquals(1, requests.size)
+        provider.releaseNative(placement)
+        verify(ad).destroy()
     }
     @Test fun `bound native forwards each vendor click and open once`() {
         val host = controller.get()
@@ -317,7 +323,7 @@ class NativeProviderOwnershipTest {
             AdPlacement.StepNative(io.onboardkit.core.StepId.OB1),
             AdPlacement.StepNative(io.onboardkit.core.StepId.OB2),
             AdPlacement.StepFullScreen(io.onboardkit.core.StepId.OB3),
-            AdPlacement.StepNative(io.onboardkit.core.StepId.OB4), AdPlacement.Ob5,
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB4),
         )
         pages.forEach { page ->
             val container = FrameLayout(host).also(host::setContentView)
@@ -348,7 +354,7 @@ class NativeProviderOwnershipTest {
     @Test fun `language popup and question preload at click and bind only on return`() {
         val host = controller.get()
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.QuestionNative).forEach { page ->
+            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.Ob5).forEach { page ->
             val container = FrameLayout(host).also(host::setContentView)
             provider.preloadNative(host, request.copy(placement = page))
             requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
@@ -371,6 +377,107 @@ class NativeProviderOwnershipTest {
             assertFalse(provider.isNativeReady(page))
             provider.releaseNative(page)
         }
+    }
+
+    @Test fun `LFO2 auto next emits no replacement requests even with legacy reload and refresh enabled`() {
+        val host = controller.get()
+        val page = AdPlacement.Language2
+        for (timerEnabled in listOf(false, true)) {
+            assertTrue(io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""
+                {"lfo":{"native2":{"behavior":{
+                  "click":{"action":"auto_next"},
+                  "reload":{"on_ad_click":true,"allowed":true,"timer_enabled":$timerEnabled,"interval_ms":5000}
+                }}}}
+            """.trimIndent()))
+            val container = FrameLayout(host).also(host::setContentView)
+            provider.preloadNative(host, request.copy(placement = page))
+            requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+            assertTrue(provider.bindNative(host, page, container, null))
+            val baseline = requests.size
+            val events = vendorEvents.last()
+            for (stopped in listOf(false, true)) {
+                events.onAdClicked()
+                events.onAdOpened()
+                assertEquals("No click/open replacement", baseline, requests.size)
+                controller.pause()
+                if (stopped) controller.stop()
+                main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                assertEquals("No background replacement", baseline, requests.size)
+                if (stopped) controller.restart().start()
+                controller.resume()
+                // Leave the helper alive longer than both timer and resume debounce;
+                // real auto-next navigation releases it much earlier.
+                main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                assertEquals("No resume or delayed replacement", baseline, requests.size)
+            }
+            provider.releaseNative(page)
+        }
+    }
+
+    @Test fun `language click replacement failure keeps the displayed slot and can retry`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(languageNative = request.unit)
+        }.getOrThrow())
+        val container = FrameLayout(host).also(host::setContentView)
+        val page = AdPlacement.Language1
+        provider.preloadNative(host, request.copy(placement = page))
+        val first = mock(NativeAd::class.java)
+        requests.last().onNativeAdLoaded(first)
+        var unavailable = 0
+        host.showNativeAd(page, request.unit, container, onUnavailable = {
+            unavailable++
+            container.visibility = View.GONE
+        })
+        val oldView = container.getChildAt(0)
+        assertNotNull(oldView)
+        vendorEvents.first().onAdClicked()
+        controller.pause().stop().restart().start().resume()
+        assertSame(oldView, container.getChildAt(0))
+        assertEquals(View.VISIBLE, container.visibility)
+        vendorEvents.last().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        assertEquals(0, unavailable)
+        assertSame(oldView, container.getChildAt(0))
+        assertEquals(View.VISIBLE, container.visibility)
+        verify(first, never()).destroy()
+        vendorEvents.first().onAdClicked()
+        controller.pause().resume()
+        requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertNotSame(oldView, container.getChildAt(0))
+        verify(first).destroy()
+        assertEquals(0, unavailable)
+    }
+
+    @Test fun `step click uses remote exclusive action live and freezes it across destination`() {
+        val host = controller.get()
+        val page = AdPlacement.StepNative(io.onboardkit.core.StepId.OB1)
+        val settings = io.onboardkit.remote.OnboardingSettings.document
+        val container = FrameLayout(host).also(host::setContentView)
+        provider.preloadNative(host, request.copy(placement = page))
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertTrue(provider.bindNative(host, page, container, null))
+        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}}""")
+        vendorEvents.single().onAdClicked()
+        assertEquals(1, requests.size)
+        assertEquals(com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT, provider.nativeClickAction(page))
+        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"reload"}}}}}}""")
+        vendorEvents.single().onAdOpened()
+        assertEquals(com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT, provider.nativeClickAction(page))
+        controller.pause().stop().restart().start().resume()
+        assertEquals(1, requests.size)
+        vendorEvents.single().onAdClicked()
+        assertEquals("Reload starts before pause, even on an existing helper", 2, requests.size)
+        assertEquals(com.ads.module.helper.adnative.NativeClickAction.RELOAD, provider.nativeClickAction(page))
+        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"none"}}}}}}""")
+        requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+        controller.pause().resume()
+        assertEquals(2, requests.size)
+        assertFalse(provider.isNativeReady(page))
     }
 
     @Test fun `content pager departure consumes old ad and return joins a pending preload`() {

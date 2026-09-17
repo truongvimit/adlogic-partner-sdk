@@ -3,9 +3,9 @@ package io.onboardkit.ui.pager
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
-import io.onboardkit.OnboardingSdk
 import io.onboardkit.core.StepHost
 import io.onboardkit.core.analytics.StepExit
+import com.ads.module.helper.adnative.NativeClickAction
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -73,9 +73,9 @@ abstract class LazyStepFragment : Fragment() {
      * adapter reports only the open, Pangle's only the click, and every adapter takes over
      * click handling so nothing else fills the gap.
      */
-    protected fun onStepAdEngaged() {
+    protected fun onStepAdEngaged(action: NativeClickAction) {
         if (!selected) return
-        if (OnboardingSdk.configOrNull()?.behavior?.adClickReturnCompletesStep != true) return
+        if (action != NativeClickAction.AUTO_NEXT) return
         adEngaged = true
     }
 

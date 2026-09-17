@@ -1,5 +1,7 @@
 package io.onboardkit.ads
 
+import com.ads.module.helper.adnative.NativeClickAction
+
 import android.app.Activity
 import android.content.Context
 import android.view.View
@@ -42,6 +44,10 @@ data class NativeAdRequest @JvmOverloads constructor(
  * placement then reports [AdSkipReason.NO_PROVIDER] instead of failing.
  */
 interface OnboardingAdProvider {
+
+    /** The click-time decision, shared by native replacement and host navigation. */
+    fun nativeClickAction(placement: AdPlacement): NativeClickAction =
+        io.onboardkit.remote.OnboardingSettings.nativeClickAction(placement)
 
     fun isPremium(context: Context): Boolean
 

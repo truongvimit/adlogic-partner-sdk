@@ -21,7 +21,7 @@ object AdBehavior {
     }
     fun supportsPlacementField(format: String, path: String): Boolean = when (format) {
         "banner" -> path.startsWith("reload.") || path.startsWith("presentation.")
-        "native" -> path.startsWith("reload.") || path.startsWith("presentation.") || path.startsWith("preload.") || path == "load.tier_timeout_ms"
+        "native" -> path == "click.action" || path.startsWith("reload.") || path.startsWith("presentation.") || path.startsWith("preload.") || path == "load.tier_timeout_ms"
         "interstitial" -> path in setOf("load.tier_timeout_ms", "load_and_show.wait_timeout_ms", "load_and_show.buffer_wait_timeout_ms", "presentation.loading_enabled", "cache.max_age_ms")
         "rewarded" -> path in setOf("load.tier_timeout_ms", "cache.max_age_ms")
         else -> false

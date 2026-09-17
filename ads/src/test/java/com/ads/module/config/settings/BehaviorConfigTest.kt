@@ -8,6 +8,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BehaviorConfigTest {
+    @Test fun `native click action wins over legacy reload flag and rejects invalid actions`() {
+        val config = NativeAdConfig("native", true, false, 1)
+        val actions = com.ads.module.helper.adnative.NativeClickAction.entries
+        actions.forEach { action ->
+            AdBehavior.document.acceptSuccessfulFetch("""{"native":{"click":{"action":"${action.remoteValue}"},"reload":{"on_ad_click":${action != com.ads.module.helper.adnative.NativeClickAction.RELOAD}}}}""")
+            assertEquals(action, config.resolvedClickAction)
+        }
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"click":{"action":"typo"}}}""")
+        assertEquals(com.ads.module.helper.adnative.NativeClickAction.RELOAD, config.resolvedClickAction)
+    }
+
     @After fun clearRemote() { AdBehavior.document.acceptSuccessfulFetch(null) }
 
     @Test fun `auto buffer rules resolve under the dedicated top level group`() {
