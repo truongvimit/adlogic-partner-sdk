@@ -394,12 +394,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
     private fun leaveLanguage() {
         val config = sdk.requireConfig()
-        val enabled = FlowNavigator.enabledSteps(
-            config,
-            sdk.flags(),
-            sdk.guard().isPremium(this),
-            OnboardingSdk::canFillAdOnlyStep,
-        )
+        val enabled = sdk.preload().stepDefinitions(sdk.guard().isPremium(this)).map { it.id }
         ObLog.d(ObLog.Section.NAV, "ob_language enabledSteps=${enabled.map { it.value }}")
         if (enabled.isNotEmpty()) {
             reuseInterstitialThenLeave { ObOnboardingHostActivity.start(this, resumeIndex = 0) }

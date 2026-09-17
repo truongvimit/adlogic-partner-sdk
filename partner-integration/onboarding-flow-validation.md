@@ -1,5 +1,16 @@
 # OB flow validation — 2026-09-17
 
+## Preload eligibility follow-up — 2026-09-18
+
+After release 5.3.15, tightened two timing cases: share the planned screen catalog from first OB preload through language exit/pager entry, and refresh mapped placement IDs/enabled state before dispatching a request queued for foreground focus.
+
+- 90 unique JVM tests passed across two focused runs: preload eligibility (9), preload chain (6), provider ownership (30), language preload (5), pager lifecycle (40). The initial run passed 88; two additional regression tests passed with their complete affected classes afterward.
+- The eligibility tests exercise all 64 subsets of six screens against a complete enabled ad document, app/remote disabled screens, absent/blank/disabled IDs for each of six slots, base-off with high-on, high-only IDs, master/group switches, consent, premium, UA and force-update holds.
+- Real provider tests intercept GMA requests: zero requests when queued placements become disabled/removed/blank; all six valid preloads bind without a second vendor request.
+- Real pager transactions verify a remote order/step-enable change between language preload and pager creation cannot remove planned pages. A new splash attempt picks up the new list. Live ad kill switches still block presentation.
+- `:app:assembleDebug` passed with JDK 21. This follow-up used JVM/Robolectric validation; the Pixel/Artemis results below describe the earlier release, not a rerun of this patch.
+- Preload eligibility cannot promise an impression after user abandonment, no-fill, or a later consent/entitlement/ad-config change.
+
 Device: Pixel 5, Android 14, ADB serial `14161FDD400111`.
 
 ## Automated checks

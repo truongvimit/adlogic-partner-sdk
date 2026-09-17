@@ -149,11 +149,15 @@ class ERainAdProvider(
         val job = owner.lifecycleScope.launch(start = CoroutineStart.LAZY) {
             if (activity.awaitNativeRequestWindow()) {
                 // Entitlement/host/remote authority can change while focus is absent.
+                val sdk = io.onboardkit.OnboardingSdk
+                val currentRequest = if (sdk.configuredPlacementKey(request.placement) != null) {
+                    sdk.configOrNull()?.ads?.nativeUnitFor(request.placement)?.let { request.copy(unit = it) }
+                } else request
                 if (io.onboardkit.OnboardingSdk.isReady() &&
-                    io.onboardkit.OnboardingSdk.guard().skipReason(activity, request.placement, request.unit) != null) {
+                    (currentRequest == null || sdk.guard().skipReason(activity, request.placement, currentRequest.unit) != null)) {
                     failedNativeLoads.add(key)
                     notifyNativeFailure(key)
-                } else preloadNativeNow(activity, request)
+                } else preloadNativeNow(activity, currentRequest ?: request)
             }
         }
         val pending = QueuedNative(activity, job)

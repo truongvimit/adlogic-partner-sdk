@@ -84,12 +84,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         setContentView(binding.root)
 
         val config = sdk.requireConfig()
-        enabledStepIds = FlowNavigator.enabledSteps(
-            config,
-            sdk.flags(),
-            sdk.guard().isPremium(this),
-            OnboardingSdk::canFillAdOnlyStep,
-        )
+        enabledStepIds = sdk.preload().stepDefinitions(sdk.guard().isPremium(this)).map { it.id }
         ObLog.d(ObLog.Section.SCREEN, "ob_onboarding steps=${enabledStepIds.map { it.value }}")
         if (enabledStepIds.isEmpty()) {
             finishFlow(FinishReason.EMPTY_FLOW)
@@ -134,7 +129,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     /** Keep the running pager's catalog stable when a later remote changes onboarding.order. */
     internal fun stepDefinition(id: StepId): StepDefinition? =
         (if (::pagerAdapter.isInitialized) pagerAdapter.currentPages().firstOrNull { it.definition.id == id }?.definition else null)
-            ?: sdk.configOrNull()?.stepById(id)
+            ?: sdk.preload().stepDefinitions().firstOrNull { it.id == id }
 
     private fun buildPages(): List<StepPage> {
         val contentVariant = NativeTemplates.templateForPlacement(

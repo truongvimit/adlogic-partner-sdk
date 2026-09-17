@@ -3,11 +3,11 @@ package io.onboardkit.ads
 import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import io.onboardkit.config.OnboardKitConfig
+import io.onboardkit.config.StepDefinition
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 import io.onboardkit.flow.FlowDestination
-import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.remote.RemoteFlags
 
 /**
@@ -27,17 +27,35 @@ class PreloadChain internal constructor(
 ) {
 
     private val requestedSteps = mutableSetOf<AdPlacement>()
+    private var plannedSteps: List<StepDefinition>? = null
     private var splashAttemptId: String? = null
     private var language1HandoffPending = false
 
     internal fun beginSplashAttempt(id: String) {
         if (splashAttemptId == id) return
-        requestedSteps.clear()
+        resetStepRequests()
         splashAttemptId = id
         language1HandoffPending = false
     }
 
-    internal fun resetStepRequests() { requestedSteps.clear() }
+    internal fun resetStepRequests() {
+        requestedSteps.clear()
+        plannedSteps = null
+    }
+
+    /** Freeze order/enabled screens at first preload so language exit and pager use the same plan.
+     * Ad eligibility remains live: a purchase or placement kill switch must still win.
+     */
+    internal fun stepDefinitions(isPremium: Boolean = false): List<StepDefinition> {
+        val cfg = config() ?: return emptyList()
+        val planned = plannedSteps ?: cfg.steps.filter {
+            it.enabled && flags().isStepEnabled(it.id)
+        }.also { plannedSteps = it }
+        return planned.filterNot {
+            it.type == StepType.AD_FULL_SCREEN &&
+                ((isPremium && cfg.ads.skipAdOnlyStepsWhenPremium) || !canShowAdStep(it.id))
+        }
+    }
 
     /** Transfers scheduling metadata only. Ads and terminal outcomes stay in the provider. */
     internal fun takeLanguage1Preload(): Boolean = language1HandoffPending.also {
@@ -133,8 +151,7 @@ class PreloadChain internal constructor(
     }
 
     private fun preloadForStep(activity: Activity, stepId: StepId) {
-        val cfg = config() ?: return
-        when (cfg.stepById(stepId)?.type) {
+        when (stepDefinitions().firstOrNull { it.id == stepId }?.type) {
             StepType.CONTENT -> preloadNative(activity, AdPlacement.StepNative(stepId))
             StepType.AD_FULL_SCREEN -> preloadNative(activity, AdPlacement.StepFullScreen(stepId))
             null -> Unit
@@ -185,7 +202,6 @@ class PreloadChain internal constructor(
      * pager will build, so preloading against an unfiltered one warms the ad of the wrong page.
      */
     private fun enabledSteps(): List<StepId> {
-        val cfg = config() ?: return emptyList()
-        return FlowNavigator.enabledSteps(cfg, flags(), canShowAdStep = canShowAdStep)
+        return stepDefinitions().map { it.id }
     }
 }

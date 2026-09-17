@@ -247,6 +247,30 @@ class OnboardingAdLifecycleTest {
         assertTrue(pager.isUserInputEnabled)
     }
 
+    @Test fun `remote order changing after language preload cannot remove planned pages before pager entry`() {
+        OnboardingSdk.configure(onboardKitConfig {
+            defaultSteps()
+            ads = AdsConfig(contentStepNative = NativeAdUnit("content"), fullScreenStepNative = NativeAdUnit("full"))
+        }.getOrThrow()).getOrThrow()
+        val language = Robolectric.buildActivity(android.app.Activity::class.java).get()
+        OnboardingSdk.preload().onLanguageSelected(language)
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"onboarding":{"order":["ob4"],"steps":{"ob2":{"enabled":false}}}}""")
+        controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
+        activity.setTheme(R.style.ob_Theme_OnboardKit)
+        requireNotNull(controller).setup().visible()
+        layout()
+        val expected = listOf(StepId.OB1, StepId.FULL1, StepId.OB2, StepId.FULL2, StepId.OB3, StepId.OB4)
+        assertEquals(6, pager.adapter!!.itemCount)
+        expected.forEachIndexed { index, id ->
+            assertEquals(id, activity.stepIdAt(index))
+            assertEquals(id, activity.stepDefinition(id)?.id)
+        }
+        pager.setCurrentItem(2, false)
+        layout()
+        assertTrue(listeners.containsKey(AdPlacement.StepNative(StepId.OB2)))
+    }
+
     @Test fun `all middle content except OB1 allows swipe regardless of position`() {
         launch(first = ContentStepDefinition(StepId.OB3), second = ContentStepDefinition(StepId.OB1), lockSwipe = false)
         assertTrue(pager.isUserInputEnabled)

@@ -59,7 +59,7 @@ Ví dụ này hiển thị **OB4 → Full2 → OB1 → OB3**, không preload OB2
 - `onboarding.steps.<id>.enabled = false` tắt thêm một màn; không thể mở lại `enabled = false` của app.
 - Quy tắc ưu tiên settings vẫn là remote hợp lệ → custom asset → app → default SDK. Không khai báo lại ad unit ID trong `onboarding_config`.
 
-Danh sách được đọc khi preload ở LFO và lập pager sau đó; pager không tự reorder màn đang chạy. Publish trước lần mở app/fetch tiếp theo để thử flow mới. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại.
+Danh sách và trạng thái bật/tắt màn được chốt tại lần preload OB đầu tiên ở LFO; LFO exit và pager dùng chung danh sách đó. Nếu vào thẳng pager mà chưa preload thì chốt tại pager entry. Remote đổi order/tắt màn sau thời điểm này áp dụng từ lượt splash tiếp theo, không loại một màn đã lên kế hoạch preload. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại.
 
 ## Bật ads trên Firebase
 
@@ -86,6 +86,10 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 ## Preload và vòng đời ads
 
 Tại callback **chọn ngôn ngữ đầu tiên** (vị trí trước đây preload OB1/OB2), SDK preload tất cả native thuộc danh sách OB hợp lệ: tối đa OB1, OB2, OB3, OB4, Full1, Full2. Không chờ tất cả tải xong mới cho tiếp tục LFO.
+
+Điều kiện preload là **màn có trong danh sách đã chốt và được bật + placement có ID sử dụng được và được bật + các gate ads đều cho phép**. Chỉ có ID trong ad config không tự tạo request. `isEnable = false` ở placement gốc tắt cả waterfall, kể cả tầng `_high` vẫn bật. Request đang chờ foreground/focus kiểm tra lại placement và lấy ID hiện tại trước khi gửi.
+
+Danh sách màn được giữ ổn định, nhưng các chặn ads (placement/master switch, premium, consent, force update, UA) vẫn có hiệu lực. SDK chỉ preload khi chưa biết có điều kiện chặn show; không thể bảo đảm mỗi preload đều có impression: người dùng có thể thoát/chuyển trang trước fill, ads no-fill, hoặc điều kiện ads thay đổi sau khi request đã gửi. Những thay đổi này vẫn phải chặn show; request đã gửi không thể thu hồi.
 
 `inter_after_ob3` preload khi vào pager (OB1 trong flow mặc định); reorder không biến tên interstitial thành ràng buộc phải gặp OB3. Splash, UMP, billing và LFO giữ lịch chạy hiện có.
 

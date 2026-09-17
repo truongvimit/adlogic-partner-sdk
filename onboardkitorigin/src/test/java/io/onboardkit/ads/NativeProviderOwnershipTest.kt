@@ -248,6 +248,74 @@ class NativeProviderOwnershipTest {
         }
     }
 
+    @Test fun `queued OB preload rechecks disabled removed and blank placement IDs before spending a request`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig { defaultSteps() }.getOrThrow()).getOrThrow()
+        sdk.setCanRequestAds(true)
+        val adConfig = com.ads.module.config.AdRemoteConfig
+        val slot = AdPlacement.StepNative(io.onboardkit.core.StepId.OB2)
+        val oldRequest = request.copy(placement = slot)
+        try {
+            val blocked = listOf(
+                emptyMap(),
+                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig("native-test", false),
+                    "native_ob2_high" to com.ads.module.config.AdUnitConfig("high", true)),
+                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig(" ", true)),
+            )
+            blocked.forEach { entries ->
+                adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_ob2" to
+                    com.ads.module.config.AdUnitConfig("native-test", true))))
+                controller.pause().stop()
+                provider.preloadNative(host, oldRequest)
+                assertTrue(provider.isNativeLoading(slot))
+                adConfig.update(com.ads.module.config.AdRemoteConfig(entries))
+                controller.restart().start().resume().visible().windowFocusChanged(true)
+                main.idle()
+                assertEquals("A queued placement that cannot show must never reach GMA", 0, requests.size)
+                assertFalse(provider.isNativeLoading(slot))
+                assertTrue(provider.isNativeLoadFailed(slot))
+                provider.releaseNative(slot)
+            }
+        } finally {
+            adConfig.reset()
+        }
+    }
+
+    @Test fun `every eligible OB preload can bind its fill without issuing another vendor request`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig { defaultSteps() }.getOrThrow()).getOrThrow()
+        sdk.setCanRequestAds(true)
+        sdk.preload().beginSplashAttempt("all-six-bind")
+        val ids = listOf("ob1", "full1", "ob2", "full2", "ob3", "ob4")
+        val adConfig = com.ads.module.config.AdRemoteConfig
+        try {
+            adConfig.update(com.ads.module.config.AdRemoteConfig(ids.associate {
+                "native_$it" to com.ads.module.config.AdUnitConfig("native-$it", true)
+            }))
+            sdk.preload().onLanguageSelected(host)
+            assertEquals(6, requests.size)
+            ids.forEachIndexed { index, id ->
+                val ad = mock(NativeAd::class.java)
+                requests[index].onNativeAdLoaded(ad)
+                val slot = if (id.startsWith("full")) AdPlacement.StepFullScreen(io.onboardkit.core.StepId(id))
+                    else AdPlacement.StepNative(io.onboardkit.core.StepId(id))
+                val container = FrameLayout(host).also(host::setContentView)
+                var bound = false
+                host.showNativeAd(slot, sdk.requireConfig().ads.nativeUnitFor(slot), container,
+                    onBound = { bound = true }, onUnavailable = { fail("$id was preloaded but rejected: $it") })
+                assertTrue("$id must bind the preloaded ad", bound)
+                assertEquals(6, requests.size)
+                provider.releaseNative(slot)
+            }
+        } finally {
+            adConfig.reset()
+        }
+    }
+
     @Test fun `language handoff reports failed preload without requesting the same ad again`() {
         val host = controller.get()
         io.onboardkit.OnboardingSdk.install(host.application) {
