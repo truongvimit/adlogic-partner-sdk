@@ -279,7 +279,7 @@ public class Admob {
         isTimeDelay = false;
         isTimeout = false;
 
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -371,7 +371,7 @@ public class Admob {
         isTimeDelay = false;
         isTimeout = false;
 
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -759,7 +759,7 @@ public class Admob {
      * Requests an interstitial and returns it through {@code adCallback}.
      */
     public void getInterstitialAds(Context context, String id, AdCallback adCallback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context) || isClickCapReached(context, id)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context) || isClickCapReached(context, id)) {
             adCallback.onInterstitialLoad(null);
             return;
         }
@@ -1234,7 +1234,7 @@ public class Admob {
     private void loadBanner(final Activity mActivity, String id,
                             final FrameLayout adContainer, final ShimmerFrameLayout containerShimmer,
                             final AdCallback callback, AdSize adSize, int shimmerHeightDp) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1330,7 +1330,7 @@ public class Admob {
 
     private void loadCollapsibleBanner(final Activity mActivity, String id, String gravity, final FrameLayout adContainer,
                                        final ShimmerFrameLayout containerShimmer, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1406,7 +1406,7 @@ public class Admob {
 
     private void loadCollapsibleAutoSizeMedium(final Activity mActivity, String id, String gravity, AdSize sizeBanner, final FrameLayout adContainer,
                                                final ShimmerFrameLayout containerShimmer, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
             // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
             containerShimmer.stopShimmer();
             containerShimmer.setVisibility(View.GONE);
@@ -1540,7 +1540,7 @@ public class Admob {
     }
 
     public void loadNativeAd(Context context, String id, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         VideoOptions videoOptions = new VideoOptions.Builder()
@@ -1600,7 +1600,7 @@ public class Admob {
     }
 
     public void loadNativeAds(Context context, String id, final AdCallback callback, int countAd) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             callback.onAdClosed();
             return;
         }
@@ -1649,7 +1649,7 @@ public class Admob {
     }
 
     private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1714,7 +1714,7 @@ public class Admob {
     }
 
     private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1783,7 +1783,7 @@ public class Admob {
     }
 
     public void loadNativeAdsFullScreen(Context context, String id, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
 
@@ -1834,7 +1834,7 @@ public class Admob {
     }
 
     public void loadNativeAdsFullScreen(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             containerShimmer.setVisibility(View.GONE);
             return;
         }
@@ -1995,7 +1995,7 @@ public class Admob {
      * Buffers a rewarded ad; premium users return without a request.
      */
     public void initRewardAds(Context context, String id) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         this.nativeId = id;
@@ -2023,7 +2023,7 @@ public class Admob {
      * Buffers a rewarded ad; premium users return without a request.
      */
     public void initRewardAds(Context context, String id, AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
         }
         this.nativeId = id;
@@ -2054,7 +2054,7 @@ public class Admob {
      * Buffers a rewarded interstitial; premium users return without a request.
      */
     public void getRewardInterstitial(Context context, String id, AdCallback callback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             // No helper wraps this format, so the skip is only visible if reported from here
             AdTracking.skipped(PlacementRegistry.placementOf(id), AdFormat.REWARDED_INTERSTITIAL,
                     AdSkipReason.PURCHASED.getKey());
@@ -2852,7 +2852,7 @@ public class Admob {
     private void loadInterSplashHigh1(final Context context, String id, long timeOut, long timeDelay, boolean showSplashIfReady, AdCallback adListener) {
         isTimeDelayHigh1 = false;
         isTimeoutHigh1 = false;
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3101,7 +3101,7 @@ public class Admob {
     private void loadInterSplashHigh2(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayHigh2 = false;
         isTimeoutHigh2 = false;
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3344,7 +3344,7 @@ public class Admob {
     private void loadInterSplashHigh3(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayHigh3 = false;
         isTimeoutHigh3 = false;
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -3587,7 +3587,7 @@ public class Admob {
     private void loadInterSplashNormal(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
         isTimeDelayNormal = false;
         isTimeoutNormal = false;
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }

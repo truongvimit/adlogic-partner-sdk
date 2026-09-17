@@ -98,6 +98,8 @@ class SplashLongPromptTest {
         ConsentCenter.reset(app)
         org.robolectric.util.ReflectionHelpers.setField(com.ads.module.config.AdConfig, "source", null)
         main.idle()
+        assertEquals("Destroyed splash must release its request hold", false,
+            com.ads.module.helper.AdGate.areRequestsHeld())
     }
 
     private fun mandatoryUpdate() = com.ads.module.update.ForceUpdateConfig(
@@ -106,15 +108,47 @@ class SplashLongPromptTest {
     )
 
     private fun reachUpdateBoundary() {
-        drainUntil("Ad requests must start before the update barrier") {
-            LongPromptFixture.provider.pending != null
+        drainUntil("Mandatory update must appear before any ad request") {
+            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
         }
+    }
+
+    private fun assertNoUpdateAdRequests() {
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+        assertTrue(LongPromptFixture.provider.nativeRequests.isEmpty())
+        assertTrue(LongPromptFixture.provider.order.isEmpty())
+        assertEquals(0, LongPromptFixture.paywallCalls)
+        assertEquals(true, com.ads.module.helper.AdGate.areRequestsHeld())
+    }
+
+    @Test
+    fun currentVersionAndOptionalUpdateReleaseRequestsNormally() {
+        val current = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(
+            app.packageManager.getPackageInfo(app.packageName, 0),
+        )
+        LongPromptFixture.updateConfig = mandatoryUpdate().copy(minVersionCode = current)
+        launch(notification = false)
+        drainUntil("Current version must be allowed to load") { LongPromptFixture.provider.pending != null }
+        assertEquals(false, com.ads.module.helper.AdGate.areRequestsHeld())
+        completeInterstitialAndAssertNormalHandoff()
+        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    @Test
+    fun optionalUpdateDoesNotKeepTheRequestHold() {
+        LongPromptFixture.updateConfig = mandatoryUpdate().copy(force = false)
+        launch(notification = false)
+        drainUntil("Optional update still allows loads") { LongPromptFixture.provider.pending != null }
+        assertEquals(false, com.ads.module.helper.AdGate.areRequestsHeld())
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idleFor(Duration.ofSeconds(4))
-        drainUntil("Update gate must hold the presentation boundary") {
-            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
-        }
+        reachUpdateBoundary()
+        org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+            .getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
     }
 
     @Test
@@ -169,16 +203,17 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun sameTimeAndNotificationStillStartBeforeRemoteAndUpdateGate() {
+    fun sameTimeWaitsForRemoteAndSendsZeroRequestsWhenForceUpdateIsRequired() {
         LongPromptFixture.strategy = io.onboardkit.config.AdLoadStrategy.SAME_TIME
         LongPromptFixture.remoteTimeoutMs = 60_000
         LongPromptFixture.remoteWait = CompletableDeferred()
         LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = true)
         val host = requireNotNull(controller).get()
-        drainUntil("Notification and SAME_TIME load must overlap pending remote") {
-            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.provider.interstitialLoads == 1
+        drainUntil("Consent, billing and notification still overlap pending remote") {
+            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.remoteEntered
         }
+        assertNoUpdateAdRequests()
         assertEquals(true, LongPromptFixture.billingEntered)
         assertEquals(false, LongPromptFixture.remoteHookCalled)
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
@@ -187,21 +222,23 @@ class SplashLongPromptTest {
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
         reachUpdateBoundary()
+        main.idleFor(Duration.ofSeconds(60))
+        assertNoUpdateAdRequests()
         assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun alternatePreloadsAndClocksRunBeforeMandatoryGateAcrossRecreation() {
+    fun alternateSendsZeroRequestsDuringForceUpdateAndRecreation() {
         LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = false)
         reachUpdateBoundary()
-        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(1, LongPromptFixture.provider.bannerLoads)
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.provider.bannerLoads)
         assertEquals(true, LongPromptFixture.billingEntered)
         assertEquals(true, LongPromptFixture.ump.allowed)
-        assertEquals(true, LongPromptFixture.remoteHookCalled)
-        assertTrue("native" in LongPromptFixture.provider.order)
+        assertEquals(false, LongPromptFixture.remoteHookCalled)
+        assertNoUpdateAdRequests()
         assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
         val previous = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
@@ -209,7 +246,7 @@ class SplashLongPromptTest {
         main.idle()
         assertEquals(false, previous.isShowing)
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
-        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
         LongPromptFixture.updateConfig = null
         requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
         main.idle()
@@ -234,8 +271,10 @@ class SplashLongPromptTest {
         requireNotNull(controller).pause().stop().destroy()
         LongPromptFixture.remoteWait = null
         LongPromptFixture.provider.pending = null
+        val previousLoads = LongPromptFixture.provider.interstitialLoads
         launch(notification = false)
         reachUpdateBoundary()
+        assertEquals(previousLoads, LongPromptFixture.provider.interstitialLoads)
         assertEquals(2, LongPromptFixture.updateReads)
         assertEquals(1, LongPromptFixture.flowStarts)
     }

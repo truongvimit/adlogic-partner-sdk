@@ -15,6 +15,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -222,12 +223,23 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // request made while it is still unknown reaches a paying user. Billing was started in
             // Application.onCreate, so this usually returns having waited on nothing.
             billing.await()
-            // SAME_TIME spends what is left of the fetch window loading with the compiled ad ids;
-            // ALTERNATE waits so that a remote id override can still apply.
+            // Even SAME_TIME must wait for the update verdict: requests sent before remote
+            // answers cannot be recovered if this launch turns out to require a mandatory update.
+            // UMP, remote, billing and the notification prompt above still overlap as before.
+            remote.await()
+            val installed = PackageInfoCompat.getLongVersionCode(
+                packageManager.getPackageInfo(packageName, 0),
+            )
+            if (attempt.updateConfig.isRequired(installed)) {
+                notification.await()
+                awaitSplashFocus()
+                ForceUpdateGate.await(this@ObSplashActivity, attempt.updateConfig)
+                attempt.updateGatePassed = true
+            }
+            attempt.allowAdRequests()
             if (cfg.splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) {
                 requestSplashAds(deferIfUnauthorized = true)
             }
-            remote.await()
             if (!attempt.remoteHookResolved) {
                 onRemoteFetched()
                 attempt.remoteHookResolved = true
@@ -545,8 +557,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
             awaitMinimumDisplay()
             awaitPresentationWindow()
             if (!attempt.updateGatePassed) {
-                // All init/load/preload and ordinary splash clocks keep their original timing.
-                // Only an enabled policy for an outdated app can suspend this final barrier.
+                // Only the optional update prompt reaches this point; mandatory policy was
+                // handled before permitting any ad load or preload.
                 ForceUpdateGate.await(this, attempt.updateConfig)
                 attempt.updateGatePassed = true
                 awaitPresentationWindow()
@@ -713,8 +725,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     /**
      * Read activated update policy once after the existing remote step settles (including timeout).
-     * Must not fetch or wait. The snapshot survives Activity recreation and is enforced only at
-     * the presentation boundary, leaving consent/billing/notification/load/preload timing intact.
+     * Must not fetch or wait. The snapshot survives Activity recreation and is enforced
+     * before any ad request for mandatory updates, or at presentation for optional prompts.
+     * Consent/billing/notification still overlap; ad requests wait for this policy in all modes.
      * Default off; hosts may read FirebaseUpdateConfig.activated() here.
      */
     protected open fun readForceUpdateConfig(): ForceUpdateConfig = ForceUpdateConfig()

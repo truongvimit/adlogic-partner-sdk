@@ -8,6 +8,9 @@ package com.ads.module.helper
  */
 enum class AdSkipReason(val key: String) {
 
+    /** Startup policy is unresolved or requires an app update. */
+    REQUESTS_HELD("requests_held"),
+
     /** The placement is disabled in config or has no usable ad unit id. */
     DISABLED_CONFIG("disabled_config"),
 

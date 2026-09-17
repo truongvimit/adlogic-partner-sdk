@@ -68,6 +68,7 @@ class AdsGuard internal constructor(
 
     /** Shared master/host/consent eligibility; no OPEN-only placement flag or unit requirement. */
     internal fun resumeEntrySkipReason(context: Context): AdSkipReason? {
+        if (com.ads.module.helper.AdGate.areRequestsHeld()) return AdSkipReason.REQUESTS_HELD
         if (isPremium(context)) return AdSkipReason.PREMIUM
         if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
         if (provider == null) return AdSkipReason.NO_PROVIDER

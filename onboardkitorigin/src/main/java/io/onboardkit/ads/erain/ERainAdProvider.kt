@@ -572,6 +572,7 @@ class ERainAdProvider(
 
     // Exhaustive so adding a store reason forces a mapping decision here
     private fun mapReason(reason: SdkAdSkipReason): AdSkipReason = when (reason) {
+        SdkAdSkipReason.REQUESTS_HELD -> AdSkipReason.REQUESTS_HELD
         SdkAdSkipReason.NOT_READY -> AdSkipReason.NOT_READY
         SdkAdSkipReason.CAPPED_BY_MODULE -> AdSkipReason.CAPPED_BY_ADS_MODULE
         SdkAdSkipReason.FAILED_TO_SHOW -> AdSkipReason.FAILED_TO_SHOW

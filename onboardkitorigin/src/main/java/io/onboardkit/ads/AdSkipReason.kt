@@ -8,6 +8,9 @@ package io.onboardkit.ads
  */
 enum class AdSkipReason(val key: String) {
 
+    /** Waiting for startup update policy, or a mandatory update prevents ad requests. */
+    REQUESTS_HELD("requests_held"),
+
     /** The user bought the ad-free entitlement. */
     PREMIUM("premium"),
 

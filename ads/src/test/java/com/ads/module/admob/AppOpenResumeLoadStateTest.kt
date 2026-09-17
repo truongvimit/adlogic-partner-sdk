@@ -83,6 +83,19 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
+    fun `startup update hold prevents background resume requests until released`() {
+        enable()
+        com.ads.module.helper.AdGate.holdRequests().use {
+            nextBackground()
+            main.idleFor(120_000, TimeUnit.MILLISECONDS)
+            assertTrue(requests.isEmpty())
+        }
+        manager.onResume()
+        nextBackground()
+        assertEquals(1, requests.size)
+    }
+
+    @Test
     fun `disabling open_resume then re-enabling it restores the unit in the same process`() {
         AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":true}}""")
         enable()

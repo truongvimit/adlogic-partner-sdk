@@ -6,19 +6,21 @@
 
 `com.ads.module.update.ForceUpdateGate` giữ navigation khi app quá cũ. Người dùng hủy Play hoặc quay lại từ Store khi chưa cập nhật vẫn ở gate. Đã bỏ điều kiện lỗi `needsUpdate || force` ở Main: bản đạt ngưỡng không còn bị chặn chỉ vì `force=true`.
 
-## Một quyết định cho mỗi lần mở app, giữ nguyên timing splash
+## Một quyết định mỗi lần mở app; force update không gửi request quảng cáo
 
-**UMP, Remote Config và billing vẫn chạy song song theo pipeline cũ.** Update không thêm fetch, không thêm timeout, không chuyển init/load/preload thành luồng tuần tự.
+**UMP, Remote Config và billing vẫn chạy song song.** SDK không thêm fetch hoặc timeout cho update. Notification vẫn được xử lý sau UMP theo flow cũ.
 
-1. Bước remote hiện có hoàn tất hoặc timeout: gọi `readForceUpdateConfig()` một lần để chốt policy đã activate.
-2. Notification, load `SAME_TIME` / `ALTERNATE`, LFO/native preload và các timer tiếp tục ở vị trí cũ. `SAME_TIME` vẫn có thể load trong lúc remote chưa xong; `ALTERNATE` load sau remote.
-3. Khi splash đã sẵn sàng show fullscreen/đi tiếp (sau minimum display và các bước chờ quảng cáo cũ), SDK xét **policy đã chốt**. Mặc định tắt thì trả về ngay; bắt buộc update thì chỉ chặn tại đây.
-4. Policy và trạng thái gate thuộc `SplashAttempt` ViewModel, giữ nguyên qua Activity recreation. Tạo lại Activity không fetch/chốt lại policy chỉ vì update.
-5. Không có observer/realtime listener, không đọc lại policy trong callback quảng cáo, paywall hoặc màn bên trong. Remote thay đổi sau khi chốt được dùng ở **lần mở app/splash mới** khi bước fetch remote chạy lại.
+1. Splash giữ khóa request quảng cáo ngay từ lúc tạo attempt. SDK helpers, API load cũ, app-open loader và auto buffer đều tôn trọng khóa này.
+2. Bước remote hiện có hoàn tất hoặc timeout: gọi `readForceUpdateConfig()` một lần để chốt policy đã activate.
+3. Nếu `enabled=true`, `force=true` và version app thấp hơn `minVersionCode`: giữ khóa, hiện update khi consent/notification kết thúc; **không load banner/interstitial, không preload native/LFO/splash-native, không mở paywall hoặc màn tiếp theo**.
+4. Nếu không bắt buộc update: mở khóa rồi mới bắt đầu requests và timer quảng cáo. Với update gợi ý (`force=false`), dialog vẫn ở ranh giới presentation, sau các bước load bình thường.
+5. Snapshot và khóa thuộc `SplashAttempt` ViewModel, tồn tại qua recreate. Khóa được giải phóng khi attempt kết thúc/hủy vĩnh viễn. Không có observer/realtime listener hoặc kiểm tra remote lại giữa màn bên trong.
 
-**Không cần mở app hai lần để bật update:** nếu lần fetch của lần mở hiện tại nhận và activate `enabled=true`, chính lần mở đó bị yêu cầu update. Chỉ những thay đổi đến sau snapshot mới đợi lần mở tiếp theo.
+**Đánh đổi bắt buộc:** cả `SAME_TIME` và `ALTERNATE` phải đợi verdict remote trước request đầu tiên. Không thể vừa gửi request trong lúc chưa biết policy, vừa bảo đảm không phí request khi remote trả force update. UMP/billing/init không chuyển thành tuần tự; không tăng timeout fetch hay thêm thời gian chờ riêng. Sau khi được phép load, minimum/ad-budget vẫn bắt đầu và vận hành theo quy tắc cũ.
 
-Đối với `force=true`, thời gian người dùng ở dialog là thời gian cố ý chặn đi tiếp; nó không kéo dài hay khởi động lại timeout/minimum của init, UMP, billing, load hoặc preload. Gate đặt ngoài các timeout nên hết thời gian chờ quảng cáo không tự bỏ qua yêu cầu update.
+**Không cần mở app hai lần:** nếu fetch lần mở hiện tại nhận/activate `enabled=true`, policy đó áp dụng ngay lần này. Remote đổi sau snapshot chỉ được xét ở lần mở splash mới. Timeout chưa có remote thì snapshot tắt; remote đã activate hợp lệ trước đó vẫn là nguồn chính sách hiện có.
+
+Khóa chỉ ngăn request mới qua AdLogic từ khi attempt bắt đầu; không thu hồi được request đã gửi ở lần chạy trước hoặc request host tự gọi trực tiếp Google SDK ngoài AdLogic. Standalone host phải đặt gate trước mọi lời gọi load/preload của mình; nếu có loader chạy nền, dùng `AdGate.holdRequests()` trong khi chờ remote và đóng token khi verdict cho phép. `ForceUpdateGate` tự giữ một khóa riêng trong suốt dialog bắt buộc, giải phóng khi scope bị hủy.
 
 ## Mặc định tắt, chỉ remote true mới bật
 
@@ -100,9 +102,9 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-`activated()` **không fetch lại**. SDK gọi hook một lần sau bước remote, giữ snapshot trong attempt và tự gọi `ForceUpdateGate` tại ranh giới presentation. Host không cần tự giữ Activity/dialog/listener cho update.
+`activated()` **không fetch lại**. SDK gọi hook một lần sau bước remote, giữ snapshot trong attempt và xử lý force update trước khi mở khóa request quảng cáo. Update gợi ý được hiện ở ranh giới presentation. Host không cần tự giữ Activity/dialog/listener cho update.
 
-Không đặt fetch riêng trước UMP, không dùng getter phụ thuộc `RemoteConfigUtils.completed` và không chèn gate vào trước init/load/preload. Default hook trả `ForceUpdateConfig()` (tắt); dependency hoặc Firebase setup đơn thuần không bật tính năng.
+Không đặt fetch riêng trước UMP và không dùng getter phụ thuộc `RemoteConfigUtils.completed`. SDK tự chặn requests trước khi có verdict, host không cần tự quản lý khóa khi dùng OnboardKit. Default hook trả `ForceUpdateConfig()` (tắt); dependency hoặc Firebase setup đơn thuần không bật tính năng.
 
 ## Không dùng OnboardKit / Firebase
 
@@ -175,11 +177,11 @@ Giữ manager sống khi tải FLEXIBLE. Khi `DOWNLOADED`, manager tự gọi `c
 
 ## QA / rollout
 
-- UMP chậm hơn remote, remote chậm hơn UMP: hai bước vẫn song song, policy được chốt sau bước remote và UI update chỉ xuất hiện tại ranh giới presentation.
+- UMP chậm hơn remote, remote chậm hơn UMP: vẫn chạy song song; không có request ads trước verdict, không chồng update với consent/notification.
 - Không có remote, remote false, local true, JSON lỗi: không bật gate. Remote true chỉ chặn version thấp.
 - Fetch timeout không có remote đã activate: đi tiếp. Offline có remote true đã activate: vẫn theo policy đó.
 - Force true: Back/hủy Play/quay lại từ Store chưa update/recreate không làm lọt navigation.
-- SAME_TIME và ALTERNATE: load/preload/notification/minimum giữ nguyên lịch cũ; gate chỉ chặn fullscreen/đi tiếp khi policy của attempt yêu cầu update.
+- SAME_TIME và ALTERNATE: force update phải có 0 request banner/interstitial/native và không có request app-open/auto-buffer mới. Khi verdict cho phép, load và timer ads mới bắt đầu.
 - Tắt bằng remote `enabled=false` rồi fetch/activate ở lần mở splash mới; dialog/attempt đang chạy không tự refresh, kể cả recreate.
 - Bản mới phải có sẵn cho đúng track/quốc gia/nhóm rollout trước khi nâng threshold, tránh chặn người chưa tải được update.
 - App chưa có phần tích hợp này phải được phát hành bản mới trước; Remote Config không bổ sung code vào APK cũ.

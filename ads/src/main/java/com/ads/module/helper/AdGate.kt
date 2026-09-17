@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The single pre-request gate shared by every helper and manager: answers "may this
@@ -27,6 +29,25 @@ import kotlin.coroutines.CoroutineContext
  * UA gate — so existing dashboards keep reading the same reason for the same state.
  */
 object AdGate {
+    private val requestHolds = AtomicInteger()
+
+    /**
+     * Blocks new helper, legacy and background requests while a startup policy is unresolved.
+     * The owner must close the token when ads are permitted or the owner is permanently destroyed.
+     * This does not change consent, entitlement or remote ad settings.
+     */
+    @JvmStatic
+    fun holdRequests(): AutoCloseable {
+        requestHolds.incrementAndGet()
+        val closed = AtomicBoolean()
+        return AutoCloseable {
+            if (closed.compareAndSet(false, true)) requestHolds.decrementAndGet()
+        }
+    }
+
+    @JvmStatic
+    fun areRequestsHeld(): Boolean = requestHolds.get() > 0
+
 
     @JvmStatic
     @JvmOverloads
@@ -36,6 +57,7 @@ object AdGate {
         passesUaGate: Boolean = true,
         checkNetwork: Boolean = true,
     ): AdSkipReason? = when {
+        areRequestsHeld() -> AdSkipReason.REQUESTS_HELD
         !enabled || !com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") -> AdSkipReason.DISABLED_CONFIG
         isPurchased(context) -> AdSkipReason.PURCHASED
         checkNetwork && !isNetworkAvailable(context) -> AdSkipReason.OFFLINE

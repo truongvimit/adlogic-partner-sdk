@@ -110,6 +110,20 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
+    fun `startup update hold prevents automatic buffer requests and allows them after release`() {
+        com.ads.module.helper.AdGate.holdRequests().use {
+            arm()
+            advance(60_000)
+            InterstitialAutoBuffer.topUpNow()
+            main.idle()
+            assertEquals(0, requests.size)
+        }
+        InterstitialAutoBuffer.topUpNow()
+        main.idle()
+        assertEquals(2, requests.size)
+    }
+
+    @Test
     fun `remote auto buffer switch only blocks managed placements and can reenable them`() {
         assertTrue(AdBehavior.defaultBool("interstitial_auto_buffer.enabled"))
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":false}}""")

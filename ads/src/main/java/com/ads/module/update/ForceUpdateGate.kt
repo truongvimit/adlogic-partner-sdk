@@ -9,6 +9,7 @@ import android.os.Looper
 import android.widget.Toast
 import androidx.core.content.pm.PackageInfoCompat
 import com.ads.module.R
+import com.ads.module.helper.AdGate
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ump.ITGUpdateManager
 import com.ads.module.ump.IUpdateInstanceCallback
@@ -32,8 +33,17 @@ object ForceUpdateGate {
         )
         if (!config.needsUpdate(installed)) return@withContext
         if (activity.isFinishing || activity.isDestroyed) throw kotlinx.coroutines.CancellationException("Host destroyed")
+        val requestHold = if (config.isRequired(installed)) AdGate.holdRequests() else null
+        try {
+            awaitDialog(activity, config)
+        } finally {
+            requestHold?.close()
+        }
+    }
+
+    private suspend fun awaitDialog(activity: Activity, config: ForceUpdateConfig) {
         suspendCancellableCoroutine<Unit> { continuation ->
-            val required = config.isRequired(installed)
+            val required = config.force
             val dialog = AlertDialog.Builder(activity)
                 .setTitle(config.title.ifBlank { activity.getString(R.string.adlogic_update_title) })
                 .setMessage(config.description.ifBlank { activity.getString(R.string.adlogic_update_message) })

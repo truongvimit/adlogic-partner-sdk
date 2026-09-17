@@ -534,8 +534,10 @@ versions; a mandatory policy remains blocking after Play cancellation or a Store
 `FirebaseUpdateConfig.fetch()` for standalone hosts, for the separate `force_update_config` parameter.
 Only activated remote values can enable the Firebase integration; missing/malformed/local defaults
 are off. OnboardKit hosts override `readForceUpdateConfig()` to supply a snapshot after the existing remote
-step. The attempt retains that snapshot across recreation and checks it only before fullscreen
-presentation/navigation; init, notification, load/preload and timers keep their original schedule.
+step. The attempt retains that snapshot and its request hold across recreation. Mandatory updates block
+all new AdLogic requests, including background loaders. Both SAME_TIME and ALTERNATE wait for the
+remote verdict before loading; UMP/billing/remote still overlap and no extra fetch is introduced.
+An optional prompt stays at the presentation boundary after ordinary ad loading.
 Later remote changes apply on the next splash launch, without observers or ad-callback checks. These APIs are opt-in, and do not start from AdsMultiDexApplication.
 
 See the [detailed Vietnamese integration guide](../partner-integration/force-update-integration.vi.md)

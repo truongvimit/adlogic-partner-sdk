@@ -528,6 +528,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Resume dispatch/configuration/cache mutations run on main. Raw splash keeps its own path.
      */
     public void fetchAd(final boolean isSplash) {
+        if (AdGate.areRequestsHeld()) return;
         if (!isSplash && Looper.myLooper() != Looper.getMainLooper()) {
             resumeFetchHandler.post(() -> fetchAd(false));
             return;
@@ -653,7 +654,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                 };
         if (isSplash) loadCallback = requestCallback;
         if (currentActivity != null) {
-            if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(currentActivity)) {
+            if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(currentActivity)) {
                 if (!isSplash && ownsResumeFetch(generation)) cancelResumeFetch(false);
                 return;
             }
@@ -1161,7 +1162,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         statusMedium = Type_Loading;
         statusAll = Type_Loading;
 
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -1497,7 +1498,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         statusOpen = Type_Loading;
         statusInter = Type_Loading;
 
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -1701,7 +1702,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         isTimeout = false;
         enableScreenContentCallback = true;
         // gated on the application: this is often called from onCreate, before currentActivity is set
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(myApplication)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(myApplication)) {
             if (fullScreenContentCallback != null && enableScreenContentCallback) {
                 (new Handler()).postDelayed(() -> {
                     fullScreenContentCallback.onAdDismissedFullScreenContent();
@@ -1779,7 +1780,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     };
 
     public void loadAdOpenSplash2id(Class splashActivity, Activity activity, String idOpenHigh, String idOpenAll, int timeOutOpen, AdCallback adListener) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(activity)) {
             if (adListener != null) {
                 adListener.onNextAction();
             }
@@ -2204,7 +2205,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     public void loadOpenAppAdSplash(final Context context, String idResumeSplash, final long timeDelay, long timeOut, final boolean isShowAdIfReady, final AdCallback adCallback) {
         this.splashAdId = idResumeSplash;
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adCallback != null) {
                 adCallback.onNextAction();
             }
@@ -2274,7 +2275,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     public void loadOpenAppAdSplashFloor(final Context context, final List<String> listIDResume, final boolean isShowAdIfReady, final AdCallback adCallback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
+        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             if (adCallback != null) {
                 adCallback.onNextAction();
             }

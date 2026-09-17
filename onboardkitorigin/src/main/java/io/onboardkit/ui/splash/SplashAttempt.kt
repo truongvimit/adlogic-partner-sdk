@@ -1,6 +1,7 @@
 package io.onboardkit.ui.splash
 
 import com.ads.module.update.ForceUpdateConfig
+import com.ads.module.helper.AdGate
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -36,7 +37,15 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
 
     init { application.registerActivityLifecycleCallbacks(visibility) }
 
+    private var updateAdHold: AutoCloseable? = AdGate.holdRequests()
+
+    fun allowAdRequests() {
+        updateAdHold?.close()
+        updateAdHold = null
+    }
+
     override fun onCleared() {
+        allowAdRequests()
         getApplication<Application>().unregisterActivityLifecycleCallbacks(visibility)
     }
 
