@@ -1,8 +1,9 @@
 {
+  "enabled": false,
   "icon": "",
   "title": "Update Available",
   "description": "A new version of the app is ready. Update now to enjoy the latest improvements.",
-  "storeLink": "https://play.google.com/store/apps/details?id=com.itg.template",
+  "storeLink": "",
   "minVersionCode": 0,
   "force": false
 }

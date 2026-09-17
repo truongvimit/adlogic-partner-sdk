@@ -30,3 +30,6 @@
 -keep class **.R$* { public static final int mbridge*; }
 -keepattributes Signature
 -keepattributes *Annotation*
+
+-keep class com.ads.module.update.** { public protected *; }
+-keep class com.ads.module.ump.** { public protected *; }

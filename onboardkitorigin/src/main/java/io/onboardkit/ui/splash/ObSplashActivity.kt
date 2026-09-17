@@ -176,6 +176,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
             return@coroutineScope
         }
         if (attempt.showRequested) {
+            // Recreated owners must re-check the activated update policy before resuming navigation.
+            onBeforeSplashProceed()
             proceed()
             return@coroutineScope
         }
@@ -207,7 +209,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Completing the step and authorizing requests are separate. The SDK reads current
             // authority at each gate, so a later answer can recover without overwriting host-off.
             val mayRequestAds = consent.await()
-            val notification = async { awaitNotificationPermission(cfg) }
             if (!mayRequestAds) {
                 ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
             }
@@ -221,6 +222,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 requestSplashAds(deferIfUnauthorized = true)
             }
             remote.await()
+            // Consent and remote still run concurrently. Update UI starts only after BOTH settle;
+            // notification/ad presentation/navigation cannot race it. SAME_TIME may preload above.
+            // Re-evaluate on recreation, even if the remote hook already ran on the old owner.
+            // This user-facing barrier is deliberately outside every splash/fetch timeout.
+            onBeforeSplashProceed()
+            val notification = async { awaitNotificationPermission(cfg) }
             if (!attempt.remoteHookResolved) {
                 onRemoteFetched()
                 attempt.remoteHookResolved = true
@@ -696,6 +703,14 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * [onRemoteFetched] or a background coroutine, or it delays every ad on the splash.
      */
     protected open suspend fun onInitBilling() {}
+
+    /**
+     * After consent and remote settle, await a host barrier such as ForceUpdateGate. Read the
+     * activated config here; do not start a second fetch. No deadline releases this barrier.
+     * SAME_TIME ad preloads may already be running, but no ads/notification/navigation can show.
+     * Called again for a recreated Activity so an unresolved mandatory gate cannot be bypassed.
+     */
+    protected open suspend fun onBeforeSplashProceed() {}
 
     /** Remote config has been fetched and synced — sync the app's own keys here. */
     protected open fun onRemoteFetched() {}

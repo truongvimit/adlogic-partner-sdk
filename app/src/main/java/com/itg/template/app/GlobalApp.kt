@@ -1,5 +1,7 @@
 package com.itg.template.app
 
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import com.google.firebase.remoteconfig.remoteConfigSettings
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -53,6 +55,10 @@ class GlobalApp : AdsMultiDexApplication() {
         // First, before any SDK: everything below emits through Tracker, and events tracked
         // before install() would only be buffered, not attributed to this session.
         initTracking()
+        FirebaseRemoteConfig.getInstance().setConfigSettingsAsync(remoteConfigSettings {
+            minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) 0 else 3_600
+            fetchTimeoutInSeconds = 10
+        })
         // No MobileAds.initialize here: ERainAd.init -> Admob.init is the single canonical site
         // (it also logs per-adapter status); a second call just races the first for no gain.
         DevConfig.init(

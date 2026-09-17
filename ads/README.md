@@ -521,3 +521,20 @@ AdSystemBars.setFullscreen(window, showNavigationBar = true)
 Call after creating your window and when it regains focus (`onWindowFocusChanged(true)`).
 This API changes bar visibility; apply visible-bar insets to your own content as needed.
 Java supports `AdSystemBars.setFullscreen(getWindow())` with the same defaults.
+
+## App updates
+
+`com.ads.module.ump.ITGUpdateManager` and `IUpdateInstanceCallback` restore the Play update API
+(IMMEDIATE / FLEXIBLE), with lifecycle cleanup and update resumption. Consent stays in ConsentCenter.
+`com.ads.module.update.ForceUpdateGate.await(activity, config)` holds startup navigation for outdated
+versions; a mandatory policy remains blocking after Play cancellation or a Store round trip.
+`enabled` defaults to false and must be explicitly true. `force` controls dismissal only;
+`minVersionCode > installedVersionCode` controls version eligibility.
+`:suite-firebase` offers `FirebaseUpdateConfig.activated()` after the shared remote step, or
+`FirebaseUpdateConfig.fetch()` for standalone hosts, for the separate `force_update_config` parameter.
+Only activated remote values can enable the Firebase integration; missing/malformed/local defaults
+are off. OnboardKit hosts await the gate in `onBeforeSplashProceed()` after remote and consent
+settle in parallel, before notification/ad presentation/navigation. These APIs are opt-in, and do not start from AdsMultiDexApplication.
+
+See the [detailed Vietnamese integration guide](../partner-integration/force-update-integration.vi.md)
+for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone examples, and Play testing.

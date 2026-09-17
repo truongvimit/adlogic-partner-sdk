@@ -11,8 +11,6 @@ import com.itg.template.app.AppConstants
 import com.itg.template.app.AppConstants.DEFAULT_CTA_HEIGHT
 import com.itg.template.app.GlobalApp
 import com.itg.template.data.model.ForceUpdateConfig
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import io.suite.firebase.RemoteConfigClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +32,6 @@ object RemoteConfigUtils {
 
     private const val ON_SHOW_DIALOG_CONSENT = "on_show_dialog_consent"
     private const val AD_REMOTE_CONFIG = "ad_remote_config"
-    private const val FORCE_UPDATE_CONFIG = "force_update_config"
 
     private const val ON_ENABLE_UNINSTALL_WIDGET = "on_enable_uninstall_widget"
 
@@ -54,7 +51,6 @@ object RemoteConfigUtils {
     
     private const val AD_REMOTE_CONFIG_FILE_DEBUG = "ad_config_debug.json"
     private const val AD_REMOTE_CONFIG_FILE_RELEASE = "ad_config.json"
-    private const val FORCE_UPDATE_CONFIG_FILE = "force_update_config.json"
 
     fun getOnShowDialogConsent(): Boolean = getBoolean(ON_SHOW_DIALOG_CONSENT)
     fun getOnEnableUninstallWidget(): Boolean = getBoolean(ON_ENABLE_UNINSTALL_WIDGET, false)
@@ -84,8 +80,6 @@ object RemoteConfigUtils {
     /** Lazy, not `lateinit`: a getter reached before [init] would otherwise throw. */
     private val remoteConfig: FirebaseRemoteConfig by lazy { Firebase.remoteConfig }
 
-    private val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
-    private val forceUpdateAdapter = moshi.adapter(ForceUpdateConfig::class.java)
 
     fun init(context: Context, mListener: Listener) {
         listener = mListener
@@ -163,32 +157,7 @@ object RemoteConfigUtils {
     }
 
 
-    fun getForceUpdateConfig(): ForceUpdateConfig? {
-        val defaultJson = loadDefaultForceUpdateConfig()
-        val json = if (!completed) {
-            defaultJson
-        } else {
-            val configValue = remoteConfig.getString(FORCE_UPDATE_CONFIG)
-            configValue.ifBlank { defaultJson }
-        }
-
-        return try {
-            forceUpdateAdapter.fromJson(json)
-        } catch (ex: Exception) {
-            ex.printStackTrace()
-            null
-        }
-    }
-
-    private fun loadDefaultForceUpdateConfig(): String {
-        return try {
-            GlobalApp.instance.assets.open(FORCE_UPDATE_CONFIG_FILE).bufferedReader().use { reader ->
-                reader.readText()
-            }
-        } catch (ex: Exception) {
-            "{}"
-        }
-    }
+    fun getForceUpdateConfig(): ForceUpdateConfig = io.suite.firebase.FirebaseUpdateConfig.activated()
 
     private fun loadDefaultAdRemoteConfig(): String {
         val fileName = if (BuildConfig.DEBUG) {

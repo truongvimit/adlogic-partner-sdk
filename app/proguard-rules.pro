@@ -69,5 +69,3 @@
 
 -keepclassmembers class androidx.lifecycle.ViewModel { *; }
 -keepnames class androidx.lifecycle.LiveData { *; }
-
--keep class com.itg.template.data.model.ForceUpdateConfig

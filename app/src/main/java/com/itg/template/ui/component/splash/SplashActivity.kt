@@ -1,5 +1,7 @@
 package com.itg.template.ui.component.splash
 
+import com.ads.module.update.ForceUpdateGate
+import io.suite.firebase.FirebaseUpdateConfig
 import androidx.lifecycle.lifecycleScope
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
@@ -19,6 +21,11 @@ import kotlinx.coroutines.launch
  */
 class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
 
+    override suspend fun onBeforeSplashProceed() {
+        // The existing remote step already fetched/activated alongside UMP. Never fetch twice.
+        ForceUpdateGate.await(this, FirebaseUpdateConfig.activated())
+    }
+
     /**
      * Waits for Play to say whether this user is premium, since every ad request below is gated on
      * the answer. Verification started in `Application.onCreate`, so this normally returns at once.
@@ -32,7 +39,7 @@ class SplashActivity : ObSplashActivity(), RemoteConfigUtils.Listener {
 
     override fun onRemoteFetched() {
         // The ad units already refreshed inside the SDK's remote step. This fetch is for the app's
-        // own flags — force update, the uninstall widget — which the SDK knows nothing about.
+        // own flags (for example the uninstall widget). Update policy was checked after the shared remote step.
         RemoteConfigUtils.init(this, this)
 
         if (ResumeAdsEntryRule.shouldEnableAppResume()) {

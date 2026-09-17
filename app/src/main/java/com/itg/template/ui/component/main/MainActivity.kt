@@ -1,6 +1,5 @@
 package com.itg.template.ui.component.main
 
-import android.app.Dialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -78,7 +77,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     private var delayRunnable: Runnable? = null
     private lateinit var noInternetDialog: NoInternetDialog
     private lateinit var forceUpdateDialog: ForceUpdateDialog
-    private var forceUpdateDialogHandle: Dialog? = null
     private var cachedForceUpdateConfig: ForceUpdateConfig? = null
 
     // Customization state
@@ -104,7 +102,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         forceUpdateDialog = ForceUpdateDialog(this)
         checkInternet()
         checkConsentStatus()
-        maybeShowForceUpdateDialog()
         showSdkVersionInfo()
         buildFlagRows()
         updateResumeModeUI()
@@ -162,18 +159,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 Timber.d("network off")
                 noInternetDialog.show()
             }
-        }
-    }
-
-    // ─── Force Update ─────────────────────────────────────────
-
-    private fun maybeShowForceUpdateDialog() {
-        val config = RemoteConfigUtils.getForceUpdateConfig() ?: return
-        if (config.storeLink.isBlank()) return
-        val needsUpdate = BuildConfig.VERSION_CODE < config.minVersionCode
-        if (needsUpdate || config.force) {
-            cachedForceUpdateConfig = config
-            forceUpdateDialog.show(config)
         }
     }
 

@@ -66,6 +66,9 @@ dependencies {
     // api, not implementation: StateFlow<AdNativeState/AdBannerState> is helper public API
     api "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
 
+    // Public update callbacks expose Play AppUpdateInfo and AppUpdateType.
+    api 'com.google.android.play:app-update:2.1.0'
+
     // Admob
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
     implementation 'com.google.android.gms:play-services-ads-identifier:18.3.0'

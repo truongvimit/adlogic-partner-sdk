@@ -1,4 +1,9 @@
 <resources>
+    <string name="adlogic_update_title">Update available</string>
+    <string name="adlogic_update_message">Please update the app to continue.</string>
+    <string name="adlogic_update_now">Update now</string>
+    <string name="adlogic_update_later">Later</string>
+    <string name="adlogic_update_store_unavailable">Unable to open the store. Please try again.</string>
     <string name="app_open_test">ca-app-pub-3940256099942544/3419835294</string>
     <string name="cancel">Cancel</string>
     <string name="exit">EXIT</string>

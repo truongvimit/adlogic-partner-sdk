@@ -312,3 +312,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `question.selection.min_count` | `1` | >=1, không vượt số option hợp lệ. |
 
 `interstitial.auto_buffer` được chuyển thành nhóm cấp cao nhất `interstitial_auto_buffer`, mặc định `enabled: true`. Cập nhật remote config và asset tùy chỉnh của host sang key mới; SDK không còn đọc key cũ. Nhóm này chỉ điều khiển placements khai báo trong `InterstitialAutoBuffer` hoặc remote `rules`, trừ placements đã reserve. Host vẫn phải gọi `configure()` / `start()`; bật field này không tự khởi động buffer hoặc tự show quảng cáo. Các cấu hình interstitial khác vẫn nằm trong `interstitial`.
+
+## Force update
+
+Parameter String riêng `force_update_config` điều khiển ngưỡng versionCode và bắt buộc/gợi ý cập nhật; không nằm trong hai document settings ở trên. Xem [setup, JSON, cache và tích hợp gate](force-update-integration.vi.md).
