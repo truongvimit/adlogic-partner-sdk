@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
 import com.ads.module.ads.ERainAd
+import com.ads.module.admob.Admob
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdsHelper
@@ -90,6 +91,7 @@ class BannerAdHelper(
     /** Points the helper at a view that already contains the module's banner layout ids. */
     fun setBannerContentView(root: ViewGroup): BannerAdHelper {
         rootView = root
+        sizePlaceholder()
         return this
     }
 
@@ -99,8 +101,22 @@ class BannerAdHelper(
      */
     fun attachInto(host: FrameLayout): BannerAdHelper {
         resetPlaceholder(activity, host)
-        rootView = host
-        return this
+        return setBannerContentView(host)
+    }
+
+    /** Known heights reserve their slot before consent/load; adaptive loaders resolve the rest. */
+    private fun sizePlaceholder() {
+        val heightDp = when (val type = config.bannerType) {
+            is BannerType.InlineMaxHeight -> type.maxHeightDp
+            is BannerType.Fixed -> type.size.adSize.height
+            is BannerType.Inline -> if (type.style.equals(Admob.BANNER_INLINE_SMALL_STYLE, ignoreCase = true)) 50 else return
+            else -> return
+        }
+        shimmerContainer()?.let { shimmer ->
+            shimmer.layoutParams = shimmer.layoutParams.apply {
+                height = (heightDp * shimmer.resources.displayMetrics.density + 0.5f).toInt()
+            }
+        }
     }
 
     fun registerAdListener(adCallback: AdCallback) {

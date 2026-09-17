@@ -8,11 +8,16 @@ import android.net.NetworkInfo
 import android.os.Bundle
 import android.os.Looper
 import android.view.View
+import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.admob.Admob
+import com.ads.module.config.settings.AdBehavior
+import com.ads.module.funtion.AdCallback
+import com.facebook.shimmer.ShimmerFrameLayout
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
@@ -73,6 +78,7 @@ class BannerRefreshOwnershipTest {
     fun setUp() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         requests.clear()
+        AdBehavior.document.acceptSuccessfulFetch("{}")
         ConsentCenter.setHostConsent(true, false)
         Entitlement.install(object : EntitlementSource {
             override fun isPremium(context: Context) = false
@@ -103,6 +109,7 @@ class BannerRefreshOwnershipTest {
             mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         }
         ConsentCenter.clearHostConsent()
+        AdBehavior.document.acceptSuccessfulFetch("{}")
         requests.clear()
     }
 
@@ -212,8 +219,143 @@ class BannerRefreshOwnershipTest {
         assertTrue(vendor(refresh.view).destroyed)
     }
 
-    private fun createHelper(canReload: Boolean, tiers: List<String> = listOf("banner"), autoReload: Boolean = false): BannerAdHelper {
-        val config = BannerAdConfig(tiers, true, canReload, BannerType.Collapsible()).apply {
+    @Test fun `inline placeholder fills its configured cap before and during loading`() {
+        val helper = createHelper(canReload = false, type = BannerType.InlineMaxHeight(100))
+        assertPlaceholderHeight(100)
+        assertTrue(requests.isEmpty())
+        helper.requestAds(BannerAdParam.Request)
+        assertEquals(1, requests.size)
+        assertPlaceholderHeight(100)
+    }
+
+    @Test fun `remote cap changes resize both shimmer and skeleton at request time`() {
+        val helper = createHelper(canReload = false, type = BannerType.InlineMaxHeight(100))
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "banner":{"presentation":{"inline_max_height_dp":140}}
+        }""")
+        helper.requestAds(BannerAdParam.Request)
+        assertEquals(1, requests.size)
+        assertPlaceholderHeight(140)
+        fail(requests.single())
+        assertEquals(View.GONE, host.findViewById<View>(R.id.shimmer_container_banner).visibility)
+        measureHost()
+        assertEquals(0, host.height)
+    }
+
+    @Test fun `fixed large banner reserves one hundred dp before requesting`() {
+        createHelper(canReload = false, type = BannerType.Fixed(FixedBannerSize.LARGE_BANNER))
+        assertPlaceholderHeight(100)
+    }
+
+    @Test fun `legacy inline loader also expands the visible skeleton`() {
+        BannerAdHelper.resetPlaceholder(activity, host)
+        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 100, object : AdCallback() {})
+        assertEquals(1, requests.size)
+        assertPlaceholderHeight(100)
+    }
+
+    @Test
+    @Config(qualifiers = "hdpi")
+    fun `inline cap is converted from dp using the host density`() {
+        createHelper(canReload = false, type = BannerType.InlineMaxHeight(140))
+        assertPlaceholderHeight(140)
+    }
+
+    @Test fun `fifty six dp inline slot keeps both loading layers aligned`() {
+        val helper = createHelper(canReload = false, type = BannerType.InlineMaxHeight(56))
+        assertPlaceholderHeight(56)
+        helper.requestAds(BannerAdParam.Request)
+        assertPlaceholderHeight(56)
+    }
+
+    @Test fun `all fixed sizes reserve and load their declared height`() {
+        for (size in FixedBannerSize.entries) {
+            helper?.cancel()
+            val current = createHelper(canReload = false, type = BannerType.Fixed(size))
+            assertPlaceholderHeight(size.adSize.height)
+            current.requestAds(BannerAdParam.Request)
+            assertPlaceholderHeight(size.adSize.height)
+        }
+    }
+
+    @Test fun `anchored and collapsible skeletons follow the resolved ad size`() {
+        for (type in listOf(BannerType.Normal, BannerType.LargeAnchored, BannerType.Collapsible())) {
+            helper?.cancel()
+            val current = createHelper(canReload = false, type = type)
+            assertPlaceholderHeight(56)
+            current.requestAds(BannerAdParam.Request)
+            val height = checkNotNull(requests.last().view.adSize).height
+            assertTrue("Anchored banner resolves a positive height", height > 0)
+            assertPlaceholderHeight(height)
+        }
+    }
+
+    @Test fun `small inline skeleton reserves its fifty dp cap`() {
+        val helper = createHelper(canReload = false, type = BannerType.Inline(Admob.BANNER_INLINE_SMALL_STYLE))
+        assertPlaceholderHeight(50)
+        helper.requestAds(BannerAdParam.Request)
+        assertPlaceholderHeight(50)
+    }
+
+    @Test fun `uncapped inline keeps the configured layout until creative height is known`() {
+        val helper = createHelper(canReload = false, type = BannerType.Inline())
+        assertPlaceholderHeight(56)
+        helper.requestAds(BannerAdParam.Request)
+        assertPlaceholderHeight(56)
+    }
+
+    @Test fun `legacy inline layout fills an explicit fifty six dp cap`() {
+        host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_inline_banner_control, host, false))
+        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 56, object : AdCallback() {})
+        assertPlaceholderHeight(56)
+    }
+
+    @Test fun `legacy medium layout fills an explicit one hundred dp cap`() {
+        host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_banner_size_medium_control, host, false))
+        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 100, object : AdCallback() {})
+        assertPlaceholderHeight(100)
+    }
+
+    @Test fun `legacy collapsible medium remeasures the configured loading slot`() {
+        host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_banner_size_medium_control, host, false))
+        assertPlaceholderHeight(250)
+        val shimmer = host.findViewById<ShimmerFrameLayout>(R.id.shimmer_container_banner)
+        Admob.getInstance().loadCollapsibleBannerSizeMedium(
+            activity, "banner", "bottom", AdSize.LARGE_BANNER, object : AdCallback() {})
+        assertTrue("Changing the slot must schedule another layout", shimmer.isLayoutRequested)
+        assertPlaceholderHeight(100)
+        fill(requests.single())
+        assertEquals(View.GONE, shimmer.visibility)
+        assertFalse(shimmer.isShimmerStarted)
+    }
+
+    @Test fun `uncapped inline preserves a host configured one hundred dp skeleton`() {
+        val helper = createHelper(canReload = false, type = BannerType.Inline())
+        val shimmer = host.findViewById<ShimmerFrameLayout>(R.id.shimmer_container_banner)
+        shimmer.layoutParams = shimmer.layoutParams.apply {
+            height = (100 * activity.resources.displayMetrics.density + 0.5f).toInt()
+        }
+        helper.requestAds(BannerAdParam.Request)
+        assertPlaceholderHeight(100)
+    }
+
+    private fun assertPlaceholderHeight(dp: Int) {
+        measureHost()
+        val shimmer = host.findViewById<ShimmerFrameLayout>(R.id.shimmer_container_banner)
+        val pixels = (dp * activity.resources.displayMetrics.density + 0.5f).toInt()
+        assertEquals("shimmer height", pixels, shimmer.height)
+        assertEquals("visible skeleton height", pixels, shimmer.getChildAt(0).height)
+    }
+
+    private fun measureHost() {
+        host.measure(View.MeasureSpec.makeMeasureSpec(540, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        host.layout(0, 0, host.measuredWidth, host.measuredHeight)
+    }
+
+    private fun createHelper(canReload: Boolean, tiers: List<String> = listOf("banner"), autoReload: Boolean = false,
+                             type: BannerType = BannerType.Collapsible()): BannerAdHelper {
+        val config = BannerAdConfig(tiers, true, canReload, type).apply {
             enableAutoReload = autoReload
             autoReloadTime = 1_000 // Existing supported range is intentionally unchanged.
         }

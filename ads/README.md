@@ -199,6 +199,16 @@ build [NativeAdConfig](src/main/java/com/ads/module/helper/adnative/NativeAdConf
 [BannerAdConfig](src/main/java/com/ads/module/helper/banner/BannerAdConfig.kt) yourself when the
 app supplies its own ad units.
 
+Banner shimmer sizing is owned by the SDK. `InlineMaxHeight(100)` reserves a 100dp
+placeholder as soon as it is attached; other explicit inline caps and fixed banner sizes
+reserve their configured height. The skeleton fills that height. At request time, the
+loader updates it for the resolved size, including Remote Config changes. Uncapped inline
+adaptive banners keep the configured shimmer layout height until the creative arrives,
+because their requested ad size reports zero height. This also applies to the legacy
+inline/medium banner layouts. Keep the host
+`FrameLayout` at `wrap_content` so a failed/skipped banner can collapse; apps do not need
+to resize SDK shimmer children or set a permanent minimum height.
+
 Native includes a generated loading skeleton. To customize it, copy the
 [supplied native layout](src/main/res/layout/custom_native_admob_medium.xml), keeping its
 `NativeAdView` root, asset IDs and ad badge. Both examples leave refresh to AdMob; SDK refresh

@@ -6,7 +6,6 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Context;
-import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,6 +17,7 @@ import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -1255,7 +1255,13 @@ public class Admob {
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.CENTER_HORIZONTAL));
-            containerShimmer.getLayoutParams().height = (int) (shimmerHeightDp * Resources.getSystem().getDisplayMetrics().density + 0.5f);
+            // Uncapped inline adaptive reports 0 until a creative arrives. Keep the
+            // configured placeholder layout in that case instead of collapsing loading.
+            if (shimmerHeightDp > 0) {
+                ViewGroup.LayoutParams shimmerParams = containerShimmer.getLayoutParams();
+                shimmerParams.height = (int) (shimmerHeightDp * containerShimmer.getResources().getDisplayMetrics().density + 0.5f);
+                containerShimmer.setLayoutParams(shimmerParams);
+            }
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
             adView.setAdListener(new AdListener() {
@@ -1342,7 +1348,9 @@ public class Admob {
             adView.setAdUnitId(id);
             adContainer.addView(adView);
             AdSize adSize = getAdSize(mActivity, false, "");
-            containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
+            ViewGroup.LayoutParams shimmerParams = containerShimmer.getLayoutParams();
+            shimmerParams.height = (int) (adSize.getHeight() * containerShimmer.getResources().getDisplayMetrics().density + 0.5f);
+            containerShimmer.setLayoutParams(shimmerParams);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
             adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
@@ -1416,7 +1424,9 @@ public class Admob {
             adView.setAdUnitId(id);
             adContainer.addView(adView);
             AdSize adSize = sizeBanner;
-            containerShimmer.getLayoutParams().height = (int) (adSize.getHeight() * Resources.getSystem().getDisplayMetrics().density + 0.5f);
+            ViewGroup.LayoutParams shimmerParams = containerShimmer.getLayoutParams();
+            shimmerParams.height = (int) (adSize.getHeight() * containerShimmer.getResources().getDisplayMetrics().density + 0.5f);
+            containerShimmer.setLayoutParams(shimmerParams);
             adView.setAdSize(adSize);
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
             adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
