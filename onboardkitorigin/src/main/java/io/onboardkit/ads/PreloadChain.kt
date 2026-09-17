@@ -43,13 +43,15 @@ class PreloadChain internal constructor(
         plannedSteps = null
     }
 
-    /** Freeze order/enabled screens at first preload so language exit and pager use the same plan.
+    /**
+     * Freeze order/enabled screens at first preload so language exit and pager use the same plan.
      * Ad eligibility remains live: a purchase or placement kill switch must still win.
      */
     internal fun stepDefinitions(isPremium: Boolean = false): List<StepDefinition> {
         val cfg = config() ?: return emptyList()
-        val planned = plannedSteps ?: cfg.steps.filter {
-            it.enabled && flags().isStepEnabled(it.id)
+        val planned = plannedSteps ?: run {
+            val snapshot = flags()
+            cfg.steps.filter { it.enabled && snapshot.isStepEnabled(it.id) }
         }.also { plannedSteps = it }
         return planned.filterNot {
             it.type == StepType.AD_FULL_SCREEN &&
@@ -78,7 +80,7 @@ class PreloadChain internal constructor(
             }
 
             FlowDestination.ONBOARDING ->
-                enabledSteps().getOrNull(resumeIndex)?.let { preloadForStep(activity, it) }
+                stepDefinitions().getOrNull(resumeIndex)?.let { preloadForStep(activity, it) }
 
             FlowDestination.QUESTION_NEW_USER,
             FlowDestination.QUESTION_OLD_USER,
@@ -116,7 +118,7 @@ class PreloadChain internal constructor(
     fun onLanguageSelected(activity: Activity) {
         if (OnboardingSettings.text("lfo.native2.preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.Language2)
         if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.LanguageConfirm)
-        enabledSteps().forEach { preloadForStep(activity, it) }
+        stepDefinitions().forEach { preloadForStep(activity, it) }
     }
 
     /** Pager entry, including resumed flows. Empty flows never call this. */
@@ -150,11 +152,10 @@ class PreloadChain internal constructor(
         preloadNative(activity, AdPlacement.Ob5)
     }
 
-    private fun preloadForStep(activity: Activity, stepId: StepId) {
-        when (stepDefinitions().firstOrNull { it.id == stepId }?.type) {
-            StepType.CONTENT -> preloadNative(activity, AdPlacement.StepNative(stepId))
-            StepType.AD_FULL_SCREEN -> preloadNative(activity, AdPlacement.StepFullScreen(stepId))
-            null -> Unit
+    private fun preloadForStep(activity: Activity, step: StepDefinition) {
+        when (step.type) {
+            StepType.CONTENT -> preloadNative(activity, AdPlacement.StepNative(step.id))
+            StepType.AD_FULL_SCREEN -> preloadNative(activity, AdPlacement.StepFullScreen(step.id))
         }
     }
 
@@ -194,14 +195,4 @@ class PreloadChain internal constructor(
         return true
     }
 
-    /**
-     * Premium is not applied here: the guard already declines every preload for those users, and
-     * a second copy of the step-filter rule is a second place for it to drift.
-     *
-     * [canShowAdStep] is applied though — the resume index arrives as an index into the list the
-     * pager will build, so preloading against an unfiltered one warms the ad of the wrong page.
-     */
-    private fun enabledSteps(): List<StepId> {
-        return stepDefinitions().map { it.id }
-    }
 }

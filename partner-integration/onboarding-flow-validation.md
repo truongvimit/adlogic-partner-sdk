@@ -11,6 +11,10 @@ After release 5.3.15, tightened two timing cases: share the planned screen catal
 - `:app:assembleDebug` passed with JDK 21. This follow-up used JVM/Robolectric validation; the Pixel/Artemis results below describe the earlier release, not a rerun of this patch.
 - Preload eligibility cannot promise an impression after user abandonment, no-fill, or a later consent/entitlement/ad-config change.
 
+Performance review for 5.3.16: the language preload loop now traverses resolved step definitions directly instead of resolving/filtering the whole list again for each step. Pager construction also reads its definitions once per build. The snapshot is a list of existing definitions plus the existing per-attempt request set; there is no new scheduler, network fetch, delay, timeout, or coroutine. Config resolution uses the existing identity cache. The focus wait predates this patch; its dispatch now refreshes mapped IDs before sending. These are code-path checks, not a device latency benchmark.
+
+Final 5.3.16 validation: all 139 tests across the eight affected preload/provider/guard/settings/flow/pager test classes passed (zero failures, errors or skips), and `:app:assembleDebug` passed after the simplification.
+
 Device: Pixel 5, Android 14, ADB serial `14161FDD400111`.
 
 ## Automated checks

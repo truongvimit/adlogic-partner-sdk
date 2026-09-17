@@ -153,7 +153,7 @@ class ERainAdProvider(
                 val currentRequest = if (sdk.configuredPlacementKey(request.placement) != null) {
                     sdk.configOrNull()?.ads?.nativeUnitFor(request.placement)?.let { request.copy(unit = it) }
                 } else request
-                if (io.onboardkit.OnboardingSdk.isReady() &&
+                if (sdk.isReady() &&
                     (currentRequest == null || sdk.guard().skipReason(activity, request.placement, currentRequest.unit) != null)) {
                     failedNativeLoads.add(key)
                     notifyNativeFailure(key)
