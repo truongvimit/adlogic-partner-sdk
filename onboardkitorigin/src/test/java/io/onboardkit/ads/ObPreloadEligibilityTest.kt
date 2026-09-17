@@ -92,6 +92,15 @@ class ObPreloadEligibilityTest {
         }
     }
 
+    @Test fun `explicit order overrides legacy screen gates for both preload and pager`() {
+        adConfig()
+        flags = flags.copy(enableStepOb1 = false, enableStepOb2 = false, enableStepOb3 = false, enableStepOb4 = false)
+        order(ids)
+        resetChain()
+        assertRequested(ids)
+        assertEquals(ids, chain.stepDefinitions().map { it.id.value })
+    }
+
     @Test fun `app list and app disabled screens cannot be resurrected by remote IDs or order`() {
         cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false),
@@ -102,10 +111,10 @@ class ObPreloadEligibilityTest {
         assertRequested(listOf("ob1", "ob4"))
     }
 
-    @Test fun `each remote disabled screen is excluded before preload`() {
+    @Test fun `each screen omitted from order is excluded before preload`() {
         adConfig()
         ids.forEach { disabled ->
-            OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"$disabled":{"enabled":false}}}}""")
+            order(ids - disabled)
             resetChain()
             assertRequested(ids - disabled)
         }
@@ -183,11 +192,11 @@ class ObPreloadEligibilityTest {
         }
     }
 
-    @Test fun `language preload and pager share order and enabled snapshot until the next splash attempt`() {
+    @Test fun `language preload and pager share order snapshot until the next splash attempt`() {
         adConfig()
         chain.beginSplashAttempt("first")
         assertRequested(ids)
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4"],"steps":{"ob1":{"enabled":false}}}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4"]}}""")
         assertEquals(ids, chain.stepDefinitions().map { it.id.value })
         chain.beginSplashAttempt("first")
         assertEquals(ids, chain.stepDefinitions().map { it.id.value })

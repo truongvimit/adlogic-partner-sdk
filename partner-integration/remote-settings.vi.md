@@ -2,6 +2,8 @@
 
 **OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
+`onboarding.order` là danh sách duy nhất chọn và sắp xếp màn trong JSON; bỏ ID để bỏ màn. Không cần khai báo `steps` nếu không có tùy chỉnh riêng. `steps.<id>.enabled` đã bỏ và bị bỏ qua; `order` hợp lệ cũng ưu tiên hơn các cờ cũ `ob_enable_step_ob1..4`. `steps.<id>` chỉ dành cho template, behavior và fullscreen tùy chọn. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`: content vẫn hiện khi ads tắt, màn fullscreen không có ads sẽ được bỏ qua.
+
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
 SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK.
@@ -274,19 +276,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.fullscreen.auto_next.enabled` | `true` | Không điều khiển OB5 standalone. |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` | Timer từ page selection, tính background như hiện tại. |
 | `onboarding.order` | Thứ tự app khi thiếu | Array chọn/sắp xếp catalog; `[]` bỏ pager. |
-| `onboarding.steps.full1.enabled` | `true` | AND với enabled của app. |
-| `onboarding.steps.full2.enabled` | `true` | AND với enabled của app. |
-| `onboarding.steps.ob1.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
-| `onboarding.steps.ob1.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
-| `onboarding.steps.ob1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
-| `onboarding.steps.ob2.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
-| `onboarding.steps.ob2.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
-| `onboarding.steps.ob2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
-| `onboarding.steps.ob3.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
-| `onboarding.steps.ob3.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
-| `onboarding.steps.ob4.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
-| `onboarding.steps.ob4.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
-| `onboarding.steps.ob4.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `onboarding.preload.ob5_on_last_step` | `true` | Warm OB5 khi tới cuối pager; vẫn cần OB5 bật. |
 | `onboarding.preload.question_on_last_step` | `true` | Warm question khi tới cuối pager. |
 | `onboarding.exit_interstitial.enabled` | `true` | Bật/tắt hành động interstitial cuối OB; unit vẫn phải được ad_config cho phép. |

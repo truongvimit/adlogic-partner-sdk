@@ -34,18 +34,13 @@ Thêm `enabled = false` vào definition để app khóa màn đó; remote không
 
 ## Đổi danh sách trên Firebase
 
-Parameter **`onboarding_config`**, kiểu String chứa JSON:
+Dùng ngay file **`onboarding_config.json`** và parameter Firebase **`onboarding_config`** hiện có, không tạo file hay parameter mới. Đặt `order` trong object `onboarding`. Partner có thể chỉ khai báo phần cần đổi như ví dụ dưới. Các field thiếu (splash, LFO, timeout, skip…) vẫn dùng fallback: Firebase hợp lệ → JSON partner → cấu hình Kotlin app → mặc định SDK. Không cần copy toàn bộ default SDK; chỉ giữ lại những tùy chỉnh riêng đã có của partner. Mảng `order` được thay thế toàn bộ, không nối với danh sách mặc định:
 
 ```json
 {
   "schema_version": 1,
   "onboarding": {
-    "order": ["ob4", "full2", "ob1", "ob3"],
-    "navigation": { "lock_pager_swipe": false },
-    "steps": {
-      "full2": { "enabled": true },
-      "ob3": { "enabled": true }
-    }
+    "order": ["ob4", "full2", "ob1", "ob3"]
   }
 }
 ```
@@ -56,10 +51,11 @@ Ví dụ này hiển thị **OB4 → Full2 → OB1 → OB3**, không preload OB2
 - `order: []`: bỏ toàn bộ pager OB; tiếp tục nhánh hoàn tất hiện có.
 - Chỉ các ID app khai báo và `enabled = true` mới được chọn. ID chưa biết được bỏ qua.
 - Danh sách sai kiểu, ID rỗng hoặc trùng ID: bỏ override `order`, dùng fallback app/local.
-- `onboarding.steps.<id>.enabled = false` tắt thêm một màn; không thể mở lại `enabled = false` của app.
+- `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Khi có `order` hợp lệ, các cờ cũ `ob_enable_step_ob1..4` không lọc thêm màn; nếu thiếu `order`, SDK vẫn hỗ trợ các cờ này cho tích hợp cũ.
+- Không cần khai báo `steps`. Chỉ dùng `steps.<id>` nếu cần ghi đè riêng template, hành vi ads hoặc nút Skip/auto-next; không có công tắc bật/tắt màn hay placement ở đây. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`.
 - Quy tắc ưu tiên settings vẫn là remote hợp lệ → custom asset → app → default SDK. Không khai báo lại ad unit ID trong `onboarding_config`.
 
-Danh sách và trạng thái bật/tắt màn được chốt tại lần preload OB đầu tiên ở LFO; LFO exit và pager dùng chung danh sách đó. Nếu vào thẳng pager mà chưa preload thì chốt tại pager entry. Remote đổi order/tắt màn sau thời điểm này áp dụng từ lượt splash tiếp theo, không loại một màn đã lên kế hoạch preload. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại.
+Danh sách màn được chốt tại lần preload OB đầu tiên ở LFO; LFO exit và pager dùng chung danh sách đó. Nếu vào thẳng pager mà chưa preload thì chốt tại pager entry. Remote đổi `order` sau thời điểm này áp dụng từ lượt splash tiếp theo, không loại một màn đã lên kế hoạch preload. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại.
 
 ## Bật ads trên Firebase
 
@@ -87,7 +83,7 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 
 Tại callback **chọn ngôn ngữ đầu tiên** (vị trí trước đây preload OB1/OB2), SDK preload tất cả native thuộc danh sách OB hợp lệ: tối đa OB1, OB2, OB3, OB4, Full1, Full2. Không chờ tất cả tải xong mới cho tiếp tục LFO.
 
-Điều kiện preload là **màn có trong danh sách đã chốt và được bật + placement có ID sử dụng được và được bật + các gate ads đều cho phép**. Chỉ có ID trong ad config không tự tạo request. `isEnable = false` ở placement gốc tắt cả waterfall, kể cả tầng `_high` vẫn bật. Request đang chờ foreground/focus kiểm tra lại placement và lấy ID hiện tại trước khi gửi.
+Điều kiện preload là **màn có trong danh sách đã chốt + placement có ID sử dụng được và được bật + các gate ads đều cho phép**. Chỉ có ID trong ad config không tự tạo request. `isEnable = false` ở placement gốc tắt cả waterfall, kể cả tầng `_high` vẫn bật. Request đang chờ foreground/focus kiểm tra lại placement và lấy ID hiện tại trước khi gửi.
 
 Danh sách màn được giữ ổn định, nhưng các chặn ads (placement/master switch, premium, consent, force update, UA) vẫn có hiệu lực. SDK chỉ preload khi chưa biết có điều kiện chặn show; không thể bảo đảm mỗi preload đều có impression: người dùng có thể thoát/chuyển trang trước fill, ads no-fill, hoặc điều kiện ads thay đổi sau khi request đã gửi. Những thay đổi này vẫn phải chặn show; request đã gửi không thể thu hồi.
 

@@ -175,15 +175,21 @@ class OnboardingSettingsTest {
         assertEquals(RemoteFlags(), OnboardingSettings.resolveFlags(RemoteFlags()))
     }
 
-    @Test fun `custom step enabled flag changes flow membership and missing field restores it`() {
-        val custom = StepId("welcome")
-        val config = onboardKitConfig { step(ContentStepDefinition(custom)) }.getOrThrow()
+    @Test fun `order alone selects standard fullscreen and custom screens ignoring removed enabled fields`() {
+        val ids = listOf(StepId.OB1, StepId.FULL1, StepId("welcome"))
+        val config = onboardKitConfig {
+            steps(ContentStepDefinition(ids[0]), AdFullScreenStepDefinition(ids[1]), ContentStepDefinition(ids[2]))
+        }.getOrThrow()
+        val legacyFlags = RemoteFlags(enableStepOb1 = false)
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["welcome","ob1","full1"],"steps":{"ob1":{"enabled":false},"full1":{"enabled":false},"welcome":{"enabled":false}}}}""")
+        assertFalse(OnboardingSettings.values.hasOverride("onboarding.steps"))
+        assertEquals(listOf(ids[2], ids[0], ids[1]), io.onboardkit.flow.FlowNavigator.enabledSteps(
+            OnboardingSettings.resolve(config), OnboardingSettings.resolveFlags(legacyFlags)))
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
+        assertTrue(OnboardingSettings.resolve(config).steps.isEmpty())
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"welcome":{"enabled":false}}}}""")
-        assertTrue(io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(config), RemoteFlags()).isEmpty())
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"welcome":{"enabled":true}}}}""")
-        assertEquals(listOf(custom), io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(config), RemoteFlags()))
-        OnboardingSettings.document.acceptSuccessfulFetch(null)
-        assertEquals(listOf(custom), io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(config), RemoteFlags()))
+        assertEquals(ids, OnboardingSettings.resolve(config).steps.map { it.id })
+        assertEquals(legacyFlags, OnboardingSettings.resolveFlags(legacyFlags))
     }
 
     @Test fun `skip style scopes preserve local resources and unrelated timing`() {

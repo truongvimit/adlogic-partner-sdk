@@ -8,7 +8,8 @@ Default order: **OB1 → Full1 → OB2 → Full2 → OB3 → OB4**. Step IDs are
 The first language selection preloads every eligible native in the configured list. Pager entry
 preloads the exit interstitial. Step ads never reload on return or refill after showing.
 App definitions may set `enabled = false`; `onboarding.order` in remote settings can select and
-reorder the remaining catalog. See the [configuration and migration guide](../partner-integration/onboarding-flow.vi.md).
+reorder the remaining catalog. Remove IDs from `order` to omit pages; no `steps.*.enabled` map is needed or read.
+Per-placement ads are controlled by `ad_config` (`isEnable`). See the [configuration and migration guide](../partner-integration/onboarding-flow.vi.md).
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 

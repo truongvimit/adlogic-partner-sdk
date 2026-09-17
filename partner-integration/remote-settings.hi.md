@@ -2,6 +2,8 @@
 
 **OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
+JSON में पेज चुनने और उनका क्रम तय करने के लिए केवल `onboarding.order` इस्तेमाल करें; पेज हटाने के लिए उसका ID निकालें। `steps` केवल वैकल्पिक template, behavior या fullscreen overrides के लिए है। `steps.<id>.enabled` अब अनदेखा किया जाता है; वैध `order` पुराने `ob_enable_step_ob1..4` flags से भी प्राथमिकता रखता है। हर ad placement को `ad_config.<placement>.isEnable` से नियंत्रित करें: ads बंद होने पर content पेज रहता है, fullscreen ad पेज छोड़ दिया जाता है।
+
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
 Console setup के लिए [तीन String parameters publish करने के कदम](firebase-integration.hi.md#remote-json) देखें। Custom offline defaults के लिए [app में दो local JSON files बनाना](firebase-integration.hi.md#local-defaults) देखें। नीचे के पूरे उदाहरण SDK assets से मेल खाते हैं।
@@ -256,19 +258,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
 | `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
-| `onboarding.steps.full1.enabled` | `true` |
-| `onboarding.steps.full2.enabled` | `true` |
-| `onboarding.steps.ob1.enabled` | `true` |
-| `onboarding.steps.ob1.native_template` | `""` |
-| `onboarding.steps.ob1.behavior` | `{}` |
-| `onboarding.steps.ob2.enabled` | `true` |
-| `onboarding.steps.ob2.native_template` | `""` |
-| `onboarding.steps.ob2.behavior` | `{}` |
-| `onboarding.steps.ob3.enabled` | `true` |
-| `onboarding.steps.ob3.behavior` | `{}` |
-| `onboarding.steps.ob4.enabled` | `true` |
-| `onboarding.steps.ob4.native_template` | `""` |
-| `onboarding.steps.ob4.behavior` | `{}` |
 | `onboarding.preload.ob5_on_last_step` | `true` |
 | `onboarding.preload.question_on_last_step` | `true` |
 | `onboarding.exit_interstitial.enabled` | `true` |

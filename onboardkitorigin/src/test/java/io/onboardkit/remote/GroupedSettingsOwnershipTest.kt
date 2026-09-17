@@ -112,7 +112,7 @@ class GroupedSettingsOwnershipTest {
         OnboardingSdk.configure(config)
         val remote = OnboardingSdk.remoteOrNull()!!
         remote.applySnapshot(RemoteFlags(uiContentJson = """{"steps":[{"id":"ob1","title":"Legacy title"}]}"""))
-        SettingsRegistry.acceptSuccessfulFetch(mapOf("onboarding_config" to """{"onboarding":{"navigation":{"lock_pager_swipe":false},"steps":{"custom":{"enabled":false}}},"ui":{"content":{"steps":[{"id":"ob1","title":"Ignored"}]},"behavior":{"reload":{"allowed":true}}},"question":{"content":{"title":"Ignored","options":[]}}}"""))
+        SettingsRegistry.acceptSuccessfulFetch(mapOf("onboarding_config" to """{"onboarding":{"navigation":{"lock_pager_swipe":false},"order":["ob1","full1","ob2","full2","ob3","ob4"]},"ui":{"content":{"steps":[{"id":"ob1","title":"Ignored"}]},"behavior":{"reload":{"allowed":true}}},"question":{"content":{"title":"Ignored","options":[]}}}"""))
         assertFalse(OnboardingSdk.requireConfig().behavior.lockPagerSwipe)
         assertNull(OnboardingSdk.requireConfig().stepById(StepId("custom")))
         assertFalse(OnboardingSettings.values.hasOverride("ui"))

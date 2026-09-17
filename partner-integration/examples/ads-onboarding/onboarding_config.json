@@ -126,36 +126,6 @@
         "delay_ms": 15000
       }
     },
-    "steps": {
-      "ob1": {
-        "enabled": true,
-        "native_template": "",
-        "behavior": {}
-      },
-      "ob2": {
-        "enabled": true,
-        "native_template": "",
-        "behavior": {}
-      },
-      "ob3": {
-        "enabled": true,
-        "behavior": {},
-        "native_template": ""
-      },
-      "ob4": {
-        "enabled": true,
-        "native_template": "",
-        "behavior": {}
-      },
-      "full1": {
-        "enabled": true,
-        "behavior": {}
-      },
-      "full2": {
-        "enabled": true,
-        "behavior": {}
-      }
-    },
     "preload": {
       "ob5_on_last_step": true,
       "question_on_last_step": true

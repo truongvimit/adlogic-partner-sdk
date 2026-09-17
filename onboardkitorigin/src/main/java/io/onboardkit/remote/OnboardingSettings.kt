@@ -8,7 +8,6 @@ import com.ads.module.config.settings.SettingsRegistry
 import com.ads.module.config.settings.SettingsSnapshot
 import io.onboardkit.config.*
 import io.onboardkit.ads.NextScreenTiming
-import io.onboardkit.core.StepId
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdPlacement
 
@@ -20,7 +19,9 @@ object OnboardingSettings {
         if (path.startsWith("onboarding.steps.")) {
             val suffix = path.split('.').drop(3).joinToString(".")
             if (suffix.startsWith("fullscreen.")) return document.defaultValue("onboarding.$suffix")
-            if (!suffix.startsWith("behavior.")) return document.defaultValue("onboarding.steps.ob1.$suffix")
+            if (suffix == "native_template") return ""
+            if (suffix == "behavior") return emptyMap<String, Any>()
+            if (!suffix.startsWith("behavior.")) return null
         }
         if (path.contains("behavior.")) {
             val scope = path.substringBefore("behavior.") + "behavior"
@@ -155,14 +156,11 @@ object OnboardingSettings {
             backNavigatesBack = v.boolean("onboarding.navigation.back_navigates_back", c.behavior.backNavigatesBack),
             adClickReturnCompletesStep = v.boolean("onboarding.navigation.ad_click_return_completes_step", c.behavior.adClickReturnCompletesStep),
         )
-        val legacySteps = setOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId.OB5, StepId.QUESTION)
         val catalog = c.steps.associateBy { it.id.value }
         val ordered = if (v.hasOverride("onboarding.order")) {
-            v.strings("onboarding.order").distinct().mapNotNull(catalog::get)
+            v.strings("onboarding.order").mapNotNull(catalog::get)
         } else c.steps
-        val steps = ordered.filter { it.enabled }.filter { step ->
-            step.id in legacySteps || v.boolean("onboarding.steps.${step.id.value}.enabled", true)
-        }.map { step ->
+        val steps = ordered.filter { it.enabled }.map { step ->
             if (step !is AdFullScreenStepDefinition) step else {
                 val p = "onboarding.steps.${step.id.value}.fullscreen"
                 fun b(s: String, local: Boolean) = v.boolean("$p.$s", v.boolean("onboarding.fullscreen.$s", local))
@@ -213,13 +211,16 @@ object OnboardingSettings {
         return resolveFlags(f, snapshot).also { flagsCache = ResolvedFlags(f, snapshot, it) }
     }
 
-    private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot): RemoteFlags = f.copy(
+    private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot): RemoteFlags {
+        // An explicit order owns pager membership; old scalar flags cannot hide selected pages.
+        val order = v.strings("onboarding.order").takeIf { v.hasOverride("onboarding.order") }
+        return f.copy(
             enableAllAds = v.boolean("flow.ads_enabled", f.enableAllAds),
             languageSupportedCodes = v.strings("lfo.languages.supported_codes", f.languageSupportedCodes.split(',').filter { it.isNotBlank() }).joinToString(","),
-            enableStepOb1 = v.boolean("onboarding.steps.ob1.enabled", f.enableStepOb1),
-            enableStepOb2 = v.boolean("onboarding.steps.ob2.enabled", f.enableStepOb2),
-            enableStepOb3 = v.boolean("onboarding.steps.ob3.enabled", f.enableStepOb3),
-            enableStepOb4 = v.boolean("onboarding.steps.ob4.enabled", f.enableStepOb4),
+            enableStepOb1 = order?.contains("ob1") ?: f.enableStepOb1,
+            enableStepOb2 = order?.contains("ob2") ?: f.enableStepOb2,
+            enableStepOb3 = order?.contains("ob3") ?: f.enableStepOb3,
+            enableStepOb4 = order?.contains("ob4") ?: f.enableStepOb4,
             enableStepOb5 = v.boolean("ob5.enabled", f.enableStepOb5),
             enableQuestion = v.boolean("question.enabled", f.enableQuestion),
             enableQuestionOldUser = v.boolean("question.old_user_enabled", f.enableQuestionOldUser),
@@ -237,4 +238,5 @@ object OnboardingSettings {
             splashBannerWaitMs = v.long("splash.timing.banner_wait_ms", f.splashBannerWaitMs),
             splashLfoParallelPreloadEnabled = v.string("splash.load.lfo1_preload_mode", if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL") == "PARALLEL",
         )
+    }
 }

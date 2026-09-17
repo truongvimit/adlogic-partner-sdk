@@ -255,7 +255,7 @@ class OnboardingAdLifecycleTest {
         val language = Robolectric.buildActivity(android.app.Activity::class.java).get()
         OnboardingSdk.preload().onLanguageSelected(language)
         io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"onboarding":{"order":["ob4"],"steps":{"ob2":{"enabled":false}}}}""")
+            """{"onboarding":{"order":["ob4"]}}""")
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
         activity.setTheme(R.style.ob_Theme_OnboardKit)
         requireNotNull(controller).setup().visible()

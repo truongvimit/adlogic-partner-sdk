@@ -44,7 +44,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
- * Pager host. Steps are gated per remote flag in the fixed configured order; an empty result
+ * Pager host. Steps follow the resolved onboarding order and ad eligibility; an empty result
  * completes the flow instead of stranding the user on an empty pager. Swipe is locked by
  * default (buttons navigate); back goes one step backwards and exits only from the first step.
  */

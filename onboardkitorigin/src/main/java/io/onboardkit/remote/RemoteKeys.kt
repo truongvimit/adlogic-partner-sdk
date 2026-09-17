@@ -20,11 +20,11 @@ object ObRemoteKeys {
     val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", OnboardingSettings.defaultBool("flow.ads_enabled"))
     val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true)
 
-    // Step gating — order is fixed in code; remote can only toggle
-    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", OnboardingSettings.defaultBool("onboarding.steps.ob1.enabled"))
-    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", OnboardingSettings.defaultBool("onboarding.steps.ob2.enabled"))
-    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", OnboardingSettings.defaultBool("onboarding.steps.ob3.enabled"))
-    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", OnboardingSettings.defaultBool("onboarding.steps.ob4.enabled"))
+    // Legacy scalar gates: retained for hosts without onboarding.order.
+    val ENABLE_STEP_OB1 = RemoteKey.BoolKey("ob_enable_step_ob1", true)
+    val ENABLE_STEP_OB2 = RemoteKey.BoolKey("ob_enable_step_ob2", true)
+    val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", true)
+    val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", true)
     val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", OnboardingSettings.defaultBool("ob5.enabled"))
     val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", OnboardingSettings.defaultBool("question.enabled"))
     val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", OnboardingSettings.defaultBool("question.old_user_enabled"))
