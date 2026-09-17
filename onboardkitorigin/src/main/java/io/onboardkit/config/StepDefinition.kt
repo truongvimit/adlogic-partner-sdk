@@ -7,16 +7,9 @@ import androidx.annotation.StringRes
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 
-/**
- * One entry in the ordered step list. Order in the list IS the display order —
- * remote config can only enable/disable, matching the verified original behavior.
- */
-/**
- * A step is enabled or disabled by its [id]: `StepId.OB1` reads `ob_enable_step_ob1`, and so on
- * through OB5. There is no per-step key name to declare — the SDK's remote surface is a fixed,
- * typed set, so a free-text key would be one nobody reads.
- */
+/** App declares the available steps; onboarding.order may select/reorder this catalog. */
 sealed interface StepDefinition {
+    val enabled: Boolean
     val id: StepId
     val type: StepType
     val showsProgressIndicator: Boolean
@@ -32,6 +25,7 @@ data class ContentStepDefinition(
     /** App-supplied layout honoring the ID contract; 0 = SDK default layout. */
     @LayoutRes val layoutRes: Int = 0,
     override val showsProgressIndicator: Boolean = true,
+    override val enabled: Boolean = true,
 ) : StepDefinition {
     override val type: StepType get() = StepType.CONTENT
 }
@@ -48,6 +42,7 @@ data class AdFullScreenStepDefinition(
     @LayoutRes val layoutRes: Int = 0,
     /** Null inherits AdsConfig.fullScreenSkipStyle. */
     val skipButtonStyle: FullScreenSkipStyle? = null,
+    override val enabled: Boolean = true,
 ) : StepDefinition {
     override val type: StepType get() = StepType.AD_FULL_SCREEN
     override val showsProgressIndicator: Boolean get() = false

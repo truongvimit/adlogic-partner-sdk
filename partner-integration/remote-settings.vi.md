@@ -1,6 +1,6 @@
 # Cấu hình ads và hành vi onboarding
 
-**Mapping fullscreen:** `native_fsob` là trang fullscreen bên trong OB (`StepId.OB3`); trang nội dung cuối dùng `native_ob3` (`StepId.OB4`). `native_fs` là native splash riêng, tùy chọn: `inter_splash → native_fs → LFO`. Mặc định example tắt cả `native_fs` và các tier `_high*` của nó. Khi bật, slot này preload sau khi splash interstitial load thành công, cùng LFO1 ở chế độ SEQUENTIAL mặc định; chế độ PARALLEL có thể preload LFO1 sớm hơn. Chỉ mở sau khi interstitial đóng, khi màn đích là LFO và native đã sẵn sàng. Native splash bị tắt, load fail hoặc chưa sẵn sàng thì đi thẳng LFO. Slot có buffer riêng, không ảnh hưởng fullscreen OB. Example đặt `enable_ua_check = false` cho `native_ob3` và các tier để user organic cũng có thể thấy ads ở trang cuối.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -33,7 +33,7 @@ OnboardingSdk.configure(onboardKitConfig {
     steps(
         ContentStepDefinition(StepId.OB1, titleRes = R.string.welcome, imageRes = R.drawable.welcome),
         ContentStepDefinition(StepId.OB2, titleRes = R.string.features),
-        AdFullScreenStepDefinition(StepId.OB3),
+        AdFullScreenStepDefinition(StepId.FULL1),
         ContentStepDefinition(StepId.OB4, titleRes = R.string.get_started),
     )
     // Cũng là mặc định của builder. Không cần chép từng ad ID hoặc timing vào code.
@@ -48,8 +48,8 @@ OnboardingSdk.configure(onboardKitConfig {
 | Splash banner/interstitial | `banner_splash` / `inter_splash` |
 | Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
-| Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fsob` |
+| Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
+| Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native/interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -114,7 +114,7 @@ Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là s�
 - `auto_next`: quay về thì chuyển trang onboarding đang hiển thị, không tải ad thay thế. Ở LFO2: tự confirm ngôn ngữ đã chọn. Ở LFO1: chọn ngôn ngữ hiện tại/mặc định để sang LFO2.
 - `none`: giữ ad và trang hiện tại; không reload theo click, không tự chuyển trang.
 
-Mặc định LFO1/LFO2 và mọi native khác là `reload`; các trang content/fullscreen trong pager onboarding là `auto_next`. Native splash riêng và OB5 là `reload`. Trong example, trang content cuối mang step ID `ob4`, còn `ob3` là trang fullscreen.
+Mặc định LFO1/LFO2 và mọi native khác là `reload`; các trang content/fullscreen trong pager onboarding là `auto_next`. Native splash riêng và OB5 là `reload`. Trong example, `ob1..ob4` là content; `full1/full2` là fullscreen. Pager OB không reload: remote `reload` được xử lý như `none`.
 
 Cấu hình chung/placement trong `ad_behavior_config` qua `native.click.action` hoặc `placement_overrides.<key>.click.action`. Với `onboarding_config`, dùng scope từng màn/nhóm bên dưới hoặc `onboarding.steps.<id>.behavior.click.action`. Một `click.action` hợp lệ được khai báo tường minh sẽ thắng cả cờ cũ `reload.on_ad_click` và `navigation.ad_click_return_completes_step`: không thể vừa auto-next vừa click reload. Timer/resume refresh và timeout tự chuyển trang fullscreen là các cài đặt riêng.
 
@@ -136,7 +136,7 @@ Ví dụ override trong `onboarding_config` (LFO2 mặc định là `reload`; v�
 
 - LFO1/LFO2: `lfo.native_template` (SDK default `CTA_BOTTOM`). Content OB: `onboarding.ads.content_template` (`CTA_TOP`), có thể override từng `onboarding.steps.<id>.native_template` (mặc định `""`, nghĩa là kế thừa). Question: `question.native.template` (`CTA_BOTTOM`).
 - Thứ tự chọn frame: template tường minh của trang > template tường minh của nhóm/màn > `ad_config.<key>.positionCTA` (`TOP`/`BOTTOM`) > template host/SDK. “Tường minh” gồm remote hợp lệ hoặc custom local asset; bản asset SDK nguyên mẫu không tự ghi đè cấu hình cũ. Khi thử riêng `positionCTA`, bỏ override template tương ứng. `positionCTA` không bị sao chép thành một field mới.
-- Các preset `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` dùng cho native nội dung; field template chung cũng nhận `FULL_SCREEN`/`DIALOG` như API trước. Riêng native trong popup LFO luôn dùng `DIALOG`, native ad-only OB3/OB5 luôn dùng `FULL_SCREEN` để giữ khung chứa tương ứng. Custom `R.layout` của trang vẫn ở app.
+- Các preset `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` dùng cho native nội dung; field template chung cũng nhận `FULL_SCREEN`/`DIALOG` như API trước. Riêng native trong popup LFO luôn dùng `DIALOG`, native ad-only Full1/Full2/OB5 luôn dùng `FULL_SCREEN` để giữ khung chứa tương ứng. Custom `R.layout` của trang vẫn ở app.
 - Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. Đây không phải thứ tự splash mặc định: LFO1 luôn được lên lịch sau bước remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
 - `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Scope cụ thể ưu tiên scope chung, rồi cấu hình local; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
 - `native.presentation.cta_corner_radius_dp` mặc định `20` dp, có thể override theo placement hoặc scope native từng màn. Áp dụng khi CTA có màu nền tường minh từ `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; màu `default` giữ drawable XML như trước.
@@ -273,6 +273,9 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của trang fullscreen trong OB. |
 | `onboarding.fullscreen.auto_next.enabled` | `true` | Không điều khiển OB5 standalone. |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` | Timer từ page selection, tính background như hiện tại. |
+| `onboarding.order` | Thứ tự app khi thiếu | Array chọn/sắp xếp catalog; `[]` bỏ pager. |
+| `onboarding.steps.full1.enabled` | `true` | AND với enabled của app. |
+| `onboarding.steps.full2.enabled` | `true` | AND với enabled của app. |
 | `onboarding.steps.ob1.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
 | `onboarding.steps.ob1.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
 | `onboarding.steps.ob1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
@@ -284,10 +287,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.steps.ob4.enabled` | `true` | Công tắc của slot/step; vẫn qua gate host. |
 | `onboarding.steps.ob4.native_template` | `""` | Rỗng kế thừa template nhóm; CTA_TOP/CTA_BOTTOM/COMPACT. Hỗ trợ cả ID trang custom. |
 | `onboarding.steps.ob4.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
-| `onboarding.preload.initial_content_trigger` | `"FIRST_LANGUAGE_SELECTION"` | SPLASH_HANDOFF / LFO_SHOWN / FIRST_LANGUAGE_SELECTION. |
-| `onboarding.preload.initial_content_count` | `2` | Số content native đầu được preload; 0 không preload nhóm đầu. |
-| `onboarding.preload.next_step_enabled` | `true` | Preload step n+1 khi chọn step n. |
-| `onboarding.preload.upcoming_fullscreen_enabled` | `true` | Preload fullscreen tiếp theo sớm từ content trước nó. |
 | `onboarding.preload.ob5_on_last_step` | `true` | Warm OB5 khi tới cuối pager; vẫn cần OB5 bật. |
 | `onboarding.preload.question_on_last_step` | `true` | Warm question khi tới cuối pager. |
 | `onboarding.exit_interstitial.enabled` | `true` | Bật/tắt hành động interstitial cuối OB; unit vẫn phải được ad_config cho phép. |

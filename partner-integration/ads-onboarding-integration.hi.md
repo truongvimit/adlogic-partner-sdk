@@ -1,6 +1,6 @@
 # Ads + OnboardKit integration
 
-**Fullscreen placement mapping:** OB के अंदर fullscreen page (`StepId.OB3`) के लिए `native_fsob` है; आखिरी content page (`StepId.OB4`) `native_ob3` इस्तेमाल करता है। `native_fs` अलग optional splash native है: `inter_splash → native_fs → LFO`। Example defaults में `native_fs` और इसके सभी `_high*` tiers बंद हैं। चालू होने पर splash interstitial load होने के बाद यह preload होता है, default SEQUENTIAL mode में LFO1 के साथ; PARALLEL mode में LFO1 पहले preload हो सकता है। यह interstitial बंद होने के बाद तभी खुलता है जब destination LFO हो और native तैयार हो। बंद, failed या unready native होने पर सीधे LFO खुलता है। इसका buffer अलग है और OB fullscreen पर कोई असर नहीं पड़ता। आखिरी page पर organic users भी ads देख सकें, इसलिए example में `native_ob3` और इसके tiers का `enable_ua_check = false` है.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← गाइड चुनें](README.hi.md)
 
@@ -100,11 +100,13 @@ Ad unit IDs में **`/`** होता है। हर file में [debu
 | `native_popup_lang` | भाषा confirmation popup का native | `languageConfirmNative` |
 | `native_ob1` | सामग्री 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | सामग्री 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fsob` | सिर्फ ad वाला page — `StepId.OB3` | `stepNatives[StepId.OB3]` |
-| `native_ob3` | सामग्री 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
+| `native_full1` | Full1 — `StepId.FULL1` | `stepNatives[StepId.FULL1]` |
+| `native_full2` | Full2 — `StepId.FULL2` | `stepNatives[StepId.FULL2]` |
+| `native_ob3` | Content 3 — `StepId.OB3` | `stepNatives[StepId.OB3]` |
+| `native_ob4` | Content 4 — `StepId.OB4` | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | पूरे onboarding के बाद, destination स्क्रीन से पहले | `afterOnboardingInterstitial` |
 
-यह mapping बनाए रखें: `native_ob3` **OB4** पर सामग्री 3 है; **OB3** fullscreen page है। `inter_after_ob3` पूरे onboarding के बाद दिखता है।
+`native_ob3` → **OB3**, `native_ob4` → **OB4**; `native_full1/2` → **Full1/Full2**. `inter_after_ob3` पूरे onboarding के बाद दिखता है।
 
 SDK debuggable के अनुसार file चुनता है। Debug build में JSON गायब या गलत हो तो असली file इस्तेमाल होती है; live IDs की जगह test IDs नहीं आते। सफलतापूर्वक load हुआ debug asset default रूप से remote overrides रोकता है।
 
@@ -453,7 +455,7 @@ Splash, OB5 और प्रश्न स्क्रीन खुद को ब
 - [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; fullscreen native सामग्री 2 और 3 के बीच रहता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
 - [ ] LFO: भाषा चुनकर Back दबाने पर Save दिखता है और स्क्रीन बनी रहती है; मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है, दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है।
 - [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।
-- [ ] `native_ob2` और `native_ob2_high` दोनों बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_fsob` और `native_fsob_high` दोनों बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash`, `inter_after_ob3` और उनके सभी `_high*` floors बंद करें: destination स्क्रीन फिर भी मिलती है।
+- [ ] `native_ob2` और `native_ob2_high` दोनों बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_full1` और `native_full1_high` दोनों बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash`, `inter_after_ob3` और उनके सभी `_high*` floors बंद करें: destination स्क्रीन फिर भी मिलती है।
 - [ ] बिना नेटवर्क टेस्ट करें: default रूप से connection prompt दिखता है; offline support चुना हो तो flow SDK के timeout पर फिर भी आगे बढ़ता है और किसी app callback पर अटकता नहीं।
 - [ ] पूरा होने के बाद दोबारा खोलें: splash से होते हुए आपकी app में, OB दोबारा नहीं चलता; splash interstitial बंद होने पर आपकी स्क्रीन पहले से मौजूद होती है। First-open टेस्ट करने के लिए app data clear करें; OB के बीच app बंद करके दोबारा खोलने पर splash के बाद LFO से शुरू होना चाहिए।
 - [ ] आपकी app की screens चुनी हुई भाषा इस्तेमाल करती हैं; AAB भेजते समय अनुवाद और language split configuration दोनों जाँचें।

@@ -18,6 +18,7 @@ import io.onboardkit.ads.loadAndShowInterstitial
 import io.onboardkit.core.FinishReason
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepHost
+import io.onboardkit.config.StepDefinition
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -57,7 +58,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             if (super.resumeBlockedByScreen || !::binding.isInitialized || exitResolved ||
                 binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return true
             val id = enabledStepIds.getOrNull(binding.obStepPager.currentItem) ?: return true
-            return sdk.configOrNull()?.stepById(id)?.type != StepType.CONTENT
+            return stepDefinition(id)?.type != StepType.CONTENT
         }
 
     private lateinit var binding: ObActivityOnboardingBinding
@@ -130,13 +131,17 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         }
     }
 
+    /** Keep the running pager's catalog stable when a later remote changes onboarding.order. */
+    internal fun stepDefinition(id: StepId): StepDefinition? =
+        (if (::pagerAdapter.isInitialized) pagerAdapter.currentPages().firstOrNull { it.definition.id == id }?.definition else null)
+            ?: sdk.configOrNull()?.stepById(id)
+
     private fun buildPages(): List<StepPage> {
-        val config = sdk.requireConfig()
         val contentVariant = NativeTemplates.templateForPlacement(
             AdPlacement.StepNative(enabledStepIds.first()),
         ).name
         return enabledStepIds.mapNotNull { id ->
-            config.stepById(id)?.let { def ->
+            stepDefinition(id)?.let { def ->
                 val variant = when (def.type) {
                     StepType.CONTENT -> contentVariant
                     StepType.AD_FULL_SCREEN -> "fullscreen"
@@ -228,10 +233,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         if (config.behavior.lockPagerSwipe || exitResolved) return false
         val position = binding.obStepPager.currentItem
         val stepId = enabledStepIds.getOrNull(position) ?: return false
-        return when (config.stepById(stepId)?.type) {
+        return when (stepDefinition(stepId)?.type) {
             StepType.AD_FULL_SCREEN -> swipeEnabledAdStep == stepId
-            StepType.CONTENT -> stepId == StepId.OB2 ||
-                (stepId != StepId.OB1 && position == enabledStepIds.lastIndex)
+            StepType.CONTENT -> stepId != StepId.OB1
             null -> false
         }
     }

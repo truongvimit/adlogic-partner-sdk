@@ -139,19 +139,24 @@
       },
       "ob3": {
         "enabled": true,
-        "behavior": {}
+        "behavior": {},
+        "native_template": ""
       },
       "ob4": {
         "enabled": true,
         "native_template": "",
         "behavior": {}
+      },
+      "full1": {
+        "enabled": true,
+        "behavior": {}
+      },
+      "full2": {
+        "enabled": true,
+        "behavior": {}
       }
     },
     "preload": {
-      "initial_content_trigger": "FIRST_LANGUAGE_SELECTION",
-      "initial_content_count": 2,
-      "next_step_enabled": true,
-      "upcoming_fullscreen_enabled": true,
       "ob5_on_last_step": true,
       "question_on_last_step": true
     },
@@ -161,7 +166,15 @@
       "wait_timeout_ms": 8000,
       "next_screen_timing": "UNDER_AD",
       "behavior": {}
-    }
+    },
+    "order": [
+      "ob1",
+      "full1",
+      "ob2",
+      "full2",
+      "ob3",
+      "ob4"
+    ]
   },
   "ob5": {
     "enabled": false,

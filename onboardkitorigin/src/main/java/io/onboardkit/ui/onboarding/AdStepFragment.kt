@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Full-screen native step (OB3). No app content — the ad IS the page. Guarantees an exit:
+ * Full-screen native step (Full1/Full2). No app content — the ad IS the page. Guarantees an exit:
  * if remote hides Skip while auto-next is off, Skip is forced visible anyway. App-resume ads
  * are suppressed while this page shows so two ads never stack.
  */
@@ -87,7 +87,8 @@ class AdStepFragment : LazyStepFragment() {
     }
 
     private fun definition(): AdFullScreenStepDefinition? =
-        OnboardingSdk.configOrNull()?.stepById(stepId) as? AdFullScreenStepDefinition
+        ((activity as? ObOnboardingHostActivity)?.stepDefinition(stepId)
+            ?: OnboardingSdk.configOrNull()?.stepById(stepId)) as? AdFullScreenStepDefinition
 
     private fun requestAd() {
         val b = binding ?: return

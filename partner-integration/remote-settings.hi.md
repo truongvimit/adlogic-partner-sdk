@@ -1,6 +1,6 @@
 # Ads behavior और onboarding settings
 
-**Fullscreen placement mapping:** OB के अंदर fullscreen page (`StepId.OB3`) के लिए `native_fsob` है; आखिरी content page (`StepId.OB4`) `native_ob3` इस्तेमाल करता है। `native_fs` अलग optional splash native है: `inter_splash → native_fs → LFO`। Example defaults में `native_fs` और इसके सभी `_high*` tiers बंद हैं। चालू होने पर splash interstitial load होने के बाद यह preload होता है, default SEQUENTIAL mode में LFO1 के साथ; PARALLEL mode में LFO1 पहले preload हो सकता है। यह interstitial बंद होने के बाद तभी खुलता है जब destination LFO हो और native तैयार हो। बंद, failed या unready native होने पर सीधे LFO खुलता है। इसका buffer अलग है और OB fullscreen पर कोई असर नहीं पड़ता। आखिरी page पर organic users भी ads देख सकें, इसलिए example में `native_ob3` और इसके tiers का `enable_ua_check = false` है.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -39,8 +39,8 @@ ads = AdsConfig.fromAdConfig()
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
-| Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fsob` |
+| Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
+| Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -116,7 +116,7 @@ Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager क�
 
 - `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; हर content-step का `native_template`: `""` यानी inherit; `question.native.template`: `CTA_BOTTOM`।
 - Frame priority: explicit per-step template > explicit screen/group template > placement का `ad_config.positionCTA` (`TOP`/`BOTTOM`) > host/SDK template। Explicit में valid remote और custom app asset शामिल हैं; unmodified SDK asset पुराने settings override नहीं करता। `positionCTA` स्वयं test करने के लिए संबंधित template override हटाएँ।
-- Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only OB3/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
+- Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only Full1/Full2/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
 - Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। यह default splash order नहीं: दोनों strategies में LFO1 remote के बाद schedule होता है।
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। Specific scope shared scope से पहले, फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
@@ -255,6 +255,9 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
+| `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
+| `onboarding.steps.full1.enabled` | `true` |
+| `onboarding.steps.full2.enabled` | `true` |
 | `onboarding.steps.ob1.enabled` | `true` |
 | `onboarding.steps.ob1.native_template` | `""` |
 | `onboarding.steps.ob1.behavior` | `{}` |
@@ -266,10 +269,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.steps.ob4.enabled` | `true` |
 | `onboarding.steps.ob4.native_template` | `""` |
 | `onboarding.steps.ob4.behavior` | `{}` |
-| `onboarding.preload.initial_content_trigger` | `"FIRST_LANGUAGE_SELECTION"` |
-| `onboarding.preload.initial_content_count` | `2` |
-| `onboarding.preload.next_step_enabled` | `true` |
-| `onboarding.preload.upcoming_fullscreen_enabled` | `true` |
 | `onboarding.preload.ob5_on_last_step` | `true` |
 | `onboarding.preload.question_on_last_step` | `true` |
 | `onboarding.exit_interstitial.enabled` | `true` |

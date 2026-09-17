@@ -175,6 +175,7 @@ class SettingsDocument(
             }
             if (allowed != null && value !in allowed) return false
         }
+        if (value is List<*> && path == "onboarding.order") return value.all { it is String && it.isNotBlank() } && value.distinct().size == value.size
         if (value is List<*> && path.endsWith("failure_backoff_ms")) return value.isNotEmpty() && value.size <= 10 && value.all { it is Number && it.toLong() in 1..3_600_000 && it.toDouble() == it.toLong().toDouble() }
         if (value is List<*> && (path.endsWith("supported_codes") || path.endsWith("excluded_hosts"))) return value.all { it is String }
         return true

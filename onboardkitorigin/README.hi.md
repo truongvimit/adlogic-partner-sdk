@@ -1,5 +1,7 @@
 # OnboardKit
 
+[Luồng 6 màn OB, remote order và preload](../partner-integration/onboarding-flow.vi.md).
+
 Splash → भाषा चयन → onboarding → वैकल्पिक प्रश्न/paywall → आपकी app।
 SDK स्क्रीन बदलना, ads preload करना और प्रगति सहेजना संभालता है; आपकी app सामग्री और अंतिम स्क्रीन देती है।
 
@@ -174,7 +176,7 @@ Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/Onboar
 ```kotlin
 // Include this among your content pages in steps(...).
 AdFullScreenStepDefinition(
-    StepId.OB3,
+    StepId.FULL1,
     skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
@@ -190,7 +192,7 @@ Fullscreen page में default X 1 सेकंड बाद दिखता 
 page खुलता है। Manual completion के लिए `autoNextEnabled = false` रखें। Step के ad से वापसी
 default रूप से step पूरा करती है, इसलिए ये placements click पर replacement preload/show नहीं
 करते। Remote `ob_skip_button_delay_sec >= 0` local delay को override करता है; `-1` local value लेता है।
-`AdsConfig.fullScreenSkipStyle` OB3/OB5 का साझा button style है। Standalone OB5 में अलग defaults
+`AdsConfig.fullScreenSkipStyle` Full1/Full2/OB5 का साझा button style है। Standalone OB5 में अलग defaults
 हैं: 3 सेकंड का skip delay और 15 सेकंड का auto-dismiss।
 
 `inter_after_ob3` splash से अलग placement है। दिया गया provider pager entry पर preload करता

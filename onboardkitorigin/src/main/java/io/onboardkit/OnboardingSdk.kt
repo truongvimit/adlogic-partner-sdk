@@ -214,6 +214,7 @@ object OnboardingSdk {
 
     /** Clears all persisted progress (debug/logout). */
     suspend fun reset() {
+        if (::preloadChain.isInitialized) preloadChain.resetStepRequests()
         stateStore?.reset()
         session.reset()
     }

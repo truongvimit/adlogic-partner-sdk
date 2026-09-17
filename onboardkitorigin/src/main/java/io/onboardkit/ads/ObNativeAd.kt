@@ -96,10 +96,12 @@ internal fun Activity.showNativeAd(
         container.visibility = View.VISIBLE
         it.startShimmer()
     }
-    provider.preloadNative(
-        this,
-        NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement)),
-    )
+    if (!OnboardingSdk.preload().requestNativeOnce(
+        this, NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement)),
+    )) {
+        skeleton.stopShimmer()
+        placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)
+    }
 }
 
 private fun AdPlacement.reportUnavailable(

@@ -1,6 +1,6 @@
 # Tích hợp Ads + OnboardKit
 
-**Mapping fullscreen:** `native_fsob` là trang fullscreen bên trong OB (`StepId.OB3`); trang nội dung cuối dùng `native_ob3` (`StepId.OB4`). `native_fs` là native splash riêng, tùy chọn: `inter_splash → native_fs → LFO`. Mặc định example tắt cả `native_fs` và các tier `_high*` của nó. Khi bật, slot này preload sau khi splash interstitial load thành công, cùng LFO1 ở chế độ SEQUENTIAL mặc định; chế độ PARALLEL có thể preload LFO1 sớm hơn. Chỉ mở sau khi interstitial đóng, khi màn đích là LFO và native đã sẵn sàng. Native splash bị tắt, load fail hoặc chưa sẵn sàng thì đi thẳng LFO. Slot có buffer riêng, không ảnh hưởng fullscreen OB. Example đặt `enable_ua_check = false` cho `native_ob3` và các tier để user organic cũng có thể thấy ads ở trang cuối.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← Chọn hướng dẫn](README.vi.md)
 
@@ -100,11 +100,13 @@ Ad unit ID chứa **`/`**. Mỗi file có **45 entry** như [example debug](../a
 | `native_popup_lang` | Native trong popup xác nhận ngôn ngữ | `languageConfirmNative` |
 | `native_ob1` | Nội dung 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | Nội dung 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fsob` | Trang chỉ quảng cáo — `StepId.OB3` | `stepNatives[StepId.OB3]` |
-| `native_ob3` | Nội dung 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
+| `native_full1` | Full1 — `StepId.FULL1` | `stepNatives[StepId.FULL1]` |
+| `native_full2` | Full2 — `StepId.FULL2` | `stepNatives[StepId.FULL2]` |
+| `native_ob3` | Content 3 — `StepId.OB3` | `stepNatives[StepId.OB3]` |
+| `native_ob4` | Content 4 — `StepId.OB4` | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | Sau toàn bộ onboarding, trước màn đích | `afterOnboardingInterstitial` |
 
-Giữ ánh xạ: `native_ob3` là nội dung 3 ở **OB4**; **OB3** là fullscreen. `inter_after_ob3` hiện sau toàn bộ OB.
+`inter_after_ob3` shows after the entire configured OB list. See [migration](onboarding-flow.vi.md) for the former OB3/OB4 mapping.
 
 SDK chọn file theo debuggable. Debug thiếu/sai JSON sẽ dùng file thật, không tự đổi live ID thành test ID. Asset debug nạp thành công mặc định chặn remote ghi đè.
 
@@ -453,7 +455,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn lại ngôn ngữ hiện tại mở popup ngay, còn chọn ngôn ngữ khác phải chờ đủ tổng số click đã cấu hình.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Click native ở trang OB rồi quay lại chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.
-- [ ] Tắt cả `native_ob2` và `native_ob2_high`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt cả `native_fsob` và `native_fsob_high`: bỏ trang chỉ quảng cáo. Tắt `inter_splash`, `inter_after_ob3` và mọi tầng `_high*` của chúng: vẫn tới màn đích.
+- [ ] Tắt cả `native_ob2` và `native_ob2_high`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt cả `native_full1` và `native_full1_high`: bỏ trang chỉ quảng cáo. Tắt `inter_splash`, `inter_after_ob3` và mọi tầng `_high*` của chúng: vẫn tới màn đích.
 - [ ] Thử mất mạng: mặc định hiện prompt kết nối; nếu chọn hỗ trợ offline thì luồng vẫn đi tiếp theo timeout SDK, không treo vì callback app.
 - [ ] Mở lại sau khi hoàn thành: đi qua splash rồi vào app, không chạy lại OB; màn app đã sẵn khi đóng inter splash. Clear app data để kiểm tra first-open; đóng app giữa OB rồi mở lại phải bắt đầu từ LFO sau splash.
 - [ ] Các màn app dùng đúng ngôn ngữ đã chọn; kiểm tra cả bản dịch và cấu hình language split khi phát hành AAB.

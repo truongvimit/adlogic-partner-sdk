@@ -91,7 +91,7 @@ class NativeAdHelper(
         }
 
     var isEnablePreload: Boolean = AdBehavior.defaultBool("native.preload.enabled")
-        get() = config.behaviorValues().boolean("preload.enabled", field)
+        get() = config.canPreloadReplacement && config.behaviorValues().boolean("preload.enabled", field)
         private set
 
     var preloadKey: String = NativeAdPreload.getInstance().keyOf(config)
@@ -680,7 +680,7 @@ class NativeAdHelper(
     }
 
     private fun refillAfterShow() {
-        if (!isEnablePreload || !config.behaviorValues().boolean("preload.after_show", preloadClientOption.preloadAfterShow)) return
+        if (!config.canPreloadReplacement || !isEnablePreload || !config.behaviorValues().boolean("preload.after_show", preloadClientOption.preloadAfterShow)) return
         val preload = NativeAdPreload.getInstance()
         if (preload.getNativeAdBuffer(preloadKey).isEmpty() &&
             !preload.isPreloadInProgress(preloadKey)

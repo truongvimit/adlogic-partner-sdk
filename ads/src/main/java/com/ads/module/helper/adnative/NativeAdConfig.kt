@@ -34,6 +34,9 @@ open class NativeAdConfig(
      */
     private var placementKey: String? = null
 
+    /** A containing flow can forbid replacement preloads even when global policy enables them. */
+    open val canPreloadReplacement: Boolean get() = true
+
     var behavior: BehaviorValues? = null
     private val declaredCanReloadAds = canReloadAds
     internal fun behaviorValues() = behavior ?: AdBehavior.values("native", placementKey)

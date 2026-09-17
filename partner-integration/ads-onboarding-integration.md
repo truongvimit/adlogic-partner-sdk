@@ -1,10 +1,10 @@
 # Ads + OnboardKit integration
 
-**Fullscreen placement mapping:** `native_fsob` is the fullscreen page inside OB (`StepId.OB3`); the final content page uses `native_ob3` (`StepId.OB4`). `native_fs` is a separate, optional splash native: `inter_splash → native_fs → LFO`. Both `native_fs` and its `_high*` tiers are disabled in the example defaults. When enabled, it preloads after the splash interstitial loads, alongside LFO1 in the default SEQUENTIAL mode; PARALLEL mode may start LFO1 earlier. It opens only after the interstitial closes, only when the destination is LFO and the native is ready. A disabled, failed or unready splash native goes straight to LFO. It has a separate buffer and does not change OB fullscreen eligibility. The example sets `enable_ua_check = false` for `native_ob3` and its tiers so the last page can show ads to organic users too.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← Choose a guide](README.md)
 
-Sample flow: **Splash → language (LFO) → content 1 → content 2 → fullscreen native → content 3 → end-of-onboarding interstitial → MainActivity**. The SDK owns consent, notifications, ads and navigation; an ad shows only when it is eligible and filled.
+Sample flow: **Splash → language (LFO) → OB1 → Full1 → OB2 → Full2 → OB3 → OB4 → end-of-onboarding interstitial → MainActivity**. The SDK owns consent, notifications, ads and navigation; an ad shows only when it is eligible and filled.
 
 Do steps 1–6 and replace the **package, app details, content/images and destination screen**. The code keeps the SDK defaults; the JSON keeps the example debug configuration. Fill in the app token to enable Adjust; Firebase, app-open and purchases are in the [optional tables](#7-configure-only-what-your-app-needs).
 
@@ -100,11 +100,13 @@ Ad unit IDs contain **`/`**. Each file holds **45 entries**, like the [debug exa
 | `native_popup_lang` | Native in the language confirmation popup | `languageConfirmNative` |
 | `native_ob1` | Content 1 — `StepId.OB1` | `stepNatives[StepId.OB1]` |
 | `native_ob2` | Content 2 — `StepId.OB2` | `stepNatives[StepId.OB2]` |
-| `native_fsob` | Ad-only page — `StepId.OB3` | `stepNatives[StepId.OB3]` |
-| `native_ob3` | Content 3 — **`StepId.OB4`** | `stepNatives[StepId.OB4]` |
+| `native_full1` | Full1 — `StepId.FULL1` | `stepNatives[StepId.FULL1]` |
+| `native_full2` | Full2 — `StepId.FULL2` | `stepNatives[StepId.FULL2]` |
+| `native_ob3` | Content 3 — `StepId.OB3` | `stepNatives[StepId.OB3]` |
+| `native_ob4` | Content 4 — `StepId.OB4` | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | After all of onboarding, before the destination screen | `afterOnboardingInterstitial` |
 
-Keep this mapping: `native_ob3` is content 3 at **OB4**; **OB3** is the fullscreen page. `inter_after_ob3` shows after all of onboarding.
+`inter_after_ob3` shows after the entire configured OB list. See [migration](onboarding-flow.vi.md) for the former OB3/OB4 mapping.
 
 The SDK picks the file by debuggable. A debug build with a missing or invalid JSON falls back to the real file; it does not substitute test IDs for live IDs. A debug asset that loads successfully blocks remote overrides by default.
 
@@ -453,7 +455,7 @@ Splash, OB5 and the question screen exclude themselves; register only your app's
 - [ ] Walk LFO → OB → MainActivity on test ads; the fullscreen native sits between content 2 and 3, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; re-selecting the current language opens the popup immediately, while another language waits for the configured total tap count.
 - [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. A native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.
-- [ ] Disable both `native_ob2` and `native_ob2_high`: content page 2 still shows and does not borrow page 1's native. Disable both `native_fsob` and `native_fsob_high`: the ad-only page is skipped. Disable `inter_splash`, `inter_after_ob3` and all their `_high*` floors: the destination screen is still reached.
+- [ ] Disable both `native_ob2` and `native_ob2_high`: content page 2 still shows and does not borrow page 1's native. Disable both `native_full1` and `native_full1_high`: the ad-only page is skipped. Disable `inter_splash`, `inter_after_ob3` and all their `_high*` floors: the destination screen is still reached.
 - [ ] Test with no network: by default the connection prompt appears; if you opted into offline support the flow still continues on the SDK timeout and does not hang on an app callback.
 - [ ] Relaunch after completion: through the splash into your app, with no OB rerun; your screen is already there when the splash interstitial closes. Clear app data to test first-open; closing the app mid-OB and reopening must start at LFO after the splash.
 - [ ] Your app screens use the selected language; check both the translations and the language split configuration when shipping an AAB.

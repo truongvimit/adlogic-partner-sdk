@@ -11,8 +11,10 @@ object AppAdPlacement {
     const val NATIVE_OB1 = "native_ob1"
     const val NATIVE_OB2 = "native_ob2"
     const val NATIVE_FS = "native_fs"
-    const val NATIVE_FSOB = "native_fsob"
+    const val NATIVE_FULL1 = "native_full1"
+    const val NATIVE_FULL2 = "native_full2"
     const val NATIVE_OB3 = "native_ob3"
+    const val NATIVE_OB4 = "native_ob4"
     const val INTER_AFTER_OB3 = "inter_after_ob3"
 
     // Other placements from the example catalog; keep the ones your app uses.

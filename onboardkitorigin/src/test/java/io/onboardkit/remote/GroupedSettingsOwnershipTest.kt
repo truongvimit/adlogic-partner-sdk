@@ -64,15 +64,15 @@ class GroupedSettingsOwnershipTest {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
         fun pages() = FlowNavigator.enabledSteps(OnboardingSdk.requireConfig(), OnboardingSdk.flags(),
             canShowAdStep = OnboardingSdk::canFillAdOnlyStep)
-        assertFalse(StepId.OB3 in pages())
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", false), "native_fsob" to AdUnitConfig("remote_fs", true))))
-        assertTrue(StepId.OB3 in pages())
-        assertEquals(listOf("remote_fs"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder)
+        assertFalse(StepId.FULL1 in pages())
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", false), "native_full1" to AdUnitConfig("remote_fs", true))))
+        assertTrue(StepId.FULL1 in pages())
+        assertEquals(listOf("remote_fs"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder)
         // Behavior JSON cannot re-enable or remap the unit declared off in ad_config.
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob3":{"enabled":true,"native_enabled":true,"native_placement":"another"}}}}""")
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", true), "native_fsob" to AdUnitConfig("remote_fs", false))))
-        assertFalse(StepId.OB3 in pages())
-        assertEquals(0, OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.tierCount)
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"full1":{"enabled":true,"native_enabled":true,"native_placement":"another"}}}}""")
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", true), "native_full1" to AdUnitConfig("remote_fs", false))))
+        assertFalse(StepId.FULL1 in pages())
+        assertEquals(0, OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.tierCount)
     }
 
     @Test fun `remote template overrides the frame and removal restores ad config then host`() {

@@ -1,5 +1,7 @@
 # Partner integration guides
 
+[Flexible OB catalog, remote order and preload (Tiếng Việt)](onboarding-flow.vi.md)
+
 Pick the guide for the feature your app needs. Work through the basic integration in order; open the optional tables only when your app needs to change a default behaviour.
 
 | Your app needs | Guide to read | Module |

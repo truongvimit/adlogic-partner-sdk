@@ -1,5 +1,7 @@
 # OnboardKit
 
+[Luồng 6 màn OB, remote order và preload](../partner-integration/onboarding-flow.vi.md).
+
 Splash → chọn ngôn ngữ → onboarding → câu hỏi/paywall tùy chọn → app của bạn.
 SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình; app cung cấp nội dung và màn đích cuối cùng.
 
@@ -174,7 +176,7 @@ Cấu hình trong cùng khối `onboardKitConfig` với nội dung của app. `S
 ```kotlin
 // Include this among your content pages in steps(...).
 AdFullScreenStepDefinition(
-    StepId.OB3,
+    StepId.FULL1,
     skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
@@ -186,11 +188,11 @@ afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
 afterOnboardingInterstitialEnabled = true,
 ```
 
-Trang fullscreen mặc định hiện X sau 1 giây và tự chuyển sau 3 giây tính từ lúc chọn trang;
+Ví dụ trên hiện X sau 1 giây và tự chuyển sau 3 giây tính từ lúc chọn trang (default SDK là 5 và 15 giây);
 đặt `autoNextEnabled = false` nếu chỉ muốn chuyển bằng thao tác người dùng. Mặc định quay về
 từ ad của step sẽ hoàn thành bước, nên các placement này không preload/show ad thay thế khi click. Remote
 `ob_skip_button_delay_sec >= 0` ghi đè delay local; `-1` dùng local.
-`AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho OB3/OB5. OB5 độc lập có mặc định riêng:
+`AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho Full1/Full2/OB5. OB5 độc lập có mặc định riêng:
 hiện nút sau 3 giây và tự đóng sau 15 giây.
 
 `inter_after_ob3` là placement riêng với splash. Provider có sẵn preload khi vào pager và

@@ -71,7 +71,7 @@ object FlowNavigator {
     ): List<StepId> {
         val dropAdOnly = isPremium && config.ads.skipAdOnlyStepsWhenPremium
         return config.steps
-            .filter { flags.isStepEnabled(it.id) }
+            .filter { it.enabled && flags.isStepEnabled(it.id) }
             .filterNot {
                 it.type == StepType.AD_FULL_SCREEN && (dropAdOnly || !canShowAdStep(it.id))
             }

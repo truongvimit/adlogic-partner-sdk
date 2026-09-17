@@ -453,7 +453,7 @@ class NativeProviderOwnershipTest {
         assertEquals(0, unavailable)
     }
 
-    @Test fun `step click uses remote exclusive action live and freezes it across destination`() {
+    @Test fun `step click never reloads even when remote requests reload`() {
         val host = controller.get()
         val page = AdPlacement.StepNative(io.onboardkit.core.StepId.OB1)
         val settings = io.onboardkit.remote.OnboardingSettings.document
@@ -471,13 +471,24 @@ class NativeProviderOwnershipTest {
         controller.pause().stop().restart().start().resume()
         assertEquals(1, requests.size)
         vendorEvents.single().onAdClicked()
-        assertEquals("Reload starts before pause, even on an existing helper", 2, requests.size)
-        assertEquals(com.ads.module.helper.adnative.NativeClickAction.RELOAD, provider.nativeClickAction(page))
+        assertEquals("Onboarding never reloads its consumed slot", 1, requests.size)
+        assertEquals(com.ads.module.helper.adnative.NativeClickAction.NONE, provider.nativeClickAction(page))
         settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"none"}}}}}}""")
-        requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
         controller.pause().resume()
-        assertEquals(2, requests.size)
+        assertEquals(1, requests.size)
         assertFalse(provider.isNativeReady(page))
+    }
+
+    @Test fun `step never refills after show even with global replacement preload enabled`() {
+        val host = controller.get()
+        val page = AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL1)
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"full1":{"behavior":{"preload":{"enabled":true,"after_show":true},"reload":{"allowed":true,"timer_enabled":true,"interval_ms":1000}}}}}}""")
+        val container = FrameLayout(host).also(host::setContentView)
+        provider.preloadNative(host, request.copy(placement = page))
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        assertTrue(provider.bindNative(host, page, container, null))
+        main.idleFor(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1, requests.size)
     }
 
     @Test fun `content pager departure consumes old ad and return joins a pending preload`() {
@@ -486,8 +497,8 @@ class NativeProviderOwnershipTest {
     }
 
     @Test fun `full screen pager departure consumes old ad and return joins a pending preload`() {
-        verifyPagerReturn(io.onboardkit.ui.onboarding.AdStepFragment.newInstance(io.onboardkit.core.StepId.OB3, 0),
-            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.OB3))
+        verifyPagerReturn(io.onboardkit.ui.onboarding.AdStepFragment.newInstance(io.onboardkit.core.StepId.FULL1, 0),
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL1))
     }
 
     private fun verifyPagerReturn(fragment: io.onboardkit.ui.pager.LazyStepFragment, page: AdPlacement) {
@@ -501,6 +512,7 @@ class NativeProviderOwnershipTest {
             ads = io.onboardkit.config.AdsConfig(
                 contentStepNative = request.unit, fullScreenStepNative = request.unit)
         }.getOrThrow())
+        kotlinx.coroutines.runBlocking { io.onboardkit.OnboardingSdk.reset() }
         val parent = FrameLayout(host).apply { id = android.view.View.generateViewId() }
         host.setContentView(parent)
         host.supportFragmentManager.beginTransaction().add(parent.id, fragment).commitNow()

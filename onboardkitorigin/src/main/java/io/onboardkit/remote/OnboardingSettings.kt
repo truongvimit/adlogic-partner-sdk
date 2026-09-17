@@ -156,7 +156,11 @@ object OnboardingSettings {
             adClickReturnCompletesStep = v.boolean("onboarding.navigation.ad_click_return_completes_step", c.behavior.adClickReturnCompletesStep),
         )
         val legacySteps = setOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId.OB5, StepId.QUESTION)
-        val steps = c.steps.filter { step ->
+        val catalog = c.steps.associateBy { it.id.value }
+        val ordered = if (v.hasOverride("onboarding.order")) {
+            v.strings("onboarding.order").distinct().mapNotNull(catalog::get)
+        } else c.steps
+        val steps = ordered.filter { it.enabled }.filter { step ->
             step.id in legacySteps || v.boolean("onboarding.steps.${step.id.value}.enabled", true)
         }.map { step ->
             if (step !is AdFullScreenStepDefinition) step else {

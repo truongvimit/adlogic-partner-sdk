@@ -11,12 +11,11 @@ import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.remote.RemoteFlags
 
 /**
- * The n+1 preload chain: while the user reads screen n, the ad for screen n+1 loads.
+ * Native onboarding preload: all configured, eligible steps warm on language selection.
  *
  *   splash ready     → only the ads of the screen the flow is actually about to open
  *   LFO shown        → language native slot 2 (when the second slot is on)
- *   language picked  → first two content natives
- *   step n selected  → ad of step n+1
+ *   language picked  → all eligible content and fullscreen natives
  *   last step shown  → OB5 and question
  */
 class PreloadChain internal constructor(
@@ -27,14 +26,18 @@ class PreloadChain internal constructor(
     private val canShowAdStep: (StepId) -> Boolean = { true },
 ) {
 
+    private val requestedSteps = mutableSetOf<AdPlacement>()
     private var splashAttemptId: String? = null
     private var language1HandoffPending = false
 
     internal fun beginSplashAttempt(id: String) {
         if (splashAttemptId == id) return
+        requestedSteps.clear()
         splashAttemptId = id
         language1HandoffPending = false
     }
+
+    internal fun resetStepRequests() { requestedSteps.clear() }
 
     /** Transfers scheduling metadata only. Ads and terminal outcomes stay in the provider. */
     internal fun takeLanguage1Preload(): Boolean = language1HandoffPending.also {
@@ -54,7 +57,6 @@ class PreloadChain internal constructor(
         when (destination) {
             FlowDestination.LANGUAGE -> {
                 if (!language1AlreadyScheduled) preloadLanguage1(activity)
-                if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "SPLASH_HANDOFF") preloadInitialContent(activity)
             }
 
             FlowDestination.ONBOARDING ->
@@ -86,24 +88,17 @@ class PreloadChain internal constructor(
         if (OnboardingSettings.text("lfo.native2.preload_trigger") == "LFO_SHOWN" && cfg.language.secondNativeOnSelectEnabled && flags().enableLanguageNative2) {
             preloadNative(activity, AdPlacement.Language2)
         }
-        if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "LFO_SHOWN") preloadInitialContent(activity)
         if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "LFO_SHOWN") preloadNative(activity, AdPlacement.LanguageConfirm)
     }
 
     /**
-     * The first language selection warms OB1 and OB2 alongside the slot-2 wait/show.
-     * Fullscreen stays on the pager-entry chain; the confirm dialog loads on demand.
+     * Language selection warms every eligible onboarding native, including both fullscreen slots.
+     * The confirm dialog retains its own trigger.
      */
     fun onLanguageSelected(activity: Activity) {
         if (OnboardingSettings.text("lfo.native2.preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.Language2)
         if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.LanguageConfirm)
-        if (OnboardingSettings.text("onboarding.preload.initial_content_trigger") == "FIRST_LANGUAGE_SELECTION") preloadInitialContent(activity)
-    }
-
-    private fun preloadInitialContent(activity: Activity) {
-        val cfg = config() ?: return
-        enabledSteps().filter { cfg.stepById(it)?.type == StepType.CONTENT }
-            .take(OnboardingSettings.number("onboarding.preload.initial_content_count").toInt()).forEach { preloadForStep(activity, it) }
+        enabledSteps().forEach { preloadForStep(activity, it) }
     }
 
     /** Pager entry, including resumed flows. Empty flows never call this. */
@@ -117,26 +112,11 @@ class PreloadChain internal constructor(
     }
 
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {
-        val next = enabledSteps.getOrNull(index + 1)
-        if (next != null && OnboardingSettings.bool("onboarding.preload.next_step_enabled")) preloadForStep(activity, next)
-
-        // An ad-only page has no content of its own: arriving there without a filled ad leaves the
-        // user staring at a spinner. It gets the longest lead time available — requested from the
-        // first page that precedes it, not just from the one immediately before.
-        nextAdOnlyStep(enabledSteps, index)?.takeIf { OnboardingSettings.bool("onboarding.preload.upcoming_fullscreen_enabled") }?.let { preloadForStep(activity, it) }
-
-        if (next != null) return
+        if (index != enabledSteps.lastIndex) return
         // Last pager step: warm every possible exit. OB5 used to have a preload nobody called, so
         // its native was never ready and the whole screen was unreachable.
         if (flags().enableStepOb5 && OnboardingSettings.bool("onboarding.preload.ob5_on_last_step")) preloadOb5(activity)
         if (OnboardingSettings.bool("onboarding.preload.question_on_last_step")) preloadQuestion(activity)
-    }
-
-    private fun nextAdOnlyStep(enabledSteps: List<StepId>, index: Int): StepId? {
-        val cfg = config() ?: return null
-        return enabledSteps
-            .drop(index + 1)
-            .firstOrNull { cfg.stepById(it)?.type == StepType.AD_FULL_SCREEN }
     }
 
     fun preloadQuestion(activity: Activity) {
@@ -180,10 +160,21 @@ class PreloadChain internal constructor(
         // Also call for a queued/in-flight preload: the provider joins the network request or
         // transfers a foreground wait from the departing splash to the destination's owner.
         ObLog.d(ObLog.Section.PRELOAD, "${placement.key} request/join tiers=${unit.tierCount}")
-        adProvider.preloadNative(
-            activity,
-            NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement), allowWhileVisible),
-        )
+        requestNativeOnce(activity, NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement), allowWhileVisible))
+    }
+
+    /** Step requests share one attempt between language preload and screen binding. */
+    internal fun requestNativeOnce(activity: Activity, request: NativeAdRequest): Boolean {
+        val adProvider = provider ?: return false
+        val placement = request.placement
+        if (placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen) {
+            if (!requestedSteps.add(placement)) {
+                // Keep the in-flight request; attaching the screen may transfer its focus wait.
+                if (!adProvider.isNativeLoading(placement) && !adProvider.isNativeReady(placement)) return false
+            }
+        }
+        adProvider.preloadNative(activity, request)
+        return true
     }
 
     /**

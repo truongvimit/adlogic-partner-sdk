@@ -91,12 +91,12 @@ data class SystemBarConfig @JvmOverloads constructor(
 )
 
 data class BehaviorConfig(
-    /** Locks all swipe navigation. When false, OB2, filled fullscreen and the last content page allow swipe. */
+    /** Locks all swipe navigation. When false, every content step except OB1 and impressed fullscreen steps allow swipe. */
     val lockPagerSwipe: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.lock_pager_swipe"),
     /** Back returns to the previous step; on the first step it exits the app. */
     val backNavigatesBack: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.back_navigates_back"),
-    /** Compatibility only: a new page visit always consumes an unused ad or waits for a new one. */
-    @Deprecated("Native presentations end on page departure; return always starts a new visit.")
+    /** Compatibility only: each step has one load attempt per onboarding run. */
+    @Deprecated("Step ads do not reload on return.")
     val reloadAdOnStepReturn: Boolean = false,
     /**
      * A forward swipe on an eligible last step completes it exactly like its CTA, including
@@ -153,12 +153,14 @@ class OnboardKitConfigBuilder internal constructor() {
         stepList += definition
     }
 
-    /** The classic OB1..OB4 template: three content steps and one full-screen ad step. */
+    /** Four content steps and two independent full-screen native steps. */
     fun defaultSteps() {
         stepList += listOf(
             ContentStepDefinition(StepId.OB1),
+            AdFullScreenStepDefinition(StepId.FULL1),
             ContentStepDefinition(StepId.OB2),
-            AdFullScreenStepDefinition(StepId.OB3),
+            AdFullScreenStepDefinition(StepId.FULL2),
+            ContentStepDefinition(StepId.OB3),
             ContentStepDefinition(StepId.OB4),
         )
     }

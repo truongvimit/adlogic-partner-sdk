@@ -70,7 +70,7 @@ class OnboardKitConfigTest {
     fun `default steps build a valid config`() {
         val result = onboardKitConfig { defaultSteps() }
         assertTrue(result.isSuccess)
-        assertEquals(4, result.getOrThrow().steps.size)
+        assertEquals(6, result.getOrThrow().steps.size)
     }
 
     @Test

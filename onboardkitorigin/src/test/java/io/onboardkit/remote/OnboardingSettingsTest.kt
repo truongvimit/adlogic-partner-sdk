@@ -33,6 +33,34 @@ class OnboardingSettingsTest {
         assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
     }
 
+    @Test fun `remote order is a subset of the app catalog and absent order preserves app order`() {
+        val cfg = onboardKitConfig {
+            steps(ContentStepDefinition(StepId.OB4), AdFullScreenStepDefinition(StepId.FULL2),
+                ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false))
+        }.getOrThrow()
+        assertEquals(listOf(StepId.OB4, StepId.FULL2, StepId.OB1),
+            io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(cfg), RemoteFlags()))
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob4"]}}""")
+        assertEquals(listOf(StepId.FULL2, StepId.OB4), OnboardingSettings.resolve(cfg).steps.map { it.id })
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
+        assertTrue(OnboardingSettings.resolve(cfg).steps.isEmpty())
+    }
+
+    @Test fun `malformed order falls back to app order instead of partially changing flow`() {
+        val cfg = onboardKitConfig { defaultSteps() }.getOrThrow()
+        for (order in listOf("[1, true]", "[\"ob1\",\"ob1\"]", "\"ob1\"")) {
+            OnboardingSettings.document.acceptSuccessfulFetch("{\"onboarding\":{\"order\":$order}}")
+            assertEquals(cfg.steps, OnboardingSettings.resolve(cfg).steps)
+        }
+    }
+
+    @Test fun `standard placements keep identities across reorder with separate fullscreen pools`() {
+        val ads = AdsConfig.fromAdConfig()
+        for (n in 1..4) assertEquals("native_ob$n", ads.placementKeyFor(AdPlacement.StepNative(StepId("ob$n"))))
+        for (n in 1..2) assertEquals("native_full$n", ads.placementKeyFor(AdPlacement.StepFullScreen(StepId("full$n"))))
+        assertNull(ads.placementKeyFor(AdPlacement.StepFullScreen(StepId.OB3)))
+    }
+
     @After fun clearRemote() {
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         AdBehavior.document.acceptSuccessfulFetch(null)
@@ -92,14 +120,14 @@ class OnboardingSettingsTest {
         assertNull(OnboardingSettings.resolve(config).ads.languageNative)
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
             "native_lang" to AdUnitConfig("remote_n", true),
-            "native_fsob" to AdUnitConfig("remote_fs", true),
+            "native_full1" to AdUnitConfig("remote_fs", true),
         )))
         val available = OnboardingSettings.resolve(config)
         assertEquals(listOf("remote_n"), available.ads.languageNative!!.loadOrder)
-        assertEquals(listOf("remote_fs"), available.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder)
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fsob" to AdUnitConfig("remote_fs", false))))
+        assertEquals(listOf("remote_fs"), available.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder)
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_full1" to AdUnitConfig("remote_fs", false))))
         val disabled = OnboardingSettings.resolve(config)
-        assertTrue(disabled.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.OB3))!!.loadOrder.isEmpty())
+        assertTrue(disabled.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder.isEmpty())
         assertNull(disabled.ads.languageNative)
     }
 

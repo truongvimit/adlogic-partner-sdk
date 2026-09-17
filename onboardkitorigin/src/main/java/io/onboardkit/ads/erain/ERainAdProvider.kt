@@ -507,9 +507,14 @@ class ERainAdProvider(
         val sdkTemplate = io.onboardkit.config.NativeTemplate.entries.any {
             io.onboardkit.ads.NativeTemplates.layoutFor(it) == layoutRes
         }
+        val step = placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen
         return object : NativeAdConfig(ids, true, false, layoutRes) {
+            override val canPreloadReplacement: Boolean get() = !step
+            override val canReloadAds: Boolean get() = !step && super.canReloadAds
             override val resolvedClickAction: NativeClickAction
-                get() = OnboardingSettings.nativeClickAction(placement)
+                get() = OnboardingSettings.nativeClickAction(placement).let {
+                    if (step && it == NativeClickAction.RELOAD) NativeClickAction.NONE else it
+                }
             // Resolve SDK frames at bind too, retaining the fill and any custom host layout.
             override val layoutId: Int
                 get() = if (sdkTemplate && io.onboardkit.OnboardingSdk.configOrNull() != null)

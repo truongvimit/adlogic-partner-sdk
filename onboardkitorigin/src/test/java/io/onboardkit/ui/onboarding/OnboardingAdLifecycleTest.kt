@@ -198,10 +198,10 @@ class OnboardingAdLifecycleTest {
         main.idleFor(400, MILLISECONDS)
     }
 
-    @Test fun `fsob binds fullscreen then final content binds its own native with splash native off`() {
+    @Test fun `full1 binds fullscreen then OB3 content binds its own native with splash native off`() {
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
             "native_fs" to com.ads.module.config.AdUnitConfig("unused_splash_native", false),
-            "native_fsob" to com.ads.module.config.AdUnitConfig("ob_fullscreen", true),
+            "native_full1" to com.ads.module.config.AdUnitConfig("ob_fullscreen", true),
             "native_ob1" to com.ads.module.config.AdUnitConfig("content1", true),
             "native_ob2" to com.ads.module.config.AdUnitConfig("content2", true),
             "native_ob3" to com.ads.module.config.AdUnitConfig("content3", true, enableUaCheck = false),
@@ -211,14 +211,14 @@ class OnboardingAdLifecycleTest {
         activity.setTheme(R.style.ob_Theme_OnboardKit)
         requireNotNull(controller).setup().visible()
         layout()
-        assertEquals(4, pager.adapter!!.itemCount)
-        pager.setCurrentItem(2, false)
+        assertEquals(5, pager.adapter!!.itemCount)
+        pager.setCurrentItem(1, false)
         layout()
-        assertTrue(listeners.containsKey(AdPlacement.StepFullScreen(StepId.OB3)))
+        assertTrue(listeners.containsKey(AdPlacement.StepFullScreen(StepId.FULL1)))
         pager.setCurrentItem(3, false)
         layout()
-        assertTrue(listeners.containsKey(AdPlacement.StepNative(StepId.OB4)))
-        assertEquals(listOf("content3"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepNative(StepId.OB4))!!.loadOrder)
+        assertTrue(listeners.containsKey(AdPlacement.StepNative(StepId.OB3)))
+        assertEquals(listOf("content3"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepNative(StepId.OB3))!!.loadOrder)
         assertEquals(View.VISIBLE, activity.supportFragmentManager.fragments
             .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
             .findViewById<View>(R.id.ob_ad_block).visibility)
@@ -230,6 +230,30 @@ class OnboardingAdLifecycleTest {
         flingForward()
         assertEquals(0, pager.currentItem)
         pager.setCurrentItem(1, false)
+        layout()
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `late remote order does not remove or reorder pages in a running pager`() {
+        launch(lockSwipe = false)
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4"]}}""")
+        activity.rebuildPendingPages()
+        assertEquals(3, pager.adapter!!.itemCount)
+        assertEquals(StepId.OB1, activity.stepDefinition(StepId.OB1)?.id)
+        assertFalse(pager.isUserInputEnabled)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertEquals(StepId.OB2, activity.stepDefinition(StepId.OB2)?.id)
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `all middle content except OB1 allows swipe regardless of position`() {
+        launch(first = ContentStepDefinition(StepId.OB3), second = ContentStepDefinition(StepId.OB1), lockSwipe = false)
+        assertTrue(pager.isUserInputEnabled)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertFalse(pager.isUserInputEnabled)
+        pager.setCurrentItem(2, false)
         layout()
         assertTrue(pager.isUserInputEnabled)
     }

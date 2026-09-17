@@ -3,10 +3,12 @@
 Splash → language → onboarding → optional question/paywall → your app.
 The SDK owns screen transitions, ad preloading and saved progress; your app supplies content and the final destination.
 
-In the default flow, splash preloads only LFO1. LFO1 entry preloads LFO2; the first language
-selection starts the existing LFO2 wait/show and preloads the first two content natives (OB1/OB2).
-Entering OB1 warms the fullscreen native, and entering fullscreen warms the third content native.
-In code, fullscreen is `StepId.OB3` and the third content page is `StepId.OB4`.
+Default order: **OB1 → Full1 → OB2 → Full2 → OB3 → OB4**. Step IDs are stable identities:
+`OB1..OB4` use `native_ob1..4`; `FULL1/FULL2` use `native_full1/2`.
+The first language selection preloads every eligible native in the configured list. Pager entry
+preloads the exit interstitial. Step ads never reload on return or refill after showing.
+App definitions may set `enabled = false`; `onboarding.order` in remote settings can select and
+reorder the remaining catalog. See the [configuration and migration guide](../partner-integration/onboarding-flow.vi.md).
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
@@ -166,7 +168,7 @@ Leave optional slots unset unless you need them; some slots inherit fallback uni
 | `afterOnboardingInterstitial` | Separate interstitial at onboarding completion (`inter_after_ob3`) |
 | `appResume` | App-open eligibility during language/content and in-app returns |
 
-`defaultSteps()` creates OB1, OB2, OB3 (ad-only), OB4. For your copy and images, replace it with `steps(ContentStepDefinition(...), ...)`; see [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt).
+`defaultSteps()` creates OB1, Full1, OB2, Full2, OB3, OB4. For your copy and images, replace it with `steps(ContentStepDefinition(...), ...)`; see [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in request order; banners take one ID.
 
 JSON names such as `inter_splash` or `native_lang` must be mapped into `AdsConfig`; the SDK does not infer every mapping from the field name.
@@ -182,7 +184,7 @@ Configure these in the same `onboardKitConfig` block as your content. `StepId` i
 ```kotlin
 // Include this among your content pages in steps(...).
 AdFullScreenStepDefinition(
-    StepId.OB3,
+    StepId.FULL1,
     skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
@@ -194,14 +196,14 @@ afterOnboardingInterstitial = InterstitialAdUnit("YOUR_INTERSTITIAL_UNIT_ID"),
 afterOnboardingInterstitialEnabled = true,
 ```
 
-The fullscreen page defaults to an X after 1 second and automatic advance after 3 seconds from
-page selection; set `autoNextEnabled = false` for manual completion. Step ad return completes
+The example above sets an X after 1 second and automatic advance after 3 seconds from
+page selection (SDK defaults are 5 and 15 seconds); set `autoNextEnabled = false` for manual completion. Step ad return completes
 the step by default, so these placements do not preload/show a replacement on click. Remote
 `ob_skip_button_delay_sec >= 0` overrides the local skip delay; `-1` uses the local value.
-`AdsConfig.fullScreenSkipStyle` sets the shared appearance for OB3/OB5. Standalone OB5 uses
+`AdsConfig.fullScreenSkipStyle` sets the shared appearance for Full1/Full2/OB5. Standalone OB5 uses
 its own 3-second skip and 15-second auto-dismiss defaults.
 
-With `BehaviorConfig.lockPagerSwipe = false`, OB1 stays locked, OB2 permits swipe, and fullscreen
+With `BehaviorConfig.lockPagerSwipe = false`, OB1 stays locked, OB2/OB3/OB4 permit swipe, and fullscreen
 permits swipe only after its ad is shown for the current visit. Loading or failure keeps fullscreen
 swipe locked; X, timeout and automatic no-fill completion still work. Forward swipe on the last
 content page uses the same exit interstitial as its CTA when `swipeCompletesLastStep = true`.

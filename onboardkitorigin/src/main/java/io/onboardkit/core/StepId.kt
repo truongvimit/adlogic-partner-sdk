@@ -15,6 +15,8 @@ value class StepId(val value: String) {
         val OB2 = StepId("ob2")
         val OB3 = StepId("ob3")
         val OB4 = StepId("ob4")
+        val FULL1 = StepId("full1")
+        val FULL2 = StepId("full2")
         val OB5 = StepId("ob5")
         val QUESTION = StepId("question")
     }

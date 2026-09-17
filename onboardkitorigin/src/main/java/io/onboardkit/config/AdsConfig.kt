@@ -103,7 +103,7 @@ enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
  * | [languageDupNative] | native that replaces it on the first language tap |
  * | [languageConfirmNative] | native inside the "Confirm Language" modal |
  * | [contentStepNative] | native on each onboarding content page |
- * | [fullScreenStepNative] | the ad-only onboarding page (OB3) |
+ * | [fullScreenStepNative] | the ad-only onboarding pages |
  * | [ob5Native] | native on the extra onboarding page after OB4 (OB5) |
  * | [questionNative] | native on the survey/question screen |
  * | [questionInterstitial] | full-screen ad after the survey is submitted |
@@ -166,7 +166,7 @@ data class AdsConfig(
     val afterOnboardingInterstitialEnabled: Boolean = OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"),
     /** UNDER_AD starts the next screen under this ad; only an entry launch waits for close. */
     val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.valueOf(OnboardingSettings.defaultText("onboarding.exit_interstitial.next_screen_timing")),
-    /** Shared Skip/X appearance for OB3 and standalone OB5. */
+    /** Shared Skip/X appearance for fullscreen steps and standalone OB5. */
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
     /** App-owned association with ad_config keys; never duplicated in behavior JSON. */
     val placementKeys: Map<AdPlacement, String> = emptyMap(),
@@ -188,8 +188,10 @@ data class AdsConfig(
                 AdPlacement.LanguageConfirm to "native_popup_lang",
                 AdPlacement.StepNative(StepId.OB1) to "native_ob1",
                 AdPlacement.StepNative(StepId.OB2) to "native_ob2",
-                AdPlacement.StepNative(StepId.OB4) to "native_ob3",
-                AdPlacement.StepFullScreen(StepId.OB3) to "native_fsob",
+                AdPlacement.StepNative(StepId.OB3) to "native_ob3",
+                AdPlacement.StepNative(StepId.OB4) to "native_ob4",
+                AdPlacement.StepFullScreen(StepId.FULL1) to "native_full1",
+                AdPlacement.StepFullScreen(StepId.FULL2) to "native_full2",
                 AdPlacement.Ob5 to "native_onboarding_fullscreen_1_4",
                 AdPlacement.QuestionNative to "native_question",
                 AdPlacement.QuestionInterstitial to "inter_question",

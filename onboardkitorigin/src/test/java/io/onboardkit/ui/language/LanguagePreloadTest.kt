@@ -103,13 +103,14 @@ class LanguagePreloadTest {
         adapter.onCreateViewHolder(list, 0).also { adapter.onBindViewHolder(it, 0) }.itemView.performClick()
     }
 
-    @Test fun `first actual language tap warms OB1 OB2 and shows LFO2 once`() {
+    @Test fun `first actual language tap warms all OB natives and shows LFO2 once`() {
         launch()
         assertEquals(listOf(AdPlacement.Language2), preloads)
         tapLanguage()
         tapLanguage()
-        assertEquals(listOf(AdPlacement.Language2, AdPlacement.StepNative(StepId.OB1),
-            AdPlacement.StepNative(StepId.OB2)), preloads)
+        assertEquals(listOf(AdPlacement.Language2, AdPlacement.StepNative(StepId.OB1), AdPlacement.StepFullScreen(StepId.FULL1),
+            AdPlacement.StepNative(StepId.OB2), AdPlacement.StepFullScreen(StepId.FULL2),
+            AdPlacement.StepNative(StepId.OB3), AdPlacement.StepNative(StepId.OB4)), preloads)
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.Language2), binds)
         assertEquals(View.VISIBLE, requireNotNull(controller).get().findViewById<View>(R.id.ob_ad_block_2).visibility)
     }
@@ -165,7 +166,9 @@ class LanguagePreloadTest {
         assertEquals(emptyList<AdPlacement>(), preloads)
         tapLanguage()
         tapLanguage()
-        assertEquals(listOf(AdPlacement.StepNative(StepId.OB1), AdPlacement.StepNative(StepId.OB2)), preloads)
+        assertEquals(listOf(AdPlacement.StepNative(StepId.OB1), AdPlacement.StepFullScreen(StepId.FULL1),
+            AdPlacement.StepNative(StepId.OB2), AdPlacement.StepFullScreen(StepId.FULL2),
+            AdPlacement.StepNative(StepId.OB3), AdPlacement.StepNative(StepId.OB4)), preloads)
         assertEquals(listOf(AdPlacement.Language1), binds)
     }
 }

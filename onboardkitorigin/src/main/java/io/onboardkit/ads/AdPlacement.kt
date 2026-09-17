@@ -24,7 +24,7 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.INTERSTITIAL
     }
 
-    /** Separate from the fullscreen page inside onboarding (native_fsob). */
+    /** Separate from the fullscreen pages inside onboarding (native_full1/native_full2). */
     data object SplashNative : AdPlacement {
         override val key: String = "native_fs"
         override val format: AdFormat = AdFormat.NATIVE_FULL_SCREEN

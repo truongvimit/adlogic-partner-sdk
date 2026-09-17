@@ -140,14 +140,14 @@ class FlowNavigatorTest {
     @Test
     fun `disabling one step drops it from order without reordering`() {
         val enabled = FlowNavigator.enabledSteps(config, flags.copy(enableStepOb2 = false))
-        assertEquals(listOf(StepId.OB1, StepId.OB3, StepId.OB4), enabled)
+        assertEquals(listOf(StepId.OB1, StepId.FULL1, StepId.FULL2, StepId.OB3, StepId.OB4), enabled)
     }
 
     @Test
     fun `premium users get no ad-only page`() {
-        // OB3 is the AD_FULL_SCREEN page of the default config
+        // Both fullscreen pages are ad-only.
         assertEquals(
-            listOf(StepId.OB1, StepId.OB2, StepId.OB4),
+            listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4),
             FlowNavigator.enabledSteps(config, flags, isPremium = true),
         )
     }
@@ -159,7 +159,7 @@ class FlowNavigatorTest {
             ads = AdsConfig(skipAdOnlyStepsWhenPremium = false)
         }.getOrThrow()
         assertEquals(
-            listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4),
+            listOf(StepId.OB1, StepId.FULL1, StepId.OB2, StepId.FULL2, StepId.OB3, StepId.OB4),
             FlowNavigator.enabledSteps(keepAll, flags, isPremium = true),
         )
     }
@@ -167,7 +167,7 @@ class FlowNavigatorTest {
     @Test
     fun `an ad-only page with no ad to show is dropped, not left blank`() {
         assertEquals(
-            listOf(StepId.OB1, StepId.OB2, StepId.OB4),
+            listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4),
             FlowNavigator.enabledSteps(config, flags, canShowAdStep = { false }),
         )
     }

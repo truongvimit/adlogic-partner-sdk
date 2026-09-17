@@ -24,7 +24,7 @@ import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
 
 /**
- * Content step (OB1/OB2/OB4 style). Layout resolves in three tiers: app-injected layout →
+ * Content step (OB1 through OB4). Layout resolves in three tiers: app-injected layout →
  * remote UI (only when this step's asset is cached) → SDK default. The ExoPlayer used for
  * remote video is released on unselect and on view destroy.
  */
@@ -221,7 +221,8 @@ class ContentStepFragment : LazyStepFragment() {
     }
 
     private fun definition(): ContentStepDefinition? =
-        OnboardingSdk.configOrNull()?.stepById(stepId) as? ContentStepDefinition
+        ((activity as? ObOnboardingHostActivity)?.stepDefinition(stepId)
+            ?: OnboardingSdk.configOrNull()?.stepById(stepId)) as? ContentStepDefinition
 
     private fun totalSteps(): Int =
         (activity as? ObOnboardingHostActivity)?.totalSteps?.value ?: 0

@@ -1,6 +1,6 @@
 # Ads behavior and onboarding settings
 
-**Fullscreen placement mapping:** `native_fsob` is the fullscreen page inside OB (`StepId.OB3`); the final content page uses `native_ob3` (`StepId.OB4`). `native_fs` is a separate, optional splash native: `inter_splash → native_fs → LFO`. Both `native_fs` and its `_high*` tiers are disabled in the example defaults. When enabled, it preloads after the splash interstitial loads, alongside LFO1 in the default SEQUENTIAL mode; PARALLEL mode may start LFO1 earlier. It opens only after the interstitial closes, only when the destination is LFO and the native is ready. A disabled, failed or unready splash native goes straight to LFO. It has a separate buffer and does not change OB fullscreen eligibility. The example sets `enable_ua_check = false` for `native_ob3` and its tiers so the last page can show ads to organic users too.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -39,8 +39,8 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
-| Content OB1 / OB2 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` |
-| Fullscreen OB3 | `native_fsob` |
+| Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
+| Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
@@ -94,7 +94,7 @@ Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, othe
 - `auto_next`: advance the active onboarding page on return, without loading a replacement. On LFO2, confirm the selected language; on LFO1, select the current/default language to enter LFO2.
 - `none`: keep the current ad and page; no click replacement or automatic navigation.
 
-Defaults: LFO1/LFO2 and all other natives use `reload`; content/fullscreen onboarding pager steps use `auto_next`. The separate splash native and OB5 use `reload`. In the sample, the last content page uses step ID `ob4`; `ob3` is the fullscreen page.
+Defaults: LFO1/LFO2 and all other natives use `reload`; content/fullscreen onboarding pager steps use `auto_next`. The separate splash native and OB5 use `reload`. Content pages use `ob1..ob4`; fullscreen pages use `full1/full2`. Pager step ads never reload: `reload` is treated as `none`.
 
 Set format/placement defaults in `ad_behavior_config` (`native.click.action`, `placement_overrides.<key>.click.action`). In `onboarding_config`, use screen/group paths below or `onboarding.steps.<id>.behavior.click.action`. An explicit valid action overrides both legacy `reload.on_ad_click` and `navigation.ad_click_return_completes_step` flags, so auto-next and click reload cannot run together. Timer/resume refresh and fullscreen page timeout are separate settings.
 
@@ -116,7 +116,7 @@ Example override in `onboarding_config` (LFO2 defaults to `reload`, this changes
 
 - `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; per-content-step `native_template`: `""` to inherit; `question.native.template`: `CTA_BOTTOM`.
 - Frame priority: explicit per-step template > explicit screen/group template > per-placement `ad_config.positionCTA` (`TOP`/`BOTTOM`) > host/SDK template. Explicit includes valid remote or custom app assets; the unmodified SDK asset does not override existing settings. Remove the corresponding template override when testing `positionCTA` itself.
-- Content presets are `CTA_TOP`, `CTA_BOTTOM`, `COMPACT`; group template fields also accept `FULL_SCREEN`/`DIALOG` as before. The language popup always uses `DIALOG`; ad-only OB3/OB5 always use `FULL_SCREEN`. App-provided custom layout resources remain local.
+- Content presets are `CTA_TOP`, `CTA_BOTTOM`, `COMPACT`; group template fields also accept `FULL_SCREEN`/`DIALOG` as before. The language popup always uses `DIALOG`; ad-only Full1/Full2/OB5 always use `FULL_SCREEN`. App-provided custom layout resources remain local.
 - Preload and show share template resolution. If a host preloads early, or remote is refreshed after a preload, bind uses the current SDK frame without discarding the loaded ad. Already visible views remain until a subsequent bind. This is not the default splash ordering: LFO1 is scheduled after remote under both strategies.
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. A specific scope overrides a shared scope, then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
 - `native.presentation.cta_corner_radius_dp`: `20` dp, overridable by placement/screen. It applies when an explicit CTA background color is supplied through `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; `default` color preserves the XML drawable.
@@ -255,6 +255,9 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
+| `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
+| `onboarding.steps.full1.enabled` | `true` |
+| `onboarding.steps.full2.enabled` | `true` |
 | `onboarding.steps.ob1.enabled` | `true` |
 | `onboarding.steps.ob1.native_template` | `""` |
 | `onboarding.steps.ob1.behavior` | `{}` |
@@ -266,10 +269,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.steps.ob4.enabled` | `true` |
 | `onboarding.steps.ob4.native_template` | `""` |
 | `onboarding.steps.ob4.behavior` | `{}` |
-| `onboarding.preload.initial_content_trigger` | `"FIRST_LANGUAGE_SELECTION"` |
-| `onboarding.preload.initial_content_count` | `2` |
-| `onboarding.preload.next_step_enabled` | `true` |
-| `onboarding.preload.upcoming_fullscreen_enabled` | `true` |
 | `onboarding.preload.ob5_on_last_step` | `true` |
 | `onboarding.preload.question_on_last_step` | `true` |
 | `onboarding.exit_interstitial.enabled` | `true` |
