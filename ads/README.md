@@ -533,8 +533,10 @@ versions; a mandatory policy remains blocking after Play cancellation or a Store
 `:suite-firebase` offers `FirebaseUpdateConfig.activated()` after the shared remote step, or
 `FirebaseUpdateConfig.fetch()` for standalone hosts, for the separate `force_update_config` parameter.
 Only activated remote values can enable the Firebase integration; missing/malformed/local defaults
-are off. OnboardKit hosts await the gate in `onBeforeSplashProceed()` after remote and consent
-settle in parallel, before notification/ad presentation/navigation. These APIs are opt-in, and do not start from AdsMultiDexApplication.
+are off. OnboardKit hosts override `readForceUpdateConfig()` to supply a snapshot after the existing remote
+step. The attempt retains that snapshot across recreation and checks it only before fullscreen
+presentation/navigation; init, notification, load/preload and timers keep their original schedule.
+Later remote changes apply on the next splash launch, without observers or ad-callback checks. These APIs are opt-in, and do not start from AdsMultiDexApplication.
 
 See the [detailed Vietnamese integration guide](../partner-integration/force-update-integration.vi.md)
 for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone examples, and Play testing.

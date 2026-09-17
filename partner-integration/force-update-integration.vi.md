@@ -6,26 +6,19 @@
 
 `com.ads.module.update.ForceUpdateGate` giữ navigation khi app quá cũ. Người dùng hủy Play hoặc quay lại từ Store khi chưa cập nhật vẫn ở gate. Đã bỏ điều kiện lỗi `needsUpdate || force` ở Main: bản đạt ngưỡng không còn bị chặn chỉ vì `force=true`.
 
-## Thứ tự UMP, Remote Config và gate
+## Một quyết định cho mỗi lần mở app, giữ nguyên timing splash
 
-**UMP và Remote Config vẫn chạy song song**, cùng billing, trong pipeline splash hiện có. Không fetch update trước UMP; không thêm một lượt fetch riêng cho update.
+**UMP, Remote Config và billing vẫn chạy song song theo pipeline cũ.** Update không thêm fetch, không thêm timeout, không chuyển init/load/preload thành luồng tuần tự.
 
-```text
-                         ┌─ UMP / consent ─────────────┐
-Splash → network gate ───┼─ Remote fetch + activate ────┼─ chờ các bước hoàn tất
-                         └─ Billing ───────────────────┘
-       → onBeforeSplashProceed(): đọc remote đã activate
-       → enabled=true VÀ versionCode < minVersionCode VÀ minVersionCode>0 ?
-           Không → tiếp tục
-           Có   → dialog update; force=true thì không được bỏ qua
-       → notification permission → hiển thị splash ads / navigation
-```
+1. Bước remote hiện có hoàn tất hoặc timeout: gọi `readForceUpdateConfig()` một lần để chốt policy đã activate.
+2. Notification, load `SAME_TIME` / `ALTERNATE`, LFO/native preload và các timer tiếp tục ở vị trí cũ. `SAME_TIME` vẫn có thể load trong lúc remote chưa xong; `ALTERNATE` load sau remote.
+3. Khi splash đã sẵn sàng show fullscreen/đi tiếp (sau minimum display và các bước chờ quảng cáo cũ), SDK xét **policy đã chốt**. Mặc định tắt thì trả về ngay; bắt buộc update thì chỉ chặn tại đây.
+4. Policy và trạng thái gate thuộc `SplashAttempt` ViewModel, giữ nguyên qua Activity recreation. Tạo lại Activity không fetch/chốt lại policy chỉ vì update.
+5. Không có observer/realtime listener, không đọc lại policy trong callback quảng cáo, paywall hoặc màn bên trong. Remote thay đổi sau khi chốt được dùng ở **lần mở app/splash mới** khi bước fetch remote chạy lại.
 
-- Remote xong trước: chờ UMP kết thúc rồi mới hiện update, không chồng hai dialog.
-- UMP xong trước: chờ remote hoàn tất hoặc hết deadline của bước remote rồi mới xét gate.
-- `SAME_TIME` vẫn được **preload** quảng cáo trong lúc chờ remote theo hành vi cũ; gate chặn **hiển thị** quảng cáo và điều hướng. `ALTERNATE` chờ remote/gate trước khi load.
-- Dialog update không nằm trong timeout remote/splash. Hết thời gian chờ quảng cáo không cho phép vượt gate.
-- Activity recreate: gate được đánh giá lại, dialog cũ được dọn; không đánh dấu “đã pass” chỉ vì từng mở dialog/Store.
+**Không cần mở app hai lần để bật update:** nếu lần fetch của lần mở hiện tại nhận và activate `enabled=true`, chính lần mở đó bị yêu cầu update. Chỉ những thay đổi đến sau snapshot mới đợi lần mở tiếp theo.
+
+Đối với `force=true`, thời gian người dùng ở dialog là thời gian cố ý chặn đi tiếp; nó không kéo dài hay khởi động lại timeout/minimum của init, UMP, billing, load hoặc preload. Gate đặt ngoài các timeout nên hết thời gian chờ quảng cáo không tự bỏ qua yêu cầu update.
 
 ## Mặc định tắt, chỉ remote true mới bật
 
@@ -74,7 +67,7 @@ Với `enabled=true, minVersionCode=101`: bản 100 bị chặn nếu `force=tru
 
 Không fallback sang asset hay SharedPreferences policy riêng để bật tính năng. Asset example để `enabled=false` chỉ là mẫu local; production adapter không đọc asset đó. Remote cache của chính Firebase vẫn là remote đã activate, không phải default local.
 
-**Deadline và remote đến muộn:** gate đọc snapshot đang active sau bước remote hiện có. Nếu fetch timeout khi chưa có remote, gate tắt và app tiếp tục. Nếu fetch hoàn tất/activate sau lần xét gate, policy mới áp dụng ở lần vào splash/recreate tiếp theo; bản này không có listener realtime cưỡng chế bật dialog giữa màn đang dùng. Không đảm bảo mọi thiết bị nhận rule ngay khi Publish.
+**Deadline và remote đến muộn:** SDK chốt snapshot ngay khi bước remote hiện có kết thúc. Nếu timeout khi chưa có remote thì snapshot tắt; kết quả activate đến sau đó không chen vào flow đang chạy, chỉ áp dụng ở lần mở splash mới. Recreate cùng attempt không chốt lại. Publish vẫn chịu fetch/activate và cache interval của Firebase, không đồng nghĩa mọi thiết bị nhận rule ngay lập tức.
 
 Example đặt interval debug=0, release=3600 giây và Firebase fetch timeout=10 giây trong Application. Thời gian splash chờ remote theo `SplashConfig.remoteFetchTimeoutMs`; không cộng thêm 3 giây cho update. API fetch standalone mặc định chờ 3 giây. Cấu hình interval của Firebase vẫn được tôn trọng.
 
@@ -99,20 +92,17 @@ dependencies {
 Nối Firebase vào bước remote hiện có theo guide Firebase (example đã có `ObRemote.installFetchDelegate(RemoteConfigClient::fetchAndActivate)` và nguồn ads remote). Sau đó:
 
 ```kotlin
-import com.ads.module.update.ForceUpdateGate
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.suite.firebase.FirebaseUpdateConfig
 
 class SplashActivity : ObSplashActivity() {
-    override suspend fun onBeforeSplashProceed() {
-        ForceUpdateGate.await(this, FirebaseUpdateConfig.activated())
-    }
+    override fun readForceUpdateConfig() = FirebaseUpdateConfig.activated()
 }
 ```
 
-`activated()` **không fetch lại**. Không đặt fetch riêng trước UMP và không dùng getter phụ thuộc cờ `RemoteConfigUtils.completed` của app: cờ đó có thể chưa cập nhật dù Firebase đã activate.
+`activated()` **không fetch lại**. SDK gọi hook một lần sau bước remote, giữ snapshot trong attempt và tự gọi `ForceUpdateGate` tại ranh giới presentation. Host không cần tự giữ Activity/dialog/listener cho update.
 
-Không bọc `ForceUpdateGate.await()` bằng timeout và không tự navigate song song. Hook chạy sau remote/consent, trước notification/ad presentation/navigation; mỗi Activity mới đánh giá lại gate. Cấu hình Firebase hoặc dependency đơn thuần không tự bật gate; partner phải gắn hook trên.
+Không đặt fetch riêng trước UMP, không dùng getter phụ thuộc `RemoteConfigUtils.completed` và không chèn gate vào trước init/load/preload. Default hook trả `ForceUpdateConfig()` (tắt); dependency hoặc Firebase setup đơn thuần không bật tính năng.
 
 ## Không dùng OnboardKit / Firebase
 
@@ -185,12 +175,12 @@ Giữ manager sống khi tải FLEXIBLE. Khi `DOWNLOADED`, manager tự gọi `c
 
 ## QA / rollout
 
-- UMP chậm hơn remote, remote chậm hơn UMP: không hiện update trước khi cả hai bước kết thúc.
+- UMP chậm hơn remote, remote chậm hơn UMP: hai bước vẫn song song, policy được chốt sau bước remote và UI update chỉ xuất hiện tại ranh giới presentation.
 - Không có remote, remote false, local true, JSON lỗi: không bật gate. Remote true chỉ chặn version thấp.
 - Fetch timeout không có remote đã activate: đi tiếp. Offline có remote true đã activate: vẫn theo policy đó.
 - Force true: Back/hủy Play/quay lại từ Store chưa update/recreate không làm lọt navigation.
-- SAME_TIME: có thể preload nhưng không show ads hoặc mở LFO/Main qua gate.
-- Tắt bằng remote `enabled=false` rồi fetch/activate và vào lại splash để áp dụng; dialog đang mở không tự refresh realtime.
+- SAME_TIME và ALTERNATE: load/preload/notification/minimum giữ nguyên lịch cũ; gate chỉ chặn fullscreen/đi tiếp khi policy của attempt yêu cầu update.
+- Tắt bằng remote `enabled=false` rồi fetch/activate ở lần mở splash mới; dialog/attempt đang chạy không tự refresh, kể cả recreate.
 - Bản mới phải có sẵn cho đúng track/quốc gia/nhóm rollout trước khi nâng threshold, tránh chặn người chưa tải được update.
 - App chưa có phần tích hợp này phải được phát hành bản mới trước; Remote Config không bổ sung code vào APK cũ.
 - Test tải/cài thật bằng package/chữ ký/version phù hợp trên Play, theo [Test in-app updates](https://developer.android.com/guide/playcore/in-app-updates/test). APK debug sideload không chứng minh luồng Play chạy thật.

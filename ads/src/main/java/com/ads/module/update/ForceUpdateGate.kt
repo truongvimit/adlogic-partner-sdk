@@ -26,6 +26,7 @@ object ForceUpdateGate {
 
     @JvmStatic
     suspend fun await(activity: Activity, config: ForceUpdateConfig) = withContext(Dispatchers.Main.immediate) {
+        if (!config.enabled || config.minVersionCode <= 0) return@withContext
         val installed = PackageInfoCompat.getLongVersionCode(
             activity.packageManager.getPackageInfo(activity.packageName, 0),
         )

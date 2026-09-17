@@ -1,5 +1,6 @@
 package io.onboardkit.ui.splash
 
+import com.ads.module.update.ForceUpdateConfig
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -45,6 +46,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var consentAnswered: Boolean? = null
     var billingResolved = false
     var remoteResolved = false
+    var updateConfig = ForceUpdateConfig()
+    var updateGatePassed = false
     var remoteHookResolved = false
     var flags: RemoteFlags? = null
     var startDecision: StartDecision? = null

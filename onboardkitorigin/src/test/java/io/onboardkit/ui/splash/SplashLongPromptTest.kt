@@ -100,33 +100,43 @@ class SplashLongPromptTest {
         main.idle()
     }
 
+    private fun mandatoryUpdate() = com.ads.module.update.ForceUpdateConfig(
+        enabled = true, minVersionCode = Long.MAX_VALUE, force = true,
+        storeLink = "https://play.google.com/store/apps/details?id=test",
+    )
+
+    private fun reachUpdateBoundary() {
+        drainUntil("Ad requests must start before the update barrier") {
+            LongPromptFixture.provider.pending != null
+        }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("Update gate must hold the presentation boundary") {
+            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
+        }
+    }
+
     @Test
     fun consentFinishingFirstStillWaitsForRemoteBeforeUpdateDecision() {
         LongPromptFixture.remoteTimeoutMs = 60_000
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = com.ads.module.update.ForceUpdateConfig(
-            enabled = true, minVersionCode = Long.MAX_VALUE, force = true,
-            storeLink = "https://play.google.com/store/apps/details?id=test",
-        )
-        launch(notification = true)
+        LongPromptFixture.updateConfig = mandatoryUpdate()
+        launch(notification = false)
         drainUntil("UMP finishes while remote is still pending") {
             LongPromptFixture.remoteEntered && LongPromptFixture.ump.allowed
         }
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
         assertEquals(0, LongPromptFixture.provider.interstitialLoads)
         LongPromptFixture.remoteWait!!.complete(Unit)
-        drainUntil("Remote completion permits update evaluation") {
-            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
-        }
+        reachUpdateBoundary()
         assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
     fun remoteTimeoutWithDisabledPolicyContinuesWithoutAnUpdateDialog() {
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = com.ads.module.update.ForceUpdateConfig(
-            minVersionCode = Long.MAX_VALUE, force = true, // enabled is absent: always off
-        )
+        LongPromptFixture.updateConfig = mandatoryUpdate().copy(enabled = false)
         launch(notification = false)
         drainUntil("Remote fetch starts") { LongPromptFixture.remoteEntered }
         main.idleFor(Duration.ofSeconds(1))
@@ -135,6 +145,7 @@ class SplashLongPromptTest {
         }
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
         assertEquals(true, LongPromptFixture.remoteHookCalled)
+        completeInterstitialAndAssertNormalHandoff()
     }
 
     @Test
@@ -142,11 +153,8 @@ class SplashLongPromptTest {
         LongPromptFixture.remoteTimeoutMs = 60_000
         LongPromptFixture.ump.holdUpdate = true
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = com.ads.module.update.ForceUpdateConfig(
-            enabled = true, minVersionCode = Long.MAX_VALUE, force = true,
-            storeLink = "https://play.google.com/store/apps/details?id=test",
-        )
-        launch(notification = true)
+        LongPromptFixture.updateConfig = mandatoryUpdate()
+        launch(notification = false)
         drainUntil("Remote must start while UMP is still unresolved") {
             LongPromptFixture.remoteEntered && LongPromptFixture.ump.pendingUpdate != null
         }
@@ -156,64 +164,98 @@ class SplashLongPromptTest {
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
         LongPromptFixture.ump.allowed = true
         requireNotNull(LongPromptFixture.ump.pendingUpdate).onConsentInfoUpdateSuccess()
-        drainUntil("Only after UMP finishes may update UI show") {
-            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
-        }
-        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(null, shadowOf(requireNotNull(controller).get()).lastRequestedPermission)
+        reachUpdateBoundary()
         assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun sameTimeCanPreloadButCannotShowOrNavigateWhileUpdateGateBlocks() {
+    fun sameTimeAndNotificationStillStartBeforeRemoteAndUpdateGate() {
         LongPromptFixture.strategy = io.onboardkit.config.AdLoadStrategy.SAME_TIME
-        LongPromptFixture.provider.immediateInterResult = 1
-        LongPromptFixture.updateConfig = com.ads.module.update.ForceUpdateConfig(
-            enabled = true, minVersionCode = Long.MAX_VALUE, force = true,
-            storeLink = "https://play.google.com/store/apps/details?id=test",
-        )
+        LongPromptFixture.remoteTimeoutMs = 60_000
+        LongPromptFixture.remoteWait = CompletableDeferred()
+        LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = true)
-        drainUntil("Update UI must be visible") {
-            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
+        val host = requireNotNull(controller).get()
+        drainUntil("Notification and SAME_TIME load must overlap pending remote") {
+            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.provider.interstitialLoads == 1
         }
-        main.idleFor(Duration.ofSeconds(60))
-        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(true, LongPromptFixture.billingEntered)
+        assertEquals(false, LongPromptFixture.remoteHookCalled)
+        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
+        LongPromptFixture.remoteWait!!.complete(Unit)
+        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
+        host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
+            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
+        reachUpdateBoundary()
         assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
-        assertEquals(null, shadowOf(requireNotNull(controller).get()).lastRequestedPermission)
     }
 
     @Test
-    fun forcedUpdateBlocksPresentationAfterConsentAndRemoteAcrossRecreation() {
-        LongPromptFixture.updateConfig = com.ads.module.update.ForceUpdateConfig(
-            minVersionCode = Long.MAX_VALUE, force = true, enabled = true,
-            storeLink = "https://play.google.com/store/apps/details?id=test",
-        )
-        launch(notification = true)
-        drainUntil("Update gate must start after remote and consent") {
-            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()?.isShowing == true
-        }
-        main.idleFor(Duration.ofSeconds(60))
-        assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
-        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(0, LongPromptFixture.provider.bannerLoads)
+    fun alternatePreloadsAndClocksRunBeforeMandatoryGateAcrossRecreation() {
+        LongPromptFixture.updateConfig = mandatoryUpdate()
+        launch(notification = false)
+        reachUpdateBoundary()
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertEquals(true, LongPromptFixture.billingEntered)
         assertEquals(true, LongPromptFixture.ump.allowed)
-        assertEquals(false, LongPromptFixture.remoteHookCalled)
+        assertEquals(true, LongPromptFixture.remoteHookCalled)
+        assertTrue("native" in LongPromptFixture.provider.order)
+        assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
         val previous = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
         requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
         main.idle()
         assertEquals(false, previous.isShowing)
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
-        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(0, LongPromptFixture.flowStarts)
-        // A later startup reads a disabled policy and releases the ordinary pipeline.
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
         LongPromptFixture.updateConfig = null
         requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
-        drainUntil("Disabling the next startup policy releases splash") {
-            LongPromptFixture.provider.interstitialLoads == 1
-        }
+        main.idle()
+        assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
+        assertEquals(1, LongPromptFixture.updateReads)
+        assertEquals(0, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun lateRemoteAppliesOnNextLaunchWithoutDelayingCurrentMinimum() {
+        LongPromptFixture.remoteWait = CompletableDeferred()
+        LongPromptFixture.updateConfig = null
+        launch(notification = false)
+        drainUntil("Remote starts") { LongPromptFixture.remoteEntered }
+        main.idleFor(Duration.ofSeconds(1))
+        drainUntil("Timeout releases normal loads") { LongPromptFixture.provider.pending != null }
+        LongPromptFixture.updateConfig = mandatoryUpdate() // Arrived after this attempt's snapshot.
+        completeInterstitialAndAssertNormalHandoff()
+        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
+        assertEquals(1, LongPromptFixture.updateReads)
+        // A genuinely new launch (not recreation) captures the newly fetched/activated policy.
+        requireNotNull(controller).pause().stop().destroy()
+        LongPromptFixture.remoteWait = null
+        LongPromptFixture.provider.pending = null
+        launch(notification = false)
+        reachUpdateBoundary()
+        assertEquals(2, LongPromptFixture.updateReads)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun remoteChangesInsideAdDoNotAlterTheCurrentLaunchDecision() {
+        LongPromptFixture.provider.successfulShow = true
+        LongPromptFixture.provider.holdNext = true
+        launch(notification = false)
+        drainUntil("Inter loads") { LongPromptFixture.provider.pending != null }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("Ad is open") { LongPromptFixture.provider.presentation != null }
+        LongPromptFixture.updateConfig = mandatoryUpdate()
+        requireNotNull(LongPromptFixture.provider.presentation).onNextAction()
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
+        assertEquals(1, LongPromptFixture.updateReads)
     }
 
     @Test
@@ -866,8 +908,9 @@ class SplashLongPromptTest {
 class LongPromptVendorActivity : Activity()
 
 class LongPromptSplashActivity : ObSplashActivity() {
-    override suspend fun onBeforeSplashProceed() {
-        LongPromptFixture.updateConfig?.let { com.ads.module.update.ForceUpdateGate.await(this, it) }
+    override fun readForceUpdateConfig(): com.ads.module.update.ForceUpdateConfig {
+        LongPromptFixture.updateReads++
+        return LongPromptFixture.updateConfig ?: com.ads.module.update.ForceUpdateConfig()
     }
     override fun nextScreenTiming() =
         if (LongPromptFixture.useDefaultTiming) super.nextScreenTiming() else LongPromptFixture.timing
@@ -890,6 +933,7 @@ private object LongPromptFixture {
     var remoteWait: CompletableDeferred<Unit>? = null
     var remoteEntered = false
     var remoteTimeoutMs = 100L
+    var updateReads = 0
     val provider = LongPromptProvider()
     var ump = LongPromptConsentInformation()
     var form = LongPromptConsentForm()
@@ -910,6 +954,7 @@ private object LongPromptFixture {
         remoteWait = null
         remoteEntered = false
         remoteTimeoutMs = 100L
+        updateReads = 0
         flags = io.onboardkit.remote.RemoteFlags()
         strategy = io.onboardkit.config.AdLoadStrategy.ALTERNATE
         billing = null
