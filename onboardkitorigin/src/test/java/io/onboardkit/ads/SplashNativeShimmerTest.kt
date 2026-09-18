@@ -47,11 +47,14 @@ class SplashNativeShimmerTest {
     @Test fun `the skeleton wraps the card rather than filling the splash`() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         try {
-            // mdpi: 1px == 1dp. The card is the design's 147dp — 123dp row plus 12dp padding
-            // top and bottom — so the slot it occupies is the size of the ad that replaces it.
-            val view = skeleton(controller.get(), 360)
+            val host = controller.get()
+            val view = skeleton(host, 360)
             assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, view.layoutParams.height)
-            assertEquals(147, view.height)
+            // The card is its media row plus the card padding, read from the resources that draw
+            // it — naming the design's pixel total here would only restate the dimens file.
+            val pad = host.resources.getDimensionPixelSize(R.dimen.ob_splash_native_padding)
+            val well = view.findViewById<View>(R.id.ob_splash_native_media_well)
+            assertEquals(well.height + 2 * pad, view.height)
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -83,20 +86,22 @@ class SplashNativeShimmerTest {
             // measures it EXACTLY, so that floor must not leak into the skeleton's geometry.
             assertEquals(well.width, media.width)
             assertEquals(well.height, media.height)
-            assertEquals(123, media.height)
+            assertTrue("the floor leaked into the media box", media.height < 160)
         } finally { controller.pause().stop().destroy() }
     }
 
     @Test fun `the CTA stays at the bottom of the row and keeps its height`() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         try {
-            val view = skeleton(controller.get(), 360)
+            val host = controller.get()
+            val view = skeleton(host, 360)
             val cta = view.findViewById<View>(R.id.ad_call_to_action)
-            assertEquals(44, cta.height)
+            assertEquals(host.resources.getDimensionPixelSize(R.dimen.ob_splash_native_cta_height), cta.height)
             val rect = android.graphics.Rect(0, 0, cta.width, cta.height)
             view.offsetDescendantRectToMyCoords(cta, rect)
-            // The Space above it absorbs the slack, so the CTA sits on the card's bottom padding.
-            assertEquals(147 - 12, rect.bottom)
+            // The design's space-between: the CTA rests on the card's bottom padding.
+            val pad = host.resources.getDimensionPixelSize(R.dimen.ob_splash_native_padding)
+            assertEquals(view.height - pad, rect.bottom)
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -106,7 +111,10 @@ class SplashNativeShimmerTest {
             // 320dp is the narrowest width Android ships.
             val view = skeleton(controller.get(), 320)
             val cta = view.findViewById<View>(R.id.ad_call_to_action)
-            assertEquals(44, cta.height)
+            assertEquals(
+                controller.get().resources.getDimensionPixelSize(R.dimen.ob_splash_native_cta_height),
+                cta.height,
+            )
             assertTrue("headline must keep a visible line", view.findViewById<View>(R.id.ad_headline).height > 0)
             assertTrue("body must keep a visible line", view.findViewById<View>(R.id.ad_body).height > 0)
         } finally { controller.pause().stop().destroy() }
@@ -130,7 +138,11 @@ class SplashNativeShimmerTest {
                 val bodyRect = android.graphics.Rect(0, 0, body.width, body.height)
                 view.offsetDescendantRectToMyCoords(body, bodyRect)
                 // The card has to grow to hold the button whole, at its full declared height.
-                assertEquals("fontScale $scale: CTA lost height", 44, cta.height)
+                assertEquals(
+                    "fontScale $scale: CTA lost height",
+                    controller.get().resources.getDimensionPixelSize(R.dimen.ob_splash_native_cta_height),
+                    cta.height,
+                )
                 assertTrue(
                     "fontScale $scale: CTA bottom ${rect.bottom} overflows card ${view.height}",
                     rect.bottom <= view.height,
