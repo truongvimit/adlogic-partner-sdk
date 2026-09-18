@@ -59,6 +59,9 @@ Splash में loading bar के नीचे एक ही ad slot है, �
 | `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
 | `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
 
+Native को दोनों चाहिए: `slot_format` को `NATIVE` **और** ad_config में एक usable `native_splash`
+entry। इनमें से कोई एक भी न हो तो slot खाली ही रहता है।
+
 एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
 नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.banner_wait_ms` जो भी format लोड हो रहा हो उसे सीमित
 करता है, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।

@@ -59,6 +59,9 @@ format fills it:
 | `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
 | `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
 
+Native needs both halves: `slot_format` set to `NATIVE` **and** a usable `native_splash`
+entry in ad_config. With either one missing the slot simply stays empty.
+
 One launch requests the chosen format only, so switching this moves the spend rather than adding a
 second impression. The wait is shared too: `splash.timing.banner_wait_ms` bounds whichever format
 is loading, and `ob_ads_splash_banner_enabled` turns the position off for both.

@@ -68,6 +68,9 @@ lấp vào:
 | `BANNER` (mặc định) | `AdPlacement.SplashBanner` | `banner_splash` |
 | `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
 
+Native cần đủ hai vế: `slot_format` đặt `NATIVE` **và** một entry `native_splash` dùng được
+trong ad_config. Thiếu một trong hai thì slot chỉ đơn giản là rỗng.
+
 Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ này là dịch chuyển doanh thu chứ không
 thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.banner_wait_ms` giới hạn cho
 format nào đang load, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
