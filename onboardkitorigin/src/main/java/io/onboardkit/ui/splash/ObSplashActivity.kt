@@ -348,6 +348,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         combine(lifecycle.currentStateFlow, windowFocused) { state, focused ->
             !isFinishing && !isDestroyed && state.isAtLeast(Lifecycle.State.RESUMED) && focused
         }.first { it }
+        attempt.focusedAtMs = SystemClock.elapsedRealtime()
     }
 
     private suspend fun awaitRequestWindow() {
@@ -545,9 +546,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
     /**
      * Holds the interstitial until the bottom slot has had its minimum time on screen.
      *
-     * Waiting for the *load* was never the same as the ad being seen. A slot that fills behind the
-     * notification dialog, or lands just as that dialog closes, satisfied the older rule and still
-     * gave the user an ad that appeared and was covered in the same breath.
+     * Waiting for the *load* was never the same as the ad being seen, and neither is the
+     * impression on its own: a banner renders behind the notification dialog, so by that measure it
+     * had been "seen" while the user was reading something else entirely. The window therefore runs
+     * from the later of the impression and the splash getting the screen back.
      *
      * Nothing here can strand the flow. A slot with no ad to show settles
      * [SplashAttempt.bannerSettled] without ever reporting an impression, which releases the first
@@ -570,8 +572,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ObLog.d(ObLog.Section.SPLASH, "slot never reached the screen — not holding the interstitial")
             return
         }
+        // Measured from whichever came later. A banner that rendered behind the permission dialog
+        // has been on screen but not in front of anyone, so its clock starts at the dismissal; a
+        // native, which waits for the resume to bind at all, starts at its impression.
+        val seenFrom = maxOf(shownAt, attempt.focusedAtMs ?: shownAt)
         val holdMs = minOf(
-            minVisibleMs - (SystemClock.elapsedRealtime() - shownAt),
+            minVisibleMs - (SystemClock.elapsedRealtime() - seenFrom),
             remainingBudgetMs(),
         )
         if (holdMs > 0) {

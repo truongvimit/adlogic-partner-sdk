@@ -533,8 +533,7 @@ class NativeAdHelper(
     }
 
     private fun onLoadedAd(ad: ApNativeAd) {
-        val hostReady = isResumed() || (config.bindsWhileHostPaused && isVisible())
-        if (isActiveState() && canShowAds() && ad.isUsable && (adClickPending || contentView == null || !hostReady)) {
+        if (isActiveState() && canShowAds() && ad.isUsable && (adClickPending || contentView == null || !isResumed())) {
             NativeAdManager.returnUnused(storeKey, ad)
             awaitingHost = true
             setState(AdNativeState.Loading)

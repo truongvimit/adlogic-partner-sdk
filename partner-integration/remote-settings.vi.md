@@ -75,9 +75,9 @@ Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ n
 thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.slot_min_visible_ms` giữ inter lại cho format nào
 đang lấp slot, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
 
-Thời gian đó tính từ lúc slot có **impression**, không phải lúc load xong — hai mốc này khác nhau:
-ad fill sau lưng dialog xin quyền, hoặc vừa kịp hiện lúc dialog đóng, trước đây bị inter phủ lên
-ngay lập tức. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
+Thời gian đó tính từ mốc **muộn hơn** giữa impression của slot và lúc splash **lấy lại màn hình** —
+không bao giờ tính từ lúc load. Ba mốc này khác nhau: ad fill sau lưng dialog thì user chưa hề nhìn
+nó, còn ad vừa kịp hiện lúc dialog đóng thì bị inter phủ lên ngay lập tức. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
 nhưng không báo impression (banner collapsible không bao giờ báo) thì bỏ qua sau đúng khoảng này;
 và mọi lần chờ đều bị chặn trên bởi `splash.timing.ad_budget_ms`. Đặt `0` là quay lại hành vi cũ,
 không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms`, key cũ vẫn được đọc khi thiếu key mới.
@@ -88,10 +88,9 @@ Native dùng khung media-left cố định nên `positionCTA` và thứ tự `co
 inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
 vào `AdsConfig.splashInlineNative`.
 
-Cả hai format đều hiển thị trong lúc dialog xin quyền thông báo đang mở chứ không đợi nó đóng, nên
-slot trông như nhau dù remote config chọn format nào. Các native khác trong luồng vẫn giữ fill lại
-cho tới khi màn của nó resume; chỉ slot này được miễn, và chỉ khi splash còn trên màn hình — thoát
-app là dừng, không bind quảng cáo nào.
+Banner có hiển thị sau lưng dialog xin quyền thông báo, còn native đợi dialog đóng mới bind — nhưng
+đảm bảo bên dưới là như nhau cho cả hai, vì nó tính từ lúc splash lấy lại màn hình chứ không phải
+từ lúc có impression.
 
 **Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
 nên `when (placement)` exhaustive của bạn — hay gặp nhất là khi tự implement

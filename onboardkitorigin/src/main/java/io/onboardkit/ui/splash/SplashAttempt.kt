@@ -81,6 +81,16 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     /** True once the slot has an ad to show. A slot that failed has nothing worth waiting on. */
     var slotFilled = false
 
+    /**
+     * When the splash last had the screen to itself, i.e. resumed and focused.
+     *
+     * The minimum-visible window is measured from here rather than from the impression, because
+     * time spent behind a permission dialog is not time the user spent looking at the ad. A banner
+     * renders under that dialog and a native does not, and starting both clocks at the dismissal
+     * is what makes the guarantee identical either way.
+     */
+    var focusedAtMs: Long? = null
+
     fun markSlotShown() {
         if (slotShown.complete(Unit)) slotShownAtMs = SystemClock.elapsedRealtime()
     }

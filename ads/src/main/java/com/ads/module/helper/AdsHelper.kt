@@ -49,16 +49,6 @@ abstract class AdsHelper<C : IAdsConfig, P : IAdsParam>(
     protected fun isResumed(): Boolean =
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
-    /**
-     * On screen, though not necessarily interactive.
-     *
-     * The gap between this and [isResumed] is exactly a system window over the host — a runtime
-     * permission dialog is its own Activity, so the host is paused while the user answers it but
-     * never stopped. Leaving the app stops it, which is how the two are told apart.
-     */
-    protected fun isVisible(): Boolean =
-        lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-
     open fun canShowAds(): Boolean = config.canShowAds && com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") && !AdGate.isPurchased(context) &&
         ConsentCenter.canRequestAds() && !ConsentCenter.isFormShowing()
 

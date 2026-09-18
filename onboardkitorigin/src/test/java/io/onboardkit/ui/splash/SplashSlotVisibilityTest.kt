@@ -26,12 +26,15 @@ class SplashSlotVisibilityTest {
         budgetLeftMs: Long,
         filled: Boolean,
         shownElapsedMs: Long?,
+        focusedElapsedMs: Long? = null,
     ): Long {
         if (minVisibleMs <= 0) return 0
         // A slot that never filled resolves its latch at once and is not waited on.
         if (!filled) return 0
         val shown = shownElapsedMs ?: return minOf(minVisibleMs, budgetLeftMs) // waited, never shown
-        return minOf(minVisibleMs - shown, budgetLeftMs).coerceAtLeast(0)
+        // The later of the two: time behind the permission dialog does not count as seen.
+        val seenFor = minOf(shown, focusedElapsedMs ?: shown)
+        return minOf(minVisibleMs - seenFor, budgetLeftMs).coerceAtLeast(0)
     }
 
     @Test fun `a slot that failed never delays the interstitial`() {
@@ -39,15 +42,23 @@ class SplashSlotVisibilityTest {
         assertEquals(0, holdMs(minVisibleMs = 1000, budgetLeftMs = 60_000, filled = false, shownElapsedMs = null))
     }
 
-    @Test fun `a slot already seen long enough is not held at all`() {
-        // Filled behind a permission dialog the user took a while to answer.
-        assertEquals(0, holdMs(1000, 60_000, filled = true, shownElapsedMs = 5_000))
+    @Test fun `a slot already seen long enough on a clear screen is not held`() {
+        // Shown and focused five seconds ago: the user has had it in front of them.
+        assertEquals(0, holdMs(1000, 60_000, filled = true, shownElapsedMs = 5_000, focusedElapsedMs = 5_000))
     }
 
-    @Test fun `a slot seen only for an instant is held for the remainder`() {
-        // The dialog closed, the ad appeared, and the interstitial was about to land on top of it.
-        assertEquals(900, holdMs(1000, 60_000, filled = true, shownElapsedMs = 100))
+    @Test fun `time behind the permission dialog does not count as seen`() {
+        // The banner rendered under the dialog six seconds ago, but the dialog only closed 100ms
+        // ago — the user has had 100ms with it, not six seconds, so it is still owed its window.
+        assertEquals(900, holdMs(1000, 60_000, filled = true, shownElapsedMs = 6_000, focusedElapsedMs = 100))
     }
+
+    @Test fun `a native binding after the dismissal is measured from its own impression`() {
+        // Focus came back 400ms ago but the native only bound 100ms ago; the later one wins.
+        assertEquals(900, holdMs(1000, 60_000, filled = true, shownElapsedMs = 100, focusedElapsedMs = 400))
+    }
+
+
 
     @Test fun `a filled slot that never reports an impression gives up after the same budget`() {
         // Collapsible banners never report one, so this may not be an open-ended wait.
@@ -55,12 +66,12 @@ class SplashSlotVisibilityTest {
     }
 
     @Test fun `the shared ad budget always wins`() {
-        assertEquals(200, holdMs(1000, budgetLeftMs = 200, filled = true, shownElapsedMs = 0))
-        assertEquals(0, holdMs(1000, budgetLeftMs = 0, filled = true, shownElapsedMs = 0))
+        assertEquals(200, holdMs(1000, budgetLeftMs = 200, filled = true, shownElapsedMs = 0, focusedElapsedMs = 0))
+        assertEquals(0, holdMs(1000, budgetLeftMs = 0, filled = true, shownElapsedMs = 0, focusedElapsedMs = 0))
     }
 
     @Test fun `zero restores the old behaviour of never holding`() {
-        assertEquals(0, holdMs(0, 60_000, filled = true, shownElapsedMs = 0))
+        assertEquals(0, holdMs(0, 60_000, filled = true, shownElapsedMs = 0, focusedElapsedMs = 0))
     }
 
     @Test fun `the shipped default protects the slot rather than leaving it unguarded`() {

@@ -66,9 +66,10 @@ One launch requests the chosen format only, so switching this moves the spend ra
 second impression. The wait is shared too: `splash.timing.slot_min_visible_ms` keeps the interstitial off whichever
 format is filling it, and `ob_ads_splash_banner_enabled` turns the position off for both.
 
-That wait is measured from the slot's **impression**, not its load, because the two are not the
-same moment — an ad that fills behind the notification dialog, or lands as that dialog closes, was
-once covered by the interstitial the instant it appeared. A slot that fails, is skipped or has no
+That wait is measured from the later of the slot's **impression** and the splash **regaining the
+screen** — never from its load. Those are three different moments: an ad that filled behind the
+notification dialog had not been looked at, and one that landed as the dialog closed was covered by
+the interstitial the instant it appeared. A slot that fails, is skipped or has no
 ad unit resolves immediately and is never waited on, a filled slot that reports no impression (a
 collapsible banner never does) is abandoned after the same budget, and every wait is clamped to
 what is left of `splash.timing.ad_budget_ms`. `0` restores the old unguarded behaviour. It replaces
@@ -80,10 +81,9 @@ nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.Splas
 the splash interstitial. In code the flag is `io.onboardkit.config.SplashAdSlotFormat`, and the ad
 units resolve into `AdsConfig.splashInlineNative`.
 
-Both formats render while the notification permission dialog is up rather than waiting it out,
-so the slot looks the same whichever one remote config picked. Natives elsewhere in the flow still
-park a fill until their screen resumes; only this slot opts out, and only while the splash is still
-on screen — leaving the app stops it and no ad is bound.
+A banner renders behind the notification permission dialog and a native waits for the dismissal to
+bind, but the guarantee below is the same either way, because it is measured from the moment the
+splash has the screen back rather than from the impression.
 
 **Upgrading to 5.4.0.** `AdPlacement` is a sealed interface and this release adds
 `SplashInlineNative` to it, so an exhaustive `when (placement)` of your own — most likely in a
