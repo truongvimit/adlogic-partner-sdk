@@ -58,6 +58,27 @@ OnboardingSdk.configure(onboardKitConfig {
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
 
+### Slot dưới màn splash
+
+Splash có đúng một slot quảng cáo dưới thanh loading, và `splash.ads.slot_format` chọn format nào
+lấp vào:
+
+| Giá trị | Placement | Key trong ad_config |
+| --- | --- | --- |
+| `BANNER` (mặc định) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ này là dịch chuyển doanh thu chứ không
+thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.banner_wait_ms` giới hạn cho
+format nào đang load, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
+
+Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
+động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
+`AdPlacement.SplashNative` — cái sau vẫn là native full-screen tuỳ chọn (`native_fs`) hiện sau
+inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
+vào `AdsConfig.splashInlineNative`.
+
+
 App dùng key khác chỉ khai báo association đó một lần trong code:
 
 ```kotlin

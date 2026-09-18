@@ -49,6 +49,27 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
 
+### The splash bottom slot
+
+The splash has one ad slot beneath its loading bar, and `splash.ads.slot_format` decides which
+format fills it:
+
+| Value | Placement | ad_config key |
+| --- | --- | --- |
+| `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+One launch requests the chosen format only, so switching this moves the spend rather than adding a
+second impression. The wait is shared too: `splash.timing.banner_wait_ms` bounds whichever format
+is loading, and `ob_ads_splash_banner_enabled` turns the position off for both.
+
+The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
+nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.SplashInlineNative` is not
+`AdPlacement.SplashNative`, which stays the optional full-screen native (`native_fs`) shown after
+the splash interstitial. In code the flag is `io.onboardkit.config.SplashAdSlotFormat`, and the ad
+units resolve into `AdsConfig.splashInlineNative`.
+
+
 Declare only nonstandard associations in code:
 
 ```kotlin

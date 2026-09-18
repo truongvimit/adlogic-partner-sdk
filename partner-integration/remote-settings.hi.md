@@ -49,6 +49,27 @@ ads = AdsConfig.fromAdConfig()
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
 
+### Splash का निचला slot
+
+Splash में loading bar के नीचे एक ही ad slot है, और `splash.ads.slot_format` तय करता है कि उसे कौन
+सा format भरेगा:
+
+| Value | Placement | ad_config key |
+| --- | --- | --- |
+| `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
+नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.banner_wait_ms` जो भी format लोड हो रहा हो उसे सीमित
+करता है, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
+
+Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
+हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
+`AdPlacement.SplashNative` अलग हैं; दूसरा splash interstitial के बाद दिखने वाला optional full-screen
+native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
+`AdsConfig.splashInlineNative` में resolve होते हैं।
+
+
 केवल अलग नाम वाली associations code में घोषित करें:
 
 ```kotlin
