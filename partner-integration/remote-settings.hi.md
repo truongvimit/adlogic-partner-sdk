@@ -63,7 +63,7 @@ Native को दोनों चाहिए: `slot_format` को `NATIVE` **�
 entry। इनमें से कोई एक भी न हो तो slot खाली ही रहता है।
 
 एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
-नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.banner_wait_ms` जो भी format लोड हो रहा हो उसे सीमित
+नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.slot_min_visible_ms` interstitial को उस format से दूर रखता है जो slot भर रहा हो, और यह slot की **impression** से नापा जाता है, load से नहीं — `0` पुराना असुरक्षित व्यवहार लौटाता है, और यह `splash.timing.banner_wait_ms` की जगह लेता है जिसे नई key न होने पर अब भी पढ़ा जाता है। पुरानी पंक्ति: यह जो भी format लोड हो रहा हो उसे सीमित
 करता है, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
 
 Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
@@ -252,7 +252,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
-| `splash.timing.banner_wait_ms` | `0` |
+| `splash.timing.slot_min_visible_ms` | `1000` |
 | `splash.timing.notification_settle_ms` | `0` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |

@@ -60,7 +60,7 @@ class SplashOrderingDeviceTest {
             "home_pending", "home_expired", "under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate", "native_ready", "native_loading", "native_failed"))
         val parallel = args.getString("lfoParallel") == "true"
         f.flags = RemoteFlags(splashLfoParallelPreloadEnabled = parallel, splashMinDisplayMs = 200,
-            splashAdBudgetMs = 3_000, splashBannerWaitMs = if (case == "banner_budget") 2_200 else 0,
+            splashAdBudgetMs = 3_000, splashSlotMinVisibleMs = if (case == "banner_budget") 2_200 else 0,
             adsSplashInter = case != "inter_off", enableAllAds = case != "master_off")
         f.nativeBehavior = case.takeIf { it.startsWith("native_") }
         f.premium = case == "premium"

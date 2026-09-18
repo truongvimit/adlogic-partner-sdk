@@ -45,7 +45,11 @@ data class RemoteFlags(
     val splashNotificationSettleMs: Long = ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.default,
     val splashMinDisplayMs: Long = ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.default,
     val splashAdBudgetMs: Long = ObRemoteKeys.SPLASH_AD_BUDGET_MS.default,
-    val splashBannerWaitMs: Long = ObRemoteKeys.SPLASH_BANNER_WAIT_MS.default,
+    /**
+     * How long the splash's bottom slot must have been on screen before the interstitial may
+     * cover it. `0` restores the old behaviour of not protecting it at all.
+     */
+    val splashSlotMinVisibleMs: Long = ObRemoteKeys.SPLASH_SLOT_MIN_VISIBLE_MS.default,
     val skipButtonDelaySec: Long = ObRemoteKeys.SKIP_BUTTON_DELAY_SEC.default,
     val fullScreenAutoDismissSec: Long = ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC.default,
     val showSkipOb3: Boolean = ObRemoteKeys.SHOW_SKIP_OB3.default,
@@ -79,7 +83,7 @@ data class RemoteFlags(
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
         "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
         "reuseSplashInter=$reuseSplashInter minDisplayMs=$splashMinDisplayMs " +
-        "adBudgetMs=$splashAdBudgetMs bannerWaitMs=$splashBannerWaitMs " +
+        "adBudgetMs=$splashAdBudgetMs slotMinVisibleMs=$splashSlotMinVisibleMs " +
         "lfoPreload=${if (splashLfoParallelPreloadEnabled) "parallel" else "sequential"} notificationSettleMs=$splashNotificationSettleMs"
 
     /** Any tutorial page enabled → the pager flow can show. */
@@ -135,7 +139,7 @@ data class RemoteFlags(
                 splashNotificationSettleMs = long(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS).coerceAtLeast(0),
                 splashMinDisplayMs = long(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS),
                 splashAdBudgetMs = long(ObRemoteKeys.SPLASH_AD_BUDGET_MS),
-                splashBannerWaitMs = long(ObRemoteKeys.SPLASH_BANNER_WAIT_MS),
+                splashSlotMinVisibleMs = long(ObRemoteKeys.SPLASH_SLOT_MIN_VISIBLE_MS),
                 skipButtonDelaySec = long(ObRemoteKeys.SKIP_BUTTON_DELAY_SEC),
                 fullScreenAutoDismissSec = long(ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC),
                 showSkipOb3 = bool(ObRemoteKeys.SHOW_SKIP_OB3),

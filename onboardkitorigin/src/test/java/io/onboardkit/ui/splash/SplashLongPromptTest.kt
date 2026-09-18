@@ -617,7 +617,7 @@ class SplashLongPromptTest {
 
     @Test
     fun bannerAndInterstitialShareOneDeadlineAndLateFillCannotShow() {
-        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 5_000, splashBannerWaitMs = 4_000)
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 5_000, splashSlotMinVisibleMs = 4_000)
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
@@ -648,7 +648,7 @@ class SplashLongPromptTest {
 
     @Test
     fun recreationDoesNotRestartTheBannerWaitOrInterstitialBudget() {
-        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 10_000, splashBannerWaitMs = 6_000)
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 10_000, splashSlotMinVisibleMs = 6_000)
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }

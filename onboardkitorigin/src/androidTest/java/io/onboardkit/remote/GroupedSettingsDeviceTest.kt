@@ -127,7 +127,7 @@ class GroupedSettingsDeviceTest {
 
         OnboardingSettings.initialize(app)
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"min_display_ms":4321}}}"""))
-        val legacy = RemoteFlags(adsSplashInter = false, splashBannerWaitMs = 123)
+        val legacy = RemoteFlags(adsSplashInter = false, splashSlotMinVisibleMs = 123)
         val syncer = RemoteConfigSyncer(app) { null }
         syncer.applySnapshot(legacy)
         assertFalse(syncer.fetchAndSync(100))

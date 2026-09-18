@@ -72,8 +72,15 @@ Native cần đủ hai vế: `slot_format` đặt `NATIVE` **và** một entry `
 trong ad_config. Thiếu một trong hai thì slot chỉ đơn giản là rỗng.
 
 Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ này là dịch chuyển doanh thu chứ không
-thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.banner_wait_ms` giới hạn cho
-format nào đang load, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
+thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.slot_min_visible_ms` giữ inter lại cho format nào
+đang lấp slot, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
+
+Thời gian đó tính từ lúc slot có **impression**, không phải lúc load xong — hai mốc này khác nhau:
+ad fill sau lưng dialog xin quyền, hoặc vừa kịp hiện lúc dialog đóng, trước đây bị inter phủ lên
+ngay lập tức. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
+nhưng không báo impression (banner collapsible không bao giờ báo) thì bỏ qua sau đúng khoảng này;
+và mọi lần chờ đều bị chặn trên bởi `splash.timing.ad_budget_ms`. Đặt `0` là quay lại hành vi cũ,
+không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms`, key cũ vẫn được đọc khi thiếu key mới.
 
 Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
 động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
@@ -269,7 +276,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.ads.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |
-| `splash.timing.banner_wait_ms` | `0` | Đợi render trước inter, giới hạn bởi ad budget. |
+| `splash.timing.slot_min_visible_ms` | `1000` | Thời gian tối thiểu slot phải hiện trước khi inter phủ lên. |
 | `splash.timing.notification_settle_ms` | `0` | Đệm sau notification result. |
 | `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; capture trước khởi động attempt, mới fetch chỉ áp attempt sau. |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` | PARALLEL/SEQUENTIAL so với inter splash; độc lập ad_strategy. |

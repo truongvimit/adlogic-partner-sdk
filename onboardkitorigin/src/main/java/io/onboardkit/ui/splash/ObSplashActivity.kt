@@ -264,8 +264,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
         awaitSplashFocus()
         beginAdWait()
-        awaitBanner()
         awaitInterstitial()
+        awaitSlotVisible()
         ensureLfo1Preload(attempt.interstitialSettled.await().lfoReason)
         if (attempt.interstitialSettled.await() == InterResult.LOADED) ensureSplashNativePreload()
         proceed()
@@ -405,9 +405,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
     /**
      * The native that takes the slot when the format says NATIVE.
      *
-     * It settles the same latch the banner does, so the splash's existing wait — `banner_wait_ms`,
-     * bounded by the shared ad budget — covers whichever format the remote picked, and neither
-     * format can hold the splash open a moment longer than the other.
+     * It settles the same latch the banner does and reports its impression the same way, so one
+     * slot has one wait whichever format remote config named.
      */
     private fun requestSplashSlotNative() {
         val placement = AdPlacement.SplashInlineNative
@@ -433,8 +432,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
             container = container,
             onBound = {
                 ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
+                state.slotFilled = true
                 state.bannerSettled.complete(Unit)
             },
+            onShown = { state.markSlotShown() },
             onUnavailable = { reason ->
                 ObLog.w(ObLog.Section.LOAD, "${placement.key} unavailable — $reason")
                 container.visibility = View.GONE
@@ -473,8 +474,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 object : AdEventListener {
                     override fun onLoaded() {
                         ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
+                        state.slotFilled = true
                         state.bannerSettled.complete(Unit)
                     }
+
+                    override fun onImpression() = state.markSlotShown()
 
                     override fun onFailedToLoad() {
                         ObLog.w(ObLog.Section.LOAD, "${placement.key} failed")
@@ -529,7 +533,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         if (attempt.budgetDeadlineMs != null) return
         val flags = checkNotNull(attempt.flags)
         if (!attempt.interstitialSettled.isCompleted ||
-            flags.splashBannerWaitMs > 0 && !attempt.bannerSettled.isCompleted) {
+            flags.splashSlotMinVisibleMs > 0 && !attempt.slotShown.isCompleted) {
             attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
             ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
         }
@@ -538,14 +542,42 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private fun remainingBudgetMs(): Long =
         ((attempt.budgetDeadlineMs ?: SystemClock.elapsedRealtime()) - SystemClock.elapsedRealtime()).coerceAtLeast(0)
 
-    // One wait for one slot: a native occupant is bounded by the banner's budget rather than a
-    // second key, so switching format cannot lengthen the splash.
-    private suspend fun awaitBanner() {
-        if (attempt.bannerDeadlineMs == null) {
-            attempt.bannerDeadlineMs = SystemClock.elapsedRealtime() + checkNotNull(attempt.flags).splashBannerWaitMs.coerceAtLeast(0)
+    /**
+     * Holds the interstitial until the bottom slot has had its minimum time on screen.
+     *
+     * Waiting for the *load* was never the same as the ad being seen. A slot that fills behind the
+     * notification dialog, or lands just as that dialog closes, satisfied the older rule and still
+     * gave the user an ad that appeared and was covered in the same breath.
+     *
+     * Nothing here can strand the flow. A slot with no ad to show settles
+     * [SplashAttempt.bannerSettled] without ever reporting an impression, which releases the first
+     * wait; a slot that simply never appears is given only this same budget and then abandoned; and
+     * both waits are clamped to whatever is left of the shared ad budget.
+     */
+    private suspend fun awaitSlotVisible() {
+        val minVisibleMs = checkNotNull(attempt.flags).splashSlotMinVisibleMs
+        if (minVisibleMs <= 0) return
+        if (attempt.slotShownAtMs == null) {
+            withTimeoutOrNull(minOf(minVisibleMs, remainingBudgetMs()).milliseconds) {
+                // Settling is not the same as filling: a slot that failed, was skipped or had no
+                // ad unit resolves this immediately and must not cost the flow a further wait.
+                attempt.bannerSettled.await()
+                if (attempt.slotFilled) attempt.slotShown.await()
+            }
         }
-        val waitMs = minOf((checkNotNull(attempt.bannerDeadlineMs) - SystemClock.elapsedRealtime()).coerceAtLeast(0), remainingBudgetMs())
-        if (waitMs > 0) withTimeoutOrNull(waitMs.milliseconds) { attempt.bannerSettled.await() }
+        val shownAt = attempt.slotShownAtMs
+        if (shownAt == null) {
+            ObLog.d(ObLog.Section.SPLASH, "slot never reached the screen — not holding the interstitial")
+            return
+        }
+        val holdMs = minOf(
+            minVisibleMs - (SystemClock.elapsedRealtime() - shownAt),
+            remainingBudgetMs(),
+        )
+        if (holdMs > 0) {
+            ObLog.d(ObLog.Section.SPLASH, "holding the interstitial ${holdMs}ms so the slot is seen")
+            delay(holdMs.milliseconds)
+        }
     }
 
     private suspend fun awaitInterstitial() {

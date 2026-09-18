@@ -150,7 +150,7 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.key, snapshot.splashNotificationSettleMs.toString())
         put(ObRemoteKeys.SPLASH_MIN_DISPLAY_MS.key, snapshot.splashMinDisplayMs.toString())
         put(ObRemoteKeys.SPLASH_AD_BUDGET_MS.key, snapshot.splashAdBudgetMs.toString())
-        put(ObRemoteKeys.SPLASH_BANNER_WAIT_MS.key, snapshot.splashBannerWaitMs.toString())
+        put(ObRemoteKeys.SPLASH_SLOT_MIN_VISIBLE_MS.key, snapshot.splashSlotMinVisibleMs.toString())
         put(ObRemoteKeys.SKIP_BUTTON_DELAY_SEC.key, snapshot.skipButtonDelaySec.toString())
         put(
             ObRemoteKeys.FULLSCREEN_AUTO_DISMISS_SEC.key,

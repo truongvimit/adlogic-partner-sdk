@@ -67,12 +67,25 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var nativeScreenRequested = false
     var nativeScreenResolved = false
     val nativeScreenFinished = CompletableDeferred<Unit>()
-    // Still named for the banner because `splash.timing.banner_wait_ms` is a published remote key:
-    // renaming the field would leave it disagreeing with the setting partners actually tune.
+    /** Settles whichever format `splash.ads.slot_format` gave the bottom slot — banner or native. */
     val bannerSettled = CompletableDeferred<Unit>()
+
+    /**
+     * Completes on the slot's first impression, which is a later and stricter moment than the load
+     * that settles [bannerSettled]: an ad that filled while a permission dialog covered the splash
+     * has not been seen yet, and that gap is exactly what the minimum-visible wait protects.
+     */
+    val slotShown = CompletableDeferred<Unit>()
+    var slotShownAtMs: Long? = null
+
+    /** True once the slot has an ad to show. A slot that failed has nothing worth waiting on. */
+    var slotFilled = false
+
+    fun markSlotShown() {
+        if (slotShown.complete(Unit)) slotShownAtMs = SystemClock.elapsedRealtime()
+    }
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null
-    var bannerDeadlineMs: Long? = null
     var notificationPermissionRequested = false
     val notificationOpen = MutableStateFlow(false)
     val notificationPermissionResult = CompletableDeferred<Unit>()

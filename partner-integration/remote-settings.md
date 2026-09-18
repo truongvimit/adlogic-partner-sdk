@@ -63,8 +63,16 @@ Native needs both halves: `slot_format` set to `NATIVE` **and** a usable `native
 entry in ad_config. With either one missing the slot simply stays empty.
 
 One launch requests the chosen format only, so switching this moves the spend rather than adding a
-second impression. The wait is shared too: `splash.timing.banner_wait_ms` bounds whichever format
-is loading, and `ob_ads_splash_banner_enabled` turns the position off for both.
+second impression. The wait is shared too: `splash.timing.slot_min_visible_ms` keeps the interstitial off whichever
+format is filling it, and `ob_ads_splash_banner_enabled` turns the position off for both.
+
+That wait is measured from the slot's **impression**, not its load, because the two are not the
+same moment — an ad that fills behind the notification dialog, or lands as that dialog closes, was
+once covered by the interstitial the instant it appeared. A slot that fails, is skipped or has no
+ad unit resolves immediately and is never waited on, a filled slot that reports no impression (a
+collapsible banner never does) is abandoned after the same budget, and every wait is clamped to
+what is left of `splash.timing.ad_budget_ms`. `0` restores the old unguarded behaviour. It replaces
+`splash.timing.banner_wait_ms`, which is still read when the new key is absent.
 
 The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
 nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.SplashInlineNative` is not
@@ -252,7 +260,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
-| `splash.timing.banner_wait_ms` | `0` |
+| `splash.timing.slot_min_visible_ms` | `1000` |
 | `splash.timing.notification_settle_ms` | `0` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |

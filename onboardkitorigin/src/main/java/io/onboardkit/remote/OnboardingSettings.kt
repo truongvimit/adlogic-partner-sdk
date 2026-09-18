@@ -238,7 +238,12 @@ object OnboardingSettings {
             splashNotificationSettleMs = v.long("splash.timing.notification_settle_ms", f.splashNotificationSettleMs),
             splashMinDisplayMs = v.long("splash.timing.min_display_ms", f.splashMinDisplayMs),
             splashAdBudgetMs = v.long("splash.timing.ad_budget_ms", f.splashAdBudgetMs),
-            splashBannerWaitMs = v.long("splash.timing.banner_wait_ms", f.splashBannerWaitMs),
+            // banner_wait_ms is the key this replaced; a console still publishing it keeps
+            // delaying the interstitial for the slot's sake, which was its whole point.
+            splashSlotMinVisibleMs = v.long(
+                "splash.timing.slot_min_visible_ms",
+                v.long("splash.timing.banner_wait_ms", f.splashSlotMinVisibleMs),
+            ),
             splashLfoParallelPreloadEnabled = v.string("splash.load.lfo1_preload_mode", if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL") == "PARALLEL",
         )
     }

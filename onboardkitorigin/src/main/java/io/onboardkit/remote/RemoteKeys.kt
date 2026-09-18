@@ -103,7 +103,7 @@ object ObRemoteKeys {
      * How long the splash holds for its banner/native slot to render before the full-screen ad
      * is allowed to cover it, capped by the shared splash budget. `0` means do not wait.
      */
-    val SPLASH_BANNER_WAIT_MS = RemoteKey.LongKey("ob_splash_banner_wait_ms", OnboardingSettings.defaultNumber("splash.timing.banner_wait_ms"))
+    val SPLASH_SLOT_MIN_VISIBLE_MS = RemoteKey.LongKey("ob_splash_slot_min_visible_ms", OnboardingSettings.defaultNumber("splash.timing.slot_min_visible_ms"))
 
     /** Negative inherits the page default: OB3 1s, standalone OB5 3s. */
     val SKIP_BUTTON_DELAY_SEC = RemoteKey.LongKey("ob_skip_button_delay_sec", -1)
@@ -137,7 +137,7 @@ object ObRemoteKeys {
         ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
         ADS_APP_RESUME,
         SPLASH_LFO_PARALLEL_PRELOAD_ENABLED, SPLASH_NOTIFICATION_SETTLE_MS,
-        SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_BANNER_WAIT_MS,
+        SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_SLOT_MIN_VISIBLE_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,
         UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, QUESTION_CONFIG_JSON, CONFIG_VERSION,

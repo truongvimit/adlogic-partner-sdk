@@ -21,7 +21,7 @@ class RemoteConfigCacheDeviceTest {
         adsSplashInter = false,
         adsAppResume = false,
         splashAdBudgetMs = 9_876,
-        splashBannerWaitMs = 321,
+        splashSlotMinVisibleMs = 321,
         splashLfoParallelPreloadEnabled = true,
         splashNotificationSettleMs = 800,
     )
