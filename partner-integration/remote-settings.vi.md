@@ -278,7 +278,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |
 | `splash.timing.slot_min_visible_ms` | `1000` | Thời gian tối thiểu slot phải hiện trước khi inter phủ lên. |
-| `splash.timing.notification_settle_ms` | `0` | Đệm sau notification result. |
+| `splash.timing.notification_settle_ms` | `800` | Sàn tối thiểu sau khi user trả lời prompt noti, trước khi inter được show. |
 | `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; capture trước khởi động attempt, mới fetch chỉ áp attempt sau. |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` | PARALLEL/SEQUENTIAL so với inter splash; độc lập ad_strategy. |
 | `splash.load.remote_fetch_timeout_ms` | `10000` | Đang fetch không tự đổi timeout cho chính lần fetch đó; lần sau dùng cache. |

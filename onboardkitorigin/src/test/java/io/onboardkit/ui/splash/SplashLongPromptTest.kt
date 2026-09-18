@@ -925,7 +925,9 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         if (minimumAlreadyElapsed) {
-            main.idle()
+            // Past the notification settle but far short of the 3s minimum display, which the long
+            // prompt already consumed — that distinction is what this case exists to prove.
+            main.idleFor(Duration.ofSeconds(1))
             assertEquals("Long prompt time already consumed the minimum", 1, LongPromptFixture.flowStarts)
         } else main.idleFor(Duration.ofSeconds(4))
         drainUntil("Ready splash must show and hand off once; order=${LongPromptFixture.provider.order}") { LongPromptFixture.flowStarts == 1 }
@@ -937,7 +939,9 @@ class SplashLongPromptTest {
     private fun drainUntil(message: String, condition: () -> Boolean) {
         val deadline = System.nanoTime() + 5_000_000_000L
         while (!condition() && System.nanoTime() < deadline) {
-            main.idle()
+            // Virtual time, not just pending work: the splash now settles for a beat after the
+            // notification result, and a bare idle() would never reach a scheduled delay.
+            main.idleFor(Duration.ofMillis(50))
             Thread.sleep(5) // DataStore IO completion; virtual prompt durations use only the main looper.
         }
         assertTrue(message, condition())

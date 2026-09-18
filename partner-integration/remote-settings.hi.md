@@ -252,7 +252,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
 | `splash.timing.slot_min_visible_ms` | `1000` |
-| `splash.timing.notification_settle_ms` | `0` |
+| `splash.timing.notification_settle_ms` | `800` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |
 | `splash.load.remote_fetch_timeout_ms` | `10000` |

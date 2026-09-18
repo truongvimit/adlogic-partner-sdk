@@ -23,7 +23,7 @@
       "min_display_ms": 3000,
       "ad_budget_ms": 60000,
       "slot_min_visible_ms": 1000,
-      "notification_settle_ms": 0
+      "notification_settle_ms": 800
     },
     "load": {
       "ad_strategy": "ALTERNATE",
