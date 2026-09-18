@@ -4,6 +4,9 @@ package com.example.app
 object AppAdPlacement {
     // Standard onboarding flow.
     const val BANNER_SPLASH = "banner_splash"
+
+    /** Alternative occupant of the splash bottom slot; `splash.ads.slot_format` picks it or the banner. */
+    const val NATIVE_SPLASH = "native_splash"
     const val INTER_SPLASH = "inter_splash"
     const val NATIVE_LANG = "native_lang"
     const val NATIVE_LANG_ALT = "native_lang_alt"

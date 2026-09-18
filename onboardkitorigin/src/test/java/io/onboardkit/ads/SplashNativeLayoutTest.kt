@@ -49,20 +49,28 @@ class SplashNativeLayoutTest {
     }
 
     @Test
-    fun `the media well clips its child to the rounded background`() {
+    fun `ad_media carries the rounded box, so hiding it hides the box`() {
         val media = elementsById()["ad_media"]!!
         // The MediaView's image is added as a child at bind time and would otherwise paint square
         // corners straight over the 4dp radius the background draws.
         assertEquals("true", media.getAttributeNS(android, "clipToOutline"))
+        // With no `ad_container`, NativeAdStyler toggles `ad_media`'s own visibility for a remote
+        // `components` list that drops "media". The background must ride on the view that gets
+        // hidden — on the well it would leave an empty grey block holding half the card.
+        assertEquals("@drawable/ob_bg_splash_native_media", media.getAttributeNS(android, "background"))
     }
 
     @Test
-    fun `the media keeps a concrete height so the derived shimmer matches the ad`() {
-        // NativeAdShimmer.skeletonizeMedia replaces a 0dp or wrap_content MediaView height with a
-        // 160dp floor. That would make the skeleton taller than the 123dp ad it stands in for, and
-        // the slot would visibly resize the moment the ad arrived.
-        val height = elementsById()["ad_media"]!!.getAttributeNS(android, "layout_height")
-        assertEquals("@dimen/ob_splash_native_media_height", height)
+    fun `the ratio sits on the well and never on ad_media`() {
+        val byId = elementsById()
+        val auto = "http://schemas.android.com/apk/res-auto"
+        // A ratio owner must be 0dp, and NativeAdShimmer.skeletonizeMedia rewrites a 0dp `ad_media`
+        // to a flat 160dp floor — the skeleton would then stand taller than the 4:3 ad replacing
+        // it. Keeping the ratio one level up is what holds skeleton and ad to one geometry, so
+        // moving it onto `ad_media` must fail here rather than ship a slot that jumps.
+        assertEquals("H,4:3", byId["ob_splash_native_media_well"]?.getAttributeNS(auto, "layout_constraintDimensionRatio"))
+        assertEquals("", byId["ad_media"]!!.getAttributeNS(auto, "layout_constraintDimensionRatio"))
+        assertEquals("match_parent", byId["ad_media"]!!.getAttributeNS(android, "layout_height"))
     }
 
     @Test

@@ -89,7 +89,7 @@ Copy hai file đúng tên vào `assets` (tạo folder nếu thiếu):
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** cấu hình cho bản release; hiện toàn bộ ID là test.
 - **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** cấu hình debug; giữ ID test.
 
-Ad unit ID chứa **`/`**. Mỗi file có **45 entry** như [example debug](../app/src/main/assets/ad_config_debug.json), đủ style, UA, app-resume delay và waterfall; interstitial dùng ID test `1033173712`, native high dùng native video test. Dưới đây là 10 slot OB; các key còn lại dành cho màn app, chưa tự tạo vị trí hiển thị. Giá trị mẫu có thể khác default parser; xem [bảng field JSON](#field-trong-json-mẫu).
+Ad unit ID chứa **`/`**. Mỗi file bám theo [example debug](../app/src/main/assets/ad_config_debug.json), đủ style, UA, app-resume delay và waterfall; interstitial dùng ID test `1033173712`, native high dùng native video test. Dưới đây là các slot OB; các key còn lại dành cho màn app, chưa tự tạo vị trí hiển thị. Giá trị mẫu có thể khác default parser; xem [bảng field JSON](#field-trong-json-mẫu).
 
 | Key trong JSON | Vị trí | Ánh xạ vào `AdsConfig` ở bước 4 |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ Chỉ `SplashConfig.layoutRes` và `ContentStepDefinition.layoutRes` hỗ trợ 
 
 ### `AppAdPlacement.kt` — danh mục placement của app
 
-Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) vào package app, ví dụ `app/src/main/java/com/example/app/`. File có **35 key gốc**: 10 OB và các slot app. SDK tự tìm tầng `_high`, `_high1`…; không cần constant cho tầng.
+Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) vào package app, ví dụ `app/src/main/java/com/example/app/`. File có một key gốc cho mỗi placement: các slot OB và slot app. SDK tự tìm tầng `_high`, `_high1`…; không cần constant cho tầng.
 
 `AppAdPlacement.NATIVE_HOME` là key `native_home`; cả hai JSON chứa ad unit ID và cấu hình của key đó. Slot mới cần constant và key tương ứng trong JSON.
 
@@ -452,7 +452,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 ## 8. Kiểm tra hoàn tất
 
 - [ ] Nếu dùng settings mới, thử remote override, offline lần đầu dùng local và offline giữ remote cache hợp lệ theo [checklist Firebase](firebase-integration.vi.md#remote-notes).
-- [ ] Debug build mở được splash, Logcat tag `AdRemoteConfig` có dòng `Loaded ad_config_debug.json with 45 placements (debug=true)`, `OB_FLOW` không báo config/provider lỗi.
+- [ ] Debug build mở được splash, Logcat tag `AdRemoteConfig` có dòng `Loaded ad_config_debug.json with <n> placements (debug=true)`, `<n>` khớp với example bạn ship, `OB_FLOW` không báo config/provider lỗi.
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn lại ngôn ngữ hiện tại mở popup ngay, còn chọn ngôn ngữ khác phải chờ đủ tổng số click đã cấu hình.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Click native ở trang OB rồi quay lại chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.

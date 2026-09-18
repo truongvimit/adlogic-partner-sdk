@@ -421,8 +421,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
             attempt.bannerSettled.complete(Unit)
             return
         }
-        // The slot's XML ships the banner's control view; the native owns the space instead.
-        container.removeAllViews()
+        // Deliberately not cleared here: showNativeAd empties the container itself before it
+        // mounts either the skeleton or the ad, and a host splash layout may put its own content
+        // in this slot — emptying it before the guard has spoken would destroy that for a
+        // placement we then decline to fill.
         container.visibility = View.VISIBLE
         val state = attempt
         showNativeAd(
@@ -748,10 +750,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
         // The consent timeout holds this screen's completion callback for its whole window; the
         // flow it guards died with the screen.
         ConsentCenter.detach(this)
-        // The bottom-slot native is bound into a view of this Activity and is never rebound
-        // anywhere else, so nothing would otherwise drop it: the ad and its view would outlive
-        // the splash for the rest of the process. A rotation rebinds it, so that is not a release.
-        if (!isChangingConfigurations) sdk.provider()?.releaseNative(AdPlacement.SplashInlineNative)
+        // Released unconditionally, unlike the screens that guard this on isChangingConfigurations:
+        // they rebind from onCreate, whereas the slot is requested once per attempt and `attempt`
+        // outlives the Activity, so a recreated splash never asks for this native again. Holding it
+        // for a rebind that cannot come would strand the ad and its view for the rest of the process.
+        sdk.provider()?.releaseNative(AdPlacement.SplashInlineNative)
         super.onDestroy()
     }
 

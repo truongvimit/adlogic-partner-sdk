@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -49,12 +50,34 @@ class SplashNativeShimmerTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun `media keeps the design's 4 to 3 well at the reference width`() {
+    @Test fun `the media well holds 4 to 3 at every width, not just the design's`() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         try {
-            val media = skeleton(controller.get(), 360).findViewById<View>(R.id.ad_media)
-            // (360 - 24 padding - 8 gap) / 2 = 164, and 164 x 3/4 = 123.
-            assertEquals(164, media.width)
+            // The whole point of putting the ratio on the well: a pinned height would only be 4:3
+            // at 360dp and would stretch on everything else. 320dp is the narrowest Android ships;
+            // 412dp is a common large phone. 1px tolerance absorbs integer rounding.
+            for (width in listOf(320, 360, 412)) {
+                val well = skeleton(controller.get(), width)
+                    .findViewById<View>(R.id.ob_splash_native_media_well)
+                val expected = (well.width * 3.0 / 4.0)
+                assertTrue(
+                    "at ${width}dp the well is ${well.width}x${well.height}, not 4:3",
+                    kotlin.math.abs(well.height - expected) <= 1.0,
+                )
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun `the MediaView fills the well, so the ad is framed by the ratio`() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            val view = skeleton(controller.get(), 360)
+            val well = view.findViewById<View>(R.id.ob_splash_native_media_well)
+            val media = view.findViewById<View>(R.id.ad_media)
+            // skeletonizeMedia sets a 160dp minimumHeight on a match_parent MediaView. The well
+            // measures it EXACTLY, so that floor must not leak into the skeleton's geometry.
+            assertEquals(well.width, media.width)
+            assertEquals(well.height, media.height)
             assertEquals(123, media.height)
         } finally { controller.pause().stop().destroy() }
     }
@@ -75,13 +98,45 @@ class SplashNativeShimmerTest {
     @Test fun `a narrow screen still leaves the text column room for every block`() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         try {
-            // 320dp is the narrowest width Android ships. The row height is fixed, so the CTA
-            // must not be squeezed out by the badge, headline and body above it.
+            // 320dp is the narrowest width Android ships.
             val view = skeleton(controller.get(), 320)
             val cta = view.findViewById<View>(R.id.ad_call_to_action)
             assertEquals(44, cta.height)
             assertTrue("headline must keep a visible line", view.findViewById<View>(R.id.ad_headline).height > 0)
             assertTrue("body must keep a visible line", view.findViewById<View>(R.id.ad_body).height > 0)
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun `the CTA survives a large font scale on the narrowest screen`() {
+        // The row's height follows the media's 4:3, so it shrinks with screen width while the
+        // badge and the 44dp CTA do not, and the headline and body grow with the font scale. At
+        // 320dp the ratio gives only 108dp, and 1.3 is Android's ordinary "largest" text step —
+        // no accessibility mode needed. Without height_min="wrap" the CTA is clipped out of the
+        // card, and clipChildren makes the lost strip untappable as well as invisible.
+        for (scale in listOf(1.0f, 1.3f, 1.5f, 2.0f)) {
+            RuntimeEnvironment.setFontScale(scale)
+            val controller = Robolectric.buildActivity(Activity::class.java).setup()
+            try {
+                val view = skeleton(controller.get(), 320)
+                val column = view.findViewById<View>(R.id.ob_splash_native_text)
+                val cta = view.findViewById<View>(R.id.ad_call_to_action)
+                val rect = android.graphics.Rect(0, 0, cta.width, cta.height)
+                view.offsetDescendantRectToMyCoords(cta, rect)
+                val columnRect = android.graphics.Rect(0, 0, column.width, column.height)
+                view.offsetDescendantRectToMyCoords(column, columnRect)
+                // The card has to grow to hold the button whole, at its full declared height.
+                assertEquals("fontScale $scale: CTA lost height", 44, cta.height)
+                assertTrue(
+                    "fontScale $scale: CTA bottom ${rect.bottom} overflows card ${view.height}",
+                    rect.bottom <= view.height,
+                )
+                // …and it must not ride up over the text it sits beneath.
+                assertTrue(
+                    "fontScale $scale: CTA top ${rect.top} overlaps text bottom ${columnRect.bottom}",
+                    rect.top >= columnRect.bottom,
+                )
+            } finally { controller.pause().stop().destroy() }
+        }
+        RuntimeEnvironment.setFontScale(1.0f)
     }
 }

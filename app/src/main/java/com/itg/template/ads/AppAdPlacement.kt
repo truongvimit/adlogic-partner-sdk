@@ -4,8 +4,8 @@ package com.itg.template.ads
  * Every ad position this app owns, by the key it carries in `ad_config.json`.
  *
  * The placement key is the only thing that tells two positions apart. Ad unit ids do not:
- * this app's JSON declares 45 placements across 8 distinct units — one native test unit
- * serves 25 of them — and production payloads reuse a unit across screens just as freely.
+ * this app's JSON points most of its native placements at a single test unit, and production
+ * payloads reuse a unit across screens just as freely.
  * Everything the SDK keys by placement — the interstitial cache, the frequency clock, the
  * auto-buffer group, native preload, and every `ad_request` / `ad_impression` / `ad_skipped`
  * the dashboard slices — keys by this string.
