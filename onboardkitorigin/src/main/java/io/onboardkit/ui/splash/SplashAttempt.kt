@@ -70,29 +70,30 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     /** Settles whichever format `splash.ads.slot_format` gave the bottom slot — banner or native. */
     val bannerSettled = CompletableDeferred<Unit>()
 
-    /**
-     * Completes on the slot's first impression, which is a later and stricter moment than the load
-     * that settles [bannerSettled]: an ad that filled while a permission dialog covered the splash
-     * has not been seen yet, and that gap is exactly what the minimum-visible wait protects.
-     */
-    val slotShown = CompletableDeferred<Unit>()
-    var slotShownAtMs: Long? = null
-
     /** True once the slot has an ad to show. A slot that failed has nothing worth waiting on. */
     var slotFilled = false
 
     /**
+     * When that ad arrived.
+     *
+     * The vendor impression is deliberately not used: a collapsible banner never reports one, so
+     * anything waiting on it would be waiting for something that may never come.
+     */
+    var slotLoadedAtMs: Long? = null
+
+    /**
      * When the splash last had the screen to itself, i.e. resumed and focused.
      *
-     * The minimum-visible window is measured from here rather than from the impression, because
-     * time spent behind a permission dialog is not time the user spent looking at the ad. A banner
-     * renders under that dialog and a native does not, and starting both clocks at the dismissal
-     * is what makes the guarantee identical either way.
+     * The minimum-visible window runs from the later of this and the load, because both have to be
+     * true before anyone can look at the ad: a banner renders behind the permission dialog, and a
+     * native binds only once that dialog is gone.
      */
     var focusedAtMs: Long? = null
 
-    fun markSlotShown() {
-        if (slotShown.complete(Unit)) slotShownAtMs = SystemClock.elapsedRealtime()
+    fun markSlotLoaded() {
+        slotFilled = true
+        if (slotLoadedAtMs == null) slotLoadedAtMs = SystemClock.elapsedRealtime()
+        bannerSettled.complete(Unit)
     }
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null

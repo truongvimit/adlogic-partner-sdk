@@ -66,10 +66,12 @@ One launch requests the chosen format only, so switching this moves the spend ra
 second impression. The wait is shared too: `splash.timing.slot_min_visible_ms` keeps the interstitial off whichever
 format is filling it, and `ob_ads_splash_banner_enabled` turns the position off for both.
 
-That wait is measured from the later of the slot's **impression** and the splash **regaining the
-screen** — never from its load. Those are three different moments: an ad that filled behind the
-notification dialog had not been looked at, and one that landed as the dialog closed was covered by
-the interstitial the instant it appeared. A slot that fails, is skipped or has no
+That window runs from the later of the slot **loading** and the splash **regaining the screen**,
+because both have to be true before anyone can look at it: an ad that filled behind the notification
+dialog was on screen but not in front of the user. A slot that fails, is skipped or has no ad unit
+never starts the window and is not waited on; a slow one is waited for within what remains of
+`splash.timing.ad_budget_ms`, the same budget the interstitial spends. Vendor impressions are not
+consulted, since a collapsible banner never reports one. A slot that fails, is skipped or has no
 ad unit resolves immediately and is never waited on, a filled slot that reports no impression (a
 collapsible banner never does) is abandoned after the same budget, and every wait is clamped to
 what is left of `splash.timing.ad_budget_ms`. `0` restores the old unguarded behaviour. It replaces

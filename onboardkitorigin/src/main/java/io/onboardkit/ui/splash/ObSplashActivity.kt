@@ -433,10 +433,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
             container = container,
             onBound = {
                 ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
-                state.slotFilled = true
-                state.bannerSettled.complete(Unit)
+                state.markSlotLoaded()
             },
-            onShown = { state.markSlotShown() },
             onUnavailable = { reason ->
                 ObLog.w(ObLog.Section.LOAD, "${placement.key} unavailable — $reason")
                 container.visibility = View.GONE
@@ -475,11 +473,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 object : AdEventListener {
                     override fun onLoaded() {
                         ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
-                        state.slotFilled = true
-                        state.bannerSettled.complete(Unit)
+                        state.markSlotLoaded()
                     }
-
-                    override fun onImpression() = state.markSlotShown()
 
                     override fun onFailedToLoad() {
                         ObLog.w(ObLog.Section.LOAD, "${placement.key} failed")
@@ -534,7 +529,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         if (attempt.budgetDeadlineMs != null) return
         val flags = checkNotNull(attempt.flags)
         if (!attempt.interstitialSettled.isCompleted ||
-            flags.splashSlotMinVisibleMs > 0 && !attempt.slotShown.isCompleted) {
+            flags.splashSlotMinVisibleMs > 0 && !attempt.bannerSettled.isCompleted) {
             attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
             ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
         }
@@ -546,38 +541,29 @@ open class ObSplashActivity : BaseOnboardActivity() {
     /**
      * Holds the interstitial until the bottom slot has had its minimum time on screen.
      *
-     * Waiting for the *load* was never the same as the ad being seen, and neither is the
-     * impression on its own: a banner renders behind the notification dialog, so by that measure it
-     * had been "seen" while the user was reading something else entirely. The window therefore runs
-     * from the later of the impression and the splash getting the screen back.
+     * The window runs from the later of the slot loading and the splash getting the screen back,
+     * because both have to be true before anyone can look at it: a banner that filled behind the
+     * notification dialog was on screen but not in front of the user, and a native binds only once
+     * that dialog is gone.
      *
-     * Nothing here can strand the flow. A slot with no ad to show settles
-     * [SplashAttempt.bannerSettled] without ever reporting an impression, which releases the first
-     * wait; a slot that simply never appears is given only this same budget and then abandoned; and
-     * both waits are clamped to whatever is left of the shared ad budget.
+     * Nothing here can strand the flow. A slot that fails, is skipped or has no ad unit settles
+     * without ever being marked filled and returns at once, and the wait for a slow one is clamped
+     * to what is left of the shared ad budget — the same budget the interstitial just spent.
      */
     private suspend fun awaitSlotVisible() {
         val minVisibleMs = checkNotNull(attempt.flags).splashSlotMinVisibleMs
         if (minVisibleMs <= 0) return
-        if (attempt.slotShownAtMs == null) {
-            withTimeoutOrNull(minOf(minVisibleMs, remainingBudgetMs()).milliseconds) {
-                // Settling is not the same as filling: a slot that failed, was skipped or had no
-                // ad unit resolves this immediately and must not cost the flow a further wait.
-                attempt.bannerSettled.await()
-                if (attempt.slotFilled) attempt.slotShown.await()
-            }
+        if (!attempt.bannerSettled.isCompleted) {
+            withTimeoutOrNull(remainingBudgetMs().milliseconds) { attempt.bannerSettled.await() }
         }
-        val shownAt = attempt.slotShownAtMs
-        if (shownAt == null) {
-            ObLog.d(ObLog.Section.SPLASH, "slot never reached the screen — not holding the interstitial")
+        val loadedAt = attempt.slotLoadedAtMs
+        if (!attempt.slotFilled || loadedAt == null) {
+            ObLog.d(ObLog.Section.SPLASH, "slot has no ad — not holding the interstitial")
             return
         }
-        // Measured from whichever came later. A banner that rendered behind the permission dialog
-        // has been on screen but not in front of anyone, so its clock starts at the dismissal; a
-        // native, which waits for the resume to bind at all, starts at its impression.
-        val seenFrom = maxOf(shownAt, attempt.focusedAtMs ?: shownAt)
+        val onScreenSince = maxOf(loadedAt, attempt.focusedAtMs ?: loadedAt)
         val holdMs = minOf(
-            minVisibleMs - (SystemClock.elapsedRealtime() - seenFrom),
+            minVisibleMs - (SystemClock.elapsedRealtime() - onScreenSince),
             remainingBudgetMs(),
         )
         if (holdMs > 0) {

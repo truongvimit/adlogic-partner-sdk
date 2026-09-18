@@ -461,9 +461,6 @@ class ERainAdProvider(
             override fun onAdLoaded() { listener?.onLoaded() }
             override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
             override fun onAdClicked() { listener?.onClicked() }
-            // Forwarded so a caller can tell "filled" from "on screen"; a collapsible loader never
-            // reports this, which is why nothing may wait on it without a timeout.
-            override fun onAdImpression() { listener?.onImpression() }
         }
         val owner = activity as? LifecycleOwner
         if (owner == null) {

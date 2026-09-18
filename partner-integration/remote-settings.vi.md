@@ -75,9 +75,11 @@ Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ n
 thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.slot_min_visible_ms` giữ inter lại cho format nào
 đang lấp slot, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
 
-Thời gian đó tính từ mốc **muộn hơn** giữa impression của slot và lúc splash **lấy lại màn hình** —
-không bao giờ tính từ lúc load. Ba mốc này khác nhau: ad fill sau lưng dialog thì user chưa hề nhìn
-nó, còn ad vừa kịp hiện lúc dialog đóng thì bị inter phủ lên ngay lập tức. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
+Khoảng đó tính từ mốc **muộn hơn** giữa lúc slot **load xong** và lúc splash **lấy lại màn hình**,
+vì phải đủ cả hai thì mới có ai nhìn được: ad fill sau lưng dialog là có trên màn nhưng không ở
+trước mặt user. Slot lỗi, bị skip hoặc không có ad unit thì không khởi động khoảng này và không bị
+chờ; slot chậm thì được chờ trong phần còn lại của `splash.timing.ad_budget_ms` — đúng ngân sách mà
+inter vừa tiêu. Không dùng impression của vendor, vì banner collapsible không bao giờ báo. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
 nhưng không báo impression (banner collapsible không bao giờ báo) thì bỏ qua sau đúng khoảng này;
 và mọi lần chờ đều bị chặn trên bởi `splash.timing.ad_budget_ms`. Đặt `0` là quay lại hành vi cũ,
 không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms`, key cũ vẫn được đọc khi thiếu key mới.
