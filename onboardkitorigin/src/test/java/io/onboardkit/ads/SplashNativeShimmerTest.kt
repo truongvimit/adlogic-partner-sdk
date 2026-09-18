@@ -7,6 +7,7 @@ import android.widget.FrameLayout
 import com.ads.module.helper.adnative.NativeAdShimmer
 import com.facebook.shimmer.ShimmerFrameLayout
 import io.onboardkit.R
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,10 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SplashNativeShimmerTest {
+
+    // Robolectric's font scale is process-wide and survives a failed test, which would silently
+    // re-scale every class that runs after this one in the same JVM.
+    @After fun resetFontScale() = RuntimeEnvironment.setFontScale(1.0f)
 
     private fun skeleton(host: Activity, widthPx: Int): ShimmerFrameLayout {
         val parent = FrameLayout(host)
@@ -118,25 +123,24 @@ class SplashNativeShimmerTest {
             val controller = Robolectric.buildActivity(Activity::class.java).setup()
             try {
                 val view = skeleton(controller.get(), 320)
-                val column = view.findViewById<View>(R.id.ob_splash_native_text)
+                val body = view.findViewById<View>(R.id.ad_body)
                 val cta = view.findViewById<View>(R.id.ad_call_to_action)
                 val rect = android.graphics.Rect(0, 0, cta.width, cta.height)
                 view.offsetDescendantRectToMyCoords(cta, rect)
-                val columnRect = android.graphics.Rect(0, 0, column.width, column.height)
-                view.offsetDescendantRectToMyCoords(column, columnRect)
+                val bodyRect = android.graphics.Rect(0, 0, body.width, body.height)
+                view.offsetDescendantRectToMyCoords(body, bodyRect)
                 // The card has to grow to hold the button whole, at its full declared height.
                 assertEquals("fontScale $scale: CTA lost height", 44, cta.height)
                 assertTrue(
                     "fontScale $scale: CTA bottom ${rect.bottom} overflows card ${view.height}",
                     rect.bottom <= view.height,
                 )
-                // …and it must not ride up over the text it sits beneath.
+                // …and it must not ride up over the copy it sits beneath.
                 assertTrue(
-                    "fontScale $scale: CTA top ${rect.top} overlaps text bottom ${columnRect.bottom}",
-                    rect.top >= columnRect.bottom,
+                    "fontScale $scale: CTA top ${rect.top} overlaps body bottom ${bodyRect.bottom}",
+                    rect.top >= bodyRect.bottom,
                 )
             } finally { controller.pause().stop().destroy() }
         }
-        RuntimeEnvironment.setFontScale(1.0f)
     }
 }

@@ -63,15 +63,19 @@ class SplashNativeLayoutTest {
     @Test
     fun `the ratio sits on the well and never on ad_media`() {
         val byId = elementsById()
+        // The 4:3 belongs to the wrapper, not the MediaView: NativeAdShimmer.skeletonizeMedia
+        // rewrites an unresolved `ad_media` height to a flat 160dp floor, so a ratio owned by
+        // `ad_media` would leave the skeleton taller than the ad that replaces it and the slot
+        // would jump on every launch. `ad_media` must stay match_parent inside the well.
         val auto = "http://schemas.android.com/apk/res-auto"
-        // A ratio owner must be 0dp, and NativeAdShimmer.skeletonizeMedia rewrites a 0dp `ad_media`
-        // to a flat 160dp floor — the skeleton would then stand taller than the 4:3 ad replacing
-        // it. Keeping the ratio one level up is what holds skeleton and ad to one geometry, so
-        // moving it onto `ad_media` must fail here rather than ship a slot that jumps.
-        assertEquals("H,4:3", byId["ob_splash_native_media_well"]?.getAttributeNS(auto, "layout_constraintDimensionRatio"))
+        assertEquals(
+            "H,4:3",
+            byId["ob_splash_native_media_well"]?.getAttributeNS(auto, "layout_constraintDimensionRatio"),
+        )
         assertEquals("", byId["ad_media"]!!.getAttributeNS(auto, "layout_constraintDimensionRatio"))
         assertEquals("match_parent", byId["ad_media"]!!.getAttributeNS(android, "layout_height"))
     }
+
 
     @Test
     fun `the layout is not a reorderable stack`() {
