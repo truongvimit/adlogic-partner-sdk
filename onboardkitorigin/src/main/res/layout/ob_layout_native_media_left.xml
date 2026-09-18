@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the native that can take the splash
+  bottom slot in place of the banner. `splash.ads.slot_format` picks which of the two is requested.
+
+  A horizontal split — 4:3 media on the left, badge/headline/body over a CTA on the right — so,
+  like ob_layout_native_dialog, there is no vertical `ad_container` here: `components` is a
+  visibility switch and never a reorder, and `positionCTA` has nothing to move.
+
+  The design draws a Play-store glyph in the top-right corner. It is not reproduced: the loader
+  never calls setAdChoicesPlacement, so GMA drops its own AdChoices badge there, and a second mark
+  underneath it would collide. No clearance is reserved for it either — unlike the dialog card, the
+  first view of this column is the wrap_content "Ads" chip, so the corner the badge lands on is
+  already empty.
+-->
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/ob_bg_splash_native"
+        android:padding="@dimen/ob_splash_native_padding">
+
+        <!--
+          The ratio lives on this well rather than on `ad_media` itself, and that placement is
+          load-bearing rather than cosmetic: a ratio needs its owner's height to be 0dp, and
+          NativeAdShimmer.skeletonizeMedia rewrites a 0dp `ad_media` to a flat 160dp floor. The
+          skeleton would then stand 160dp tall where the ad that replaces it is 4:3, and the slot
+          would jump on every launch. A match_parent `ad_media` only picks up a minimumHeight,
+          which this well's exact measurement overrides — so skeleton and ad share one geometry.
+
+          Top-anchored with no bottom constraint: when the text beside it is the taller of the two
+          the card grows, and this well has to keep its ratio rather than stretch with it.
+        -->
+        <FrameLayout
+            android:id="@+id/ob_splash_native_media_well"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintDimensionRatio="H,4:3"
+            app:layout_constraintEnd_toStartOf="@id/ob_splash_native_text"
+            app:layout_constraintHorizontal_chainStyle="spread"
+            app:layout_constraintHorizontal_weight="1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <!--
+              The rounded background stays on `ad_media` rather than on the well: with no
+              `ad_container` here, NativeAdStyler falls to its visibility-only branch, and a remote
+              `components` list that drops "media" hides `ad_media` alone. On the well it would
+              leave a grey box behind. clipToOutline rounds the image child GMA adds at bind time.
+            -->
+            <com.google.android.gms.ads.nativead.MediaView
+                android:id="@+id/ad_media"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/ob_bg_splash_native_media"
+                android:clipToOutline="true" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/ob_splash_native_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/ob_splash_native_gap"
+            android:orientation="vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_weight="1"
+            app:layout_constraintStart_toEndOf="@id/ob_splash_native_media_well"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <!-- Figma "Tag/ads/2" — the same chip the Confirm Language native uses. -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/ob_splash_native_badge_height"
+                android:background="@drawable/ob_bg_ad_badge_dialog"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="@dimen/ob_splash_native_badge_padding_h"
+                android:text="@string/ob_ad_badge_plural"
+                android:textColor="@color/ob_splash_native_headline"
+                android:textSize="@dimen/ob_text_splash_native_badge" />
+
+            <!-- Two lines, as in the dialog card: AdMob's native ad validator counts a clipped
+                 asset as an implementation issue, and a real headline rarely fits half a card on
+                 one line. The card grows to fit the second line rather than clipping it. -->
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ob_splash_native_text_gap"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_medium"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:textColor="@color/ob_splash_native_headline"
+                android:textSize="@dimen/ob_text_splash_native_headline"
+                tools:text="Tiki 11.01 Shopping" />
+
+            <TextView
+                android:id="@+id/ad_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/ob_splash_native_body"
+                android:textSize="@dimen/ob_text_splash_native_body"
+                tools:text="Festival &amp; shoping online" />
+        </LinearLayout>
+
+        <!--
+          Bottom-anchored rather than last inside the text column, because that column is
+          wrap_content: that is what lets the card stand as tall as the taller of the media and the
+          text, so a long headline or a large font scale grows the card instead of clipping a 44dp
+          button out of it — and clipChildren would make the lost strip untappable, not merely
+          invisible. Pinning here still reproduces the design's space-between whenever the media is
+          the taller side, which is every ordinary phone at the default font scale.
+
+          Height is overridden at bind time by `heightCTA` (NativeAdStyler.applyLayout), so the XML
+          value is the design's resting state.
+        -->
+        <TextView
+            android:id="@+id/ad_call_to_action"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ob_splash_native_cta_height"
+            android:layout_marginStart="@dimen/ob_splash_native_gap"
+            android:background="@drawable/ob_bg_splash_native_cta"
+            android:ellipsize="end"
+            android:fontFamily="@font/ob_poppins_semibold"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textAllCaps="true"
+            android:textColor="@color/ob_white"
+            android:textSize="@dimen/ob_text_splash_native_cta"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/ob_splash_native_media_well"
+            app:layout_constraintTop_toBottomOf="@id/ob_splash_native_text"
+            app:layout_constraintVertical_bias="1"
+            tools:text="Download" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

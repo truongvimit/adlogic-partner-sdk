@@ -73,6 +73,7 @@ No `adtracer_config.json`, no dedicated manifest Activity and no copy of the exa
 | JSON key | Placement on the dashboard |
 | --- | --- |
 | `banner_splash` | `splash_banner` |
+| `native_splash` | `splash_native` |
 | `inter_splash` | `splash_inter` |
 | `native_lang` / `native_lang_alt` | `language1` / `language2` |
 | `native_popup_lang` | `language_confirm` |

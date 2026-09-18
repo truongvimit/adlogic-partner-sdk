@@ -89,11 +89,12 @@ Copy both files into `assets` under exactly these names (create the folder if it
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** the release configuration; every ID is currently a test ID.
 - **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** the debug configuration; keep the test IDs.
 
-Ad unit IDs contain **`/`**. Each file holds **45 entries**, like the [debug example](../app/src/main/assets/ad_config_debug.json), covering style, UA, app-resume delay and waterfalls; the interstitials use test ID `1033173712` and the native high tier uses the native video test unit. The 10 OB slots are listed below; the remaining keys are for your app screens and do not create a display position by themselves. Sample values may differ from the parser defaults; see the [JSON field table](#fields-in-the-sample-json).
+Ad unit IDs contain **`/`**. Each file follows the [debug example](../app/src/main/assets/ad_config_debug.json), covering style, UA, app-resume delay and waterfalls; the interstitials use test ID `1033173712` and the native high tier uses the native video test unit. The OB slots are listed below; the remaining keys are for your app screens and do not create a display position by themselves. Sample values may differ from the parser defaults; see the [JSON field table](#fields-in-the-sample-json).
 
 | JSON key | Position | Maps into `AdsConfig` in step 4 |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
+| `native_splash` | Splash native, same slot as the banner | `splashInlineNative` |
 | `inter_splash` | Interstitial when leaving splash | `splashInterstitial` |
 | `native_lang` | First language native | `languageNative` |
 | `native_lang_alt` | Replacement native after the first language selection | `languageDupNative` |
@@ -148,7 +149,7 @@ Only `SplashConfig.layoutRes` and `ContentStepDefinition.layoutRes` accept custo
 
 ### `AppAdPlacement.kt` — your app's placement catalog
 
-Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) into your app package, for example `app/src/main/java/com/example/app/`. The file holds **35 base keys**: the 10 OB slots and your app slots. The SDK finds the `_high`, `_high1`… floors itself; floors need no constants.
+Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) into your app package, for example `app/src/main/java/com/example/app/`. The file holds one base key per placement: the OB slots and your app slots. The SDK finds the `_high`, `_high1`… floors itself; floors need no constants.
 
 `AppAdPlacement.NATIVE_HOME` is the key `native_home`; both JSON files contain its ad unit IDs and configuration. Add a constant and the matching JSON key for each new placement.
 
@@ -451,7 +452,7 @@ Splash, OB5 and the question screen exclude themselves; register only your app's
 ## 8. Final checks
 
 - [ ] If using grouped settings, verify remote overrides plus first-run offline local fallback and offline reuse of valid remote cache, per the [Firebase checklist](firebase-integration.md#remote-notes).
-- [ ] A debug build opens the splash, Logcat tag `AdRemoteConfig` shows `Loaded ad_config_debug.json with 45 placements (debug=true)`, and `OB_FLOW` reports no config or provider error.
+- [ ] A debug build opens the splash, Logcat tag `AdRemoteConfig` shows `Loaded ad_config_debug.json with <n> placements (debug=true)`, where `<n>` matches the example you shipped, and `OB_FLOW` reports no config or provider error.
 - [ ] Walk LFO → OB → MainActivity on test ads; the fullscreen native sits between content 2 and 3, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; re-selecting the current language opens the popup immediately, while another language waits for the configured total tap count.
 - [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. A native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.

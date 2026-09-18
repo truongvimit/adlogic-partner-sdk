@@ -28,7 +28,11 @@ object NativeTemplates {
      */
     @LayoutRes
     internal fun layoutForPlacement(placement: AdPlacement): Int =
-        layoutFor(templateForPlacement(placement))
+        // The splash bottom native ships one fixed frame, so it stays out of [NativeTemplate]
+        // rather than being added to it: a partner can neither ask for this layout elsewhere nor
+        // re-skin the slot, and the public enum keeps its five constants.
+        if (placement == AdPlacement.SplashInlineNative) R.layout.ob_layout_native_media_left
+        else layoutFor(templateForPlacement(placement))
 
     /**
      * The template a placement renders with, from [io.onboardkit.config.AdsConfig].
@@ -72,7 +76,9 @@ object NativeTemplates {
 
             is AdPlacement.StepFullScreen, AdPlacement.Ob5, AdPlacement.SplashNative -> NativeTemplate.FULL_SCREEN
 
+            // SplashInlineNative never reaches here — layoutForPlacement answers it directly.
             AdPlacement.SplashBanner,
+            AdPlacement.SplashInlineNative,
             AdPlacement.SplashInterstitial,
             AdPlacement.AfterOnboardingInterstitial,
             AdPlacement.QuestionInterstitial,

@@ -39,6 +39,7 @@ ads = AdsConfig.fromAdConfig()
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
+| Splash native (नीचे का slot, जब `splash.ads.slot_format` = `NATIVE`) | `native_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
@@ -47,6 +48,38 @@ ads = AdsConfig.fromAdConfig()
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
+
+### Splash का निचला slot
+
+Splash में loading bar के नीचे एक ही ad slot है, और `splash.ads.slot_format` तय करता है कि उसे कौन
+सा format भरेगा:
+
+| Value | Placement | ad_config key |
+| --- | --- | --- |
+| `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+Native को दोनों चाहिए: `slot_format` को `NATIVE` **और** ad_config में एक usable `native_splash`
+entry। इनमें से कोई एक भी न हो तो slot खाली ही रहता है।
+
+एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
+नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.banner_wait_ms` जो भी format लोड हो रहा हो उसे सीमित
+करता है, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
+
+Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
+हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
+`AdPlacement.SplashNative` अलग हैं; दूसरा splash interstitial के बाद दिखने वाला optional full-screen
+native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
+`AdsConfig.splashInlineNative` में resolve होते हैं।
+
+**5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और यह release उसमें
+`SplashInlineNative` जोड़ता है, इसलिए आपका exhaustive `when (placement)` — सबसे अधिक संभावना custom
+`OnboardingAdProvider` में — तब तक compile नहीं होगा जब तक नए placement के लिए एक branch न जुड़े।
+इसके अलावा कुछ नहीं टूटता: `AdsConfig.splashInlineNative` का default है इसलिए मौजूदा constructor
+calls अप्रभावित हैं, और bundled `slot_format` `BANNER` ही रहता है, इसलिए बिना बदलाव वाला app पहले
+जैसा ही चलता है।
+
+
 
 केवल अलग नाम वाली associations code में घोषित करें:
 
@@ -208,7 +241,9 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `flow.ads_enabled` | `true` |
 | `flow.skip_ad_only_steps_when_premium` | `true` |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` |
+| `splash.ads.slot_format` | `"BANNER"` |
 | `splash.ads.banner.behavior` | `{}` |
+| `splash.ads.native.behavior` | `{}` |
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |

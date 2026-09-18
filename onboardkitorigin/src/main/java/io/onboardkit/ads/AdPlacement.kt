@@ -19,6 +19,20 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.BANNER
     }
 
+    /**
+     * The native alternative to [SplashBanner] in the splash screen's bottom slot.
+     * `splash.ads.slot_format` picks which of the two fills that slot; one launch never requests
+     * both.
+     *
+     * Not [SplashNative], which is the standalone full-screen native shown *after* the splash
+     * interstitial. Separate placements because they differ in format, buffer and skip rules —
+     * one identity would report a bottom-slot ad as a full-screen impression.
+     */
+    data object SplashInlineNative : AdPlacement {
+        override val key: String = "splash_native"
+        override val format: AdFormat = AdFormat.NATIVE
+    }
+
     data object SplashInterstitial : AdPlacement {
         override val key: String = "splash_inter"
         override val format: AdFormat = AdFormat.INTERSTITIAL

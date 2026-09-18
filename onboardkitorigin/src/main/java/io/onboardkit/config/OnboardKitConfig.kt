@@ -15,6 +15,20 @@ enum class AdLoadStrategy {
     ALTERNATE,
 }
 
+/**
+ * Which ad format fills the splash screen's bottom slot, from `splash.ads.slot_format`.
+ *
+ * One slot, one occupant: a launch requests the chosen format only, so switching this remotely
+ * moves the spend rather than adding a second impression.
+ */
+enum class SplashAdSlotFormat {
+    /** `banner_splash`, refreshing in place. Default. */
+    BANNER,
+
+    /** `native_splash`, rendered with the SDK's media-left frame. */
+    NATIVE,
+}
+
 data class SplashConfig(
     @LayoutRes val layoutRes: Int = 0,
     @DrawableRes val logoRes: Int = 0,

@@ -39,6 +39,7 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
+| Splash native (bottom slot, when `splash.ads.slot_format` is `NATIVE`) | `native_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
@@ -47,6 +48,38 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
+
+### The splash bottom slot
+
+The splash has one ad slot beneath its loading bar, and `splash.ads.slot_format` decides which
+format fills it:
+
+| Value | Placement | ad_config key |
+| --- | --- | --- |
+| `BANNER` (default) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+Native needs both halves: `slot_format` set to `NATIVE` **and** a usable `native_splash`
+entry in ad_config. With either one missing the slot simply stays empty.
+
+One launch requests the chosen format only, so switching this moves the spend rather than adding a
+second impression. The wait is shared too: `splash.timing.banner_wait_ms` bounds whichever format
+is loading, and `ob_ads_splash_banner_enabled` turns the position off for both.
+
+The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
+nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.SplashInlineNative` is not
+`AdPlacement.SplashNative`, which stays the optional full-screen native (`native_fs`) shown after
+the splash interstitial. In code the flag is `io.onboardkit.config.SplashAdSlotFormat`, and the ad
+units resolve into `AdsConfig.splashInlineNative`.
+
+**Upgrading to 5.4.0.** `AdPlacement` is a sealed interface and this release adds
+`SplashInlineNative` to it, so an exhaustive `when (placement)` of your own — most likely in a
+custom `OnboardingAdProvider` — stops compiling until it gains a branch for the new placement.
+Nothing else breaks: `AdsConfig.splashInlineNative` has a default, so existing constructor calls
+are unaffected, and the bundled `slot_format` stays `BANNER`, so an untouched app behaves exactly
+as before.
+
+
 
 Declare only nonstandard associations in code:
 
@@ -208,7 +241,9 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `flow.ads_enabled` | `true` |
 | `flow.skip_ad_only_steps_when_premium` | `true` |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` |
+| `splash.ads.slot_format` | `"BANNER"` |
 | `splash.ads.banner.behavior` | `{}` |
+| `splash.ads.native.behavior` | `{}` |
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |

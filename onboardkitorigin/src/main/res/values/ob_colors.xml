@@ -55,4 +55,12 @@
     <color name="ob_ad_badge_amber">#FDB812</color>
     <color name="ob_ad_star">#FDB812</color>
     <color name="ob_scrim_dialog">#66101828</color>
+
+    <!-- Figma "native_med_4_3_media_left" (node 1:28), the Mode=True variant: the native that can
+         take the splash bottom slot instead of the banner. The dark Mode=False variant is not
+         shipped — the splash it sits on is ob_white and the module has no night resources. -->
+    <color name="ob_splash_native_bg">#EAF5FF</color>
+    <color name="ob_splash_native_headline">#121212</color>
+    <color name="ob_splash_native_body">#717680</color>
+    <color name="ob_splash_native_cta_bg">#007AFF</color>
 </resources>

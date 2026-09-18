@@ -32,12 +32,14 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.showInterstitial
+import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.ads.tracked
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.OnboardKitConfig
+import io.onboardkit.config.SplashAdSlotFormat
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.SkipReason
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -381,8 +383,64 @@ open class ObSplashActivity : BaseOnboardActivity() {
         attempt.adsRequested = true
         // The minimum begins once requests are allowed, overlapping our notification prompt.
         attempt.adPhaseStartedAtMs = SystemClock.elapsedRealtime()
-        requestSplashBanner()
+        if (splashSlotFormat() == SplashAdSlotFormat.NATIVE) requestSplashSlotNative()
+        else requestSplashBanner()
         requestSplashInterstitial()
+    }
+
+    /**
+     * Which format the bottom slot is filled with. Read per attempt rather than cached at config
+     * time: on ALTERNATE the remote fetch lands before the request, so a console change takes
+     * effect on the very launch that fetched it.
+     *
+     * Matched by name rather than `valueOf`: the only thing standing between a console typo and
+     * an exception is an allow-list in another module, and this runs on the path every launch
+     * takes. An unreadable value costs the slot its native, not the app its start.
+     */
+    private fun splashSlotFormat(): SplashAdSlotFormat {
+        val name = OnboardingSettings.text("splash.ads.slot_format")
+        return SplashAdSlotFormat.entries.firstOrNull { it.name == name } ?: SplashAdSlotFormat.BANNER
+    }
+
+    /**
+     * The native that takes the slot when the format says NATIVE.
+     *
+     * It settles the same latch the banner does, so the splash's existing wait — `banner_wait_ms`,
+     * bounded by the shared ad budget — covers whichever format the remote picked, and neither
+     * format can hold the splash open a moment longer than the other.
+     */
+    private fun requestSplashSlotNative() {
+        val placement = AdPlacement.SplashInlineNative
+        val container = findViewById<FrameLayout?>(R.id.ob_splash_ad_container)
+        if (container == null) {
+            ObLog.w(
+                ObLog.Section.LOAD,
+                "${placement.key} container missing — a custom splash layout that replaces " +
+                    "ob_splash_ad_container has nowhere to put the bottom slot",
+            )
+            attempt.bannerSettled.complete(Unit)
+            return
+        }
+        // Deliberately not cleared here: showNativeAd empties the container itself before it
+        // mounts either the skeleton or the ad, and a host splash layout may put its own content
+        // in this slot — emptying it before the guard has spoken would destroy that for a
+        // placement we then decline to fill.
+        container.visibility = View.VISIBLE
+        val state = attempt
+        showNativeAd(
+            placement = placement,
+            unit = sdk.requireConfig().ads.splashInlineNative,
+            container = container,
+            onBound = {
+                ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
+                state.bannerSettled.complete(Unit)
+            },
+            onUnavailable = { reason ->
+                ObLog.w(ObLog.Section.LOAD, "${placement.key} unavailable — $reason")
+                container.visibility = View.GONE
+                state.bannerSettled.complete(Unit)
+            },
+        )
     }
 
     private fun requestSplashBanner() {
@@ -480,6 +538,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private fun remainingBudgetMs(): Long =
         ((attempt.budgetDeadlineMs ?: SystemClock.elapsedRealtime()) - SystemClock.elapsedRealtime()).coerceAtLeast(0)
 
+    // One wait for one slot: a native occupant is bounded by the banner's budget rather than a
+    // second key, so switching format cannot lengthen the splash.
     private suspend fun awaitBanner() {
         if (attempt.bannerDeadlineMs == null) {
             attempt.bannerDeadlineMs = SystemClock.elapsedRealtime() + checkNotNull(attempt.flags).splashBannerWaitMs.coerceAtLeast(0)
@@ -690,6 +750,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
         // The consent timeout holds this screen's completion callback for its whole window; the
         // flow it guards died with the screen.
         ConsentCenter.detach(this)
+        // Released unconditionally, unlike the screens that guard this on isChangingConfigurations:
+        // they rebind from onCreate, whereas the slot is requested once per attempt and `attempt`
+        // outlives the Activity, so a recreated splash never asks for this native again. Holding it
+        // for a rebind that cannot come would strand the ad and its view for the rest of the process.
+        sdk.provider()?.releaseNative(AdPlacement.SplashInlineNative)
         super.onDestroy()
     }
 

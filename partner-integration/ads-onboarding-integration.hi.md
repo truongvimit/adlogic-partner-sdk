@@ -89,11 +89,12 @@ Test AdMob App ID में **`~`** होता है। चलाने स�
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** release का configuration; अभी हर ID test ID है।
 - **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** debug configuration; test IDs रखें।
 
-Ad unit IDs में **`/`** होता है। हर file में [debug example](../app/src/main/assets/ad_config_debug.json) की तरह **45 entries** हैं, जो style, UA, app-resume delay और waterfalls को कवर करती हैं; interstitials test ID `1033173712` इस्तेमाल करते हैं और native high tier native video test unit। नीचे 10 OB slots दिए हैं; बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
+Ad unit IDs में **`/`** होता है। हर file [debug example](../app/src/main/assets/ad_config_debug.json) का अनुसरण करती है, जो style, UA, app-resume delay और waterfalls को कवर करती है; interstitials test ID `1033173712` इस्तेमाल करते हैं और native high tier native video test unit। नीचे OB slots दिए हैं; बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
 
 | JSON key | जगह | कदम 4 में `AdsConfig` में mapping |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
+| `native_splash` | Splash native, banner वाला ही slot | `splashInlineNative` |
 | `inter_splash` | Splash छोड़ते समय का interstitial | `splashInterstitial` |
 | `native_lang` | भाषा का पहला native | `languageNative` |
 | `native_lang_alt` | पहली बार भाषा चुनने के बाद का replacement native | `languageDupNative` |
@@ -148,7 +149,7 @@ LFO, popup, OB और native ads के layouts/Activities SDK पहले स�
 
 ### `AppAdPlacement.kt` — आपकी app का placement catalog
 
-[AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) को अपने app package में copy करें, उदाहरण के लिए `app/src/main/java/com/example/app/`। File में **35 base keys** हैं: 10 OB slots और आपकी app के slots। `_high`, `_high1`… floors SDK खुद ढूँढता है; floors के लिए constants नहीं चाहिए।
+[AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) को अपने app package में copy करें, उदाहरण के लिए `app/src/main/java/com/example/app/`। File में हर placement के लिए एक base key है: OB slots और आपकी app के slots। `_high`, `_high1`… floors SDK खुद ढूँढता है; floors के लिए constants नहीं चाहिए।
 
 `AppAdPlacement.NATIVE_HOME` की key `native_home` है; दोनों JSON files में उसके ad unit IDs और configuration रहते हैं। हर नए placement के लिए constant और वही JSON key जोड़ें।
 
@@ -451,7 +452,7 @@ Splash, OB5 और प्रश्न स्क्रीन खुद को ब
 ## 8. आखिरी जाँच
 
 - [ ] Grouped settings के लिए remote override, पहली-run offline local fallback और valid remote cache का offline reuse [Firebase checklist](firebase-integration.hi.md#remote-notes) के अनुसार जाँचें।
-- [ ] Debug build splash खोलता है, Logcat tag `AdRemoteConfig` में `Loaded ad_config_debug.json with 45 placements (debug=true)` दिखता है, और `OB_FLOW` कोई config या provider error नहीं बताता।
+- [ ] Debug build splash खोलता है, Logcat tag `AdRemoteConfig` में `Loaded ad_config_debug.json with <n> placements (debug=true)`, जहाँ `<n>` आपके ship किए example से मेल खाता है दिखता है, और `OB_FLOW` कोई config या provider error नहीं बताता।
 - [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; fullscreen native सामग्री 2 और 3 के बीच रहता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
 - [ ] LFO: भाषा चुनकर Back दबाने पर Save दिखता है और स्क्रीन बनी रहती है; मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है, दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है।
 - [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।

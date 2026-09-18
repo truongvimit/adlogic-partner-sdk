@@ -48,6 +48,7 @@ OnboardingSdk.configure(onboardKitConfig {
 | Slot | Key chuẩn trong ad_config |
 |---|---|
 | Splash banner/interstitial | `banner_splash` / `inter_splash` |
+| Splash native (slot dưới, khi `splash.ads.slot_format` = `NATIVE`) | `native_splash` |
 | Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
@@ -56,6 +57,37 @@ OnboardingSdk.configure(onboardKitConfig {
 | Question native/interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume` |
+
+### Slot dưới màn splash
+
+Splash có đúng một slot quảng cáo dưới thanh loading, và `splash.ads.slot_format` chọn format nào
+lấp vào:
+
+| Giá trị | Placement | Key trong ad_config |
+| --- | --- | --- |
+| `BANNER` (mặc định) | `AdPlacement.SplashBanner` | `banner_splash` |
+| `NATIVE` | `AdPlacement.SplashInlineNative` | `native_splash` |
+
+Native cần đủ hai vế: `slot_format` đặt `NATIVE` **và** một entry `native_splash` dùng được
+trong ad_config. Thiếu một trong hai thì slot chỉ đơn giản là rỗng.
+
+Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ này là dịch chuyển doanh thu chứ không
+thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.banner_wait_ms` giới hạn cho
+format nào đang load, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
+
+Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
+động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
+`AdPlacement.SplashNative` — cái sau vẫn là native full-screen tuỳ chọn (`native_fs`) hiện sau
+inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
+vào `AdsConfig.splashInlineNative`.
+
+**Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
+nên `when (placement)` exhaustive của bạn — hay gặp nhất là khi tự implement
+`OnboardingAdProvider` — sẽ không compile cho tới khi thêm nhánh cho placement mới. Ngoài ra không
+vỡ gì: `AdsConfig.splashInlineNative` có giá trị mặc định nên mọi lời gọi constructor hiện tại giữ
+nguyên, và `slot_format` mặc định vẫn là `BANNER` nên app không đụng gì thì hành vi y như cũ.
+
+
 
 App dùng key khác chỉ khai báo association đó một lần trong code:
 
@@ -226,7 +258,9 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `flow.ads_enabled` | `true` | Thay ob_enable_all_ads; chỉ phạm vi OnboardKit. |
 | `flow.skip_ad_only_steps_when_premium` | `true` | Bỏ trang chỉ chứa ads cho premium; không cho premium xem ads. |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` | Kiểu X/Skip chung; không thay đổi delay/auto-next. |
+| `splash.ads.slot_format` | `"BANNER"` | Chọn định dạng cho slot dưới splash: `BANNER` hoặc `NATIVE`. |
 | `splash.ads.banner.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `splash.ads.native.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.ads.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |

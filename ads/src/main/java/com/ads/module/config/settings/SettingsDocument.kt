@@ -158,6 +158,7 @@ class SettingsDocument(
             val allowed = when {
                 path.endsWith("click.action") -> setOf("auto_next", "none", "reload")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
+                path.endsWith("slot_format") -> setOf("BANNER", "NATIVE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")
                 path.endsWith("next_screen_timing") -> if (path == "splash.navigation.next_screen_timing") setOf("AUTO", "AFTER_AD", "UNDER_AD") else setOf("AFTER_AD", "UNDER_AD")
                 path.endsWith("skip.style") || path.endsWith("fullscreen_skip_style") -> setOf("TEXT", "CLOSE_ICON")

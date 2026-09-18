@@ -73,6 +73,7 @@ Timeline को placement के अनुसार पढ़ें। [उद�
 | JSON key | Dashboard पर placement |
 | --- | --- |
 | `banner_splash` | `splash_banner` |
+| `native_splash` | `splash_native` |
 | `inter_splash` | `splash_inter` |
 | `native_lang` / `native_lang_alt` | `language1` / `language2` |
 | `native_popup_lang` | `language_confirm` |
