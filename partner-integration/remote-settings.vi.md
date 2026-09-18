@@ -78,6 +78,13 @@ Native dùng khung media-left cố định nên `positionCTA` và thứ tự `co
 inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
 vào `AdsConfig.splashInlineNative`.
 
+**Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
+nên `when (placement)` exhaustive của bạn — hay gặp nhất là khi tự implement
+`OnboardingAdProvider` — sẽ không compile cho tới khi thêm nhánh cho placement mới. Ngoài ra không
+vỡ gì: `AdsConfig.splashInlineNative` có giá trị mặc định nên mọi lời gọi constructor hiện tại giữ
+nguyên, và `slot_format` mặc định vẫn là `BANNER` nên app không đụng gì thì hành vi y như cũ.
+
+
 
 App dùng key khác chỉ khai báo association đó một lần trong code:
 

@@ -69,6 +69,14 @@ Native एक तय media-left frame से render होता है, इस�
 native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
 `AdsConfig.splashInlineNative` में resolve होते हैं।
 
+**5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और यह release उसमें
+`SplashInlineNative` जोड़ता है, इसलिए आपका exhaustive `when (placement)` — सबसे अधिक संभावना custom
+`OnboardingAdProvider` में — तब तक compile नहीं होगा जब तक नए placement के लिए एक branch न जुड़े।
+इसके अलावा कुछ नहीं टूटता: `AdsConfig.splashInlineNative` का default है इसलिए मौजूदा constructor
+calls अप्रभावित हैं, और bundled `slot_format` `BANNER` ही रहता है, इसलिए बिना बदलाव वाला app पहले
+जैसा ही चलता है।
+
+
 
 केवल अलग नाम वाली associations code में घोषित करें:
 

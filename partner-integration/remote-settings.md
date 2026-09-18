@@ -69,6 +69,14 @@ nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.Splas
 the splash interstitial. In code the flag is `io.onboardkit.config.SplashAdSlotFormat`, and the ad
 units resolve into `AdsConfig.splashInlineNative`.
 
+**Upgrading to 5.4.0.** `AdPlacement` is a sealed interface and this release adds
+`SplashInlineNative` to it, so an exhaustive `when (placement)` of your own — most likely in a
+custom `OnboardingAdProvider` — stops compiling until it gains a branch for the new placement.
+Nothing else breaks: `AdsConfig.splashInlineNative` has a default, so existing constructor calls
+are unaffected, and the bundled `slot_format` stays `BANNER`, so an untouched app behaves exactly
+as before.
+
+
 
 Declare only nonstandard associations in code:
 
