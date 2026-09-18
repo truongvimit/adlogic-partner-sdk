@@ -513,6 +513,10 @@ class ERainAdProvider(
         }
         val step = placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen
         return object : NativeAdConfig(ids, true, false, layoutRes) {
+            // The splash slot alone: it is the one native that shares a position with a banner,
+            // and the banner shows under the notification prompt rather than waiting it out.
+            override val bindsWhileHostPaused: Boolean
+                get() = placement == AdPlacement.SplashInlineNative
             override val canPreloadReplacement: Boolean get() = !step
             override val canReloadAds: Boolean get() = !step && super.canReloadAds
             override val resolvedClickAction: NativeClickAction

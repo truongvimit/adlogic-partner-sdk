@@ -72,6 +72,11 @@ Native एक तय media-left frame से render होता है, इस�
 native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
 `AdsConfig.splashInlineNative` में resolve होते हैं।
 
+दोनों formats notification permission dialog खुले रहने के दौरान भी render होते हैं, उसके बंद होने का
+इंतज़ार नहीं करते, इसलिए remote config जो भी format चुने slot एक जैसा दिखता है। flow के बाकी natives
+अपनी screen resume होने तक fill रोके रखते हैं; सिर्फ़ यह slot छूट लेता है, और वह भी तभी जब splash
+screen पर है — app छोड़ने पर कोई ad bind नहीं होता।
+
 **5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और यह release उसमें
 `SplashInlineNative` जोड़ता है, इसलिए आपका exhaustive `when (placement)` — सबसे अधिक संभावना custom
 `OnboardingAdProvider` में — तब तक compile नहीं होगा जब तक नए placement के लिए एक branch न जुड़े।

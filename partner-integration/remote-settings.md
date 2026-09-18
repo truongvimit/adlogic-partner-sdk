@@ -72,6 +72,11 @@ nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.Splas
 the splash interstitial. In code the flag is `io.onboardkit.config.SplashAdSlotFormat`, and the ad
 units resolve into `AdsConfig.splashInlineNative`.
 
+Both formats render while the notification permission dialog is up rather than waiting it out,
+so the slot looks the same whichever one remote config picked. Natives elsewhere in the flow still
+park a fill until their screen resumes; only this slot opts out, and only while the splash is still
+on screen — leaving the app stops it and no ad is bound.
+
 **Upgrading to 5.4.0.** `AdPlacement` is a sealed interface and this release adds
 `SplashInlineNative` to it, so an exhaustive `when (placement)` of your own — most likely in a
 custom `OnboardingAdProvider` — stops compiling until it gains a branch for the new placement.

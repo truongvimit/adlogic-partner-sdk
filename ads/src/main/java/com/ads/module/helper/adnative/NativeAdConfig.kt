@@ -37,6 +37,17 @@ open class NativeAdConfig(
     /** A containing flow can forbid replacement preloads even when global policy enables them. */
     open val canPreloadReplacement: Boolean get() = true
 
+    /**
+     * Whether a fill may be bound while the host is paused but still on screen.
+     *
+     * `false` parks the ad until the host resumes, which is right for a slot the user is about to
+     * interact with. A launch slot that sits under a system permission dialog is the exception: the
+     * ad is on screen for as long as that dialog is up, and holding it back means it is first seen
+     * moments before the splash hands off. Banners never took this detour, so a slot that can be
+     * either format needs the two to behave alike.
+     */
+    open val bindsWhileHostPaused: Boolean get() = false
+
     var behavior: BehaviorValues? = null
     private val declaredCanReloadAds = canReloadAds
     internal fun behaviorValues() = behavior ?: AdBehavior.values("native", placementKey)

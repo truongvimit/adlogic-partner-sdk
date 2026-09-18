@@ -81,6 +81,11 @@ Native dùng khung media-left cố định nên `positionCTA` và thứ tự `co
 inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
 vào `AdsConfig.splashInlineNative`.
 
+Cả hai format đều hiển thị trong lúc dialog xin quyền thông báo đang mở chứ không đợi nó đóng, nên
+slot trông như nhau dù remote config chọn format nào. Các native khác trong luồng vẫn giữ fill lại
+cho tới khi màn của nó resume; chỉ slot này được miễn, và chỉ khi splash còn trên màn hình — thoát
+app là dừng, không bind quảng cáo nào.
+
 **Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
 nên `when (placement)` exhaustive của bạn — hay gặp nhất là khi tự implement
 `OnboardingAdProvider` — sẽ không compile cho tới khi thêm nhánh cho placement mới. Ngoài ra không
