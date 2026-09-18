@@ -67,6 +67,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var nativeScreenRequested = false
     var nativeScreenResolved = false
     val nativeScreenFinished = CompletableDeferred<Unit>()
+    // Still named for the banner because `splash.timing.banner_wait_ms` is a published remote key:
+    // renaming the field would leave it disagreeing with the setting partners actually tune.
     val bannerSettled = CompletableDeferred<Unit>()
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the card the splash native sits in. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_splash_native_bg" />
+    <corners android:radius="@dimen/ob_splash_native_radius" />
+</shape>

@@ -94,6 +94,7 @@ Ad unit IDs contain **`/`**. Each file holds **45 entries**, like the [debug exa
 | JSON key | Position | Maps into `AdsConfig` in step 4 |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
+| `native_splash` | Splash native, same slot as the banner | `splashInlineNative` |
 | `inter_splash` | Interstitial when leaving splash | `splashInterstitial` |
 | `native_lang` | First language native | `languageNative` |
 | `native_lang_alt` | Replacement native after the first language selection | `languageDupNative` |

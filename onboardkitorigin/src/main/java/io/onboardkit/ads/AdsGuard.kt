@@ -123,6 +123,9 @@ class AdsGuard internal constructor(
  */
 internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = when (placement) {
     AdPlacement.SplashBanner -> adsSplashBanner
+    // The native_splash entry in ad_config owns this slot, and splash.ads.slot_format decides
+    // whether it is asked for at all — a third switch could only disagree with those two.
+    AdPlacement.SplashInlineNative -> true
     AdPlacement.SplashInterstitial -> adsSplashInter
     AdPlacement.SplashNative -> true // The native_fs entry in ad_config owns this optional slot.
     AdPlacement.AfterOnboardingInterstitial -> adsAfterOnboardInter

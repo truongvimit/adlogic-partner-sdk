@@ -10,6 +10,13 @@
     "reloadIntervalSeconds": 30,
     "enable_ua_check": false
   },
+  "native_splash": {
+    "id": "ca-app-pub-3940256099942544/2247696110",
+    "isEnable": true,
+    "colorCTA": "default",
+    "heightCTA": 44,
+    "enable_ua_check": false
+  },
   "open_resume": {
     "app_resume_load_delay_ms": 2000,
     "id": "ca-app-pub-3940256099942544/9257395921",

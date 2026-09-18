@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the native that can take the splash
+  bottom slot in place of the banner. `splash.ads.slot_format` picks which of the two is requested.
+
+  A horizontal split — 4:3 media on the left, badge/headline/body over a CTA on the right — so,
+  like ob_layout_native_dialog, there is no vertical `ad_container` here: `components` is a
+  visibility switch and never a reorder, and `positionCTA` has nothing to move.
+
+  The design draws a Play-store glyph in the top-right corner. It is not reproduced: the loader
+  never calls setAdChoicesPlacement, so GMA drops its own AdChoices badge there, and a second mark
+  underneath it would collide. The corner is reserved as clearance instead.
+-->
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/ob_bg_splash_native"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:padding="@dimen/ob_splash_native_padding">
+
+        <!-- clipToOutline rounds the image child GMA adds at bind time to the 4dp background. -->
+        <com.google.android.gms.ads.nativead.MediaView
+            android:id="@+id/ad_media"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ob_splash_native_media_height"
+            android:layout_weight="1"
+            android:background="@drawable/ob_bg_splash_native_media"
+            android:clipToOutline="true" />
+
+        <!-- Same fixed height as the media so the CTA can sit at the bottom of the row, which is
+             the design's space-between, while the text block stays at the top. -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ob_splash_native_media_height"
+            android:layout_marginStart="@dimen/ob_splash_native_gap"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- Figma "Tag/ads/2" — the same chip the Confirm Language native uses. -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/ob_splash_native_badge_height"
+                android:background="@drawable/ob_bg_ad_badge_dialog"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="@dimen/ob_splash_native_badge_padding_h"
+                android:text="@string/ob_ad_badge_plural"
+                android:textColor="@color/ob_splash_native_headline"
+                android:textSize="@dimen/ob_text_splash_native_badge" />
+
+            <!-- Two lines, not the design's one: AdMob's native ad validator counts a clipped
+                 asset as an implementation issue, and a real headline rarely fits 164dp on one
+                 line. The Figma sample ("Tiki 11.01 Shopping") still renders as a single line.
+
+                 paddingEnd reserves the card's top-right corner for the AdChoices badge. -->
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ob_splash_native_text_gap"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_medium"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:paddingEnd="@dimen/ob_splash_native_adchoices_clearance"
+                android:textColor="@color/ob_splash_native_headline"
+                android:textSize="@dimen/ob_text_splash_native_headline"
+                tools:ignore="RtlSymmetry"
+                tools:text="Tiki 11.01 Shopping" />
+
+            <TextView
+                android:id="@+id/ad_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_regular"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/ob_splash_native_body"
+                android:textSize="@dimen/ob_text_splash_native_body"
+                tools:text="Festival &amp; shoping online" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- Height is overridden at bind time by `heightCTA` (NativeAdStyler.applyLayout), so
+                 the XML value is the design's resting state. -->
+            <TextView
+                android:id="@+id/ad_call_to_action"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/ob_splash_native_cta_height"
+                android:background="@drawable/ob_bg_splash_native_cta"
+                android:ellipsize="end"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textAllCaps="true"
+                android:textColor="@color/ob_white"
+                android:textSize="@dimen/ob_text_splash_native_cta"
+                tools:text="Download" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

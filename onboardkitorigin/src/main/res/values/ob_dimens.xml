@@ -81,4 +81,28 @@
     <dimen name="ob_text_confirm_ad_headline">14sp</dimen>
     <dimen name="ob_text_confirm_ad_body">10sp</dimen>
     <dimen name="ob_text_confirm_ad_meta">10sp</dimen>
+
+    <!-- Splash bottom-slot native, Figma "native_med_4_3_media_left" (node 1:28). The card is
+         360dp wide and 147dp tall; 12dp padding on each side leaves a 123dp row, and the two
+         equal columns are (360 - 24 - 8) / 2 = 164dp — which is exactly the design's 4:3 media.
+         The media height is pinned rather than expressed as a ratio so the derived shimmer keeps
+         the loaded ad's geometry, and 123dp also clears the 120dp minimum a native video needs. -->
+    <dimen name="ob_splash_native_radius">8dp</dimen>
+    <dimen name="ob_splash_native_padding">12dp</dimen>
+    <dimen name="ob_splash_native_gap">8dp</dimen>
+    <dimen name="ob_splash_native_media_height">123dp</dimen>
+    <dimen name="ob_splash_native_media_radius">4dp</dimen>
+    <dimen name="ob_splash_native_text_gap">4dp</dimen>
+    <dimen name="ob_splash_native_badge_height">16dp</dimen>
+    <dimen name="ob_splash_native_badge_padding_h">4dp</dimen>
+    <dimen name="ob_splash_native_cta_height">44dp</dimen>
+    <!-- Clear space kept for GMA's AdChoices badge, which lands top-right by default. The design
+         puts its own 12dp glyph at a 7dp inset in that corner, so 19dp of the headline's line box
+         is spoken for either way; rounded to the 20dp the Confirm Language native already uses. -->
+    <dimen name="ob_splash_native_adchoices_clearance">20dp</dimen>
+
+    <dimen name="ob_text_splash_native_badge">12sp</dimen>
+    <dimen name="ob_text_splash_native_headline">14sp</dimen>
+    <dimen name="ob_text_splash_native_body">12sp</dimen>
+    <dimen name="ob_text_splash_native_cta">16sp</dimen>
 </resources>

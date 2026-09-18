@@ -94,6 +94,7 @@ Ad unit ID chứa **`/`**. Mỗi file có **45 entry** như [example debug](../a
 | Key trong JSON | Vị trí | Ánh xạ vào `AdsConfig` ở bước 4 |
 | --- | --- | --- |
 | `banner_splash` | Banner splash | `splashBanner` |
+| `native_splash` | Native splash, cùng slot với banner | `splashInlineNative` |
 | `inter_splash` | Inter khi rời splash | `splashInterstitial` |
 | `native_lang` | Native ngôn ngữ đầu tiên | `languageNative` |
 | `native_lang_alt` | Native thay thế sau lần chọn ngôn ngữ đầu | `languageDupNative` |

@@ -39,6 +39,7 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
+| Splash native (bottom slot, when `splash.ads.slot_format` is `NATIVE`) | `native_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
@@ -208,7 +209,9 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `flow.ads_enabled` | `true` |
 | `flow.skip_ad_only_steps_when_premium` | `true` |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` |
+| `splash.ads.slot_format` | `"BANNER"` |
 | `splash.ads.banner.behavior` | `{}` |
+| `splash.ads.native.behavior` | `{}` |
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |

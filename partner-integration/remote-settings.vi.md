@@ -48,6 +48,7 @@ OnboardingSdk.configure(onboardKitConfig {
 | Slot | Key chuẩn trong ad_config |
 |---|---|
 | Splash banner/interstitial | `banner_splash` / `inter_splash` |
+| Splash native (slot dưới, khi `splash.ads.slot_format` = `NATIVE`) | `native_splash` |
 | Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
@@ -226,7 +227,9 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `flow.ads_enabled` | `true` | Thay ob_enable_all_ads; chỉ phạm vi OnboardKit. |
 | `flow.skip_ad_only_steps_when_premium` | `true` | Bỏ trang chỉ chứa ads cho premium; không cho premium xem ads. |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` | Kiểu X/Skip chung; không thay đổi delay/auto-next. |
+| `splash.ads.slot_format` | `"BANNER"` | Chọn định dạng cho slot dưới splash: `BANNER` hoặc `NATIVE`. |
 | `splash.ads.banner.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `splash.ads.native.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.ads.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |

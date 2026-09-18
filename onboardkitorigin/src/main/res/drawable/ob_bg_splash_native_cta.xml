@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma node 1:50: the native's DOWNLOAD button, 8dp corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_splash_native_cta_bg" />
+    <corners android:radius="@dimen/ob_splash_native_radius" />
+</shape>

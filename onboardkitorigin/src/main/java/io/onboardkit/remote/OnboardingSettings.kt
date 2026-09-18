@@ -55,6 +55,9 @@ object OnboardingSettings {
 
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"
+        // Not "splash.native" — that scope belongs to the full-screen SplashNative and carries the
+        // skip / auto-dismiss settings of a screen, which mean nothing to a bottom slot.
+        io.onboardkit.ads.AdPlacement.SplashInlineNative -> "splash.ads.native"
         io.onboardkit.ads.AdPlacement.SplashInterstitial -> "splash.ads.interstitial"
         io.onboardkit.ads.AdPlacement.SplashNative -> "splash.native"
         io.onboardkit.ads.AdPlacement.AfterOnboardingInterstitial -> "onboarding.exit_interstitial"

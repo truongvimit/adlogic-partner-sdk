@@ -94,6 +94,7 @@ Ad unit IDs में **`/`** होता है। हर file में [debu
 | JSON key | जगह | कदम 4 में `AdsConfig` में mapping |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
+| `native_splash` | Splash native, banner वाला ही slot | `splashInlineNative` |
 | `inter_splash` | Splash छोड़ते समय का interstitial | `splashInterstitial` |
 | `native_lang` | भाषा का पहला native | `languageNative` |
 | `native_lang_alt` | पहली बार भाषा चुनने के बाद का replacement native | `languageDupNative` |

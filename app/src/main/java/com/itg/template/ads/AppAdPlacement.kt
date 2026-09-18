@@ -55,6 +55,9 @@ object AppAdPlacement {
     const val NATIVE_ONBOARDING_FULLSCREEN_2_4 = "native_onboarding_fullscreen_2_4"
     const val NATIVE_PERMISSION = "native_permission"
     const val NATIVE_POPUP_LANG = "native_popup_lang"
+    /** Alternative occupant of the splash bottom slot; `splash.ads.slot_format` picks it or the banner. */
+    const val NATIVE_SPLASH = "native_splash"
+
     const val NATIVE_SURVEY = "native_survey"
     const val NATIVE_UNINSTALL = "native_uninstall"
     const val NATIVE_WELCOME = "native_welcome"
