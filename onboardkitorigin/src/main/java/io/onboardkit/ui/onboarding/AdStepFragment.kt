@@ -1,6 +1,6 @@
 package io.onboardkit.ui.onboarding
 
-import io.onboardkit.remote.OnboardingSettings
+import io.onboardkit.remote.FullScreenSetting
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.LayoutInflater
@@ -12,11 +12,12 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.AdFullScreenStepDefinition
+import io.onboardkit.config.FullScreenSkipPosition
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObFragmentAdStepBinding
-import io.onboardkit.ui.applyFullScreenSkipStyle
+import io.onboardkit.ui.applyFullScreenSkip
 import io.onboardkit.ui.pager.LazyStepFragment
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -56,8 +57,9 @@ class AdStepFragment : LazyStepFragment() {
         b.obFallbackImage.setImageDrawable(
             requireContext().packageManager.getApplicationIcon(requireContext().applicationInfo),
         )
-        b.obSkipButton.applyFullScreenSkipStyle(
+        b.obSkipButton.applyFullScreenSkip(
             definition()?.skipButtonStyle ?: OnboardingSdk.requireConfig().ads.fullScreenSkipStyle,
+            definition()?.skipButtonPosition ?: FullScreenSkipPosition.RIGHT,
         )
         b.obSkipButton.setOnClickListener {
             completeStep(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
@@ -141,10 +143,8 @@ class AdStepFragment : LazyStepFragment() {
         val b = binding ?: return
         val definition = definition() ?: return
         val flags = OnboardingSdk.flags()
-        val skipAllowed = OnboardingSettings.values.boolean(
-            "onboarding.steps.${definition.id.value}.fullscreen.skip.enabled",
-            definition.showSkipButton && flags.showSkipOb3,
-        )
+        val skipAllowed = FullScreenSetting.SkipEnabled.on(definition.id.value)
+            .boolean(definition.showSkipButton && flags.showSkipOb3)
         // Always keep one exit path: no skip + no auto-next would trap the user
         val mustForceSkip = !skipAllowed && !definition.autoNextEnabled
         if (!skipAllowed && !mustForceSkip) return
@@ -152,8 +152,7 @@ class AdStepFragment : LazyStepFragment() {
             ?: definition.skipButtonDelaySec.toLong().coerceAtLeast(0)
         skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(OnboardingSettings.values.long("onboarding.steps.${definition.id.value}.fullscreen.skip.delay_ms",
-                OnboardingSettings.values.long("onboarding.fullscreen.skip.delay_ms", delaySec * 1000)).milliseconds)
+            delay(FullScreenSetting.SkipDelayMs.on(definition.id.value).long(delaySec * 1000).milliseconds)
             b.obSkipButton.visibility = View.VISIBLE
         }
     }

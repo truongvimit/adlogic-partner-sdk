@@ -70,11 +70,9 @@ That window runs from the later of the slot **loading** and the splash **regaini
 because both have to be true before anyone can look at it: an ad that filled behind the notification
 dialog was on screen but not in front of the user. A slot that fails, is skipped or has no ad unit
 never starts the window and is not waited on; a slow one is waited for within what remains of
-`splash.timing.ad_budget_ms`, the same budget the interstitial spends. Vendor impressions are not
-consulted, since a collapsible banner never reports one. A slot that fails, is skipped or has no
-ad unit resolves immediately and is never waited on, a filled slot that reports no impression (a
-collapsible banner never does) is abandoned after the same budget, and every wait is clamped to
-what is left of `splash.timing.ad_budget_ms`. `0` restores the old unguarded behaviour. It replaces
+`splash.timing.ad_budget_ms`, the same budget the interstitial spends, and every hold is clamped to
+that remainder. Vendor impressions are not consulted at all, since a collapsible banner never
+reports one. `0` restores the old unguarded behaviour. It replaces
 `splash.timing.banner_wait_ms`, which is still read when the new key is absent.
 
 The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
@@ -131,7 +129,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
-OB interstitial slots support tier and wait timeouts. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`.
+OB interstitial slots support tier and wait timeouts. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
 
 Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
 
@@ -169,9 +167,25 @@ Example override in `onboarding_config` (LFO2 defaults to `reload`, this changes
 - Content presets are `CTA_TOP`, `CTA_BOTTOM`, `COMPACT`; group template fields also accept `FULL_SCREEN`/`DIALOG` as before. The language popup always uses `DIALOG`; ad-only Full1/Full2/OB5 always use `FULL_SCREEN`. App-provided custom layout resources remain local.
 - Preload and show share template resolution. If a host preloads early, or remote is refreshed after a preload, bind uses the current SDK frame without discarding the loaded ad. Already visible views remain until a subsequent bind. This is not the default splash ordering: LFO1 is scheduled after remote under both strategies.
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. A specific scope overrides a shared scope, then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
+- The X/Skip side is per native full-screen page, with no shared scope above it: `onboarding.steps.<id>.fullscreen.skip.position` for each full-screen step, `ob5.skip.position` for standalone OB5 and `splash.native.skip.position` for the native_fs between the splash interstitial and LFO. All three accept `RIGHT` / `LEFT` and default to `RIGHT`, the side the X has always taken; the shipped JSON declares `full1` and `full2`, and any other step id the app declares is accepted at the same path. No other format has this control: interstitial, app-open, banner and inline native carry no such button. Both sides are exact mirrors — same inset from their edge and the same top margin — so only the side changes, never the size, the style or the timing. In an RTL locale the screen keeps mirroring as it does today: `RIGHT` follows the text end, `LEFT` its start.
 - `native.presentation.cta_corner_radius_dp`: `20` dp, overridable by placement/screen. It applies when an explicit CTA background color is supplied through `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; `default` color preserves the XML drawable.
 - `lfo.confirm_button.image_url` / `tint_color`: `""` keeps the XML icon/color. Image-load failure uses the SDK check icon; invalid color is ignored. These style the LFO confirm control, separately from ad CTA fields.
 - `lfo.languages.supported_codes`: `[]` keeps the app/SDK catalog. Unknown codes are dropped and an empty filtered result falls back to that catalog. `lfo.languages.default_code`: `""` preserves the existing choice; a new code must exist in the app catalog.
+
+Example override setting the X side of each native full-screen page. The shipped JSON declares `full1` and `full2`, the standard full-screen pages; an app that declares its own step id adds that id the same way:
+
+```json
+{
+  "splash": { "native": { "skip": { "position": "LEFT" } } },
+  "onboarding": {
+    "steps": {
+      "full1": { "fullscreen": { "skip": { "position": "LEFT" } } },
+      "full2": { "fullscreen": { "skip": { "position": "RIGHT" } } }
+    }
+  },
+  "ob5": { "skip": { "position": "LEFT" } }
+}
+```
 
 `flow.lock_portrait`, `flow.system_bars.*` and `onboarding.steps.ob1/ob2/ob4.progress_visible` remain outside the new JSON schema. Use `BehaviorConfig`, `SystemBarConfig` and `ContentStepDefinition.showsProgressIndicator` with the existing defaults.
 
@@ -274,6 +288,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.navigation.next_screen_timing` | `"AUTO"` |
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
+| `splash.native.skip.position` | `"RIGHT"` |
 | `splash.native.auto_dismiss_ms` | `15000` |
 | `splash.native.behavior.click.action` | `"reload"` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
@@ -307,6 +322,8 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
+| `onboarding.steps.full1.fullscreen.skip.position` | `"RIGHT"` |
+| `onboarding.steps.full2.fullscreen.skip.position` | `"RIGHT"` |
 | `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
 | `onboarding.preload.ob5_on_last_step` | `true` |
 | `onboarding.preload.question_on_last_step` | `true` |
@@ -320,6 +337,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
+| `ob5.skip.position` | `"RIGHT"` |
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |

@@ -7,10 +7,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
+import io.onboardkit.config.FullScreenSkipPosition
 import io.onboardkit.config.FullScreenSkipStyle
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
 import io.onboardkit.remote.OnboardingSettings
-import io.onboardkit.ui.applyFullScreenSkipStyle
+import io.onboardkit.ui.applyFullScreenSkip
 import io.onboardkit.ui.base.BaseOnboardActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -28,8 +29,9 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
         }
         binding = ObActivityFullscreenAdBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.obSkipButton.applyFullScreenSkipStyle(
+        binding.obSkipButton.applyFullScreenSkip(
             FullScreenSkipStyle.valueOf(OnboardingSettings.text("splash.native.skip.style")),
+            FullScreenSkipPosition.valueOf(OnboardingSettings.text("splash.native.skip.position")),
         )
         binding.obSkipButton.setOnClickListener { close() }
         showNativeAd(

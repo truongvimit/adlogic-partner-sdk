@@ -222,6 +222,63 @@ class OnboardingSettingsTest {
         assertEquals(FullScreenSkipStyle.TEXT, OnboardingSettings.ob5SkipStyle(config.ads.fullScreenSkipStyle))
     }
 
+    @Test fun `each fullscreen page owns its skip side and no shared scope reaches it`() {
+        val config = onboardKitConfig {
+            steps(AdFullScreenStepDefinition(StepId.FULL1),
+                AdFullScreenStepDefinition(StepId.FULL2, skipButtonPosition = FullScreenSkipPosition.LEFT))
+        }.getOrThrow()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"full1":{"fullscreen":{"skip":{"position":"LEFT"}}},"full2":{"fullscreen":{"skip":{"position":"RIGHT"}}}}}}""")
+        val perPage = OnboardingSettings.resolve(config)
+        assertEquals(FullScreenSkipPosition.LEFT, (perPage.steps[0] as AdFullScreenStepDefinition).skipButtonPosition)
+        assertEquals(FullScreenSkipPosition.RIGHT, (perPage.steps[1] as AdFullScreenStepDefinition).skipButtonPosition)
+        // The umbrella scopes are gone: neither key is a declared path, so both are dropped and
+        // each page keeps its own side. OB5 and the splash native answer only to their own key.
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"fullscreen_skip_position":"LEFT"},"onboarding":{"fullscreen":{"skip":{"position":"LEFT"}}},"ob5":{"skip":{"position":"LEFT"}}}""")
+        val shared = OnboardingSettings.resolve(config)
+        assertEquals(FullScreenSkipPosition.RIGHT, (shared.steps[0] as AdFullScreenStepDefinition).skipButtonPosition)
+        assertEquals(FullScreenSkipPosition.LEFT, (shared.steps[1] as AdFullScreenStepDefinition).skipButtonPosition)
+        assertEquals("LEFT", OnboardingSettings.text("ob5.skip.position"))
+        assertEquals("RIGHT", OnboardingSettings.text("splash.native.skip.position"))
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"full2":{"fullscreen":{"skip":{"position":"UP"}}}}}}""")
+        assertEquals(FullScreenSkipPosition.LEFT, (OnboardingSettings.resolve(config).steps[1] as AdFullScreenStepDefinition).skipButtonPosition)
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertSame(config, OnboardingSettings.resolve(config))
+        // The two standard pages are declared in the asset so a partner can see and copy them,
+        // but a bundled default must never displace what the host wrote in code.
+        assertEquals("RIGHT", OnboardingSettings.defaultText("onboarding.steps.full1.fullscreen.skip.position"))
+        assertEquals("RIGHT", OnboardingSettings.defaultText("onboarding.steps.full2.fullscreen.skip.position"))
+        assertEquals(FullScreenSkipPosition.LEFT, (OnboardingSettings.resolve(config).steps[1] as AdFullScreenStepDefinition).skipButtonPosition)
+    }
+
+    @Test fun `a shared style scope reaches a page whose style the host set in code`() {
+        val config = onboardKitConfig {
+            steps(AdFullScreenStepDefinition(StepId.FULL1, skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON),
+                AdFullScreenStepDefinition(StepId.FULL2))
+        }.getOrThrow()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"fullscreen_skip_style":"TEXT"}}""")
+        val shared = OnboardingSettings.resolve(config)
+        assertEquals(FullScreenSkipStyle.TEXT, (shared.steps[0] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertEquals(FullScreenSkipStyle.TEXT, (shared.steps[1] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertEquals(FullScreenSkipStyle.TEXT, OnboardingSettings.ob5SkipStyle(shared.ads.fullScreenSkipStyle))
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"fullscreen_skip_style":"TEXT"},"onboarding":{"steps":{"full1":{"fullscreen":{"skip":{"style":"CLOSE_ICON"}}}}}}""")
+        val specific = OnboardingSettings.resolve(config)
+        assertEquals(FullScreenSkipStyle.CLOSE_ICON, (specific.steps[0] as AdFullScreenStepDefinition).skipButtonStyle)
+        assertEquals(FullScreenSkipStyle.TEXT, (specific.steps[1] as AdFullScreenStepDefinition).skipButtonStyle)
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertEquals(FullScreenSkipStyle.CLOSE_ICON, (OnboardingSettings.resolve(config).steps[0] as AdFullScreenStepDefinition).skipButtonStyle)
+    }
+
+    @Test fun `the renamed slot key still honours a console publishing the old name`() {
+        val host = RemoteFlags()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"banner_wait_ms":2500}}}""")
+        assertEquals(2500L, OnboardingSettings.resolveFlags(host).splashSlotMinVisibleMs)
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"banner_wait_ms":2500,"slot_min_visible_ms":800}}}""")
+        assertEquals("the current name wins when both are published", 800L,
+            OnboardingSettings.resolveFlags(host).splashSlotMinVisibleMs)
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertEquals(host.splashSlotMinVisibleMs, OnboardingSettings.resolveFlags(host).splashSlotMinVisibleMs)
+    }
+
     @Test fun `language experiments use the app catalog and missing fields retain its default`() {
         val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en") }.getOrThrow()
         val supported = config.language.languages.last().code

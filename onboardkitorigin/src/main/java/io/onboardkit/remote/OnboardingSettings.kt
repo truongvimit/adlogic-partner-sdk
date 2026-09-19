@@ -13,11 +13,24 @@ import io.onboardkit.ads.AdPlacement
 
 /** Defaults come from onboarding_config.json; only explicit valid overrides replace host options. */
 object OnboardingSettings {
+    /**
+     * Keys renamed in a past release, old name to current one. Without an entry here the old key
+     * has no declared default, so it is dropped at parse and a console still publishing it goes
+     * silently unheard — the read site alone cannot keep that promise. Declared before [document],
+     * which takes [extraDefault] by reference.
+     */
+    private val RENAMED = mapOf("splash.timing.banner_wait_ms" to "splash.timing.slot_min_visible_ms")
+
     val document = SettingsDocument("onboarding_config", BundledOnboarding.VALUES, ::extraDefault)
     val values: SettingsSnapshot get() = document.snapshot
+
     private fun extraDefault(path: String): Any? {
+        RENAMED[path]?.let { return document.defaultValue(it) }
         if (path.startsWith("onboarding.steps.")) {
             val suffix = path.split('.').drop(3).joinToString(".")
+            // Position is the one fullscreen field with no shared onboarding scope: each page
+            // owns its own side, so there is no "onboarding.fullscreen.*" default to borrow.
+            if (suffix == "fullscreen.skip.position") return FullScreenSkipPosition.RIGHT.name
             if (suffix.startsWith("fullscreen.")) return document.defaultValue("onboarding.$suffix")
             if (suffix == "native_template") return ""
             if (suffix == "behavior") return emptyMap<String, Any>()
@@ -165,16 +178,17 @@ object OnboardingSettings {
         } else c.steps
         val steps = ordered.filter { it.enabled }.map { step ->
             if (step !is AdFullScreenStepDefinition) step else {
-                val p = "onboarding.steps.${step.id.value}.fullscreen"
-                fun b(s: String, local: Boolean) = v.boolean("$p.$s", v.boolean("onboarding.fullscreen.$s", local))
-                fun n(s: String, local: Long) = v.long("$p.$s", v.long("onboarding.fullscreen.$s", local))
+                val page = step.id.value
                 step.copy(
-                    showSkipButton = b("skip.enabled", step.showSkipButton),
-                    skipButtonDelaySec = (n("skip.delay_ms", step.skipButtonDelaySec * 1000L) / 1000).toInt(),
-                    autoNextEnabled = b("auto_next.enabled", step.autoNextEnabled),
-                    autoNextDelayMs = n("auto_next.delay_ms", step.autoNextDelayMs),
-                    skipButtonStyle = FullScreenSkipStyle.valueOf(v.string("$p.skip.style",
-                        v.string("onboarding.fullscreen.skip.style", step.skipButtonStyle?.name ?: ads.fullScreenSkipStyle.name))),
+                    showSkipButton = FullScreenSetting.SkipEnabled.on(page, v).boolean(step.showSkipButton),
+                    skipButtonDelaySec = (FullScreenSetting.SkipDelayMs.on(page, v)
+                        .long(step.skipButtonDelaySec * 1000L) / 1000).toInt(),
+                    autoNextEnabled = FullScreenSetting.AutoNextEnabled.on(page, v).boolean(step.autoNextEnabled),
+                    autoNextDelayMs = FullScreenSetting.AutoNextDelayMs.on(page, v).long(step.autoNextDelayMs),
+                    skipButtonStyle = FullScreenSkipStyle.valueOf(FullScreenSetting.SkipStyle.on(page, v)
+                        .string(step.skipButtonStyle?.name ?: ads.fullScreenSkipStyle.name)),
+                    skipButtonPosition = FullScreenSkipPosition.valueOf(FullScreenSetting.SkipPosition.on(page, v)
+                        .string(step.skipButtonPosition.name)),
                 )
             }
         }
@@ -238,12 +252,10 @@ object OnboardingSettings {
             splashNotificationSettleMs = v.long("splash.timing.notification_settle_ms", f.splashNotificationSettleMs),
             splashMinDisplayMs = v.long("splash.timing.min_display_ms", f.splashMinDisplayMs),
             splashAdBudgetMs = v.long("splash.timing.ad_budget_ms", f.splashAdBudgetMs),
-            // banner_wait_ms is the key this replaced; a console still publishing it keeps
+            // The pre-rename key is the second scope, so a console still publishing it keeps
             // delaying the interstitial for the slot's sake, which was its whole point.
-            splashSlotMinVisibleMs = v.long(
-                "splash.timing.slot_min_visible_ms",
-                v.long("splash.timing.banner_wait_ms", f.splashSlotMinVisibleMs),
-            ),
+            splashSlotMinVisibleMs = v.scoped("splash.timing.slot_min_visible_ms", "splash.timing.banner_wait_ms")
+                .long(f.splashSlotMinVisibleMs),
             splashLfoParallelPreloadEnabled = v.string("splash.load.lfo1_preload_mode", if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL") == "PARALLEL",
         )
     }

@@ -178,6 +178,7 @@ Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/Onboar
 AdFullScreenStepDefinition(
     StepId.FULL1,
     skipButtonStyle = FullScreenSkipStyle.CLOSE_ICON, // TEXT for “Skip”
+    skipButtonPosition = FullScreenSkipPosition.RIGHT, // LEFT mirrors it to the other side
     skipButtonDelaySec = 1,
     autoNextEnabled = true,
     autoNextDelayMs = 3_000,

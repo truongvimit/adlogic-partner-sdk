@@ -162,6 +162,7 @@ class SettingsDocument(
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")
                 path.endsWith("next_screen_timing") -> if (path == "splash.navigation.next_screen_timing") setOf("AUTO", "AFTER_AD", "UNDER_AD") else setOf("AFTER_AD", "UNDER_AD")
                 path.endsWith("skip.style") || path.endsWith("fullscreen_skip_style") -> setOf("TEXT", "CLOSE_ICON")
+                path.endsWith("skip.position") -> setOf("RIGHT", "LEFT")
                 path.endsWith("empty_visibility") -> setOf("GONE", "INVISIBLE")
                 path.endsWith("presentation.type") -> setOf("NORMAL", "LARGE_ANCHORED", "COLLAPSIBLE", "INLINE", "INLINE_MAX_HEIGHT", "FIXED")
                 path.endsWith("collapsible_gravity") -> setOf("TOP", "BOTTOM")
@@ -236,6 +237,9 @@ class SettingsSnapshot internal constructor(
     fun longList(path: String, fallback: List<Long> = emptyList()): List<Long> =
         ((overrideValue(path) ?: defaults[path]) as? List<*>)?.mapNotNull { (it as? Number)?.toLong() } ?: fallback
 
+    /** Ordered scopes, most specific first; see [ScopeChain]. */
+    fun scoped(vararg paths: String): ScopeChain = ScopeChain(this, paths.asList())
+
     /** Already validated flat values relative to [path]; no JSON work at a timer/show call site. */
     fun objectEntries(path: String): Map<String, Any> = (defaults + asset + remote)
         .filterKeys { it.startsWith("$path.") }.mapKeys { it.key.removePrefix("$path.") }
@@ -252,4 +256,20 @@ class SettingsSnapshot internal constructor(
         path.split('.').forEach { key -> current = (current as? JSONObject)?.opt(key) }
         return current?.toString() ?: "{}"
     }
+}
+
+/**
+ * One setting read from an ordered list of scopes, most specific first: the first scope carrying an
+ * explicit override answers, and the host's own value stands when none does. Stating the order once
+ * is the point — a field that spells its own chain out by hand is how two sibling settings end up
+ * with different precedence, and how a host value ends up sitting above a scope that should outrank it.
+ */
+class ScopeChain internal constructor(
+    private val values: SettingsSnapshot,
+    private val paths: List<String>,
+) {
+    private fun override(): Any? = paths.firstNotNullOfOrNull(values::overrideValue)
+    fun boolean(fallback: Boolean): Boolean = override() as? Boolean ?: fallback
+    fun long(fallback: Long): Long = (override() as? Number)?.toLong() ?: fallback
+    fun string(fallback: String): String = override() as? String ?: fallback
 }

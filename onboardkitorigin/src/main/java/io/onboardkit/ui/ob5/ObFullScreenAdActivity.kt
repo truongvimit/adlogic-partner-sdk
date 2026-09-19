@@ -13,6 +13,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackSkipped
+import io.onboardkit.config.FullScreenSkipPosition
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -21,7 +22,7 @@ import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
-import io.onboardkit.ui.applyFullScreenSkipStyle
+import io.onboardkit.ui.applyFullScreenSkip
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.Job
@@ -69,7 +70,10 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
         shownAtMs = System.currentTimeMillis()
         OnboardingSdk.track(AnalyticsEvent.StepViewed(StepId.OB5, stepIndex, VARIANT))
 
-        binding.obSkipButton.applyFullScreenSkipStyle(OnboardingSettings.ob5SkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle))
+        binding.obSkipButton.applyFullScreenSkip(
+            OnboardingSettings.ob5SkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle),
+            FullScreenSkipPosition.valueOf(OnboardingSettings.text("ob5.skip.position")),
+        )
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 
         requestAd()

@@ -42,7 +42,8 @@
     "native": {
       "skip": {
         "delay_ms": 3000,
-        "style": "CLOSE_ICON"
+        "style": "CLOSE_ICON",
+        "position": "RIGHT"
       },
       "auto_dismiss_ms": 15000,
       "behavior": {
@@ -130,6 +131,22 @@
         "delay_ms": 15000
       }
     },
+    "steps": {
+      "full1": {
+        "fullscreen": {
+          "skip": {
+            "position": "RIGHT"
+          }
+        }
+      },
+      "full2": {
+        "fullscreen": {
+          "skip": {
+            "position": "RIGHT"
+          }
+        }
+      }
+    },
     "preload": {
       "ob5_on_last_step": true,
       "question_on_last_step": true
@@ -162,7 +179,8 @@
     "skip": {
       "enabled": true,
       "delay_ms": 3000,
-      "style": "CLOSE_ICON"
+      "style": "CLOSE_ICON",
+      "position": "RIGHT"
     },
     "auto_dismiss_ms": 15000
   },

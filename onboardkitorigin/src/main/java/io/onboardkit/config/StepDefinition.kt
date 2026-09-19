@@ -32,6 +32,9 @@ data class ContentStepDefinition(
 
 enum class FullScreenSkipStyle { TEXT, CLOSE_ICON }
 
+/** Side the Skip/X takes. The two sides are exact mirrors: same inset, same top margin. */
+enum class FullScreenSkipPosition { RIGHT, LEFT }
+
 data class AdFullScreenStepDefinition(
     override val id: StepId,
     val showSkipButton: Boolean = OnboardingSettings.defaultBool("onboarding.fullscreen.skip.enabled"),
@@ -42,6 +45,8 @@ data class AdFullScreenStepDefinition(
     @LayoutRes val layoutRes: Int = 0,
     /** Null inherits AdsConfig.fullScreenSkipStyle. */
     val skipButtonStyle: FullScreenSkipStyle? = null,
+    /** Owned by this page alone; there is no shared position scope to inherit. */
+    val skipButtonPosition: FullScreenSkipPosition = FullScreenSkipPosition.RIGHT,
     override val enabled: Boolean = true,
 ) : StepDefinition {
     override val type: StepType get() = StepType.AD_FULL_SCREEN

@@ -63,8 +63,16 @@ Native को दोनों चाहिए: `slot_format` को `NATIVE` **�
 entry। इनमें से कोई एक भी न हो तो slot खाली ही रहता है।
 
 एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
-नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.slot_min_visible_ms` interstitial को उस format से दूर रखता है जो slot भर रहा हो, और यह slot की **impression** से नापा जाता है, load से नहीं — `0` पुराना असुरक्षित व्यवहार लौटाता है, और यह `splash.timing.banner_wait_ms` की जगह लेता है जिसे नई key न होने पर अब भी पढ़ा जाता है। पुरानी पंक्ति: यह जो भी format लोड हो रहा हो उसे सीमित
-करता है, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
+नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.slot_min_visible_ms` interstitial को उस format से दूर रखता है जो slot भर
+रहा हो, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
+
+यह window slot के **load** होने और splash के **स्क्रीन वापस पाने** में से जो बाद में हो, वहाँ से चलती है — दोनों
+सच होने पर ही कोई उसे देख सकता है: notification dialog के पीछे भरा ad स्क्रीन पर था, पर user के सामने नहीं।
+जो slot fail हो, skip हो या जिसका ad unit न हो, वह window शुरू ही नहीं करता और उसका इंतज़ार नहीं होता;
+धीमे slot का इंतज़ार `splash.timing.ad_budget_ms` के बचे हुए हिस्से में होता है — वही budget जो interstitial
+ख़र्च करता है — और हर hold उसी बचे हुए हिस्से तक सीमित रहता है। Vendor impression बिल्कुल नहीं देखा जाता,
+क्योंकि collapsible banner कभी report नहीं करता। `0` पुराना असुरक्षित व्यवहार लौटाता है। यह
+`splash.timing.banner_wait_ms` की जगह लेता है, जिसे नई key न होने पर अब भी पढ़ा जाता है।
 
 Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
 हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
@@ -120,7 +128,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
-OB interstitial slots tier और wait timeout support करते हैं। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं।
+OB interstitial slots tier और wait timeout support करते हैं। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
 Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। Interval सेट करना timer चालू नहीं करता। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
 
@@ -158,9 +166,25 @@ Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager क�
 - Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only Full1/Full2/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
 - Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। यह default splash order नहीं: दोनों strategies में LFO1 remote के बाद schedule होता है।
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। Specific scope shared scope से पहले, फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
+- X/Skip का side हर native full-screen page का अपना है, ऊपर कोई shared scope नहीं: हर full-screen step के लिए `onboarding.steps.<id>.fullscreen.skip.position`, standalone OB5 के लिए `ob5.skip.position`, और splash interstitial से LFO के बीच के native_fs के लिए `splash.native.skip.position`। तीनों में `RIGHT` / `LEFT` मान्य हैं, default `RIGHT` — वही side जहाँ X हमेशा से था; shipped JSON में `full1` और `full2` declare हैं, और app का declare किया कोई भी दूसरा step id उसी path पर स्वीकार होता है। किसी और format में यह control नहीं है: interstitial, app-open, banner और inline native में यह button होता ही नहीं। दोनों sides पूरी तरह mirror हैं: अपने edge से समान inset और समान top margin, इसलिए केवल side बदलता है, size/style/timing नहीं। RTL locale में screen आज की तरह ही mirror होती है: `RIGHT` text end, `LEFT` text start।
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
 - `lfo.confirm_button.image_url` / `tint_color`: `""` XML icon/color रखता है। Image failure पर SDK check icon, invalid color पर मौजूदा color रहता है। यह LFO confirm control है, ad CTA से अलग।
 - `lfo.languages.supported_codes`: `[]` app/SDK catalog रखता है। Unknown codes हटते हैं; filtered result खाली हो तो catalog fallback है। `lfo.languages.default_code`: `""` पुराना चुनाव रखता है; नया code app catalog में होना चाहिए।
+
+हर native full-screen page के X side का override उदाहरण। Shipped JSON में `full1` और `full2` — standard full-screen pages — declare हैं; app अपना step id declare करे तो उसे भी इसी तरह जोड़ें:
+
+```json
+{
+  "splash": { "native": { "skip": { "position": "LEFT" } } },
+  "onboarding": {
+    "steps": {
+      "full1": { "fullscreen": { "skip": { "position": "LEFT" } } },
+      "full2": { "fullscreen": { "skip": { "position": "RIGHT" } } }
+    }
+  },
+  "ob5": { "skip": { "position": "LEFT" } }
+}
+```
 
 `flow.lock_portrait`, `flow.system_bars.*` और `onboarding.steps.ob1/ob2/ob4.progress_visible` नए JSON schema में नहीं हैं। पुराने defaults के साथ `BehaviorConfig`, `SystemBarConfig`, `ContentStepDefinition.showsProgressIndicator` इस्तेमाल करें।
 
@@ -263,6 +287,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.navigation.next_screen_timing` | `"AUTO"` |
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
+| `splash.native.skip.position` | `"RIGHT"` |
 | `splash.native.auto_dismiss_ms` | `15000` |
 | `splash.native.behavior.click.action` | `"reload"` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
@@ -296,6 +321,8 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
 | `onboarding.fullscreen.auto_next.enabled` | `true` |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` |
+| `onboarding.steps.full1.fullscreen.skip.position` | `"RIGHT"` |
+| `onboarding.steps.full2.fullscreen.skip.position` | `"RIGHT"` |
 | `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
 | `onboarding.preload.ob5_on_last_step` | `true` |
 | `onboarding.preload.question_on_last_step` | `true` |
@@ -309,6 +336,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
+| `ob5.skip.position` | `"RIGHT"` |
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |

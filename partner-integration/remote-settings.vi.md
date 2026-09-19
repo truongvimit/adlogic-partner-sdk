@@ -79,9 +79,8 @@ Khoảng đó tính từ mốc **muộn hơn** giữa lúc slot **load xong** v�
 vì phải đủ cả hai thì mới có ai nhìn được: ad fill sau lưng dialog là có trên màn nhưng không ở
 trước mặt user. Slot lỗi, bị skip hoặc không có ad unit thì không khởi động khoảng này và không bị
 chờ; slot chậm thì được chờ trong phần còn lại của `splash.timing.ad_budget_ms` — đúng ngân sách mà
-inter vừa tiêu. Không dùng impression của vendor, vì banner collapsible không bao giờ báo. Slot lỗi, bị skip hoặc không có ad unit thì settle ngay và không bị chờ; slot đã fill
-nhưng không báo impression (banner collapsible không bao giờ báo) thì bỏ qua sau đúng khoảng này;
-và mọi lần chờ đều bị chặn trên bởi `splash.timing.ad_budget_ms`. Đặt `0` là quay lại hành vi cũ,
+inter vừa tiêu, và mọi lần giữ đều bị chặn trên bởi phần còn lại đó. Hoàn toàn không dùng impression
+của vendor, vì banner collapsible không bao giờ báo. Đặt `0` là quay lại hành vi cũ,
 không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms`, key cũ vẫn được đọc khi thiếu key mới.
 
 Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
@@ -148,7 +147,7 @@ Slot behavior > nhóm content/fullscreen OB > placement override > format overri
 | interstitial | load.tier_timeout_ms, load_and_show.wait_timeout_ms, load_and_show.buffer_wait_timeout_ms, presentation.loading_enabled, cache.max_age_ms |
 | rewarded | load.tier_timeout_ms, cache.max_age_ms |
 
-Slot interstitial OB hỗ trợ tier timeout và wait timeout. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style}` và `.auto_next.{enabled,delay_ms}`. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
+Slot interstitial OB hỗ trợ tier timeout và wait timeout. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
 
 Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Khai báo interval không tự bật timer. App-open delay chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms. Không thêm banner tier timeout khi loader chưa có timer đó.
 
@@ -186,9 +185,25 @@ Ví dụ override trong `onboarding_config` (LFO2 mặc định là `reload`; v�
 - Các preset `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` dùng cho native nội dung; field template chung cũng nhận `FULL_SCREEN`/`DIALOG` như API trước. Riêng native trong popup LFO luôn dùng `DIALOG`, native ad-only Full1/Full2/OB5 luôn dùng `FULL_SCREEN` để giữ khung chứa tương ứng. Custom `R.layout` của trang vẫn ở app.
 - Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. Đây không phải thứ tự splash mặc định: LFO1 luôn được lên lịch sau bước remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
 - `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Scope cụ thể ưu tiên scope chung, rồi cấu hình local; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
+- Phía đặt X/Skip khai theo từng trang native fullscreen, không có scope chung ở trên: `onboarding.steps.<id>.fullscreen.skip.position` cho mỗi trang fullscreen trong OB, `ob5.skip.position` cho OB5 standalone, `splash.native.skip.position` cho native_fs giữa inter splash và LFO. Cả ba nhận `RIGHT`/`LEFT`, default `RIGHT` — đúng phía X vẫn nằm từ trước; JSON gốc khai sẵn `full1` và `full2`, id step khác do app khai vẫn nhận ở cùng path đó. Các format khác không có cờ này: interstitial, app-open, banner và native inline đều không có nút X này. Hai phía đối xứng tuyệt đối: cùng khoảng cách tới mép và cùng margin trên, chỉ đổi phía chứ không đổi kích thước, style hay thời gian. Locale RTL vẫn lật như hiện tại: `RIGHT` theo mép cuối dòng chữ, `LEFT` theo mép đầu.
 - `native.presentation.cta_corner_radius_dp` mặc định `20` dp, có thể override theo placement hoặc scope native từng màn. Áp dụng khi CTA có màu nền tường minh từ `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; màu `default` giữ drawable XML như trước.
 - `lfo.confirm_button.image_url` / `tint_color`: mặc định `""`, giữ icon/màu XML. URL ảnh lỗi dùng icon check của SDK, màu không hợp lệ bị bỏ qua. Đây là nút xác nhận LFO; CTA quảng cáo vẫn dùng field của ad_config.
 - `lfo.languages.supported_codes` mặc định `[]`: giữ catalog app/SDK; mã không có trong catalog bị loại, kết quả rỗng trở về catalog. `lfo.languages.default_code` mặc định `""`: giữ lựa chọn mặc định cũ; chỉ thay khi mã thuộc catalog app.
+
+Ví dụ chỉnh phía nút X cho từng trang native fullscreen. JSON gốc khai sẵn `full1` và `full2` — hai trang fullscreen tiêu chuẩn; app khai id riêng thì thêm id đó y hệt:
+
+```json
+{
+  "splash": { "native": { "skip": { "position": "LEFT" } } },
+  "onboarding": {
+    "steps": {
+      "full1": { "fullscreen": { "skip": { "position": "LEFT" } } },
+      "full2": { "fullscreen": { "skip": { "position": "RIGHT" } } }
+    }
+  },
+  "ob5": { "skip": { "position": "LEFT" } }
+}
+```
 
 Các field chỉ thuộc app đã loại khỏi nhóm UI 26 field là `flow.lock_portrait`, ba field `flow.system_bars.*` và `onboarding.steps.ob1/ob2/ob4.progress_visible`. Chúng tiếp tục dùng `BehaviorConfig`, `SystemBarConfig`, `ContentStepDefinition.showsProgressIndicator` với default cũ. Payload nội dung `ui.*` / `question.content.*` không nhân bản sang JSON mới; nội dung UI remote cũ vẫn qua `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`, và toggle `ob_enable_ui_content`. Text nút tiếp tục của question dùng `QuestionConfig.ctaTextRes` trong app, độc lập với CTA quảng cáo.
 
@@ -289,6 +304,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.navigation.next_screen_timing` | `"AUTO"` | AUTO/AFTER_AD/UNDER_AD; entry noti/widget/uninstall vẫn bảo đảm AFTER_AD. |
 | `splash.native.skip.delay_ms` | `3000` | Native splash trước LFO.
 | `splash.native.skip.style` | `"CLOSE_ICON"` | Native splash trước LFO.
+| `splash.native.skip.position` | `"RIGHT"` | Native splash trước LFO.
 | `splash.native.auto_dismiss_ms` | `15000` | Native splash trước LFO.
 | `splash.native.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.native_template` | `"CTA_BOTTOM"` | Preset layout native SDK cho LFO1/LFO2; xem thứ tự ưu tiên template. |
@@ -322,6 +338,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của trang fullscreen trong OB. |
 | `onboarding.fullscreen.auto_next.enabled` | `true` | Không điều khiển OB5 standalone. |
 | `onboarding.fullscreen.auto_next.delay_ms` | `15000` | Timer từ page selection, tính background như hiện tại. |
+| `onboarding.steps.full1.fullscreen.skip.position` | `"RIGHT"` | Phía đặt X/Skip của riêng trang full1. |
+| `onboarding.steps.full2.fullscreen.skip.position` | `"RIGHT"` | Phía đặt X/Skip của riêng trang full2. |
 | `onboarding.order` | Thứ tự app khi thiếu | Array chọn/sắp xếp catalog; `[]` bỏ pager. |
 | `onboarding.preload.ob5_on_last_step` | `true` | Warm OB5 khi tới cuối pager; vẫn cần OB5 bật. |
 | `onboarding.preload.question_on_last_step` | `true` | Warm question khi tới cuối pager. |
@@ -335,6 +353,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `ob5.skip.enabled` | `true` | ob_show_skip_ob5. |
 | `ob5.skip.delay_ms` | `3000` | Tách override riêng với pager; legacy ob_skip_button_delay_sec áp cả hai như trước. |
 | `ob5.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của màn OB5 standalone. |
+| `ob5.skip.position` | `"RIGHT"` | Phía đặt X/Skip của màn OB5 standalone. |
 | `ob5.auto_dismiss_ms` | `15000` | Thời gian đóng OB5; tối thiểu 5000ms. |
 | `question.enabled` | `true` | ob_enable_question. |
 | `question.old_user_enabled` | `false` | ob_enable_question_old_user. |
