@@ -81,7 +81,10 @@ trước mặt user. Slot lỗi, bị skip hoặc không có ad unit thì không
 chờ; slot chậm thì được chờ trong phần còn lại của `splash.timing.ad_budget_ms` — đúng ngân sách mà
 inter vừa tiêu, và mọi lần giữ đều bị chặn trên bởi phần còn lại đó. Hoàn toàn không dùng impression
 của vendor, vì banner collapsible không bao giờ báo. Đặt `0` là quay lại hành vi cũ,
-không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms`, key cũ vẫn được đọc khi thiếu key mới.
+không bảo vệ gì. Cờ này thay cho `splash.timing.banner_wait_ms` thời còn banner — key cũ **không còn
+được đọc**: nó đặt tên theo banner trong khi slot nay có thể là native, và default của chính nó là
+`0`, nên đọc lại một bản sót sẽ tắt đảm bảo này chứ không phải giữ lại thiết lập. Publish lại giá
+trị dưới tên mới.
 
 Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
 động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác

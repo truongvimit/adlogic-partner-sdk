@@ -13,19 +13,10 @@ import io.onboardkit.ads.AdPlacement
 
 /** Defaults come from onboarding_config.json; only explicit valid overrides replace host options. */
 object OnboardingSettings {
-    /**
-     * Keys renamed in a past release, old name to current one. Without an entry here the old key
-     * has no declared default, so it is dropped at parse and a console still publishing it goes
-     * silently unheard — the read site alone cannot keep that promise. Declared before [document],
-     * which takes [extraDefault] by reference.
-     */
-    private val RENAMED = mapOf("splash.timing.banner_wait_ms" to "splash.timing.slot_min_visible_ms")
-
     val document = SettingsDocument("onboarding_config", BundledOnboarding.VALUES, ::extraDefault)
     val values: SettingsSnapshot get() = document.snapshot
 
     private fun extraDefault(path: String): Any? {
-        RENAMED[path]?.let { return document.defaultValue(it) }
         if (path.startsWith("onboarding.steps.")) {
             val suffix = path.split('.').drop(3).joinToString(".")
             // Position is the one fullscreen field with no shared onboarding scope: each page
@@ -252,10 +243,11 @@ object OnboardingSettings {
             splashNotificationSettleMs = v.long("splash.timing.notification_settle_ms", f.splashNotificationSettleMs),
             splashMinDisplayMs = v.long("splash.timing.min_display_ms", f.splashMinDisplayMs),
             splashAdBudgetMs = v.long("splash.timing.ad_budget_ms", f.splashAdBudgetMs),
-            // The pre-rename key is the second scope, so a console still publishing it keeps
-            // delaying the interstitial for the slot's sake, which was its whole point.
-            splashSlotMinVisibleMs = v.scoped("splash.timing.slot_min_visible_ms", "splash.timing.banner_wait_ms")
-                .long(f.splashSlotMinVisibleMs),
+            // splash.timing.banner_wait_ms, which this replaced, is deliberately not read as a
+            // second scope. It named a banner in a slot that can now hold a native, and its own
+            // default was 0 — so honouring a stale copy would switch this guarantee off rather
+            // than carry a setting across.
+            splashSlotMinVisibleMs = v.long("splash.timing.slot_min_visible_ms", f.splashSlotMinVisibleMs),
             splashLfoParallelPreloadEnabled = v.string("splash.load.lfo1_preload_mode", if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL") == "PARALLEL",
         )
     }

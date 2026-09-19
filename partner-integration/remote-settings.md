@@ -72,8 +72,10 @@ dialog was on screen but not in front of the user. A slot that fails, is skipped
 never starts the window and is not waited on; a slow one is waited for within what remains of
 `splash.timing.ad_budget_ms`, the same budget the interstitial spends, and every hold is clamped to
 that remainder. Vendor impressions are not consulted at all, since a collapsible banner never
-reports one. `0` restores the old unguarded behaviour. It replaces
-`splash.timing.banner_wait_ms`, which is still read when the new key is absent.
+reports one. `0` restores the old unguarded behaviour. It replaces the banner-era
+`splash.timing.banner_wait_ms`, which is **no longer read**: that key named a banner in a slot that
+now takes a native too, and its own default was `0`, so honouring a stale copy would switch this
+guarantee off rather than carry a setting across. Republish the value under the new name.
 
 The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
 nothing to act on — `colorCTA` and `heightCTA` still apply. `AdPlacement.SplashInlineNative` is not
