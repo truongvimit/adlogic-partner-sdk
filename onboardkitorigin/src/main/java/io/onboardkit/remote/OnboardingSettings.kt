@@ -243,10 +243,6 @@ object OnboardingSettings {
             splashNotificationSettleMs = v.long("splash.timing.notification_settle_ms", f.splashNotificationSettleMs),
             splashMinDisplayMs = v.long("splash.timing.min_display_ms", f.splashMinDisplayMs),
             splashAdBudgetMs = v.long("splash.timing.ad_budget_ms", f.splashAdBudgetMs),
-            // splash.timing.banner_wait_ms, which this replaced, is deliberately not read as a
-            // second scope. It named a banner in a slot that can now hold a native, and its own
-            // default was 0 — so honouring a stale copy would switch this guarantee off rather
-            // than carry a setting across.
             splashSlotMinVisibleMs = v.long("splash.timing.slot_min_visible_ms", f.splashSlotMinVisibleMs),
             splashLfoParallelPreloadEnabled = v.string("splash.load.lfo1_preload_mode", if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL") == "PARALLEL",
         )

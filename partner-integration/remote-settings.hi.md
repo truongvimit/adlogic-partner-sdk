@@ -71,10 +71,7 @@ entry। इनमें से कोई एक भी न हो तो slot �
 जो slot fail हो, skip हो या जिसका ad unit न हो, वह window शुरू ही नहीं करता और उसका इंतज़ार नहीं होता;
 धीमे slot का इंतज़ार `splash.timing.ad_budget_ms` के बचे हुए हिस्से में होता है — वही budget जो interstitial
 ख़र्च करता है — और हर hold उसी बचे हुए हिस्से तक सीमित रहता है। Vendor impression बिल्कुल नहीं देखा जाता,
-क्योंकि collapsible banner कभी report नहीं करता। `0` पुराना असुरक्षित व्यवहार लौटाता है। यह banner-युग की
-`splash.timing.banner_wait_ms` की जगह लेता है, जिसे **अब नहीं पढ़ा जाता**: वह key banner के नाम पर थी जबकि
-slot अब native भी हो सकता है, और उसका अपना default `0` था — इसलिए किसी बची हुई प्रति को मानना इस
-guarantee को बनाए रखने के बजाय बंद कर देता। नई key के नाम से value दोबारा publish करें।
+क्योंकि collapsible banner कभी report नहीं करता। `0` पुराना असुरक्षित व्यवहार लौटाता है।
 
 Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
 हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और

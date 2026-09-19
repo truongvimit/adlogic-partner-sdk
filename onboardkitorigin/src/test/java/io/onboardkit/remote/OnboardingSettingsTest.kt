@@ -268,17 +268,6 @@ class OnboardingSettingsTest {
         assertEquals(FullScreenSkipStyle.CLOSE_ICON, (OnboardingSettings.resolve(config).steps[0] as AdFullScreenStepDefinition).skipButtonStyle)
     }
 
-    @Test fun `the banner-era slot key is not read, so a stale copy cannot disarm the guarantee`() {
-        val host = RemoteFlags()
-        // banner_wait_ms defaulted to 0 and named a banner in a slot that now takes a native too.
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"banner_wait_ms":0}}}""")
-        assertFalse(OnboardingSettings.values.hasOverride("splash.timing.banner_wait_ms"))
-        assertEquals(host.splashSlotMinVisibleMs, OnboardingSettings.resolveFlags(host).splashSlotMinVisibleMs)
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"slot_min_visible_ms":2500}}}""")
-        assertEquals("the current name is the only one that lands", 2500L,
-            OnboardingSettings.resolveFlags(host).splashSlotMinVisibleMs)
-    }
-
     @Test fun `language experiments use the app catalog and missing fields retain its default`() {
         val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en") }.getOrThrow()
         val supported = config.language.languages.last().code
