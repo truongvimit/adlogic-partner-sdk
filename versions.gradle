@@ -35,7 +35,7 @@ ext {
     moshi_version = '1.15.1'
     
     // Coroutines
-    coroutines_version = '1.7.3'
+    coroutines_version = '1.10.2'
     
     // Glide
     glide_version = '4.15.1'
@@ -70,7 +70,7 @@ ext {
     module_update_gdpr_version = '2.0.2'
     play_review_ktx_version = '2.0.2'
     // Must match what :ads compiles against — :onboardkitorigin runs on whatever :ads resolves.
-    play_services_ads_version = '25.3.0'
+    play_services_ads_version = '25.5.0'
     billing_version = '9.0.0'
     
     // Media
