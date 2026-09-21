@@ -10,6 +10,7 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.Entitlement
@@ -66,6 +67,8 @@ class RewardCacheFlowTest {
     fun setUp() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         RewardAdManager.releaseAll()
+        RewardAdManager.bufferAfterClose = false
+        AdBehavior.document.acceptSuccessfulFetch(null)
         AdRemoteConfig.reset()
         requests.clear()
         RewardFlowLoadShadow.requestedUnits.clear()
@@ -90,6 +93,8 @@ class RewardCacheFlowTest {
             it.state.callback?.onAdDismissedFullScreenContent()
         }
         RewardAdManager.releaseAll()
+        RewardAdManager.bufferAfterClose = false
+        AdBehavior.document.acceptSuccessfulFetch(null)
         AdRemoteConfig.reset()
         ConsentCenter.setHostConsent(false, false)
         controller.pause().stop().destroy()
@@ -152,6 +157,37 @@ class RewardCacheFlowTest {
         ad.state.callback!!.onAdDismissedFullScreenContent()
         assertEquals(listOf(false), shown.closed)
         assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `host opt-in buffers the next rewarded ad once this one closes`() {
+        AdRemoteConfig.initializeFromJson("""{"$PLACEMENT":{"id":"$UNIT","isEnable":true}}""")
+        RewardAdManager.bufferAfterClose = true
+        val ad = loadAndFill()
+        RewardAdManager.show(activity, PLACEMENT, RecordingShow())
+        ad.state.callback!!.onAdShowedFullScreenContent()
+        assertEquals("Showing alone must not load anything", 1, requests.size)
+        ad.state.callback!!.onAdDismissedFullScreenContent()
+        assertEquals("Closing must load the replacement", 2, requests.size)
+    }
+
+    @Test
+    fun `remote config opt-in outranks a host flag left off`() {
+        AdRemoteConfig.initializeFromJson("""{"$PLACEMENT":{"id":"$UNIT","isEnable":true}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"rewarded":{"buffer":{"after_close":true}}}""")
+        val ad = loadAndFill()
+        RewardAdManager.show(activity, PLACEMENT, RecordingShow())
+        ad.state.callback!!.onAdDismissedFullScreenContent()
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `opt-in leaves a placement the config never declares to its caller`() {
+        RewardAdManager.bufferAfterClose = true
+        val ad = loadAndFill()
+        RewardAdManager.show(activity, PLACEMENT, RecordingShow())
+        ad.state.callback!!.onAdDismissedFullScreenContent()
+        assertEquals("An explicitly loaded key stays the caller's to reload", 1, requests.size)
     }
 
     @Test

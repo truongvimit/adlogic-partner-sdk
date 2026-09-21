@@ -291,7 +291,7 @@ run. Explicit timer/resume refresh options remain separate and are disabled by d
 | Remote placements / Firebase analytics | [suite-firebase](../suite-firebase/README.md); install `FirebaseAdConfigSource`, then call `AdConfig.refresh()` from a custom splash. The supplied onboarding splash already refreshes. |
 | Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
-| Rewarded ads | `RewardAdManager.preload(context, placement)` (or `load`) shares one cache/request per placement. `show(activity, placement) { earned -> }` consumes a ready ad; `loadAndShow(activity, placement, onSuccess, onFailed)` uses cache, waits for an active request, or loads. Grant only when earned; the manager does not refill automatically. `show` keeps the placement's config, UA, premium and consent gates. |
+| Rewarded ads | `RewardAdManager.preload(context, placement)` (or `load`) shares one cache/request per placement. `show(activity, placement) { earned -> }` consumes a ready ad; `loadAndShow(activity, placement, onSuccess, onFailed)` uses cache, waits for an active request, or loads. Grant only when earned; the manager does not refill unless `rewarded.buffer.after_close` is on. `show` keeps the placement's config, UA, premium and consent gates. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
 | App-open on return | Set `ERainAdConfig.idAdResume` from the `open_resume` placement before init; exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`. See [App-open on return](#app-open-on-return). |
 
@@ -469,8 +469,9 @@ See the [Firebase setup](../partner-integration/firebase-integration.md#remote-j
 [all fields/defaults](../partner-integration/remote-settings.md).
 
 **Rewarded cache.** `preload` shares `load`'s cache/request;
-`loadAndShow` reuses a ready ad or joins an active load. The manager no longer triggers legacy
-refill. Shown/impression callbacks are optional; each terminal completes once. Timeout, premium
+`loadAndShow` reuses a ready ad or joins an active load. The legacy refill is gone; an opt-in
+replacement loads the next ad after this one closes, off unless `rewarded.buffer.after_close`
+says otherwise or the host calls `RewardAdManager.setBufferAfterClose(true)`. Shown/impression callbacks are optional; each terminal completes once. Timeout, premium
 gates and other formats keep their established behavior.
 Partner screens call SDK APIs directly; `AdsAppManager` groups initialization and app policy.
 

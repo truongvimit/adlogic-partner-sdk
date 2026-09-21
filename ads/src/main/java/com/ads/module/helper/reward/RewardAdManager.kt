@@ -52,6 +52,13 @@ open class RewardShowCallback {
  */
 object RewardAdManager {
 
+    /**
+     * Host fallback for `rewarded.buffer.after_close`; remote and asset config outrank it.
+     * Off by default: a shown ad is not replaced unless the host asks for it.
+     */
+    @JvmStatic
+    var bufferAfterClose: Boolean = AdBehavior.defaultBool("rewarded.buffer.after_close")
+
     private val cache = ConcurrentHashMap<String, CachedAd<RewardedAd>>()
     private val requests = ConcurrentHashMap<String, LoadRequest>()
     private val presentations = ConcurrentHashMap<String, Presentation>()
@@ -195,7 +202,7 @@ object RewardAdManager {
             callback.onFailedToShow(0)
             return
         }
-        showInternal(activity, cached.ad, callback)
+        showInternal(activity, placement, cached.ad, callback)
     }
 
     /**
@@ -270,7 +277,7 @@ object RewardAdManager {
                     }
                     presentation.showing = true
                     showInternal(
-                        activity, cached.ad,
+                        activity, placement, cached.ad,
                         object : RewardShowCallback() {
                             override fun onClosed(earned: Boolean) {
                                 finishPresentation(placement, presentation, earned)
@@ -335,7 +342,7 @@ object RewardAdManager {
         }
     }
 
-    private fun showInternal(activity: Activity, ad: RewardedAd?, callback: RewardShowCallback) {
+    private fun showInternal(activity: Activity, placement: String, ad: RewardedAd?, callback: RewardShowCallback) {
         // The module answers purchased users with a lone onUserEarnedReward(null) and no
         // terminal callback; map that to a completed earn so the caller is never stranded
         if (AdGate.isPurchased(activity)) {
@@ -363,7 +370,9 @@ object RewardAdManager {
             }
 
             override fun onRewardedAdClosed() {
-                if (settled.compareAndSet(false, true)) runCatching { callback.onClosed(earned) }
+                if (!settled.compareAndSet(false, true)) return
+                runCatching { callback.onClosed(earned) }
+                bufferNext(activity.applicationContext, placement)
             }
 
             override fun onRewardedAdFailedToShow(codeError: Int) {
@@ -379,6 +388,16 @@ object RewardAdManager {
         } catch (_: RuntimeException) {
             vendorCallback.onRewardedAdFailedToShow(0)
         }
+    }
+
+    /**
+     * Loads the next rewarded ad once this one closes, when the host opted in. A placement the
+     * remote config never declares is the caller's own key, so it keeps owning the loading.
+     */
+    private fun bufferNext(context: Context, placement: String) {
+        if (!AdBehavior.values("rewarded", placement).boolean("buffer.after_close", bufferAfterClose)) return
+        if (!AdRemoteConfig.getInstance().declares(placement)) return
+        load(context, placement)
     }
 
     private fun finishPresentation(placement: String, presentation: Presentation, earned: Boolean) {

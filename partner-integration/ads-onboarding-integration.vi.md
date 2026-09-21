@@ -401,9 +401,9 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 }
 ```
 
-`preload` và `load` dùng chung cache/request theo placement. `show` lấy ad sẵn có; `loadAndShow` dùng cache, chờ request đang chạy hoặc tải khi chưa có. Không tự refill. `onSuccess` chạy sau khi đã nhận reward và ad đóng; `onFailed` xử lý các kết quả còn lại. Lấy kết quả từ callback SDK, không suy đoán bằng timer.
+`preload` và `load` dùng chung cache/request theo placement. `show` lấy ad sẵn có; `loadAndShow` dùng cache, chờ request đang chạy hoặc tải khi chưa có. Không tự refill, trừ khi bật `rewarded.buffer.after_close`. `onSuccess` chạy sau khi đã nhận reward và ad đóng; `onFailed` xử lý các kết quả còn lại. Lấy kết quả từ callback SDK, không suy đoán bằng timer.
 
-Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
+Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `rewarded.buffer.after_close` (hoặc `RewardAdManager.setBufferAfterClose(true)`) cho phép tải ad kế tiếp ngay sau khi ad đóng, chỉ với placement mà remote config có khai báo. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
 
 ### Tích hợp bổ sung
 

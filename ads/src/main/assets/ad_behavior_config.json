@@ -101,6 +101,9 @@
     },
     "cache": {
       "max_age_ms": 3600000
+    },
+    "buffer": {
+      "after_close": false
     }
   },
   "app_open": {

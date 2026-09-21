@@ -264,8 +264,9 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `interstitial_auto_buffer.preload_lead_ms` | `2000` | Preload/refill/load qua manager cần đủ tap_threshold và max(0, interval_ms - preload_lead_ms). Show vẫn phải đủ toàn bộ interval_ms. |
 | `interstitial_auto_buffer.rules` | `inter_all: 30000ms / 2 taps; inter_back: 30000ms / 1 tap` | Map theo placement: {enabled, independent_interval, tap_threshold, interval_ms}; đầy đủ placements/independentIntervalPlacements/tapThresholds/intervalMsByPlacement. rules={} xóa remote rules, không xóa cấu hình host hoặc mặc định SDK. |
 | `interstitial.cache.max_age_ms` | `3600000` | Chỉ giảm so với lifetime hiện tại. |
-| `rewarded.load.tier_timeout_ms` | `30000` | Giữ cache/request chung theo placement; không auto refill. |
-| `rewarded.cache.max_age_ms` | `3600000` | Một unused fill; không thêm buffer_count/refill policy. |
+| `rewarded.load.tier_timeout_ms` | `30000` | Giữ cache/request chung theo placement. |
+| `rewarded.cache.max_age_ms` | `3600000` | Một unused fill; không có buffer_count. |
+| `rewarded.buffer.after_close` | `false` | Mặc định tắt: show xong không tự tải ad mới. Bật thì sau khi ad đóng, manager tải tiếp một ad cho placement đó. Chỉ áp dụng placement mà remote config có khai báo; placement host tự truyền id vẫn do host tự tải. Có `placement_overrides.<placement>.rewarded.buffer.after_close`. Host bật bằng code: `RewardAdManager.setBufferAfterClose(true)`, nhưng remote/asset thắng. |
 | `app_open.load.timeout_ms` | `30000` | RESUME_FETCH_TIMEOUT_MS. |
 | `app_open.load.max_background_requests` | `3` | Số request trong cửa sổ retry. |
 | `app_open.load.background_retry_window_ms` | `120000` | Giới hạn cửa sổ retry. |

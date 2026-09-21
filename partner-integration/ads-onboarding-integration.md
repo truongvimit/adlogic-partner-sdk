@@ -401,9 +401,9 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 }
 ```
 
-`preload` and `load` share one cache/request per placement. `show` uses a ready ad; `loadAndShow` uses that cache, waits for the running request, or starts loading when neither exists. There is no automatic refill. `onSuccess` runs after a reward is earned and the ad closes; `onFailed` handles other outcomes. Use SDK callbacks for the result; do not infer it with a timer.
+`preload` and `load` share one cache/request per placement. `show` uses a ready ad; `loadAndShow` uses that cache, waits for the running request, or starts loading when neither exists. There is no automatic refill unless `rewarded.buffer.after_close` turns it on. `onSuccess` runs after a reward is earned and the ad closes; `onFailed` handles other outcomes. Use SDK callbacks for the result; do not infer it with a timer.
 
-Defaults: 30 seconds per load tier, one cached ad/request per placement, no automatic refill. An empty-cache `show` completes with `false`; a repeated `loadAndShow` while the same placement is waiting/showing calls `onFailed`. The lambda/Runnable result reflects reward received **before close**. For individual events, including a mediation reward reported after close, use [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); the completed result is not revised.
+Defaults: 30 seconds per load tier, one cached ad/request per placement, no automatic refill. `rewarded.buffer.after_close` (or `RewardAdManager.setBufferAfterClose(true)`) loads the next ad once this one closes, for placements the remote config declares. An empty-cache `show` completes with `false`; a repeated `loadAndShow` while the same placement is waiting/showing calls `onFailed`. The lambda/Runnable result reflects reward received **before close**. For individual events, including a mediation reward reported after close, use [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); the completed result is not revised.
 
 ### Additional integrations
 

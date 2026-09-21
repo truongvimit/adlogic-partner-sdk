@@ -401,9 +401,9 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 }
 ```
 
-`preload` और `load` हर placement के लिए एक ही cache/request इस्तेमाल करते हैं। `show` तैयार ad लेता है; `loadAndShow` cache इस्तेमाल करता है, चल रही request का इंतज़ार करता है, या दोनों न होने पर load शुरू करता है। Automatic refill नहीं होता। Reward मिलने और ad बंद होने के बाद `onSuccess` चलता है; बाकी परिणाम `onFailed` में आते हैं। परिणाम SDK callback से लें, timer से अनुमान न लगाएँ।
+`preload` और `load` हर placement के लिए एक ही cache/request इस्तेमाल करते हैं। `show` तैयार ad लेता है; `loadAndShow` cache इस्तेमाल करता है, चल रही request का इंतज़ार करता है, या दोनों न होने पर load शुरू करता है। `rewarded.buffer.after_close` चालू न हो तो automatic refill नहीं होता। Reward मिलने और ad बंद होने के बाद `onSuccess` चलता है; बाकी परिणाम `onFailed` में आते हैं। परिणाम SDK callback से लें, timer से अनुमान न लगाएँ।
 
-Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
+Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। `rewarded.buffer.after_close` (या `RewardAdManager.setBufferAfterClose(true)`) इस ad के बंद होते ही अगला ad load करता है, उन्हीं placements के लिए जिन्हें remote config घोषित करता है। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
 
 ### अतिरिक्त integrations
 

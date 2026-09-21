@@ -249,6 +249,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `interstitial.cache.max_age_ms` | `3600000` |
 | `rewarded.load.tier_timeout_ms` | `30000` |
 | `rewarded.cache.max_age_ms` | `3600000` |
+| `rewarded.buffer.after_close` | `false` |
 | `app_open.load.timeout_ms` | `30000` |
 | `app_open.load.max_background_requests` | `3` |
 | `app_open.load.background_retry_window_ms` | `120000` |
