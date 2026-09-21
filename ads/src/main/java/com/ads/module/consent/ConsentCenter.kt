@@ -4,11 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
-import android.os.Handler
-import android.os.Looper
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.ads.module.event.MmpTracking
+import com.ads.module.engine.launchAfter
 import com.google.android.ump.ConsentDebugSettings
 import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
@@ -23,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 
 /**
  * Coordinates UMP consent and the SDK's ad-request gate for this process. A failed UMP flow can
@@ -67,8 +67,7 @@ object ConsentCenter {
     @Volatile private var generation = 0L
     @Volatile private var pendingFlow: PendingFlow? = null
     @Volatile private var visibleForm: VisibleForm? = null
-    private val timeoutHandler = Handler(Looper.getMainLooper())
-    private var timeoutRunnable: Runnable? = null
+    private var timeoutJob: Job? = null
 
     private data class HostConsent(val allowed: Boolean, val personalized: Boolean)
 
@@ -220,18 +219,19 @@ object ConsentCenter {
 
     private fun armTimeout(flow: PendingFlow) {
         cancelTimeout()
-        val runnable = Runnable {
-            if (!ownsFlow(flow)) return@Runnable
+        val timeoutMs = com.ads.module.config.settings.AdBehavior.number(
+            "consent.network_timeout_ms", options.timeoutMs,
+        )
+        timeoutJob = launchAfter(timeoutMs) {
+            if (!ownsFlow(flow)) return@launchAfter
             Log.w(TAG, "consent update timed out after ${options.timeoutMs}ms")
             finish(flow, retryable = true, error = true)
         }
-        timeoutRunnable = runnable
-        timeoutHandler.postDelayed(runnable, com.ads.module.config.settings.AdBehavior.number("consent.network_timeout_ms", options.timeoutMs))
     }
 
     private fun cancelTimeout() {
-        timeoutRunnable?.let(timeoutHandler::removeCallbacks)
-        timeoutRunnable = null
+        timeoutJob?.cancel()
+        timeoutJob = null
     }
 
     private fun loadAndShowConsent(activity: Activity, flow: PendingFlow) {
