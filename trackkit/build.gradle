@@ -16,12 +16,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = '17'
-        // Java partners implement TrackSink directly; without this every default method
-        // becomes abstract on the Java side and the 'only id + onEvent are required' promise breaks.
-        freeCompilerArgs += ["-Xjvm-default=all"]
-    }
     testOptions {
         unitTests.returnDefaultValues = true
     }
@@ -51,5 +45,14 @@ afterEvaluate {
                 artifactId = "trackkit"
             }
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        // Java partners implement TrackSink directly; without this every default method
+        // becomes abstract on the Java side and the 'only id + onEvent are required' promise breaks.
+        jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY)
     }
 }

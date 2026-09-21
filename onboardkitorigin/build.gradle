@@ -25,10 +25,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = '17'
-        freeCompilerArgs += ["-Xskip-metadata-version-check"]
-    }
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -107,3 +103,10 @@ ext.settingsName = 'onboarding_config'
 ext.settingsPackage = 'io.onboardkit.remote'
 ext.settingsClass = 'BundledOnboarding'
 apply from: rootProject.file('gradle/settings-defaults.gradle')
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
+}

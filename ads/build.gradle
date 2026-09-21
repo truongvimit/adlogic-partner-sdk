@@ -41,11 +41,6 @@ android {
         checkReleaseBuilds false
     }
 
-    kotlinOptions {
-        jvmTarget = '1.8'
-        freeCompilerArgs += ["-Xskip-metadata-version-check"]
-    }
-
     namespace "com.ads.module"
 }
 
@@ -125,3 +120,10 @@ ext.settingsName = 'ad_behavior_config'
 ext.settingsPackage = 'com.ads.module.config.settings'
 ext.settingsClass = 'BundledAdBehavior'
 apply from: rootProject.file('gradle/settings-defaults.gradle')
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
+}
