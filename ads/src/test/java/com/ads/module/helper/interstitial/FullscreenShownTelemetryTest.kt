@@ -13,6 +13,7 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
 import com.ads.module.helper.Entitlement
@@ -168,7 +169,7 @@ class FullscreenShownTelemetryTest {
         assertEquals(0, count("ad_show"))
         assertEquals(1, count("ad_show_failed"))
         assertEquals(1, callback.failures.size)
-        assertTrue(Admob.isShowInBackgroundError(callback.failures.single()))
+        assertTrue(InterstitialEngine.isShowInBackgroundError(callback.failures.single()))
         assertSame(raw, wrapper.interstitialAd)
     }
 

@@ -31,8 +31,10 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.ads.module.R;
+import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.dialog.PrepareLoadingAdsDialog;
 import com.ads.module.engine.BannerEngine;
+import com.ads.module.engine.InterstitialEngine;
 import com.ads.module.engine.NativeEngine;
 import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.funtion.AdCallback;
@@ -87,87 +89,25 @@ import io.trackkit.PlacementRegistry;
 public class Admob {
     private static final String TAG = "ERainStudio";
 
-    /** Internal pre-show lifecycle rejection in the ERainStudio error domain; not a GMA error. */
-    public static final int ERROR_CODE_SHOW_IN_BACKGROUND = 9001;
+    public static final int ERROR_CODE_SHOW_IN_BACKGROUND = InterstitialEngine.ERROR_CODE_SHOW_IN_BACKGROUND;
 
-    /** Only this module's rejection before vendor show permits a cached fill to be reused. */
     public static boolean isShowInBackgroundError(AdError error) {
-        return error != null && error.getCode() == ERROR_CODE_SHOW_IN_BACKGROUND
-                && TAG.equals(error.getDomain());
+        return InterstitialEngine.INSTANCE.isShowInBackgroundError(error);
     }
     private static Admob instance;
-    /**
-     * Interstitial clicks allowed per ad unit per 24h before the unit stops loading and showing.
-     * {@code 0} — the default — means no cap.
-     *
-     * <p>Off by default on purpose: the cap shipped for a long time with its counter never
-     * incremented, so "no cap" is the behaviour every existing partner build actually has. Turning
-     * it on is an opt-in via {@link #setMaxClickAdsPerDay(int)}, typically driven by remote config.
-     */
-    private volatile int maxClickAds = (int) AdBehavior.defaultNumber("interstitial.frequency.max_clicks_per_24h");
-    private PrepareLoadingAdsDialog dialog;
     private boolean disableAdResumeWhenClickAds = AdBehavior.defaultBool("app_open.presentation.skip_after_ad_click");
-    /**
-     * Process-wide default for when an interstitial's {@code onNextAction} fires: {@code false}
-     * (the default) on dismissal, {@code true} as the ad goes to the screen so the caller can
-     * start its next screen underneath it.
-     * <p>
-     * Only a <em>default</em> — the interstitial show path takes the value as a parameter, so one
-     * presentation's choice can no longer be changed by another's while it is on screen. The
-     * splash paths, which have no per-show surface, read it directly.
-     */
-    private volatile boolean openActivityAfterShowInterAds = false;
     private Context context;
 
     public static final String BANNER_INLINE_SMALL_STYLE = "BANNER_INLINE_SMALL_STYLE";
     public static final String BANNER_INLINE_LARGE_STYLE = "BANNER_INLINE_LARGE_STYLE";
 
 
-    /**
-     * @param maxClickAds clicks per ad unit per 24h before interstitials from that unit stop being
-     *                    loaded and shown. {@code 0} or negative disables the cap. Safe to call at
-     *                    any time — remote config typically applies it once the fetch lands.
-     */
-    private int effectiveMaxClicks() { return (int) AdBehavior.number("interstitial.frequency.max_clicks_per_24h", maxClickAds); }
-
     public void setMaxClickAdsPerDay(int maxClickAds) {
-        if (this.maxClickAds == maxClickAds) {
-            return;
-        }
-        this.maxClickAds = maxClickAds;
-        Log.i(TAG, maxClickAds > 0
-                ? "Interstitial click cap enabled: " + maxClickAds + " clicks/ad unit/day"
-                : "Interstitial click cap disabled");
+        InterstitialEngine.INSTANCE.setMaxClickAdsPerDay(maxClickAds);
     }
 
-    /**
-     * Records one ad click against the daily cap.
-     *
-     * <p>Called from {@code ERainLogEventManager.logClickAdsEvent}, the module's single click choke
-     * point, so a newly added ad format cannot ship with its clicks uncounted. Counts are per ad
-     * unit, so clicks on a native only ever gate that native's own unit.
-     */
     public void recordAdClick(Context context, String adUnitId) {
-        if (effectiveMaxClicks() <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
-            return;
-        }
-        AdmobHelper.increaseNumClickAdsPerDay(context, adUnitId);
-    }
-
-    /**
-     * True when {@code adUnitId} has burned through its daily click allowance.
-     */
-    private boolean isClickCapReached(Context context, String adUnitId) {
-        if (effectiveMaxClicks() <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
-            return false;
-        }
-        int clicks = AdmobHelper.getNumClickAdsPerDay(context, adUnitId);
-        if (clicks < effectiveMaxClicks()) {
-            return false;
-        }
-        Log.w(TAG, "Interstitial suppressed: ad unit hit the daily click cap ("
-                + clicks + "/" + maxClickAds + "). Resets 24h after the window opened.");
-        return true;
+        InterstitialEngine.INSTANCE.recordAdClick(context, adUnitId);
     }
 
     public static Admob getInstance() {
@@ -235,12 +175,11 @@ public class Admob {
     }
 
     public void setOpenActivityAfterShowInterAds(boolean openActivityAfterShowInterAds) {
-        this.openActivityAfterShowInterAds = openActivityAfterShowInterAds;
+        InterstitialEngine.INSTANCE.setOpenNextUnderAdDefault(openActivityAfterShowInterAds);
     }
 
     public boolean isOpenActivityAfterShowInterAds() {
-        return "UNDER_AD".equals(AdBehavior.text("interstitial.presentation.next_screen_timing",
-                openActivityAfterShowInterAds ? "UNDER_AD" : "AFTER_AD"));
+        return InterstitialEngine.INSTANCE.getOpenNextUnderAdDefault();
     }
 
     @SuppressLint("VisibleForTests")
@@ -248,247 +187,8 @@ public class Admob {
         return new AdRequest.Builder().build();
     }
 
-    /**
-     * Requests an interstitial and returns it through {@code adCallback}.
-     */
-    public void getInterstitialAds(Context context, String id, AdCallback adCallback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context) || isClickCapReached(context, id)) {
-            adCallback.onInterstitialLoad(null);
-            return;
-        }
-
-        InterstitialAd.load(context, id, getAdRequest(),
-                new InterstitialAdLoadCallback() {
-                    @Override
-                    public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
-                        if (adCallback != null)
-                            adCallback.onInterstitialLoad(interstitialAd);
-
-                        interstitialAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
-                                    adValue,
-                                    interstitialAd.getAdUnitId(),
-                                    interstitialAd.getResponseInfo()
-                                            .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId());
-                        });
-                    }
-
-                    @Override
-                    public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                        Log.i(TAG, loadAdError.getMessage());
-                        if (adCallback != null)
-                            adCallback.onAdFailedToLoad(loadAdError);
-                    }
-
-                });
-
-    }
-
-
-    /**
-     * The click-counter show, with the next-action timing fixed for this one presentation.
-     *
-     * @param openNextUnderAd {@code true} fires {@code onNextAction} as the ad goes to the screen,
-     *                        so the caller's next screen starts underneath it; {@code false} fires
-     *                        it on dismissal instead. Taken as a parameter, not read from
-     *                        {@link #openActivityAfterShowInterAds}, because the field is read
-     *                        800 ms after the show begins — long enough for another placement to
-     *                        have changed what this presentation's callbacks mean.
-     */
-    private void showInterstitialAdByTimes(final Context context, InterstitialAd mInterstitialAd, final AdCallback callback, final boolean openNextUnderAd) {
-        // No setupAdmobData() call: the 24h rollover now runs inside every counter read and write,
-        // so it can no longer be skipped by the load-time gate that never called it.
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            callback.onNextAction();
-            return;
-        }
-        if (mInterstitialAd == null) {
-            if (callback != null) {
-                callback.onNextAction();
-            }
-            return;
-        }
-
-        mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
-
-            @Override
-            public void onAdDismissedFullScreenContent() {
-                super.onAdDismissedFullScreenContent();
-                AppOpenManager.getInstance().setInterstitialShowing(false);
-                SharePreferenceUtils.setLastImpressionInterstitialTime(context);
-                if (callback != null) {
-                    if (!openNextUnderAd) {
-                        callback.onNextAction();
-                    }
-                    callback.onAdClosed();
-                }
-                if (dialog != null) {
-                    dialog.dismiss();
-                }
-            }
-
-            @Override
-            public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
-                super.onAdFailedToShowFullScreenContent(adError);
-                // Before the null check, and for the same reason as notifyShowFailed: the show
-                // path raised both, so a failure has to lower them whether or not anyone is
-                // listening. Leaving the flag up suppressed every app-resume ad until the
-                // AppOpenManager watchdog cleared it 90 s later.
-                AppOpenManager.getInstance().setInterstitialShowing(false);
-                if (dialog != null) {
-                    dialog.dismiss();
-                }
-                if (callback != null) {
-                    callback.onAdFailedToShow(adError);
-                    if (!openNextUnderAd) {
-                        callback.onNextAction();
-                    }
-                }
-            }
-
-            @Override
-            public void onAdShowedFullScreenContent() {
-                super.onAdShowedFullScreenContent();
-                AppOpenManager.getInstance().setInterstitialShowing(true);
-                if (callback != null) {
-                    callback.onInterstitialDisplayed();
-                    if (!callback.usesActualInterstitialImpression()) callback.onAdImpression();
-                }
-            }
-
-            @Override
-            public void onAdImpression() {
-                if (callback != null && callback.usesActualInterstitialImpression()) {
-                    callback.onAdImpression();
-                }
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                    AppOpenManager.getInstance().disableAdResumeByClickAction();
-                if (callback != null) {
-                    callback.onAdClicked();
-                }
-                ERainLogEventManager.logClickAdsEvent(context, mInterstitialAd.getAdUnitId());
-            }
-        });
-
-        if (!isClickCapReached(context, mInterstitialAd.getAdUnitId())) {
-            showInterstitialAd(context, mInterstitialAd, callback, openNextUnderAd);
-            return;
-        }
-        if (callback != null) {
-            callback.onNextAction();
-        }
-    }
-
-
-    /**
-     * Shows the interstitial now, ignoring the click counter, with the next-action timing chosen
-     * for this one presentation instead of taken from
-     * {@link #setOpenActivityAfterShowInterAds(boolean)}.
-     */
     public void forceShowInterstitial(Context context, InterstitialAd mInterstitialAd, final AdCallback callback, boolean openNextUnderAd) {
-        showInterstitialAdByTimes(context, mInterstitialAd, callback, openNextUnderAd);
-    }
-
-    /**
-     * Shows the ad, or runs the next action when there is nothing to show.
-     */
-    private void showInterstitialAd(Context context, InterstitialAd mInterstitialAd, AdCallback callback, boolean openNextUnderAd) {
-        if (mInterstitialAd == null) {
-            if (dialog != null) {
-                dialog.dismiss();
-            }
-            if (callback != null) {
-                callback.onNextAction();
-            }
-            return;
-        }
-
-        // Every exit below reports something. This branch used to return in silence when the
-        // process was not resumed, leaving the caller waiting on a callback that never came.
-        if (!ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-            notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail: process is not resumed", openNextUnderAd);
-            return;
-        }
-
-        // show() needs an Activity, and the delayed block reads its lifecycle. Reported in this
-        // module's own error domain so the caller restores the fill it already took out of the
-        // cache; a generic code 0 lost it for good.
-        if (!(context instanceof AppCompatActivity)) {
-            notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND,
-                    "Show fail: context is not an AppCompatActivity", openNextUnderAd);
-            return;
-        }
-
-        // The loading dialog is cosmetic; failing to put it up must never cost an impression.
-        try {
-            if (dialog != null && dialog.isShowing())
-                dialog.dismiss();
-            dialog = new PrepareLoadingAdsDialog(context);
-            dialog.setCancelable(false);
-            if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
-            AppOpenManager.getInstance().setInterstitialShowing(true);
-        } catch (Exception e) {
-            dialog = null;
-            Log.w(TAG, "showInterstitialAd: loading dialog unavailable, showing the ad anyway", e);
-        }
-
-        // Committed to showing. Call sites use this to tell the two meanings of onNextAction
-        // apart, so it has to fire on every path that reaches show().
-        if (callback != null) {
-            callback.onInterstitialShow();
-        }
-
-        new Handler().postDelayed(() -> {
-            if (((AppCompatActivity) context).getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) {
-                if (callback != null && !callback.canShowInterstitial()) {
-                    if (dialog != null) dialog.dismiss();
-                    notifyShowFailed(callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd);
-                    return;
-                }
-                if (openNextUnderAd && callback != null) {
-                    // Same tick as show() below, deliberately: the next Activity has to be queued
-                    // before the ad's, or it is stacked on top of it instead of underneath.
-                    callback.onNextAction();
-                    new Handler().postDelayed(() -> {
-                        if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                            dialog.dismiss();
-                    }, 1500);
-                }
-                mInterstitialAd.setImmersiveMode(true);
-                mInterstitialAd.show((Activity) context);
-            } else {
-                if (dialog != null && dialog.isShowing() && !((Activity) context).isDestroyed())
-                    dialog.dismiss();
-                notifyShowFailed(callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail in background after show loading ad", openNextUnderAd);
-            }
-        }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
-    }
-
-    /**
-     * Reports a presentation that never reached the screen.
-     * <p>
-     * onNextAction is still fired when the next screen was not opened under the ad, because that
-     * is the signal legacy call sites advance their flow on.
-     */
-    private void notifyShowFailed(AdCallback callback, int code, String message, boolean openNextUnderAd) {
-        // Before the null check on purpose: the flag is raised when the loading dialog goes up, so
-        // a presentation that dies here must lower it whether or not anyone is listening. Leaving
-        // it raised suppressed every app-resume ad for the rest of the process.
-        AppOpenManager.getInstance().setInterstitialShowing(false);
-        if (callback == null) {
-            return;
-        }
-        Log.e(TAG, "showInterstitialAd: " + message);
-        callback.onAdFailedToShow(new AdError(code, message, TAG));
-        if (!openNextUnderAd) {
-            callback.onNextAction();
-        }
+        InterstitialEngine.INSTANCE.show(context, new ApInterstitialAd(mInterstitialAd), callback, openNextUnderAd);
     }
 
     public void loadBanner(final Activity mActivity, String id) {

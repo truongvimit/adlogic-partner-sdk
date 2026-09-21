@@ -17,6 +17,7 @@ import com.ads.module.config.ERainAdConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.settings.SettingsDocument
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.Entitlement
@@ -134,9 +135,9 @@ class InterstitialLoadAndShowTest {
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"UNDER_AD"}}}""")
         var implicitNext = 0
         val first = newVendor()
-        Admob.getInstance().forceShowInterstitial(activity, first, object : AdCallback() {
+        InterstitialEngine.show(activity, ApInterstitialAd(first), object : AdCallback() {
             override fun onNextAction() { implicitNext++ }
-        }, Admob.getInstance().isOpenActivityAfterShowInterAds)
+        }, InterstitialEngine.openNextUnderAdDefault)
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"AFTER_AD"}}}""")
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         assertEquals(1, implicitNext)
@@ -146,7 +147,7 @@ class InterstitialLoadAndShowTest {
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"UNDER_AD"}}}""")
         var explicitNext = 0
         val second = newVendor()
-        Admob.getInstance().forceShowInterstitial(activity, second, object : AdCallback() {
+        InterstitialEngine.show(activity, ApInterstitialAd(second), object : AdCallback() {
             override fun onNextAction() { explicitNext++ }
         }, false)
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)

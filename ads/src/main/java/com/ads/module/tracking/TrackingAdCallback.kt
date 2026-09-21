@@ -6,7 +6,6 @@ import com.ads.module.config.settings.AdBehavior
 import com.ads.module.funtion.AdCallback
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import io.trackkit.AdFormat
 import io.trackkit.PlacementRegistry
@@ -55,11 +54,6 @@ open class TrackingAdCallback(
     override fun onAdLoaded() {
         reportLoaded()
         delegate?.onAdLoaded()
-    }
-
-    override fun onInterstitialLoad(interstitialAd: InterstitialAd?) {
-        reportLoaded()
-        delegate?.onInterstitialLoad(interstitialAd)
     }
 
     override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {

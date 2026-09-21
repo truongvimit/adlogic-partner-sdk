@@ -24,6 +24,7 @@ import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.R;
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.engine.BannerEngine;
+import com.ads.module.engine.InterstitialEngine;
 import com.ads.module.engine.NativeEngine;
 import com.ads.module.event.AdjustInstallReferrer;
 import com.ads.module.event.ERainAdjust;
@@ -303,164 +304,32 @@ public class ERainAd {
 
     public ApInterstitialAd getInterstitialAds(Context context, String id, AdCallback adListener) {
         ApInterstitialAd apInterstitialAd = new ApInterstitialAd();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
+        InterstitialEngine.INSTANCE.load(context, id, new AdCallback() {
             @Override
-            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                apInterstitialAd.setInterstitialAd(interstitialAd);
+            public void onApInterstitialLoad(@Nullable ApInterstitialAd loaded) {
+                apInterstitialAd.setInterstitialAd(loaded == null ? null : loaded.getInterstitialAd());
                 adListener.onApInterstitialLoad(apInterstitialAd);
             }
 
             @Override
             public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
                 Log.d(TAG, "Admob onAdFailedToLoad");
                 adListener.onAdFailedToLoad(i);
             }
 
             @Override
             public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
                 Log.d(TAG, "Admob onAdFailedToShow");
                 adListener.onAdFailedToShow(adError);
             }
-
-        }));
+        });
         return apInterstitialAd;
     }
 
-    /**
-     * Shows the ad with the next-action timing chosen for this one presentation.
-     *
-     * @param openNextUnderAd {@code true} fires {@code onNextAction} on the same tick as
-     *                        {@code show()}, so the caller's next screen starts underneath the ad;
-     *                        {@code false} fires it on dismissal. Overrides
-     *                        {@link #setOpenActivityAfterShowInterAds(boolean)} for this call only.
-     */
     public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
                                       @NonNull final AdCallback callback, boolean shouldReloadAds,
                                       boolean openNextUnderAd) {
-        // Frequency belongs to placement-based InterstitialAdManager/AutoBuffer. Raw
-        // splash/OB callers must not inherit or advance that group's interval.
-        if (mInterstitialAd == null || !mInterstitialAd.isReady()) {
-            callback.onNextAction();
-            return;
-        }
-        // Captured while the ad is still held: the reload paths below used to dereference it after
-        // it could already have been cleared.
-        InterstitialAd shownAd = mInterstitialAd.getInterstitialAd();
-        final String adUnitId = shownAd == null ? "" : shownAd.getAdUnitId();
-        AdCallback adCallback = new AdCallback() {
-            @Override
-            public void onAdClosed() {
-                super.onAdClosed();
-                callback.onAdClosed();
-                if (shouldReloadAds) {
-                    Admob.getInstance().getInterstitialAds(context, adUnitId, instrument(adUnitId, AdFormat.INTERSTITIAL, new AdCallback() {
-                        @Override
-                        public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                            super.onInterstitialLoad(interstitialAd);
-                            mInterstitialAd.setInterstitialAd(interstitialAd);
-                            callback.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
-                        }
-
-                        @Override
-                        public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                            super.onAdFailedToLoad(i);
-                            mInterstitialAd.setInterstitialAd(null);
-                            callback.onAdFailedToLoad(i);
-                        }
-
-                        @Override
-                        public void onAdFailedToShow(@Nullable AdError adError) {
-                            super.onAdFailedToShow(adError);
-                            callback.onAdFailedToShow(adError);
-                        }
-
-                    }));
-                } else {
-                    mInterstitialAd.setInterstitialAd(null);
-                }
-            }
-
-            @Override
-            public void onNextAction() {
-                super.onNextAction();
-                callback.onNextAction();
-            }
-
-            @Override
-            public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
-                if (Admob.isShowInBackgroundError(adError)) {
-                    // GMA show was never invoked: retain the original wrapper for a later trigger.
-                    // The manager may restore it during this callback, so do not clear it afterward.
-                    callback.onAdFailedToShow(adError);
-                    return;
-                }
-                callback.onAdFailedToShow(adError);
-                if (shouldReloadAds) {
-                    Admob.getInstance().getInterstitialAds(context, adUnitId, instrument(adUnitId, AdFormat.INTERSTITIAL, new AdCallback() {
-                        @Override
-                        public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                            super.onInterstitialLoad(interstitialAd);
-                            mInterstitialAd.setInterstitialAd(interstitialAd);
-                            callback.onInterstitialLoad(mInterstitialAd.getInterstitialAd());
-                        }
-
-                        @Override
-                        public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                            super.onAdFailedToLoad(i);
-                            callback.onAdFailedToLoad(i);
-                        }
-
-                        @Override
-                        public void onAdFailedToShow(@Nullable AdError adError) {
-                            super.onAdFailedToShow(adError);
-                            callback.onAdFailedToShow(adError);
-                        }
-
-                    }));
-                } else {
-                    mInterstitialAd.setInterstitialAd(null);
-                }
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                callback.onAdClicked();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                callback.onAdImpression();
-            }
-
-            @Override
-            public void onInterstitialDisplayed() {
-                callback.onInterstitialDisplayed();
-            }
-
-            @Override
-            public boolean usesActualInterstitialImpression() {
-                return callback.usesActualInterstitialImpression();
-            }
-
-            @Override
-            public boolean canShowInterstitial() {
-                return callback.canShowInterstitial();
-            }
-
-            @Override
-            public void onInterstitialShow() {
-                super.onInterstitialShow();
-                callback.onInterstitialShow();
-            }
-        };
-        Admob.getInstance().forceShowInterstitial(context, shownAd,
-                instrument(adUnitId, AdFormat.INTERSTITIAL, adCallback), openNextUnderAd);
+        InterstitialEngine.INSTANCE.show(context, mInterstitialAd, callback, openNextUnderAd);
     }
 
     public void loadNativeAdResultCallback(final Context activity, String id,

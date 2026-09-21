@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.engine.NativeEngine
 import com.ads.module.funtion.AdCallback
 import com.google.android.gms.ads.AdLoader
@@ -51,7 +52,7 @@ class AdRequestHoldTest {
                         mockStatic(AppOpenAd::class.java).use { appOpen ->
                             mockConstruction(AdLoader.Builder::class.java).use { native ->
                                 val admob = Admob.getInstance()
-                                admob.getInterstitialAds(context, "inter", callback)
+                                InterstitialEngine.load(context, "inter", callback)
                                 admob.initRewardAds(context, "reward", callback)
                                 NativeEngine.load(context, "native", 0, callback)
                                 AppOpenManager.getInstance().fetchAd()

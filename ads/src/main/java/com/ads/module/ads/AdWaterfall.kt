@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.engine.NativeEngine
 import com.ads.module.engine.adMainScope
 import com.ads.module.funtion.AdCallback
@@ -151,7 +152,7 @@ object AdWaterfall {
         val tier = Tier(tierTimeoutMs) {
             loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback)
         }
-        ERainAd.getInstance().getInterstitialAds(context, tiers[index], object : AdCallback() {
+        InterstitialEngine.load(context, tiers[index], object : AdCallback() {
             override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                 if (!tier.settle()) return
                 // A null wrapper is how the module reports a purchased or capped user; that is

@@ -9,13 +9,12 @@ import android.os.SystemClock
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.ads.module.admob.Admob
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.dialog.PrepareLoadingAdsDialog
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
@@ -145,14 +144,13 @@ object InterstitialAdManager {
      */
     @JvmStatic
     var defaultNextAction: InterNextAction
-        get() = if (AdBehavior.text("interstitial.presentation.next_screen_timing", if (ERainAd.getInstance().isOpenActivityAfterShowInterAds) "UNDER_AD" else "AFTER_AD") == "UNDER_AD") {
+        get() = if (InterstitialEngine.openNextUnderAdDefault) {
             InterNextAction.UnderAd
         } else {
             InterNextAction.AfterDismiss
         }
         set(value) {
-            ERainAd.getInstance()
-                .setOpenActivityAfterShowInterAds(value == InterNextAction.UnderAd)
+            InterstitialEngine.openNextUnderAdDefault = value == InterNextAction.UnderAd
         }
 
     private val cache = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
@@ -630,7 +628,7 @@ object InterstitialAdManager {
         val completed = AtomicBoolean(false)
         val complete = { if (completed.compareAndSet(false, true)) runCatching { callback.onComplete() }; Unit }
         InterstitialFrequency.beginShow(placement)
-        ERainAd.getInstance().forceShowInterstitial(
+        InterstitialEngine.show(
             context,
             ad,
             object : AdCallback() {
@@ -693,7 +691,7 @@ object InterstitialAdManager {
                 override fun onAdFailedToShow(adError: AdError?) {
                     if (!terminal.compareAndSet(false, true)) return
                     InterstitialFrequency.endShow(placement, closed = false)
-                    val lifecycleRejected = Admob.isShowInBackgroundError(adError)
+                    val lifecycleRejected = InterstitialEngine.isShowInBackgroundError(adError)
                     if (lifecycleRejected && spent != null && spent.isFresh && spent.ad.isReady &&
                         releaseTokens[placement] === releaseToken &&
                         AdGate.skipReason(context, enabled = true, checkNetwork = false) == null
@@ -715,8 +713,6 @@ object InterstitialAdManager {
                     notifyListener(placement) { it.onAdClicked() }
                 }
             },
-            // Reloading is the caller's decision; the module doing it too double-requests
-            false,
             nextAction == InterNextAction.UnderAd,
         )
     }

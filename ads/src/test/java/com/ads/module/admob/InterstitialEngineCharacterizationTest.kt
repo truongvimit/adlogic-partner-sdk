@@ -14,6 +14,7 @@ import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.Entitlement
@@ -107,10 +108,10 @@ class InterstitialEngineCharacterizationTest {
 
     @Test
     fun `a held request gate answers getInterstitialAds with exactly one null load`() {
-        val loads = mutableListOf<InterstitialAd?>()
+        val loads = mutableListOf<ApInterstitialAd?>()
         AdGate.holdRequests().use {
-            Admob.getInstance().getInterstitialAds(activity, UNIT, object : AdCallback() {
-                override fun onInterstitialLoad(interstitialAd: InterstitialAd?) { loads += interstitialAd }
+            InterstitialEngine.load(activity, UNIT, object : AdCallback() {
+                override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) { loads += apInterstitialAd }
             })
         }
         mainLooper.idle()

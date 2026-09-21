@@ -2,7 +2,7 @@ package com.ads.module.event
 
 import android.content.Context
 import android.util.Log
-import com.ads.module.admob.Admob
+import com.ads.module.engine.InterstitialEngine
 import com.ads.module.funtion.AdType
 import com.ads.module.tracking.AdFormatRegistry
 import com.google.android.gms.ads.AdValue
@@ -73,7 +73,7 @@ object ERainLogEventManager {
             PlacementRegistry.placementOf(unitId), AdFormatRegistry.formatOf(unitId), unitId))
         // Being the sole click emitter makes this the only place the daily cap can count from
         // without a new ad format silently escaping it. No-op while the cap is off.
-        Admob.getInstance().recordAdClick(context, unitId)
+        InterstitialEngine.recordAdClick(context, unitId)
     }
 
     /**

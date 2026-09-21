@@ -4,7 +4,6 @@ import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 
 open class AdCallback {
@@ -25,8 +24,6 @@ open class AdCallback {
     open fun onAdFailedToShow(adError: AdError?) {}
 
     open fun onAdLoaded() {}
-
-    open fun onInterstitialLoad(interstitialAd: InterstitialAd?) {}
 
     open fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {}
 
