@@ -47,10 +47,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = '17' }
     buildFeatures { buildConfig = true }
     // Translations को app bundle में रखें ताकि language picker offline काम करे.
     bundle { language { enableSplit = false } }
+}
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
@@ -61,6 +63,55 @@ dependencies {
 ```
 
 अपनी app का `targetSdk` रखें (repo 36 इस्तेमाल करता है), और मौजूदा AndroidX/AppCompat setup तथा `MainActivity` इस्तेमाल करें। Gradle sync करें, फिर आगे बढ़ें। SDK में GMA/UMP, mediation, Trackkit और `minifyEnabled` release के लिए consumer rules पहले से हैं: ये dependencies, `MobileAds.initialize()` या example की `app/proguard-rules.pro` दोबारा न जोड़ें।
+
+**6.0.0 में अपग्रेड।** Ads engine अब Kotlin में है और कई पुराने entry points हटा दिए गए हैं। मौजूदा
+integration के लिए:
+
+1. **Toolchain.** App को Kotlin 2.1 या नए और `minSdk 24` (GMA 25.5.0) से compile करें। Kotlin 2.2
+   `kotlinOptions {}` स्वीकार नहीं करता; ऊपर वाला `kotlin { compilerOptions {} }` block इस्तेमाल करें।
+   नया mediation adapter set debug APK में लगभग 5.8 MB जोड़ता है।
+2. **पुराना splash API हटाया गया।** `ERainAd` के splash entry points (`loadSplashInterstitialAds`,
+   `onCheckShowSplashWhenFail`, `loadInterSplashPriority4SameTime`, `onShowSplashPriority4`,
+   `onCheckShowSplashPriority4WhenFail`) और `AppOpenManager` के (`getSplashAd`/`setSplashAd`,
+   `setSplashActivity`, `loadSplashOpenHighFloor`, `loadSplashOpenAndInter`, `loadAndShowSplashAds`,
+   `loadAdOpenSplash2id`, `onCheckShowAppOpenSplashWhenFail`, `showAppOpenSplash`,
+   `loadOpenAppAdSplash`, `loadOpenAppAdSplashFloor`, `onCheckShowSplashWhenFail`, `AD_UNIT_ID_TEST`)
+   हटा दिए गए हैं। Splash अब `ObSplashActivity` है (step 6); screen interstitial के लिए
+   `InterstitialAdManager.loadAndShow` इस्तेमाल करें। `AppOpenManager.fetchAd()`, `isAdAvailable()` और
+   `showAdIfAvailable()` अब कोई argument नहीं लेते।
+3. **`Admob` class हटाई गई।** `Admob.BANNER_INLINE_SMALL_STYLE`/`LARGE_STYLE` अब
+   `BannerType.Inline.SMALL_STYLE`/`LARGE_STYLE` हैं; `setDisableAdResumeWhenClickAds` अब `ERainAd` पर है।
+4. **`ERainAd` में आठ members बचे हैं:** `getInstance()`, `init`, `adConfig`, `shouldDisplayForUa` (अब
+   primitive `boolean` लौटाता है — Java callers को recompile करें), `setMaxClickAdsPerDay`,
+   `setIntervalInterstitialAd`, `setDisableAdResumeWhenClickAds` और `loadBanner(Activity, String, AdCallback)`।
+   बाकी banner, interstitial, native और reward methods हटा दिए गए हैं: `BannerAdHelper`,
+   `InterstitialAdManager`, `NativeAdHelper` और `RewardAdManager` इस्तेमाल करें।
+   `setOpenActivityAfterShowInterAds` अब `InterstitialAdManager.defaultNextAction` है, और `getOrganic()`
+   internal है। `ApAdBase`, `StatusAd` और `ApInterstitialPriorityAd` हटाए गए, `ApInterstitialAd.isNotReady()`
+   अब `!isReady` है, और `AdWaterfall` में सिर्फ `usableIds` और `DEFAULT_TIER_TIMEOUT_MS` public हैं।
+5. **`AdCallback` से 19 methods हटे हैं**, इसलिए इनमें से किसी का भी override compile नहीं होगा:
+   `onAdFailedToShowHigh`/`Medium`/`All`, `onAdLoadedHigh`/`All`, `onAdClickedHigh`/`Medium`/`All`,
+   `onAdSplashReady`, `onAdSplashHigh1Ready`/`2Ready`/`3Ready`, `onAdSplashNormalReady`,
+   `onAdHighFailedToLoad`, `onAdPriorityFailedToLoad`/`Show`, `onRewardAdLoaded(RewardedInterstitialAd)`,
+   `onInterstitialLoad(InterstitialAd)` (`onApInterstitialLoad` इस्तेमाल करें) और
+   `onUnifiedNativeAdLoaded(NativeAd)` (`onNativeAdLoaded` इस्तेमाल करें)। Kotlin overrides को घोषित
+   nullability से मेल खाना चाहिए: `onAdFailedToLoad(LoadAdError?)`, `onAdFailedToShow(AdError?)`,
+   `onApInterstitialLoad(ApInterstitialAd?)`, `onRewardAdLoaded(RewardedAd?)` और
+   `RewardCallback.onUserEarnedReward(RewardItem?)`।
+6. **Rewarded interstitial और reward का auto-refill हटाया गया।** दिखाया गया rewarded ad अब अपने आप
+   replace नहीं होता: अगर आप इस पर निर्भर थे तो `rewarded.buffer.after_close` चालू करें (global या per
+   placement) या `RewardAdManager.bufferAfterClose = true` set करें। `setCountClickToShowAds` हटाया गया है
+   पर pacing नहीं बदली — उस counter ने कभी कोई show नहीं रोका। जो ad unit दिन की click सीमा तक पहुँच
+   गई है, वह अब interstitial load खत्म करने के बजाय waterfall अगली unit को सौंप देती है।
+7. **`MobileAds.initialize()` अब `ERainAd.init()` के भीतर background thread पर चलता है,** इसलिए
+   `init()` लौटने के तुरंत बाद `MobileAds.getInitializationStatus()` अभी भी `null` हो सकता है: adapter
+   status बाद में पढ़ें, `init()` के तुरंत बाद synchronously नहीं।
+
+`AppOpenManager` एक Kotlin `object` है: `isShowingAd`, `isInterstitialShowing`, `isInitialized`,
+`currentActivity` और `resumeReturnSkipReason` read-only properties हैं, जबकि `isAdAvailable()` और `set…`
+members functions हैं। Mockito matchers (`eq()`, `any()`) `null` लौटाते हैं, जिसे non-null Kotlin
+parameter अस्वीकार करता है: इसी कारण `ERainAd.loadBanner` के parameters nullable रखे गए हैं, पर
+`ERainAd.init` जैसे members को stub करने के लिए null-safe matchers चाहिए (जैसे mockito-kotlin के)।
 
 ## 2. IDs और दो JSON files जोड़ें
 
@@ -403,7 +454,7 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 
 `preload` और `load` हर placement के लिए एक ही cache/request इस्तेमाल करते हैं। `show` तैयार ad लेता है; `loadAndShow` cache इस्तेमाल करता है, चल रही request का इंतज़ार करता है, या दोनों न होने पर load शुरू करता है। `rewarded.buffer.after_close` चालू न हो तो automatic refill नहीं होता। Reward मिलने और ad बंद होने के बाद `onSuccess` चलता है; बाकी परिणाम `onFailed` में आते हैं। परिणाम SDK callback से लें, timer से अनुमान न लगाएँ।
 
-Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। `rewarded.buffer.after_close` (या `RewardAdManager.setBufferAfterClose(true)`) इस ad के बंद होते ही अगला ad load करता है, उन्हीं placements के लिए जिन्हें remote config घोषित करता है। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
+Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। `rewarded.buffer.after_close` (या `RewardAdManager.bufferAfterClose = true`; Java: `setBufferAfterClose(true)`) इस ad के बंद होते ही अगला ad load करता है, उन्हीं placements के लिए जिन्हें remote config घोषित करता है। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
 
 ### अतिरिक्त integrations
 

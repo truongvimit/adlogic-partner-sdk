@@ -47,10 +47,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = '17' }
     buildFeatures { buildConfig = true }
     // Giữ các bản dịch trong app bundle để bộ chọn ngôn ngữ dùng được offline.
     bundle { language { enableSplit = false } }
+}
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 def sdkVersion = providers.gradleProperty('adlogicSdkVersion').get()
@@ -61,6 +63,55 @@ dependencies {
 ```
 
 Giữ `targetSdk` theo app (repo dùng 36), dùng AndroidX/AppCompat và `MainActivity` hiện có. Sync Gradle rồi tiếp tục. SDK đã gồm GMA/UMP, mediation, Trackkit và consumer rules cho release `minifyEnabled`: không thêm lại dependency, `MobileAds.initialize()` hay `app/proguard-rules.pro` của example.
+
+**Nâng lên 6.0.0.** Engine quảng cáo giờ là Kotlin và một loạt entry point cũ đã bị gỡ. Với tích hợp
+đang có:
+
+1. **Toolchain.** Biên dịch app bằng Kotlin 2.1 trở lên và `minSdk 24` (GMA 25.5.0). Kotlin 2.2 từ chối
+   `kotlinOptions {}`; dùng khối `kotlin { compilerOptions {} }` như trên. Bộ adapter mediation mới làm
+   APK debug nặng thêm khoảng 5.8 MB.
+2. **Gỡ API splash cũ.** Các entry point splash trên `ERainAd` (`loadSplashInterstitialAds`,
+   `onCheckShowSplashWhenFail`, `loadInterSplashPriority4SameTime`, `onShowSplashPriority4`,
+   `onCheckShowSplashPriority4WhenFail`) và trên `AppOpenManager` (`getSplashAd`/`setSplashAd`,
+   `setSplashActivity`, `loadSplashOpenHighFloor`, `loadSplashOpenAndInter`, `loadAndShowSplashAds`,
+   `loadAdOpenSplash2id`, `onCheckShowAppOpenSplashWhenFail`, `showAppOpenSplash`,
+   `loadOpenAppAdSplash`, `loadOpenAppAdSplashFloor`, `onCheckShowSplashWhenFail`, `AD_UNIT_ID_TEST`)
+   đã bị xoá. Splash là `ObSplashActivity` (bước 6); interstitial trên màn hình dùng
+   `InterstitialAdManager.loadAndShow`. `AppOpenManager.fetchAd()`, `isAdAvailable()` và
+   `showAdIfAvailable()` không còn nhận tham số.
+3. **Xoá class `Admob`.** `Admob.BANNER_INLINE_SMALL_STYLE`/`LARGE_STYLE` đổi thành
+   `BannerType.Inline.SMALL_STYLE`/`LARGE_STYLE`; `setDisableAdResumeWhenClickAds` chuyển sang `ERainAd`.
+4. **`ERainAd` còn tám member:** `getInstance()`, `init`, `adConfig`, `shouldDisplayForUa` (giờ trả
+   `boolean` nguyên thuỷ — code Java phải biên dịch lại), `setMaxClickAdsPerDay`,
+   `setIntervalInterstitialAd`, `setDisableAdResumeWhenClickAds` và `loadBanner(Activity, String, AdCallback)`.
+   Các method banner, interstitial, native, reward khác đều bị gỡ: dùng `BannerAdHelper`,
+   `InterstitialAdManager`, `NativeAdHelper` và `RewardAdManager`. `setOpenActivityAfterShowInterAds` đổi
+   thành `InterstitialAdManager.defaultNextAction`, còn `getOrganic()` thành nội bộ. `ApAdBase`,
+   `StatusAd` và `ApInterstitialPriorityAd` bị xoá, `ApInterstitialAd.isNotReady()` đổi thành `!isReady`,
+   và `AdWaterfall` chỉ còn `usableIds` và `DEFAULT_TIER_TIMEOUT_MS` là public.
+5. **`AdCallback` mất 19 method**, nên override bất kỳ method nào trong số đó sẽ lỗi biên dịch:
+   `onAdFailedToShowHigh`/`Medium`/`All`, `onAdLoadedHigh`/`All`, `onAdClickedHigh`/`Medium`/`All`,
+   `onAdSplashReady`, `onAdSplashHigh1Ready`/`2Ready`/`3Ready`, `onAdSplashNormalReady`,
+   `onAdHighFailedToLoad`, `onAdPriorityFailedToLoad`/`Show`, `onRewardAdLoaded(RewardedInterstitialAd)`,
+   `onInterstitialLoad(InterstitialAd)` (dùng `onApInterstitialLoad`) và
+   `onUnifiedNativeAdLoaded(NativeAd)` (dùng `onNativeAdLoaded`). Override bằng Kotlin phải khớp
+   nullability đã khai báo: `onAdFailedToLoad(LoadAdError?)`, `onAdFailedToShow(AdError?)`,
+   `onApInterstitialLoad(ApInterstitialAd?)`, `onRewardAdLoaded(RewardedAd?)` và
+   `RewardCallback.onUserEarnedReward(RewardItem?)`.
+6. **Gỡ rewarded interstitial và auto-refill của reward.** Ad reward đã hiện không còn tự được thay:
+   nếu app dựa vào điều đó, bật `rewarded.buffer.after_close` (toàn cục hoặc theo placement) hoặc đặt
+   `RewardAdManager.bufferAfterClose = true`. `setCountClickToShowAds` bị gỡ mà nhịp hiện quảng cáo không
+   đổi — bộ đếm đó chưa từng chặn lần show nào. Một ad unit đã chạm trần click trong ngày giờ nhường
+   waterfall cho unit kế tiếp thay vì kết thúc lượt load interstitial.
+7. **`MobileAds.initialize()` chạy trên thread nền** bên trong `ERainAd.init()`, nên
+   `MobileAds.getInitializationStatus()` có thể vẫn là `null` ngay sau khi `init()` trả về: đọc trạng thái
+   adapter sau đó, không đọc đồng bộ ngay sau `init()`.
+
+`AppOpenManager` là một `object` Kotlin: `isShowingAd`, `isInterstitialShowing`, `isInitialized`,
+`currentActivity` và `resumeReturnSkipReason` là property chỉ đọc, còn `isAdAvailable()` và các member
+`set…` là hàm. Matcher của Mockito (`eq()`, `any()`) trả `null`, thứ mà tham số Kotlin non-null từ chối:
+`ERainAd.loadBanner` giữ tham số nullable vì lý do đó, còn stub các member như `ERainAd.init` cần matcher
+an toàn với null (ví dụ của mockito-kotlin).
 
 ## 2. Thêm ID và hai file JSON
 
@@ -403,7 +454,7 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 
 `preload` và `load` dùng chung cache/request theo placement. `show` lấy ad sẵn có; `loadAndShow` dùng cache, chờ request đang chạy hoặc tải khi chưa có. Không tự refill, trừ khi bật `rewarded.buffer.after_close`. `onSuccess` chạy sau khi đã nhận reward và ad đóng; `onFailed` xử lý các kết quả còn lại. Lấy kết quả từ callback SDK, không suy đoán bằng timer.
 
-Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `rewarded.buffer.after_close` (hoặc `RewardAdManager.setBufferAfterClose(true)`) cho phép tải ad kế tiếp ngay sau khi ad đóng, chỉ với placement mà remote config có khai báo. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
+Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `rewarded.buffer.after_close` (hoặc `RewardAdManager.bufferAfterClose = true`; Java: `setBufferAfterClose(true)`) cho phép tải ad kế tiếp ngay sau khi ad đóng, chỉ với placement mà remote config có khai báo. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
 
 ### Tích hợp bổ sung
 
