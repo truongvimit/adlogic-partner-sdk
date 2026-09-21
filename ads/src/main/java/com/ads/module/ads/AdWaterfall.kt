@@ -1,16 +1,19 @@
 package com.ads.module.ads
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.engine.adMainScope
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardedAd
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Requests one ad unit at a time, highest floor first, and stops at the first fill.
@@ -227,6 +230,7 @@ object AdWaterfall {
         try {
             ERainAd.getInstance().initRewardAds(context, tiers[index], tierCallback)
         } catch (error: RuntimeException) {
+            if (error is CancellationException) throw error
             // A dispatch failure must settle the same tier as a vendor load failure; otherwise its
             // already-armed timeout can start another request after the caller has finished.
             tierCallback.onAdFailedToLoad(null)
@@ -250,23 +254,19 @@ object AdWaterfall {
      */
     private class Tier(timeoutMs: Long, advance: () -> Unit) {
         private val settled = AtomicBoolean(false)
-        private val onTimeout = Runnable {
+        private val timeout: Job = adMainScope.launch {
+            delay(timeoutMs)
             if (settled.compareAndSet(false, true)) {
                 Log.w(TAG, "tier timed out after " + timeoutMs + "ms")
                 advance()
             }
         }
 
-        init {
-            MAIN.postDelayed(onTimeout, timeoutMs)
-        }
-
+        // settled, not the cancel, is what rejects a late vendor callback: cancel only stops the timer.
         fun settle(): Boolean {
             if (!settled.compareAndSet(false, true)) return false
-            MAIN.removeCallbacks(onTimeout)
+            timeout.cancel()
             return true
         }
     }
-
-    private val MAIN = Handler(Looper.getMainLooper())
 }
