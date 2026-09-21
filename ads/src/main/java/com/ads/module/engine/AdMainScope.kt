@@ -9,10 +9,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
-// Main, never Default or IO: its delay() is a main-Handler post, the only clock the tests can advance.
+// Main, never Default or IO: its delay() is a main-Handler post, the one clock tests can advance.
 internal val adMainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-// Handler.postDelayed on adMainScope: the timer starts at the call, and 0 ms still waits one loop turn.
+// A delayed Handler post on adMainScope: the timer starts now; 0 ms still waits one loop turn.
 internal fun launchAfter(delayMs: Long, block: () -> Unit): Job =
     adMainScope.launch(start = CoroutineStart.UNDISPATCHED) {
         if (delayMs > 0) delay(delayMs) else yield()
