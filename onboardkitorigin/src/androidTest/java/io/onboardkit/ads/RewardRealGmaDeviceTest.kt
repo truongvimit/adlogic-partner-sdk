@@ -177,8 +177,8 @@ class RewardRealGmaDeviceTest {
         val ads = CopyOnWriteArrayList<RewardedAd>()
         val errors = CopyOnWriteArrayList<String>()
         val finished = CountDownLatch(1)
-        override fun onRewardAdLoaded(ad: RewardedAd) {
-            ads += ad
+        override fun onRewardAdLoaded(ad: RewardedAd?) {
+            ad?.let { ads += it }
             finished.countDown()
         }
         override fun onAdFailedToLoad(error: LoadAdError?) {
