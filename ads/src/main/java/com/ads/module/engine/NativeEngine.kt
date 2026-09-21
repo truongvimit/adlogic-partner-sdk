@@ -81,7 +81,7 @@ internal object NativeEngine {
 
         bindAsset { (adView.headlineView as TextView).text = nativeAd.headline }
         bindAsset {
-            val view = checkNotNull(adView.bodyView)
+            val view = adView.bodyView!!
             if (nativeAd.body == null) {
                 view.visibility = View.INVISIBLE
             } else {
@@ -90,7 +90,7 @@ internal object NativeEngine {
             }
         }
         bindAsset {
-            val view = checkNotNull(adView.callToActionView)
+            val view = adView.callToActionView!!
             if (nativeAd.callToAction == null) {
                 view.visibility = View.INVISIBLE
             } else {
@@ -99,7 +99,7 @@ internal object NativeEngine {
             }
         }
         bindAsset {
-            val view = checkNotNull(adView.iconView)
+            val view = adView.iconView!!
             val icon = nativeAd.icon
             if (icon == null) {
                 view.visibility = View.GONE
@@ -109,7 +109,7 @@ internal object NativeEngine {
             }
         }
         bindAsset {
-            val view = checkNotNull(adView.priceView)
+            val view = adView.priceView!!
             if (nativeAd.price == null) {
                 view.visibility = View.INVISIBLE
             } else {
@@ -118,7 +118,7 @@ internal object NativeEngine {
             }
         }
         bindAsset {
-            val view = checkNotNull(adView.starRatingView)
+            val view = adView.starRatingView!!
             val rating = nativeAd.starRating
             if (rating == null) {
                 view.visibility = View.INVISIBLE
@@ -128,7 +128,7 @@ internal object NativeEngine {
             }
         }
         bindAsset {
-            val view = checkNotNull(adView.advertiserView)
+            val view = adView.advertiserView!!
             if (nativeAd.advertiser == null) {
                 view.visibility = View.INVISIBLE
             } else {
@@ -139,7 +139,7 @@ internal object NativeEngine {
         adView.setNativeAd(nativeAd)
     }
 
-    // A missing or mistyped view only drops that asset: the ad still ships, without it.
+    // A missing or mistyped view only drops that asset (NPE/CCE, printed): the ad still ships.
     private inline fun bindAsset(bind: () -> Unit) {
         try {
             bind()
