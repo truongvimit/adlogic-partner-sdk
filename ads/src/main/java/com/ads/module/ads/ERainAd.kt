@@ -16,6 +16,7 @@ import com.ads.module.config.ERainAdConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.engine.BannerEngine
 import com.ads.module.engine.InterstitialEngine
+import com.ads.module.engine.adMainScope
 import com.ads.module.event.AdjustInstallReferrer
 import com.ads.module.event.ERainAdjust
 import com.ads.module.event.MmpTracking
@@ -27,6 +28,10 @@ import com.ads.module.util.SharePreferenceUtils
 import com.facebook.FacebookSdk
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
+import com.google.android.gms.ads.initialization.InitializationStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** The module's entry point: [init] once from `Application.onCreate`, then use the helpers. */
 object ERainAd {
@@ -111,22 +116,27 @@ object ERainAd {
             val processName = Application.getProcessName()
             if (app.packageName != processName) WebView.setDataDirectorySuffix(processName)
         }
-        MobileAds.initialize(app) { initializationStatus ->
-            for ((adapterClass, status) in initializationStatus.adapterStatusMap) {
-                if (status == null) continue
-                Log.d(
-                    TAG_GMA,
-                    String.format(
-                        "Adapter name: %s, Description: %s, Latency: %d",
-                        adapterClass, status.description, status.latency,
-                    ),
-                )
-            }
-        }
         appContext = app.applicationContext
         MobileAds.setRequestConfiguration(
             RequestConfiguration.Builder().setTestDeviceIds(testDevices).build(),
         )
+        // initialize() blocks on adapter start-up; it must never run on the main thread.
+        CoroutineScope(Dispatchers.IO).launch {
+            MobileAds.initialize(app) { status -> adMainScope.launch { logAdapters(status) } }
+        }
+    }
+
+    private fun logAdapters(initializationStatus: InitializationStatus) {
+        for ((adapterClass, status) in initializationStatus.adapterStatusMap) {
+            if (status == null) continue
+            Log.d(
+                TAG_GMA,
+                String.format(
+                    "Adapter name: %s, Description: %s, Latency: %d",
+                    adapterClass, status.description, status.latency,
+                ),
+            )
+        }
     }
 
     private fun setupAdjust(adConfig: ERainAdConfig, buildDebug: Boolean?) {
