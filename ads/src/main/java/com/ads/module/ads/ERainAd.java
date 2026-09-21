@@ -21,12 +21,15 @@ import com.ads.module.admob.Admob;
 import com.ads.module.admob.AppOpenManager;
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.R;
 import com.ads.module.config.ERainAdConfig;
+import com.ads.module.engine.BannerEngine;
 import com.ads.module.event.AdjustInstallReferrer;
 import com.ads.module.event.ERainAdjust;
 import com.ads.module.event.MmpTracking;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.RewardCallback;
+import com.ads.module.helper.banner.BannerType;
 import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.AppUtil;
 import com.ads.module.util.SharePreferenceUtils;
@@ -241,7 +244,8 @@ public class ERainAd {
     }
 
     public void loadBanner(Activity mActivity, String id, AdCallback adCallback) {
-        Admob.getInstance().loadBanner(mActivity, id, instrument(id, AdFormat.BANNER, adCallback));
+        BannerEngine.INSTANCE.load(mActivity, id, mActivity.findViewById(R.id.banner_container),
+                mActivity.findViewById(R.id.shimmer_container_banner), BannerType.Normal.INSTANCE, adCallback);
     }
 
     public void loadCollapsibleBanner(Activity activity, String id, String gravity, AdCallback adCallback) {

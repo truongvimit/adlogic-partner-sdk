@@ -8,7 +8,7 @@ import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
-import com.ads.module.ads.ERainAd
+import com.ads.module.engine.BannerEngine
 import com.ads.module.admob.Admob
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -280,48 +280,14 @@ class BannerAdHelper(
                 listeners.forEach { it.onAdImpression() }
             }
         }
-        val root = rootView
-        val erain = ERainAd.getInstance()
-        when (val type = effectiveType) {
-            is BannerType.Normal ->
-                if (root == null) erain.loadBanner(activity, adUnitId, callback)
-                else erain.loadBannerFragment(activity, adUnitId, root, callback)
-
-            is BannerType.LargeAnchored ->
-                if (root == null) erain.loadLargeAnchoredBanner(activity, adUnitId, callback)
-                else erain.loadLargeAnchoredBannerFragment(activity, adUnitId, root, callback)
-
-            is BannerType.Inline ->
-                if (root == null) erain.loadInlineBanner(activity, adUnitId, type.style, callback)
-                else erain.loadBannerInlineFragment(activity, adUnitId, root, type.style, callback)
-
-            is BannerType.InlineMaxHeight ->
-                if (root == null) {
-                    erain.loadInlineBanner(activity, adUnitId, type.maxHeightDp, callback)
-                } else {
-                    erain.loadBannerInlineFragment(
-                        activity, adUnitId, root, type.maxHeightDp, callback,
-                    )
-                }
-
-            is BannerType.Fixed ->
-                if (root == null) {
-                    erain.loadFixedSizeBanner(activity, adUnitId, type.size.adSize, callback)
-                } else {
-                    erain.loadFixedSizeBannerFragment(
-                        activity, adUnitId, root, type.size.adSize, callback,
-                    )
-                }
-
-            is BannerType.Collapsible ->
-                if (root == null) {
-                    erain.loadCollapsibleBanner(activity, adUnitId, type.gravity, callback)
-                } else {
-                    erain.loadCollapsibleBannerFragment(
-                        activity, adUnitId, root, type.gravity, callback,
-                    )
-                }
-        }
+        BannerEngine.load(
+            activity,
+            adUnitId,
+            checkNotNull(bannerContainer()) { "banner_container is missing from the host layout" },
+            checkNotNull(shimmerContainer()) { "shimmer_container_banner is missing from the layout" },
+            effectiveType,
+            callback,
+        )
         // The loaders raise the shimmer on every request, and it is drawn over the banner.
         // With an ad still on screen that reads as ad → shimmer → ad, so undo it in the same
         // main-loop message: the live banner stays until the new one renders over it

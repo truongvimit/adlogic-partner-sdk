@@ -48,6 +48,9 @@ object AdGate {
     @JvmStatic
     fun areRequestsHeld(): Boolean = requestHolds.get() > 0
 
+    internal fun engineBlocked(context: Context): Boolean = areRequestsHeld() ||
+        !com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") ||
+        isPurchased(context)
 
     @JvmStatic
     @JvmOverloads

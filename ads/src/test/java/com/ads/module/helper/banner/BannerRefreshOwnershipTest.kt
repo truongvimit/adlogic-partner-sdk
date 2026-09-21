@@ -21,6 +21,7 @@ import com.facebook.shimmer.ShimmerFrameLayout
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.BannerEngine
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import com.ads.module.helper.interstitial.Int02Activity
@@ -249,7 +250,11 @@ class BannerRefreshOwnershipTest {
 
     @Test fun `legacy inline loader also expands the visible skeleton`() {
         BannerAdHelper.resetPlaceholder(activity, host)
-        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 100, object : AdCallback() {})
+        BannerEngine.load(
+            activity, "banner", host.findViewById(R.id.banner_container),
+            host.findViewById(R.id.shimmer_container_banner), BannerType.InlineMaxHeight(100),
+            object : AdCallback() {},
+        )
         assertEquals(1, requests.size)
         assertPlaceholderHeight(100)
     }
@@ -306,13 +311,21 @@ class BannerRefreshOwnershipTest {
 
     @Test fun `legacy inline layout fills an explicit fifty six dp cap`() {
         host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_inline_banner_control, host, false))
-        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 56, object : AdCallback() {})
+        BannerEngine.load(
+            activity, "banner", host.findViewById(R.id.banner_container),
+            host.findViewById(R.id.shimmer_container_banner), BannerType.InlineMaxHeight(56),
+            object : AdCallback() {},
+        )
         assertPlaceholderHeight(56)
     }
 
     @Test fun `legacy medium layout fills an explicit one hundred dp cap`() {
         host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_banner_size_medium_control, host, false))
-        Admob.getInstance().loadInlineBannerFragment(activity, "banner", host, 100, object : AdCallback() {})
+        BannerEngine.load(
+            activity, "banner", host.findViewById(R.id.banner_container),
+            host.findViewById(R.id.shimmer_container_banner), BannerType.InlineMaxHeight(100),
+            object : AdCallback() {},
+        )
         assertPlaceholderHeight(100)
     }
 

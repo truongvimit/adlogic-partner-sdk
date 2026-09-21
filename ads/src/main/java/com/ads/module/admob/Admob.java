@@ -32,6 +32,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.ads.module.R;
 import com.ads.module.dialog.PrepareLoadingAdsDialog;
+import com.ads.module.engine.BannerEngine;
 import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.AdType;
@@ -39,6 +40,7 @@ import com.ads.module.funtion.AdmobHelper;
 import com.ads.module.funtion.RewardCallback;
 import com.ads.module.helper.AdGate;
 import com.ads.module.helper.AdSkipReason;
+import com.ads.module.helper.banner.BannerType;
 import com.ads.module.tracking.AdTracking;
 import com.ads.module.tracking.TrackingAdCallback;
 import com.ads.module.util.SharePreferenceUtils;
@@ -118,7 +120,6 @@ public class Admob {
 
     public static final String BANNER_INLINE_SMALL_STYLE = "BANNER_INLINE_SMALL_STYLE";
     public static final String BANNER_INLINE_LARGE_STYLE = "BANNER_INLINE_LARGE_STYLE";
-        private final int MAX_SMALL_INLINE_BANNER_HEIGHT = 50;
 
 
     /**
@@ -181,6 +182,16 @@ public class Admob {
 
     public void setDisableAdResumeWhenClickAds(boolean disableAdResumeWhenClickAds) {
         this.disableAdResumeWhenClickAds = disableAdResumeWhenClickAds;
+    }
+
+    public boolean isDisableAdResumeWhenClickAds() {
+        return disableAdResumeWhenClickAds;
+    }
+
+    /** Application context captured by {@link #init}; null until then. */
+    @Nullable
+    public Context getAppContext() {
+        return context;
     }
 
     public void init(Context context, List<String> testDeviceList) {
@@ -479,372 +490,72 @@ public class Admob {
         }
     }
 
-    /**
-     * Loads a banner into the activity's {@code banner_container}.
-     */
     public void loadBanner(final Activity mActivity, String id) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, null, false, BANNER_INLINE_LARGE_STYLE);
+        loadBanner(mActivity, id, null);
     }
 
-    /**
-     * Loads a banner into the activity's {@code banner_container}.
-     */
     public void loadBanner(final Activity mActivity, String id, AdCallback callback) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, false, BANNER_INLINE_LARGE_STYLE);
+        BannerEngine.INSTANCE.load(mActivity, id, mActivity.findViewById(R.id.banner_container),
+                mActivity.findViewById(R.id.shimmer_container_banner), BannerType.Normal.INSTANCE, callback);
     }
 
-
-    /**
-     * Loads an inline adaptive banner into the activity's {@code banner_container}.
-     *
-     * @param inlineStyle one of the {@code BANNER_INLINE_*} styles
-     */
     public void loadInlineBanner(final Activity activity, String id, String inlineStyle) {
-        final FrameLayout adContainer = activity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = activity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(activity, id, adContainer, containerShimmer, null, true, inlineStyle);
+        loadInlineBanner(activity, id, inlineStyle, null);
     }
 
-    /**
-     * Loads an inline adaptive banner into the activity's {@code banner_container}.
-     *
-     * @param inlineStyle one of the {@code BANNER_INLINE_*} styles
-     */
     public void loadInlineBanner(final Activity activity, String id, String inlineStyle, final AdCallback callback) {
-        final FrameLayout adContainer = activity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = activity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(activity, id, adContainer, containerShimmer, callback, true, inlineStyle);
+        BannerEngine.INSTANCE.load(activity, id, activity.findViewById(R.id.banner_container),
+                activity.findViewById(R.id.shimmer_container_banner), new BannerType.Inline(inlineStyle), callback);
     }
 
-    /**
-     * Loads a collapsible banner into the activity's {@code banner_container}.
-     *
-     * @param gravity edge the banner collapses towards
-     */
     public void loadCollapsibleBanner(final Activity mActivity, String id, String gravity, final AdCallback callback) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadCollapsibleBanner(mActivity, id, gravity, adContainer, containerShimmer, callback);
+        BannerEngine.INSTANCE.load(mActivity, id, mActivity.findViewById(R.id.banner_container),
+                mActivity.findViewById(R.id.shimmer_container_banner), new BannerType.Collapsible(gravity), callback);
     }
 
-    /**
-     * Loads a banner into the {@code banner_container} of a fragment's {@code rootView}.
-     */
     public void loadBannerFragment(final Activity mActivity, String id, final View rootView, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, false, BANNER_INLINE_LARGE_STYLE);
+        BannerEngine.INSTANCE.load(mActivity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), BannerType.Normal.INSTANCE, callback);
     }
 
-    /**
-     * Loads an inline adaptive banner into the {@code banner_container} of a fragment's {@code rootView}.
-     *
-     * @param inlineStyle one of the {@code BANNER_INLINE_*} styles
-     */
     public void loadInlineBannerFragment(final Activity activity, String id, final View rootView, String inlineStyle, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadBanner(activity, id, adContainer, containerShimmer, callback, true, inlineStyle);
+        BannerEngine.INSTANCE.load(activity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), new BannerType.Inline(inlineStyle), callback);
     }
 
-    /**
-     * Loads a collapsible banner into the {@code banner_container} of a fragment's {@code rootView}.
-     *
-     * @param gravity edge the banner collapses towards
-     */
     public void loadCollapsibleBannerFragment(final Activity mActivity, String id, final View rootView, String gravity, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadCollapsibleBanner(mActivity, id, gravity, adContainer, containerShimmer, callback);
+        BannerEngine.INSTANCE.load(mActivity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), new BannerType.Collapsible(gravity), callback);
     }
 
-    /**
-     * Loads a large anchored adaptive banner (up to 20% of screen height, 50–150dp) into the
-     * activity's {@code banner_container}.
-     */
-    @SuppressLint("VisibleForTests")
     public void loadLargeAnchoredBanner(final Activity mActivity, String id, final AdCallback callback) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        AdSize adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(mActivity, getAdWidthDp(mActivity));
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, adSize, adSize.getHeight());
+        BannerEngine.INSTANCE.load(mActivity, id, mActivity.findViewById(R.id.banner_container),
+                mActivity.findViewById(R.id.shimmer_container_banner), BannerType.LargeAnchored.INSTANCE, callback);
     }
 
-    /**
-     * Loads a large anchored adaptive banner into the {@code banner_container} of a fragment's
-     * {@code rootView}.
-     */
-    @SuppressLint("VisibleForTests")
     public void loadLargeAnchoredBannerFragment(final Activity mActivity, String id, final View rootView, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        AdSize adSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(mActivity, getAdWidthDp(mActivity));
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, adSize, adSize.getHeight());
+        BannerEngine.INSTANCE.load(mActivity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), BannerType.LargeAnchored.INSTANCE, callback);
     }
 
-    /**
-     * Loads an inline adaptive banner that may grow up to {@code maxHeightDp} (at least 32) into
-     * the activity's {@code banner_container}.
-     */
-    @SuppressLint("VisibleForTests")
     public void loadInlineBanner(final Activity activity, String id, int maxHeightDp, final AdCallback callback) {
-        final FrameLayout adContainer = activity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = activity.findViewById(R.id.shimmer_container_banner);
-        AdSize adSize = AdSize.getInlineAdaptiveBannerAdSize(getAdWidthDp(activity), maxHeightDp);
-        // Inline sizes report height 0; reserve the cap so the shimmer keeps its slot
-        loadBanner(activity, id, adContainer, containerShimmer, callback, adSize, maxHeightDp);
+        BannerEngine.INSTANCE.load(activity, id, activity.findViewById(R.id.banner_container),
+                activity.findViewById(R.id.shimmer_container_banner), new BannerType.InlineMaxHeight(maxHeightDp), callback);
     }
 
-    /**
-     * Loads an inline adaptive banner that may grow up to {@code maxHeightDp} (at least 32) into
-     * the {@code banner_container} of a fragment's {@code rootView}.
-     */
-    @SuppressLint("VisibleForTests")
     public void loadInlineBannerFragment(final Activity activity, String id, final View rootView, int maxHeightDp, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        AdSize adSize = AdSize.getInlineAdaptiveBannerAdSize(getAdWidthDp(activity), maxHeightDp);
-        // Inline sizes report height 0; reserve the cap so the shimmer keeps its slot
-        loadBanner(activity, id, adContainer, containerShimmer, callback, adSize, maxHeightDp);
+        BannerEngine.INSTANCE.load(activity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), new BannerType.InlineMaxHeight(maxHeightDp), callback);
     }
 
-    /**
-     * Loads a fixed-size banner ({@link AdSize#BANNER}, {@link AdSize#LARGE_BANNER}, …) into the
-     * activity's {@code banner_container}.
-     */
     public void loadFixedSizeBanner(final Activity mActivity, String id, AdSize adSize, final AdCallback callback) {
-        final FrameLayout adContainer = mActivity.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, adSize, adSize.getHeight());
+        BannerEngine.INSTANCE.loadFixedSize(mActivity, id, mActivity.findViewById(R.id.banner_container),
+                mActivity.findViewById(R.id.shimmer_container_banner), adSize, callback);
     }
 
-    /**
-     * Loads a fixed-size banner into the {@code banner_container} of a fragment's {@code rootView}.
-     */
     public void loadFixedSizeBannerFragment(final Activity mActivity, String id, final View rootView, AdSize adSize, final AdCallback callback) {
-        final FrameLayout adContainer = rootView.findViewById(R.id.banner_container);
-        final ShimmerFrameLayout containerShimmer = rootView.findViewById(R.id.shimmer_container_banner);
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, adSize, adSize.getHeight());
-    }
-
-    private void loadBanner(final Activity mActivity, String id,
-                            final FrameLayout adContainer, final ShimmerFrameLayout containerShimmer,
-                            final AdCallback callback, Boolean useInlineAdaptive, String inlineStyle) {
-        AdSize adSize = getAdSize(mActivity, useInlineAdaptive, inlineStyle);
-        // Inline sizes report height 0; the SMALL cap doubles as the reserved shimmer height
-        int shimmerHeightDp = useInlineAdaptive && BANNER_INLINE_SMALL_STYLE.equalsIgnoreCase(inlineStyle)
-                ? MAX_SMALL_INLINE_BANNER_HEIGHT
-                : adSize.getHeight();
-        loadBanner(mActivity, id, adContainer, containerShimmer, callback, adSize, shimmerHeightDp);
-    }
-
-    private void loadBanner(final Activity mActivity, String id,
-                            final FrameLayout adContainer, final ShimmerFrameLayout containerShimmer,
-                            final AdCallback callback, AdSize adSize, int shimmerHeightDp) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
-            // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
-            containerShimmer.stopShimmer();
-            containerShimmer.setVisibility(View.GONE);
-            adContainer.setVisibility(View.GONE);
-            if (callback != null) {
-                callback.onAdFailedToLoad(null);
-            }
-            return;
-        }
-
-        containerShimmer.setVisibility(View.VISIBLE);
-        containerShimmer.startShimmer();
-        try {
-            AdView adView = new AdView(mActivity);
-            adView.setAdUnitId(id);
-            // Adaptive sizes span the window anyway; fixed sizes narrower than it must not hug the start edge
-            adContainer.addView(adView, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.CENTER_HORIZONTAL));
-            // Uncapped inline adaptive reports 0 until a creative arrives. Keep the
-            // configured placeholder layout in that case instead of collapsing loading.
-            if (shimmerHeightDp > 0) {
-                ViewGroup.LayoutParams shimmerParams = containerShimmer.getLayoutParams();
-                shimmerParams.height = (int) (shimmerHeightDp * containerShimmer.getResources().getDisplayMetrics().density + 0.5f);
-                containerShimmer.setLayoutParams(shimmerParams);
-            }
-            adView.setAdSize(adSize);
-            adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            adView.setAdListener(new AdListener() {
-                @Override
-                public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                    containerShimmer.stopShimmer();
-                    adContainer.setVisibility(View.GONE);
-                    containerShimmer.setVisibility(View.GONE);
-
-                    if (callback != null) {
-                        callback.onAdFailedToLoad(loadAdError);
-                    }
-                }
-
-
-                @Override
-                public void onAdLoaded() {
-                    Log.d(TAG, "Banner adapter class name: " + adView.getResponseInfo().getMediationAdapterClassName());
-                    containerShimmer.stopShimmer();
-                    containerShimmer.setVisibility(View.GONE);
-                    adContainer.setVisibility(View.VISIBLE);
-                    if (adView != null) {
-                        adView.setOnPaidEventListener(adValue -> {
-                            Log.d(TAG, "OnPaidEvent banner:" + adValue.getValueMicros());
-
-                            ERainLogEventManager.logPaidAdImpression(context,
-                                    adValue,
-                                    adView.getAdUnitId(),
-                                    adView.getResponseInfo()
-                                            .getMediationAdapterClassName(), AdType.BANNER);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
-                        });
-                    }
-
-                    if (callback != null) {
-                        callback.onAdLoaded();
-                    }
-                }
-
-                @Override
-                public void onAdClicked() {
-                    super.onAdClicked();
-                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                        AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    if (callback != null) {
-                        callback.onAdClicked();
-                        Log.d(TAG, "onAdClicked");
-                    }
-                    ERainLogEventManager.logClickAdsEvent(context, id);
-                }
-
-                @Override
-                public void onAdImpression() {
-                    super.onAdImpression();
-                    if (callback != null) {
-                        callback.onAdImpression();
-                    }
-                }
-            });
-
-            adView.loadAd(getAdRequest());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void loadCollapsibleBanner(final Activity mActivity, String id, String gravity, final FrameLayout adContainer,
-                                       final ShimmerFrameLayout containerShimmer, final AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(mActivity)) {
-            // Returning silently strands BannerAdHelper in Loading; end like a no-fill instead
-            containerShimmer.stopShimmer();
-            containerShimmer.setVisibility(View.GONE);
-            adContainer.setVisibility(View.GONE);
-            if (callback != null) {
-                callback.onAdFailedToLoad(null);
-            }
-            return;
-        }
-
-        containerShimmer.setVisibility(View.VISIBLE);
-        containerShimmer.startShimmer();
-        try {
-            AdView adView = new AdView(mActivity);
-            adView.setAdUnitId(id);
-            adContainer.addView(adView);
-            AdSize adSize = getAdSize(mActivity, false, "");
-            ViewGroup.LayoutParams shimmerParams = containerShimmer.getLayoutParams();
-            shimmerParams.height = (int) (adSize.getHeight() * containerShimmer.getResources().getDisplayMetrics().density + 0.5f);
-            containerShimmer.setLayoutParams(shimmerParams);
-            adView.setAdSize(adSize);
-            adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            adView.loadAd(getAdRequestForCollapsibleBanner(gravity));
-            adView.setAdListener(new AdListener() {
-
-                @Override
-                public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                    super.onAdFailedToLoad(loadAdError);
-                    containerShimmer.stopShimmer();
-                    adContainer.setVisibility(View.GONE);
-                    containerShimmer.setVisibility(View.GONE);
-                    if (callback != null) {
-                        callback.onAdFailedToLoad(loadAdError);
-                    }
-                }
-
-                @Override
-                public void onAdLoaded() {
-                    Log.d(TAG, "Banner adapter class name: " + adView.getResponseInfo().getMediationAdapterClassName());
-                    containerShimmer.stopShimmer();
-                    containerShimmer.setVisibility(View.GONE);
-                    adContainer.setVisibility(View.VISIBLE);
-                    adView.setOnPaidEventListener(adValue -> {
-                        Log.d(TAG, "OnPaidEvent banner:" + adValue.getValueMicros());
-
-                        ERainLogEventManager.logPaidAdImpression(context,
-                                adValue,
-                                adView.getAdUnitId(),
-                                adView.getResponseInfo()
-                                        .getMediationAdapterClassName(), AdType.BANNER);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
-                    });
-                    if (callback != null) {
-                        callback.onAdLoaded();
-                    }
-                }
-
-                @Override
-                public void onAdClicked() {
-                    super.onAdClicked();
-                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                        AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    ERainLogEventManager.logClickAdsEvent(context, id);
-                    if (callback != null) {
-                        callback.onAdClicked();
-                    }
-                }
-            });
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private int getAdWidthDp(Activity mActivity) {
-        // Width in dp of the window, not the display, so a multi-window ad is sized to fit.
-        Display display = mActivity.getWindowManager().getDefaultDisplay();
-        DisplayMetrics outMetrics = new DisplayMetrics();
-        display.getMetrics(outMetrics);
-        return (int) (outMetrics.widthPixels / outMetrics.density);
-    }
-
-    @SuppressLint("VisibleForTests")
-    private AdSize getAdSize(Activity mActivity, Boolean useInlineAdaptive, String inlineStyle) {
-        int adWidth = getAdWidthDp(mActivity);
-
-        if (useInlineAdaptive) {
-            if (BANNER_INLINE_LARGE_STYLE.equalsIgnoreCase(inlineStyle)) {
-                return AdSize.getCurrentOrientationInlineAdaptiveBannerAdSize(mActivity, adWidth);
-            } else {
-                return AdSize.getInlineAdaptiveBannerAdSize(adWidth, MAX_SMALL_INLINE_BANNER_HEIGHT);
-            }
-        }
-        return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(mActivity, adWidth);
-
-    }
-
-    @SuppressLint("VisibleForTests")
-    private AdRequest getAdRequestForCollapsibleBanner(String gravity) {
-        AdRequest.Builder builder = new AdRequest.Builder();
-        Bundle admobExtras = new Bundle();
-        admobExtras.putString("collapsible", gravity);
-        builder.addNetworkExtrasBundle(AdMobAdapter.class, admobExtras);
-        return builder.build();
+        BannerEngine.INSTANCE.loadFixedSize(mActivity, id, rootView.findViewById(R.id.banner_container),
+                rootView.findViewById(R.id.shimmer_container_banner), adSize, callback);
     }
 
     public void loadNativeAd(Context context, String id, final AdCallback callback) {
