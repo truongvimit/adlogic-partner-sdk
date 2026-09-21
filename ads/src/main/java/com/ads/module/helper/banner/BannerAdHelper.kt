@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
 import com.ads.module.engine.BannerEngine
+import com.ads.module.engine.launchAfter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdsHelper
@@ -20,6 +21,7 @@ import io.trackkit.AdFormat
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,7 +64,10 @@ class BannerAdHelper(
     // When the next interval reload is due; ON_STOP kills the timer, this survives it
     private var nextReloadAtMs = 0L
 
-    private val resumeReloadRunnable = Runnable {
+    private var resumeReloadJob: Job? = null
+    private var autoReloadJob: Job? = null
+
+    private fun reloadAfterResume() {
         // enableAutoReload placements may also recover from a Cancel (e.g. offline) here
         val active = isActiveState() || config.enableAutoReload
         if (resumeCount.get() > 1 && canRequestAds() && canReloadAd() && active) {
@@ -71,16 +76,20 @@ class BannerAdHelper(
                 requestAds(BannerAdParam.Reload)
             } else {
                 // Interval not elapsed: resume the paused timer for the remaining time
-                mainHandler.removeCallbacks(autoReloadRunnable)
-                mainHandler.postDelayed(autoReloadRunnable, nextReloadAtMs - now)
+                scheduleAutoReload(nextReloadAtMs - now)
             }
         }
     }
 
-    private val autoReloadRunnable = Runnable {
+    private fun reloadOnInterval() {
         if (isResumed() && canReloadAd() && _bannerAdState.value !is AdBannerState.Loading) {
             requestAds(BannerAdParam.Reload)
         }
+    }
+
+    private fun scheduleAutoReload(delayMs: Long) {
+        autoReloadJob?.cancel()
+        autoReloadJob = launchAfter(delayMs) { reloadOnInterval() }
     }
 
     init {
@@ -154,7 +163,7 @@ class BannerAdHelper(
 
     override fun cancel() {
         flagActive.compareAndSet(true, false)
-        mainHandler.removeCallbacks(autoReloadRunnable)
+        autoReloadJob?.cancel()
         detachAdView()
         setState(AdBannerState.Cancel)
         bannerContainer()?.visibility = View.GONE
@@ -169,15 +178,15 @@ class BannerAdHelper(
                     return
                 }
                 resumeCount.incrementAndGet()
-                mainHandler.removeCallbacks(resumeReloadRunnable)
-                mainHandler.postDelayed(resumeReloadRunnable, config.timeDebounceResume)
+                resumeReloadJob?.cancel()
+                resumeReloadJob = launchAfter(config.timeDebounceResume) { reloadAfterResume() }
             }
 
-            Lifecycle.Event.ON_STOP -> mainHandler.removeCallbacks(autoReloadRunnable)
+            Lifecycle.Event.ON_STOP -> autoReloadJob?.cancel()
 
             Lifecycle.Event.ON_DESTROY -> {
-                mainHandler.removeCallbacks(resumeReloadRunnable)
-                mainHandler.removeCallbacks(autoReloadRunnable)
+                resumeReloadJob?.cancel()
+                autoReloadJob?.cancel()
                 detachAdView()
                 listeners.clear()
             }
@@ -296,8 +305,7 @@ class BannerAdHelper(
     private fun armAutoReload() {
         if (!config.enableAutoReload || !canReloadAd()) return
         nextReloadAtMs = System.currentTimeMillis() + config.autoReloadTime
-        mainHandler.removeCallbacks(autoReloadRunnable)
-        mainHandler.postDelayed(autoReloadRunnable, config.autoReloadTime)
+        scheduleAutoReload(config.autoReloadTime)
     }
 
     private fun setState(state: AdBannerState) {
