@@ -2,7 +2,6 @@ package com.ads.module.helper
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.engine.InterstitialEngine
@@ -52,7 +51,6 @@ class AdRequestHoldTest {
                     mockStatic(RewardedInterstitialAd::class.java).use { rewardInter ->
                         mockStatic(AppOpenAd::class.java).use { appOpen ->
                             mockConstruction(AdLoader.Builder::class.java).use { native ->
-                                val admob = Admob.getInstance()
                                 InterstitialEngine.load(context, "inter", callback)
                                 RewardEngine.load(context, "reward", callback)
                                 NativeEngine.load(context, "native", 0, callback)

@@ -14,7 +14,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.admob.Admob
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.funtion.AdCallback
 import com.facebook.shimmer.ShimmerFrameLayout
@@ -58,7 +57,7 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowNetworkInfo
 import java.util.concurrent.TimeUnit
 
-/** Real public helper/ERain/Admob; only BaseAdView's external dispatch/storage is replaced. */
+/** Real public helper/engine; only BaseAdView's external dispatch/storage is replaced. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -296,7 +295,7 @@ class BannerRefreshOwnershipTest {
     }
 
     @Test fun `small inline skeleton reserves its fifty dp cap`() {
-        val helper = createHelper(canReload = false, type = BannerType.Inline(Admob.BANNER_INLINE_SMALL_STYLE))
+        val helper = createHelper(canReload = false, type = BannerType.Inline(BannerType.Inline.SMALL_STYLE))
         assertPlaceholderHeight(50)
         helper.requestAds(BannerAdParam.Request)
         assertPlaceholderHeight(50)

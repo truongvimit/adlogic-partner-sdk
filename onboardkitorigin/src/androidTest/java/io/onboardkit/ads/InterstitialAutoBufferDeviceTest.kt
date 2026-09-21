@@ -16,6 +16,8 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
+import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
@@ -62,7 +64,7 @@ class InterstitialAutoBufferDeviceTest {
             AppOpenManager.getInstance().disableAppResume()
             ERainAd.getInstance().setIntervalInterstitialAd(5)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
             AdRemoteConfig.initializeFromJson("""{
                 "inter_all":{"id":"$UNIT","isEnable":true},
                 "inter_back":{"id":"$UNIT","isEnable":true}

@@ -16,6 +16,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
+import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
@@ -72,7 +73,7 @@ class InterstitialLoadAndShowRealGmaDeviceTest {
             })
             ERainAd.getInstance().setIntervalInterstitialAd(0)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
         }

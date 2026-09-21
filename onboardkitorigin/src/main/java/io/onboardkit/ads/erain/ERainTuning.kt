@@ -1,6 +1,6 @@
 package io.onboardkit.ads.erain
 
-import com.ads.module.admob.Admob
+import com.ads.module.ads.ERainAd
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterstitialAdManager
 
@@ -26,7 +26,7 @@ object ERainTuning {
         // overrides `InterstitialAdManager.defaultNextAction` after this call.
         //
         // UnderAd is the right default because it is the module's only safe prewarm point.
-        // `Admob.showInterstitialAd` shows a loading dialog, waits 800 ms, re-checks that the host
+        // `InterstitialEngine.show` shows a loading dialog, waits 800 ms, re-checks that the host
         // Activity is still RESUMED, and only then calls `onNextAction` and `show()`. Starting the
         // next screen any earlier — on `onInterstitialShow`, say — pauses the host before that
         // re-check, and the module drops the ad with "show fail in background after show loading
@@ -41,6 +41,6 @@ object ERainTuning {
 
         // A tap on an ad takes the user out of the app; the return is the network handing them
         // back, not a new session, so app-resume must not fire on it.
-        Admob.getInstance().setDisableAdResumeWhenClickAds(true)
+        ERainAd.getInstance().setDisableAdResumeWhenClickAds(true)
     }
 }

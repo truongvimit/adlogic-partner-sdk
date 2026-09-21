@@ -3,8 +3,6 @@ package com.ads.module.helper.interstitial
 /**
  * When [InterShowCallback.onComplete] fires — which is to say, when the next screen starts.
  *
- * The module has always had this switch as a process-wide boolean
- * (`Admob.setOpenActivityAfterShowInterAds`); what it never had was a way to choose per show.
  * It is a real per-placement choice: a destination that must not exist behind the ad — one that
  * opens the camera, starts audio, or plays its own video — has to wait for [AfterDismiss], while
  * every ordinary screen is better off inflated and painted before the user first sees it.

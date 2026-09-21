@@ -8,7 +8,7 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
-import com.ads.module.admob.Admob
+import com.ads.module.ads.ERainAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.AdType
 import com.ads.module.helper.AdGate
@@ -57,7 +57,7 @@ internal object BannerEngine {
             is BannerType.Inline -> {
                 val adSize = inlineAdSize(activity, type.style)
                 val shimmerHeightDp =
-                    if (Admob.BANNER_INLINE_SMALL_STYLE.equals(type.style, ignoreCase = true)) {
+                    if (BannerType.Inline.SMALL_STYLE.equals(type.style, ignoreCase = true)) {
                         MAX_SMALL_INLINE_BANNER_HEIGHT
                     } else {
                         adSize.height
@@ -82,18 +82,6 @@ internal object BannerEngine {
             is BannerType.Collapsible ->
                 loadCollapsible(activity, adUnitId, type.gravity, container, shimmer, tracked)
         }
-    }
-
-    fun loadFixedSize(
-        activity: Activity,
-        adUnitId: String,
-        container: FrameLayout,
-        shimmer: ShimmerFrameLayout,
-        adSize: AdSize,
-        callback: AdCallback?,
-    ) {
-        val tracked = TrackingAdCallback.attach(adUnitId, AdFormat.BANNER, callback)
-        loadSized(activity, adUnitId, container, shimmer, adSize, adSize.height, tracked)
     }
 
     private fun loadSized(
@@ -140,7 +128,7 @@ internal object BannerEngine {
                     super.onAdClicked()
                     callback.onAdClicked()
                     Log.d(TAG, "onAdClicked")
-                    onGmaClick(Admob.getInstance().appContext, adUnitId)
+                    onGmaClick(ERainAd.appContext, adUnitId)
                 }
 
                 override fun onAdImpression() {
@@ -149,7 +137,7 @@ internal object BannerEngine {
                 }
             }
 
-            adView.loadAd(Admob.getInstance().adRequest)
+            adView.loadAd(AdRequest.Builder().build())
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -192,7 +180,7 @@ internal object BannerEngine {
 
                 override fun onAdClicked() {
                     super.onAdClicked()
-                    onGmaClick(Admob.getInstance().appContext, adUnitId)
+                    onGmaClick(ERainAd.appContext, adUnitId)
                     callback.onAdClicked()
                 }
             }
@@ -230,7 +218,7 @@ internal object BannerEngine {
         adView.onPaidEventListener = OnPaidEventListener { adValue ->
             Log.d(TAG, "OnPaidEvent banner:" + adValue.valueMicros)
             onGmaPaid(
-                Admob.getInstance().appContext, adValue, adView.adUnitId,
+                ERainAd.appContext, adValue, adView.adUnitId,
                 adView.responseInfo!!.mediationAdapterClassName, AdType.BANNER,
             )
         }
@@ -246,7 +234,7 @@ internal object BannerEngine {
     @SuppressLint("VisibleForTests")
     private fun inlineAdSize(activity: Activity, style: String): AdSize {
         val adWidth = adWidthDp(activity)
-        return if (Admob.BANNER_INLINE_LARGE_STYLE.equals(style, ignoreCase = true)) {
+        return if (BannerType.Inline.LARGE_STYLE.equals(style, ignoreCase = true)) {
             AdSize.getCurrentOrientationInlineAdaptiveBannerAdSize(activity, adWidth)
         } else {
             AdSize.getInlineAdaptiveBannerAdSize(adWidth, MAX_SMALL_INLINE_BANNER_HEIGHT)

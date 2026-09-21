@@ -59,7 +59,7 @@ import org.robolectric.shadows.ShadowSystem
 import org.robolectric.shadows.ShadowSystemClock
 import java.util.concurrent.TimeUnit
 
-/** Real manager -> waterfall -> ERain -> Admob; only the external ad SDK dispatch is replaced. */
+/** Real manager -> waterfall -> engine; only the external ad SDK dispatch is replaced. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -96,7 +96,7 @@ class InterstitialLifecycleRestoreTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()

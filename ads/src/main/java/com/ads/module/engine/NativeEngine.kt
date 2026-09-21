@@ -6,7 +6,6 @@ import android.widget.ImageView
 import android.widget.RatingBar
 import android.widget.TextView
 import com.ads.module.R
-import com.ads.module.admob.Admob
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.AdType
@@ -14,6 +13,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.tracking.TrackingAdCallback
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
+import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.nativead.NativeAd
@@ -66,7 +66,7 @@ internal object NativeEngine {
             })
             .withNativeAdOptions(adOptions)
             .build()
-        adLoader.loadAd(Admob.getInstance().adRequest)
+        adLoader.loadAd(AdRequest.Builder().build())
     }
 
     fun populate(nativeAd: NativeAd, adView: NativeAdView) {

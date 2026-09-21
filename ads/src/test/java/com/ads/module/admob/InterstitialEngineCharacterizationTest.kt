@@ -19,6 +19,8 @@ import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
+import com.ads.module.helper.interstitial.InterNextAction
+import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.Int02Activity
 import com.ads.module.helper.interstitial.Int02Application
 import com.ads.module.helper.interstitial.Int02FacebookShadow
@@ -81,7 +83,7 @@ class InterstitialEngineCharacterizationTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -124,7 +126,7 @@ class InterstitialEngineCharacterizationTest {
     @Test
     fun `the bundled pre-show delay dispatches the vendor show at exactly 800 ms`() {
         val raw = newVendor()
-        ERainAd.getInstance().forceShowInterstitial(activity, ApInterstitialAd(raw), AdCallback(), false, false)
+        InterstitialEngine.show(activity, ApInterstitialAd(raw), AdCallback(), false)
 
         mainLooper.idleFor(799, TimeUnit.MILLISECONDS)
         assertEquals("vendor show dispatched before the 800 ms pre-show delay", 0, raw.hosts.size)
@@ -136,7 +138,7 @@ class InterstitialEngineCharacterizationTest {
     fun `the pre-show delay is read from interstitial presentation pre_show_delay_ms`() {
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"pre_show_delay_ms":300}}}""")
         val raw = newVendor()
-        ERainAd.getInstance().forceShowInterstitial(activity, ApInterstitialAd(raw), AdCallback(), false, false)
+        InterstitialEngine.show(activity, ApInterstitialAd(raw), AdCallback(), false)
 
         mainLooper.idleFor(299, TimeUnit.MILLISECONDS)
         assertEquals("vendor show dispatched before the configured 300 ms", 0, raw.hosts.size)
@@ -150,9 +152,9 @@ class InterstitialEngineCharacterizationTest {
         var next = 0
         var nextAtShow = -1
         raw.beforeShow = { nextAtShow = next }
-        ERainAd.getInstance().forceShowInterstitial(activity, ApInterstitialAd(raw), object : AdCallback() {
+        InterstitialEngine.show(activity, ApInterstitialAd(raw), object : AdCallback() {
             override fun onNextAction() { next++ }
-        }, false, true)
+        }, true)
 
         mainLooper.idleFor(799, TimeUnit.MILLISECONDS)
         assertEquals("under-ad onNextAction ran before the pre-show tick", 0, next)
@@ -166,9 +168,9 @@ class InterstitialEngineCharacterizationTest {
         val raw = newVendor()
         val wrapper = ApInterstitialAd(raw)
         val failures = mutableListOf<AdError?>()
-        ERainAd.getInstance().forceShowInterstitial(activity, wrapper, object : AdCallback() {
+        InterstitialEngine.show(activity, wrapper, object : AdCallback() {
             override fun onAdFailedToShow(adError: AdError?) { failures += adError }
-        }, false, false)
+        }, false)
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         assertEquals(listOf(activity), raw.hosts)
 
@@ -183,14 +185,14 @@ class InterstitialEngineCharacterizationTest {
         val raw = newVendor()
         val wrapper = ApInterstitialAd(raw)
         val failures = mutableListOf<AdError?>()
-        ERainAd.getInstance().forceShowInterstitial(
+        InterstitialEngine.show(
             ApplicationProvider.getApplicationContext<Application>(), wrapper, object : AdCallback() {
                 override fun onAdFailedToShow(adError: AdError?) { failures += adError }
-            }, false, false,
+            }, false,
         )
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
 
-        assertEquals(listOf(Admob.ERROR_CODE_SHOW_IN_BACKGROUND), failures.map { it?.code })
+        assertEquals(listOf(InterstitialEngine.ERROR_CODE_SHOW_IN_BACKGROUND), failures.map { it?.code })
         assertEquals(0, raw.hosts.size)
         assertSame("a 9001 rejection must keep the wrapper's fill", raw, wrapper.interstitialAd)
     }

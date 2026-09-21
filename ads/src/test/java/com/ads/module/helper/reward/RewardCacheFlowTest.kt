@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
@@ -47,7 +46,7 @@ import org.robolectric.annotation.Implements
 import org.robolectric.annotation.LooperMode
 import java.util.concurrent.TimeUnit
 
-/** Exercise manager -> waterfall -> ERain -> Admob; replace only the external GMA objects. */
+/** Exercise manager -> waterfall -> engine; replace only the external GMA objects. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],

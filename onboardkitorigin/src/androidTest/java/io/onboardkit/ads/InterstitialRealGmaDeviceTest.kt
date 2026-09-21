@@ -101,7 +101,7 @@ class InterstitialRealGmaDeviceTest {
             })
             ERainAd.getInstance().setIntervalInterstitialAd(0)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
             Tracker.install(app)

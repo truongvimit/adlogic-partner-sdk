@@ -9,14 +9,17 @@ import android.os.Looper
 import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
+import com.ads.module.R
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.BannerEngine
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import com.ads.module.helper.banner.BannerAdHelper
+import com.ads.module.helper.banner.BannerType
 import com.ads.module.helper.banner.BannerVendorViewShadow
 import com.ads.module.helper.interstitial.Int02Activity
 import com.ads.module.helper.interstitial.Int02Application
@@ -116,7 +119,7 @@ class BannerEngineCharacterizationTest {
     fun `gate decline on the plain banner loader ends with one null load failure and no request`() {
         installPremium(true)
         val callback = mock(AdCallback::class.java)
-        Admob.getInstance().loadBannerFragment(activity, UNIT, host, callback)
+        loadPlain(callback)
         assertTrue("gate must stop the plain banner before any AdView request", requests.isEmpty())
         verify(callback).onAdFailedToLoad(null)
         verifyNoMoreInteractions(callback)
@@ -126,7 +129,7 @@ class BannerEngineCharacterizationTest {
     fun `gate decline on the collapsible banner loader ends with one null load failure and no request`() {
         installPremium(true)
         val callback = mock(AdCallback::class.java)
-        Admob.getInstance().loadCollapsibleBannerFragment(activity, UNIT, host, "bottom", callback)
+        loadCollapsible(callback)
         assertTrue("gate must stop the collapsible banner before any AdView request", requests.isEmpty())
         verify(callback).onAdFailedToLoad(null)
         verifyNoMoreInteractions(callback)
@@ -134,45 +137,55 @@ class BannerEngineCharacterizationTest {
 
     @Test
     fun `plain banner click logs one ad_click for its own unit`() {
-        Admob.getInstance().loadBannerFragment(activity, UNIT, host, AdCallback())
+        loadPlain(AdCallback())
         filledListener().onAdClicked()
         assertEquals("plain banner click must reach logClickAdsEvent once", listOf("$CLICK_LOG:$UNIT"), order)
     }
 
     @Test
     fun `collapsible banner click logs one ad_click for its own unit`() {
-        Admob.getInstance().loadCollapsibleBannerFragment(activity, UNIT, host, "bottom", AdCallback())
+        loadCollapsible(AdCallback())
         filledListener().onAdClicked()
         assertEquals("collapsible banner click must reach logClickAdsEvent once", listOf("$CLICK_LOG:$UNIT"), order)
     }
 
     @Test
     fun `collapsible banner click logs ad_click before notifying the callback`() {
-        Admob.getInstance().loadCollapsibleBannerFragment(activity, UNIT, host, "bottom", recording)
+        loadCollapsible(recording)
         filledListener().onAdClicked()
         assertEquals("collapsible click order", listOf("$CLICK_LOG:$UNIT", CALLBACK_CLICK), order)
     }
 
     @Test
     fun `plain banner click notifies the callback before logging ad_click`() {
-        Admob.getInstance().loadBannerFragment(activity, UNIT, host, recording)
+        loadPlain(recording)
         filledListener().onAdClicked()
         assertEquals("plain banner click order", listOf(CALLBACK_CLICK, "$CLICK_LOG:$UNIT"), order)
     }
 
     @Test
     fun `collapsible banner listener does not forward onAdImpression to the callback`() {
-        Admob.getInstance().loadCollapsibleBannerFragment(activity, UNIT, host, "bottom", recording)
+        loadCollapsible(recording)
         filledListener().onAdImpression()
         assertEquals("collapsible loader must not forward impressions", emptyList<String>(), order)
     }
 
     @Test
     fun `plain banner listener forwards onAdImpression to the callback once`() {
-        Admob.getInstance().loadBannerFragment(activity, UNIT, host, recording)
+        loadPlain(recording)
         filledListener().onAdImpression()
         assertEquals("plain banner loader must forward impressions", listOf(CALLBACK_IMPRESSION), order)
     }
+
+    private fun loadPlain(callback: AdCallback) = BannerEngine.load(
+        activity, UNIT, host.findViewById(R.id.banner_container),
+        host.findViewById(R.id.shimmer_container_banner), BannerType.Normal, callback,
+    )
+
+    private fun loadCollapsible(callback: AdCallback) = BannerEngine.load(
+        activity, UNIT, host.findViewById(R.id.banner_container),
+        host.findViewById(R.id.shimmer_container_banner), BannerType.Collapsible("bottom"), callback,
+    )
 
     private fun filledListener(): AdListener {
         val listener = checkNotNull(requests.single().view.adListener)

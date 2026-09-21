@@ -7,6 +7,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.engine.RewardEngine
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
@@ -91,7 +92,7 @@ class RewardEngineCharacterizationTest {
         val raw = Tel02RewardedAd(UNIT)
         var listenerAtLoad: OnPaidEventListener? = null
         var loaded: RewardedAd? = null
-        Admob.getInstance().initRewardAds(activity, UNIT, object : AdCallback() {
+        RewardEngine.load(activity, UNIT, object : AdCallback() {
             override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
                 loaded = rewardedAd
                 listenerAtLoad = (rewardedAd as Tel02RewardedAd).state.paid
@@ -109,7 +110,7 @@ class RewardEngineCharacterizationTest {
     fun `host onAdImpression fires only from the vendor impression callback, not from the shown callback`() {
         val raw = showSupplied()
         val callback = RecordingRewardCallback()
-        Admob.getInstance().showRewardAds(activity, raw, callback)
+        RewardEngine.show(activity, raw, callback)
 
         raw.state.callback!!.onAdShowedFullScreenContent()
         assertEquals("onAdShowedFullScreenContent must not count as a host impression", 0, callback.impressions)
@@ -123,7 +124,7 @@ class RewardEngineCharacterizationTest {
     fun `showRewardAds with no ad reports failed to show with code 0`() {
         val callback = RecordingRewardCallback()
 
-        Admob.getInstance().showRewardAds(activity, null, callback)
+        RewardEngine.show(activity, null, callback)
 
         assertEquals("a null ad must fail to show with code 0", listOf(0), callback.failures)
         assertEquals(0, callback.earned)
@@ -132,14 +133,14 @@ class RewardEngineCharacterizationTest {
     @Test
     fun `closing a shown reward never loads the next one even after the main looper drains`() {
         var loaded: RewardedAd? = null
-        Admob.getInstance().initRewardAds(activity, UNIT, object : AdCallback() {
+        RewardEngine.load(activity, UNIT, object : AdCallback() {
             override fun onRewardAdLoaded(rewardedAd: RewardedAd?) { loaded = rewardedAd }
         })
         requests.single().onAdLoaded(Tel02RewardedAd(UNIT))
         val raw = loaded as Tel02RewardedAd
         val callback = RecordingRewardCallback()
 
-        Admob.getInstance().showRewardAds(activity, raw, callback)
+        RewardEngine.show(activity, raw, callback)
         raw.state.callback!!.onAdShowedFullScreenContent()
         raw.state.callback!!.onAdDismissedFullScreenContent()
         mainLooper.idleFor(5, TimeUnit.SECONDS)

@@ -59,7 +59,7 @@ class GlobalApp : AdsMultiDexApplication() {
             minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) 0 else 3_600
             fetchTimeoutInSeconds = 10
         })
-        // No MobileAds.initialize here: ERainAd.init -> Admob.init is the single canonical site
+        // No MobileAds.initialize here: ERainAd.init is the single canonical site
         // (it also logs per-adapter status); a second call just races the first for no gain.
         DevConfig.init(
             context = this,

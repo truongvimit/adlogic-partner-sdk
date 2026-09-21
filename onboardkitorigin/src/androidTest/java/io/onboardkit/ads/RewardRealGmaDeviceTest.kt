@@ -20,9 +20,10 @@ import com.ads.module.ads.ERainAd
 import com.ads.module.config.ERainAdConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
-import com.ads.module.funtion.RewardCallback
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
+import com.ads.module.helper.reward.RewardAdManager
+import com.ads.module.helper.reward.RewardShowCallback
 import com.ads.module.tracking.AdTracking
 import com.google.android.gms.ads.AdActivity
 import com.google.android.gms.ads.LoadAdError
@@ -106,7 +107,9 @@ class RewardRealGmaDeviceTest {
                     }
                 }
                 val load = RecordingLoad()
-                instrumentation.runOnMainSync { ERainAd.getInstance().initRewardAds(host, TEST_UNIT, load) }
+                instrumentation.runOnMainSync {
+                    RewardAdManager.load(host, PLACEMENT, listOf(TEST_UNIT), listener = load)
+                }
                 assertTrue("Real rewarded load must settle", load.finished.await(45, TimeUnit.SECONDS))
                 assertTrue("Real test fill required: ${load.errors}", load.errors.isEmpty())
                 assertEquals(1, load.ads.size)
@@ -116,9 +119,7 @@ class RewardRealGmaDeviceTest {
                 Log.i(TAG, "FILLED real_reward=${System.identityHashCode(reward)} shown=0")
                 val callback = RecordingReward(events)
                 instrumentation.runOnMainSync {
-                    // Explicit supplied-ad overload; public init above supplies the same unit
-                    // and exercises the existing refill path without an invented nativeId.
-                    ERainAd.getInstance().showRewardAds(host, reward, callback)
+                    RewardAdManager.show(host, PLACEMENT, callback)
                 }
                 val monitor = ActivityLifecycleMonitorRegistry.getInstance()
                 eventually("Show must reach a visible focused real GMA AdActivity; errors=${callback.failures}", 15_000) {
@@ -187,25 +188,24 @@ class RewardRealGmaDeviceTest {
         }
     }
 
-    private class RecordingReward(private val events: CopyOnWriteArrayList<String>) : RewardCallback {
+    private class RecordingReward(private val events: CopyOnWriteArrayList<String>) : RewardShowCallback() {
         val items = CopyOnWriteArrayList<RewardItem?>()
         val failures = CopyOnWriteArrayList<Int>()
         val finished = CountDownLatch(1)
         val closedCount get() = events.count { it == "closed" }
-        override fun onUserEarnedReward(item: RewardItem?) {
+        override fun onEarned(item: RewardItem?) {
             items += item
             events += "earned"
             Log.i(TAG, "EARNED count=${items.size} type=${item?.type} amount=${item?.amount}")
         }
-        override fun onRewardedAdClosed() {
+        override fun onClosed(earned: Boolean) {
             events += "closed"
             finished.countDown()
         }
-        override fun onRewardedAdFailedToShow(codeError: Int) {
+        override fun onFailedToShow(codeError: Int) {
             failures += codeError
             finished.countDown()
         }
-        override fun onAdClicked() = Unit
     }
 
     companion object {

@@ -9,7 +9,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
 import com.ads.module.engine.BannerEngine
-import com.ads.module.admob.Admob
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdsHelper
@@ -109,7 +108,7 @@ class BannerAdHelper(
         val heightDp = when (val type = config.bannerType) {
             is BannerType.InlineMaxHeight -> type.maxHeightDp
             is BannerType.Fixed -> type.size.adSize.height
-            is BannerType.Inline -> if (type.style.equals(Admob.BANNER_INLINE_SMALL_STYLE, ignoreCase = true)) 50 else return
+            is BannerType.Inline -> if (type.style.equals(BannerType.Inline.SMALL_STYLE, ignoreCase = true)) 50 else return
             else -> return
         }
         shimmerContainer()?.let { shimmer ->

@@ -8,6 +8,7 @@ import com.ads.module.application.AdsMultiDexApplication;
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.RewardCallback;
+import com.ads.module.helper.banner.BannerType;
 import com.google.android.gms.ads.rewarded.RewardItem;
 
 import org.junit.Test;
@@ -27,7 +28,9 @@ public class JavaHostSurfaceTest {
     private void entryPoints(Application app) {
         ERainAd.getInstance().init(app, new ERainAdConfig(app, ERainAdConfig.ENVIRONMENT_DEVELOP));
         ERainAd.getInstance().setMaxClickAdsPerDay(3);
-        Boolean organic = ERainAd.getInstance().getOrganic();
+        boolean ua = ERainAd.getInstance().shouldDisplayForUa(false);
+        ERainAd.getInstance().setDisableAdResumeWhenClickAds(true);
+        String inlineSmall = BannerType.Inline.SMALL_STYLE;
         AppOpenManager.getInstance().setResumeSkipPolicy(a -> null);
     }
 

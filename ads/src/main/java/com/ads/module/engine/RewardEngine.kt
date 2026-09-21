@@ -2,7 +2,6 @@ package com.ads.module.engine
 
 import android.app.Activity
 import android.content.Context
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.funtion.AdCallback
@@ -11,6 +10,7 @@ import com.ads.module.funtion.RewardCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.tracking.TrackingAdCallback
 import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardedAd
@@ -25,7 +25,7 @@ internal object RewardEngine {
         // Silent on purpose: AdWaterfall.canContinue already failed the caller in this tick.
         if (AdGate.engineBlocked(context)) return
         RewardedAd.load(
-            context, adUnitId, Admob.getInstance().adRequest,
+            context, adUnitId, AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(rewardedAd: RewardedAd) {
                     rewardedAd.setOnPaidEventListener { adValue ->

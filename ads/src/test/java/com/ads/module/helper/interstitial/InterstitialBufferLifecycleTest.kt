@@ -78,7 +78,7 @@ class InterstitialBufferLifecycleTest {
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
         ERainAd.getInstance().setIntervalInterstitialAd(30)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()

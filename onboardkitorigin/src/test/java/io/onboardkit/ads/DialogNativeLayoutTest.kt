@@ -10,7 +10,7 @@ import org.w3c.dom.Element
 /**
  * The binding contract for the Confirm Language modal's native.
  *
- * `Admob.populateUnifiedNativeAdView` finds its views by id and casts them — `ad_stars` to a
+ * `NativeEngine.populate` finds its views by id and casts them — `ad_stars` to a
  * `RatingBar`, `ad_call_to_action` to a `TextView` — inside a `try/catch` that swallows the
  * failure. A renamed id or a retyped view therefore does not crash; it silently ships an ad with
  * no headline. This test is the only thing that notices.

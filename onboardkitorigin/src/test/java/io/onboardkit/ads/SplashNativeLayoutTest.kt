@@ -10,7 +10,7 @@ import org.w3c.dom.Element
 /**
  * The binding contract for the native that can take the splash bottom slot.
  *
- * `Admob.populateUnifiedNativeAdView` finds its views by id and casts them — `ad_call_to_action`
+ * `NativeEngine.populate` finds its views by id and casts them — `ad_call_to_action`
  * to a `TextView`, `ad_media` to a `MediaView` — inside a `try/catch` that swallows the failure. A
  * renamed id or a retyped view therefore does not crash; it silently ships an ad with no headline,
  * on the one screen every launch passes through. This test is the only thing that notices.

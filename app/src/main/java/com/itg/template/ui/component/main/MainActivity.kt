@@ -14,7 +14,6 @@ import android.widget.TextView
 import androidx.annotation.LayoutRes
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
@@ -528,8 +527,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             mBinding.btnBannerAdaptive to BannerType.Normal,
             mBinding.btnBannerLargeAnchored to BannerType.LargeAnchored,
             mBinding.btnBannerCollapsible to BannerType.Collapsible(),
-            mBinding.btnBannerInlineSmall to BannerType.Inline(Admob.BANNER_INLINE_SMALL_STYLE),
-            mBinding.btnBannerInlineLarge to BannerType.Inline(Admob.BANNER_INLINE_LARGE_STYLE),
+            mBinding.btnBannerInlineSmall to BannerType.Inline(BannerType.Inline.SMALL_STYLE),
+            mBinding.btnBannerInlineLarge to BannerType.Inline(BannerType.Inline.LARGE_STYLE),
             mBinding.btnBannerInlineMax100 to BannerType.InlineMaxHeight(100),
             mBinding.btnBannerFixedBanner to BannerType.Fixed(FixedBannerSize.BANNER),
             mBinding.btnBannerFixedLarge to BannerType.Fixed(FixedBannerSize.LARGE_BANNER),
@@ -551,7 +550,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         BannerType.LargeAnchored -> "Large Anchored Adaptive"
         is BannerType.Collapsible -> "Collapsible (${type.gravity})"
         is BannerType.Inline ->
-            if (type.style == Admob.BANNER_INLINE_SMALL_STYLE) "Inline Small (cap 50dp)"
+            if (type.style == BannerType.Inline.SMALL_STYLE) "Inline Small (cap 50dp)"
             else "Inline Large (no cap)"
 
         is BannerType.InlineMaxHeight -> "Inline (cap ${type.maxHeightDp}dp)"

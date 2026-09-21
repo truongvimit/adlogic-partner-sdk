@@ -1,6 +1,5 @@
 package com.ads.module.helper.banner
 
-import com.ads.module.admob.Admob
 import com.ads.module.util.AppConstant
 import com.google.android.gms.ads.AdSize
 
@@ -18,10 +17,15 @@ sealed interface BannerType {
         val gravity: String = AppConstant.CollapsibleGravity.BOTTOM,
     ) : BannerType
 
-    /** Inline adaptive banner; [style] is one of the module's `BANNER_INLINE_*_STYLE`. */
+    /** Inline adaptive banner; [style] is [SMALL_STYLE] (capped at 50dp) or [LARGE_STYLE]. */
     data class Inline(
-        val style: String = Admob.BANNER_INLINE_LARGE_STYLE,
-    ) : BannerType
+        val style: String = LARGE_STYLE,
+    ) : BannerType {
+        companion object {
+            const val SMALL_STYLE: String = "BANNER_INLINE_SMALL_STYLE"
+            const val LARGE_STYLE: String = "BANNER_INLINE_LARGE_STYLE"
+        }
+    }
 
     /** Inline adaptive banner whose height AdMob may grow up to [maxHeightDp] (at least 32). */
     data class InlineMaxHeight(val maxHeightDp: Int) : BannerType {

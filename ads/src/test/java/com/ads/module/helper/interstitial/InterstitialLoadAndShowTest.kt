@@ -10,7 +10,6 @@ import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.admob.Admob
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.ERainAdConfig
@@ -41,7 +40,7 @@ import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowNetworkInfo
 import java.util.concurrent.TimeUnit
 
-/** Public manager/ERain/Admob flow; reuse only INT-02's external GMA/bootstrap boundaries. */
+/** Public manager/waterfall/engine flow; reuse only INT-02's external GMA/bootstrap boundaries. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -78,7 +77,7 @@ class InterstitialLoadAndShowTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -183,7 +182,7 @@ class InterstitialLoadAndShowTest {
         val waitingDialog = requireNotNull(ShadowDialog.getLatestDialog())
         assertTrue(waitingDialog.isShowing)
         assertEquals(1, requests.size)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        InterstitialAdManager.defaultNextAction = InterNextAction.AfterDismiss
         mainLooper.idleFor(1, TimeUnit.SECONDS)
         val raw = newVendor().apply {
             beforeShow = { assertEquals("UnderAd advances before the vendor invocation", 1, result.completed) }

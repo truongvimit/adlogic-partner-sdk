@@ -183,13 +183,7 @@ object ERainAdjust {
 
     private const val DEFAULT_CURRENCY = "USD"
 
-    private fun config(): AdjustConfig? {
-        val instance = ERainAd.getInstance()
-        if (instance == null || instance.adConfig == null) {
-            return null
-        }
-        return instance.adConfig.adjustConfig
-    }
+    private fun config(): AdjustConfig? = ERainAd.getInstance().adConfig?.adjustConfig
 
     /**
      * A blank token is a configuration mistake, not a quiet opt-out — say so once per call site.

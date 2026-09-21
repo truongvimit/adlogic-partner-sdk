@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.config.settings.AdBehavior
@@ -17,6 +16,7 @@ import com.ads.module.helper.AdGate
 import com.ads.module.tracking.TrackingAdCallback
 import com.ads.module.util.SharePreferenceUtils
 import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
@@ -70,7 +70,7 @@ internal object InterstitialEngine {
             return
         }
         InterstitialAd.load(
-            context, adUnitId, Admob.getInstance().adRequest,
+            context, adUnitId, AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(interstitialAd: InterstitialAd) {
                     tracked.onApInterstitialLoad(ApInterstitialAd(interstitialAd))
