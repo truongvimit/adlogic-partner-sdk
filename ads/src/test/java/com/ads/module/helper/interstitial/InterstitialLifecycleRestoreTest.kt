@@ -92,7 +92,7 @@ class InterstitialLifecycleRestoreTest {
                 shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             })
         ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-            setFacebookClientToken("int02-test-client-token")
+            facebookClientToken = "int02-test-client-token"
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)

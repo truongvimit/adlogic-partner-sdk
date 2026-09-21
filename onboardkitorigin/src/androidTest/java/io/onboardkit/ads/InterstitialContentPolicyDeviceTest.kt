@@ -71,8 +71,8 @@ class InterstitialContentPolicyDeviceTest {
                 override fun isPremium(context: Context) = false
             })
             ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-                setFacebookClientToken("123456789")
-                setIdAdResume("")
+                facebookClientToken = "123456789"
+                idAdResume = ""
             })
             ERainAd.getInstance().setIntervalInterstitialAd(0)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)

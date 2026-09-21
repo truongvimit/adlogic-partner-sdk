@@ -78,7 +78,7 @@ class RewardCacheFlowTest {
             override fun isPremium(context: Context): Boolean = premium
         })
         ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-            setFacebookClientToken("reward-cache-test-client-token")
+            facebookClientToken = "reward-cache-test-client-token"
         })
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)

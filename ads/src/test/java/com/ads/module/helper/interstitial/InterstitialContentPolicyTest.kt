@@ -64,7 +64,7 @@ class InterstitialContentPolicyTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("content-test") })
+        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "content-test" })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)

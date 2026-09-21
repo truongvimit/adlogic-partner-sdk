@@ -73,7 +73,7 @@ class InterstitialBufferLifecycleTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("buffer-test") })
+        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "buffer-test" })
         // This suite exercises the shared group policy, independently of bundled defaults.
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
         ERainAd.getInstance().setIntervalInterstitialAd(30)

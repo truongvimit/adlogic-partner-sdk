@@ -89,7 +89,7 @@ class BannerRefreshOwnershipTest {
         ))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("ban04-test-token") })
+        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "ban04-test-token" })
         AppOpenManager.getInstance().disableAppResume()
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
         activity = controller.get()

@@ -56,8 +56,8 @@ class InterstitialAutoBufferDeviceTest {
             Tracker.addSink(sink)
             ConsentCenter.setHostConsent(true, false)
             ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-                setFacebookClientToken("123456789")
-                setIdAdResume("")
+                facebookClientToken = "123456789"
+                idAdResume = ""
             })
             AppOpenManager.getInstance().disableAppResume()
             ERainAd.getInstance().setIntervalInterstitialAd(5)

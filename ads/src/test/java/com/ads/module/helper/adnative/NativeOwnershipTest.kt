@@ -74,7 +74,7 @@ class NativeOwnershipTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("native-test") })
+        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "native-test" })
         AppOpenManager.getInstance().disableAppResume()
         controller = Robolectric.buildActivity(NativeHostActivity::class.java).setup()
         main.idle()

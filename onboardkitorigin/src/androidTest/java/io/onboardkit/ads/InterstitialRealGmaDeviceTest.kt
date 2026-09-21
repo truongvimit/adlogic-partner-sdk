@@ -96,8 +96,8 @@ class InterstitialRealGmaDeviceTest {
             ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
                 // Existing sample placeholders satisfy ERain's unconditional Facebook bootstrap.
                 // Test manifest disables Facebook auto-init, automatic events and ID collection.
-                setFacebookClientToken("123456789")
-                setIdAdResume("")
+                facebookClientToken = "123456789"
+                idAdResume = ""
             })
             ERainAd.getInstance().setIntervalInterstitialAd(0)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)

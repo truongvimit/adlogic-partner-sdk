@@ -80,7 +80,7 @@ class FullscreenShownTelemetryTest {
             override fun isPremium(context: Context): Boolean = false
         })
         ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-            setFacebookClientToken("tel02-test-client-token")
+            facebookClientToken = "tel02-test-client-token"
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)

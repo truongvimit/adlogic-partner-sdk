@@ -48,7 +48,7 @@ class NativeOwnershipRealGmaDeviceTest {
         onMain {
             ConsentCenter.setHostConsent(true, false)
             Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("123456789"); setIdAdResume("") })
+            ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "123456789"; idAdResume = "" })
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
             NativeAdPreload.getInstance().registerAdCallback(f.key, object : AdCallback() {

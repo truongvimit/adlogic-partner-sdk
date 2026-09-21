@@ -97,7 +97,7 @@ class ERainInterstitialWaitTest {
             connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
         ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-            setFacebookClientToken("provider-wait-test")
+            facebookClientToken = "provider-wait-test"
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)

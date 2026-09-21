@@ -61,8 +61,8 @@ class BannerRefreshRealGmaDeviceTest {
                 override fun isPremium(context: Context) = false
             })
             ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-                setFacebookClientToken("123456789")
-                setIdAdResume("")
+                facebookClientToken = "123456789"
+                idAdResume = ""
             })
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
