@@ -7,7 +7,7 @@ import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.engine.InterstitialEngine
 import com.ads.module.engine.NativeEngine
 import com.ads.module.engine.RewardEngine
-import com.ads.module.engine.adMainScope
+import com.ads.module.engine.launchAfter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.google.android.gms.ads.LoadAdError
@@ -15,8 +15,6 @@ import com.google.android.gms.ads.rewarded.RewardedAd
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Requests one ad unit at a time, highest floor first, and stops at the first fill.
@@ -257,8 +255,7 @@ object AdWaterfall {
      */
     private class Tier(timeoutMs: Long, advance: () -> Unit) {
         private val settled = AtomicBoolean(false)
-        private val timeout: Job = adMainScope.launch {
-            delay(timeoutMs)
+        private val timeout: Job = launchAfter(timeoutMs) {
             if (settled.compareAndSet(false, true)) {
                 Log.w(TAG, "tier timed out after " + timeoutMs + "ms")
                 advance()

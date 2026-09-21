@@ -25,6 +25,7 @@ import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.dialog.ResumeLoadingDialog
 import com.ads.module.engine.adMainScope
+import com.ads.module.engine.launchAfter
 import com.ads.module.event.ERainLogEventManager
 import com.ads.module.funtion.AdType
 import com.ads.module.helper.AdGate
@@ -44,7 +45,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** App-resume ads: loads one app-open ad while the app is in the background, shows it on return. */
@@ -380,9 +380,8 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
             resumeFetchDeadlineMs =
                 resumeFetchStartedAtMs + AdBehavior.number("app_open.load.timeout_ms")
             val timeoutMs = AdBehavior.number("app_open.load.timeout_ms")
-            resumeFetchTimeout = adMainScope.launch {
-                delay(timeoutMs)
-                if (!ownsResumeFetch(generation)) return@launch
+            resumeFetchTimeout = launchAfter(timeoutMs) {
+                if (!ownsResumeFetch(generation)) return@launchAfter
                 if (!canFetchResume(false)) {
                     if (ownsResumeFetch(generation)) cancelResumeFetch(false)
                 } else {
@@ -853,10 +852,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                 if (ownedDialog != null && dialog === ownedDialog && ownedDialog.isShowing) {
                     val loadingTimeoutMs =
                         AdBehavior.number("app_open.presentation.loading_timeout_ms")
-                    adMainScope.launch {
-                        delay(loadingTimeoutMs)
-                        dismissResumeDialog(ownedDialog)
-                    }
+                    launchAfter(loadingTimeoutMs) { dismissResumeDialog(ownedDialog) }
                 }
             }
         }
@@ -878,10 +874,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
             }
             if (ownedDialog != null && ownedDialog.isShowing) {
                 val preShowDelayMs = AdBehavior.number("app_open.presentation.pre_show_delay_ms")
-                val pending = adMainScope.launch {
-                    delay(preShowDelayMs)
-                    dispatch()
-                }
+                val pending = launchAfter(preShowDelayMs) { dispatch() }
                 ownedDialog.setOnCancelListener {
                     if (pendingResumeShow === pending) cancelBeforeShow.run()
                 }
@@ -929,13 +922,12 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         ) {
             return
         }
-        pendingBackgroundLoad = adMainScope.launch {
-            delay(maxOf(0L, delayMs))
+        pendingBackgroundLoad = launchAfter(delayMs) {
             pendingBackgroundLoad = null
             if (!resumeBackground || SystemClock.elapsedRealtime() >= resumeBackgroundDeadlineMs ||
                 backgroundRequestsSpent()
             ) {
-                return@launch
+                return@launchAfter
             }
             resumeDispatchAllowed = true
             try {

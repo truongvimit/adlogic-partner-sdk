@@ -22,8 +22,6 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import io.trackkit.AdFormat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 internal object InterstitialEngine {
     private const val TAG = "ERainStudio"
@@ -247,23 +245,19 @@ internal object InterstitialEngine {
         callback.onInterstitialShow()
 
         val preShowDelayMs = AdBehavior.number("interstitial.presentation.pre_show_delay_ms")
-        adMainScope.launch {
-            delay(preShowDelayMs)
+        launchAfter(preShowDelayMs) {
             if (context.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                 if (!callback.canShowInterstitial()) {
                     dialog?.dismiss()
                     notifyShowFailed(
                         callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd,
                     )
-                    return@launch
+                    return@launchAfter
                 }
                 if (openNextUnderAd) {
                     // Same tick as show(): the next Activity must queue under the ad, not above it.
                     callback.onNextAction()
-                    launch {
-                        delay(1500)
-                        dismissLoading(context)
-                    }
+                    launchAfter(1500) { dismissLoading(context) }
                 }
                 interstitialAd.setImmersiveMode(true)
                 interstitialAd.show(context)
