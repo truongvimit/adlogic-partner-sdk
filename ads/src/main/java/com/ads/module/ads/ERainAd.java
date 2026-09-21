@@ -249,29 +249,6 @@ public class ERainAd {
         return new TrackingAdCallback(PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
     }
 
-    /**
-     * Tiered variant: the tiers are one placement shown once, so they resolve to whichever tier the
-     * app registered and the rest are bound to it. Without this only the registered tier's revenue
-     * could be attributed to a screen.
-     */
-    private AdCallback instrumentTiered(AdFormat format, AdCallback callback, String... adUnitIds) {
-        if (callback instanceof TrackingAdCallback) {
-            return callback;
-        }
-        String placement = "unknown";
-        for (String id : adUnitIds) {
-            String resolved = PlacementRegistry.placementOf(id, "");
-            if (!resolved.isEmpty()) {
-                placement = resolved;
-                break;
-            }
-        }
-        for (String id : adUnitIds) {
-            PlacementRegistry.register(id, placement);
-        }
-        return new TrackingAdCallback(placement, format, adUnitIds[0], callback);
-    }
-
     public void loadBanner(Activity mActivity, String id) {
         Admob.getInstance().loadBanner(mActivity, id, instrument(id, AdFormat.BANNER, null));
     }
@@ -349,15 +326,6 @@ public class ERainAd {
     public void loadFixedSizeBannerFragment(Activity mActivity, String id, View rootView, AdSize adSize, AdCallback adCallback) {
         Admob.getInstance().loadFixedSizeBannerFragment(mActivity, id, rootView, adSize,
                 instrument(id, AdFormat.BANNER, adCallback));
-    }
-
-    public void loadSplashInterstitialAds(Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
-        Admob.getInstance().loadSplashInterstitialAds(context, id, timeOut, timeDelay, true,
-                instrument(id, AdFormat.INTERSTITIAL, adListener));
-    }
-
-    public void onCheckShowSplashWhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
-        Admob.getInstance().onCheckShowSplashWhenFail(activity, callback, timeDelay);
     }
 
     public ApInterstitialAd getInterstitialAds(Context context, String id, AdCallback adListener) {
@@ -660,26 +628,6 @@ public class ERainAd {
     public void showRewardAds(Activity context, RewardedAd rewardedAd, RewardCallback adCallback,
                               boolean reload) {
         Admob.getInstance().showRewardAds(context, rewardedAd, adCallback, reload);
-    }
-
-    public void loadInterSplashPriority4SameTime(final Context context,
-                                                 String idAdsHigh1,
-                                                 String idAdsHigh2,
-                                                 String idAdsHigh3,
-                                                 String idAdsNormal,
-                                                 long timeOut,
-                                                 long timeDelay,
-                                                 AdCallback adListener) {
-        Admob.getInstance().loadInterSplashPriority4SameTime(context, idAdsHigh1, idAdsHigh2, idAdsHigh3, idAdsNormal, timeOut, timeDelay,
-                instrumentTiered(AdFormat.INTERSTITIAL, adListener, idAdsHigh1, idAdsHigh2, idAdsHigh3, idAdsNormal));
-    }
-
-    public void onShowSplashPriority4(AppCompatActivity activity, AdCallback adListener) {
-        Admob.getInstance().onShowSplashPriority4(activity, adListener);
-    }
-
-    public void onCheckShowSplashPriority4WhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
-        Admob.getInstance().onCheckShowSplashPriority4WhenFail(activity, callback, timeDelay);
     }
 
     private boolean isFinishLoadNativeAdHigh1 = false;

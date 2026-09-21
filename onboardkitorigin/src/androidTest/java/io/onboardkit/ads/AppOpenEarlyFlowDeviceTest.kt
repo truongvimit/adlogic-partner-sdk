@@ -93,12 +93,12 @@ class AppOpenEarlyFlowDeviceTest {
                 assertNull(onMain { manager.resumeSkipReasonFor(host) })
                 SystemClock.sleep(1_000)
                 assertEquals("No startup request", 0, requests.get())
-                assertFalse(onMain { manager.isAdAvailable(false) })
+                assertFalse(onMain { manager.isAdAvailable() })
                 assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
                 eventually("Physical Home stops the process") {
                     onMain { ProcessLifecycleOwner.get().lifecycle.currentState == Lifecycle.State.CREATED }
                 }
-                eventually("Real background fill", 90_000) { onMain { manager.isAdAvailable(false) } }
+                eventually("Real background fill", 90_000) { onMain { manager.isAdAvailable() } }
                 val requestsAtFill = requests.get()
                 assertTrue("The real background must dispatch", requestsAtFill > 0)
                 assertEquals(0, shown.get())
@@ -114,7 +114,7 @@ class AppOpenEarlyFlowDeviceTest {
                 assertEquals(1, closes.get())
                 assertFalse(onMain { manager.isShowingAd })
                 assertEquals("No post-close refill", requestsAtFill, requests.get())
-                assertFalse(onMain { manager.isAdAvailable(false) })
+                assertFalse(onMain { manager.isAdAvailable() })
                 Log.i(TAG, "COMPLETE screen=$screen shown=1 closed=1 noRefill=true")
             }
         } finally {

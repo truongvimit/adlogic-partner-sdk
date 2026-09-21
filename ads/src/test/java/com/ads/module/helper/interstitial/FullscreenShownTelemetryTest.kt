@@ -188,60 +188,6 @@ class FullscreenShownTelemetryTest {
     }
 
     @Test
-    fun `raw splash shown and impression callbacks forward one display to tracking and delegate`() {
-        val raw = interstitial()
-        val delegate = RecordingAdCallback()
-        Admob.getInstance().onShowSplash(activity,
-            TrackingAdCallback(PLACEMENT, AdFormat.INTERSTITIAL, UNIT, delegate), raw)
-        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
-        assertEquals(1, raw.hosts.size)
-        assertEquals(0, count("ad_show"))
-        assertEquals(0, delegate.impressions)
-        raw.callback.onAdShowedFullScreenContent()
-        assertEquals(1, delegate.impressions)
-        assertEquals(1, count("ad_show"))
-        raw.callback.onAdImpression()
-        raw.callback.onAdShowedFullScreenContent()
-        raw.callback.onAdImpression()
-        assertEquals(1, delegate.impressions)
-        assertEquals(1, count("ad_show"))
-    }
-
-    @Test
-    fun `delayed raw priority checker forwards actual display through its callback wrapper`() {
-        val first = interstitial()
-        val normal = interstitial()
-        Admob.getInstance().loadInterSplashPriority4SameTime(activity,
-            UNIT, "unused-tier2", "unused-tier3", UNIT, 0, 0, AdCallback())
-        val requests = Int02InterstitialShadow.requests.toList()
-        assertEquals(4, requests.size)
-        requests[0].onAdLoaded(first)
-        requests[1].onAdFailedToLoad(LoadAdError(3, "no fill", "com.google.android.gms.ads", null, null))
-        requests[2].onAdFailedToLoad(LoadAdError(3, "no fill", "com.google.android.gms.ads", null, null))
-        requests[3].onAdLoaded(normal)
-        mainLooper.idle()
-        // Consume High1 through public API; Normal remains buffered for the delayed retry API.
-        Admob.getInstance().onShowSplashPriority4(activity, AdCallback())
-        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
-        assertEquals(1, first.hosts.size)
-        first.callback.onAdShowedFullScreenContent()
-        first.callback.onAdDismissedFullScreenContent()
-        interstitials.remove(first)
-        val delegate = RecordingAdCallback()
-        Admob.getInstance().onCheckShowSplashPriority4WhenFail(activity,
-            TrackingAdCallback(PLACEMENT, AdFormat.INTERSTITIAL, UNIT, delegate), 20)
-        // Dialog construction may advance the external test clock inside the scheduled task.
-        mainLooper.idleFor(20, TimeUnit.MILLISECONDS)
-        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
-        assertEquals(1, normal.hosts.size)
-        assertEquals(0, count("ad_show"))
-        normal.callback.onAdShowedFullScreenContent()
-        normal.callback.onAdImpression()
-        assertEquals(1, delegate.impressions)
-        assertEquals(1, count("ad_show"))
-    }
-
-    @Test
     fun `buffered reward reports actual display once with captured format and unit`() {
         val raw = Tel02RewardedAd(UNIT).also { rewards += it.state }
         ERainAd.getInstance().initRewardAds(activity, UNIT, AdCallback())

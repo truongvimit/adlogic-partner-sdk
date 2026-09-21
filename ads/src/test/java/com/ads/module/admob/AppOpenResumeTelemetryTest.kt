@@ -134,7 +134,7 @@ class AppOpenResumeTelemetryTest {
         fail(0)
         assertEquals(1, named(AD_LOADED).size)
         assertTrue(named(AD_LOAD_FAILED).isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertEquals(1, named(AD_SKIPPED).size)
     }
 

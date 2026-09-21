@@ -117,7 +117,7 @@ class AppOpenResumeLoadDeviceTest {
                 scenario.onActivity { activity ->
                     assertFalse(activity.isFinishing)
                     assertFalse(activity.isDestroyed)
-                    assertFalse("Fixture must start with an empty resume buffer", manager.isAdAvailable(false))
+                    assertFalse("Fixture must start with an empty resume buffer", manager.isAdAvailable())
                     mark(phase, if (phase == "failure") "BEGIN unit=$unit spacedRetryProbes=125"
                         else "BEGIN unit=$unit windowMs=$observeMs")
                     intervalStarted = true
@@ -128,9 +128,9 @@ class AppOpenResumeLoadDeviceTest {
                     // Same main-thread runnable: no queued GMA terminal can interleave the burst
                     // or the explicit release/off operation below.
                     val calls = if (phase == "burst") 3 else 1
-                    repeat(calls) { manager.fetchAd(false) }
+                    repeat(calls) { manager.fetchAd() }
                     mark(phase, "FETCH_RETURNED explicitCalls=$calls (not a vendor-request count)")
-                    assertFalse("Foreground fetch must not synchronously fill", manager.isAdAvailable(false))
+                    assertFalse("Foreground fetch must not synchronously fill", manager.isAdAvailable())
                 }
                 SystemClock.sleep(1_000)
                 assertFalse("Startup/foreground must not warm the buffer", isReady(manager))
@@ -182,7 +182,7 @@ class AppOpenResumeLoadDeviceTest {
                     assertTrue("No real test fill within window; inspect GMA error/network logs before diagnosis", ready)
                     val requestsAtFill = requests.get()
                     // A ready buffer should remain reusable. These API calls are not request counts.
-                    instrumentation.runOnMainSync { repeat(3) { manager.fetchAd(false) } }
+                    instrumentation.runOnMainSync { repeat(3) { manager.fetchAd() } }
                     mark(phase, "READY_BUFFER_FETCH_RETURNED explicitCalls=3")
                     SystemClock.sleep(1_000)
                     assertTrue("No show/release was requested; ready buffer should remain", isReady(manager))
@@ -212,7 +212,7 @@ class AppOpenResumeLoadDeviceTest {
                         SystemClock.sleep(1_000)
                         instrumentation.runOnMainSync {
                             assertTrue("Failure backoff needs network; offline is a separate phase", hasActiveNetwork(app))
-                            manager.fetchAd(false)
+                            manager.fetchAd()
                             mark(phase, "RETRY_PROBE_RETURNED index=${index + 1} explicitCallsAfterInitial=${index + 1}")
                         }
                         assertFalse("A deliberately invalid QA unit must not produce a fill", isReady(manager))
@@ -276,7 +276,7 @@ class AppOpenResumeLoadDeviceTest {
     private fun isReady(manager: AppOpenManager): Boolean {
         var ready = false
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            ready = manager.isAdAvailable(false)
+            ready = manager.isAdAvailable()
         }
         return ready
     }

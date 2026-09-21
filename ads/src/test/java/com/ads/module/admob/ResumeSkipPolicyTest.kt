@@ -179,7 +179,7 @@ class ResumeSkipPolicyTest {
             override fun onAdDismissedFullScreenContent() { completions++ }
         })
         try {
-            manager.showAdIfAvailable(false)
+            manager.showAdIfAvailable()
             assertEquals(1, completions)
             assertEquals(listOf("suppressed_by_flow"), skipped.map { it["reason"] })
         } finally {

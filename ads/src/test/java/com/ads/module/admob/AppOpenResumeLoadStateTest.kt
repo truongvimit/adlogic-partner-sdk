@@ -194,7 +194,7 @@ class AppOpenResumeLoadStateTest {
         }
         networkAvailable(true)
         fill(0)
-        assertTrue("No replacement was sent, so A still owns its late result", manager.isAdAvailable(false))
+        assertTrue("No replacement was sent, so A still owns its late result", manager.isAdAvailable())
         main.idleFor(120_000, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
     }
@@ -223,7 +223,7 @@ class AppOpenResumeLoadStateTest {
         main.idleFor(5_000, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
     }
 
     @Test
@@ -235,7 +235,7 @@ class AppOpenResumeLoadStateTest {
         manager.onStop()
         ConsentCenter.setHostConsent(true, true)
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         main.idleFor(60_000, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
     }
@@ -262,7 +262,7 @@ class AppOpenResumeLoadStateTest {
     @Test
     fun `startup enable and explicit foreground fetches do not buy a resume ad`() {
         enable()
-        repeat(3) { manager.fetchAd(false) }
+        repeat(3) { manager.fetchAd() }
         main.idleFor(10, TimeUnit.SECONDS)
         assertTrue(requests.isEmpty())
     }
@@ -275,11 +275,11 @@ class AppOpenResumeLoadStateTest {
         assertTrue(requests.isEmpty())
         main.idleFor(1, TimeUnit.MILLISECONDS)
         assertEquals(1, requests.size)
-        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        repeat(3) { manager.fetchAd(); manager.onStop() }
         nextBackground()
         assertEquals(1, requests.size)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         nextBackground()
         assertEquals(1, requests.size)
     }
@@ -293,7 +293,7 @@ class AppOpenResumeLoadStateTest {
         main.idleFor(2_000, TimeUnit.MILLISECONDS)
         networkAvailable(true)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertEquals(1, requests.size)
     }
 
@@ -327,10 +327,10 @@ class AppOpenResumeLoadStateTest {
         manager.onResume()
         main.idleFor(2, TimeUnit.SECONDS)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         repeat(3) { nextBackground() }
         assertEquals(1, requests.size)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
     }
 
     @Test
@@ -348,7 +348,7 @@ class AppOpenResumeLoadStateTest {
         assertEquals(3, requests.size)
         fail(2)
         main.idleFor(20, TimeUnit.MINUTES)
-        repeat(3) { manager.fetchAd(false); manager.onStop() }
+        repeat(3) { manager.fetchAd(); manager.onStop() }
         assertEquals(3, requests.size)
         nextBackground()
         assertEquals(4, requests.size)
@@ -377,7 +377,7 @@ class AppOpenResumeLoadStateTest {
         startRequest()
         main.idleFor(31_000, TimeUnit.MILLISECONDS)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         main.idleFor(10, TimeUnit.MINUTES)
         assertEquals(1, requests.size)
     }
@@ -386,7 +386,7 @@ class AppOpenResumeLoadStateTest {
     fun `release invalidates A and only a new background stay can buy B`() {
         startRequest()
         manager.releaseCachedAds()
-        manager.fetchAd(false)
+        manager.fetchAd()
         assertEquals(1, requests.size)
         nextBackground()
         assertEquals(2, requests.size)
@@ -398,9 +398,9 @@ class AppOpenResumeLoadStateTest {
         startRequest()
         manager.disableAppResume()
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         manager.enableAppResume()
-        manager.fetchAd(false)
+        manager.fetchAd()
         assertEquals(1, requests.size)
         nextBackground()
         assertEquals(2, requests.size)
@@ -430,7 +430,7 @@ class AppOpenResumeLoadStateTest {
     fun `disabled mode cannot dispatch through either lifecycle or explicit fetch`() {
         manager.setAppResumeAdId(UNIT)
         nextBackground()
-        repeat(3) { manager.fetchAd(false) }
+        repeat(3) { manager.fetchAd() }
         assertTrue(requests.isEmpty())
         manager.enableAppResume()
         assertTrue(requests.isEmpty())
@@ -445,7 +445,7 @@ class AppOpenResumeLoadStateTest {
         nextBackground()
         assertTrue(requests.isEmpty())
         ConsentCenter.setHostConsent(true, false)
-        manager.fetchAd(false)
+        manager.fetchAd()
         assertTrue(requests.isEmpty())
         nextBackground()
         assertEquals(1, requests.size)
@@ -458,7 +458,7 @@ class AppOpenResumeLoadStateTest {
         nextBackground()
         assertTrue(requests.isEmpty())
         networkAvailable(true)
-        manager.fetchAd(false)
+        manager.fetchAd()
         main.idleFor(4_999, TimeUnit.MILLISECONDS)
         assertTrue(requests.isEmpty())
         main.idleFor(1, TimeUnit.MILLISECONDS)
@@ -508,7 +508,7 @@ class AppOpenResumeLoadStateTest {
         manager.onResume()
         main.idleFor(60_000, TimeUnit.MILLISECONDS)
         fill(0)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         nextBackground()
         assertEquals(1, requests.size)
     }
@@ -519,9 +519,9 @@ class AppOpenResumeLoadStateTest {
         main.idleFor(35_000, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         main.idleFor(120_000, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
     }
@@ -533,7 +533,7 @@ class AppOpenResumeLoadStateTest {
         main.idleFor(31_000, TimeUnit.MILLISECONDS)
         ConsentCenter.setHostConsent(true, true)
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         nextBackground()
         main.idleFor(3_000, TimeUnit.MILLISECONDS)
         assertEquals(2, requests.size)
@@ -541,7 +541,7 @@ class AppOpenResumeLoadStateTest {
         main.idleFor(31_000, TimeUnit.MILLISECONDS)
         premium = true
         fill(1)
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
     }
 
     @Test
@@ -551,7 +551,7 @@ class AppOpenResumeLoadStateTest {
         fill(0)
         fail(0)
         main.idleFor(10, TimeUnit.MINUTES)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertEquals(1, requests.size)
     }
 
@@ -629,22 +629,6 @@ class AppOpenResumeLoadStateTest {
         assertEquals(1, requests.size)
     }
 
-    @Test
-    fun `raw splash fetch keeps its separate network guard`() {
-        manager.disableAppResume()
-        ConsentCenter.setHostConsent(false, false)
-        manager.setSplashActivity(Activity::class.java, "raw-splash-unit", 5_000)
-        try {
-            networkAvailable(false)
-            manager.fetchAd(true)
-            assertTrue(requests.isEmpty())
-            networkAvailable(true)
-            manager.fetchAd(true)
-            assertEquals(listOf("raw-splash-unit"), requests.map { it.unit })
-        } finally {
-            manager.setSplashActivity(null, "", 0)
-        }
-    }
 
     @Test
     fun `cache keeps its original four hour expiry and only next background replaces it`() {
@@ -657,17 +641,17 @@ class AppOpenResumeLoadStateTest {
             fill(0)
             now += TimeUnit.HOURS.toMillis(4) - 1
             repeat(3) { nextBackground() }
-            assertTrue(manager.isAdAvailable(false))
+            assertTrue(manager.isAdAvailable())
             assertEquals(1, requests.size)
             now++
-            assertFalse("Reusing the cache must not renew its original TTL", manager.isAdAvailable(false))
-            manager.fetchAd(false)
+            assertFalse("Reusing the cache must not renew its original TTL", manager.isAdAvailable())
+            manager.fetchAd()
             main.idleFor(10, TimeUnit.MINUTES)
             assertEquals("An expired ad does not cause a background refresh loop", 1, requests.size)
             nextBackground()
             assertEquals(2, requests.size)
             fill(1)
-            assertTrue(manager.isAdAvailable(false))
+            assertTrue(manager.isAdAvailable())
         }
     }
 
@@ -691,11 +675,11 @@ class AppOpenResumeLoadStateTest {
     private fun assertOldRequestCannotOwnReplacement() {
         fail(0)
         fill(0)
-        assertFalse(manager.isAdAvailable(false))
-        manager.fetchAd(false)
+        assertFalse(manager.isAdAvailable())
+        manager.fetchAd()
         assertEquals(2, requests.size)
         fill(1)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         nextBackground()
         assertEquals(2, requests.size)
     }

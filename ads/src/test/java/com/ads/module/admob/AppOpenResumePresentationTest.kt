@@ -71,7 +71,6 @@ class AppOpenResumePresentationTest {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(manager)
         ProcessLifecycleOwner.get().lifecycle.addObserver(manager)
         manager.releaseCachedAds()
-        manager.setSplashActivity(null, "", 0)
         manager.setInterstitialShowing(false)
         manager.setDisableAdResumeByClickAction(false)
         manager.setResumeSkipPolicy(null)
@@ -148,9 +147,9 @@ class AppOpenResumePresentationTest {
     @Test
     fun `repeated show calls during loading dispatch the cached ad only once`() {
         val ad = load()
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         val loading = ShadowDialog.getLatestDialog()
-        repeat(3) { manager.showAdIfAvailable(false) }
+        repeat(3) { manager.showAdIfAvailable() }
         assertSame(loading, ShadowDialog.getLatestDialog())
         assertTrue(ad.hosts.isEmpty())
         main.idleFor(800, TimeUnit.MILLISECONDS)
@@ -163,7 +162,7 @@ class AppOpenResumePresentationTest {
         val ad = load()
         val events = Events()
         manager.setFullScreenContentCallback(events)
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         main.idleFor(400, TimeUnit.MILLISECONDS)
         controller.pause()
         assertFalse(latestDialogShowing())
@@ -172,7 +171,7 @@ class AppOpenResumePresentationTest {
         controller.resume().visible()
         main.idleFor(1_000, TimeUnit.MILLISECONDS)
         assertTrue("An old loading timer must not replay after returning", ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertEquals(1, events.closed)
         showAfterLoading()
         assertEquals(listOf(host), ad.hosts)
@@ -182,11 +181,11 @@ class AppOpenResumePresentationTest {
     @Test
     fun `Back cancels loading but cannot release a vendor ad after dispatch`() {
         val ad = load()
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         ShadowDialog.getLatestDialog().cancel()
         main.idleFor(800, TimeUnit.MILLISECONDS)
         assertTrue(ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
         showAfterLoading()
         ShadowDialog.getLatestDialog().cancel()
@@ -213,12 +212,12 @@ class AppOpenResumePresentationTest {
         for ((name, block) in gates) {
             manager.releaseCachedAds()
             val ad = load()
-            manager.showAdIfAvailable(false)
+            manager.showAdIfAvailable()
             main.idleFor(400, TimeUnit.MILLISECONDS)
             block()
             main.idleFor(400, TimeUnit.MILLISECONDS)
             assertTrue("$name must block the queued show", ad.hosts.isEmpty())
-            assertTrue("$name must preserve the unspent fill", manager.isAdAvailable(false))
+            assertTrue("$name must preserve the unspent fill", manager.isAdAvailable())
             assertFalse("$name must release the pending attempt", manager.isShowingAd)
             assertFalse("$name must close loading", latestDialogShowing())
             premium = false
@@ -233,16 +232,16 @@ class AppOpenResumePresentationTest {
     @Test
     fun `release or unit replacement during loading cannot dispatch the old cached ad`() {
         val released = load()
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         manager.releaseCachedAds()
         main.idleFor(800, TimeUnit.MILLISECONDS)
         assertTrue(released.hosts.isEmpty())
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
         assertFalse(latestDialogShowing())
 
         val replaced = load()
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         manager.setAppResumeAdId("another-resume-unit")
         main.idleFor(800, TimeUnit.MILLISECONDS)
         assertTrue(replaced.hosts.isEmpty())
@@ -362,7 +361,7 @@ class AppOpenResumePresentationTest {
         ResumePresentationDialogShadow.afterShow = { controller.pause() }
         showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
         assertFalse(latestDialogShowing())
         // An overlay-style resume has no process ON_START. It must not replay the rejected show.
@@ -380,7 +379,7 @@ class AppOpenResumePresentationTest {
         ResumePresentationDialogShadow.afterShow = { manager.releaseCachedAds() }
         showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
-        assertFalse(manager.isAdAvailable(false))
+        assertFalse(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
         assertFalse(latestDialogShowing())
     }
@@ -391,7 +390,7 @@ class AppOpenResumePresentationTest {
         ResumePresentationDialogShadow.afterShow = { manager.setInitialized(false) }
         showAfterLoading()
         assertTrue(ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
         manager.setInitialized(true)
         showAfterLoading()
@@ -416,7 +415,7 @@ class AppOpenResumePresentationTest {
         controller.restart().start().resume().visible()
         main.idle()
         assertTrue("Clearing the return snapshot must not resurrect this skipped return", ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         leaveProcess()
         controller.restart().start()
         assertTrue("Process ON_START alone is not a RESUMED show host", ad.hosts.isEmpty())
@@ -435,7 +434,7 @@ class AppOpenResumePresentationTest {
         controller.stop()
         main.idle()
         assertTrue(ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         assertFalse(manager.isShowingAd)
     }
 
@@ -545,7 +544,7 @@ class AppOpenResumePresentationTest {
         requests.single().callback.onAdLoaded(ad)
         main.idleFor(2_000, TimeUnit.MILLISECONDS)
         assertTrue(ad.hosts.isEmpty())
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         leaveProcess()
         main.idleFor(2_000, TimeUnit.MILLISECONDS)
         assertEquals("A cached late fill survives the next background cycle", 1, requests.size)
@@ -598,7 +597,7 @@ class AppOpenResumePresentationTest {
     }
 
     private fun showAfterLoading() {
-        manager.showAdIfAvailable(false)
+        manager.showAdIfAvailable()
         main.idleFor(800, TimeUnit.MILLISECONDS)
     }
 
@@ -614,7 +613,7 @@ class AppOpenResumePresentationTest {
         assertEquals(before + 1, requests.size)
         val ad = ResumePresentationAd(UNIT).also(ads::add)
         requests.last().callback.onAdLoaded(ad)
-        assertTrue(manager.isAdAvailable(false))
+        assertTrue(manager.isAdAvailable())
         return ad
     }
 

@@ -113,10 +113,10 @@ class AppOpenResumePresentationDeviceTest {
                     manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java)
                     manager.enableAppResume()
                 }
-                assertFalse("Startup must not preload", onMain { manager.isAdAvailable(false) })
+                assertFalse("Startup must not preload", onMain { manager.isAdAvailable() })
                 physicalHome()
                 eventually("A real background app-open fill is required; inspect GMA errors if unavailable", 60_000L) {
-                    onMain { manager.isAdAvailable(false) }
+                    onMain { manager.isAdAvailable() }
                 }
                 assertEquals(0, shown.get())
                 onMain { manager.enableAppResumeWithActivity(AppOpenResumeDeviceActivity::class.java) }
