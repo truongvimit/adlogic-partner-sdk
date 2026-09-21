@@ -24,6 +24,7 @@ import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.R;
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.engine.BannerEngine;
+import com.ads.module.engine.NativeEngine;
 import com.ads.module.event.AdjustInstallReferrer;
 import com.ads.module.event.ERainAdjust;
 import com.ads.module.event.MmpTracking;
@@ -464,43 +465,7 @@ public class ERainAd {
 
     public void loadNativeAdResultCallback(final Context activity, String id,
                                            int layoutCustomNative, AdCallback callback) {
-        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
-            @Override
-            public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
-                super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                callback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
-                callback.onAdFailedToShow(adError);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                callback.onAdClicked();
-            }
-
-            @Override
-            public void onAdOpened() {
-                super.onAdOpened();
-                callback.onAdOpened();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                callback.onAdImpression();
-            }
-        }));
+        NativeEngine.INSTANCE.load(activity, id, layoutCustomNative, callback);
     }
 
     public void initRewardAds(Context context, String id, AdCallback callback) {

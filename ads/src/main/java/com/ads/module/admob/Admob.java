@@ -33,6 +33,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import com.ads.module.R;
 import com.ads.module.dialog.PrepareLoadingAdsDialog;
 import com.ads.module.engine.BannerEngine;
+import com.ads.module.engine.NativeEngine;
 import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.AdType;
@@ -558,152 +559,8 @@ public class Admob {
                 rootView.findViewById(R.id.shimmer_container_banner), adSize, callback);
     }
 
-    public void loadNativeAd(Context context, String id, final AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            return;
-        }
-        VideoOptions videoOptions = new VideoOptions.Builder()
-                .setStartMuted(true)
-                .build();
-
-        NativeAdOptions adOptions = new NativeAdOptions.Builder()
-                .setVideoOptions(videoOptions)
-                .build();
-        AdLoader adLoader = new AdLoader.Builder(context, id)
-                .forNativeAd(nativeAd -> {
-                    callback.onUnifiedNativeAdLoaded(nativeAd);
-                    nativeAd.setOnPaidEventListener(adValue -> {
-                        ERainLogEventManager.logPaidAdImpression(context,
-                                adValue,
-                                id,
-                                nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
-                    });
-                })
-                .withAdListener(new AdListener() {
-                    @Override
-                    public void onAdFailedToLoad(LoadAdError error) {
-                        callback.onAdFailedToLoad(error);
-                    }
-
-                    @Override
-                    public void onAdImpression() {
-                        super.onAdImpression();
-                        if (callback != null) {
-                            callback.onAdImpression();
-                        }
-                    }
-
-                    @Override
-                    public void onAdOpened() {
-                        super.onAdOpened();
-                        if (callback != null) {
-                            callback.onAdOpened();
-                        }
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                            AppOpenManager.getInstance().disableAdResumeByClickAction();
-                        if (callback != null) {
-                            callback.onAdClicked();
-                        }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
-                    }
-                })
-                .withNativeAdOptions(adOptions)
-                .build();
-        adLoader.loadAd(getAdRequest());
-    }
-
     public void populateUnifiedNativeAdView(NativeAd nativeAd, NativeAdView adView) {
-        adView.setMediaView(adView.findViewById(R.id.ad_media));
-        adView.setHeadlineView(adView.findViewById(R.id.ad_headline));
-        adView.setBodyView(adView.findViewById(R.id.ad_body));
-        adView.setCallToActionView(adView.findViewById(R.id.ad_call_to_action));
-        adView.setIconView(adView.findViewById(R.id.ad_app_icon));
-        adView.setPriceView(adView.findViewById(R.id.ad_price));
-        adView.setStarRatingView(adView.findViewById(R.id.ad_stars));
-        adView.setAdvertiserView(adView.findViewById(R.id.ad_advertiser));
-
-        try {
-            ((TextView) adView.getHeadlineView()).setText(nativeAd.getHeadline());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        // These assets aren't guaranteed to be in every UnifiedNativeAd, so it's important to
-        // check before trying to display them.
-        try {
-            if (nativeAd.getBody() == null) {
-                adView.getBodyView().setVisibility(View.INVISIBLE);
-            } else {
-                adView.getBodyView().setVisibility(View.VISIBLE);
-                ((TextView) adView.getBodyView()).setText(nativeAd.getBody());
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        try {
-            if (nativeAd.getCallToAction() == null) {
-                Objects.requireNonNull(adView.getCallToActionView()).setVisibility(View.INVISIBLE);
-            } else {
-                Objects.requireNonNull(adView.getCallToActionView()).setVisibility(View.VISIBLE);
-                ((TextView) adView.getCallToActionView()).setText(nativeAd.getCallToAction());
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        try {
-            if (nativeAd.getIcon() == null) {
-                Objects.requireNonNull(adView.getIconView()).setVisibility(View.GONE);
-            } else {
-                ((ImageView) adView.getIconView()).setImageDrawable(
-                        nativeAd.getIcon().getDrawable());
-                adView.getIconView().setVisibility(View.VISIBLE);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        try {
-            if (nativeAd.getPrice() == null) {
-                Objects.requireNonNull(adView.getPriceView()).setVisibility(View.INVISIBLE);
-            } else {
-                Objects.requireNonNull(adView.getPriceView()).setVisibility(View.VISIBLE);
-                ((TextView) adView.getPriceView()).setText(nativeAd.getPrice());
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        try {
-            if (nativeAd.getStarRating() == null) {
-                Objects.requireNonNull(adView.getStarRatingView()).setVisibility(View.INVISIBLE);
-            } else {
-                ((RatingBar) Objects.requireNonNull(adView.getStarRatingView())).setRating(nativeAd.getStarRating().floatValue());
-                adView.getStarRatingView().setVisibility(View.VISIBLE);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        try {
-            if (nativeAd.getAdvertiser() == null) {
-                adView.getAdvertiserView().setVisibility(View.INVISIBLE);
-            } else {
-                ((TextView) adView.getAdvertiserView()).setText(nativeAd.getAdvertiser());
-                adView.getAdvertiserView().setVisibility(View.VISIBLE);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        adView.setNativeAd(nativeAd);
-
+        NativeEngine.INSTANCE.populate(nativeAd, adView);
     }
 
 

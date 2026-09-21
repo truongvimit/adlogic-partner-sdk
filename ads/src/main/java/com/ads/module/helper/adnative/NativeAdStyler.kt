@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.ads.module.R
-import com.ads.module.admob.Admob
+import com.ads.module.engine.NativeEngine
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -112,7 +112,8 @@ object NativeAdStyler {
         container: FrameLayout,
         shimmer: ShimmerFrameLayout?,
     ) {
-        if (nativeAd.admobNativeAd == null) {
+        val ad = nativeAd.admobNativeAd
+        if (ad == null) {
             shimmer?.visibility = View.GONE
             return
         }
@@ -121,7 +122,7 @@ object NativeAdStyler {
         shimmer?.stopShimmer()
         shimmer?.visibility = View.GONE
         container.visibility = View.VISIBLE
-        Admob.getInstance().populateUnifiedNativeAdView(nativeAd.admobNativeAd, adView)
+        NativeEngine.populate(ad, adView)
         // Style AFTER the bind: populate force-sets body/CTA visible when the ad carries
         // those assets, so the style pass must land last for exclusions to stick
         if (style != null) {

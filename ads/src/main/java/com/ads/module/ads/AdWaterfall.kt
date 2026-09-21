@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.engine.NativeEngine
 import com.ads.module.engine.adMainScope
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -80,7 +81,7 @@ object AdWaterfall {
         val tier = Tier(tierTimeoutMs) {
             loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1, callback)
         }
-        ERainAd.getInstance().loadNativeAdResultCallback(activity, tiers[index], layoutRes,
+        NativeEngine.load(activity, tiers[index], layoutRes,
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     // A fill from a tier the waterfall already moved past has nowhere to go

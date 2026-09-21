@@ -7,7 +7,6 @@ import com.ads.module.funtion.AdCallback
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
-import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import io.trackkit.AdFormat
 import io.trackkit.PlacementRegistry
@@ -71,11 +70,6 @@ open class TrackingAdCallback(
     override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
         reportLoaded()
         delegate?.onRewardAdLoaded(rewardedAd)
-    }
-
-    override fun onUnifiedNativeAdLoaded(unifiedNativeAd: NativeAd) {
-        reportLoaded()
-        delegate?.onUnifiedNativeAdLoaded(unifiedNativeAd)
     }
 
     override fun onNativeAdLoaded(nativeAd: ApNativeAd) {

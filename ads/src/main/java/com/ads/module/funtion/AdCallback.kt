@@ -5,7 +5,6 @@ import com.ads.module.ads.wrapper.ApNativeAd
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
-import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 
 open class AdCallback {
@@ -36,8 +35,6 @@ open class AdCallback {
     open fun onAdImpression() {}
 
     open fun onRewardAdLoaded(rewardedAd: RewardedAd?) {}
-
-    open fun onUnifiedNativeAdLoaded(unifiedNativeAd: NativeAd) {}
 
     open fun onNativeAdLoaded(nativeAd: ApNativeAd) {}
 
