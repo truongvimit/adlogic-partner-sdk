@@ -3,8 +3,6 @@ package com.ads.module.helper.interstitial
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.settings.BehaviorValues
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -15,6 +13,7 @@ import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.dialog.PrepareLoadingAdsDialog
 import com.ads.module.engine.InterstitialEngine
+import com.ads.module.engine.launchAfter
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.CachedAd
@@ -26,6 +25,7 @@ import io.trackkit.Tracker
 import io.trackkit.AdFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.Job
 
 /** Load-time knobs for one interstitial request. */
 class InterLoadOptions @JvmOverloads constructor(
@@ -410,10 +410,9 @@ object InterstitialAdManager {
         fun hostCanShow() = !activity.isFinishing && !activity.isDestroyed &&
             activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         val releaseToken = releaseTokens.getOrPut(placement) { Any() }
-        val handler = Handler(Looper.getMainLooper())
         val settled = AtomicBoolean(false)
         var dialog: PrepareLoadingAdsDialog? = null
-        lateinit var timeout: Runnable
+        var timeout: Job? = null
         lateinit var observer: LifecycleEventObserver
         lateinit var waiter: (AdSkipReason?) -> Unit
         lateinit var gateObserver: () -> Unit
@@ -425,7 +424,7 @@ object InterstitialAdManager {
                 if (subscribers.isEmpty()) loadWaiters.remove(placement, subscribers)
             }
             InterstitialAutoBuffer.removeGateObserver(gateObserver)
-            handler.removeCallbacks(timeout)
+            timeout?.cancel()
             activity.lifecycle.removeObserver(observer)
             runCatching { dialog?.dismiss() }
             dialog = null
@@ -449,7 +448,6 @@ object InterstitialAdManager {
                 } else null
             if (reason != null) finishSkipped(reason)
         }
-        timeout = Runnable { finishSkipped(AdSkipReason.NOT_READY) }
         observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_DESTROY ||
                 (options.allowWaitForAutoBuffer && event == Lifecycle.Event.ON_STOP)
@@ -472,7 +470,9 @@ object InterstitialAdManager {
         }
         if (options.allowWaitForAutoBuffer) InterstitialAutoBuffer.observeGates(gateObserver)
         activity.lifecycle.addObserver(observer)
-        handler.postDelayed(timeout, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+        timeout = launchAfter((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0)) {
+            finishSkipped(AdSkipReason.NOT_READY)
+        }
         // Cosmetic only. This captured dialog cannot dismiss a later invocation's UI.
         dialog = if (!checkNotNull(options.behavior).boolean("presentation.loading_enabled", AdBehavior.defaultBool("interstitial.presentation.loading_enabled"))) null else runCatching {
             PrepareLoadingAdsDialog(activity).apply {
