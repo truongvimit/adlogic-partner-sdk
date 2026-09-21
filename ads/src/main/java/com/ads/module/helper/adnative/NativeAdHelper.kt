@@ -16,6 +16,7 @@ import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
+import com.ads.module.engine.launchAfter
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
@@ -26,6 +27,7 @@ import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -145,15 +147,28 @@ class NativeAdHelper(
         (activity as? ViewModelStoreOwner)?.let { ViewModelProvider(it)[NativePresentationStore::class.java] }
     }
 
-    private val resumeReloadRunnable = Runnable {
+    private var resumeReloadJob: Job? = null
+    private var reloadByTimeJob: Job? = null
+
+    private fun reloadAfterResume() {
         if (reloadByTimeMs > 0) {
             armReload()
-            return@Runnable
+            return
         }
         if (isResumed() && contentView?.isShown == true && resumeCount.get() > 1 &&
             canRequestAds() && canReloadAd() && isActiveState()) {
             requestAds(NativeAdParam.Reload)
         }
+    }
+
+    private fun scheduleReloadByTime(delayMs: Long) {
+        reloadByTimeJob?.cancel()
+        reloadByTimeJob = launchAfter(delayMs) { reloadWhenVisible() }
+    }
+
+    private fun cancelReloadTimers() {
+        reloadByTimeJob?.cancel()
+        resumeReloadJob?.cancel()
     }
 
     // Follow the consumed ad itself; another preload at this placement must not redirect its events.
@@ -184,8 +199,7 @@ class NativeAdHelper(
         if (adClickPending) return
         adClickPending = true
         pendingClickAction = config.resolvedClickAction
-        mainHandler.removeCallbacks(reloadByTimeRunnable)
-        mainHandler.removeCallbacks(resumeReloadRunnable)
+        cancelReloadTimers()
         if (pendingClickAction != NativeClickAction.RELOAD) return
         // Keep the current presentation until a replacement binds. Only the unused cache loads here;
         // it must never bind a replacement while the click destination is opening.
@@ -195,12 +209,10 @@ class NativeAdHelper(
             reportTelemetry = reportTelemetry && placement != null)
     }
 
-    private val reloadByTimeRunnable = Runnable { reloadWhenVisible() }
-
     private fun reloadWhenVisible() {
         if (!isResumed() || !isActiveState() || !canReloadAd()) return
         if (contentView?.isShown != true) {
-            mainHandler.postDelayed(reloadByTimeRunnable, reloadByTimeMs.coerceAtLeast(maxValueDebounceAdLoaded))
+            scheduleReloadByTime(reloadByTimeMs.coerceAtLeast(maxValueDebounceAdLoaded))
         } else if (conditionReloadAdAvailable()) requestAds(NativeAdParam.Reload)
     }
 
@@ -370,8 +382,7 @@ class NativeAdHelper(
         loadSubscription?.cancel()
         eventSubscription?.cancel()
         flagActive.compareAndSet(true, false)
-        mainHandler.removeCallbacks(reloadByTimeRunnable)
-        mainHandler.removeCallbacks(resumeReloadRunnable)
+        cancelReloadTimers()
         nativeAd?.let(::destroyNative)
         nativeAd = null
         detachAdViews()
@@ -426,15 +437,14 @@ class NativeAdHelper(
                     if (!restorePresentation()) requestSharedAd()
                 } else if (nativeAd != null) armReload()
                 resumeCount.incrementAndGet()
-                mainHandler.removeCallbacks(resumeReloadRunnable)
-                mainHandler.postDelayed(resumeReloadRunnable, config.timeDebounceResume)
+                resumeReloadJob?.cancel()
+                resumeReloadJob = launchAfter(config.timeDebounceResume) { reloadAfterResume() }
             }
 
             Lifecycle.Event.ON_PAUSE -> {
                 // Pause/stop only suspend refresh. Retain the view and load subscription;
                 // a background fill waits for RESUMED through awaitingHost.
-                mainHandler.removeCallbacks(reloadByTimeRunnable)
-                mainHandler.removeCallbacks(resumeReloadRunnable)
+                cancelReloadTimers()
             }
 
             Lifecycle.Event.ON_DESTROY -> {
@@ -517,11 +527,11 @@ class NativeAdHelper(
     }
 
     private fun armReload() {
-        mainHandler.removeCallbacks(reloadByTimeRunnable)
+        reloadByTimeJob?.cancel()
         if (adClickPending || reloadByTimeMs <= 0 || !isResumed() || !isActiveState() || !canReloadAd()) return
         val due = maxOf(nextReloadAtMs, timeShowAdRecent + maxValueDebounceAdLoaded + 1)
         val delay = (due - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0)
-        mainHandler.postDelayed(reloadByTimeRunnable, delay)
+        scheduleReloadByTime(delay)
     }
 
     private fun detachAdViews() {
