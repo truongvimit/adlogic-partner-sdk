@@ -1,7 +1,6 @@
 package com.ads.module.engine
 
 import android.content.Context
-import android.os.Handler
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -23,6 +22,8 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import io.trackkit.AdFormat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal object InterstitialEngine {
     private const val TAG = "ERainStudio"
@@ -245,21 +246,24 @@ internal object InterstitialEngine {
         // Every path that reaches show() fires this: callers use it to read onNextAction's meaning.
         callback.onInterstitialShow()
 
-        @Suppress("DEPRECATION")
-        val handler = Handler()
-        handler.postDelayed({
+        val preShowDelayMs = AdBehavior.number("interstitial.presentation.pre_show_delay_ms")
+        adMainScope.launch {
+            delay(preShowDelayMs)
             if (context.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                 if (!callback.canShowInterstitial()) {
                     dialog?.dismiss()
                     notifyShowFailed(
                         callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd,
                     )
-                    return@postDelayed
+                    return@launch
                 }
                 if (openNextUnderAd) {
                     // Same tick as show(): the next Activity must queue under the ad, not above it.
                     callback.onNextAction()
-                    handler.postDelayed({ dismissLoading(context) }, 1500)
+                    launch {
+                        delay(1500)
+                        dismissLoading(context)
+                    }
                 }
                 interstitialAd.setImmersiveMode(true)
                 interstitialAd.show(context)
@@ -270,7 +274,7 @@ internal object InterstitialEngine {
                     "Show fail in background after show loading ad", openNextUnderAd,
                 )
             }
-        }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"))
+        }
     }
 
     private fun dismissLoading(activity: AppCompatActivity) {
