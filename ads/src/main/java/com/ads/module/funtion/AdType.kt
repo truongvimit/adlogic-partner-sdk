@@ -1,6 +1,6 @@
-package com.ads.module.funtion;
+package com.ads.module.funtion
 
-public enum AdType {
+enum class AdType {
     BANNER,
     INTERSTITIAL,
     NATIVE,
