@@ -36,6 +36,7 @@ import com.ads.module.dialog.PrepareLoadingAdsDialog;
 import com.ads.module.engine.BannerEngine;
 import com.ads.module.engine.InterstitialEngine;
 import com.ads.module.engine.NativeEngine;
+import com.ads.module.engine.RewardEngine;
 import com.ads.module.event.ERainLogEventManager;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.AdType;
@@ -264,103 +265,12 @@ public class Admob {
     }
 
 
-    /**
-     * Loads a rewarded ad and reports it through {@code callback}; premium users return without
-     * a request. Nothing is cached here — the caller owns the fill.
-     */
     public void initRewardAds(Context context, String id, AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            return;
-        }
-        RewardedAd.load(context, id, getAdRequest(), new RewardedAdLoadCallback() {
-            @Override
-            public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
-                rewardedAd.setOnPaidEventListener(adValue -> {
-                    ERainLogEventManager.logPaidAdImpression(context,
-                            adValue,
-                            rewardedAd.getAdUnitId(),
-                            rewardedAd.getResponseInfo().getMediationAdapterClassName()
-                            , AdType.REWARDED);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
-                });
-                callback.onRewardAdLoaded(rewardedAd);
-            }
-
-            @Override
-            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                callback.onAdFailedToLoad(loadAdError);
-            }
-        });
+        RewardEngine.INSTANCE.load(context, id, callback);
     }
 
-    /** Shows only the supplied ad. Loading the next one is the caller's decision. */
     public void showRewardAds(final Activity context, RewardedAd rewardedAd,
                               final RewardCallback adCallback) {
-        if (!AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            adCallback.onUserEarnedReward(null);
-            return;
-        }
-        if (rewardedAd == null) {
-            adCallback.onRewardedAdFailedToShow(0);
-            return;
-        } else {
-            final AtomicBoolean settled = new AtomicBoolean(false);
-            final String shownUnitId = rewardedAd.getAdUnitId();
-            final TrackingAdCallback presentationTracking = new TrackingAdCallback(
-                    PlacementRegistry.placementOf(shownUnitId), AdFormat.REWARDED, shownUnitId, null);
-            rewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
-                @Override
-                public void onAdDismissedFullScreenContent() {
-                    if (!settled.compareAndSet(false, true)) return;
-                    AppOpenManager.getInstance().setInterstitialShowing(false);
-                    if (adCallback != null) adCallback.onRewardedAdClosed();
-                }
-
-                @Override
-                public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
-                    if (!settled.compareAndSet(false, true)) return;
-                    AppOpenManager.getInstance().setInterstitialShowing(false);
-                    presentationTracking.onAdFailedToShow(adError);
-                    if (adCallback != null)
-                        adCallback.onRewardedAdFailedToShow(adError.getCode());
-                }
-
-                @Override
-                public void onAdShowedFullScreenContent() {
-                    if (settled.get()) return;
-
-                    AppOpenManager.getInstance().setInterstitialShowing(true);
-                    presentationTracking.onAdImpression();
-                    if (adCallback != null) adCallback.onRewardedAdShown();
-                }
-
-                @Override
-                public void onAdImpression() {
-                    if (settled.get()) return;
-                    if (adCallback != null) adCallback.onAdImpression();
-                }
-
-                public void onAdClicked() {
-                    if (settled.get()) return;
-                    if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                        AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    if (adCallback != null) {
-                        adCallback.onAdClicked();
-                    }
-                    ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
-                }
-            });
-            rewardedAd.show(context, new OnUserEarnedRewardListener() {
-                @Override
-                public void onUserEarnedReward(@NonNull RewardItem rewardItem) {
-                    if (adCallback != null) {
-                        adCallback.onUserEarnedReward(rewardItem);
-
-                    }
-                }
-            });
-        }
+        RewardEngine.INSTANCE.show(context, rewardedAd, adCallback);
     }
-
-
 }

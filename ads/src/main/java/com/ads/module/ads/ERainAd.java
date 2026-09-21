@@ -26,6 +26,7 @@ import com.ads.module.config.ERainAdConfig;
 import com.ads.module.engine.BannerEngine;
 import com.ads.module.engine.InterstitialEngine;
 import com.ads.module.engine.NativeEngine;
+import com.ads.module.engine.RewardEngine;
 import com.ads.module.event.AdjustInstallReferrer;
 import com.ads.module.event.ERainAdjust;
 import com.ads.module.event.MmpTracking;
@@ -338,11 +339,11 @@ public class ERainAd {
     }
 
     public void initRewardAds(Context context, String id, AdCallback callback) {
-        Admob.getInstance().initRewardAds(context, id, instrument(id, AdFormat.REWARDED, callback));
+        RewardEngine.INSTANCE.load(context, id, callback);
     }
 
     public void showRewardAds(Activity context, RewardedAd rewardedAd, RewardCallback adCallback) {
-        Admob.getInstance().showRewardAds(context, rewardedAd, adCallback);
+        RewardEngine.INSTANCE.show(context, rewardedAd, adCallback);
     }
 
 }

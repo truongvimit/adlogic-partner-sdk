@@ -6,6 +6,7 @@ import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.engine.InterstitialEngine
 import com.ads.module.engine.NativeEngine
+import com.ads.module.engine.RewardEngine
 import com.ads.module.engine.adMainScope
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -230,7 +231,7 @@ object AdWaterfall {
             }
         }
         try {
-            ERainAd.getInstance().initRewardAds(context, tiers[index], tierCallback)
+            RewardEngine.load(context, tiers[index], tierCallback)
         } catch (error: RuntimeException) {
             if (error is CancellationException) throw error
             // A dispatch failure must settle the same tier as a vendor load failure; otherwise its
