@@ -112,7 +112,7 @@ object NativeAdStyler {
         container: FrameLayout,
         shimmer: ShimmerFrameLayout?,
     ) {
-        if (nativeAd.admobNativeAd == null && nativeAd.nativeView == null) {
+        if (nativeAd.admobNativeAd == null) {
             shimmer?.visibility = View.GONE
             return
         }

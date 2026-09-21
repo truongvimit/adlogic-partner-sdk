@@ -96,7 +96,6 @@ class InterstitialLifecycleRestoreTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)

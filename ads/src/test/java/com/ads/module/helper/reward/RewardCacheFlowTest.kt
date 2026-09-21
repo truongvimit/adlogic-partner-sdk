@@ -148,7 +148,6 @@ class RewardCacheFlowTest {
         RewardAdManager.show(activity, PLACEMENT, shown)
         assertEquals(listOf(activity), ad.state.hosts)
         assertFalse(RewardAdManager.isReady(PLACEMENT))
-        assertNull("The legacy buffer cannot show the same consumed ad", Admob.getInstance().rewardedAd)
         ad.state.callback!!.onAdShowedFullScreenContent()
         ad.state.callback!!.onAdDismissedFullScreenContent()
         assertEquals(listOf(false), shown.closed)
@@ -490,7 +489,6 @@ class RewardCacheFlowTest {
         val ad = newAd()
         requests.last().onAdLoaded(ad)
         assertTrue(RewardAdManager.isReady(PLACEMENT))
-        assertSame(ad, Admob.getInstance().rewardedAd)
         return ad
     }
 

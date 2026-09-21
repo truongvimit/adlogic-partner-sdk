@@ -62,7 +62,6 @@ class InterstitialAutoBufferDeviceTest {
             AppOpenManager.getInstance().disableAppResume()
             ERainAd.getInstance().setIntervalInterstitialAd(5)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setCountClickToShowAds(1, 0)
             ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
             AdRemoteConfig.initializeFromJson("""{
                 "inter_all":{"id":"$UNIT","isEnable":true},

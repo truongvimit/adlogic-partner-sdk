@@ -51,29 +51,12 @@ public final class AdWaterfall {
     }
 
     /**
-     * Walks {@code adUnitIds} until one native fills.
+     * Walks {@code adUnitIds} until one native fills. A process-owned preload must not retain a
+     * departed Activity.
      *
      * @param callback {@code onNativeAdLoaded} on the first fill, {@code onAdFailedToLoad} once
      *                 every tier has failed. Clicks are forwarded from whichever tier won.
      */
-    public static void loadNative(
-            @NonNull Activity activity,
-            @Nullable List<String> adUnitIds,
-            int layoutRes,
-            @NonNull AdCallback callback) {
-        loadNative(activity, adUnitIds, layoutRes, DEFAULT_TIER_TIMEOUT_MS, callback);
-    }
-
-    public static void loadNative(
-            @NonNull Activity activity,
-            @Nullable List<String> adUnitIds,
-            int layoutRes,
-            long tierTimeoutMs,
-            @NonNull AdCallback callback) {
-        loadNative((Context) activity, adUnitIds, layoutRes, tierTimeoutMs, callback);
-    }
-
-    /** A process-owned preload must not retain a departed Activity. */
     public static void loadNative(
             @NonNull Context context,
             @Nullable List<String> adUnitIds,
@@ -153,13 +136,6 @@ public final class AdWaterfall {
     public static void loadInterstitial(
             @NonNull Context context,
             @Nullable List<String> adUnitIds,
-            @NonNull AdCallback callback) {
-        loadInterstitial(context, adUnitIds, DEFAULT_TIER_TIMEOUT_MS, callback);
-    }
-
-    public static void loadInterstitial(
-            @NonNull Context context,
-            @Nullable List<String> adUnitIds,
             long tierTimeoutMs,
             @NonNull AdCallback callback) {
         List<String> tiers = usableIds(adUnitIds);
@@ -214,13 +190,6 @@ public final class AdWaterfall {
      * @param callback {@code onRewardAdLoaded} on the first fill, {@code onAdFailedToLoad}
      *                 once every tier has failed.
      */
-    public static void loadReward(
-            @NonNull Context context,
-            @Nullable List<String> adUnitIds,
-            @NonNull AdCallback callback) {
-        loadReward(context, adUnitIds, DEFAULT_TIER_TIMEOUT_MS, callback);
-    }
-
     public static void loadReward(
             @NonNull Context context,
             @Nullable List<String> adUnitIds,

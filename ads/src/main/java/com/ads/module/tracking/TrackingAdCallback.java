@@ -12,7 +12,6 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.nativead.NativeAd;
 import com.google.android.gms.ads.rewarded.RewardedAd;
-import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,10 +25,6 @@ import io.trackkit.PlacementRegistry;
  *
  * <p>It also registers the ad unit against its placement and format, which is what lets the paid and
  * click bridges attribute an impression to a screen — AdMob's callbacks only know the ad unit.
- *
- * <p>The tiered splash flows call a per-tier variant of each callback ({@code onAdLoadedHigh},
- * {@code onAdClickedAll}, …), so loaded / shown / closed are emitted at most once per instance and
- * a tier race can not inflate the counts.
  *
  * <p>{@code onInterstitialShow} marks the navigation commitment before vendor show; it only
  * forwards to the delegate. Actual display is reported by {@code onAdImpression}, including
@@ -76,48 +71,6 @@ public class TrackingAdCallback extends AdCallback {
     }
 
     @Override
-    public void onAdLoadedHigh() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdLoadedHigh();
-    }
-
-    @Override
-    public void onAdLoadedAll() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdLoadedAll();
-    }
-
-    @Override
-    public void onAdSplashReady() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdSplashReady();
-    }
-
-    @Override
-    public void onAdSplashHigh1Ready() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdSplashHigh1Ready();
-    }
-
-    @Override
-    public void onAdSplashHigh2Ready() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdSplashHigh2Ready();
-    }
-
-    @Override
-    public void onAdSplashHigh3Ready() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdSplashHigh3Ready();
-    }
-
-    @Override
-    public void onAdSplashNormalReady() {
-        reportLoaded();
-        if (delegate != null) delegate.onAdSplashNormalReady();
-    }
-
-    @Override
     public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
         reportLoaded();
         if (delegate != null) delegate.onInterstitialLoad(interstitialAd);
@@ -131,12 +84,6 @@ public class TrackingAdCallback extends AdCallback {
 
     @Override
     public void onRewardAdLoaded(RewardedAd rewardedAd) {
-        reportLoaded();
-        if (delegate != null) delegate.onRewardAdLoaded(rewardedAd);
-    }
-
-    @Override
-    public void onRewardAdLoaded(RewardedInterstitialAd rewardedAd) {
         reportLoaded();
         if (delegate != null) delegate.onRewardAdLoaded(rewardedAd);
     }
@@ -157,18 +104,6 @@ public class TrackingAdCallback extends AdCallback {
     public void onAdFailedToLoad(@Nullable LoadAdError i) {
         reportLoadFailed(i == null ? null : i.getCode());
         if (delegate != null) delegate.onAdFailedToLoad(i);
-    }
-
-    @Override
-    public void onAdHighFailedToLoad() {
-        reportLoadFailed(null);
-        if (delegate != null) delegate.onAdHighFailedToLoad();
-    }
-
-    @Override
-    public void onAdPriorityFailedToLoad(@Nullable AdError adError) {
-        reportLoadFailed(adError == null ? null : adError.getCode());
-        if (delegate != null) delegate.onAdPriorityFailedToLoad(adError);
     }
 
     // -----------------------------------------------------------------------
@@ -207,30 +142,6 @@ public class TrackingAdCallback extends AdCallback {
         if (delegate != null) delegate.onAdFailedToShow(adError);
     }
 
-    @Override
-    public void onAdFailedToShowHigh(@Nullable AdError adError) {
-        reportShowFailed(adError);
-        if (delegate != null) delegate.onAdFailedToShowHigh(adError);
-    }
-
-    @Override
-    public void onAdFailedToShowMedium(@Nullable AdError adError) {
-        reportShowFailed(adError);
-        if (delegate != null) delegate.onAdFailedToShowMedium(adError);
-    }
-
-    @Override
-    public void onAdFailedToShowAll(@Nullable AdError adError) {
-        reportShowFailed(adError);
-        if (delegate != null) delegate.onAdFailedToShowAll(adError);
-    }
-
-    @Override
-    public void onAdPriorityFailedToShow(@Nullable AdError adError) {
-        reportShowFailed(adError);
-        if (delegate != null) delegate.onAdPriorityFailedToShow(adError);
-    }
-
     // -----------------------------------------------------------------------
     // Click / close
     //
@@ -241,21 +152,6 @@ public class TrackingAdCallback extends AdCallback {
     @Override
     public void onAdClicked() {
         if (delegate != null) delegate.onAdClicked();
-    }
-
-    @Override
-    public void onAdClickedHigh() {
-        if (delegate != null) delegate.onAdClickedHigh();
-    }
-
-    @Override
-    public void onAdClickedMedium() {
-        if (delegate != null) delegate.onAdClickedMedium();
-    }
-
-    @Override
-    public void onAdClickedAll() {
-        if (delegate != null) delegate.onAdClickedAll();
     }
 
     @Override

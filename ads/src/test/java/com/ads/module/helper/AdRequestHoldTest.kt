@@ -52,13 +52,10 @@ class AdRequestHoldTest {
                                 val admob = Admob.getInstance()
                                 admob.getInterstitialAds(context, "inter", callback)
                                 admob.initRewardAds(context, "reward", callback)
-                                admob.getRewardInterstitial(context, "reward-inter", callback)
                                 admob.loadNativeAd(context, "native", callback)
-                                admob.loadNativeAds(context, "native-many", callback, 3)
                                 AppOpenManager.getInstance().fetchAd()
                                 inter.verifyNoInteractions()
                                 reward.verifyNoInteractions()
-                                rewardInter.verifyNoInteractions()
                                 appOpen.verifyNoInteractions()
                                 assertTrue(native.constructed().isEmpty())
                             }

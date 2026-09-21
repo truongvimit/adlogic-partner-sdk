@@ -77,7 +77,6 @@ class InterstitialLoadAndShowTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
@@ -137,7 +136,7 @@ class InterstitialLoadAndShowTest {
         val first = newVendor()
         Admob.getInstance().forceShowInterstitial(activity, first, object : AdCallback() {
             override fun onNextAction() { implicitNext++ }
-        })
+        }, Admob.getInstance().isOpenActivityAfterShowInterAds)
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial":{"presentation":{"next_screen_timing":"AFTER_AD"}}}""")
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         assertEquals(1, implicitNext)

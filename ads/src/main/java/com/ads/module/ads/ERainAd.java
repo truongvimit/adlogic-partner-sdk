@@ -20,7 +20,6 @@ import com.adjust.sdk.LogLevel;
 import com.ads.module.admob.Admob;
 import com.ads.module.admob.AppOpenManager;
 import com.ads.module.ads.wrapper.ApInterstitialAd;
-import com.ads.module.ads.wrapper.ApInterstitialPriorityAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
 import com.ads.module.config.ERainAdConfig;
 import com.ads.module.event.AdjustInstallReferrer;
@@ -82,14 +81,6 @@ public class ERainAd {
      */
     public Boolean shouldDisplayForUa(boolean isForceOrganic) {
         return !isForceOrganic || !getOrganic();
-    }
-
-    public void setCountClickToShowAds(int countClickToShowAds) {
-        Admob.getInstance().setNumToShowAds(countClickToShowAds);
-    }
-
-    public void setCountClickToShowAds(int countClickToShowAds, int currentClicked) {
-        Admob.getInstance().setNumToShowAds(countClickToShowAds, currentClicked);
     }
 
     /**
@@ -249,10 +240,6 @@ public class ERainAd {
         return new TrackingAdCallback(PlacementRegistry.placementOf(adUnitId), format, adUnitId, callback);
     }
 
-    public void loadBanner(Activity mActivity, String id) {
-        Admob.getInstance().loadBanner(mActivity, id, instrument(id, AdFormat.BANNER, null));
-    }
-
     public void loadBanner(Activity mActivity, String id, AdCallback adCallback) {
         Admob.getInstance().loadBanner(mActivity, id, instrument(id, AdFormat.BANNER, adCallback));
     }
@@ -267,32 +254,13 @@ public class ERainAd {
                 instrument(id, AdFormat.COLLAPSIBLE_BANNER, adCallback));
     }
 
-    public void loadCollapsibleBannerSizeMedium(Activity activity, String id, String gravity, AdSize sizeBanner, AdCallback adCallback) {
-        Admob.getInstance().loadCollapsibleBannerSizeMedium(activity, id, gravity, sizeBanner,
-                instrument(id, AdFormat.COLLAPSIBLE_BANNER, adCallback));
-    }
-
-    public void loadBannerFragment(Activity mActivity, String id, View rootView) {
-        Admob.getInstance().loadBannerFragment(mActivity, id, rootView, instrument(id, AdFormat.BANNER, null));
-    }
-
     public void loadBannerFragment(Activity mActivity, String id, View rootView, AdCallback adCallback) {
         Admob.getInstance().loadBannerFragment(mActivity, id, rootView, instrument(id, AdFormat.BANNER, adCallback));
-    }
-
-    public void loadInlineBanner(Activity mActivity, String idBanner, String inlineStyle) {
-        Admob.getInstance().loadInlineBanner(mActivity, idBanner, inlineStyle,
-                instrument(idBanner, AdFormat.BANNER, null));
     }
 
     public void loadInlineBanner(Activity mActivity, String idBanner, String inlineStyle, AdCallback adCallback) {
         Admob.getInstance().loadInlineBanner(mActivity, idBanner, inlineStyle,
                 instrument(idBanner, AdFormat.BANNER, adCallback));
-    }
-
-    public void loadBannerInlineFragment(Activity mActivity, String idBanner, View rootView, String inlineStyle) {
-        Admob.getInstance().loadInlineBannerFragment(mActivity, idBanner, rootView, inlineStyle,
-                instrument(idBanner, AdFormat.BANNER, null));
     }
 
     public void loadBannerInlineFragment(Activity mActivity, String idBanner, View rootView, String inlineStyle, AdCallback adCallback) {
@@ -356,12 +324,6 @@ public class ERainAd {
         return apInterstitialAd;
     }
 
-    public void forceShowInterstitial(@NonNull Context context, ApInterstitialAd mInterstitialAd,
-                                      @NonNull final AdCallback callback, boolean shouldReloadAds) {
-        forceShowInterstitial(context, mInterstitialAd, callback, shouldReloadAds,
-                Admob.getInstance().isOpenActivityAfterShowInterAds());
-    }
-
     /**
      * Shows the ad with the next-action timing chosen for this one presentation.
      *
@@ -375,7 +337,7 @@ public class ERainAd {
                                       boolean openNextUnderAd) {
         // Frequency belongs to placement-based InterstitialAdManager/AutoBuffer. Raw
         // splash/OB callers must not inherit or advance that group's interval.
-        if (mInterstitialAd == null || mInterstitialAd.isNotReady()) {
+        if (mInterstitialAd == null || !mInterstitialAd.isReady()) {
             callback.onNextAction();
             return;
         }
@@ -496,11 +458,6 @@ public class ERainAd {
                 instrument(adUnitId, AdFormat.INTERSTITIAL, adCallback), openNextUnderAd);
     }
 
-    public void loadNativeAdResultCallback(final Activity activity, String id,
-                                           int layoutCustomNative, AdCallback callback) {
-        loadNativeAdResultCallback((Context) activity, id, layoutCustomNative, callback);
-    }
-
     public void loadNativeAdResultCallback(final Context activity, String id,
                                            int layoutCustomNative, AdCallback callback) {
         Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
@@ -542,471 +499,12 @@ public class ERainAd {
         }));
     }
 
-    public void loadNativeAd(final Activity activity, String id,
-                             int layoutCustomNative, FrameLayout adPlaceHolder, ShimmerFrameLayout
-                                     containerShimmerLoading, AdCallback callback) {
-        Admob.getInstance().loadNativeAd(((Context) activity), id, instrument(id, AdFormat.NATIVE, new AdCallback() {
-            @Override
-            public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
-                super.onUnifiedNativeAdLoaded(unifiedNativeAd);
-                callback.onNativeAdLoaded(new ApNativeAd(layoutCustomNative, unifiedNativeAd));
-                populateNativeAdView(activity, new ApNativeAd(layoutCustomNative, unifiedNativeAd), adPlaceHolder, containerShimmerLoading);
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                callback.onAdImpression();
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                callback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
-                callback.onAdFailedToShow(adError);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                callback.onAdClicked();
-            }
-
-            @Override
-            public void onAdOpened() {
-                super.onAdOpened();
-                callback.onAdOpened();
-            }
-        }));
-    }
-
-    public void populateNativeAdView(Activity activity, ApNativeAd apNativeAd, FrameLayout adPlaceHolder, ShimmerFrameLayout containerShimmerLoading) {
-        if (apNativeAd.getAdmobNativeAd() == null && apNativeAd.getNativeView() == null) {
-            containerShimmerLoading.setVisibility(View.GONE);
-            return;
-        }
-        @SuppressLint("InflateParams") NativeAdView adView = (NativeAdView) LayoutInflater.from(activity).inflate(apNativeAd.getLayoutCustomNative(), null);
-        containerShimmerLoading.stopShimmer();
-        containerShimmerLoading.setVisibility(View.GONE);
-        adPlaceHolder.setVisibility(View.VISIBLE);
-        Admob.getInstance().populateUnifiedNativeAdView(apNativeAd.getAdmobNativeAd(), adView);
-        adPlaceHolder.removeAllViews();
-        adPlaceHolder.addView(adView);
-    }
-
-    public void initRewardAds(Context context, String id) {
-        Admob.getInstance().initRewardAds(context, id, instrument(id, AdFormat.REWARDED, null));
-    }
-
     public void initRewardAds(Context context, String id, AdCallback callback) {
         Admob.getInstance().initRewardAds(context, id, instrument(id, AdFormat.REWARDED, callback));
-    }
-
-    public void getRewardInterstitial(Context context, String id, AdCallback callback) {
-        Admob.getInstance().getRewardInterstitial(context, id,
-                instrument(id, AdFormat.REWARDED_INTERSTITIAL, callback));
-    }
-
-    public void showRewardInterstitial(Activity activity, RewardedInterstitialAd rewardedInterstitialAd, RewardCallback adCallback) {
-        Admob.getInstance().showRewardInterstitial(activity, rewardedInterstitialAd, adCallback);
-    }
-
-    public void showRewardAds(Activity context, RewardCallback adCallback) {
-        Admob.getInstance().showRewardAds(context, adCallback);
     }
 
     public void showRewardAds(Activity context, RewardedAd rewardedAd, RewardCallback adCallback) {
         Admob.getInstance().showRewardAds(context, rewardedAd, adCallback);
     }
 
-    /** Pass false when a placement manager owns loading and the supplied ad's cache. */
-    public void showRewardAds(Activity context, RewardedAd rewardedAd, RewardCallback adCallback,
-                              boolean reload) {
-        Admob.getInstance().showRewardAds(context, rewardedAd, adCallback, reload);
-    }
-
-    private boolean isFinishLoadNativeAdHigh1 = false;
-    private boolean isFinishLoadNativeAdHigh2 = false;
-    private boolean isFinishLoadNativeAdHigh3 = false;
-    private boolean isFinishLoadNativeAdNormal = false;
-
-    private ApNativeAd apNativeAdHigh2;
-    private ApNativeAd apNativeAdHigh3;
-    private ApNativeAd apNativeAdNormal;
-
-    public void loadNative4SameTime(final Activity activity, String idAdHigh1, String idAdHigh2, String idAdHigh3, String idAdNormal, int layoutCustomNative, AdCallback adCallback) {
-        isFinishLoadNativeAdHigh1 = false;
-        isFinishLoadNativeAdHigh2 = false;
-        isFinishLoadNativeAdHigh3 = false;
-
-        apNativeAdHigh2 = null;
-        apNativeAdHigh3 = null;
-        apNativeAdNormal = null;
-
-        loadNativeAdResultCallback(activity, idAdHigh1, layoutCustomNative, new AdCallback() {
-            @Override
-            public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
-                super.onNativeAdLoaded(nativeAd);
-                adCallback.onNativeAdLoaded(nativeAd);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                if (isFinishLoadNativeAdHigh2 && apNativeAdHigh2 != null) {
-                    adCallback.onNativeAdLoaded(apNativeAdHigh2);
-                } else if (isFinishLoadNativeAdHigh3 && apNativeAdHigh3 != null) {
-                    adCallback.onNativeAdLoaded(apNativeAdHigh3);
-                } else if (isFinishLoadNativeAdNormal && apNativeAdNormal != null) {
-                    adCallback.onNativeAdLoaded(apNativeAdNormal);
-                } else {
-                    // waiting for ads loaded
-                    isFinishLoadNativeAdHigh1 = true;
-                }
-            }
-        });
-
-        loadNativeAdResultCallback(activity, idAdHigh2, layoutCustomNative, new AdCallback() {
-            @Override
-            public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
-                super.onNativeAdLoaded(nativeAd);
-                if (isFinishLoadNativeAdHigh1) {
-                    adCallback.onNativeAdLoaded(nativeAd);
-                } else {
-                    isFinishLoadNativeAdHigh2 = true;
-                    apNativeAdHigh2 = nativeAd;
-                }
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                if (isFinishLoadNativeAdHigh1) {
-                    if (isFinishLoadNativeAdHigh3 && apNativeAdHigh3 != null) {
-                        adCallback.onNativeAdLoaded(apNativeAdHigh3);
-                    } else if (isFinishLoadNativeAdNormal && apNativeAdNormal != null) {
-                        adCallback.onNativeAdLoaded(apNativeAdNormal);
-                    } else {
-                        isFinishLoadNativeAdHigh2 = true;
-                    }
-                } else {
-                    isFinishLoadNativeAdHigh2 = true;
-                    apNativeAdHigh2 = null;
-                }
-            }
-        });
-
-        loadNativeAdResultCallback(activity, idAdHigh3, layoutCustomNative, new AdCallback() {
-            @Override
-            public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
-                super.onNativeAdLoaded(nativeAd);
-                if (isFinishLoadNativeAdHigh1 && isFinishLoadNativeAdHigh2) {
-                    adCallback.onNativeAdLoaded(nativeAd);
-                } else {
-                    isFinishLoadNativeAdHigh3 = true;
-                    apNativeAdHigh3 = nativeAd;
-                }
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                if (isFinishLoadNativeAdHigh1 && isFinishLoadNativeAdHigh2) {
-                    if (isFinishLoadNativeAdNormal && apNativeAdNormal != null) {
-                        adCallback.onNativeAdLoaded(apNativeAdNormal);
-                    } else {
-                        isFinishLoadNativeAdHigh3 = true;
-                    }
-                } else {
-                    isFinishLoadNativeAdHigh3 = true;
-                    apNativeAdHigh3 = null;
-                }
-            }
-        });
-
-        loadNativeAdResultCallback(activity, idAdNormal, layoutCustomNative, new AdCallback() {
-            @Override
-            public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
-                super.onNativeAdLoaded(nativeAd);
-                if (isFinishLoadNativeAdHigh1 && isFinishLoadNativeAdHigh2 && isFinishLoadNativeAdHigh3) {
-                    adCallback.onNativeAdLoaded(nativeAd);
-                } else {
-                    isFinishLoadNativeAdNormal = true;
-                    apNativeAdNormal = nativeAd;
-                }
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                if (isFinishLoadNativeAdHigh1 && isFinishLoadNativeAdHigh2 && isFinishLoadNativeAdHigh3) {
-                    adCallback.onNativeAdLoaded(apNativeAdNormal);
-                } else {
-                    isFinishLoadNativeAdNormal = true;
-                    apNativeAdNormal = null;
-                }
-            }
-        });
-    }
-
-    public void loadPriorityInterstitialAds(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback) {
-        loadPriorityInterstitialAdsFromAdmob(context, apInterstitialPriorityAd, adCallback);
-    }
-
-    public void loadPriorityInterstitialAdsFromAdmob(Context context,
-                                                     ApInterstitialPriorityAd apInterstitialPriorityAd,
-                                                     AdCallback adCallback) {
-        if (!apInterstitialPriorityAd.getHigh1PriorityId().isEmpty()
-                && !apInterstitialPriorityAd.getHigh1PriorityInterstitialAd().isReady()
-        ) {
-            loadAdsInterHigh1Priority(context, apInterstitialPriorityAd, adCallback);
-        }
-
-        if (!apInterstitialPriorityAd.getHigh2PriorityId().isEmpty()
-                && !apInterstitialPriorityAd.getHigh2PriorityInterstitialAd().isReady()
-        ) {
-            loadAdsInterHigh2Priority(context, apInterstitialPriorityAd, adCallback);
-        }
-
-        if (!apInterstitialPriorityAd.getHigh3PriorityId().isEmpty()
-                && !apInterstitialPriorityAd.getHigh3PriorityInterstitialAd().isReady()
-        ) {
-            loadAdsInterHigh3Priority(context, apInterstitialPriorityAd, adCallback);
-        }
-
-        if (!apInterstitialPriorityAd.getNormalPriorityId().isEmpty()
-                && !apInterstitialPriorityAd.getNormalPriorityInterstitialAd().isReady()
-        ) {
-            loadInterNormalPriority(context, apInterstitialPriorityAd, adCallback);
-        }
-    }
-
-    private void loadAdsInterHigh1Priority(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback) {
-        String id = apInterstitialPriorityAd.getHigh1PriorityId();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                Log.d(TAG, "onInterstitialLoad idAdsNormalPriority");
-                apInterstitialPriorityAd.getHigh1PriorityInterstitialAd().setInterstitialAd(interstitialAd);
-                adCallback.onApInterstitialLoad(apInterstitialPriorityAd.getHigh1PriorityInterstitialAd());
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                Log.e(TAG, "onAdFailedToLoad: idAdsNormalPriority: " + i);
-                adCallback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                adCallback.onAdImpression();
-            }
-        }));
-    }
-
-    private void loadAdsInterHigh2Priority(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback) {
-        String id = apInterstitialPriorityAd.getHigh2PriorityId();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                Log.d(TAG, "onInterstitialLoad idAdsNormalPriority");
-                apInterstitialPriorityAd.getHigh2PriorityInterstitialAd().setInterstitialAd(interstitialAd);
-                adCallback.onApInterstitialLoad(apInterstitialPriorityAd.getHigh2PriorityInterstitialAd());
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                Log.e(TAG, "onAdFailedToLoad: idAdsNormalPriority: " + i);
-                adCallback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                adCallback.onAdImpression();
-            }
-        }));
-    }
-
-    private void loadAdsInterHigh3Priority(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback) {
-        String id = apInterstitialPriorityAd.getHigh3PriorityId();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                Log.d(TAG, "onInterstitialLoad idAdsNormalPriority");
-                apInterstitialPriorityAd.getHigh3PriorityInterstitialAd().setInterstitialAd(interstitialAd);
-                adCallback.onApInterstitialLoad(apInterstitialPriorityAd.getHigh3PriorityInterstitialAd());
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                Log.e(TAG, "onAdFailedToLoad: idAdsNormalPriority: " + i);
-                adCallback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                adCallback.onAdImpression();
-            }
-        }));
-    }
-
-    private void loadInterNormalPriority(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback) {
-        String id = apInterstitialPriorityAd.getNormalPriorityId();
-        Admob.getInstance().getInterstitialAds(context, id, instrument(id, AdFormat.INTERSTITIAL, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                Log.d(TAG, "onInterstitialLoad idAdsNormalPriority");
-                apInterstitialPriorityAd.getNormalPriorityInterstitialAd().setInterstitialAd(interstitialAd);
-                adCallback.onApInterstitialLoad(apInterstitialPriorityAd.getNormalPriorityInterstitialAd());
-            }
-
-            @Override
-            public void onAdFailedToLoad(@Nullable LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                Log.e(TAG, "onAdFailedToLoad: idAdsNormalPriority: " + i);
-                adCallback.onAdFailedToLoad(i);
-            }
-
-            @Override
-            public void onAdClicked() {
-                super.onAdClicked();
-                adCallback.onAdClicked();
-            }
-
-            @Override
-            public void onAdImpression() {
-                super.onAdImpression();
-                adCallback.onAdImpression();
-            }
-        }));
-    }
-
-    public void forceShowInterstitialPriority(Context context, ApInterstitialPriorityAd apInterstitialPriorityAd, AdCallback adCallback, boolean isReloadAds) {
-        ApInterstitialAd interstitialAd;
-        if (apInterstitialPriorityAd.getHigh1PriorityInterstitialAd() != null
-                && apInterstitialPriorityAd.getHigh1PriorityInterstitialAd().isReady()
-        ) {
-            interstitialAd = apInterstitialPriorityAd.getHigh1PriorityInterstitialAd();
-        } else if (apInterstitialPriorityAd.getHigh2PriorityInterstitialAd() != null
-                && apInterstitialPriorityAd.getHigh2PriorityInterstitialAd().isReady()
-        ) {
-            interstitialAd = apInterstitialPriorityAd.getHigh2PriorityInterstitialAd();
-        } else if (apInterstitialPriorityAd.getHigh3PriorityInterstitialAd() != null
-                && apInterstitialPriorityAd.getHigh3PriorityInterstitialAd().isReady()
-        ) {
-            interstitialAd = apInterstitialPriorityAd.getHigh3PriorityInterstitialAd();
-        } else if (apInterstitialPriorityAd.getNormalPriorityInterstitialAd() != null
-                && apInterstitialPriorityAd.getNormalPriorityInterstitialAd().isReady()
-        ) {
-            interstitialAd = apInterstitialPriorityAd.getNormalPriorityInterstitialAd();
-        } else {
-            adCallback.onNextAction();
-            if (isReloadAds) {
-                loadPriorityInterstitialAds(context, apInterstitialPriorityAd, new AdCallback());
-            }
-            return;
-        }
-        forceShowInterstitial(context,
-                interstitialAd,
-                new AdCallback() {
-                    @Override
-                    public void onNextAction() {
-                        super.onNextAction();
-                        adCallback.onNextAction();
-                    }
-
-                    @Override
-                    public void onAdClosed() {
-                        super.onAdClosed();
-                        interstitialAd.setInterstitialAd(null);
-                        adCallback.onAdClosed();
-                        if (isReloadAds) {
-                            loadPriorityInterstitialAds(context, apInterstitialPriorityAd, new AdCallback());
-                        }
-                    }
-
-                    @Override
-                    public void onInterstitialShow() {
-                        super.onInterstitialShow();
-                        adCallback.onInterstitialShow();
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        adCallback.onAdClicked();
-                    }
-
-                    @Override
-                    public void onAdFailedToShow(@Nullable AdError adError) {
-                        super.onAdFailedToShow(adError);
-                        adCallback.onAdFailedToShow(adError);
-                    }
-
-                    @Override
-                    public void onAdImpression() {
-                        super.onAdImpression();
-                        adCallback.onAdImpression();
-                    }
-                },
-                false
-        );
-    }
 }

@@ -10,7 +10,6 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.nativead.NativeAd;
 import com.google.android.gms.ads.rewarded.RewardedAd;
-import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 
 
 public class AdCallback {
@@ -35,25 +34,7 @@ public class AdCallback {
     public void onAdFailedToShow(@Nullable AdError adError) {
     }
 
-    public void onAdFailedToShowHigh(@Nullable AdError adError) {
-    }
-
-    public void onAdFailedToShowMedium(@Nullable AdError adError) {
-    }
-
-    public void onAdFailedToShowAll(@Nullable AdError adError) {
-    }
-
     public void onAdLoaded() {
-    }
-
-    public void onAdLoadedHigh() {
-    }
-
-    public void onAdLoadedAll() {
-    }
-
-    public void onAdSplashReady() {
     }
 
     public void onInterstitialLoad(@Nullable InterstitialAd interstitialAd) {
@@ -69,25 +50,11 @@ public class AdCallback {
     public void onAdClicked() {
     }
 
-    public void onAdClickedHigh() {
-    }
-
-    public void onAdClickedMedium() {
-    }
-
-    public void onAdClickedAll() {
-    }
-
-
     public void onAdImpression() {
     }
 
     public void onRewardAdLoaded(RewardedAd rewardedAd) {
     }
-
-    public void onRewardAdLoaded(RewardedInterstitialAd rewardedAd) {
-    }
-
 
     public void onUnifiedNativeAdLoaded(@NonNull NativeAd unifiedNativeAd) {
 
@@ -115,31 +82,4 @@ public class AdCallback {
         return true;
     }
 
-    public void onAdSplashHigh1Ready() {
-
-    }
-
-    public void onAdSplashHigh2Ready() {
-
-    }
-
-    public void onAdSplashHigh3Ready() {
-
-    }
-
-    public void onAdSplashNormalReady() {
-
-    }
-
-    public void onAdHighFailedToLoad() {
-
-    }
-
-    public void onAdPriorityFailedToLoad(@Nullable AdError adError) {
-
-    }
-
-    public void onAdPriorityFailedToShow(@Nullable AdError adError) {
-
-    }
 }

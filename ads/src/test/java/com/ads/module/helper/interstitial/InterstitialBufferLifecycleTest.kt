@@ -78,7 +78,6 @@ class InterstitialBufferLifecycleTest {
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
         ERainAd.getInstance().setIntervalInterstitialAd(30)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)

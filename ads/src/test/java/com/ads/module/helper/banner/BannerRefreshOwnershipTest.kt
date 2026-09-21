@@ -316,19 +316,6 @@ class BannerRefreshOwnershipTest {
         assertPlaceholderHeight(100)
     }
 
-    @Test fun `legacy collapsible medium remeasures the configured loading slot`() {
-        host.addView(LayoutInflater.from(activity).inflate(R.layout.layout_banner_size_medium_control, host, false))
-        assertPlaceholderHeight(250)
-        val shimmer = host.findViewById<ShimmerFrameLayout>(R.id.shimmer_container_banner)
-        Admob.getInstance().loadCollapsibleBannerSizeMedium(
-            activity, "banner", "bottom", AdSize.LARGE_BANNER, object : AdCallback() {})
-        assertTrue("Changing the slot must schedule another layout", shimmer.isLayoutRequested)
-        assertPlaceholderHeight(100)
-        fill(requests.single())
-        assertEquals(View.GONE, shimmer.visibility)
-        assertFalse(shimmer.isShimmerStarted)
-    }
-
     @Test fun `uncapped inline preserves a host configured one hundred dp skeleton`() {
         val helper = createHelper(canReload = false, type = BannerType.Inline())
         val shimmer = host.findViewById<ShimmerFrameLayout>(R.id.shimmer_container_banner)

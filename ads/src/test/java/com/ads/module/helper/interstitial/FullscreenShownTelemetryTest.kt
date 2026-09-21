@@ -84,7 +84,6 @@ class FullscreenShownTelemetryTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
@@ -188,15 +187,6 @@ class FullscreenShownTelemetryTest {
     }
 
     @Test
-    fun `buffered reward reports actual display once with captured format and unit`() {
-        val raw = Tel02RewardedAd(UNIT).also { rewards += it.state }
-        ERainAd.getInstance().initRewardAds(activity, UNIT, AdCallback())
-        Tel02RewardedShadow.requests.single().onAdLoaded(raw)
-        ERainAd.getInstance().showRewardAds(activity, RecordingRewardCallback())
-        assertRewardDisplay(raw.state, "rewarded")
-    }
-
-    @Test
     fun `supplied reward reports actual display once without changing earned or close timing`() {
         val raw = Tel02RewardedAd(UNIT).also { rewards += it.state }
         val callback = RecordingRewardCallback()
@@ -210,27 +200,6 @@ class FullscreenShownTelemetryTest {
         raw.state.callback!!.onAdDismissedFullScreenContent()
         assertEquals(1, callback.closed)
         rewards.remove(raw.state) // Terminal already delivered; avoid a second cleanup callback.
-    }
-
-    @Test
-    fun `rewarded interstitial reports its actual display with its own format`() {
-        val raw = Tel02RewardedInterstitialAd(UNIT).also { rewards += it.state }
-        ERainAd.getInstance().showRewardInterstitial(activity, raw, RecordingRewardCallback())
-        assertRewardDisplay(raw.state, "rewarded_interstitial")
-    }
-
-    @Test
-    fun `actual reward vendor failure emits only show failure and preserves legacy error code`() {
-        val raw = Tel02RewardedInterstitialAd(UNIT).also { rewards += it.state }
-        val callback = RecordingRewardCallback()
-        ERainAd.getInstance().showRewardInterstitial(activity, raw, callback)
-        val error = AdError(3, "vendor could not present", "com.google.android.gms.ads")
-        raw.state.callback!!.onAdFailedToShowFullScreenContent(error)
-        assertEquals(listOf(3), callback.failures)
-        assertEquals(0, count("ad_show"))
-        assertEquals(1, count("ad_show_failed"))
-        assertEquals("rewarded_interstitial", sink.events.single { it.first == "ad_show_failed" }.second["ad_format"])
-        rewards.remove(raw.state)
     }
 
     private fun assertRewardDisplay(state: Tel02RewardState, format: String) {

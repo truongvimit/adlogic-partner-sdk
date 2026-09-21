@@ -101,7 +101,6 @@ class ERainInterstitialWaitTest {
         })
         ERainAd.getInstance().setIntervalInterstitialAd(0)
         ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(ProviderWaitActivity::class.java).setup()

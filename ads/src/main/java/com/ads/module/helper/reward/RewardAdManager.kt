@@ -375,7 +375,7 @@ object RewardAdManager {
             }
         }
         try {
-            ERainAd.getInstance().showRewardAds(activity, ad, vendorCallback, false)
+            ERainAd.getInstance().showRewardAds(activity, ad, vendorCallback)
         } catch (_: RuntimeException) {
             vendorCallback.onRewardedAdFailedToShow(0)
         }
