@@ -10,7 +10,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -25,6 +24,7 @@ import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.dialog.ResumeLoadingDialog
+import com.ads.module.engine.adMainScope
 import com.ads.module.event.ERainLogEventManager
 import com.ads.module.funtion.AdType
 import com.ads.module.helper.AdGate
@@ -42,6 +42,10 @@ import io.trackkit.TrackkitEvents
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** App-resume ads: loads one app-open ad while the app is in the background, shows it on return. */
 object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserver {
@@ -59,15 +63,14 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
     private var resumeBackgroundRequests = 0
     private var resumeBackground = false
     private var resumeDispatchAllowed = false
-    private var pendingBackgroundLoad: Runnable? = null
-    private val resumeFetchHandler = Handler(Looper.getMainLooper())
+    private var pendingBackgroundLoad: Job? = null
     private var resumeFetchGeneration = 0L
     private var resumeFetchPending = false
     private var resumeFetchDeadlineMs = 0L
     private var resumeFetchStartedAtMs = 0L
     private var resumeFailureStreak = 0
     private var resumeRetryAfterMs = 0L
-    private var resumeFetchTimeout: Runnable? = null
+    private var resumeFetchTimeout: Job? = null
 
     private var fullScreenContentCallback: FullScreenContentCallback? = null
 
@@ -83,7 +86,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
     private var resumedActivity: Activity? = null
     private var resumeHostGeneration = 0L
     private var activeResumeAttempt: Any? = null
-    private var pendingResumeShow: Runnable? = null
+    private var pendingResumeShow: Job? = null
     private var pendingResumeCancellation: Runnable? = null
 
     private var myApplication: Application? = null
@@ -241,7 +244,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
      */
     fun applyRemoteConfig() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            resumeFetchHandler.post { applyRemoteConfig() }
+            adMainScope.launch { applyRemoteConfig() }
             return
         }
         if (!resumeUnitFromConfig && appResumeAdId.isNullOrEmpty()) return
@@ -282,7 +285,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
     fun fetchAd() {
         if (AdGate.areRequestsHeld()) return
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            resumeFetchHandler.post { fetchAd() }
+            adMainScope.launch { fetchAd() }
             return
         }
         Log.d(TAG, "fetchAd")
@@ -376,8 +379,10 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
             resumeFetchStartedAtMs = SystemClock.elapsedRealtime()
             resumeFetchDeadlineMs =
                 resumeFetchStartedAtMs + AdBehavior.number("app_open.load.timeout_ms")
-            val timeout = Runnable {
-                if (!ownsResumeFetch(generation)) return@Runnable
+            val timeoutMs = AdBehavior.number("app_open.load.timeout_ms")
+            resumeFetchTimeout = adMainScope.launch {
+                delay(timeoutMs)
+                if (!ownsResumeFetch(generation)) return@launch
                 if (!canFetchResume(false)) {
                     if (ownsResumeFetch(generation)) cancelResumeFetch(false)
                 } else {
@@ -385,8 +390,6 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                     reportResumeSkip(adUnitId, "load_timeout")
                 }
             }
-            resumeFetchTimeout = timeout
-            resumeFetchHandler.postDelayed(timeout, AdBehavior.number("app_open.load.timeout_ms"))
             Log.d(TAG, "resume load dispatch generation=$generation")
             // After every gate, so the funnel counts requests that actually reach GMA.
             resumeRequestReported.set(true)
@@ -394,6 +397,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
             reportResumeRequest(adUnitId)
             AppOpenAd.load(requestApplication, adUnitId, request, requestCallback)
         } catch (error: RuntimeException) {
+            if (error is CancellationException) throw error
             if (!resumeRequestReported.get()) {
                 Log.w(TAG, "resume request preparation failed", error)
                 scheduleBackgroundLoad(AdBehavior.number("app_open.load.offline_recheck_ms"))
@@ -532,7 +536,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         val hostGeneration = resumeHostGeneration
         val fetchGeneration = resumeFetchGeneration
         // ON_START precedes RESUMED; only this already-eligible return is deferred.
-        resumeFetchHandler.post {
+        adMainScope.launch {
             if (host === currentActivity && hostGeneration == resumeHostGeneration &&
                 fetchGeneration == resumeFetchGeneration && appResumeAd === candidate
             ) {
@@ -589,7 +593,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         currentReturnSkipReason = reason
         val generation = ++resumeReturnGeneration
         // The snapshot serves this dispatch's observers only, not the rest of the foreground.
-        resumeFetchHandler.post {
+        adMainScope.launch {
             if (resumeReturnGeneration == generation) currentReturnSkipReason = null
         }
         Log.d(TAG, "resume skip consumed by host return: $reason")
@@ -686,7 +690,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         resumeFetchGeneration++
         resumeFetchPending = false
         resumeFetchDeadlineMs = 0
-        resumeFetchTimeout?.let { resumeFetchHandler.removeCallbacks(it) }
+        resumeFetchTimeout?.cancel()
         resumeFetchTimeout = null
         if (resetBackoff) {
             clearBackgroundLoadSchedule()
@@ -707,7 +711,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         resumeFailureStreak = minOf(resumeFailureStreak + 1, backoff.size)
         if (retainLateResult) {
             resumeFetchPending = false
-            resumeFetchTimeout?.let { resumeFetchHandler.removeCallbacks(it) }
+            resumeFetchTimeout?.cancel()
             resumeFetchTimeout = null
         } else {
             cancelResumeFetch(false)
@@ -827,8 +831,8 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                 forwardResumeCallback { delegate.onAdDismissedFullScreenContent() }
             }
         }
-        val dispatch = Runnable {
-            if (activeResumeAttempt !== attempt) return@Runnable
+        val dispatch: () -> Unit = dispatch@{
+            if (activeResumeAttempt !== attempt) return@dispatch
             pendingResumeShow = null
             pendingResumeCancellation = null
             try {
@@ -837,19 +841,22 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                     unit != appResumeAdId
                 ) {
                     cancelBeforeShow.run()
-                    return@Runnable
+                    return@dispatch
                 }
                 appResumeAd = null
                 ad.show(host)
             } catch (error: RuntimeException) {
+                if (error is CancellationException) throw error
                 callback.onAdFailedToShowFullScreenContent(showThrew(error))
             } finally {
                 // GMA opens asynchronously. Bound only the cosmetic window, never ad ownership.
                 if (ownedDialog != null && dialog === ownedDialog && ownedDialog.isShowing) {
-                    resumeFetchHandler.postDelayed(
-                        { dismissResumeDialog(ownedDialog) },
-                        AdBehavior.number("app_open.presentation.loading_timeout_ms"),
-                    )
+                    val loadingTimeoutMs =
+                        AdBehavior.number("app_open.presentation.loading_timeout_ms")
+                    adMainScope.launch {
+                        delay(loadingTimeoutMs)
+                        dismissResumeDialog(ownedDialog)
+                    }
                 }
             }
         }
@@ -870,17 +877,18 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                 return
             }
             if (ownedDialog != null && ownedDialog.isShowing) {
-                ownedDialog.setOnCancelListener {
-                    if (pendingResumeShow === dispatch) cancelBeforeShow.run()
+                val preShowDelayMs = AdBehavior.number("app_open.presentation.pre_show_delay_ms")
+                val pending = adMainScope.launch {
+                    delay(preShowDelayMs)
+                    dispatch()
                 }
-                pendingResumeShow = dispatch
+                ownedDialog.setOnCancelListener {
+                    if (pendingResumeShow === pending) cancelBeforeShow.run()
+                }
+                pendingResumeShow = pending
                 pendingResumeCancellation = cancelBeforeShow
-                resumeFetchHandler.postDelayed(
-                    dispatch,
-                    AdBehavior.number("app_open.presentation.pre_show_delay_ms"),
-                )
             } else {
-                dispatch.run()
+                dispatch()
             }
         } catch (error: RuntimeException) {
             callback.onAdFailedToShowFullScreenContent(showThrew(error))
@@ -901,7 +909,7 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
 
     private fun finishResumeAttempt(attempt: Any, ownedDialog: Dialog?): Boolean {
         if (activeResumeAttempt !== attempt) return false
-        pendingResumeShow?.let { resumeFetchHandler.removeCallbacks(it) }
+        pendingResumeShow?.cancel()
         pendingResumeShow = null
         pendingResumeCancellation = null
         activeResumeAttempt = null
@@ -921,12 +929,13 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
         ) {
             return
         }
-        val load = Runnable {
+        pendingBackgroundLoad = adMainScope.launch {
+            delay(maxOf(0L, delayMs))
             pendingBackgroundLoad = null
             if (!resumeBackground || SystemClock.elapsedRealtime() >= resumeBackgroundDeadlineMs ||
                 backgroundRequestsSpent()
             ) {
-                return@Runnable
+                return@launch
             }
             resumeDispatchAllowed = true
             try {
@@ -935,15 +944,13 @@ object AppOpenManager : Application.ActivityLifecycleCallbacks, LifecycleObserve
                 resumeDispatchAllowed = false
             }
         }
-        pendingBackgroundLoad = load
-        resumeFetchHandler.postDelayed(load, maxOf(0L, delayMs))
     }
 
     private fun backgroundRequestsSpent(): Boolean =
         resumeBackgroundRequests >= AdBehavior.number("app_open.load.max_background_requests")
 
     private fun clearBackgroundLoadSchedule() {
-        pendingBackgroundLoad?.let { resumeFetchHandler.removeCallbacks(it) }
+        pendingBackgroundLoad?.cancel()
         pendingBackgroundLoad = null
     }
 
