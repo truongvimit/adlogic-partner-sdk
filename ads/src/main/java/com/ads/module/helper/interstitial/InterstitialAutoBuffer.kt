@@ -2,7 +2,6 @@ package com.ads.module.helper.interstitial
 
 import com.ads.module.config.settings.AdBehavior
 import android.content.Context
-import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.Lifecycle
@@ -12,7 +11,11 @@ import com.ads.module.helper.AdSkipReason
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
+import com.ads.module.engine.adMainScope
+import com.ads.module.engine.launchAfter
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /** What the partner wants auto-buffered, and how hard. */
 class InterstitialBufferOptions @JvmOverloads constructor(
@@ -90,7 +93,7 @@ object InterstitialAutoBuffer {
 
     private const val TAG = "InterAutoBuffer"
 
-    private val handler = Handler(Looper.getMainLooper())
+    private var tickJob: Job? = null
     private val reserved = ConcurrentHashMap.newKeySet<String>()
     private val gateObservers = linkedSetOf<() -> Unit>()
 
@@ -101,7 +104,7 @@ object InterstitialAutoBuffer {
     private val lifecycleObserver = LifecycleEventObserver { _, event ->
         when (event) {
             Lifecycle.Event.ON_START -> if (running) schedule(1L)
-            Lifecycle.Event.ON_STOP -> handler.removeCallbacks(tick)
+            Lifecycle.Event.ON_STOP -> cancelTick()
             else -> Unit
         }
     }
@@ -159,10 +162,6 @@ object InterstitialAutoBuffer {
     @Volatile
     private var running = false
 
-    private val tick = Runnable {
-        schedule(topUp())
-    }
-
     /** Replaces the configuration. Safe before or after [start]; takes effect on the next tick. */
     @JvmStatic
     fun configure(newOptions: InterstitialBufferOptions) {
@@ -200,7 +199,7 @@ object InterstitialAutoBuffer {
     @JvmStatic
     fun stop() {
         running = false
-        handler.removeCallbacks(tick)
+        cancelTick()
         onGateChanged()
     }
 
@@ -224,7 +223,7 @@ object InterstitialAutoBuffer {
     @JvmStatic
     fun topUpNow() {
         if (!running) return
-        handler.post { if (running) schedule(topUp()) }
+        adMainScope.launch { if (running) schedule(topUp()) }
     }
 
     /** Compatibility API: connectivity changes can prompt a check but never erase the gate. */
@@ -264,7 +263,7 @@ object InterstitialAutoBuffer {
     @JvmStatic
     fun onGateChanged() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            handler.post { onGateChanged() }
+            adMainScope.launch { onGateChanged() }
             return
         }
         gateObservers.toList().forEach { runCatching { it() } }
@@ -371,7 +370,7 @@ object InterstitialAutoBuffer {
 
     /** [delayMs] `0` uses the configured period; anything else is an exact wake-up. */
     private fun schedule(delayMs: Long = 0L) {
-        handler.removeCallbacks(tick)
+        cancelTick()
         if (!running || !AdBehavior.bool("interstitial_auto_buffer.enabled") || !isForeground()) return
         val period =
             if (delayMs > 0L) delayMs.coerceAtLeast(if (options.independentIntervalPlacements.isEmpty()) MIN_WAKE_MS else 1L)
@@ -381,7 +380,12 @@ object InterstitialAutoBuffer {
                 options.idleTickMs,
                 options.minTickMs,
             )
-        handler.postDelayed(tick, period)
+        tickJob = launchAfter(period) { schedule(topUp()) }
+    }
+
+    private fun cancelTick() {
+        tickJob?.cancel()
+        tickJob = null
     }
 
     /** Half of [com.ads.module.helper.CachedAd.MAX_AGE_MS] — a buffer must never expire unchecked. */
