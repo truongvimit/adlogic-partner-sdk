@@ -5,8 +5,11 @@ import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -28,6 +31,7 @@ import com.ads.module.helper.adnative.NativeAdManager
 import com.ads.module.helper.adnative.NativeAdPreload
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.nativead.NativeAdView
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,10 +46,156 @@ class NativeOwnershipRealGmaDeviceTest {
     private val app = ApplicationProvider.getApplicationContext<Application>()
     private val f get() = NativeDeviceFixture
 
+    /** nativeRotation=true replaces the bound recreate with an Activity-requested orientation change. */
+    @Test fun realNativeBindingSurvivesRecreationBackAndFinalDestroy() {
+        val rotateBoundHost = InstrumentationRegistry.getArguments().getString("nativeRotation") == "true"
+        val initialized = CountDownLatch(1)
+        onMain {
+            NativeAdManager.releaseAll()
+            f.refresh = false
+            f.fills.clear()
+            f.binds.clear()
+            f.errors.clear()
+            f.hostEvents.clear()
+            ConsentCenter.setHostConsent(true, false)
+            Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
+            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+                facebookClientToken = "123456789"
+                idAdResume = ""
+            })
+            AppOpenManager.getInstance().disableAppResume()
+            MobileAds.initialize(app) { initialized.countDown() }
+            NativeAdPreload.getInstance().registerAdCallback(f.key, object : AdCallback() {
+                override fun onNativeAdLoaded(nativeAd: ApNativeAd) { f.fills += nativeAd }
+                override fun onAdFailedToLoad(error: LoadAdError?) { f.errors += error.toString() }
+            })
+        }
+        try {
+            assertTrue("GMA initialization", initialized.await(45, TimeUnit.SECONDS))
+            ActivityScenario.launch<NativeOwnershipDeviceActivity>(
+                Intent(app, NativeOwnershipDeviceActivity::class.java),
+            ).use { scenario ->
+                lateinit var host: NativeOwnershipDeviceActivity
+                scenario.onActivity { host = it }
+                if (rotateBoundHost) {
+                    onMain { host.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                    eventually("The native host must start in portrait") {
+                        onMain {
+                            val current = AppOpenManager.getInstance().currentActivity
+                            current is NativeOwnershipDeviceActivity &&
+                                current.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                                current.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+                        }
+                    }
+                    scenario.onActivity { host = it }
+                }
+                eventually("Native host focus") { onMain { host.hasWindowFocus() } }
+                onMain {
+                    host.helper.show()
+                    assertTrue("The real request starts before recreation", NativeAdManager.isLoading(f.key))
+                }
+                val firstHost = host
+                // GMA may complete before Android performs the recreation. Either a pending load
+                // or its ready presentation must transfer without a second vendor request.
+                scenario.recreate()
+                scenario.onActivity { host = it; host.helper.show() }
+                assertNotSame(firstHost, host)
+                eventually("First real native must bind: ${f.errors}", 40_000) {
+                    onMain { host.helper.nativeAd != null } || f.errors.isNotEmpty()
+                }
+                assertTrue("Need a real GMA fill: ${f.errors}", f.errors.isEmpty())
+                val first = onMain { checkNotNull(host.helper.nativeAd) }
+                assertEquals("Recreation must share the original load", 1, f.fills.size)
+                assertFalse(onMain { NativeAdManager.isReady(f.key) })
+                assertTrue(onMain {
+                    first.isUsable && host.container.isShown &&
+                        (0 until host.container.childCount).any { host.container.getChildAt(it) is NativeAdView }
+                })
+                eventually("The real native must report a vendor impression", 20_000) {
+                    f.hostEvents.any { it.kind == "impression" }
+                }
+
+                val bindsBeforeDeparture = f.binds.size
+                onMain { host.startActivity(Intent(host, InterstitialRealGmaDeviceActivity::class.java)) }
+                eventually("The destination must stop the native host") { scenario.state == Lifecycle.State.CREATED }
+                assertTrue("Stopping keeps the consumed native for a normal return", onMain { first.isUsable })
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                eventually("Back must return to the same native host") {
+                    scenario.state == Lifecycle.State.RESUMED && onMain { host.hasWindowFocus() }
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity {
+                    assertSame(host, it)
+                    assertSame(first, it.helper.nativeAd)
+                    assertTrue(it.container.isShown)
+                }
+                assertEquals("Ordinary return must retain its binding", bindsBeforeDeparture, f.binds.size)
+                assertEquals("Ordinary return must not reload", 1, f.fills.size)
+
+                val bindsBeforeRecreation = f.binds.size
+                val boundHost = host
+                if (rotateBoundHost) {
+                    onMain { boundHost.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                    eventually("Android must recreate the bound host in landscape") {
+                        onMain {
+                            val current = AppOpenManager.getInstance().currentActivity
+                            current is NativeOwnershipDeviceActivity && current !== boundHost &&
+                                current.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                                current.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                        }
+                    }
+                } else {
+                    scenario.recreate()
+                }
+                scenario.onActivity { host = it; host.helper.show() }
+                assertNotSame(boundHost, host)
+                eventually("The recreated host must rebind the same consumed ad") {
+                    onMain { host.helper.nativeAd === first && host.container.isShown }
+                }
+                assertEquals(bindsBeforeRecreation + 1, f.binds.size)
+                assertSame(first, f.binds.last())
+                assertEquals("A bound recreation must not request a replacement", 1, f.fills.size)
+                assertEquals("One real impression for the one consumed native", 1,
+                    f.hostEvents.count { it.kind == "impression" })
+
+                // Finishing is a real destruction, unlike Home or opening another Activity.
+                onMain { host.finish() }
+                eventually("Finishing must destroy the native host") { scenario.state == Lifecycle.State.DESTROYED }
+                instrumentation.waitForIdleSync()
+                assertFalse("Final destruction releases the consumed ad", onMain { first.isUsable })
+                assertFalse(onMain { NativeAdManager.isReady(f.key) })
+                val destroyedHosts = mutableSetOf<Int>()
+                for (event in f.hostEvents) {
+                    if (event.kind == "destroy") destroyedHosts += event.hostId
+                    else {
+                        assertFalse("No late ${event.kind} callback on retired host ${event.hostId}",
+                            event.hostId in destroyedHosts)
+                        assertNotEquals("No callback may target a destroyed lifecycle", Lifecycle.State.DESTROYED, event.state)
+                    }
+                }
+                assertTrue("No vendor errors: ${f.errors}", f.errors.isEmpty())
+            }
+        } finally {
+            onMain {
+                NativeAdManager.releaseAll()
+                ConsentCenter.clearHostConsent()
+                f.fills.clear()
+                f.binds.clear()
+                f.errors.clear()
+                f.hostEvents.clear()
+            }
+        }
+    }
+
     @Test fun realNativeOwnershipSurvivesRecreationAndConsumesEachPresentation() {
         f.refresh = InstrumentationRegistry.getArguments().getString("nativeRefresh") == "true"
         val initialized = CountDownLatch(1)
         onMain {
+            NativeAdManager.releaseAll()
+            f.fills.clear()
+            f.binds.clear()
+            f.errors.clear()
+            f.hostEvents.clear()
             ConsentCenter.setHostConsent(true, false)
             Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
             ERainAd.getInstance().init(app, ERainAdConfig(app).apply { facebookClientToken = "123456789"; idAdResume = "" })
@@ -58,6 +208,7 @@ class NativeOwnershipRealGmaDeviceTest {
         }
         assertTrue("GMA initialization", initialized.await(45, TimeUnit.SECONDS))
         try {
+            lateinit var finalPresentation: ApNativeAd
             ActivityScenario.launch<NativeOwnershipDeviceActivity>(Intent(app, NativeOwnershipDeviceActivity::class.java)).use { scenario ->
                 lateinit var host: NativeOwnershipDeviceActivity
                 scenario.onActivity { host = it }
@@ -80,9 +231,9 @@ class NativeOwnershipRealGmaDeviceTest {
                     val before = f.binds.size
                     scenario.recreate()
                     scenario.onActivity { host = it; host.helper.show() }
-                    eventually("Rotation must rebind the same consumed native") { f.binds.size > before }
+                    eventually("Recreation must rebind the same consumed native") { f.binds.size > before }
                     assertSame(first, f.binds.last())
-                    assertEquals("Rotation must not load another ad", 1, f.fills.size)
+                    assertEquals("Recreation must not load another ad", 1, f.fills.size)
                     onMain {
                         repeat(5) { host.helper.show() }
                         assertTrue("The bound ad remains usable while its replacement loads", first.isUsable)
@@ -97,17 +248,38 @@ class NativeOwnershipRealGmaDeviceTest {
                 }
                 val departing = f.binds.last()
                 val fillsBeforeHome = f.fills.size
+                val bindsBeforeHome = f.binds.size
                 assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
                 eventually("Actual Home stops native host") { scenario.state == Lifecycle.State.CREATED }
-                assertFalse("A shown ad is disposed on real departure", onMain { departing.isUsable })
+                // Pause/stop suspend refresh; only replacement or final destruction consumes ownership.
+                assertTrue("Home retains the consumed native", onMain { departing.isUsable })
                 SystemClock.sleep(if (f.refresh) 3_500 else 300)
                 assertEquals("No refresh loop while Home", fillsBeforeHome, f.fills.size)
+                assertEquals("Home does not replace the binding", bindsBeforeHome, f.binds.size)
+                assertTrue("The retained native stays usable while stopped", onMain { departing.isUsable })
                 onMain { app.getSystemService(ActivityManager::class.java).appTasks.single { it.taskInfo.taskId == host.taskId }.moveToFront() }
-                eventually("Returning starts a new presentation: ${f.errors}", 40_000) { f.binds.last() !== departing }
+                eventually("The same native host returns") {
+                    scenario.state == Lifecycle.State.RESUMED && onMain { host.hasWindowFocus() }
+                }
+                if (f.refresh) {
+                    // The 3-second refresh deadline elapsed while stopped. Its normal timer may
+                    // resume now; Home itself must not have discarded the previous creative.
+                    eventually("The overdue visible refresh replaces the retained native: ${f.errors}", 40_000) {
+                        f.binds.last() !== departing
+                    }
+                    assertFalse("Replacement releases the previous native", onMain { departing.isUsable })
+                } else {
+                    instrumentation.waitForIdleSync()
+                    assertSame("Ordinary return keeps the same consumed native", departing, onMain { host.helper.nativeAd })
+                    assertEquals("Ordinary return does not rebind", bindsBeforeHome, f.binds.size)
+                    assertEquals("Ordinary return does not reload", fillsBeforeHome, f.fills.size)
+                }
                 assertTrue(onMain { f.binds.last().isUsable })
                 assertFalse(onMain { NativeAdManager.isReady(f.key) })
                 assertTrue("No vendor errors: ${f.errors}", f.errors.isEmpty())
+                finalPresentation = f.binds.last()
             }
+            assertFalse("Final Activity destruction releases its consumed native", onMain { finalPresentation.isUsable })
         } finally {
             onMain { NativeAdManager.releaseAll(); ConsentCenter.clearHostConsent() }
         }
@@ -136,11 +308,29 @@ class NativeOwnershipDeviceActivity : AppCompatActivity() {
         helper.placement = NativeDeviceFixture.key
         if (NativeDeviceFixture.refresh) helper.applyReloadByTime(3_000)
         helper.registerAdListener(object : AdCallback() {
-            override fun onNativeAdLoaded(nativeAd: ApNativeAd) { NativeDeviceFixture.binds += nativeAd }
-            override fun onAdFailedToLoad(error: LoadAdError?) { NativeDeviceFixture.errors += error.toString() }
+            override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                record("bind")
+                NativeDeviceFixture.binds += nativeAd
+            }
+            override fun onAdImpression() { record("impression") }
+            override fun onAdFailedToLoad(error: LoadAdError?) {
+                record("failed")
+                NativeDeviceFixture.errors += error.toString()
+            }
         })
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        record("destroy")
+    }
+
+    private fun record(kind: String) {
+        NativeDeviceFixture.hostEvents += NativeHostEvent(System.identityHashCode(this), kind, lifecycle.currentState)
+    }
 }
+
+private data class NativeHostEvent(val hostId: Int, val kind: String, val state: Lifecycle.State)
 
 private object NativeDeviceFixture {
     const val key = "device_native_ownership"
@@ -148,6 +338,7 @@ private object NativeDeviceFixture {
     val fills = CopyOnWriteArrayList<ApNativeAd>()
     val binds = CopyOnWriteArrayList<ApNativeAd>()
     val errors = CopyOnWriteArrayList<String>()
+    val hostEvents = CopyOnWriteArrayList<NativeHostEvent>()
     fun config() = NativeAdConfig("ca-app-pub-3940256099942544/2247696110", true, refresh,
         com.ads.module.R.layout.custom_native_admob_medium)
 }

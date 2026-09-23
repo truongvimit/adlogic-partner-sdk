@@ -20,6 +20,7 @@ import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.interstitial.*
@@ -61,6 +62,17 @@ class InterstitialAutoBufferDeviceTest {
                 facebookClientToken = "123456789"
                 idAdResume = ""
             })
+            // This case exercises the shared interval without tap gating. Bundled defaults
+            // instead use independent clocks and require two ALL actions / one BACK action.
+            assertTrue(AdBehavior.document.acceptSuccessfulFetch("""{
+                "interstitial_auto_buffer": {
+                    "shared_config": true,
+                    "rules": {
+                        "inter_all": {"independent_interval": false, "tap_threshold": 0},
+                        "inter_back": {"independent_interval": false, "tap_threshold": 0}
+                    }
+                }
+            }"""))
             AppOpenManager.getInstance().disableAppResume()
             ERainAd.getInstance().setIntervalInterstitialAd(5)
             ERainAd.getInstance().setMaxClickAdsPerDay(0)
@@ -70,6 +82,9 @@ class InterstitialAutoBufferDeviceTest {
                 "inter_back":{"id":"$UNIT","isEnable":true}
             }""")
             InterstitialAutoBuffer.configure(InterstitialBufferOptions(placements = listOf(ALL, BACK)))
+            assertTrue(InterstitialAutoBuffer.options().independentIntervalPlacements.isEmpty())
+            assertEquals(mapOf(ALL to 0, BACK to 0), InterstitialAutoBuffer.options().tapThresholds)
+            assertEquals(5, InterstitialFrequency.intervalSeconds())
             MobileAds.initialize(app) { initialized.countDown() }
         }
         try {
@@ -156,6 +171,7 @@ class InterstitialAutoBufferDeviceTest {
                 InterstitialAutoBuffer.stop()
                 InterstitialAutoBuffer.configure(InterstitialBufferOptions())
                 InterstitialAdManager.releaseAll()
+                AdBehavior.document.acceptSuccessfulFetch(null)
                 Tracker.removeSink(sink)
                 AppOpenManager.getInstance().disableAppResume()
                 ConsentCenter.clearHostConsent()
