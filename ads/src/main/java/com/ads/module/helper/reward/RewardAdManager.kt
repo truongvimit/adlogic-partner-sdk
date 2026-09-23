@@ -1,11 +1,16 @@
 package com.ads.module.helper.reward
 
-import com.ads.module.config.settings.AdBehavior
 import android.app.Activity
+import android.app.Application
 import android.content.Context
+import android.os.Bundle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.engine.RewardEngine
 import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.settings.AdBehavior
+import com.ads.module.engine.RewardEngine
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
 import com.ads.module.helper.AdGate
@@ -67,9 +72,15 @@ object RewardAdManager {
         val listeners = mutableListOf<AdCallback>()
     }
 
-    private class Presentation(val onSuccess: Runnable, val onFailed: Runnable) {
+    private class Presentation(
+        var host: Activity?,
+        val onSuccess: Runnable,
+        val onFailed: Runnable,
+    ) {
         var showing = false
         val settled = AtomicBoolean(false)
+        var loadListener: AdCallback? = null
+        var lifecycleCallbacks: Application.ActivityLifecycleCallbacks? = null
     }
 
     /** Buffers an ad using exactly the same placement cache and request as [load]. */
@@ -130,7 +141,7 @@ object RewardAdManager {
         val maxAgeMs = behavior.long("cache.max_age_ms", AdBehavior.defaultNumber("rewarded.cache.max_age_ms"))
         try {
             AdWaterfall.loadReward(
-                context,
+                context.applicationContext,
                 ids,
                 behavior.long("load.tier_timeout_ms", tierTimeoutMs),
                 object : AdCallback() {
@@ -181,7 +192,7 @@ object RewardAdManager {
         return true
     }
 
-    /** Shows the buffered ad. Single-use: the buffer is dropped before `show()`. */
+    /** Shows the buffered ad on a resumed host; a background rejection keeps the fill for retry. */
     @JvmStatic
     fun show(activity: Activity, placement: String, callback: RewardShowCallback) {
         // Only for a placement the payload declares; an explicitly loaded key the config never
@@ -193,6 +204,11 @@ object RewardAdManager {
             // form on screen, UA not yet attributed — still has a fill worth keeping.
             if (blocked == AdSkipReason.PURCHASED) cache.remove(placement)
             AdTracking.skipped(placement, AdFormat.REWARDED, blocked.key)
+            callback.onFailedToShow(0)
+            return
+        }
+        if (!canShowOn(activity)) {
+            AdTracking.skipped(placement, AdFormat.REWARDED, AdSkipReason.SHOW_IN_BACKGROUND.key)
             callback.onFailedToShow(0)
             return
         }
@@ -233,6 +249,8 @@ object RewardAdManager {
      * Uses the placement's buffered ad, waits for its current load, or starts one if needed.
      * [onSuccess] runs only after the user earned and the ad closed; [onFailed] covers every
      * other outcome, including a duplicate call while this placement is waiting or showing.
+     * Leaving the host before dispatch cancels this presentation; a late fill remains cached
+     * for a new explicit trigger. Once dispatched, only the vendor settles the outcome.
      */
     @JvmStatic
     @JvmOverloads
@@ -254,46 +272,60 @@ object RewardAdManager {
             onFailed.run()
             return
         }
-        val presentation = Presentation(onSuccess, onFailed)
+        if (!canShowOn(activity)) {
+            AdTracking.skipped(placement, AdFormat.REWARDED, AdSkipReason.SHOW_IN_BACKGROUND.key)
+            onFailed.run()
+            return
+        }
+        val presentation = Presentation(activity, onSuccess, onFailed)
         if (presentations.putIfAbsent(placement, presentation) != null) {
             onFailed.run()
             return
         }
+        observePendingHost(placement, presentation)
+        val listener = object : AdCallback() {
+            override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
+                if (presentations[placement] !== presentation || presentation.settled.get()) return
+                val host = presentation.host
+                if (host == null || !canShowOn(host)) {
+                    cancelPendingPresentation(placement, presentation)
+                    return
+                }
+                // Another explicit show or a reentrant load listener may already have spent
+                // or released this fill. Never show the callback's raw ad a second time.
+                val cached = cache[placement]?.takeIf { it.ad === rewardedAd }
+                if (cached == null || !cache.remove(placement, cached) || !cached.isFresh) {
+                    finishPresentation(placement, presentation, earned = false)
+                    return
+                }
+                presentation.showing = true
+                detachPendingPresentation(placement, presentation)
+                showInternal(
+                    host, placement, cached.ad,
+                    object : RewardShowCallback() {
+                        override fun onClosed(earned: Boolean) {
+                            finishPresentation(placement, presentation, earned)
+                        }
+
+                        override fun onFailedToShow(codeError: Int) {
+                            finishPresentation(placement, presentation, earned = false)
+                        }
+                    },
+                )
+            }
+
+            override fun onAdFailedToLoad(adError: LoadAdError?) {
+                finishPresentation(placement, presentation, earned = false)
+            }
+        }
+        presentation.loadListener = listener
         load(
-            activity,
+            activity.applicationContext,
             placement,
             ids,
             enabled,
             tierTimeoutMs,
-            object : AdCallback() {
-                override fun onRewardAdLoaded(rewardedAd: RewardedAd?) {
-                    if (presentations[placement] !== presentation || presentation.settled.get()) return
-                    // Another explicit show or a reentrant load listener may already have spent
-                    // or released this fill. Never show the callback's raw ad a second time.
-                    val cached = cache[placement]?.takeIf { it.ad === rewardedAd }
-                    if (cached == null || !cache.remove(placement, cached) || !cached.isFresh) {
-                        finishPresentation(placement, presentation, earned = false)
-                        return
-                    }
-                    presentation.showing = true
-                    showInternal(
-                        activity, placement, cached.ad,
-                        object : RewardShowCallback() {
-                            override fun onClosed(earned: Boolean) {
-                                finishPresentation(placement, presentation, earned)
-                            }
-
-                            override fun onFailedToShow(codeError: Int) {
-                                finishPresentation(placement, presentation, earned = false)
-                            }
-                        },
-                    )
-                }
-
-                override fun onAdFailedToLoad(adError: LoadAdError?) {
-                    finishPresentation(placement, presentation, earned = false)
-                }
-            },
+            listener,
         )
     }
 
@@ -403,9 +435,60 @@ object RewardAdManager {
     private fun finishPresentation(placement: String, presentation: Presentation, earned: Boolean) {
         if (!presentation.settled.compareAndSet(false, true)) return
         presentations.remove(placement, presentation)
+        detachPendingPresentation(placement, presentation)
         runCatching {
             if (earned) presentation.onSuccess.run() else presentation.onFailed.run()
         }
+    }
+
+    private fun canShowOn(activity: Activity): Boolean {
+        if (activity.isFinishing || activity.isDestroyed ||
+            !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        ) return false
+        return if (activity is LifecycleOwner) {
+            activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        } else {
+            // Process lifecycle deliberately debounces stop. A plain Activity must still own
+            // the focused window rather than pass during that background grace period.
+            activity.hasWindowFocus()
+        }
+    }
+
+    private fun observePendingHost(placement: String, presentation: Presentation) {
+        val host = presentation.host ?: return
+        val callbacks = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStopped(activity: Activity) {
+                if (presentation.host === activity) cancelPendingPresentation(placement, presentation)
+            }
+
+            override fun onActivityDestroyed(activity: Activity) {
+                if (presentation.host === activity) cancelPendingPresentation(placement, presentation)
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+        }
+        presentation.lifecycleCallbacks = callbacks
+        host.application.registerActivityLifecycleCallbacks(callbacks)
+    }
+
+    private fun cancelPendingPresentation(placement: String, presentation: Presentation) {
+        if (presentation.showing || presentation.settled.get()) return
+        AdTracking.skipped(placement, AdFormat.REWARDED, AdSkipReason.SHOW_IN_BACKGROUND.key)
+        finishPresentation(placement, presentation, earned = false)
+    }
+
+    private fun detachPendingPresentation(placement: String, presentation: Presentation) {
+        presentation.loadListener?.let { requests[placement]?.listeners?.remove(it) }
+        presentation.loadListener = null
+        presentation.lifecycleCallbacks?.let { callbacks ->
+            presentation.host?.application?.unregisterActivityLifecycleCallbacks(callbacks)
+        }
+        presentation.lifecycleCallbacks = null
+        presentation.host = null
     }
 
     private fun notifyListeners(request: LoadRequest, block: (AdCallback) -> Unit) {
