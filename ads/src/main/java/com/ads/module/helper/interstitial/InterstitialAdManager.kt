@@ -249,8 +249,9 @@ object InterstitialAdManager {
         }
         val behavior = options.behaviorValues(placement)
         val maxAgeMs = behavior.long("cache.max_age_ms", AdBehavior.defaultNumber("interstitial.cache.max_age_ms"))
+        // Shared loads and cached paid listeners can outlive the requesting screen.
         AdWaterfall.loadInterstitial(
-            context,
+            context.applicationContext,
             ids,
             behavior.long("load.tier_timeout_ms", options.tierTimeoutMs),
             object : AdCallback() {
