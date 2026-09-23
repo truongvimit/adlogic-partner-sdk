@@ -8,12 +8,16 @@ import com.ads.module.event.ERainLogEventManager
 import com.ads.module.funtion.AdType
 import com.google.android.gms.ads.AdValue
 
-// Does not notify the AdCallback: each format keeps its own order around this call.
-internal fun onGmaClick(context: Context?, adUnitId: String?) {
+// Run before the host callback: it may clear or replace this one-shot resume skip.
+internal fun suppressResumeAfterAdClick() {
     val skipResume = ERainAd.skipResumeAfterAdClick
     if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", skipResume)) {
         AppOpenManager.getInstance().disableAdResumeByClickAction()
     }
+}
+
+// Each format keeps its existing logging order relative to the host callback.
+internal fun logGmaClick(context: Context?, adUnitId: String?) {
     ERainLogEventManager.logClickAdsEvent(context, adUnitId)
 }
 

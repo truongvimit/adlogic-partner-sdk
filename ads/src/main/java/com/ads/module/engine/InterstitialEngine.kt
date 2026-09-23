@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.wrapper.ApInterstitialAd
@@ -22,6 +23,7 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import io.trackkit.AdFormat
+import kotlinx.coroutines.Job
 
 internal object InterstitialEngine {
     private const val TAG = "ERainStudio"
@@ -164,44 +166,60 @@ internal object InterstitialEngine {
             return
         }
 
+        val presentation = LoadingPresentation()
         interstitialAd.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 super.onAdDismissedFullScreenContent()
-                AppOpenManager.getInstance().setInterstitialShowing(false)
-                SharePreferenceUtils.setLastImpressionInterstitialTime(context)
-                if (!openNextUnderAd) callback.onNextAction()
-                callback.onAdClosed()
-                dialog?.dismiss()
+                if (!presentation.finish()) return
+                forwardVendorCallback(presentation) {
+                    AppOpenManager.getInstance().setInterstitialShowing(false)
+                    try {
+                        SharePreferenceUtils.setLastImpressionInterstitialTime(context)
+                        if (!openNextUnderAd) callback.onNextAction()
+                        callback.onAdClosed()
+                    } finally {
+                        presentation.releaseLoading()
+                    }
+                }
             }
 
             override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                 super.onAdFailedToShowFullScreenContent(adError)
-                AppOpenManager.getInstance().setInterstitialShowing(false)
-                dialog?.dismiss()
-                callback.onAdFailedToShow(adError)
-                if (!openNextUnderAd) callback.onNextAction()
+                forwardVendorCallback(presentation) {
+                    finishFailed(presentation, callback, adError, openNextUnderAd)
+                }
             }
 
             override fun onAdShowedFullScreenContent() {
                 super.onAdShowedFullScreenContent()
-                AppOpenManager.getInstance().setInterstitialShowing(true)
-                callback.onInterstitialDisplayed()
-                if (!callback.usesActualInterstitialImpression()) callback.onAdImpression()
+                if (presentation.terminal) return
+                forwardVendorCallback(presentation) {
+                    AppOpenManager.getInstance().setInterstitialShowing(true)
+                    callback.onInterstitialDisplayed()
+                    if (!callback.usesActualInterstitialImpression()) callback.onAdImpression()
+                }
             }
 
             override fun onAdImpression() {
-                if (callback.usesActualInterstitialImpression()) callback.onAdImpression()
+                if (presentation.terminal) return
+                forwardVendorCallback(presentation) {
+                    if (callback.usesActualInterstitialImpression()) callback.onAdImpression()
+                }
             }
 
             override fun onAdClicked() {
                 super.onAdClicked()
-                callback.onAdClicked()
-                onGmaClick(context, interstitialAd.adUnitId)
+                if (presentation.terminal) return
+                forwardVendorCallback(presentation) {
+                    suppressResumeAfterAdClick()
+                    callback.onAdClicked()
+                    logGmaClick(context, interstitialAd.adUnitId)
+                }
             }
         }
 
         if (!isClickCapReached(context, interstitialAd.adUnitId)) {
-            showWithLoading(context, interstitialAd, callback, openNextUnderAd)
+            showWithLoading(context, interstitialAd, callback, openNextUnderAd, presentation)
             return
         }
         callback.onNextAction()
@@ -212,79 +230,178 @@ internal object InterstitialEngine {
         interstitialAd: InterstitialAd,
         callback: AdCallback,
         openNextUnderAd: Boolean,
+        presentation: LoadingPresentation,
     ) {
         val processState = ProcessLifecycleOwner.get().lifecycle.currentState
         if (!processState.isAtLeast(Lifecycle.State.RESUMED)) {
             notifyShowFailed(
-                callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail: process is not resumed",
+                presentation, callback, ERROR_CODE_SHOW_IN_BACKGROUND, "Show fail: process is not resumed",
                 openNextUnderAd,
             )
             return
         }
         if (context !is AppCompatActivity) {
             notifyShowFailed(
-                callback, ERROR_CODE_SHOW_IN_BACKGROUND,
+                presentation, callback, ERROR_CODE_SHOW_IN_BACKGROUND,
                 "Show fail: context is not an AppCompatActivity", openNextUnderAd,
             )
             return
         }
 
         try {
-            dialog?.let { if (it.isShowing) it.dismiss() }
+            dismissLoading(dialog)
             val loading = PrepareLoadingAdsDialog(context)
             dialog = loading
+            presentation.loading = loading
             loading.setCancelable(false)
             if (AdBehavior.bool("interstitial.presentation.loading_enabled")) loading.show()
             AppOpenManager.getInstance().setInterstitialShowing(true)
         } catch (e: Exception) {
-            dialog = null
+            presentation.dismissDialog()
             Log.w(TAG, "showInterstitialAd: loading dialog unavailable, showing the ad anyway", e)
         }
 
+        presentation.observeHost(context) {
+            if (presentation.dispatched) {
+                // Destroying the host cannot prove a vendor fullscreen ad has finished.
+                presentation.releaseLoading()
+            } else {
+                notifyShowFailed(
+                    presentation, callback, ERROR_CODE_SHOW_IN_BACKGROUND,
+                    "Show fail: host destroyed during preparation", openNextUnderAd,
+                )
+            }
+        }
+        if (presentation.terminal) return
+
         // Every path that reaches show() fires this: callers use it to read onNextAction's meaning.
         callback.onInterstitialShow()
+        if (presentation.terminal) return
 
         val preShowDelayMs = AdBehavior.number("interstitial.presentation.pre_show_delay_ms")
-        launchAfter(preShowDelayMs) {
+        presentation.pendingShow = launchAfter(preShowDelayMs) {
+            presentation.pendingShow = null
+            if (presentation.terminal) return@launchAfter
             if (context.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                 if (!callback.canShowInterstitial()) {
-                    dialog?.dismiss()
                     notifyShowFailed(
-                        callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd,
+                        presentation, callback, 0, "Interstitial policy changed before dispatch", openNextUnderAd,
                     )
                     return@launchAfter
                 }
+                presentation.dispatched = true
                 if (openNextUnderAd) {
                     // Same tick as show(): the next Activity must queue under the ad, not above it.
                     callback.onNextAction()
-                    launchAfter(1500) { dismissLoading(context) }
+                    presentation.pendingDismiss = launchAfter(1500) { presentation.releaseLoading() }
                 }
-                interstitialAd.setImmersiveMode(true)
-                interstitialAd.show(context)
+                try {
+                    interstitialAd.setImmersiveMode(true)
+                    interstitialAd.show(context)
+                } catch (error: RuntimeException) {
+                    // A host callback thrown through synchronous vendor delivery is not a show failure.
+                    if (presentation.callbackFailure === error) throw error
+                    notifyShowFailed(
+                        presentation, callback, 0,
+                        "Interstitial show threw: ${error.javaClass.simpleName}", openNextUnderAd,
+                    )
+                }
             } else {
-                dismissLoading(context)
                 notifyShowFailed(
-                    callback, ERROR_CODE_SHOW_IN_BACKGROUND,
+                    presentation, callback, ERROR_CODE_SHOW_IN_BACKGROUND,
                     "Show fail in background after show loading ad", openNextUnderAd,
                 )
             }
         }
     }
 
-    private fun dismissLoading(activity: AppCompatActivity) {
-        val loading = dialog ?: return
-        if (loading.isShowing && !activity.isDestroyed) loading.dismiss()
+    private fun dismissLoading(loading: PrepareLoadingAdsDialog?) {
+        if (dialog === loading) dialog = null
+        if (loading == null) return
+        try {
+            if (loading.isShowing) loading.dismiss()
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "Interstitial loading dialog could not be dismissed", error)
+        }
     }
 
     private fun notifyShowFailed(
+        presentation: LoadingPresentation,
         callback: AdCallback,
         code: Int,
         message: String,
         openNextUnderAd: Boolean,
     ) {
-        AppOpenManager.getInstance().setInterstitialShowing(false)
         Log.e(TAG, "showInterstitialAd: $message")
-        callback.onAdFailedToShow(AdError(code, message, TAG))
+        finishFailed(presentation, callback, AdError(code, message, TAG), openNextUnderAd)
+    }
+
+    private fun finishFailed(
+        presentation: LoadingPresentation,
+        callback: AdCallback,
+        error: AdError,
+        openNextUnderAd: Boolean,
+    ) {
+        if (!presentation.finish()) return
+        AppOpenManager.getInstance().setInterstitialShowing(false)
+        presentation.releaseLoading()
+        callback.onAdFailedToShow(error)
         if (!openNextUnderAd) callback.onNextAction()
+    }
+
+    private inline fun forwardVendorCallback(presentation: LoadingPresentation, forward: () -> Unit) {
+        try {
+            forward()
+        } catch (error: RuntimeException) {
+            presentation.callbackFailure = error
+            throw error
+        }
+    }
+
+    /** Resources belong to one attempt; old callbacks and timers cannot dismiss a newer window. */
+    private class LoadingPresentation {
+        var loading: PrepareLoadingAdsDialog? = null
+        var pendingShow: Job? = null
+        var pendingDismiss: Job? = null
+        var dispatched = false
+        var terminal = false
+            private set
+        var callbackFailure: RuntimeException? = null
+        private var lifecycle: Lifecycle? = null
+        private var observer: LifecycleEventObserver? = null
+
+        fun observeHost(host: AppCompatActivity, onDestroyed: () -> Unit) {
+            val events = host.lifecycle
+            val watch = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_DESTROY) onDestroyed()
+            }
+            lifecycle = events
+            observer = watch
+            events.addObserver(watch)
+            if (events.currentState == Lifecycle.State.DESTROYED) onDestroyed()
+        }
+
+        fun finish(): Boolean {
+            if (terminal) return false
+            terminal = true
+            return true
+        }
+
+        fun dismissDialog() {
+            val owned = loading
+            loading = null
+            dismissLoading(owned)
+        }
+
+        fun releaseLoading() {
+            pendingShow?.cancel()
+            pendingShow = null
+            pendingDismiss?.cancel()
+            pendingDismiss = null
+            observer?.let { lifecycle?.removeObserver(it) }
+            observer = null
+            lifecycle = null
+            dismissDialog()
+        }
     }
 }

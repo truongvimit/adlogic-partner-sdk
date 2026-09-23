@@ -84,8 +84,9 @@ internal object RewardEngine {
 
             override fun onAdClicked() {
                 if (settled.get()) return
+                suppressResumeAfterAdClick()
                 callback.onAdClicked()
-                onGmaClick(activity, rewardedAd.adUnitId)
+                logGmaClick(activity, rewardedAd.adUnitId)
             }
         }
         rewardedAd.show(activity) { rewardItem -> callback.onUserEarnedReward(rewardItem) }

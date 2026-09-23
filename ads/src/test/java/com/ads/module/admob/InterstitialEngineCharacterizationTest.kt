@@ -94,6 +94,7 @@ class InterstitialEngineCharacterizationTest {
 
     @After
     fun tearDown() {
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
         vendorAds.filter { it.hosts.isNotEmpty() }.forEach { it.callback.onAdDismissedFullScreenContent() }
         ShadowDialog.getLatestDialog()?.dismiss()
         if (::controller.isInitialized && activity.lifecycle.currentState != Lifecycle.State.DESTROYED) {
@@ -195,6 +196,25 @@ class InterstitialEngineCharacterizationTest {
         assertEquals(listOf(InterstitialEngine.ERROR_CODE_SHOW_IN_BACKGROUND), failures.map { it?.code })
         assertEquals(0, raw.hosts.size)
         assertSame("a 9001 rejection must keep the wrapper's fill", raw, wrapper.interstitialAd)
+    }
+
+    @Test
+    fun `interstitial preserves the custom resume reason chosen by its partner click callback`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"app_open":{"presentation":{"skip_after_ad_click":true}}}""",
+        )
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
+        val raw = newVendor()
+        InterstitialEngine.show(activity, ApInterstitialAd(raw), object : AdCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().skipNextResume("host_reason")
+            }
+        }, false)
+        mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
+
+        raw.callback.onAdClicked()
+
+        assertEquals("host_reason", AppOpenManager.getInstance().resumeReturnSkipReason)
     }
 
     private fun newVendor() = Int02VendorAd(UNIT).also { vendorAds += it }

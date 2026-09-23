@@ -11,7 +11,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.ads.ERainAd
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.engine.NativeEngine
+import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.interstitial.Int02Application
 import com.ads.module.helper.interstitial.Int02FacebookShadow
 import com.ads.module.helper.interstitial.Int02MobileAdsShadow
@@ -81,6 +84,8 @@ class NativeOwnershipTest {
     }
 
     @After fun tearDown() {
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
+        AdBehavior.document.acceptSuccessfulFetch(null)
         controller.pause().stop().destroy()
         preload.releaseAll()
         main.idleFor(31, java.util.concurrent.TimeUnit.SECONDS)
@@ -128,6 +133,23 @@ class NativeOwnershipTest {
         assertEquals(1, requests.size)
         assertSame(first, helper.nativeAd?.admobNativeAd)
         assertFalse(first.destroyed)
+    }
+
+    @Test fun `native preserves the custom resume reason chosen by its partner click callback`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"app_open":{"presentation":{"skip_after_ad_click":true}}}""",
+        )
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
+        NativeEngine.load(activity, "native-unit", config.layoutId, object : AdCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().skipNextResume("host_reason")
+            }
+        })
+        requests.single().fill(NativeVendorAd())
+
+        requests.single().listener.onAdClicked()
+
+        assertEquals("host_reason", AppOpenManager.getInstance().resumeReturnSkipReason)
     }
 
     @Test fun `pause only click reload keeps the displayed view without shimmer through failure and retry`() {

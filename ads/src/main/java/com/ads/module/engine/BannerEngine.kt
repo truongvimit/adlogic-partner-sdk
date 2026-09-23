@@ -100,8 +100,12 @@ internal object BannerEngine {
 
         shimmer.visibility = View.VISIBLE
         shimmer.startShimmer()
+        var createdView: AdView? = null
+        var callbackEntered = false
+        var aborted = false
         try {
             val adView = AdView(activity)
+            createdView = adView
             adView.adUnitId = adUnitId
             // Fixed sizes narrower than the window must not hug the start edge.
             container.addView(
@@ -118,28 +122,45 @@ internal object BannerEngine {
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             adView.adListener = object : AdListener() {
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    if (aborted) return
                     hideSlot(container, shimmer)
+                    callbackEntered = true
                     callback.onAdFailedToLoad(loadAdError)
                 }
 
-                override fun onAdLoaded() = showLoaded(adView, container, shimmer, callback)
+                override fun onAdLoaded() {
+                    if (aborted) return
+                    showLoaded(adView, container, shimmer)
+                    callbackEntered = true
+                    callback.onAdLoaded()
+                }
 
                 override fun onAdClicked() {
+                    if (aborted) return
                     super.onAdClicked()
+                    suppressResumeAfterAdClick()
+                    callbackEntered = true
                     callback.onAdClicked()
                     Log.d(TAG, "onAdClicked")
-                    onGmaClick(ERainAd.appContext, adUnitId)
+                    logGmaClick(ERainAd.appContext, adUnitId)
                 }
 
                 override fun onAdImpression() {
+                    if (aborted) return
                     super.onAdImpression()
+                    callbackEntered = true
                     callback.onAdImpression()
                 }
             }
 
             adView.loadAd(AdRequest.Builder().build())
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Banner dispatch failed", e)
+            // A synchronous host callback already settled the helper; do not fail it again.
+            if (!callbackEntered) {
+                aborted = true
+                endLoadException(createdView, container, shimmer, callback)
+            }
         }
     }
 
@@ -158,8 +179,12 @@ internal object BannerEngine {
 
         shimmer.visibility = View.VISIBLE
         shimmer.startShimmer()
+        var createdView: AdView? = null
+        var callbackEntered = false
+        var aborted = false
         try {
             val adView = AdView(activity)
+            createdView = adView
             adView.adUnitId = adUnitId
             container.addView(adView)
             val adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
@@ -168,24 +193,61 @@ internal object BannerEngine {
             reserveHeight(shimmer, adSize.height)
             adView.setAdSize(adSize)
             adView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            adView.loadAd(collapsibleRequest(gravity))
             adView.adListener = object : AdListener() {
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    if (aborted) return
                     super.onAdFailedToLoad(loadAdError)
                     hideSlot(container, shimmer)
+                    callbackEntered = true
                     callback.onAdFailedToLoad(loadAdError)
                 }
 
-                override fun onAdLoaded() = showLoaded(adView, container, shimmer, callback)
+                override fun onAdLoaded() {
+                    if (aborted) return
+                    showLoaded(adView, container, shimmer)
+                    callbackEntered = true
+                    callback.onAdLoaded()
+                }
 
                 override fun onAdClicked() {
+                    if (aborted) return
                     super.onAdClicked()
-                    onGmaClick(ERainAd.appContext, adUnitId)
+                    suppressResumeAfterAdClick()
+                    logGmaClick(ERainAd.appContext, adUnitId)
+                    callbackEntered = true
                     callback.onAdClicked()
                 }
             }
+            adView.loadAd(collapsibleRequest(gravity))
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Collapsible banner dispatch failed", e)
+            if (!callbackEntered) {
+                aborted = true
+                endLoadException(createdView, container, shimmer, callback)
+            }
+        }
+    }
+
+    private fun endLoadException(
+        adView: AdView?,
+        container: FrameLayout,
+        shimmer: ShimmerFrameLayout,
+        callback: AdCallback,
+    ) {
+        // Retire only this attempt before its failure callback can synchronously load a fallback.
+        if (adView != null) {
+            container.removeView(adView)
+            try {
+                adView.destroy()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed banner could not be destroyed", e)
+            }
+        }
+        try {
+            endDeclined(container, shimmer, callback)
+        } catch (e: Exception) {
+            // Preserve dispatch-time callback containment without a second terminal notification.
+            Log.w(TAG, "Banner failure callback threw", e)
         }
     }
 
@@ -209,7 +271,6 @@ internal object BannerEngine {
         adView: AdView,
         container: FrameLayout,
         shimmer: ShimmerFrameLayout,
-        callback: AdCallback,
     ) {
         Log.d(TAG, "Banner adapter class name: " + adView.responseInfo!!.mediationAdapterClassName)
         shimmer.stopShimmer()
@@ -222,7 +283,6 @@ internal object BannerEngine {
                 adView.responseInfo!!.mediationAdapterClassName, AdType.BANNER,
             )
         }
-        callback.onAdLoaded()
     }
 
     private fun reserveHeight(shimmer: ShimmerFrameLayout, heightDp: Int) {

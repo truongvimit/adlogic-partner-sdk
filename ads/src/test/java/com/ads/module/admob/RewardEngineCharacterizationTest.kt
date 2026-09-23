@@ -74,6 +74,7 @@ class RewardEngineCharacterizationTest {
 
     @After
     fun tearDown() {
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
         shown.forEach { it.callback?.onAdDismissedFullScreenContent() }
         if (::controller.isInitialized && activity.lifecycle.currentState != Lifecycle.State.DESTROYED) {
             if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) controller.pause()
@@ -147,6 +148,25 @@ class RewardEngineCharacterizationTest {
 
         assertEquals(1, callback.closed)
         assertEquals("showRewardAds must not request a refill after close", 1, requests.size)
+    }
+
+    @Test
+    fun `reward preserves the custom resume reason chosen by its partner click callback`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"app_open":{"presentation":{"skip_after_ad_click":true}}}""",
+        )
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
+        val raw = showSupplied()
+        val callback = object : RewardCallback by RecordingRewardCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().skipNextResume("host_reason")
+            }
+        }
+        RewardEngine.show(activity, raw, callback)
+
+        raw.state.callback!!.onAdClicked()
+
+        assertEquals("host_reason", AppOpenManager.getInstance().resumeReturnSkipReason)
     }
 
     private fun showSupplied() = Tel02RewardedAd(UNIT).also { shown += it.state }

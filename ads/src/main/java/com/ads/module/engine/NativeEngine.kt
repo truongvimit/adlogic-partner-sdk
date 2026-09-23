@@ -1,6 +1,7 @@
 package com.ads.module.engine
 
 import android.content.Context
+import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.RatingBar
@@ -16,6 +17,7 @@ import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.VideoOptions
+import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -60,8 +62,9 @@ internal object NativeEngine {
 
                 override fun onAdClicked() {
                     super.onAdClicked()
+                    suppressResumeAfterAdClick()
                     tracked.onAdClicked()
-                    onGmaClick(context, adUnitId)
+                    logGmaClick(context, adUnitId)
                 }
             })
             .withNativeAdOptions(adOptions)
@@ -70,81 +73,75 @@ internal object NativeEngine {
     }
 
     fun populate(nativeAd: NativeAd, adView: NativeAdView) {
-        adView.mediaView = adView.findViewById(R.id.ad_media)
-        adView.headlineView = adView.findViewById(R.id.ad_headline)
-        adView.bodyView = adView.findViewById(R.id.ad_body)
-        adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
-        adView.iconView = adView.findViewById(R.id.ad_app_icon)
-        adView.priceView = adView.findViewById(R.id.ad_price)
-        adView.starRatingView = adView.findViewById(R.id.ad_stars)
-        adView.advertiserView = adView.findViewById(R.id.ad_advertiser)
+        val headline = adView.findViewById<View>(R.id.ad_headline)
+        val body = adView.findViewById<View>(R.id.ad_body)
+        val callToAction = adView.findViewById<View>(R.id.ad_call_to_action)
+        val iconView = adView.findViewById<View>(R.id.ad_app_icon)
+        val price = adView.findViewById<View>(R.id.ad_price)
+        val stars = adView.findViewById<View>(R.id.ad_stars)
+        val advertiser = adView.findViewById<View>(R.id.ad_advertiser)
 
-        bindAsset { (adView.headlineView as TextView).text = nativeAd.headline }
+        // GMA also tracks clicks on custom-drawn asset Views; typed casts apply only to our writes.
+        adView.mediaView = adView.findViewById<View>(R.id.ad_media) as? MediaView
+        adView.headlineView = headline
+        adView.bodyView = body
+        adView.callToActionView = callToAction
+        adView.iconView = iconView
+        adView.priceView = price
+        adView.starRatingView = stars
+        adView.advertiserView = advertiser
+
+        bindAsset { (headline as? TextView)?.text = nativeAd.headline }
+        bindAsset { body?.bindText(nativeAd.body) }
+        bindAsset { callToAction?.bindText(nativeAd.callToAction) }
         bindAsset {
-            val view = adView.bodyView!!
-            if (nativeAd.body == null) {
-                view.visibility = View.INVISIBLE
-            } else {
-                view.visibility = View.VISIBLE
-                (view as TextView).text = nativeAd.body
+            iconView?.let { view ->
+                val icon = nativeAd.icon
+                if (icon == null) {
+                    view.visibility = View.GONE
+                } else if (view is ImageView) {
+                    view.setImageDrawable(icon.drawable)
+                    view.visibility = View.VISIBLE
+                }
+            }
+        }
+        bindAsset { price?.bindText(nativeAd.price) }
+        bindAsset {
+            stars?.let { view ->
+                val rating = nativeAd.starRating
+                if (rating == null) {
+                    view.visibility = View.INVISIBLE
+                } else if (view is RatingBar) {
+                    view.rating = rating.toFloat()
+                    view.visibility = View.VISIBLE
+                }
             }
         }
         bindAsset {
-            val view = adView.callToActionView!!
-            if (nativeAd.callToAction == null) {
-                view.visibility = View.INVISIBLE
-            } else {
-                view.visibility = View.VISIBLE
-                (view as TextView).text = nativeAd.callToAction
-            }
-        }
-        bindAsset {
-            val view = adView.iconView!!
-            val icon = nativeAd.icon
-            if (icon == null) {
-                view.visibility = View.GONE
-            } else {
-                (view as ImageView).setImageDrawable(icon.drawable)
-                view.visibility = View.VISIBLE
-            }
-        }
-        bindAsset {
-            val view = adView.priceView!!
-            if (nativeAd.price == null) {
-                view.visibility = View.INVISIBLE
-            } else {
-                view.visibility = View.VISIBLE
-                (view as TextView).text = nativeAd.price
-            }
-        }
-        bindAsset {
-            val view = adView.starRatingView!!
-            val rating = nativeAd.starRating
-            if (rating == null) {
-                view.visibility = View.INVISIBLE
-            } else {
-                (view as RatingBar).rating = rating.toFloat()
-                view.visibility = View.VISIBLE
-            }
-        }
-        bindAsset {
-            val view = adView.advertiserView!!
-            if (nativeAd.advertiser == null) {
-                view.visibility = View.INVISIBLE
-            } else {
-                (view as TextView).text = nativeAd.advertiser
-                view.visibility = View.VISIBLE
+            advertiser?.let { view ->
+                val value = nativeAd.advertiser
+                if (value == null) {
+                    view.visibility = View.INVISIBLE
+                } else if (view is TextView) {
+                    view.text = value
+                    view.visibility = View.VISIBLE
+                }
             }
         }
         adView.setNativeAd(nativeAd)
     }
 
-    // A missing or mistyped view only drops that asset (NPE/CCE, printed): the ad still ships.
+    private fun View.bindText(value: String?) {
+        visibility = if (value == null) View.INVISIBLE else View.VISIBLE
+        if (value != null && this is TextView) text = value
+    }
+
     private inline fun bindAsset(bind: () -> Unit) {
         try {
             bind()
         } catch (e: Exception) {
-            e.printStackTrace()
+            // A failing vendor getter or custom view must not drop the remaining native assets.
+            Log.w("ERainStudio", "Native asset binding failed", e)
         }
     }
 }

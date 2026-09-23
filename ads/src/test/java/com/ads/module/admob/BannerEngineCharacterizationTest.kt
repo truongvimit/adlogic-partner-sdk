@@ -31,6 +31,7 @@ import io.trackkit.Tracker
 import io.trackkit.TrackkitEvents
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -103,6 +104,7 @@ class BannerEngineCharacterizationTest {
     @After
     fun tearDown() {
         Tracker.removeSink(sink)
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
         installPremium(false)
         if (::controller.isInitialized) {
             if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) controller.pause()
@@ -164,6 +166,51 @@ class BannerEngineCharacterizationTest {
     }
 
     @Test
+    fun `plain banner preserves a partner clearing click suppression in its callback`() {
+        enableClickResumeSuppression()
+        ERainAd.getInstance().loadBanner(activity, UNIT, object : AdCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
+            }
+        })
+
+        filledListener().onAdClicked()
+
+        assertNull(
+            "The engine must not re-arm the click skip after the partner clears it",
+            AppOpenManager.getInstance().resumeReturnSkipReason,
+        )
+    }
+
+    @Test
+    fun `plain banner preserves the custom resume reason chosen by its partner callback`() {
+        enableClickResumeSuppression()
+        ERainAd.getInstance().loadBanner(activity, UNIT, object : AdCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().skipNextResume("host_reason")
+            }
+        })
+
+        filledListener().onAdClicked()
+
+        assertEquals("host_reason", AppOpenManager.getInstance().resumeReturnSkipReason)
+    }
+
+    @Test
+    fun `collapsible banner preserves the custom resume reason chosen by its partner callback`() {
+        enableClickResumeSuppression()
+        loadCollapsible(object : AdCallback() {
+            override fun onAdClicked() {
+                AppOpenManager.getInstance().skipNextResume("host_reason")
+            }
+        })
+
+        filledListener().onAdClicked()
+
+        assertEquals("host_reason", AppOpenManager.getInstance().resumeReturnSkipReason)
+    }
+
+    @Test
     fun `collapsible banner listener does not forward onAdImpression to the callback`() {
         loadCollapsible(recording)
         filledListener().onAdImpression()
@@ -175,6 +222,13 @@ class BannerEngineCharacterizationTest {
         loadPlain(recording)
         filledListener().onAdImpression()
         assertEquals("plain banner loader must forward impressions", listOf(CALLBACK_IMPRESSION), order)
+    }
+
+    private fun enableClickResumeSuppression() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"app_open":{"presentation":{"skip_after_ad_click":true}}}""",
+        )
+        AppOpenManager.getInstance().setDisableAdResumeByClickAction(false)
     }
 
     private fun loadPlain(callback: AdCallback) = BannerEngine.load(
