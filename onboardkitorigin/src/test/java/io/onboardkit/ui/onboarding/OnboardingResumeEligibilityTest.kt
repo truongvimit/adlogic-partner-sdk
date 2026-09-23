@@ -21,9 +21,11 @@ import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
+import io.onboardkit.core.StepType
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -51,10 +53,15 @@ class OnboardingResumeEligibilityTest {
 
     @Before fun setup() {
         val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            if (call.method.name == "suppressAppResume") {
-                manager.disableAppResumeWithActivity(call.getArgument<Class<out Activity>>(0))
-                null
-            } else Mockito.RETURNS_DEFAULTS.answer(call)
+            when (call.method.name) {
+                "suppressAppResume" -> {
+                    manager.disableAppResumeWithActivity(call.getArgument<Class<out Activity>>(0))
+                    null
+                }
+                // Keep the native page present on each visit instead of exercising no-fill auto-next.
+                "bindNative" -> true
+                else -> Mockito.RETURNS_DEFAULTS.answer(call)
+            }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
             adProvider = provider
@@ -62,6 +69,8 @@ class OnboardingResumeEligibilityTest {
         }
         ConsentCenter.setHostConsent(true, false)
         OnboardingSdk.setCanRequestAds(true)
+        // A prior language test can freeze the process-wide step plan before this test configures it.
+        runBlocking { OnboardingSdk.reset() }
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             ads = AdsConfig(appResume = InterstitialAdUnit("test-resume"))
@@ -95,14 +104,19 @@ class OnboardingResumeEligibilityTest {
                 fullScreenStepNative = NativeAdUnit("test-native"))
         }.getOrThrow()).getOrThrow()
         val activity = launch(ObOnboardingHostActivity::class.java)
+        val pager = activity.findViewById<ViewPager2>(R.id.ob_step_pager)
+        assertEquals(0, pager.currentItem)
+        assertEquals(StepType.AD_FULL_SCREEN, activity.stepDefinition(StepId.OB1)?.type)
         assertFalse(manager.isResumeSuppressedFor(activity))
         assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
-        val pager = activity.findViewById<ViewPager2>(R.id.ob_step_pager)
         pager.setCurrentItem(1, false)
         shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, pager.currentItem)
+        assertEquals(StepType.CONTENT, activity.stepDefinition(StepId.OB2)?.type)
         assertNull(manager.resumeSkipReasonFor(activity))
         pager.setCurrentItem(0, false)
         shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, pager.currentItem)
         assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
     }
 
