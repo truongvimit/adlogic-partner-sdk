@@ -100,9 +100,14 @@ integration के लिए:
    `RewardCallback.onUserEarnedReward(RewardItem?)`।
 6. **Rewarded interstitial और reward का auto-refill हटाया गया।** दिखाया गया rewarded ad अब अपने आप
    replace नहीं होता: अगर आप इस पर निर्भर थे तो `rewarded.buffer.after_close` चालू करें (global या per
-   placement) या `RewardAdManager.bufferAfterClose = true` set करें। `setCountClickToShowAds` हटाया गया है
-   पर pacing नहीं बदली — उस counter ने कभी कोई show नहीं रोका। जो ad unit दिन की click सीमा तक पहुँच
-   गई है, वह अब interstitial load खत्म करने के बजाय waterfall अगली unit को सौंप देती है।
+   placement) या `RewardAdManager.bufferAfterClose = true` set करें। यह replacement ad बंद होने के बाद
+   load करता है; legacy refill ad दिखते ही शुरू हो सकता था, इसलिए preload का समय बदलता है।
+   `setCountClickToShowAds` भी हटाया गया है। पुराने public
+   `Admob.showInterstitialAdByTimes(context, ad, callback)` path में हर Nवीं action का counter लागू था;
+   `forceShowInterstitial` उसे bypass करता था। वर्तमान manager में time/group frequency gates हैं, लेकिन
+   वैसा action-count gate नहीं है: उस पुराने path का उपयोग करने वाली integrations को manager बुलाने से
+   पहले अपनी action-count policy लागू करनी होगी। दिन की click सीमा पर पहुँची ad unit अब interstitial
+   load खत्म करने के बजाय waterfall अगली unit को सौंप देती है।
 7. **`MobileAds.initialize()` अब `ERainAd.init()` के भीतर background thread पर चलता है,** इसलिए
    `init()` लौटने के तुरंत बाद `MobileAds.getInitializationStatus()` अभी भी `null` हो सकता है: adapter
    status बाद में पढ़ें, `init()` के तुरंत बाद synchronously नहीं।
@@ -455,6 +460,8 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 `preload` और `load` हर placement के लिए एक ही cache/request इस्तेमाल करते हैं। `show` तैयार ad लेता है; `loadAndShow` cache इस्तेमाल करता है, चल रही request का इंतज़ार करता है, या दोनों न होने पर load शुरू करता है। `rewarded.buffer.after_close` चालू न हो तो automatic refill नहीं होता। Reward मिलने और ad बंद होने के बाद `onSuccess` चलता है; बाकी परिणाम `onFailed` में आते हैं। परिणाम SDK callback से लें, timer से अनुमान न लगाएँ।
 
 Defaults: हर load tier के लिए 30 सेकंड, हर placement पर एक cache/request, automatic refill नहीं। `rewarded.buffer.after_close` (या `RewardAdManager.bufferAfterClose = true`; Java: `setBufferAfterClose(true)`) इस ad के बंद होते ही अगला ad load करता है, उन्हीं placements के लिए जिन्हें remote config घोषित करता है। तैयार ad न हो तो `show` में `false` मिलता है; उसी placement का `loadAndShow` waiting/showing के दौरान दोबारा बुलाने पर `onFailed` चलता है। Lambda/Runnable का परिणाम **close से पहले** मिले reward पर तय होता है। Close के बाद आने वाले mediation reward सहित अलग-अलग events के लिए [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt) इस्तेमाल करें; पूरा हो चुका परिणाम बदला नहीं जाता।
+
+**Activity lifecycle.** `show` / `loadAndShow` को resumed Activity से बुलाएँ जो finishing या destroyed न हो। Plain `Activity` की window में focus और app process resumed स्थिति में होना चाहिए। `loadAndShow` के इंतज़ार के दौरान host stop या destroy हो तो `onFailed` एक बार चलता है और वह pending presentation रद्द हो जाती है। Shared load जारी रहता है और देर से आया ad cache में रहता है; वापस आने पर वह अपने आप नहीं दिखता, नई presentation स्पष्ट रूप से माँगें। पहले ही dispatched ad को fullscreen lifecycle बदलावों के दौरान सामान्य close/failure callbacks मिलते रहते हैं।
 
 ### अतिरिक्त integrations
 

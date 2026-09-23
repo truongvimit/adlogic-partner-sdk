@@ -100,9 +100,13 @@ Giữ `targetSdk` theo app (repo dùng 36), dùng AndroidX/AppCompat và `MainAc
    `RewardCallback.onUserEarnedReward(RewardItem?)`.
 6. **Gỡ rewarded interstitial và auto-refill của reward.** Ad reward đã hiện không còn tự được thay:
    nếu app dựa vào điều đó, bật `rewarded.buffer.after_close` (toàn cục hoặc theo placement) hoặc đặt
-   `RewardAdManager.bufferAfterClose = true`. `setCountClickToShowAds` bị gỡ mà nhịp hiện quảng cáo không
-   đổi — bộ đếm đó chưa từng chặn lần show nào. Một ad unit đã chạm trần click trong ngày giờ nhường
-   waterfall cho unit kế tiếp thay vì kết thúc lượt load interstitial.
+   `RewardAdManager.bufferAfterClose = true`. Cách thay thế này tải sau khi đóng; refill cũ có thể bắt
+   đầu ngay khi ad hiện, nên thời điểm preload thay đổi. `setCountClickToShowAds` cũng bị gỡ. Đường public
+   cũ `Admob.showInterstitialAdByTimes(context, ad, callback)` có áp dụng bộ đếm mỗi N hành động;
+   `forceShowInterstitial` bỏ qua bộ đếm đó. Manager hiện có gate thời gian/nhóm nhưng chưa có gate
+   đếm hành động tương đương: integration dùng đường cũ phải tự áp chính sách đếm trước khi gọi manager.
+   Một ad unit đã chạm trần click trong ngày giờ nhường waterfall cho unit kế tiếp thay vì kết thúc
+   lượt load interstitial.
 7. **`MobileAds.initialize()` chạy trên thread nền** bên trong `ERainAd.init()`, nên
    `MobileAds.getInitializationStatus()` có thể vẫn là `null` ngay sau khi `init()` trả về: đọc trạng thái
    adapter sau đó, không đọc đồng bộ ngay sau `init()`.
@@ -455,6 +459,8 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 `preload` và `load` dùng chung cache/request theo placement. `show` lấy ad sẵn có; `loadAndShow` dùng cache, chờ request đang chạy hoặc tải khi chưa có. Không tự refill, trừ khi bật `rewarded.buffer.after_close`. `onSuccess` chạy sau khi đã nhận reward và ad đóng; `onFailed` xử lý các kết quả còn lại. Lấy kết quả từ callback SDK, không suy đoán bằng timer.
 
 Mặc định: 30 giây/tầng tải, một cache/request theo placement, không tự refill. `rewarded.buffer.after_close` (hoặc `RewardAdManager.bufferAfterClose = true`; Java: `setBufferAfterClose(true)`) cho phép tải ad kế tiếp ngay sau khi ad đóng, chỉ với placement mà remote config có khai báo. `show` thiếu ad trả `false`; `loadAndShow` gọi trùng khi placement đang chờ/đang hiển thị trả `onFailed`. Lambda/Runnable chốt kết quả theo reward nhận **trước lúc đóng**. Cần từng sự kiện, kể cả reward từ mediation đến sau khi đóng, dùng [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); kết quả đã hoàn tất không bị đổi lại.
+
+**Vòng đời Activity.** Gọi `show` / `loadAndShow` từ Activity đang resumed, chưa finishing hoặc destroyed. Với `Activity` thuần, cửa sổ phải có focus và process của app ở trạng thái resumed. Nếu host stop hoặc destroy khi `loadAndShow` còn chờ, `onFailed` chạy một lần và huỷ lượt chờ hiển thị đó. Request tải chung vẫn tiếp tục, ad về muộn được cache; quay lại không tự show, cần chủ động gọi lượt hiển thị mới. Ad đã được dispatch vẫn nhận callback close/failure bình thường qua các chuyển trạng thái fullscreen.
 
 ### Tích hợp bổ sung
 

@@ -100,9 +100,13 @@ existing integration:
    `RewardCallback.onUserEarnedReward(RewardItem?)`.
 6. **Rewarded interstitial and reward auto-refill are removed.** A shown rewarded ad is no longer replaced
    on its own: if you relied on that, turn on `rewarded.buffer.after_close` (globally or per placement)
-   or set `RewardAdManager.bufferAfterClose = true`. `setCountClickToShowAds` is removed without any
-   change in pacing — that counter never blocked a show. An ad unit that reached its daily click cap now
-   hands the waterfall to the next unit instead of ending the interstitial load.
+   or set `RewardAdManager.bufferAfterClose = true`. This replacement loads after dismissal; the legacy
+   refill could start when the ad was shown, so preload timing changes. `setCountClickToShowAds` is also
+   removed. The old public `Admob.showInterstitialAdByTimes(context, ad, callback)` path honored its
+   every-Nth-action counter; `forceShowInterstitial` bypassed it. The current manager has time/group
+   frequency gates, but no equivalent action-count gate: integrations using that path must implement
+   their action-count policy before calling the manager. An ad unit that reached its daily click cap
+   now hands the waterfall to the next unit instead of ending the interstitial load.
 7. **`MobileAds.initialize()` runs on a background thread** inside `ERainAd.init()`, so
    `MobileAds.getInitializationStatus()` can still be `null` right after `init()` returns: read adapter
    status later, not synchronously after `init()`.
@@ -455,6 +459,8 @@ RewardAdManager.show(this, AppAdPlacement.REWARD_EXAMPLE) { earned ->
 `preload` and `load` share one cache/request per placement. `show` uses a ready ad; `loadAndShow` uses that cache, waits for the running request, or starts loading when neither exists. There is no automatic refill unless `rewarded.buffer.after_close` turns it on. `onSuccess` runs after a reward is earned and the ad closes; `onFailed` handles other outcomes. Use SDK callbacks for the result; do not infer it with a timer.
 
 Defaults: 30 seconds per load tier, one cached ad/request per placement, no automatic refill. `rewarded.buffer.after_close` (or `RewardAdManager.bufferAfterClose = true`; Java: `setBufferAfterClose(true)`) loads the next ad once this one closes, for placements the remote config declares. An empty-cache `show` completes with `false`; a repeated `loadAndShow` while the same placement is waiting/showing calls `onFailed`. The lambda/Runnable result reflects reward received **before close**. For individual events, including a mediation reward reported after close, use [`RewardShowCallback`](../ads/src/main/java/com/ads/module/helper/reward/RewardAdManager.kt); the completed result is not revised.
+
+**Activity lifetime.** Call `show` / `loadAndShow` from a resumed Activity that is not finishing or destroyed. A plain `Activity` must also have window focus while the app process is resumed. If the host stops or is destroyed while `loadAndShow` waits, `onFailed` runs once and that pending presentation is cancelled. The shared load continues and a late fill stays cached; returning does not auto-show it, so request a new presentation explicitly. An ad already dispatched keeps its normal close/failure callbacks through fullscreen lifecycle transitions.
 
 ### Additional integrations
 
