@@ -72,9 +72,10 @@ format is filling it, and `ob_ads_splash_banner_enabled` turns the position off 
 That window runs from the later of the slot **loading** and the splash **regaining the screen**,
 because both have to be true before anyone can look at it: an ad that filled behind the notification
 dialog was on screen but not in front of the user. A slot that fails, is skipped or has no ad unit
-never starts the window and is not waited on; a slow one is waited for within what remains of
-`splash.timing.ad_budget_ms`, the same budget the interstitial spends, and every hold is clamped to
-that remainder. Vendor impressions are not consulted at all, since a collapsible banner never
+never starts the window and is not waited on. A slot that has answered nothing, neither loaded nor
+failed, is waited for at most `splash.timing.slot_wait_ms`, counted from the notification dialog
+closing, or until `splash.timing.ad_budget_ms` runs out if that comes first; past that the
+interstitial shows without it. Every hold is clamped to what remains of that budget. Vendor impressions are not consulted at all, since a collapsible banner never
 reports one. `0` restores the old unguarded behaviour.
 
 The native renders with a fixed media-left frame, so `positionCTA` and `components` ordering have
@@ -281,6 +282,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
 | `splash.timing.slot_min_visible_ms` | `1000` |
+| `splash.timing.slot_wait_ms` | `10000` |
 | `splash.timing.notification_settle_ms` | `800` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |

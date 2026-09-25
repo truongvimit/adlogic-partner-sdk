@@ -635,6 +635,44 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun aSilentSlotHoldsAReadyInterstitialOnlyUntilSlotWait() {
+        LongPromptFixture.provider.settleBanner = false
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        idleUntilAfterInterRequest(9_500)
+        assertEquals("A silent slot still has its ten seconds", listOf("native"), LongPromptFixture.provider.order)
+        idleUntilAfterInterRequest(10_500)
+        assertEquals("Not the 60s ad budget", listOf("native", "show"), LongPromptFixture.provider.order)
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun remoteSlotWaitOutranksTheBundledTen() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"slot_wait_ms":5000}}}""")
+        try {
+            LongPromptFixture.provider.settleBanner = false
+            launch(notification = false)
+            drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+            LongPromptFixture.provider.ready = true
+            requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+            idleUntilAfterInterRequest(4_500)
+            assertEquals(listOf("native"), LongPromptFixture.provider.order)
+            idleUntilAfterInterRequest(5_500)
+            assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        } finally {
+            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
+        }
+    }
+
+    /** The slot wait starts a beat after the request, so these marks sit 500ms either side of it. */
+    private fun idleUntilAfterInterRequest(ms: Long) {
+        val target = LongPromptFixture.provider.interstitialRequestAtMs + ms
+        main.idleFor(Duration.ofMillis((target - SystemClock.elapsedRealtime()).coerceAtLeast(0)))
+    }
+
+    @Test
     fun afterAdWaitsForTheMinimumBeforeShowingAndHandsOffWhenShowFails() {
         LongPromptFixture.timing = io.onboardkit.ads.NextScreenTiming.AFTER_AD
         launch(notification = false)

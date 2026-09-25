@@ -66,4 +66,8 @@ class SplashSlotVisibilityTest {
         assertTrue("a 0 default would ship the very behaviour this replaced", default > 0)
         assertEquals(1000L, default)
     }
+
+    @Test fun `a silent slot is given ten seconds before the interstitial goes without it`() {
+        assertEquals(10_000L, OnboardingSettings.defaultNumber("splash.timing.slot_wait_ms"))
+    }
 }

@@ -99,6 +99,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     }
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null
+    /** Past this, a slot that has neither loaded nor failed no longer holds the interstitial. */
+    var slotWaitDeadlineMs: Long? = null
     var notificationPermissionRequested = false
     val notificationOpen = MutableStateFlow(false)
     val notificationPermissionResult = CompletableDeferred<Unit>()

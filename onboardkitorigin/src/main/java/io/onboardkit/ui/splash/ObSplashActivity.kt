@@ -536,19 +536,27 @@ open class ObSplashActivity : BaseOnboardActivity() {
         )
     }
 
-    /** One monotonic deadline, first armed after notification and foreground focus. */
+    /**
+     * The shared ad budget and the slot's own wait, both armed once, after notification and
+     * foreground focus, so a recreated splash keeps the original deadlines.
+     */
     private fun beginAdWait() {
         if (attempt.budgetDeadlineMs != null) return
         val flags = checkNotNull(attempt.flags)
         if (!attempt.interstitialSettled.isCompleted ||
             flags.splashSlotMinVisibleMs > 0 && !attempt.bannerSettled.isCompleted) {
-            attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
-            ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
+            val now = SystemClock.elapsedRealtime()
+            val slotWaitMs = OnboardingSettings.number("splash.timing.slot_wait_ms")
+            attempt.budgetDeadlineMs = now + flags.splashAdBudgetMs.coerceAtLeast(0)
+            attempt.slotWaitDeadlineMs = now + slotWaitMs
+            ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs} slot_wait_ms=$slotWaitMs")
         }
     }
 
-    private fun remainingBudgetMs(): Long =
-        ((attempt.budgetDeadlineMs ?: SystemClock.elapsedRealtime()) - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+    private fun remainingBudgetMs(): Long = remainingMs(attempt.budgetDeadlineMs)
+
+    private fun remainingMs(deadlineMs: Long?): Long =
+        ((deadlineMs ?: SystemClock.elapsedRealtime()) - SystemClock.elapsedRealtime()).coerceAtLeast(0)
 
     /**
      * Holds the interstitial until the bottom slot has had its minimum time on screen.
@@ -559,18 +567,24 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * that dialog is gone.
      *
      * Nothing here can strand the flow. A slot that fails, is skipped or has no ad unit settles
-     * without ever being marked filled and returns at once, and the wait for a slow one is clamped
-     * to what is left of the shared ad budget — the same budget the interstitial just spent.
+     * without ever being marked filled and returns at once. One that has answered nothing is
+     * waited for only until `splash.timing.slot_wait_ms` or the shared ad budget runs out,
+     * whichever comes first, and is then given up for the interstitial.
      */
     private suspend fun awaitSlotVisible() {
         val minVisibleMs = checkNotNull(attempt.flags).splashSlotMinVisibleMs
         if (minVisibleMs <= 0) return
         if (!attempt.bannerSettled.isCompleted) {
-            withTimeoutOrNull(remainingBudgetMs().milliseconds) { attempt.bannerSettled.await() }
+            val waitMs = minOf(remainingBudgetMs(), remainingMs(attempt.slotWaitDeadlineMs))
+            withTimeoutOrNull(waitMs.milliseconds) { attempt.bannerSettled.await() }
         }
         val loadedAt = attempt.slotLoadedAtMs
         if (!attempt.slotFilled || loadedAt == null) {
-            ObLog.d(ObLog.Section.SPLASH, "slot has no ad — not holding the interstitial")
+            ObLog.d(
+                ObLog.Section.SPLASH,
+                if (attempt.bannerSettled.isCompleted) "slot has no ad — not holding the interstitial"
+                else "slot silent past its wait — showing the interstitial without it",
+            )
             return
         }
         val onScreenSince = maxOf(loadedAt, attempt.focusedAtMs ?: loadedAt)
