@@ -71,6 +71,7 @@ data class StartOptions(
 object OnboardingSdk {
 
     private const val TAG = "OnboardKit"
+    private const val LATE_REMOTE_TIMEOUT_MS = 60_000L
 
     private var application: Application? = null
     private var config: OnboardKitConfig? = null
@@ -133,6 +134,11 @@ object OnboardingSdk {
         stateStore?.let { store -> sdkScope.launch { session.seedLanguage(store.current().languageSelected) } }
         io.onboardkit.remote.OnboardingSettings.initialize(app)
         remote = ObRemote(app)
+        // A host without the SDK splash only awaits AdConfig.refresh(); that fetch activates the
+        // legacy ob_* keys as well, and nothing else would read them.
+        com.ads.module.config.settings.SettingsRegistry.addFetchListener("onboardkit.remote") {
+            remote?.rereadActivated()
+        }
         adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
         appResumeGuard = ObAppResume(adsGuard, adProvider)
         // Same transient/master policy for both entry paths; OPEN retains its own slot checks.
@@ -335,8 +341,24 @@ object OnboardingSdk {
 
     // ── Internal wiring for SDK screens ──
 
+    /** The ad_config key a placement's units, template, UA gate and overrides are read under. */
     internal fun configuredPlacementKey(placement: AdPlacement): String? =
-        config?.ads?.placementKeyFor(placement)
+        configOrNull()?.ads?.placementKeyFor(placement)
+
+    @Volatile private var lateRemote: kotlinx.coroutines.Job? = null
+
+    /**
+     * Applies a fetch that outlived the splash's wait. The splash keeps its own deadline; without
+     * this, a slow network left the rest of the session on the app's own values although the
+     * backend answered moments later.
+     */
+    internal fun applyRemoteWhenLanded() {
+        if (lateRemote?.isActive == true) return
+        lateRemote = sdkScope.launch {
+            remote?.sync(LATE_REMOTE_TIMEOUT_MS)
+            com.ads.module.config.AdConfig.refresh(LATE_REMOTE_TIMEOUT_MS)
+        }
+    }
 
     internal fun configOrNull(): OnboardKitConfig? = config?.let(io.onboardkit.remote.OnboardingSettings::resolve)
 

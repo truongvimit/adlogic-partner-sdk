@@ -2,7 +2,7 @@
 
 **OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
-`onboarding.order` alone selects and orders pages in JSON; omit an ID to remove a page. Omit `steps` unless a page needs a template, behavior or fullscreen override. `steps.<id>.enabled` is removed and ignored; a valid `order` also takes precedence over legacy `ob_enable_step_ob1..4` flags. Control each ad placement with `ad_config.<placement>.isEnable`: content pages remain when ads are off, while fullscreen ad pages are skipped.
+`onboarding.order` alone selects and orders pages in JSON; omit an ID to remove a page. Omit `steps` unless a page needs a template, behavior or fullscreen override. `steps.<id>.enabled` is removed and ignored. A remote `order` takes precedence over legacy `ob_enable_step_ob1..4` flags the backend delivered, and those take precedence over an `order` in the app asset. A page the app declares with `enabled = false` stays hidden until a remote `order` lists it or a delivered `ob_enable_step_obN = true` turns it on; an app-asset `order` keeps it hidden. Remote cannot add a page the app never declared. Control each ad placement with `ad_config.<placement>.isEnable`: content pages remain when ads are off, while fullscreen ad pages are skipped.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -24,7 +24,7 @@ The existing Firebase parameter remains `ad_remote_config`; `ad_config.json` / `
 - **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back/click-return, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation and Activity exclusions. SDK ad-presentation presets remain remotely configurable.
 
-The removed aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches and grouped app-content payloads `ui`/`question.content` are ignored, including in old cached JSON. Existing remote UI APIs still work through `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config` and `ob_enable_ui_content`; these are not new fields in the two grouped documents. Question button copy through `QuestionConfig.ctaTextRes` remains app-owned and is separate from an ad's CTA.
+The removed aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches and grouped app-content payloads `ui`/`question.content` are ignored, including in old cached JSON. Existing remote UI APIs still work through `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config` and `ob_enable_ui_content`; these are not new fields in the two grouped documents. A valid `ob_question_config` shows the question to new users even when the app configured no `QuestionConfig`; its `cta_text` sets the question button copy, with `QuestionConfig.ctaTextRes` as the fallback, and the minimum selection is clamped to the options shown. That button is separate from an ad's CTA.
 
 ## Configure the app once
 
@@ -34,20 +34,23 @@ Use the [partner setup sample](examples/ads-onboarding/OnboardKitSetup.kt). Keep
 ads = AdsConfig.fromAdConfig()
 ```
 
-This is also the `onboardKitConfig` builder default. It preserves placement keys rather than copying ad IDs at Application startup. After fetch, page eligibility, preload and display use the current units; no second `configure()` call is required. Ad-only steps with no usable unit are removed before opening the pager. Manually constructed `AdsConfig(...)` with raw IDs remains supported for hosts that own unit resolution themselves.
+This is also the `onboardKitConfig` builder default. It preserves placement keys rather than copying ad IDs at Application startup. After fetch, page eligibility, preload and display use the current units; no second `configure()` call is required. Ad-only steps with no usable unit are removed before opening the pager. Manually constructed `AdsConfig(...)` with raw IDs remains supported, but any key below that the backend's `ad_remote_config` declares outranks units written in code, including `stepNatives`, `splashInterstitialOldUser` and `splashInterstitialOverride()`; code units apply to the placements remote says nothing about. The app's own `ad_config.json` overrides code only for the keys you bind through `AdsConfig.fromAdConfig`.
 
 | Slot | Default ad_config key |
 | --- | --- |
 | Splash banner / interstitial | `banner_splash` / `inter_splash` |
 | Splash native (bottom slot, when `splash.ads.slot_format` is `NATIVE`) | `native_splash` |
-| Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`) |
+| Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`); when `_o` is not declared, returning users get the `inter_splash` units |
+| Notification / widget / uninstall entry splash | `inter_noti` / `inter_widget` / `inter_uninstall`; a key that is missing or switched off falls back to the user's segment key |
+
+`inter_splash` is the master switch for new users and `inter_splash_o` (or `inter_splash` while `_o` is not declared) for returning users: `isEnable: false` there turns off every splash interstitial for that segment, entries included. An entry spends its own key while it is declared and on, otherwise its segment's key. The load and the show are gated by the same key. The legacy Firebase key `ob_ads_splash_inter_enabled=false` turns every splash interstitial off for everyone.
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
 | Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
-| App resume | `open_resume` |
+| App resume | `open_resume`; declared with an ID by the backend, it turns app-open on without an `idAdResume` seed. Call `AppOpenManager.getInstance().disableAppResume()` to keep app-open off |
 
 ### The splash bottom slot
 
@@ -108,18 +111,20 @@ This association also selects `ad_behavior_config.placement_overrides.<key>`: LF
 
 App files named `app/src/main/assets/ad_behavior_config.json` / `onboarding_config.json` override the SDK assets. Copy a full sample or declare only the fields you want to change, then rebuild and restart the process. With no app file, bundled defaults work without any manual setters. The [Firebase guide](firebase-integration.md#local-defaults) includes two complete minimal examples.
 
-- Valid remote fields after successful fetch/activation > custom app asset > existing host constructor/setter fallback > bundled SDK defaults. Valid cached remote fields retain this priority at startup.
-- Successful fetch with a missing parameter/field removes its previous remote assignment and falls back to local/legacy. Invalid field types/enums/ranges and `null` are ignored; valid `false`/`0` remain assignments.
-- Fetch failure/timeout, malformed or blank whole JSON, or unsupported schema keeps the last valid document. On a first run without valid remote cache, local/defaults remain. **A failed fetch does not force local values over a valid remote cache.**
-- Publish `{}` or `{"schema_version":1}` to clear a document's remote overrides after a successful fetch. An empty String is malformed, not a reset. New remote objects replace previous remote overrides rather than patching them; omitted fields fall back locally.
+- Precedence for every setting: valid field of the remote `onboarding_config` / `ad_behavior_config` > legacy `ob_*` key the backend delivered > custom app asset > host Kotlin config/hooks > bundled SDK defaults. Remote at any scope outranks the app asset at any scope. Valid cached remote fields retain this priority at startup; keys the backend never sent do not count.
+- Successful fetch with a missing parameter/field removes its previous remote assignment and falls back to the next source down. Invalid field types/enums/ranges and `null` are ignored and logged under logcat tag `AdLogicSettings`; valid `false`/`0` remain assignments.
+- Fetch failure/timeout, malformed or blank whole JSON, or unsupported schema keeps the last valid document; a rejected document is logged under `AdLogicSettings`. On a first run without valid remote cache, local/defaults remain. **A failed fetch does not force local values over a valid remote cache.** A fetch that lands after the splash's `splash.load.remote_fetch_timeout_ms` still applies for the rest of the session.
+- `AdConfig.install` applies the last `ad_remote_config` the backend delivered (Firebase's last activated value) right away, so a slow or failed fetch runs on that document rather than on the asset. A failed settings fetch does not stop `ad_remote_config` from applying.
+- Publish `{}` or `{"schema_version":1}` to clear a document's remote overrides after a successful fetch. An empty String is malformed, not a reset. New remote objects replace previous remote overrides rather than patching them; omitted fields fall back to the next source down.
 - A custom/sparse app asset assigns every valid field present, including `false`/`0`. An unchanged copy of the full bundled asset preserves existing host constructor/setter fallbacks. Firebase's published default value is still remote, not the SDK's local default; Firebase in-app defaults are not accepted as fetched remote by the source.
 - SDK defaults are generated from the assets during build, available before Context initialization and contain no `null`. No duplicate Kotlin/XML defaults need maintenance. Invalid app fields fall back; the app does not need its own parser.
-- Consent, premium, `setCanRequestAds`, `AdsConfig.enabled=false`, runtime reload pause and lifecycle may still block ads. AutoBuffer needs the host's `start` integration; JSON does not create Activities or initialize host features.
-- Legacy `ob_*` keys remain fallbacks/compatible. Debug keeps ad IDs from `ad_config_debug.json` while accepting both grouped documents; there are no automatic `_debug` variants for the new parameters.
+- Consent, premium, `setCanRequestAds(false)`, remote `global.ads_enabled=false`, runtime reload pause and lifecycle still block ads. `AdsConfig.enabled=false` holds until remote `flow.ads_enabled=true` (or a delivered `ob_enable_all_ads=true`) turns onboarding ads on; an app asset cannot. AutoBuffer needs the host's `start` integration; JSON does not create Activities or initialize host features.
+- Legacy `ob_*` keys remain compatible. A delivered key sets its value either way, below the grouped documents and above the app asset/host; `ob_splash_min_display_ms <= 0` keeps the local value.
+- A debuggable build applies every field of remote `ad_remote_config` but keeps the ad unit IDs of `ad_config_debug.json` (or `ad_config.json` when there is no debug file); keys only remote declares are dropped unless they switch a slot off. A `WARN` log names the pinned file, and `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs as well. Both grouped documents apply as in release; there are no automatic `_debug` variants for the new parameters.
 
 ## Behavior scopes
 
-Screen slot override > shared content/fullscreen OB override > placement override > format override > local/default. Empty `behavior` objects provide an optional scope with no leaf overrides; no ad IDs, unit switches or app resource IDs go there.
+Screen slot override > shared content/fullscreen OB override > placement override > format override > local/default. This order applies within one source: a remote value at any scope outranks an app-asset value at any scope. Empty `behavior` objects provide an optional scope with no leaf overrides; no ad IDs, unit switches or app resource IDs go there.
 
 | Format in placement_overrides | Supported fields |
 | --- | --- |
@@ -128,9 +133,9 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
-OB interstitial slots support tier and wait timeouts. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
+OB interstitial slots support tier and wait timeouts; for the exit interstitial, `onboarding.exit_interstitial.wait_timeout_ms` outranks `placement_overrides` and format `interstitial.load_and_show.wait_timeout_ms`. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
 
-Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
+Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). A click on an onboarding ad skips the next app-open unless remote sets `app_open.presentation.skip_after_ad_click` to `false`. Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
 
 ## Native click actions
 
@@ -162,14 +167,14 @@ Example override in `onboarding_config` (LFO2 defaults to `reload`, this changes
 ## Native templates, CTA and X/Skip experiments
 
 - `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; per-content-step `native_template`: `""` to inherit; `question.native.template`: `CTA_BOTTOM`.
-- Frame priority: explicit per-step template > explicit screen/group template > per-placement `ad_config.positionCTA` (`TOP`/`BOTTOM`) > host/SDK template. Explicit includes valid remote or custom app assets; the unmodified SDK asset does not override existing settings. Remove the corresponding template override when testing `positionCTA` itself.
+- Frame priority: remote template (per-step > screen/group) > per-placement `positionCTA` (`TOP`/`BOTTOM`) from the backend's `ad_remote_config` > custom app asset template (per-step > screen/group) > `positionCTA` from the app's `ad_config.json` > host/SDK template. The unmodified SDK asset does not override existing settings. Remove the corresponding template override when testing `positionCTA` itself.
 - Content presets are `CTA_TOP`, `CTA_BOTTOM`, `COMPACT`; group template fields also accept `FULL_SCREEN`/`DIALOG` as before. The language popup always uses `DIALOG`; ad-only Full1/Full2/OB5 always use `FULL_SCREEN`. App-provided custom layout resources remain local.
 - Preload and show share template resolution. If a host preloads early, or remote is refreshed after a preload, bind uses the current SDK frame without discarding the loaded ad. Already visible views remain until a subsequent bind. This is not the default splash ordering: LFO1 is scheduled after remote under both strategies.
-- Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. A specific scope overrides a shared scope, then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
+- Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. Within one source a specific scope overrides a shared scope (remote at any scope outranks the app asset), then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
 - The X/Skip side is per native full-screen page, with no shared scope above it: `onboarding.steps.<id>.fullscreen.skip.position` for each full-screen step, `ob5.skip.position` for standalone OB5 and `splash.native.skip.position` for the native_fs between the splash interstitial and LFO. All three accept `RIGHT` / `LEFT` and default to `RIGHT`, the side the X has always taken; the shipped JSON declares `full1` and `full2`, and any other step id the app declares is accepted at the same path. No other format has this control: interstitial, app-open, banner and inline native carry no such button. Both sides are exact mirrors — same inset from their edge and the same top margin — so only the side changes, never the size, the style or the timing. In an RTL locale the screen keeps mirroring as it does today: `RIGHT` follows the text end, `LEFT` its start.
 - `native.presentation.cta_corner_radius_dp`: `20` dp, overridable by placement/screen. It applies when an explicit CTA background color is supplied through `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; `default` color preserves the XML drawable.
 - `lfo.confirm_button.image_url` / `tint_color`: `""` keeps the XML icon/color. Image-load failure uses the SDK check icon; invalid color is ignored. These style the LFO confirm control, separately from ad CTA fields.
-- `lfo.languages.supported_codes`: `[]` keeps the app/SDK catalog. Unknown codes are dropped and an empty filtered result falls back to that catalog. `lfo.languages.default_code`: `""` preserves the existing choice; a new code must exist in the app catalog.
+- `lfo.languages.supported_codes`: `[]` keeps the app/SDK catalog. Unknown codes are dropped and an empty filtered result falls back to that catalog. `lfo.languages.default_code`: `""` preserves the existing choice; a code must be on the offered list (the filtered `supported_codes`, else the catalog). A host `LanguageConfig.defaultCode` that `supported_codes` leaves out is not preselected.
 
 Example override setting the X side of each native full-screen page. The shipped JSON declares `full1` and `full2`, the standard full-screen pages; an app that declares its own step id adds that id the same way:
 
@@ -190,9 +195,9 @@ Example override setting the X side of each native full-screen page. The shipped
 
 ## Fetch timing and QA
 
-`ALTERNATE` waits for remote completion or timeout/fallback before splash ads. `SAME_TIME` may start only splash banner/interstitial before that step completes. LFO1 preload is scheduled **after remote in both strategies**; LFO `PARALLEL` means not waiting for the splash interstitial's load outcome. Strategy is selected at splash entry from current local/cache settings; a strategy value just fetched applies on a subsequent splash attempt.
+Both strategies wait for remote completion or timeout/fallback before splash ads. `ALTERNATE` then also waits for `onRemoteFetched()`; `SAME_TIME` starts splash banner/interstitial without waiting for that hook. LFO1 preload is scheduled **after remote in both strategies**; LFO `PARALLEL` means not waiting for the splash interstitial's load outcome. The strategy and the notification-permission decision are read after the remote step settles, so a value fetched in that step applies to the same launch. The notification prompt waits for that step; consent and billing still overlap it. A remote `splash.navigation.next_screen_timing` other than `AUTO` outranks an overridden `nextScreenTiming()` on launcher starts; notification/widget/uninstall entries keep the hook, and an app-asset value only feeds the default hook.
 
-Firebase shares in-flight fetches; one caller's timeout does not cancel others. Parsing/validation runs off Main, persistence on IO, and ads/UI notifications on Main. A successful fetch is reused in the process and remains subject to Firebase's fetch interval. Restart the process during Console QA; reopening a screen alone does not guarantee a new fetch. `AdConfig.refresh()` may return `false` for pinned debug ad IDs even when grouped settings were applied. See the [QA steps](firebase-integration.md#remote-notes).
+Firebase shares in-flight fetches; one caller's timeout does not cancel others. Parsing/validation runs off Main, persistence on IO, and ads/UI notifications on Main. A successful fetch is reused in the process and remains subject to Firebase's minimum fetch interval, 12 hours by default; the SDK does not set it, so set `minimumFetchIntervalInSeconds` in your app (for example `0` in debug, `3600` in release) when Console edits must reach the next launch. Restart the process during Console QA; reopening a screen alone does not guarantee a new fetch. `AdConfig.refresh()` returns whether an `ad_remote_config` document was applied; it says nothing about the grouped settings. See the [QA steps](firebase-integration.md#remote-notes).
 
 ## Complete default fields
 

@@ -101,14 +101,14 @@ class ObPreloadEligibilityTest {
         assertEquals(ids, chain.stepDefinitions().map { it.id.value })
     }
 
-    @Test fun `app list and app disabled screens cannot be resurrected by remote IDs or order`() {
+    @Test fun `a remote order brings back app disabled screens but not ones the app never declared`() {
         cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false),
                 AdFullScreenStepDefinition(StepId.FULL1, enabled = false), ContentStepDefinition(StepId.OB4))
         }.getOrThrow()
         adConfig()
         order(ids)
-        assertRequested(listOf("ob1", "ob4"))
+        assertRequested(listOf("ob1", "full1", "ob2", "ob4"))
     }
 
     @Test fun `each screen omitted from order is excluded before preload`() {

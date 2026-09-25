@@ -36,18 +36,30 @@ object AdBehavior {
     @JvmStatic fun bool(path: String, fallback: Boolean): Boolean = document.snapshot.boolean(path, fallback)
     @JvmStatic fun number(path: String, fallback: Long): Long = document.snapshot.long(path, fallback)
     @JvmStatic fun text(path: String, fallback: String): String = document.snapshot.string(path, fallback)
-    fun values(format: String, placement: String? = null, screen: SettingsSnapshot? = null, screenPath: String? = null, screenBasePath: String? = null) =
-        BehaviorValues(document.snapshot, format, placement, screen, screenPath, screenBasePath)
+    /** @param screenAliases a screen's own scalar that stands for a behavior field, e.g. its wait. */
+    fun values(format: String, placement: String? = null, screen: SettingsSnapshot? = null, screenPath: String? = null, screenBasePath: String? = null, screenAliases: Map<String, String> = emptyMap()) =
+        BehaviorValues(document.snapshot, format, placement, screen, screenPath, screenBasePath, screenAliases)
 }
 
+/** Scopes rank slot > screen alias > shared group > placement > format; remote at any scope beats the app asset at any scope. */
 class BehaviorValues internal constructor(
     private val values: SettingsSnapshot, private val format: String, private val placement: String?,
     private val screen: SettingsSnapshot?, private val screenPath: String?, private val screenBasePath: String?,
+    private val screenAliases: Map<String, String> = emptyMap(),
 ) {
-    private fun override(path: String): Any? = screenPath?.let { screen?.overrideValue("$it.$path") }
-        ?: screenBasePath?.let { screen?.overrideValue("$it.$path") }
-        ?: placement?.let { values.overrideValue("placement_overrides.$it.$format.$path") }
-        ?: values.overrideValue("$format.$path")
+    private fun scopes(path: String): List<Pair<SettingsSnapshot, String>> = buildList {
+        if (screen != null) {
+            screenPath?.let { add(screen to "$it.$path") }
+            screenAliases[path]?.let { add(screen to it) }
+            screenBasePath?.let { add(screen to "$it.$path") }
+        }
+        placement?.let { add(values to "placement_overrides.$it.$format.$path") }
+        add(values to "$format.$path")
+    }
+    private fun override(path: String): Any? = scopes(path).let { scopes ->
+        scopes.firstNotNullOfOrNull { (source, key) -> source.remoteValue(key) }
+            ?: scopes.firstNotNullOfOrNull { (source, key) -> source.assetValue(key) }
+    }
     fun hasOverride(path: String): Boolean = override(path) != null
     fun boolean(path: String, fallback: Boolean): Boolean = override(path) as? Boolean ?: fallback
     fun long(path: String, fallback: Long): Long = (override(path) as? Number)?.toLong() ?: fallback

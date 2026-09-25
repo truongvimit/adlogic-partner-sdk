@@ -59,7 +59,16 @@ data class RemoteFlags(
     val questionConfigJson: String = ObRemoteKeys.QUESTION_CONFIG_JSON.default,
     val configVersion: Long = ObRemoteKeys.CONFIG_VERSION.default,
     val languageTapHintDelaySec: Long = ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default,
+    /**
+     * The keys the backend actually delivered. A delivered key outranks the app's own config;
+     * one it never sent must not, or its default would. `null` (a snapshot built in code) counts
+     * every field that differs from its key's default as delivered.
+     */
+    val supplied: Set<String>? = null,
 ) {
+
+    internal fun isSupplied(key: RemoteKey<*>, value: Any?): Boolean =
+        supplied?.contains(key.key) ?: (value != key.default)
 
     fun isStepEnabled(stepId: StepId): Boolean = when (stepId) {
         StepId.OB1 -> enableStepOb1
@@ -151,6 +160,7 @@ data class RemoteFlags(
                 questionConfigJson = reader.string(ObRemoteKeys.QUESTION_CONFIG_JSON.key)
                     ?: ObRemoteKeys.QUESTION_CONFIG_JSON.default,
                 configVersion = long(ObRemoteKeys.CONFIG_VERSION),
+                supplied = ObRemoteKeys.ALL.mapNotNullTo(mutableSetOf()) { k -> k.key.takeIf { reader.string(it) != null } },
             )
         }
     }

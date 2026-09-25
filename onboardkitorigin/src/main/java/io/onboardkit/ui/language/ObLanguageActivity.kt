@@ -29,7 +29,6 @@ import io.onboardkit.databinding.ObActivityLanguageBinding
 import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
-import io.onboardkit.remote.ObRemoteKeys
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.language.ObLanguageActivity.Companion.RESULT_LANGUAGE_CODE
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
@@ -102,11 +101,13 @@ class ObLanguageActivity : BaseOnboardActivity() {
             ?: LanguageScreenMode.FIRST_OPEN
         reuseLfo1Preload = savedInstanceState?.getBoolean("ob_lfo1_preload_handoff")
             ?: (mode == LanguageScreenMode.FIRST_OPEN && sdk.preload().takeLanguage1Preload())
-        selectedCode = savedInstanceState?.getString("ob_selected_language")
-            ?: sdk.configOrNull()?.language?.defaultCode
+        // Resolved: the offered list already follows remote, and the default is always on it.
+        val languageConfig = sdk.requireConfig().language
+        selectedCode = (savedInstanceState?.getString("ob_selected_language") ?: languageConfig.defaultCode)
+            ?.takeIf { code -> languageConfig.languages.any { it.code == code } }
         languageTapCount = savedInstanceState?.getInt("ob_language_tap_count") ?: 0
 
-        languages = resolveLanguages()
+        languages = languageConfig.languages.ifEmpty { ObLanguages.ALL }
         val hintCode = resolveHintCode()
         if (hintCode != null) languages = DeviceLanguageHint.promote(languages)
 
@@ -150,25 +151,21 @@ class ObLanguageActivity : BaseOnboardActivity() {
      * Row that gets the animated tap hint, or null for no hint at all. A non-null result also
      * promotes the device-language row to position 2 so the hint is visible without scrolling.
      *
-     * Four ways to end up with no hint: the SETTINGS screen, where the user came to change a
-     * language they have already chosen once; a preselected `defaultCode`; the partner switched
-     * it off at build time (`language.tapHintEnabled`); or remote switched it off
-     * (`ob_show_language_tap_hint`).
+     * Three ways to end up with no hint: the SETTINGS screen, where the user came to change a
+     * language they have already chosen once; a preselected `defaultCode`; or the resolved
+     * `language.tapHintEnabled` is off (remote when it says so, else the partner's build value).
      */
     private fun resolveHintCode(): String? {
         if (mode != LanguageScreenMode.FIRST_OPEN) return null
         if (selectedCode != null) return null
         if (!sdk.requireConfig().language.tapHintEnabled) return null
-        if (!sdk.flags().showLanguageTapHint) return null
         return DeviceLanguageHint.resolve(languages)
     }
 
     private fun scheduleTapHint(hintCode: String?) {
         if (hintCode == null) return
-        val delaySec = sdk.flags().languageTapHintDelaySec.takeIf { it >= 0 }
-            ?: ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default
         tapHintJob = lifecycleScope.launch {
-            delay(OnboardingSettings.values.long("lfo.tap_hint.delay_ms", delaySec * 1000))
+            delay(OnboardingSettings.number("lfo.tap_hint.delay_ms"))
             if (!languageExitStarted && !isFinishing && selectedCode == null) {
                 adapter.hintCode = hintCode
             }
@@ -179,25 +176,14 @@ class ObLanguageActivity : BaseOnboardActivity() {
      * Confirm button state for the current selection.
      *
      * With a selection the button is always solid — whatever the flags say, the screen keeps a way
-     * out. Before the first tap it is either dimmed (default) or hidden, per
-     * `language.confirmVisibleBeforeSelect` AND `ob_show_language_confirm_before_select`.
+     * out. Before the first tap it is either dimmed (default) or hidden, per the resolved
+     * `language.confirmVisibleBeforeSelect`.
      */
     private fun bindConfirmVisibility() {
         val selected = selectedCode != null
-        val showBeforeSelect = sdk.requireConfig().language.confirmVisibleBeforeSelect &&
-            sdk.flags().showLanguageConfirmBeforeSelect
+        val showBeforeSelect = sdk.requireConfig().language.confirmVisibleBeforeSelect
         binding.obLanguageConfirm.isVisible = selected || showBeforeSelect
         binding.obLanguageConfirm.alpha = if (selected) 1f else 0.5f
-    }
-
-    /** Remote CSV filtered against the app's catalog; empty result falls back to the catalog. */
-    private fun resolveLanguages(): List<ObLanguage> {
-        val configured = sdk.requireConfig().language.languages
-        val csv = sdk.flags().languageSupportedCodes
-        if (csv.isBlank()) return configured
-        val byCode = configured.associateBy { it.code }
-        val filtered = csv.split(',').mapNotNull { byCode[it.trim()] }.distinctBy { it.code }
-        return filtered.ifEmpty { configured.ifEmpty { ObLanguages.ALL } }
     }
 
     private fun onLanguageTapped(language: ObLanguage) {
@@ -224,12 +210,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         if (shouldShowConfirmDialog(reselected)) showConfirmDialog(language)
         if (secondSlotRequested) return
 
-        val config = sdk.requireConfig()
-        if (!config.language.secondNativeOnSelectEnabled ||
-            !sdk.flags().enableLanguageNative2
-        ) {
-            return
-        }
+        if (!sdk.requireConfig().language.secondNativeOnSelectEnabled) return
 
         secondSlotRequested = true
         showSecondNativeSlot(language.code)
@@ -238,8 +219,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private fun shouldShowConfirmDialog(reselected: Boolean): Boolean =
         mode == LanguageScreenMode.FIRST_OPEN &&
             (reselected || languageTapCount >= OnboardingSettings.number("lfo.confirm_dialog.show_from_tap")) &&
-            sdk.requireConfig().language.confirmDialogOnReselectEnabled &&
-            sdk.flags().showLanguageConfirmDialog
+            sdk.requireConfig().language.confirmDialogOnReselectEnabled
 
     /**
      * Confirm runs the screen's own exit, so the modal can never become a second way to leave the

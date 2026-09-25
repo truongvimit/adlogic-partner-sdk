@@ -2,6 +2,7 @@ package com.ads.module.config.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +14,10 @@ import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** A validated document: bundled JSON defaults, optional host asset edits, last successful remote. */
+/**
+ * A validated document: bundled JSON defaults, optional host asset edits, last successful remote,
+ * and values a backend delivered under keys that predate the document.
+ */
 class SettingsDocument(
     val name: String,
     private val defaults: Map<String, Any>,
@@ -34,6 +38,7 @@ class SettingsDocument(
     private var hasAcceptedJson = false
     private var revision = 0L
     @Volatile private var prepareSnapshot: (SettingsSnapshot) -> Unit = {}
+    @Volatile private var legacy: Map<String, Any> = emptyMap()
 
     /** Resolve consumer payloads on the parsing dispatcher, before readers see the snapshot. */
     fun prepareBeforePublish(prepare: (SettingsSnapshot) -> Unit) {
@@ -45,11 +50,32 @@ class SettingsDocument(
         initialized = true
         preferences = runCatching { context.applicationContext.getSharedPreferences("adlogic_settings_$name", Context.MODE_PRIVATE) }.getOrNull()
         val assetJson = runCatching { context.assets.open("$name.json").bufferedReader().use { it.readText() } }.getOrNull()
+        install(assetJson, runCatching { preferences?.getString("remote", null) }.getOrNull())
+    }
+
+    /** Loads the app asset and the persisted remote that [initialize] reads from the Context. */
+    @Synchronized internal fun install(assetJson: String?, cachedRemote: String?) {
         val asset = localOverrides(assetJson)
-        val cached = runCatching { preferences?.getString("remote", null) }.getOrNull()?.let(::parse).orEmpty()
         local = SettingsSnapshot(defaults, asset, emptyMap())
-        state.value = SettingsSnapshot(defaults, asset, cached)
+        state.value = SettingsSnapshot(defaults, asset, cachedRemote?.let(::parse).orEmpty(), legacy)
         revision++
+    }
+
+    /**
+     * Values the backend sent under keys older than this document, already mapped to its paths.
+     *
+     * They belong to the remote tier: below the document's own remote fields, above the app asset
+     * and every host option. Only keys the backend actually delivered belong here; a key it never
+     * sent must stay absent, or its default would displace what the app configured.
+     */
+    @Synchronized fun acceptLegacyRemote(values: Map<String, Any>) {
+        val accepted = values.filter { (path, value) -> accepts(path, value) }
+        if (accepted == legacy) return
+        legacy = accepted
+        val current = snapshot
+        val next = SettingsSnapshot(defaults, current.asset, current.remoteValues, accepted)
+        prepareSnapshot(next)
+        state.value = next
     }
 
     /** A sparse/custom app asset is an explicit assignment, including false/zero SDK values. */
@@ -85,8 +111,8 @@ class SettingsDocument(
 
     private fun prepare(json: String?): Update? {
         if (hasAcceptedJson && json == lastAcceptedJson) return Update(json, snapshot.remoteValues, null, revision, snapshot)
-        val remote = if (json == null) emptyMap() else parse(json) ?: return null
-        val next = if (snapshot.remoteValues == remote) snapshot else SettingsSnapshot(defaults, snapshot.asset, remote)
+        val remote = if (json == null) emptyMap() else parse(json, report = true) ?: return null
+        val next = if (snapshot.remoteValues == remote) snapshot else SettingsSnapshot(defaults, snapshot.asset, remote, legacy)
         prepareSnapshot(next)
         return Update(json, remote, if (json == null) null else inflate(remote).toString(), revision, next)
     }
@@ -102,23 +128,44 @@ class SettingsDocument(
 
     private fun publish(update: Update) {
         if (snapshot.remoteValues != update.remote) {
-            state.value = update.snapshot
+            // Legacy values accepted while this update was parsing must not be dropped by it.
+            state.value = if (update.snapshot.legacyValues == legacy) update.snapshot
+                else SettingsSnapshot(defaults, update.snapshot.asset, update.remote, legacy)
         }
         lastAcceptedJson = update.input
         hasAcceptedJson = true
         revision++
     }
 
-    /** Presence is retained separately: a missing remote field never becomes false or zero. */
-    private fun parse(json: String): Map<String, Any>? = runCatching {
-        val root = JSONObject(json)
-        val version = root.opt("schema_version")
-        require(version == null || version is Number && version.toDouble() == 1.0)
-        flatten(root).filter { (path, value) ->
-            val example = defaults[path] ?: extraDefault(path)
-            example != null && sameType(example, value) && valid(path, value)
+    /**
+     * Presence is retained separately: a missing remote field never becomes false or zero.
+     *
+     * A dropped field leaves the app's own value in charge, which from the console looks exactly like
+     * remote being ignored, so a fetched document names every field it could not take.
+     */
+    private fun parse(json: String, report: Boolean = false): Map<String, Any>? {
+        val parsed = runCatching {
+            val root = JSONObject(json)
+            val version = root.opt("schema_version")
+            require(version == null || version is Number && version.toDouble() == 1.0) { "unsupported schema_version=$version" }
+            flatten(root)
+        }.onFailure { if (report) warn("$name rejected, keeping the previous values: ${it.message}") }
+            .getOrNull() ?: return null
+        val (kept, dropped) = parsed.entries.partition { (path, value) -> accepts(path, value) }
+        if (report && dropped.isNotEmpty()) {
+            warn("$name ignored ${dropped.joinToString { "${it.key}=${it.value}" }} (unknown path, wrong type or invalid value)")
         }
-    }.getOrNull()
+        return kept.associate { it.key to it.value }
+    }
+
+    private fun accepts(path: String, value: Any): Boolean {
+        val example = defaults[path] ?: extraDefault(path)
+        return example != null && sameType(example, value) && valid(path, value)
+    }
+
+    private fun warn(message: String) {
+        runCatching { Log.w("AdLogicSettings", message) }
+    }
 
     fun defaultValue(path: String): Any? = defaults[path]
 
@@ -216,16 +263,29 @@ class SettingsDocument(
     }
 }
 
-/** Immutable values for an attempt, screen visit, or load. Local explicit options remain fallbacks. */
+/**
+ * Immutable values for an attempt, screen visit, or load. Local explicit options remain fallbacks.
+ *
+ * Sources rank remote (the document's own fields, then legacy keys) > app asset > host option >
+ * bundled default.
+ */
 class SettingsSnapshot internal constructor(
     private val defaults: Map<String, Any>,
     internal val asset: Map<String, Any>,
     internal val remoteValues: Map<String, Any>,
+    internal val legacyValues: Map<String, Any> = emptyMap(),
 ) {
-    private val remote get() = remoteValues
     private val jsonValues = ConcurrentHashMap<Pair<String, String?>, String>()
-    fun overrideValue(path: String): Any? = remote[path] ?: asset[path]
-    fun hasOverride(path: String): Boolean = (remote.keys + asset.keys).any { it == path || it.startsWith("$path.") }
+
+    /** What the backend delivered for [path], or null when it said nothing about it. */
+    fun remoteValue(path: String): Any? = remoteValues[path] ?: legacyValues[path]
+
+    /** What the app's own asset assigns to [path], or null. */
+    fun assetValue(path: String): Any? = asset[path]
+
+    fun overrideValue(path: String): Any? = remoteValue(path) ?: assetValue(path)
+    fun hasRemoteOverride(path: String): Boolean = (remoteValues.keys + legacyValues.keys).any { it == path || it.startsWith("$path.") }
+    fun hasOverride(path: String): Boolean = hasRemoteOverride(path) || asset.keys.any { it == path || it.startsWith("$path.") }
     fun boolean(path: String, fallback: Boolean? = null): Boolean =
         (overrideValue(path) ?: fallback ?: defaults[path]) as Boolean
     fun long(path: String, fallback: Long? = null): Long =
@@ -241,7 +301,7 @@ class SettingsSnapshot internal constructor(
     fun scoped(vararg paths: String): ScopeChain = ScopeChain(this, paths.asList())
 
     /** Already validated flat values relative to [path]; no JSON work at a timer/show call site. */
-    fun objectEntries(path: String): Map<String, Any> = (defaults + asset + remote)
+    fun objectEntries(path: String): Map<String, Any> = (defaults + asset + legacyValues + remoteValues)
         .filterKeys { it.startsWith("$path.") }.mapKeys { it.key.removePrefix("$path.") }
 
     fun json(path: String, fallback: String? = null): String = jsonValues.computeIfAbsent(path to fallback) {
@@ -251,7 +311,7 @@ class SettingsSnapshot internal constructor(
     private fun resolveJson(path: String, fallback: String?): String {
         if (!hasOverride(path) && fallback != null) return fallback
         val inherited = fallback?.let { runCatching { SettingsDocument.flatten(JSONObject(it), path) }.getOrNull() }.orEmpty()
-        val node = SettingsDocument.inflate(defaults + inherited + asset + remote)
+        val node = SettingsDocument.inflate(defaults + inherited + asset + legacyValues + remoteValues)
         var current: Any? = node
         path.split('.').forEach { key -> current = (current as? JSONObject)?.opt(key) }
         return current?.toString() ?: "{}"
@@ -259,16 +319,18 @@ class SettingsSnapshot internal constructor(
 }
 
 /**
- * One setting read from an ordered list of scopes, most specific first: the first scope carrying an
- * explicit override answers, and the host's own value stands when none does. Stating the order once
- * is the point — a field that spells its own chain out by hand is how two sibling settings end up
- * with different precedence, and how a host value ends up sitting above a scope that should outrank it.
+ * One setting read from an ordered list of scopes, most specific first. Source outranks scope: the
+ * most specific scope remote answers wins, then the most specific scope the app asset answers, and
+ * the host's own value stands when neither does. Walking scope first let an app asset at a narrow
+ * scope hide a remote value at a broad one. Stating the order once is the point — a field that spells
+ * its own chain out by hand is how two sibling settings end up with different precedence.
  */
 class ScopeChain internal constructor(
     private val values: SettingsSnapshot,
     private val paths: List<String>,
 ) {
-    private fun override(): Any? = paths.firstNotNullOfOrNull(values::overrideValue)
+    private fun override(): Any? =
+        paths.firstNotNullOfOrNull(values::remoteValue) ?: paths.firstNotNullOfOrNull(values::assetValue)
     fun boolean(fallback: Boolean): Boolean = override() as? Boolean ?: fallback
     fun long(fallback: Long): Long = (override() as? Number)?.toLong() ?: fallback
     fun string(fallback: String): String = override() as? String ?: fallback

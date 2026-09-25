@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +34,18 @@ class RemoteConfigSnapshotTest {
 
     @Before fun clearCache() {
         context.getSharedPreferences("ob_remote_cache", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    @After fun clearLegacy() {
+        OnboardingSettings.acceptLegacy(RemoteFlags(supplied = emptySet()))
+    }
+
+    @Test
+    fun `the record of delivered keys survives reloading the disk snapshot`() {
+        val delivered = RemoteFlags(showLanguageTapHint = true, supplied = setOf("ob_show_language_tap_hint"))
+        RemoteConfigSyncer(context) { null }.applySnapshot(delivered)
+        assertEquals(delivered, RemoteConfigSyncer(context) { null }.flags.value)
+        assertEquals(true, OnboardingSettings.values.remoteValue("lfo.tap_hint.enabled"))
     }
 
     @Test

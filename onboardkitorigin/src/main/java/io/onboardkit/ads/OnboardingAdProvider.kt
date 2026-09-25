@@ -88,7 +88,29 @@ interface OnboardingAdProvider {
         listener: AdEventListener? = null,
     )
 
+    /**
+     * [loadInterstitial] for units that belong to another ad_config key than the placement's own —
+     * a splash entry or the returning-user key — so that key's UA gate and behavior overrides
+     * apply. The default ignores the key.
+     */
+    fun loadInterstitial(
+        context: Context,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        adConfigKey: String?,
+        listener: AdEventListener?,
+    ) = loadInterstitial(context, placement, unit, listener)
+
     fun isInterstitialReady(placement: AdPlacement): Boolean
+
+    /**
+     * The ad unit id of [placement]'s buffered fill, so a placement shared by several ad_config
+     * keys can tell whose fill it holds. `null` when unknown; the default knows nothing.
+     */
+    fun readyInterstitialUnitId(placement: AdPlacement): String? = null
+
+    /** Drops [placement]'s buffered fill. The default keeps it. */
+    fun releaseInterstitial(placement: AdPlacement) = Unit
 
     /**
      * Shows the buffered interstitial for [placement].

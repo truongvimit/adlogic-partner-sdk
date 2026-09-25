@@ -60,6 +60,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var remoteHookResolved = false
     var flags: RemoteFlags? = null
     var startDecision: StartDecision? = null
+    /** Whether this launch spends the returning-user splash interstitial position. */
+    var returningUser: Boolean? = null
     var adPhaseStartedAtMs = 0L
     var adsRequested = false
     var lfo1Scheduled = false

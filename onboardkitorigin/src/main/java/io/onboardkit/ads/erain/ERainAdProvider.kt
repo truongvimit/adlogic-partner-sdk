@@ -339,6 +339,14 @@ class ERainAdProvider(
         placement: AdPlacement,
         unit: InterstitialAdUnit,
         listener: AdEventListener?,
+    ) = loadInterstitial(context, placement, unit, null, listener)
+
+    override fun loadInterstitial(
+        context: Context,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        adConfigKey: String?,
+        listener: AdEventListener?,
     ) {
         val key = placement.key
         listener?.let { listeners[key] = it }
@@ -350,10 +358,11 @@ class ERainAdProvider(
             // The show path reads the placement's own enable_ua_check for any key ad_config.json
             // declares; loading past it would buy a fill that show then refuses.
             InterLoadOptions(
-                passesUaGate = AdGate.placementPassesUaGate(io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: key),
+                passesUaGate = AdGate.placementPassesUaGate(
+                    adConfigKey ?: io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: key),
                 tierTimeoutMs = tierTimeoutMs,
                 reportTelemetry = false,
-            ).apply { behavior = OnboardingSettings.behavior(placement) },
+            ).apply { behavior = OnboardingSettings.behavior(placement, adConfigKey) },
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
@@ -372,6 +381,13 @@ class ERainAdProvider(
 
     override fun isInterstitialReady(placement: AdPlacement): Boolean =
         InterstitialAdManager.isReady(placement.key)
+
+    override fun readyInterstitialUnitId(placement: AdPlacement): String? =
+        InterstitialAdManager.readyAdUnitId(placement.key)
+
+    override fun releaseInterstitial(placement: AdPlacement) {
+        InterstitialAdManager.release(placement.key)
+    }
 
     /**
      * Maps the store's show contract onto the flow's two moments: `onComplete` without a

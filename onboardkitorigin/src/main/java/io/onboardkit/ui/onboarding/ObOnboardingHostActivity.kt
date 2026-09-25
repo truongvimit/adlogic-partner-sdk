@@ -352,7 +352,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
-            timeoutMs = OnboardingSettings.number("onboarding.exit_interstitial.wait_timeout_ms"),
+            // Only the last fallback: the placement's behavior chain already reads this screen's
+            // wait, ranked above the placement and format waits.
+            timeoutMs = OnboardingSettings.defaultNumber("onboarding.exit_interstitial.wait_timeout_ms"),
             onNext = { if (underAd) continueWhenResumed() },
             onFinished = {
                 adGone.complete(Unit)

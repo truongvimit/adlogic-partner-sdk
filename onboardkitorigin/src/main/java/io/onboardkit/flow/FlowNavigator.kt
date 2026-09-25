@@ -5,6 +5,7 @@ import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 import io.onboardkit.core.state.OnboardingState
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 
 /** Where to go after splash. */
@@ -123,8 +124,13 @@ object FlowNavigator {
 
         flags.enableStepOb5 && isOb5NativeReady -> ExitDecision.GoToOb5
 
-        flags.enableQuestion && config.question != null -> ExitDecision.GoToQuestion
+        asksQuestion(flags, config) -> ExitDecision.GoToQuestion
 
         else -> ExitDecision.Complete
     }
+
+    /** A new user is asked only when the run has a question with options, from remote or the app. */
+    internal fun asksQuestion(flags: RemoteFlags, config: OnboardKitConfig): Boolean =
+        flags.enableQuestion &&
+            OnboardingSettings.questionContent(config.question, flags.questionConfigJson)?.options?.isNotEmpty() == true
 }

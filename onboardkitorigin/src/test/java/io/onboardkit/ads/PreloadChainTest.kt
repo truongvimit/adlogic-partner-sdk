@@ -75,7 +75,7 @@ class PreloadChainTest {
         assertEquals(listOf(AdPlacement.AfterOnboardingInterstitial), interstitials)
     }
 
-    @Test fun `remote order omits slots and app disabled always wins`() {
+    @Test fun `remote order omits slots and brings back a page the app disabled`() {
         cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false),
                 AdFullScreenStepDefinition(StepId.FULL2), ContentStepDefinition(StepId.OB4))
@@ -84,7 +84,8 @@ class PreloadChainTest {
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob1"]}}""")
         cfg = OnboardingSettings.resolve(cfg)
         chain.onLanguageSelected(activity)
-        assertEquals(listOf(AdPlacement.StepFullScreen(StepId.FULL2), AdPlacement.StepNative(StepId.OB1)), requests)
+        assertEquals(listOf(AdPlacement.StepFullScreen(StepId.FULL2), AdPlacement.StepNative(StepId.OB2),
+            AdPlacement.StepNative(StepId.OB1)), requests)
     }
 
     @Test fun `missing units and remote disabled steps never preload`() {

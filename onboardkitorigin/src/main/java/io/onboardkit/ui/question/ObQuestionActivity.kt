@@ -49,18 +49,6 @@ class ObQuestionActivity : BaseOnboardActivity() {
     private var nativeLoadPending = false
     private var pendingReplacement: FrameLayout? = null
 
-    /** Remote JSON fully replaces the option list when valid; otherwise compile-time config. */
-    private fun resolveQuestion(): QuestionConfig? {
-        val compiled = sdk.requireConfig().question
-        val remote = RemoteQuestionParser.parse(sdk.flags().questionConfigJson)
-        val base = compiled ?: if (remote != null) QuestionConfig() else return null
-        val title = remote?.title?.takeIf { it.isNotBlank() } ?: base.title
-        return OnboardingSettings.resolveQuestion(base.copy(
-            title = title,
-            options = remote?.options ?: base.options,
-        ))
-    }
-
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         binding = ObActivityQuestionBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -69,7 +57,8 @@ class ObQuestionActivity : BaseOnboardActivity() {
             ?.let { runCatching { QuestionSource.valueOf(it) }.getOrNull() }
             ?: QuestionSource.NEW_USER
 
-        val question = resolveQuestion()
+        val remoteJson = sdk.flags().questionConfigJson
+        val question = OnboardingSettings.questionContent(sdk.requireConfig().question, remoteJson)
         if (question == null || question.options.isEmpty()) {
             forwardWithoutShowing()
             return
@@ -82,7 +71,11 @@ class ObQuestionActivity : BaseOnboardActivity() {
         binding.obQuestionTitle.text = question.title
             ?: question.titleRes.takeIf { it != 0 }?.let(::getString)
             ?: getString(R.string.ob_question_title_default)
-        if (question.ctaTextRes != 0) binding.obQuestionCta.setText(question.ctaTextRes)
+        val remoteCta = RemoteQuestionParser.parse(remoteJson)?.ctaText?.takeIf { it.isNotBlank() }
+        when {
+            remoteCta != null -> binding.obQuestionCta.text = remoteCta
+            question.ctaTextRes != 0 -> binding.obQuestionCta.setText(question.ctaTextRes)
+        }
 
         adapter = QuestionAdapter(question) { option, selected -> onOptionToggled(option.id, selected) }
         binding.obQuestionList.layoutManager = GridLayoutManager(this, GRID_SPAN)

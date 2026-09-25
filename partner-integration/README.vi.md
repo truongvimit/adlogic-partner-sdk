@@ -29,7 +29,7 @@ Không cần làm tất cả guide. Mỗi guide ghi rõ dependency, file cần c
 - **Bảng tùy chọn:** nêu mặc định, lúc cần đổi và nơi cấu hình. Không cần chép cả bảng vào code hay Firebase.
 - **Placement app:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) tập trung key OB và các màn app. Placement key là danh tính duy nhất của một vị trí ads — ad unit ID dùng chung giữa nhiều placement nên không phân biệt được; ad unit ID nằm trong JSON.
 - **File mẫu:** [ad_config.json](examples/ads-onboarding/ad_config.json) và [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) đều dùng ad ID test. Copy vào `app/src/main/assets/`; thay ID ở file thật trước khi phát hành.
-- **Settings theo nhóm:** [setup remote](firebase-integration.vi.md#remote-json), [custom default local](firebase-integration.vi.md#local-defaults), [toàn bộ field/default](remote-settings.vi.md). Thêm hai parameter String; default SDK đã đóng gói sẵn. Offline ưu tiên giữ remote cache hợp lệ trước fallback local.
+- **Settings theo nhóm:** [setup remote](firebase-integration.vi.md#remote-json), [custom default local](firebase-integration.vi.md#local-defaults), [toàn bộ field/default](remote-settings.vi.md). Thêm hai parameter String; default SDK đã đóng gói sẵn. Remote, live hay cache, ưu tiên hơn JSON asset và cấu hình Kotlin của app; offline ưu tiên giữ remote cache hợp lệ trước fallback local.
 - **README module:** tra cứu thêm API, lifecycle và tùy biến khi cần.
 
 ## File mẫu để copy

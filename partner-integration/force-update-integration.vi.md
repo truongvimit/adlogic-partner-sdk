@@ -8,7 +8,7 @@
 
 ## Một quyết định mỗi lần mở app; force update không gửi request quảng cáo
 
-**UMP, Remote Config và billing vẫn chạy song song.** SDK không thêm fetch hoặc timeout cho update. Notification vẫn được xử lý sau UMP theo flow cũ.
+**UMP, Remote Config và billing vẫn chạy song song.** SDK không thêm fetch hoặc timeout cho update. Prompt notification được xử lý sau UMP và sau bước remote.
 
 1. Splash giữ khóa request quảng cáo ngay từ lúc tạo attempt. SDK helpers, API load cũ, app-open loader và auto buffer đều tôn trọng khóa này.
 2. Bước remote hiện có hoàn tất hoặc timeout: gọi `readForceUpdateConfig()` một lần để chốt policy đã activate.
@@ -69,9 +69,9 @@ Với `enabled=true, minVersionCode=101`: bản 100 bị chặn nếu `force=tru
 
 Không fallback sang asset hay SharedPreferences policy riêng để bật tính năng. Asset example để `enabled=false` chỉ là mẫu local; production adapter không đọc asset đó. Remote cache của chính Firebase vẫn là remote đã activate, không phải default local.
 
-**Deadline và remote đến muộn:** SDK chốt snapshot ngay khi bước remote hiện có kết thúc. Nếu timeout khi chưa có remote thì snapshot tắt; kết quả activate đến sau đó không chen vào flow đang chạy, chỉ áp dụng ở lần mở splash mới. Recreate cùng attempt không chốt lại. Publish vẫn chịu fetch/activate và cache interval của Firebase, không đồng nghĩa mọi thiết bị nhận rule ngay lập tức.
+**Deadline và remote đến muộn:** SDK chốt snapshot ngay khi bước remote hiện có kết thúc. Nếu timeout khi chưa có remote thì snapshot tắt; kết quả activate đến sau đó không đổi quyết định update của flow đang chạy, chỉ áp dụng ở lần mở splash mới (settings và `ad_remote_config` đến muộn thì vẫn được áp dụng cho phần còn lại của phiên). Recreate cùng attempt không chốt lại. Publish vẫn chịu fetch/activate và cache interval của Firebase, không đồng nghĩa mọi thiết bị nhận rule ngay lập tức.
 
-Example đặt interval debug=0, release=3600 giây và Firebase fetch timeout=10 giây trong Application. Thời gian splash chờ remote theo `SplashConfig.remoteFetchTimeoutMs`; không cộng thêm 3 giây cho update. API fetch standalone mặc định chờ 3 giây. Cấu hình interval của Firebase vẫn được tôn trọng.
+Example đặt interval debug=0, release=3600 giây và Firebase fetch timeout=10 giây trong Application. Thời gian splash chờ remote theo `SplashConfig.remoteFetchTimeoutMs`; không cộng thêm 3 giây cho update. API fetch standalone mặc định chờ 3 giây. Cấu hình interval của Firebase vẫn được tôn trọng; SDK không tự đặt interval, app không đặt thì Firebase dùng mặc định 12 giờ.
 
 ## Dependencies và Firebase
 

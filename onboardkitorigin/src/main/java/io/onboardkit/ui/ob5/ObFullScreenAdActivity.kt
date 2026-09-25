@@ -20,6 +20,7 @@ import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
+import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.applyFullScreenSkip
@@ -99,14 +100,13 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
     }
 
     private fun scheduleSkip() {
-        val flags = sdk.flags()
-        if (!flags.showSkipOb5) {
-            // Auto-dismiss still guarantees an exit; keep Skip hidden as remote asked
+        if (!OnboardingSettings.bool("ob5.skip.enabled")) {
+            // Auto-dismiss still guarantees an exit; keep Skip hidden as configured
             return
         }
         skipJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(OnboardingSettings.values.long("ob5.skip.delay_ms", (flags.skipButtonDelaySec.takeIf { it >= 0 } ?: (OnboardingSettings.number("ob5.skip.delay_ms") / 1000)) * 1_000))
+                delay(OnboardingSettings.number("ob5.skip.delay_ms"))
                 binding.obSkipButton.visibility = View.VISIBLE
             }
         }
@@ -117,10 +117,9 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
      * pause is not accumulated, and an ad destination cannot be navigated over.
      */
     private fun scheduleAutoDismiss() {
-        val seconds = sdk.flags().fullScreenAutoDismissSec.coerceAtLeast(5)
         autoDismissJob = lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(OnboardingSettings.values.long("ob5.auto_dismiss_ms", seconds * 1000))
+                delay(OnboardingSettings.number("ob5.auto_dismiss_ms"))
                 navigateNext(StepExit.AUTO_DISMISS)
             }
         }
@@ -147,8 +146,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
                 ),
             )
         }
-        val config = sdk.requireConfig()
-        if (sdk.flags().enableQuestion && config.question != null) {
+        if (FlowNavigator.asksQuestion(sdk.flags(), sdk.requireConfig())) {
             ObQuestionActivity.start(this, QuestionSource.NEW_USER)
             finish()
             return

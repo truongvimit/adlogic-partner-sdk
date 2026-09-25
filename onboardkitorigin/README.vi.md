@@ -121,14 +121,16 @@ Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` 
 - Hiện status/caption bar, ẩn navigation bar; dùng `SystemBarConfig` khi cần đổi.
 - Chưa hoàn thành flow thì lần mở mới chạy lại Splash → LFO → OB. Đã hoàn thành thì bỏ qua onboarding.
 - Chọn lại ngôn ngữ hiện tại thì popup mở ngay. Chọn ngôn ngữ khác chỉ mở khi đủ tổng số click đã cấu hình; click chọn lại vẫn được cộng count. Native được tải khi mở popup; click/open preload ad thay thế để hiện khi quay lại.
-- Quay lại từ ad ở bước OB mặc định hoàn thành bước (`BehaviorConfig.adClickReturnCompletesStep = true`). Provider tắt click replacement cho bước OB/OB5; native ngôn ngữ, popup và khảo sát vẫn bật.
+- Native `behavior.click.action` chọn một trong `auto_next`, `none`, `reload`. Bước content/fullscreen trong pager mặc định `auto_next`; native LFO1/LFO2, OB5, splash, popup và khảo sát mặc định `reload`.
+- `reload` gửi request thay thế ngay khi click/open ad và dùng kết quả khi quay lại; resume app thông thường không kích hoạt click reload. `auto_next` chuyển tiếp khi quay lại mà không xin ad thay thế; `none` không làm gì cả.
+- Action cố định cho mỗi lượt click và override các switch cũ `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep`. Xem [hướng dẫn remote settings](../partner-integration/remote-settings.vi.md).
 
 
-- `notificationPermissionEnabled = true`: Android 13+ / target 33+ hỏi quyền thông báo sau consent. Đã cấp quyền hoặc đã ghi nhận kết quả hỏi tự động thì không hỏi lại; từ chối vẫn đi tiếp. Đặt `false` nếu app tự quản lý lời nhắc này.
+- `notificationPermissionEnabled = true`: Android 13+ / target 33+ hỏi quyền thông báo sau consent và bước fetch remote, nên giá trị remote fetch ở bước đó áp dụng ngay trong lần mở này. Đã cấp quyền hoặc đã ghi nhận kết quả hỏi tự động thì không hỏi lại; từ chối vẫn đi tiếp. Đặt `false` nếu app tự quản lý lời nhắc này.
 - `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
 - `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. Giữ `configChanges` của splash như mẫu trên để việc khóa dọc, đổi dark mode hay cỡ chữ không tạo lại Activity. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
 - `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
-- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Mặc định luồng lần đầu (ngôn ngữ/onboarding) dùng `AFTER_AD`, mở từ launcher khi onboarding đã xong (vào app hoặc khảo sát người dùng cũ) dùng `UNDER_AD`; entry notification, widget, uninstall luôn dùng `AFTER_AD`; override `nextScreenTiming()` trong splash và gọi `super` cho trường hợp giữ mặc định. Cả hai kiểu đều chờ đủ minimum rồi mới show inter: `UNDER_AD` mở màn và show inter liên tiếp, còn `AFTER_AD` chuyển màn ngay khi đóng quảng cáo.
+- Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Mặc định luồng lần đầu (ngôn ngữ/onboarding) dùng `AFTER_AD`, mở từ launcher khi onboarding đã xong (vào app hoặc khảo sát người dùng cũ) dùng `UNDER_AD`; entry notification, widget, uninstall luôn dùng `AFTER_AD`; override `nextScreenTiming()` trong splash và gọi `super` cho trường hợp giữ mặc định. Khi mở từ launcher, remote `splash.navigation.next_screen_timing` khác `AUTO` được ưu tiên hơn override của app. Cả hai kiểu đều chờ đủ minimum rồi mới show inter: `UNDER_AD` mở màn và show inter liên tiếp, còn `AFTER_AD` chuyển màn ngay khi đóng quảng cáo.
 
 ### Tùy chọn splash và ngôn ngữ
 
@@ -137,13 +139,14 @@ không thêm timer chờ vào luồng này.
 
 | Tùy chọn | Mặc định / cách dùng |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi show inter splash, hoặc trước khi chuyển màn nếu không có quảng cáo. Remote `ob_splash_min_display_ms` (mặc định 3000) ghi đè trường này khi lớn hơn 0, nên trường này chỉ có tác dụng khi giá trị đó trên Firebase là `0`; không có Firebase thì thời gian tối thiểu luôn là 3000 ms. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms trước khi show inter splash, hoặc trước khi chuyển màn nếu không có quảng cáo. Remote `splash.timing.min_display_ms`, `ob_splash_min_display_ms` đã được gửi về và lớn hơn 0, hoặc `splash.timing.min_display_ms` trong asset của app sẽ ghi đè trường này; nếu không, giá trị của app được áp dụng. |
 | `ob_splash_ad_budget_ms` | Chờ quảng cáo tối đa 60000 ms, tính sau khi notification hoàn tất và splash có focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload native ngôn ngữ đầu sau khi waterfall splash kết thúc hoặc hết thời gian chờ. `true`: preload cùng quảng cáo splash. |
-| `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Cần bật cả hai để hiện bàn tay gợi ý chọn ngôn ngữ. |
+| `LanguageConfig.tapHintEnabled` | Hiện bàn tay gợi ý chọn ngôn ngữ. Remote `lfo.tap_hint.enabled` hoặc `ob_show_language_tap_hint` đã được gửi về sẽ quyết định thay, bật hay tắt. |
 | `ob_language_tap_hint_delay_sec` | 3 giây; `0` hiện ngay. Chọn ngôn ngữ sẽ hủy gợi ý; SETTINGS/ngôn ngữ chọn sẵn không hiện gợi ý. |
 
-Các tham số `ob_*` là tùy chọn trong Firebase Remote Config. Xem các key khác tại
+Các tham số `ob_*` là tùy chọn trong Firebase Remote Config. Key backend đã gửi về được ưu tiên hơn
+tùy chọn Kotlin tương ứng; key chưa từng được gửi thì giữ giá trị của app. Xem các key khác tại
 [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt).
 Native ngoài onboarding làm theo [hướng dẫn Ads](../ads/README.md#native-preload-repeated-show-and-refresh).
 
@@ -160,12 +163,12 @@ Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự p
 | `afterOnboardingInterstitial` | Interstitial riêng khi hoàn thành onboarding (`inter_after_ob3`) |
 | `appResume` | Điều kiện app-open ở màn ngôn ngữ/nội dung và khi quay lại app |
 
-`defaultSteps()` tạo OB1, OB2, OB3 (chỉ quảng cáo), OB4. Để dùng nội dung và ảnh riêng, thay bằng `steps(ContentStepDefinition(...), ...)`; xem [định nghĩa bước](src/main/java/io/onboardkit/config/StepDefinition.kt).
+`defaultSteps()` tạo OB1, Full1, OB2, Full2, OB3, OB4. Để dùng nội dung và ảnh riêng, thay bằng `steps(ContentStepDefinition(...), ...)`; xem [định nghĩa bước](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo thứ tự request; banner nhận một ID.
 
-Tên JSON như `inter_splash`, `native_lang` cần được app gắn vào `AdsConfig`; SDK không tự suy ra mọi ánh xạ từ tên trường.
-Dùng `AdRemoteConfig.getInstance().tiersFor(key)` và dựng lại config khi ID mới đã cập nhật trong `onRemoteFetched()`.
-`tiersFor` trả về rỗng khi key gốc khai báo `isEnable: false` — key gốc là công tắc tổng, tắt luôn mọi tầng `_high*` — nên slot đã tắt map thành ad unit null và flow bỏ qua.
+`AdsConfig.fromAdConfig()`, mặc định của `onboardKitConfig`, gắn các tên JSON chuẩn như `inter_splash`, `native_lang` và giữ chúng cập nhật sau mỗi lần fetch; truyền thêm map cho các tên khác trong app.
+`ad_config.json` của app chỉ thay unit viết trong code với các key được gắn theo cách này. Key chuẩn mà `ad_remote_config` trên backend khai báo được áp dụng không cần gắn và được ưu tiên hơn mọi unit viết trong code, kể cả `stepNatives` và `splashInterstitialOldUser`, nên không cần dựng lại config trong `onRemoteFetched()`.
+Key gốc khai báo `isEnable: false` là công tắc tổng, tắt luôn mọi tầng `_high*`, nên slot không có ad unit và flow bỏ qua.
 [OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
 
 ## Trang fullscreen và interstitial sau onboarding
@@ -196,29 +199,38 @@ từ ad của step sẽ hoàn thành bước, nên các placement này không pr
 `AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho Full1/Full2/OB5. OB5 độc lập có mặc định riêng:
 hiện nút sau 3 giây và tự đóng sau 15 giây.
 
+Với `BehaviorConfig.lockPagerSwipe = false`, OB1 vẫn khóa, OB2/OB3/OB4 cho vuốt, còn trang fullscreen
+chỉ cho vuốt sau khi ad đã hiện trong lượt xem đó. Khi đang tải hoặc lỗi, trang fullscreen vẫn khóa vuốt;
+X, timeout và tự hoàn thành khi no-fill vẫn hoạt động. Với `swipeCompletesLastStep = true`, vuốt tới ở trang
+content cuối đi qua đúng inter thoát như CTA của nó. `lockPagerSwipe = true` tắt luôn cử chỉ này.
+
 `inter_after_ob3` là placement riêng với splash. Provider có sẵn preload khi vào pager và
 chờ fill tối đa 8 giây lúc hoàn thành. Mặc định
 (`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) màn tiếp theo mở dưới
 quảng cáo; entry notification, widget, uninstall chờ đóng quảng cáo. Đặt
 `NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) để luôn chờ đóng.
-Cần bật cả `afterOnboardingInterstitialEnabled` và remote `ob_ads_inter_after_ob3_enabled`.
-Đặt switch local thành `false` nếu app tự quản lý thời điểm hiện ad này; SDK sẽ tắt cả preload
-lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
+`afterOnboardingInterstitialEnabled` bật/tắt placement này; remote
+`onboarding.exit_interstitial.enabled` hoặc `ob_ads_inter_after_ob3_enabled` đã được gửi về sẽ quyết định
+thay, bật hay tắt. Đặt switch local thành `false` nếu app tự quản lý thời điểm hiện ad này; khi remote
+không gửi gì, SDK sẽ tắt cả preload lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
 
 ## App-open khi quay lại app
 
-Hoàn tất [cấu hình app-open](../ads/README.md#app-open-on-return), rồi thêm
+Hoàn tất [cấu hình app-open](../ads/README.md#app-open-on-return). `AdsConfig.fromAdConfig()`
+đã gắn `appResume` với `open_resume`, và `open_resume` trong `ad_remote_config` trên backend điền slot
+này không cần gắn. Nếu tự dựng `AdsConfig` và remote không có entry này, thêm
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
-vào `AdsConfig`, để cả hai cùng đọc placement `open_resume`.
+để cả hai cùng đọc placement `open_resume`.
 Màn ngôn ngữ và nội dung onboarding cho phép hiện resume ad đã sẵn sàng khi thực sự ra nền/quay lại.
 Splash, fullscreen độc lập và khảo sát được loại trừ; trang fullscreen trong pager,
-chuyển trang và dialog xác nhận ngôn ngữ tạm chặn resume.
+chuyển trang và dialog xác nhận ngôn ngữ tạm chặn resume. Lần quay lại sau khi click quảng cáo
+onboarding cũng bỏ qua resume, trừ khi remote đặt `app_open.presentation.skip_after_ad_click` thành `false`.
 Chỉ bỏ exclusion do app đặt cho màn ngôn ngữ/nội dung nếu muốn hiện resume tại đó.
 SDK quản lý tải và điều kiện màn hình; không cần thêm callback lifecycle của Activity.
 
 ## Tích hợp tùy chọn
 
-- **Firebase:** splash fetch flag `ob_*` khi Firebase được cấu hình; nếu chưa có thì dùng cache/mặc định. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) liệt kê key hỗ trợ. Muốn remote JSON quảng cáo hoặc sink GA4, thêm [suite-firebase](../suite-firebase/README.md); chỉ cài nguồn ad config chưa thực hiện fetch.
+- **Firebase:** splash fetch flag `ob_*` khi Firebase được cấu hình; host không dùng `ObSplashActivity` nhận các flag này sau `AdConfig.refresh()`. Trước khi fetch xong, dùng giá trị Firebase đã gửi lần gần nhất; key chưa từng được gửi thì giữ cấu hình của app. Fetch xong sau deadline splash vẫn được áp dụng cho phần còn lại của phiên. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) liệt kê key hỗ trợ. Muốn remote JSON quảng cáo hoặc sink GA4, thêm [suite-firebase](../suite-firebase/README.md); chỉ cài nguồn ad config chưa thực hiện fetch.
 - **Paywall:** cài [PayKit](../paykit/README.md) trước, rồi đặt `paywallGate = OnboardKitPaywallGate()` trong `OnboardingSdk.install` (`io.paykit.integration`). Không đặt gate thì bỏ qua paywall. Nếu app có cả mua hàng và quảng cáo, làm thêm bước chờ billing bên dưới.
 - **Consent riêng:** giữ `onConsentRequired()` mặc định nếu dùng UMP. Nếu override bằng CMP riêng, công bố kết quả qua `ConsentCenter.setHostConsent(canRequestAds, personalized)` trước khi trả về. Chỉ trả `true` không cấp quyền request; `setCanRequestAds(false)` là giới hạn riêng của host, còn `true` chỉ gỡ giới hạn đó. Nếu override `onDestroy()`, luôn gọi `super.onDestroy()`.
 - **Giao diện / khảo sát:** xem [cấu hình màn](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) và [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Chỉ splash và bước nội dung hỗ trợ ghi đè `layoutRes`; trường layout chưa hỗ trợ sẽ báo lỗi validation. Giữ nguyên ID khi ghi đè resource SDK.
@@ -252,7 +264,7 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 ```
 
 Listener bên trên chuyển tiếp extras cho `Completed`/`Skipped`. Đọc chúng ở cả `onCreate` và `onNewIntent` của màn đích.
-Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`, dự phòng bằng unit splash thường; các entry này luôn điều hướng sau khi đóng quảng cáo, vì màn đích của chúng tự mở thêm một màn và màn đó sẽ che quảng cáo đang hiển thị. Mở từ launcher thì lần đầu vào LFO sau khi đóng quảng cáo, onboarding đã xong thì mở app dưới quảng cáo.
+Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`; key thiếu hoặc bị tắt thì chuyển về tệp user (`inter_splash_o` cho user cũ, `inter_splash` cho user mới), và tắt tệp nào thì entry của tệp đó cũng tắt; các entry này luôn điều hướng sau khi đóng quảng cáo, vì màn đích của chúng tự mở thêm một màn và màn đó sẽ che quảng cáo đang hiển thị. Mở từ launcher thì lần đầu vào LFO sau khi đóng quảng cáo, onboarding đã xong thì mở app dưới quảng cáo.
 
 ## Xử lý lỗi tích hợp
 

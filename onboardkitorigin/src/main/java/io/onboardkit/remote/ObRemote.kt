@@ -19,9 +19,17 @@ class ObRemote internal constructor(context: Context) {
     private val _uiConfig = MutableStateFlow(UiConfig(emptyList(), emptyList()))
     private val uiLock = Any()
     private var uiRevision = 0L
+    private var prefetched: UiConfig? = null
 
     val flags: StateFlow<RemoteFlags> get() = syncer.flags
     val uiConfig: StateFlow<UiConfig> = _uiConfig.asStateFlow()
+
+    @Volatile private var hostAssigned = false
+
+    init {
+        // The last delivered UI stands from install on, whether or not this launch's sync lands.
+        rebuildUiConfig(prefetch = false)
+    }
 
     suspend fun sync(timeoutMs: Long): Boolean {
         val fetched = syncer.fetchAndSync(timeoutMs)
@@ -30,8 +38,19 @@ class ObRemote internal constructor(context: Context) {
     }
 
     fun applySnapshot(snapshot: RemoteFlags) {
+        hostAssigned = true
         syncer.applySnapshot(snapshot)
         rebuildUiConfig()
+    }
+
+    /**
+     * Takes the `ob_*` values a fetch made elsewhere already activated, without fetching again, so
+     * a host that only awaits `AdConfig.refresh()` gets them too. A host that assigns its own
+     * snapshot owns these values, and Firebase does not replace them here.
+     */
+    internal suspend fun rereadActivated() {
+        if (hostAssigned) return
+        if (syncer.rereadActivated()) withContext(Dispatchers.Default) { rebuildUiConfig() }
     }
 
     /** Remote UI applies per screen once that screen's asset is cached. */
@@ -40,7 +59,12 @@ class ObRemote internal constructor(context: Context) {
         return assetCache.isReady(style.contentUrl)
     }
 
-    private fun rebuildUiConfig() {
+    /**
+     * @param prefetch false publishes without downloading, for a moment the network may not be
+     * up yet. Several paths rebuild after one fetch, and a config whose assets were already
+     * requested is not requested again: an in-flight download would start a second time.
+     */
+    private fun rebuildUiConfig(prefetch: Boolean = true) {
         val revision = synchronized(uiLock) { ++uiRevision }
         val f = OnboardingSettings.resolveFlags(syncer.flags.value)
         val config = if (!f.enableUiContent) {
@@ -51,7 +75,10 @@ class ObRemote internal constructor(context: Context) {
         synchronized(uiLock) {
             // A manual host update may finish while the older remote UI is still being parsed.
             if (revision == uiRevision) {
-                assetCache.prefetch(config)
+                if (prefetch && config != prefetched) {
+                    assetCache.prefetch(config)
+                    prefetched = config
+                }
                 _uiConfig.value = config
             }
         }

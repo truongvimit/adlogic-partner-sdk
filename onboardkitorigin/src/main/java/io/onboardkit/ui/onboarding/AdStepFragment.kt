@@ -57,10 +57,6 @@ class AdStepFragment : LazyStepFragment() {
         b.obFallbackImage.setImageDrawable(
             requireContext().packageManager.getApplicationIcon(requireContext().applicationInfo),
         )
-        b.obSkipButton.applyFullScreenSkip(
-            definition()?.skipButtonStyle ?: OnboardingSdk.requireConfig().ads.fullScreenSkipStyle,
-            definition()?.skipButtonPosition ?: FullScreenSkipPosition.RIGHT,
-        )
         b.obSkipButton.setOnClickListener {
             completeStep(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
         }
@@ -72,9 +68,15 @@ class AdStepFragment : LazyStepFragment() {
         completed = false
         impressionHandled.set(false)
         requireStepHost().setAdStepSwipeEnabled(stepId, false)
-        scheduleAutoNext()
+        // One read per visit: the Skip trap guard must judge the same auto-next this visit runs.
+        val definition = definition()
+        binding?.obSkipButton?.applyFullScreenSkip(
+            definition?.skipButtonStyle ?: OnboardingSdk.requireConfig().ads.fullScreenSkipStyle,
+            definition?.skipButtonPosition ?: FullScreenSkipPosition.RIGHT,
+        )
+        scheduleAutoNext(definition)
         requestAd()
-        if (!completed) scheduleSkipButton()
+        if (!completed) scheduleSkipButton(definition)
     }
 
     override fun onStepUnselected(dwellMs: Long) {
@@ -88,9 +90,10 @@ class AdStepFragment : LazyStepFragment() {
         impressionHandled.set(false)
     }
 
+    /** The pager keeps the page list it was built with; a page's own settings are read as they stand now. */
     private fun definition(): AdFullScreenStepDefinition? =
-        ((activity as? ObOnboardingHostActivity)?.stepDefinition(stepId)
-            ?: OnboardingSdk.configOrNull()?.stepById(stepId)) as? AdFullScreenStepDefinition
+        (OnboardingSdk.configOrNull()?.stepById(stepId)
+            ?: (activity as? ObOnboardingHostActivity)?.stepDefinition(stepId)) as? AdFullScreenStepDefinition
 
     private fun requestAd() {
         val b = binding ?: return
@@ -139,28 +142,26 @@ class AdStepFragment : LazyStepFragment() {
         skipJob?.cancel()
     }
 
-    private fun scheduleSkipButton() {
+    private fun scheduleSkipButton(definition: AdFullScreenStepDefinition?) {
         val b = binding ?: return
-        val definition = definition() ?: return
-        val flags = OnboardingSdk.flags()
-        val skipAllowed = FullScreenSetting.SkipEnabled.on(definition.id.value)
-            .boolean(definition.showSkipButton && flags.showSkipOb3)
+        if (definition == null) return
+        val skipAllowed = definition.showSkipButton
         // Always keep one exit path: no skip + no auto-next would trap the user
         val mustForceSkip = !skipAllowed && !definition.autoNextEnabled
         if (!skipAllowed && !mustForceSkip) return
-        val delaySec = flags.skipButtonDelaySec.takeIf { it >= 0 }
-            ?: definition.skipButtonDelaySec.toLong().coerceAtLeast(0)
+        // Same chain the definition was resolved through; the definition keeps only whole seconds.
+        val delayMs = FullScreenSetting.SkipDelayMs.on(definition.id.value)
+            .long(definition.skipButtonDelaySec.coerceAtLeast(0) * 1000L)
         skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(FullScreenSetting.SkipDelayMs.on(definition.id.value).long(delaySec * 1000).milliseconds)
+            delay(delayMs.milliseconds)
             b.obSkipButton.visibility = View.VISIBLE
         }
     }
 
     /** One deadline per visit. Pausing the Activity does not cancel or restart it. */
-    private fun scheduleAutoNext() {
-        val definition = definition() ?: return
-        if (!definition.autoNextEnabled) return
+    private fun scheduleAutoNext(definition: AdFullScreenStepDefinition?) {
+        if (definition == null || !definition.autoNextEnabled) return
         val durationMs = definition.autoNextDelayMs.coerceAtLeast(0)
         autoNextDeadlineMs = SystemClock.elapsedRealtime() + durationMs
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {

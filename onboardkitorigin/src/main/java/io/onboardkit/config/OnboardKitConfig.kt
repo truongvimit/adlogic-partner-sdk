@@ -46,7 +46,8 @@ data class SplashConfig(
      */
     val noInternetPromptEnabled: Boolean = OnboardingSettings.defaultBool("splash.permissions.no_internet_prompt_enabled"),
     /**
-     * Requests POST_NOTIFICATIONS on Android 13+ after consent, when the splash is foreground.
+     * Requests POST_NOTIFICATIONS on Android 13+ after consent and the remote fetch, when the
+     * splash is foreground.
      * Enabled by default. Authorized splash requests and the minimum display clock may run under
      * this prompt while splash is visible. The ad wait budget and fullscreen presentation require
      * its result and foreground focus. LFO1 follows its remote preload mode. Denial never blocks access.
@@ -69,8 +70,8 @@ data class LanguageConfig(
     /**
      * Animated hand pointing at the row that matches the device language (English when the
      * device language is not on the list), shown only until the user picks something.
-     * AND-ed with the `ob_show_language_tap_hint` remote flag. Appears after
-     * `ob_language_tap_hint_delay_sec` seconds (default 3); the delay is ignored when disabled.
+     * Remote `lfo.tap_hint.enabled` (or a delivered `ob_show_language_tap_hint`) overrides this.
+     * Appears after `lfo.tap_hint.delay_ms` (default 3000); the delay is ignored when disabled.
      */
     val tapHintEnabled: Boolean = OnboardingSettings.defaultBool("lfo.tap_hint.enabled"),
     /**
@@ -78,8 +79,8 @@ data class LanguageConfig(
      *
      * `false` (default) hides it until the first tap, which makes selecting a language the only
      * thing the screen offers. `true` keeps it visible but dimmed, so the way out of the screen
-     * is obvious from the start. AND-ed with the `ob_show_language_confirm_before_select` remote
-     * flag; either side turning it off hides the button.
+     * is obvious from the start. Remote `lfo.confirm_button.visible_before_selection` (or a
+     * delivered `ob_show_language_confirm_before_select`) overrides this.
      */
     val confirmVisibleBeforeSelect: Boolean = OnboardingSettings.defaultBool("lfo.confirm_button.visible_before_selection"),
     /**
@@ -91,7 +92,8 @@ data class LanguageConfig(
     /**
      * Show confirmation from the fourth language-item tap onward, including taps on the
      * selected language. Kept under its original API name for source compatibility.
-     * AND-ed with `ob_show_language_confirm_dialog`.
+     * Remote `lfo.confirm_dialog.enabled` (or a delivered `ob_show_language_confirm_dialog`)
+     * overrides this.
      */
     val confirmDialogOnReselectEnabled: Boolean = OnboardingSettings.defaultBool("lfo.confirm_dialog.enabled"),
     @LayoutRes val layoutRes: Int = 0,

@@ -8,6 +8,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.ObInterstitial.show
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.ObLog
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -58,6 +59,29 @@ internal object ObInterstitial {
 
     @Volatile
     private var isShowing = false
+
+    private class Spend(val case: SplashInterCase, val adConfigKey: String?, val unitIds: List<String>)
+
+    private val spends = ConcurrentHashMap<AdPlacement, Spend>()
+
+    /**
+     * Records the position a placement's fill is requested for and returns what it resolves to.
+     *
+     * Every later show of that fill — the splash's own, or a screen reusing it — is gated by the
+     * same case: a position switched off since is not shown, one that is on is never refused for
+     * another's switch, and a buffered fill bought for another position is dropped, not shown.
+     */
+    fun spend(placement: AdPlacement, case: SplashInterCase): SplashInterCase.Resolved {
+        val resolved = case.resolve()
+        val unitIds = resolved.unit?.loadOrder.orEmpty()
+        spends[placement] = Spend(case, resolved.adConfigKey, unitIds)
+        val provider = OnboardingSdk.provider()
+        provider?.readyInterstitialUnitId(placement)?.takeIf { it !in unitIds }?.let {
+            ObLog.d(ObLog.Section.LOAD, "${placement.key} dropping a fill bought for another position")
+            provider.releaseInterstitial(placement)
+        }
+        return resolved
+    }
 
     fun show(
         activity: AppCompatActivity,
@@ -123,8 +147,20 @@ internal object ObInterstitial {
         requireReady: Boolean
     ): AdSkipReason? {
         if (isShowing) return AdSkipReason.SUPPRESSED_BY_FLOW
-        OnboardingSdk.guard().skipReason(activity, placement)?.let { return it }
+        // Only a buffered fill belongs to a recorded position; a fresh load-and-show does not.
+        val spend = spends[placement]?.takeIf { requireReady }
+        val now = spend?.case?.resolve()
+        OnboardingSdk.guard().skipReason(activity, placement, now?.unit, now?.adConfigKey)?.let { return it }
         val provider = OnboardingSdk.provider() ?: return AdSkipReason.NO_PROVIDER
+        if (spend != null) {
+            // The fill was bought for the position the load resolved; a different one now, or a
+            // fill from other units, is not this launch's to show.
+            val fillUnit = provider.readyInterstitialUnitId(placement)
+            if (now?.adConfigKey != spend.adConfigKey || fillUnit != null && fillUnit !in spend.unitIds) {
+                provider.releaseInterstitial(placement)
+                return AdSkipReason.NOT_READY
+            }
+        }
         if (requireReady && !provider.isInterstitialReady(placement)) return AdSkipReason.NOT_READY
         return null
     }

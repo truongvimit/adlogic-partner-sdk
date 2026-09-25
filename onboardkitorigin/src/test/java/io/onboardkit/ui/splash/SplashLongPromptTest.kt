@@ -97,6 +97,7 @@ class SplashLongPromptTest {
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.reset(app)
         org.robolectric.util.ReflectionHelpers.setField(com.ads.module.config.AdConfig, "source", null)
+        com.ads.module.config.AdRemoteConfig.reset()
         main.idle()
         assertEquals("Destroyed splash must release its request hold", false,
             com.ads.module.helper.AdGate.areRequestsHeld())
@@ -210,14 +211,16 @@ class SplashLongPromptTest {
         LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = true)
         val host = requireNotNull(controller).get()
-        drainUntil("Consent, billing and notification still overlap pending remote") {
-            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.remoteEntered
+        drainUntil("Consent and billing still overlap pending remote") {
+            LongPromptFixture.billingEntered && LongPromptFixture.remoteEntered
         }
+        assertEquals("Remote decides whether the prompt shows, so it waits for the fetch",
+            null, shadowOf(host).lastRequestedPermission)
         assertNoUpdateAdRequests()
-        assertEquals(true, LongPromptFixture.billingEntered)
         assertEquals(false, LongPromptFixture.remoteHookCalled)
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
         LongPromptFixture.remoteWait!!.complete(Unit)
+        drainUntil("The prompt follows the fetch") { shadowOf(host).lastRequestedPermission != null }
         val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
@@ -894,7 +897,170 @@ class SplashLongPromptTest {
         completeInterstitialAndAssertNormalHandoff(minimumAlreadyElapsed = minimumAlreadyElapsed)
     }
 
-    private fun launch(notification: Boolean) {
+    private fun remoteAds(vararg units: Pair<String, Boolean>) = com.ads.module.config.AdRemoteConfig.update(
+        com.ads.module.config.AdRemoteConfig(units.associate { (key, on) -> key to com.ads.module.config.AdUnitConfig(key, on) }),
+        fromRemote = true,
+    )
+
+    private fun assertSpendsAndShows(key: String) {
+        drainUntil("$key must be requested") { LongPromptFixture.provider.interstitialLoads == 1 }
+        assertEquals(listOf(listOf(key)), LongPromptFixture.provider.loadedUnits)
+        assertEquals(listOf<String?>(key), LongPromptFixture.provider.loadedKeys)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("The show gate must pass the position the load spent") { "show" in LongPromptFixture.provider.order }
+    }
+
+    private fun assertShowsNothing() {
+        drainUntil("The flow continues without a splash interstitial") { LongPromptFixture.flowStarts == 1 }
+        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertTrue("show" !in LongPromptFixture.provider.order)
+    }
+
+    @Test
+    fun returningUserSpendsTheOldUserPositionWhileTheRegularOneIsOff() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to false, "inter_splash_o" to true)
+        launch(notification = false)
+        assertSpendsAndShows("inter_splash_o")
+    }
+
+    @Test
+    fun newUserShowsNothingWhileTheRegularPositionIsOff() {
+        remoteAds("inter_splash" to false, "inter_splash_o" to true)
+        launch(notification = false)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun returningUserShowsNothingWhileTheOldUserPositionIsOff() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to true, "inter_splash_o" to false)
+        launch(notification = false)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun notificationEntrySpendsItsOwnPositionWhileNewUsersAreOn() {
+        remoteAds("inter_splash" to true, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertSpendsAndShows("inter_noti")
+    }
+
+    @Test
+    fun regularPositionOffSilencesNewUsersEntriesToo() {
+        remoteAds("inter_splash" to false, "inter_splash_o" to true, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun oldUserPositionOffSilencesReturningUsersEntriesToo() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to true, "inter_splash_o" to false, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun returningUsersEntryStaysOnWhileOnlyTheRegularPositionIsOff() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to false, "inter_splash_o" to true, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertSpendsAndShows("inter_noti")
+    }
+
+    @Test
+    fun switchedOffEntryFallsBackToTheNewUserPosition() {
+        remoteAds("inter_splash" to true, "inter_splash_o" to true, "inter_noti" to false)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertSpendsAndShows("inter_splash")
+    }
+
+    @Test
+    fun switchedOffEntryFallsBackToTheOldUserPosition() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to true, "inter_splash_o" to true, "inter_noti" to false)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertSpendsAndShows("inter_splash_o")
+    }
+
+    @Test
+    fun switchingOneEntryOffLeavesOtherEntriesAndPlainLaunchesAlone() {
+        remoteAds("inter_splash" to true, "inter_noti" to false, "inter_widget" to true)
+        launch(notification = false, entry = SplashEntry.WIDGET)
+        assertSpendsAndShows("inter_widget")
+    }
+
+    @Test
+    fun plainLaunchIgnoresASwitchedOffEntry() {
+        remoteAds("inter_splash" to true, "inter_noti" to false)
+        launch(notification = false)
+        assertSpendsAndShows("inter_splash")
+    }
+
+    @Test
+    fun returningUsersUndeclaredEntryFallsBackToTheOldUserPosition() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to true, "inter_splash_o" to true)
+        launch(notification = false, entry = SplashEntry.UNINSTALL)
+        assertSpendsAndShows("inter_splash_o")
+    }
+
+    @Test
+    fun returningUserWithoutAnOldUserKeyFollowsTheRegularPosition() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        remoteAds("inter_splash" to false, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun legacySplashInterSwitchSilencesAnEntryPosition() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(adsSplashInter = false)
+        remoteAds("inter_splash" to true, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun legacySplashInterSwitchSilencesTheOldUserPosition() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(adsSplashInter = false)
+        remoteAds("inter_splash" to true, "inter_splash_o" to true)
+        launch(notification = false)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun legacySplashInterSwitchSilencesTheRegularPosition() {
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(adsSplashInter = false)
+        remoteAds("inter_splash" to true)
+        launch(notification = false)
+        assertShowsNothing()
+    }
+
+    @Test
+    fun aBufferedFillFromAnotherPositionIsDroppedBeforeLoading() {
+        LongPromptFixture.provider.ready = true
+        LongPromptFixture.provider.readyUnit = "inter_splash_o"
+        remoteAds("inter_splash" to true, "inter_noti" to true)
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        drainUntil("inter_noti must be requested") { LongPromptFixture.provider.interstitialLoads == 1 }
+        assertEquals(1, LongPromptFixture.provider.releases)
+        LongPromptFixture.provider.readyUnit = "inter_noti"
+        assertSpendsAndShows("inter_noti")
+    }
+
+    @Test
+    fun entryThatConfigNeverDeclaresSharesTheRegularPosition() {
+        remoteAds("inter_splash" to true)
+        launch(notification = false, entry = SplashEntry.UNINSTALL)
+        assertSpendsAndShows("inter_splash")
+    }
+
+    private fun launch(notification: Boolean, entry: SplashEntry? = null) {
         if (LongPromptFixture.remoteWait != null) com.ads.module.config.AdConfig.install(
             object : com.ads.module.config.AdConfigSource, com.ads.module.config.settings.SettingsConfigSource {
                 override val id = "update-test"
@@ -908,14 +1074,15 @@ class SplashLongPromptTest {
         )
         OnboardingSdk.configure(onboardKitConfig {
             splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = notification,
-                minDisplayTimeMs = 0, remoteFetchTimeoutMs = LongPromptFixture.remoteTimeoutMs, adLoadStrategy = LongPromptFixture.strategy)
+                remoteFetchTimeoutMs = LongPromptFixture.remoteTimeoutMs, adLoadStrategy = LongPromptFixture.strategy)
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             ads = AdsConfig(splashBanner = BannerAdUnit("host-banner"),
                 splashInterstitial = InterstitialAdUnit("host-interstitial"),
                 languageNative = NativeAdUnit("host-language"),
                 splashNative = NativeAdUnit("host-splash-native").takeIf { LongPromptFixture.nativeConfigured })
         }.getOrThrow()).getOrThrow()
-        controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java).setup().visible()
+        controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java,
+            entry?.intent(app, LongPromptSplashActivity::class.java)).setup().visible()
         requireNotNull(controller).get().onWindowFocusChanged(true)
         main.idle()
     }
@@ -1024,6 +1191,10 @@ private object LongPromptFixture {
         provider.settleBanner = true
         provider.bannerLoads = 0
         provider.interstitialLoads = 0
+        provider.loadedUnits.clear()
+        provider.readyUnit = null
+        provider.releases = 0
+        provider.loadedKeys.clear()
         provider.interstitialRequestAtMs = 0L
         provider.pending = null
         provider.ready = false
@@ -1054,7 +1225,14 @@ private class LongPromptProvider : OnboardingAdProvider {
     override fun isNativeLoading(placement: AdPlacement) = false
     override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?) = false
     override fun releaseNative(placement: AdPlacement) = Unit
+    val loadedUnits = mutableListOf<List<String>>()
+    val loadedKeys = mutableListOf<String?>()
+    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, adConfigKey: String?, listener: AdEventListener?) {
+        loadedKeys += adConfigKey
+        loadInterstitial(context, placement, unit, listener)
+    }
     override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) {
+        loadedUnits += unit.loadOrder
         interstitialLoads++
         interstitialRequestAtMs = SystemClock.elapsedRealtime()
         pending = listener
@@ -1062,6 +1240,14 @@ private class LongPromptProvider : OnboardingAdProvider {
         if (immediateInterResult == 2) listener?.onFailedToLoad()
     }
     override fun isInterstitialReady(placement: AdPlacement) = ready
+    var readyUnit: String? = null
+    var releases = 0
+    override fun readyInterstitialUnitId(placement: AdPlacement) = readyUnit.takeIf { ready }
+    override fun releaseInterstitial(placement: AdPlacement) {
+        releases++
+        ready = false
+        readyUnit = null
+    }
     override fun loadAndShowInterstitial(
         activity: androidx.appcompat.app.AppCompatActivity,
         placement: AdPlacement,

@@ -30,7 +30,7 @@ You do not need to do every guide. Each guide states its dependencies, the files
 - **Optional tables:** state the default, when to change it and where to configure it. You do not need to copy a whole table into your code or Firebase.
 - **App placements:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) collects the OB keys and your app screens in one place. The placement key is the only identity of an ad slot — an ad unit ID is shared across placements and so cannot tell them apart; ad unit IDs live in the JSON.
 - **Sample files:** [ad_config.json](examples/ads-onboarding/ad_config.json) and [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) both use test ad IDs. Copy them into `app/src/main/assets/`; replace the IDs in the real file before release.
-- **Grouped settings:** [remote setup](firebase-integration.md#remote-json), [custom local defaults](firebase-integration.md#local-defaults), [all fields/defaults](remote-settings.md). Add the two String parameters; SDK defaults are already bundled. Offline preserves valid remote cache before local fallback.
+- **Grouped settings:** [remote setup](firebase-integration.md#remote-json), [custom local defaults](firebase-integration.md#local-defaults), [all fields/defaults](remote-settings.md). Add the two String parameters; SDK defaults are already bundled. Remote, live or cached, outranks your asset JSON and Kotlin config; offline preserves valid remote cache before local fallback.
 - **Module READMEs:** look up further APIs, lifecycle and customization when you need them.
 
 ## Sample files to copy

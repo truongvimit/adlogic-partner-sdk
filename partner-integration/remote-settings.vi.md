@@ -2,7 +2,7 @@
 
 **OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
-`onboarding.order` là danh sách duy nhất chọn và sắp xếp màn trong JSON; bỏ ID để bỏ màn. Không cần khai báo `steps` nếu không có tùy chỉnh riêng. `steps.<id>.enabled` đã bỏ và bị bỏ qua; `order` hợp lệ cũng ưu tiên hơn các cờ cũ `ob_enable_step_ob1..4`. `steps.<id>` chỉ dành cho template, behavior và fullscreen tùy chọn. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`: content vẫn hiện khi ads tắt, màn fullscreen không có ads sẽ được bỏ qua.
+`onboarding.order` là danh sách duy nhất chọn và sắp xếp màn trong JSON; bỏ ID để bỏ màn. Không cần khai báo `steps` nếu không có tùy chỉnh riêng. `steps.<id>.enabled` đã bỏ và bị bỏ qua. `order` remote ưu tiên hơn các cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi, và các cờ đó ưu tiên hơn `order` trong asset app. Màn app khai báo `enabled = false` vẫn ẩn cho tới khi `order` remote liệt kê nó hoặc `ob_enable_step_obN = true` đã gửi bật nó; `order` trong asset app vẫn giữ màn đó ẩn. Remote không thêm được màn app chưa khai báo. `steps.<id>` chỉ dành cho template, behavior và fullscreen tùy chọn. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`: content vẫn hiện khi ads tắt, màn fullscreen không có ads sẽ được bỏ qua.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -49,14 +49,17 @@ OnboardingSdk.configure(onboardKitConfig {
 |---|---|
 | Splash banner/interstitial | `banner_splash` / `inter_splash` |
 | Splash native (slot dưới, khi `splash.ads.slot_format` = `NATIVE`) | `native_splash` |
-| Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`) |
+| Splash người dùng cũ | `<key splash interstitial>_o` (`inter_splash_o`); không khai báo `_o` thì người dùng cũ dùng unit của `inter_splash` |
+| Splash mở từ notification / widget / uninstall | `inter_noti` / `inter_widget` / `inter_uninstall`; key thiếu hoặc bị tắt thì chuyển về key của tệp user |
+
+`inter_splash` là công tắc tổng cho user mới, `inter_splash_o` (hoặc `inter_splash` khi chưa khai báo `_o`) cho user cũ: `isEnable: false` ở đó tắt mọi inter splash của tệp user đó, kể cả entry. Entry dùng key riêng khi key được khai báo và đang bật, nếu không thì dùng key của tệp user. Load và show đều gate theo cùng key. Key Firebase cũ `ob_ads_splash_inter_enabled=false` tắt mọi inter splash cho tất cả user.
 | LFO1 / LFO2 / dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
 | Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Question native/interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
-| App resume | `open_resume` |
+| App resume | `open_resume`; backend khai báo kèm ID thì bật app-open mà không cần seed `idAdResume`. Gọi `AppOpenManager.getInstance().disableAppResume()` để giữ app-open tắt |
 
 ### Slot dưới màn splash
 
@@ -110,7 +113,7 @@ ads = AdsConfig.fromAdConfig(mapOf(
 ))
 ```
 
-Đổi ID, tiers, switch, màu/chiều cao/vị trí CTA và components vẫn thực hiện ở ad_config. Chọn preset template SDK và bo góc CTA dùng hai JSON mới như bảng dưới. Association này cũng dùng để tìm `ad_behavior_config.placement_overrides.<key>`; LFO1 mặc định tìm `native_lang`, không nhầm với key telemetry/buffer nội bộ `language1`. API `AdsConfig(...)` truyền raw ID vẫn được giữ cho host tự quản lý units; khi dùng API đó SDK không đoán association từ các ID có thể trùng nhau.
+Đổi ID, tiers, switch, màu/chiều cao/vị trí CTA và components vẫn thực hiện ở ad_config. Chọn preset template SDK và bo góc CTA dùng hai JSON mới như bảng dưới. Association này cũng dùng để tìm `ad_behavior_config.placement_overrides.<key>`; LFO1 mặc định tìm `native_lang`, không nhầm với key telemetry/buffer nội bộ `language1`. API `AdsConfig(...)` truyền raw ID vẫn được hỗ trợ, nhưng key nào trong bảng trên mà `ad_remote_config` của backend khai báo sẽ ưu tiên hơn unit ghi trong code, kể cả `stepNatives`, `splashInterstitialOldUser` và `splashInterstitialOverride()`; unit trong code chỉ áp cho placement mà remote không nhắc tới. `ad_config.json` của chính app chỉ ghi đè code ở các key liên kết qua `AdsConfig.fromAdConfig`. SDK không đoán association từ các ID có thể trùng nhau.
 
 ## Local JSON và fallback
 
@@ -128,17 +131,19 @@ Ví dụ local hoặc remote chỉ đổi swipe và thời gian X:
 }
 ```
 
-- Remote hợp lệ sau fetch/activate thành công > custom local asset > constructor/setter của host > SDK defaults. Các field hành vi không yêu cầu partner set lại bằng code.
-- Thiếu parameter/field sau fetch thành công: xóa assignment remote cũ tương ứng, trở về local/legacy. Null, sai type/enum/range bị bỏ qua theo field; false và 0 hợp lệ được giữ.
-- Fetch lỗi/timeout, JSON hỏng hoặc schema chưa hỗ trợ: giữ snapshot hợp lệ gần nhất. Lần đầu chưa có remote dùng local/default. Cache lưu SharedPreferences, khôi phục ở lần chạy sau; lỗi cache không làm mất default trong bộ nhớ. Fetch lỗi không ép local ghi đè remote cache hợp lệ. Muốn bỏ override, publish `{}` hoặc `{"schema_version":1}` rồi fetch thành công; không dùng String rỗng. Đổi asset local cần build và khởi động lại process.
+- Thứ tự ưu tiên cho mọi setting: field hợp lệ của `onboarding_config` / `ad_behavior_config` remote > key `ob_*` cũ mà backend đã gửi > custom local asset > cấu hình Kotlin/hook của host > SDK defaults. Remote ở bất kỳ scope nào ưu tiên hơn asset app ở bất kỳ scope nào. Field remote hợp lệ đã cache giữ thứ tự này lúc khởi động; key backend chưa từng gửi không được tính. Các field hành vi không yêu cầu partner set lại bằng code.
+- Thiếu parameter/field sau fetch thành công: xóa assignment remote cũ tương ứng, trở về nguồn kế tiếp bên dưới. Null, sai type/enum/range bị bỏ qua theo field và được log với logcat tag `AdLogicSettings`; false và 0 hợp lệ được giữ.
+- Fetch lỗi/timeout, JSON hỏng hoặc schema chưa hỗ trợ: giữ snapshot hợp lệ gần nhất; document bị từ chối được log dưới `AdLogicSettings`. Lần đầu chưa có remote dùng local/default. Cache lưu SharedPreferences, khôi phục ở lần chạy sau; lỗi cache không làm mất default trong bộ nhớ. Fetch lỗi không ép local ghi đè remote cache hợp lệ. Fetch về sau `splash.load.remote_fetch_timeout_ms` của splash vẫn được áp dụng cho phần còn lại của phiên. Muốn bỏ override, publish `{}` hoặc `{"schema_version":1}` rồi fetch thành công; không dùng String rỗng. Đổi asset local cần build và khởi động lại process.
+- `AdConfig.install` áp ngay `ad_remote_config` mà backend gửi gần nhất (giá trị Firebase activate gần nhất), nên fetch chậm hoặc lỗi vẫn chạy trên document đó thay vì asset. Fetch settings lỗi không chặn `ad_remote_config` được áp dụng.
 - Defaults SDK sinh từ chính asset khi build, dùng được trước Context; không có bản Kotlin/XML cần đồng bộ cho các field thuộc hai JSON. Build từ chối null/sai schema.
-- Consent, premium, `setCanRequestAds`, `AdsConfig.enabled=false`, runtime pause reload và lifecycle vẫn có quyền chặn. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
-- Key `ob_*` cũ tiếp tục là fallback/tương thích. Custom UI legacy qua `ob_ui_content`/`ob_ui_design_tokens`/`ob_question_config` vẫn theo API cũ, không được nhân bản sang hai JSON mới. Các API remote nội dung cũ vẫn sử dụng được; reference layout/resource và nội dung mặc định do app khai báo. Không nhầm nhóm nội dung trang này với template/style của quảng cáo trong hai JSON mới.
-- Debug giữ ad IDs trong ad_config_debug, vẫn nhận hai JSON hành vi. Timer/request đang chạy giữ thời điểm đã capture; lần đọc/request sau nhận cấu hình mới. `ALTERNATE` chờ bước remote kết thúc/timeout rồi mới request ads splash. `SAME_TIME` chỉ có thể request banner/interstitial splash sớm hơn; **LFO1 được lên lịch preload sau remote ở cả hai strategy**. LFO `PARALLEL` nghĩa là không đợi interstitial splash tải xong. Strategy được đọc lúc vào splash; giá trị vừa fetch áp dụng ở lượt splash sau.
+- Consent, premium, `setCanRequestAds(false)`, remote `global.ads_enabled=false`, runtime pause reload và lifecycle vẫn chặn ads. `AdsConfig.enabled=false` giữ hiệu lực cho tới khi remote `flow.ads_enabled=true` (hoặc `ob_enable_all_ads=true` đã gửi) bật ads onboarding; asset app không bật lại được. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
+- Key `ob_*` cũ tiếp tục tương thích. Key đã gửi đặt giá trị theo cả hai chiều, xếp dưới hai document nhóm và trên asset app/host; `ob_splash_min_display_ms <= 0` giữ giá trị local. Custom UI legacy qua `ob_ui_content`/`ob_ui_design_tokens`/`ob_question_config` vẫn theo API cũ, không được nhân bản sang hai JSON mới. Các API remote nội dung cũ vẫn sử dụng được; reference layout/resource và nội dung mặc định do app khai báo. Không nhầm nhóm nội dung trang này với template/style của quảng cáo trong hai JSON mới.
+- Build debuggable áp mọi field của `ad_remote_config` remote nhưng giữ ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug); key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Log `WARN` nêu tên file đang pin, và `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Hai JSON hành vi áp dụng như release.
+- Timer/request đang chạy giữ thời điểm đã capture; lần đọc/request sau nhận cấu hình mới. Cả hai strategy chờ bước remote kết thúc/timeout rồi mới request ads splash; `ALTERNATE` chờ thêm `onRemoteFetched()`, còn `SAME_TIME` request banner/interstitial splash mà không chờ hook đó. **LFO1 được lên lịch preload sau remote ở cả hai strategy**. LFO `PARALLEL` nghĩa là không đợi interstitial splash tải xong. Strategy và quyết định hỏi quyền thông báo được đọc sau khi bước remote kết thúc, nên giá trị fetch ở bước đó áp dụng ngay lượt mở này. Prompt thông báo chờ bước remote; consent và billing vẫn chạy song song với bước đó. `splash.navigation.next_screen_timing` remote khác `AUTO` ưu tiên hơn `nextScreenTiming()` đã override khi mở từ launcher; entry notification/widget/uninstall giữ hook, còn giá trị trong asset app chỉ làm default cho hook.
 
 ## Scope của behavior
 
-Slot behavior > nhóm content/fullscreen OB > placement override > format override > local/default. Các object `behavior` trống là scope tùy chọn cho hành vi chưa có trong ad_config, không chứa ad IDs/switch/UI resources.
+Slot behavior > nhóm content/fullscreen OB > placement override > format override > local/default. Thứ tự này áp dụng trong cùng một nguồn: giá trị remote ở bất kỳ scope nào ưu tiên hơn giá trị asset app ở bất kỳ scope nào. Các object `behavior` trống là scope tùy chọn cho hành vi chưa có trong ad_config, không chứa ad IDs/switch/UI resources.
 
 | Format trong placement_overrides | Field được hỗ trợ |
 |---|---|
@@ -147,9 +152,9 @@ Slot behavior > nhóm content/fullscreen OB > placement override > format overri
 | interstitial | load.tier_timeout_ms, load_and_show.wait_timeout_ms, load_and_show.buffer_wait_timeout_ms, presentation.loading_enabled, cache.max_age_ms |
 | rewarded | load.tier_timeout_ms, cache.max_age_ms |
 
-Slot interstitial OB hỗ trợ tier timeout và wait timeout. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
+Slot interstitial OB hỗ trợ tier timeout và wait timeout; với inter cuối OB, `onboarding.exit_interstitial.wait_timeout_ms` ưu tiên hơn `placement_overrides` và `interstitial.load_and_show.wait_timeout_ms` ở scope format. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
 
-Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Khai báo interval không tự bật timer. App-open delay chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms. Không thêm banner tier timeout khi loader chưa có timer đó.
+Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Khai báo interval không tự bật timer. App-open delay chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms. Click vào ad onboarding bỏ qua lần app-open kế tiếp, trừ khi remote đặt `app_open.presentation.skip_after_ad_click` là `false`. Không thêm banner tier timeout khi loader chưa có timer đó.
 
 ## Hành động khi click native
 
@@ -181,14 +186,14 @@ Ví dụ override trong `onboarding_config` (LFO2 mặc định là `reload`; v�
 ## Template và CTA để UA/MO thử nghiệm
 
 - LFO1/LFO2: `lfo.native_template` (SDK default `CTA_BOTTOM`). Content OB: `onboarding.ads.content_template` (`CTA_TOP`), có thể override từng `onboarding.steps.<id>.native_template` (mặc định `""`, nghĩa là kế thừa). Question: `question.native.template` (`CTA_BOTTOM`).
-- Thứ tự chọn frame: template tường minh của trang > template tường minh của nhóm/màn > `ad_config.<key>.positionCTA` (`TOP`/`BOTTOM`) > template host/SDK. “Tường minh” gồm remote hợp lệ hoặc custom local asset; bản asset SDK nguyên mẫu không tự ghi đè cấu hình cũ. Khi thử riêng `positionCTA`, bỏ override template tương ứng. `positionCTA` không bị sao chép thành một field mới.
+- Thứ tự chọn frame: template remote (trang > nhóm/màn) > `positionCTA` (`TOP`/`BOTTOM`) theo placement từ `ad_remote_config` của backend > template trong custom asset app (trang > nhóm/màn) > `positionCTA` từ `ad_config.json` của app > template host/SDK. Bản asset SDK nguyên mẫu không tự ghi đè cấu hình cũ. Khi thử riêng `positionCTA`, bỏ override template tương ứng. `positionCTA` không bị sao chép thành một field mới.
 - Các preset `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` dùng cho native nội dung; field template chung cũng nhận `FULL_SCREEN`/`DIALOG` như API trước. Riêng native trong popup LFO luôn dùng `DIALOG`, native ad-only Full1/Full2/OB5 luôn dùng `FULL_SCREEN` để giữ khung chứa tương ứng. Custom `R.layout` của trang vẫn ở app.
 - Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. Đây không phải thứ tự splash mặc định: LFO1 luôn được lên lịch sau bước remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
-- `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Scope cụ thể ưu tiên scope chung, rồi cấu hình local; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
+- `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Trong cùng một nguồn, scope cụ thể ưu tiên scope chung (remote ở bất kỳ scope nào ưu tiên hơn asset app), rồi tới cấu hình host; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
 - Phía đặt X/Skip khai theo từng trang native fullscreen, không có scope chung ở trên: `onboarding.steps.<id>.fullscreen.skip.position` cho mỗi trang fullscreen trong OB, `ob5.skip.position` cho OB5 standalone, `splash.native.skip.position` cho native_fs giữa inter splash và LFO. Cả ba nhận `RIGHT`/`LEFT`, default `RIGHT` — đúng phía X vẫn nằm từ trước; JSON gốc khai sẵn `full1` và `full2`, id step khác do app khai vẫn nhận ở cùng path đó. Các format khác không có cờ này: interstitial, app-open, banner và native inline đều không có nút X này. Hai phía đối xứng tuyệt đối: cùng khoảng cách tới mép và cùng margin trên, chỉ đổi phía chứ không đổi kích thước, style hay thời gian. Locale RTL vẫn lật như hiện tại: `RIGHT` theo mép cuối dòng chữ, `LEFT` theo mép đầu.
 - `native.presentation.cta_corner_radius_dp` mặc định `20` dp, có thể override theo placement hoặc scope native từng màn. Áp dụng khi CTA có màu nền tường minh từ `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; màu `default` giữ drawable XML như trước.
 - `lfo.confirm_button.image_url` / `tint_color`: mặc định `""`, giữ icon/màu XML. URL ảnh lỗi dùng icon check của SDK, màu không hợp lệ bị bỏ qua. Đây là nút xác nhận LFO; CTA quảng cáo vẫn dùng field của ad_config.
-- `lfo.languages.supported_codes` mặc định `[]`: giữ catalog app/SDK; mã không có trong catalog bị loại, kết quả rỗng trở về catalog. `lfo.languages.default_code` mặc định `""`: giữ lựa chọn mặc định cũ; chỉ thay khi mã thuộc catalog app.
+- `lfo.languages.supported_codes` mặc định `[]`: giữ catalog app/SDK; mã không có trong catalog bị loại, kết quả rỗng trở về catalog. `lfo.languages.default_code` mặc định `""`: giữ lựa chọn mặc định cũ; mã phải nằm trong danh sách được hiển thị (`supported_codes` đã lọc, nếu không có thì catalog). `LanguageConfig.defaultCode` của host nằm ngoài `supported_codes` sẽ không được chọn sẵn.
 
 Ví dụ chỉnh phía nút X cho từng trang native fullscreen. JSON gốc khai sẵn `full1` và `full2` — hai trang fullscreen tiêu chuẩn; app khai id riêng thì thêm id đó y hệt:
 
@@ -205,11 +210,13 @@ Ví dụ chỉnh phía nút X cho từng trang native fullscreen. JSON gốc kha
 }
 ```
 
-Các field chỉ thuộc app đã loại khỏi nhóm UI 26 field là `flow.lock_portrait`, ba field `flow.system_bars.*` và `onboarding.steps.ob1/ob2/ob4.progress_visible`. Chúng tiếp tục dùng `BehaviorConfig`, `SystemBarConfig`, `ContentStepDefinition.showsProgressIndicator` với default cũ. Payload nội dung `ui.*` / `question.content.*` không nhân bản sang JSON mới; nội dung UI remote cũ vẫn qua `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`, và toggle `ob_enable_ui_content`. Text nút tiếp tục của question dùng `QuestionConfig.ctaTextRes` trong app, độc lập với CTA quảng cáo.
+Các field chỉ thuộc app đã loại khỏi nhóm UI 26 field là `flow.lock_portrait`, ba field `flow.system_bars.*` và `onboarding.steps.ob1/ob2/ob4.progress_visible`. Chúng tiếp tục dùng `BehaviorConfig`, `SystemBarConfig`, `ContentStepDefinition.showsProgressIndicator` với default cũ. Payload nội dung `ui.*` / `question.content.*` không nhân bản sang JSON mới; nội dung UI remote cũ vẫn qua `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`, và toggle `ob_enable_ui_content`. `ob_question_config` hợp lệ hiện question cho người dùng mới kể cả khi app chưa cấu hình `QuestionConfig`; `cta_text` của nó đặt text nút tiếp tục của question, `QuestionConfig.ctaTextRes` là fallback, và số lựa chọn tối thiểu được giới hạn theo số option đang hiện. Nút này độc lập với CTA quảng cáo.
 
 ## Fetch và publish
 
 Firebase `fetchAndActivate().await()` chia sẻ tác vụ đang chạy qua delegate suite/example; timeout/cancellation của caller không hủy caller khác. Parse/validate trên Default, persist trên IO, publish snapshot trước khi flow dùng cấu hình; các notification chạm ads/UI chạy Main. Preset template/Skip và style ads đọc snapshot tại điểm sử dụng; payload nội dung trang qua API remote UI cũ vẫn có luồng publish riêng.
+
+Fetch thành công được dùng lại trong process và vẫn chịu minimum fetch interval của Firebase, mặc định 12 giờ. SDK không tự đặt interval này; muốn thay đổi trên Console tới được lần mở sau, đặt `minimumFetchIntervalInSeconds` trong app (ví dụ `0` ở debug, `3600` ở release). `AdConfig.refresh()` trả về việc có áp dụng một document `ad_remote_config` hay không; giá trị này không phản ánh hai settings nhóm. Xem [các bước QA](firebase-integration.vi.md#remote-notes).
 
 ## Toàn bộ defaults
 
@@ -273,7 +280,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `app_open.load.failure_backoff_ms` | `[5000,30000,120000]` | Backoff theo số lần request app-open thất bại; chỉ nhận mảng số nguyên dương, tối đa 10 mức. |
 | `app_open.presentation.loading_timeout_ms` | `3000` | Giới hạn loading resume. |
 | `app_open.presentation.pre_show_delay_ms` | `800` | Delay trước show cached app-open. |
-| `app_open.presentation.skip_after_ad_click` | `false` | Map policy click-return; explicit one-shot suppression từ host vẫn giữ. |
+| `app_open.presentation.skip_after_ad_click` | `false` | Map policy click-return; explicit one-shot suppression từ host vẫn giữ. Click ad onboarding vẫn bỏ lần app-open kế tiếp, trừ khi remote đặt `false` tường minh. |
 | `app_open.cache.max_age_ms` | `14400000` | Không tăng quá lifetime hiện tại. |
 | `placement_overrides` | `{}` | Override theo key ad_config; chỉ các field hành vi được hỗ trợ. |
 
@@ -294,7 +301,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |
 | `splash.timing.slot_min_visible_ms` | `1000` | Thời gian tối thiểu slot phải hiện trước khi inter phủ lên. |
 | `splash.timing.notification_settle_ms` | `800` | Sàn tối thiểu sau khi user trả lời prompt noti, trước khi inter được show. |
-| `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; capture trước khởi động attempt, mới fetch chỉ áp attempt sau. |
+| `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; đọc sau khi bước remote kết thúc, giá trị fetch ở bước đó áp dụng ngay lượt mở này. |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` | PARALLEL/SEQUENTIAL so với inter splash; độc lập ad_strategy. |
 | `splash.load.remote_fetch_timeout_ms` | `10000` | Đang fetch không tự đổi timeout cho chính lần fetch đó; lần sau dùng cache. |
 | `splash.load.consent_hook_timeout_ms` | `20000` | Riêng hook tùy biến; UMP timeout nằm trong ad_behavior_config.consent. |
@@ -315,7 +322,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` | LFO_SHOWN hoặc FIRST_SELECTION. Không tắt hiển thị slot 2. |
 | `lfo.tap_hint.enabled` | `true` | Thay ob_show_language_tap_hint. |
 | `lfo.tap_hint.delay_ms` | `3000` | Thay ob_language_tap_hint_delay_sec. |
-| `lfo.confirm_button.visible_before_selection` | `false` | Explicit remote mới true được override UI local false; missing giữ AND semantics cũ. |
+| `lfo.confirm_button.visible_before_selection` | `false` | Remote (hoặc `ob_show_language_confirm_before_select` đã gửi), rồi asset app, ghi đè `LanguageConfig.confirmVisibleBeforeSelect` theo cả hai chiều. |
 | `lfo.confirm_button.save_on_back` | `true` | Back trước chọn vẫn inert. |
 | `lfo.confirm_button.image_url` | `""` | Rỗng giữ drawable check hiện tại; URL lỗi giữ icon dự phòng. |
 | `lfo.confirm_button.tint_color` | `""` | Rỗng giữ tint local; màu không parse được bị bỏ qua. |
@@ -324,7 +331,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` | DIALOG_OPEN/LFO_SHOWN/FIRST_SELECTION; mặc định on-demand. |
 | `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.languages.supported_codes` | `[]` | Rỗng giữ catalog; mã lạ bị loại, lọc rỗng trở về catalog. |
-| `lfo.languages.default_code` | `""` | Rỗng giữ lựa chọn cũ; chỉ nhận mã có trong catalog app. |
+| `lfo.languages.default_code` | `""` | Rỗng giữ lựa chọn cũ; chỉ nhận mã nằm trong danh sách được hiển thị. |
 | `lfo.exit.reuse_splash_inter` | `true` | Chỉ nhánh thoát LFO không vào pager. |
 | `onboarding.navigation.lock_pager_swipe` | `false` | Giữ chính sách page eligibility hiện tại; false không tự mở swipe OB1 trong working tree. |
 | `onboarding.navigation.swipe_completes_last_step` | `true` | Trong working tree còn cần !lock_pager_swipe. |

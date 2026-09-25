@@ -22,7 +22,6 @@ import androidx.lifecycle.lifecycleScope
 import com.ads.module.update.ForceUpdateConfig
 import com.ads.module.update.ForceUpdateGate
 import com.ads.module.config.AdConfig
-import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -37,6 +36,9 @@ import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.ads.tracked
 import io.onboardkit.config.AdLoadStrategy
+import com.ads.module.config.AdRemoteConfig
+import io.onboardkit.ads.ObInterstitial
+import io.onboardkit.ads.SplashInterCase
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.config.SplashAdSlotFormat
@@ -67,10 +69,11 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Splash template. The app's launcher activity extends this and overrides the hooks it needs.
  *
- * Consent resolves before the optional notification prompt. Authorized requests and the minimum
- * display clock may run beneath that prompt while splash is visible. The shared ad wait budget
- * starts only after the notification result and foreground focus; LFO1 follows the captured mode.
- * System permission UI waits for the user; network and host hooks keep their own timeouts.
+ * Consent and the remote fetch settle before the optional notification prompt, since remote
+ * decides whether it shows. Authorized requests and the minimum display clock may run beneath
+ * that prompt while splash is visible. The shared ad wait budget starts only after the
+ * notification result and foreground focus; LFO1 follows the captured mode. System permission UI
+ * waits for the user; network and host hooks keep their own timeouts.
  */
 open class ObSplashActivity : BaseOnboardActivity() {
 
@@ -203,7 +206,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
                     // Refresh the ad units in the same step. No-op unless the host installed an
                     // AdConfigSource, so an app that ships only assets/ad_config.json pays nothing.
                     AdConfig.refresh(cfg.splash.remoteFetchTimeoutMs)
-                }.also {
+                }.also { settled ->
+                    // A fetch that outlives this deadline still governs the rest of the session once it lands.
+                    if (settled == null) OnboardingSdk.applyRemoteWhenLanded()
                     // One immutable policy per splash attempt, at the existing remote deadline.
                     // Neither subsequent fetches nor Activity recreation change this decision.
                     attempt.updateConfig = readForceUpdateConfig()
@@ -217,7 +222,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Completing the step and authorizing requests are separate. The SDK reads current
             // authority at each gate, so a later answer can recover without overwriting host-off.
             val mayRequestAds = consent.await()
-            val notification = async { awaitNotificationPermission(cfg) }
+            val notification = async {
+                remote.await()
+                awaitNotificationPermission()
+            }
             if (!mayRequestAds) {
                 ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
             }
@@ -227,7 +235,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             billing.await()
             // Even SAME_TIME must wait for the update verdict: requests sent before remote
             // answers cannot be recovered if this launch turns out to require a mandatory update.
-            // UMP, remote, billing and the notification prompt above still overlap as before.
+            // UMP, remote and billing above still overlap.
             remote.await()
             val installed = PackageInfoCompat.getLongVersionCode(
                 packageManager.getPackageInfo(packageName, 0),
@@ -239,7 +247,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 attempt.updateGatePassed = true
             }
             attempt.allowAdRequests()
-            if (cfg.splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) {
+            if (sdk.requireConfig().splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) {
                 requestSplashAds(deferIfUnauthorized = true)
             }
             if (!attempt.remoteHookResolved) {
@@ -310,13 +318,13 @@ open class ObSplashActivity : BaseOnboardActivity() {
         attempt.nativeScreenResolved = true
     }
 
-    private suspend fun awaitNotificationPermission(cfg: OnboardKitConfig) {
+    private suspend fun awaitNotificationPermission() {
         if (attempt.notificationPermissionRequested) {
             attempt.notificationPermissionResult.await()
             awaitSplashFocus()
             return
         }
-        if (!cfg.splash.notificationPermissionEnabled || Build.VERSION.SDK_INT < 33 ||
+        if (!sdk.requireConfig().splash.notificationPermissionEnabled || Build.VERSION.SDK_INT < 33 ||
             applicationInfo.targetSdkVersion < 33 ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED ||
@@ -377,6 +385,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
      */
     private suspend fun requestSplashAds(deferIfUnauthorized: Boolean = false) {
         if (attempt.adsRequested) return
+        // Known before the start decision, because SAME_TIME loads ahead of it, and before the
+        // latch below, so a recreation during this read cannot strand the request.
+        if (attempt.returningUser == null) attempt.returningUser = OnboardingSdk.isCompleted()
         // Billing or remote fetch can finish while the host is backgrounded. Check focus at the
         // actual request boundary, then re-read authorization after that suspension.
         awaitRequestWindow()
@@ -487,10 +498,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private fun requestSplashInterstitial() {
         val placement = AdPlacement.SplashInterstitial
-        // Resolved before the guard on purpose: a remote id override is invisible in the compiled
-        // config, so judging that alone would report no_ad_unit for a live placement.
-        val unit = resolveSplashInterUnit()
-        val skip = sdk.guard().skipReason(this, placement, unit)
+        val case = SplashInterCase(SplashEntry.from(intent), attempt.returningUser == true, splashInterstitialOverride())
+        // Recorded before any gate, so the show judges exactly the position this load judged.
+        val (adConfigKey, unit) = ObInterstitial.spend(placement, case)
+        val skip = sdk.guard().skipReason(this, placement, unit, adConfigKey)
         val provider = sdk.provider()
         if (skip != null || unit == null || provider == null) {
             placement.trackSkipped(skip ?: AdSkipReason.NO_AD_UNIT)
@@ -500,7 +511,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
         ObLog.d(
             ObLog.Section.LOAD,
-            "${placement.key} request tiers=${unit.tierCount} budgetMs=${sdk.flags().splashAdBudgetMs}",
+            "${placement.key} request key=$adConfigKey tiers=${unit.tierCount} budgetMs=${sdk.flags().splashAdBudgetMs}",
         )
         placement.trackRequest()
         val state = attempt
@@ -508,6 +519,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             this,
             placement,
             unit,
+            adConfigKey,
             placement.tracked(
                 object : AdEventListener {
                     override fun onLoaded() {
@@ -584,40 +596,25 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     /**
-     * The entry's own unit beats everything; below that, a remote id override beats the compiled
-     * id, split by user segment.
+     * Ad units to spend in place of the SDK's own choice for this launch, or `null` to let the SDK
+     * choose.
      *
-     * A returning user is worth a different floor than a first-open one. When the segment is not
-     * resolved yet — `SAME_TIME` loads before the fetch lands — the shared override applies rather
-     * than the old-user one, because guessing the segment would spend the wrong floor.
-     */
-    private fun resolveSplashInterUnit(): InterstitialAdUnit? {
-        splashInterstitialOverride()?.let {
-            ObLog.d(ObLog.Section.LOAD, "splash_inter unit chosen by the entry tiers=${it.tierCount}")
-            return it
-        }
-        val ads = sdk.requireConfig().ads
-        return if (isReturningUser()) {
-            ads.splashInterstitialOldUser ?: ads.splashInterstitial
-        } else {
-            ads.splashInterstitial
-        }
-    }
-
-    /**
-     * The interstitial ad unit this launch spends, or `null` to keep the configured splash units.
-     *
-     * The default resolves [SplashEntry]: a launch that came through one spends its entry's key —
-     * `inter_noti`, `inter_widget`, `inter_uninstall` — full `_high…` waterfall included, and a
-     * key that is missing or disabled falls back to the regular resolution rather than silencing
-     * the ad. The standard entries therefore need no code in the app at all; override only for an
-     * app that diverges — different keys, or its own per-entry segmentation.
+     * The SDK spends one position per launch: a [SplashEntry] launch its entry's key —
+     * `inter_noti`, `inter_widget`, `inter_uninstall` — while that key is declared and on, anyone
+     * else their segment's key, `inter_splash_o` for a returning user (`inter_splash` without
+     * `_o`) and `inter_splash` for a new one, each with its full `_high…` waterfall. An entry key
+     * that is missing or switched off falls back to the segment's key, and a segment key switched
+     * off silences every splash interstitial for that segment, entries included. The default
+     * returns the entry key's units while they are declared and on, else `null`. The standard
+     * entries therefore need no code in the app; override only for an app that diverges.
      *
      * Asked once per launch, when the request is about to go out, so it can read `intent` — the
-     * same contract as [nextScreenTiming]. Only the ids change: the guard, the budget, the paywall
-     * checkpoint and the telemetry keep judging the same `splash_inter` placement. Returning
-     * non-null replaces the whole resolution, including the returning-user split — an entry
-     * specific enough to carry its own id owns its own segmentation.
+     * same contract as [nextScreenTiming]. Only the ids change: the budget, the paywall checkpoint
+     * and the telemetry keep judging the same `splash_inter` placement.
+     *
+     * What an override returns is a fallback. When the backend's ad_config declares the key this
+     * launch would spend — the entry's key, else the splash key or, for a returning user, its `_o`
+     * — the SDK resolves that key instead, switched off included.
      */
     protected open fun splashInterstitialOverride(): InterstitialAdUnit? =
         SplashEntry.from(intent)?.let { entry ->
@@ -626,7 +623,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 ?.let { InterstitialAdUnit(tiers = it) }
         }
 
-    private fun isReturningUser(): Boolean = when (val decision = attempt.startDecision) {
+    private fun isReturningUser(): Boolean = attempt.returningUser ?: when (val decision = attempt.startDecision) {
         null -> false
         is StartDecision.Skip -> true
         is StartDecision.Start -> decision.destination == FlowDestination.QUESTION_OLD_USER
@@ -635,7 +632,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private suspend fun proceed() {
         if (!attempt.showRequested) {
             if (attempt.nextScreenTiming == null) {
-                attempt.nextScreenTiming = if (splashNativeEligible()) NextScreenTiming.AFTER_AD else nextScreenTiming()
+                attempt.nextScreenTiming = when {
+                    splashNativeEligible() -> NextScreenTiming.AFTER_AD
+                    SplashEntry.from(intent) != null -> nextScreenTiming()
+                    else -> remoteNextScreenTiming() ?: nextScreenTiming()
+                }
             }
             // Must precede the paywall and show for every timing: a dismissed ad navigates at once.
             awaitMinimumDisplay()
@@ -699,7 +700,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private suspend fun awaitMinimumDisplay() {
-        val remaining = remainingMinDisplayMs(sdk.requireConfig().splash.minDisplayTimeMs)
+        val remaining = remainingMinDisplayMs()
         if (remaining > 0) delay(remaining.milliseconds)
     }
 
@@ -713,9 +714,17 @@ open class ObSplashActivity : BaseOnboardActivity() {
         awaitSplashFocus()
     }
 
+    /** An explicit `splash.navigation.next_screen_timing` the backend delivered; AUTO means none. */
+    private fun remoteNextScreenTiming(): NextScreenTiming? =
+        (OnboardingSettings.values.remoteValue("splash.navigation.next_screen_timing") as? String)
+            ?.takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+
     /**
-     * Asked once, right before the splash ad shows. Default: AFTER_AD for the first-open flow and
-     * every [SplashEntry] launch, UNDER_AD when a launcher start goes past completed onboarding.
+     * Asked once, right before the splash ad shows: for every [SplashEntry] launch, and for a
+     * launcher start unless the backend delivered an explicit `splash.navigation.next_screen_timing`,
+     * which outranks this hook. Default: that setting from the app asset when explicit, else
+     * AFTER_AD for the first-open flow and every [SplashEntry] launch, UNDER_AD when a launcher
+     * start goes past completed onboarding.
      */
     protected open fun nextScreenTiming(): NextScreenTiming =
         if (SplashEntry.from(intent) != null) NextScreenTiming.AFTER_AD
@@ -740,8 +749,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         is StartDecision.Skip -> "SKIP reason=${decision.reason}"
     }
 
-    private fun remainingMinDisplayMs(configured: Long): Long {
-        val target = OnboardingSettings.values.long("splash.timing.min_display_ms", checkNotNull(attempt.flags).splashMinDisplayMs.takeIf { it > 0 } ?: configured)
+    private fun remainingMinDisplayMs(): Long {
+        val target = sdk.requireConfig().splash.minDisplayTimeMs.coerceAtLeast(0)
         val elapsed = SystemClock.elapsedRealtime() - attempt.adPhaseStartedAtMs
         return (target - elapsed).coerceIn(0, target)
     }

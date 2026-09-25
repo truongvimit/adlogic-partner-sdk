@@ -77,7 +77,7 @@ import io.suite.firebase.FirebaseAdConfigSource
 AdConfig.install(FirebaseAdConfigSource())
 ```
 
-`FirebaseAdConfigSource` reads the ad-unit document and both grouped settings documents. No separate source, manual `getString`, field-by-field setter or additional Firebase fetch is needed.
+`FirebaseAdConfigSource` reads the ad-unit document and both grouped settings documents. No separate source, manual `getString`, field-by-field setter or additional Firebase fetch is needed. `AdConfig.install` applies the `ad_remote_config` value Firebase last activated right away, so a slow or failed fetch runs on the last remote document rather than on the asset.
 
 1. Open your app's Firebase project → **Remote Config → Parameters**.
 2. Keep the existing `ad_remote_config` key. Add **`ad_behavior_config`** and **`onboarding_config`**, with data type **String**.
@@ -86,13 +86,13 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Content to paste | Purpose |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | Existing unit IDs, floors, switches and CTA fields. Keep the existing parameter name. |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | Existing unit IDs, floors, switches and CTA fields. A key declared here outranks ad unit IDs written in code, and an `open_resume` with an ID turns app-open on. Keep the existing parameter name. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Ad-format behavior, timeouts, reload/cache and native CTA radius. |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, native templates, X/Skip, swipe and preload. |
 
-`ad_config.json` and `ad_config_debug.json` are local asset filenames; the default Firebase source reads **one** ad-unit key, `ad_remote_config`. Do not create new `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` or `onboarding_config_debug` parameters for this setup. Debug keeps its test ad IDs pinned by default **but still reads the two new settings parameters**. Use your test project/conditions for experiments. Existing `ob_*` keys remain compatible; do not nest them in these JSON objects. [Firebase parameter types and conditions](https://firebase.google.com/docs/remote-config/parameters).
+`ad_config.json` and `ad_config_debug.json` are local asset filenames; the default Firebase source reads **one** ad-unit key, `ad_remote_config`. Do not create new `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` or `onboarding_config_debug` parameters for this setup. Debug keeps the ad unit IDs of `ad_config_debug.json` (or `ad_config.json` when there is no debug file) pinned by default **but applies every other `ad_remote_config` field and both new settings parameters**; keys only remote declares are dropped unless they switch a slot off, and a `WARN` log from `AdRemoteConfig` names the pinned file. `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs as well. Use your test project/conditions for experiments. Existing `ob_*` keys remain compatible; do not nest them in these JSON objects. A delivered `ob_*` key ranks below these documents and above your app assets and Kotlin config. [Firebase parameter types and conditions](https://firebase.google.com/docs/remote-config/parameters).
 
-`ObSplashActivity` already calls `AdConfig.refresh()`. With the sample's `AdsConfig.fromAdConfig()`, IDs and settings resolve after fetch without calling `OnboardKitSetup.configure()` again in `onRemoteFetched`. Keep that hook only for app-specific work. Without SDK splash, await `AdConfig.refresh()` from your coroutine before the relevant screen/request, after initializing the kits.
+`ObSplashActivity` already calls `AdConfig.refresh()`. With the sample's `AdsConfig.fromAdConfig()`, IDs and settings resolve after fetch without calling `OnboardKitSetup.configure()` again in `onRemoteFetched`. Keep that hook only for app-specific work. Without SDK splash, await `AdConfig.refresh()` from your coroutine before the relevant screen/request, after initializing the kits; that refresh also re-reads the legacy `ob_*` keys.
 
 <a id="local-defaults"></a>
 
@@ -134,13 +134,15 @@ This local example disables the SDK connection prompt so you can exercise the of
 
 These values are **custom examples**, not changes to the SDK defaults. The copied full samples match the SDK's actual defaults. No translation of JSON field names or enum values is needed.
 
+Precedence for every setting: remote grouped-document field > legacy `ob_*` key the backend delivered > custom local JSON > host Kotlin config/hooks > bundled SDK defaults. Keys the backend never sent do not count.
+
 | Situation | Values the SDK uses |
 | --- | --- |
-| Successful fetch with valid fields | Remote fields override the app's local JSON. |
+| Successful fetch with valid fields | Remote fields override the app's local JSON at any scope. |
 | First run, fetch fails/timeouts, no valid remote cache | Custom local JSON → existing host fallback → bundled SDK defaults. |
 | Fetch fails/timeouts after a successful fetch | Keep the last valid remote snapshot/cache; fields not supplied by it still use local fallbacks. **Failure does not force local values over a valid remote cache.** |
-| Successful fetch omits a field/parameter, or a field has an invalid type/enum/range or `null` | Drop that remote field's old override and use local/host/default for it. Valid `false`/`0` values are preserved. |
-| Malformed/blank whole JSON, or unsupported schema | Keep that document's last valid snapshot; with no valid remote snapshot, keep local/defaults. |
+| Successful fetch omits a field/parameter, or a field has an invalid type/enum/range or `null` | Drop that remote field's old override and use the next source down for it. Invalid fields are logged under logcat tag `AdLogicSettings`. Valid `false`/`0` values are preserved. |
+| Malformed/blank whole JSON, or unsupported schema | Keep that document's last valid snapshot; with no valid remote snapshot, keep local/defaults. The rejection is logged under `AdLogicSettings`. |
 
 To remove all remote overrides for one of the new documents, publish `{}` or `{"schema_version":1}` and fetch successfully. A blank String is malformed JSON and keeps the previous valid snapshot. A successful remote document is persisted across process restarts, so changing a local file alone does not outrank cached remote fields. Test first-run local fallback on a test installation without remote cache, or remove the overrides successfully before testing offline. For the examples above, an uncached offline run uses native timeout **25000 ms**, LFO **COMPACT**, swipe unlocked and Skip delay **1500 ms**.
 
@@ -151,10 +153,10 @@ A custom/sparse app asset explicitly assigns all valid fields present, including
 ### 3.3. Timing, compatibility and QA
 
 - Use an SDK build containing both grouped settings and `AdsConfig.fromAdConfig()`, with matching versions for all modules. Merely adding the keys cannot add this behavior to an older SDK.
-- `ALTERNATE` waits for the remote step to finish (or its timeout/fallback) before requesting splash ads. `SAME_TIME` may start **splash banner/interstitial** earlier. **LFO1 preload is scheduled after the remote step in both strategies**; LFO `PARALLEL` means not waiting for splash interstitial loading to settle. The strategy is read at splash start, so a newly fetched change to it takes effect on a subsequent splash attempt.
-- SDK template overrides select the native frame before `positionCTA`; CTA colors/height/components stay in `ad_remote_config`. Keep `R.layout`, resource references, system bars, orientation and progress indicators in app code. Consent/premium and app-owned request gates still apply.
-- Firebase fetches are shared; a successful fetch is reused in the process and Firebase's fetch interval also applies. During Console QA, restart the process and account for that interval; opening an Activity again does not guarantee a fresh network fetch.
-- In debug, `AdConfig.refresh()` may return `false` because ad IDs are pinned even though both settings documents were applied. Do not use that Boolean as a success flag for the two new documents.
+- Both strategies wait for the remote step to finish (or its timeout/fallback) before requesting splash ads; `ALTERNATE` also waits for `onRemoteFetched()`, while `SAME_TIME` starts **splash banner/interstitial** without waiting for that hook. **LFO1 preload is scheduled after the remote step in both strategies**; LFO `PARALLEL` means not waiting for splash interstitial loading to settle. The strategy and the notification-permission decision are read once the remote step settles, so a value fetched in that step applies to the same launch. A fetch that lands after the splash deadline still applies for the rest of the session.
+- A remote template override selects the native frame before `positionCTA`, and a `positionCTA` from `ad_remote_config` outranks a template in your app asset; CTA colors/height/components stay in `ad_remote_config`. Keep `R.layout`, resource references, system bars, orientation and progress indicators in app code. Consent, premium and `setCanRequestAds(false)` still apply; `AdsConfig.enabled = false` yields to a remote `flow.ads_enabled = true`.
+- Firebase fetches are shared; a successful fetch is reused in the process. Firebase's default minimum fetch interval is 12 hours and the SDK does not change it, so a Console edit can take that long to arrive. For edits to reach the next launch, set it in your Application before the first fetch, for example `FirebaseRemoteConfig.getInstance().setConfigSettingsAsync(remoteConfigSettings { minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) 0 else 3600 })`. During Console QA, restart the process; opening an Activity again does not guarantee a fresh network fetch.
+- `AdConfig.refresh()` returns whether an `ad_remote_config` document was applied. Do not use that Boolean as a success flag for the two new documents.
 - Verify a valid remote override, missing/invalid fields, first-run offline local fallback, and offline reuse of a previous valid remote. JSON files shipped locally must be rebuilt into the app.
 
 See the [settings reference, ownership and full defaults](remote-settings.md) before changing fields for UA/MO experiments.
@@ -195,10 +197,10 @@ Open the paywall as the [PayKit guide](paywall-integration.md) shows; do not syn
 | `FirebaseSink.setDefaultEventParameters(...)` | No extra defaults. Use it when you need params on the events Firebase collects itself too; `Tracker.setDefaults` applies only to events that go through Tracker. |
 | `FirebaseAdConfigSource(key)` | `ad_remote_config`; change it when your Console uses a different key. |
 | `FirebaseConfigSource(key)` | `paywall_config`; change it when your Console uses a different key. |
-| Ads/PayKit fetch | Installing a source does not fetch. The two sources share one fetch and keep a successful result for the process; a failure permits a retry, still subject to Firebase's minimum fetch interval. |
+| Ads/PayKit fetch | Installing a source does not fetch; `AdConfig.install` applies the `ad_remote_config` value Firebase last activated. The two sources share one fetch and keep a successful result for the process; a failure permits a retry, still subject to Firebase's minimum fetch interval (12 hours unless your app sets `minimumFetchIntervalInSeconds`). |
 | Blank / Firebase in-app defaults | Both sources ignore them; do not use `setDefaultsAsync` in place of the kit's local JSON. |
 | Offline / invalid JSON | The kit keeps its current config; PayKit's remote cache takes priority over the bundled fallback. No separate fallback code is needed. |
-| Debug ads / paywall | Debug ad-unit IDs stay pinned by default, but both grouped settings documents still apply. PayKit has no equivalent pinning. Use suitable test projects/conditions. |
+| Debug ads / paywall | Debug ad-unit IDs stay pinned by default, but every other `ad_remote_config` field and both grouped settings documents still apply. PayKit has no equivalent pinning. Use suitable test projects/conditions. |
 
 Call only `AdConfig.refresh()`/`PayKit.sync()`; no extra `fetchAndActivate` is needed. The `ob_*` remote flags have their own OnboardKit adapter; the two new JSON documents are applied by the ads source.
 
@@ -207,7 +209,7 @@ Call only `AdConfig.refresh()`/`PayKit.sync()`; no extra `fetchAndActivate` is n
 - [ ] The build resolves Google Services and the application ID matches the Firebase JSON.
 - [ ] `Tracker.sinkIds()` contains `firebase`; app and SDK events appear once, according to the chosen consent.
 - [ ] Remote is published; test online, offline and invalid JSON against the local fallback.
-- [ ] Debug ads still use the pinned asset; the paywall opens from local/cache even before remote finishes.
+- [ ] Debug ads still use the pinned asset's ad unit IDs; the paywall opens from local/cache even before remote finishes.
 
 To watch Firebase DebugView, run `adb shell setprop debug.firebase.analytics.app <applicationId>` and open the app; turn it off with `adb shell setprop debug.firebase.analytics.app .none.`. [Firebase DebugView](https://firebase.google.com/docs/analytics/debugview).
 

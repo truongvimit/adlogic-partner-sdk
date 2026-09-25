@@ -56,16 +56,42 @@ data class AdRemoteConfig @JvmOverloads constructor(
         /**
          * Set by [initializeFromAssets] on a debuggable build.
          *
-         * While it stands, a remote refresh is ignored — the rule the handwritten flow enforced
-         * with `if (BuildConfig.DEBUG) fromAssets(DEBUG_FILE_NAME)`, which read the remote
-         * document only on a release build. Without it a debug run fetches the live document and
-         * spends the real ad unit ids, which is invalid traffic on the app's own account.
+         * While it stands, a remote document keeps the ad unit ids the assets shipped and sets
+         * everything else. A debug run that took the live document's ids would spend the real
+         * units, which is invalid traffic on the app's own account.
          */
         @Volatile
         private var debugAssetsPinned = false
 
+        /** What [initializeFromAssets] loaded on a debuggable build, and from which file. */
+        @Volatile
+        private var pinnedAssets: AdRemoteConfig? = null
+
+        @Volatile
+        private var pinnedFile: String? = null
+
+        @Volatile
+        private var pinReported = false
+
         @Volatile
         private var allowRemoteOverrideInDebug = false
+
+        @Volatile
+        private var remoteDocument = false
+
+        @Volatile
+        private var remoteKeys: Set<String> = emptySet()
+
+        /** True when the active document came from the backend rather than the app's own assets. */
+        @JvmStatic
+        fun isFromRemote(): Boolean = remoteDocument
+
+        /**
+         * True when the backend's document, not the app's assets, declares [baseKey] or one of its
+         * floors. Only then does ad_config outrank a value the app set in code.
+         */
+        @JvmStatic
+        fun remoteDeclares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { (baseKey + it) in remoteKeys }
 
         /**
          * The active configuration, or an empty one if nothing has loaded yet.
@@ -87,11 +113,11 @@ data class AdRemoteConfig @JvmOverloads constructor(
         fun initializeFromAssets(context: Context) {
             com.ads.module.config.settings.AdBehavior.initialize(context)
             val debug = isDebuggable(context)
-            val fileName = if (debug) DEBUG_FILE_NAME else RELEASE_FILE_NAME
-            val loaded = fromAssets(context, fileName)
-                // A debug build with no debug config falls back rather than starting up empty.
-                ?: if (debug) fromAssets(context, RELEASE_FILE_NAME) else null
-            if (loaded == null) {
+            // A debug build with no debug config falls back rather than starting up empty.
+            val candidates = if (debug) listOf(DEBUG_FILE_NAME, RELEASE_FILE_NAME) else listOf(RELEASE_FILE_NAME)
+            val (fileName, loaded) = candidates.firstNotNullOfOrNull { name ->
+                fromAssets(context, name)?.let { name to it }
+            } ?: run {
                 Log.e(
                     TAG,
                     "No ad config found. Ship assets/$RELEASE_FILE_NAME in your app, " +
@@ -100,26 +126,65 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 return
             }
             Log.i(TAG, "Loaded $fileName with ${loaded.ads.size} placements (debug=$debug)")
-            debugAssetsPinned = debug
-            update(loaded)
+            pinAssets(loaded.takeIf { debug }, fileName)
+            // The shipped file never replaces a document the backend already delivered; that
+            // document is re-applied so a debuggable build pins its ids from here on.
+            if (isFromRemote()) applyRemote(getInstance()) else update(loaded, fromRemote = false)
         }
 
         /**
-         * True when a remote document must not replace what the assets loaded.
+         * True when a remote document must keep the ad unit ids the assets loaded.
          *
-         * Read by [com.ads.module.config.AdConfig.refresh]; a host that deliberately injects a
-         * document through [initializeFromJson] is not gated by it.
+         * Read by [com.ads.module.config.AdConfig]; a host that deliberately injects a document
+         * through [initializeFromJson] is not gated by it.
          */
         @JvmStatic
         fun isRemoteOverrideBlocked(): Boolean = debugAssetsPinned && !allowRemoteOverrideInDebug
 
         /**
-         * Lets a debuggable build take remote ad units after all, for testing a live
+         * Lets a debuggable build take remote ad unit ids after all, for testing a live
          * configuration. Off by default, so a debug run keeps spending test ids.
          */
         @JvmStatic
         fun setAllowRemoteOverrideInDebug(allow: Boolean) {
             allowRemoteOverrideInDebug = allow
+        }
+
+        /**
+         * [remote] as it may apply while [isRemoteOverrideBlocked]: a key the pinned assets also
+         * declare keeps their `id`/`ids` and takes every other field from remote, a key only
+         * remote declares is dropped unless it switches the placement off (there is no test unit
+         * to request for it), and a key only the assets declare stays as shipped. Unpinned,
+         * [remote] as is.
+         */
+        internal fun withPinnedIds(remote: AdRemoteConfig): AdRemoteConfig {
+            val assets = pinnedAssets
+            if (!isRemoteOverrideBlocked() || assets == null) return remote
+            if (!pinReported) {
+                pinReported = true
+                Log.w(
+                    TAG,
+                    "Debuggable build: ad unit ids stay on assets/$pinnedFile, remote sets every other " +
+                        "field. setAllowRemoteOverrideInDebug(true) takes the remote ids too.",
+                )
+            }
+            val merged = assets.ads.mapValues { (key, unit) ->
+                remote.ads[key]?.copy(id = unit.id, ids = unit.ids) ?: unit
+            }
+            return AdRemoteConfig(merged + remote.ads.filter { (key, unit) -> key !in assets.ads && !unit.isEnable })
+        }
+
+        /** [assets] is what a debuggable build loaded, whose ids every remote document keeps; null unpins. */
+        internal fun pinAssets(assets: AdRemoteConfig?, fileName: String) {
+            debugAssetsPinned = assets != null
+            pinnedAssets = assets
+            pinnedFile = fileName.takeIf { assets != null }
+        }
+
+        /** Applies a document the backend delivered, pinning a debuggable build's ids. Main thread. */
+        internal fun applyRemote(remote: AdRemoteConfig) {
+            val applied = withPinnedIds(remote)
+            publish(applied, fromRemote = true, keys = applied.ads.keys.filterTo(mutableSetOf()) { it in remote.ads })
         }
 
         /** Replaces the active configuration, e.g. after remote config delivers a new document. */
@@ -130,12 +195,24 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 Log.w(TAG, "Ignoring unparsable ad config; keeping the previous one")
                 return
             }
-            update(parsed)
+            update(parsed, fromRemote = true)
         }
 
+        /**
+         * @param fromRemote the document came from the backend, so it outranks the app's own
+         *   settings. Omitted, an edit of the active document keeps its origin.
+         */
         @JvmStatic
-        fun update(newConfig: AdRemoteConfig) {
-            synchronized(this) { instance = newConfig }
+        @JvmOverloads
+        fun update(newConfig: AdRemoteConfig, fromRemote: Boolean = remoteDocument) =
+            publish(newConfig, fromRemote, if (fromRemote) newConfig.ads.keys else emptySet())
+
+        private fun publish(newConfig: AdRemoteConfig, fromRemote: Boolean, keys: Set<String>) {
+            synchronized(this) {
+                instance = newConfig
+                remoteDocument = fromRemote
+                remoteKeys = keys
+            }
             // Bind every id to its placement before anything can load: the paid-event bridge reads
             // the placement back by ad unit id, and an unregistered unit reports as "unknown".
             AdPlacements.registerAll(newConfig)
@@ -145,8 +222,15 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         @JvmStatic
         fun reset() {
-            synchronized(this) { instance = null }
+            synchronized(this) {
+                instance = null
+                remoteDocument = false
+                remoteKeys = emptySet()
+            }
             debugAssetsPinned = false
+            pinnedAssets = null
+            pinnedFile = null
+            pinReported = false
         }
 
         @JvmStatic

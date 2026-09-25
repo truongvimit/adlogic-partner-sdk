@@ -515,6 +515,11 @@ object InterstitialAdManager {
     @JvmStatic
     fun isLoading(placement: String): Boolean = placement in inFlight
 
+    /** The ad unit id of [placement]'s showable fill, or null when it has none. */
+    @JvmStatic
+    fun readyAdUnitId(placement: String): String? =
+        cache[placement]?.takeIf { it.isFresh && it.ad.isReady }?.ad?.interstitialAd?.adUnitId
+
     /**
      * Why [show] would decline right now, or null when it would go ahead.
      *

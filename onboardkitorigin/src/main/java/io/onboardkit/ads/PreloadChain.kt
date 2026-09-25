@@ -104,11 +104,7 @@ class PreloadChain internal constructor(
 
     /** The LFO is on screen; slot 2 is buffered before the user's first tap swaps it into view. */
     fun onLanguageShown(activity: Activity) {
-        val cfg = config() ?: return
-        if (OnboardingSettings.text("lfo.native2.preload_trigger") == "LFO_SHOWN" && cfg.language.secondNativeOnSelectEnabled && flags().enableLanguageNative2) {
-            preloadNative(activity, AdPlacement.Language2)
-        }
-        if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "LFO_SHOWN") preloadNative(activity, AdPlacement.LanguageConfirm)
+        preloadLanguageSlots(activity, "LFO_SHOWN")
     }
 
     /**
@@ -116,9 +112,19 @@ class PreloadChain internal constructor(
      * The confirm dialog retains its own trigger.
      */
     fun onLanguageSelected(activity: Activity) {
-        if (OnboardingSettings.text("lfo.native2.preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.Language2)
-        if (OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == "FIRST_SELECTION") preloadNative(activity, AdPlacement.LanguageConfirm)
+        preloadLanguageSlots(activity, "FIRST_SELECTION")
         stepDefinitions().forEach { preloadForStep(activity, it) }
+    }
+
+    /** Gated on the same resolved switches the screen shows by, so a slot that cannot open is never requested. */
+    private fun preloadLanguageSlots(activity: Activity, trigger: String) {
+        val language = config()?.language ?: return
+        if (language.secondNativeOnSelectEnabled && OnboardingSettings.text("lfo.native2.preload_trigger") == trigger) {
+            preloadNative(activity, AdPlacement.Language2)
+        }
+        if (language.confirmDialogOnReselectEnabled && OnboardingSettings.text("lfo.confirm_dialog.native_preload_trigger") == trigger) {
+            preloadNative(activity, AdPlacement.LanguageConfirm)
+        }
     }
 
     /** Pager entry, including resumed flows. Empty flows never call this. */

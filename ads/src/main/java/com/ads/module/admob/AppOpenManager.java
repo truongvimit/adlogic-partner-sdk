@@ -185,6 +185,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public void init(Application application, String appOpenAdId) {
         setAppResumeAdId(appOpenAdId);
+        // The seed is only a fallback: a backend document that already names the unit keeps it.
+        if (AdRemoteConfig.remoteDeclares(RESUME_PLACEMENT)) applyRemoteConfig();
         // Register unconditionally, even with a blank id: the id usually only arrives later, from
         // remote config via setAppResumeAdId. Gating registration on it left the hooks unattached
         // for the whole process, so app-resume never fired. Requests stay gated in fetchAd.
@@ -459,13 +461,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Re-points the app-resume unit at what {@code open_resume} currently declares, including an
      * empty id when that placement is switched off.
      *
-     * Two no-ops keep this from taking over a decision it was not given: until a resume unit
-     * exists, because opting into app-resume stays the partner's own explicit call; and unless
+     * Two no-ops keep this from taking over a decision it was not given: unless
      * {@code open_resume} actually carries an ad unit id, because an entry that only tunes
-     * {@code app_resume_load_delay_ms} is not a statement about which unit to request.
+     * {@code app_resume_load_delay_ms} is not a statement about which unit to request; and, while
+     * the document is the app's own asset, until a resume unit exists, because opting into
+     * app-resume from shipped config stays the partner's own explicit call. A document from the
+     * backend needs no such unit: it outranks whatever the partner seeded. Switching app-resume
+     * off stays {@link #disableAppResume()}, which no document overrides.
      *
      * Once it has set the unit it keeps setting it, empty id included. Without that, switching
-     * {@code isEnable} off would empty the id and then re-tripping the first no-op forever, so
+     * {@code isEnable} off would empty the id and then re-tripping the second no-op forever, so
      * switching it back on could never take effect in that process.
      */
     public void applyRemoteConfig() {
@@ -474,9 +479,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             resumeFetchHandler.post(this::applyRemoteConfig);
             return;
         }
-        if (!resumeUnitFromConfig && (appResumeAdId == null || appResumeAdId.isEmpty())) return;
         AdUnitConfig unit = AdRemoteConfig.getInstance().getAds().get(RESUME_PLACEMENT);
         if (unit == null || unit.getWaterfallIds().isEmpty()) return;
+        if (!resumeUnitFromConfig && !AdRemoteConfig.remoteDeclares(RESUME_PLACEMENT)
+                && (appResumeAdId == null || appResumeAdId.isEmpty())) return;
         List<String> ids = AdGate.adUnitIds(RESUME_PLACEMENT);
         resumeUnitFromConfig = true;
         setAppResumeAdId(ids.isEmpty() ? "" : ids.get(0));
@@ -1252,8 +1258,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         if (!isAppOpenShowed) {
@@ -1366,7 +1370,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
                     }
 
@@ -1464,7 +1467,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
                     }
 
@@ -1532,7 +1534,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         splashAdOpen = appOpenAd;
@@ -1668,7 +1669,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     interstitialAd.getAdUnitId(),
                                     interstitialAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId());
                         });
 
                         splashAdInter = interstitialAd;
@@ -1835,7 +1835,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                             appOpenAd.getAdUnitId(),
                             appOpenAd.getResponseInfo()
                                     .getMediationAdapterClassName(), AdType.APP_OPEN);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                 });
 
                 splashAdHigh = appOpenAd;
@@ -1924,7 +1923,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                     appOpenAd.getAdUnitId(),
                                     appOpenAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.APP_OPEN);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                         });
 
                         splashAdAll = appOpenAd;
@@ -2249,7 +2247,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                 appOpenAd.getAdUnitId(),
                                 appOpenAd.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.APP_OPEN);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                     });
                     if (isShowAdIfReady) {
                         long elapsedTime = System.currentTimeMillis() - currentTimeMillis;
@@ -2328,7 +2325,6 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
                                 appOpenAd.getAdUnitId(),
                                 appOpenAd.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.APP_OPEN);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, appOpenAd.getAdUnitId());
                     });
                     if (isShowAdIfReady) {
                         AppOpenManager.this.showAppOpenSplash(context, adCallback);

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import io.onboardkit.core.ObLog
 import com.ads.module.admob.AppOpenManager
+import com.ads.module.config.settings.AdBehavior
 import io.onboardkit.ui.base.BaseOnboardActivity
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -35,9 +36,11 @@ class ObAppResume internal constructor(
 
     /**
      * The user tapped an ad and is about to leave. The next return to the foreground is the ad
-     * network handing them back, not a fresh session.
+     * network handing them back, not a fresh session — unless remote sets
+     * `app_open.presentation.skip_after_ad_click` to false.
      */
     fun onAdClicked() {
+        if (AdBehavior.document.snapshot.remoteValue(SKIP_AFTER_AD_CLICK) == false) return
         ObLog.d(ObLog.Section.RESUME, "ad_clicked — next foreground is not a new session")
         AppOpenManager.getInstance().disableAdResumeByClickAction()
     }
@@ -71,5 +74,9 @@ class ObAppResume internal constructor(
      */
     fun excludeScreen(activityClass: Class<out Activity>) {
         provider?.suppressAppResume(activityClass)
+    }
+
+    private companion object {
+        const val SKIP_AFTER_AD_CLICK = "app_open.presentation.skip_after_ad_click"
     }
 }

@@ -7,8 +7,10 @@ Default order: **OB1 → Full1 → OB2 → Full2 → OB3 → OB4**. Step IDs are
 `OB1..OB4` use `native_ob1..4`; `FULL1/FULL2` use `native_full1/2`.
 The first language selection preloads every eligible native in the configured list. Pager entry
 preloads the exit interstitial. Step ads never reload on return or refill after showing.
-App definitions may set `enabled = false`; `onboarding.order` in remote settings can select and
-reorder the remaining catalog. Remove IDs from `order` to omit pages; no `steps.*.enabled` map is needed or read.
+App definitions may set `enabled = false`. A remote `onboarding.order` selects and orders pages
+from the whole catalog, disabled ones included; an `order` in your app asset selects among enabled
+pages only. Without a remote order, a delivered `ob_enable_step_obN` adds or removes its page.
+Remove IDs from `order` to omit pages; no `steps.*.enabled` map is needed or read.
 Per-placement ads are controlled by `ad_config` (`isEnable`). See the [configuration and migration guide](../partner-integration/onboarding-flow.vi.md).
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
@@ -133,11 +135,11 @@ Do not call `OnboardingSdk.start()` or finish splash yourself; `ObSplashActivity
 - Set `lfo.native2.behavior.click.action = "auto_next"` to confirm the selected language on return. LFO1 `auto_next` selects the current/default language and advances to the second language slot. The action is fixed for each click trip and overrides legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches. See the [remote settings guide](../partner-integration/remote-settings.md).
 
 
-- `notificationPermissionEnabled = true`: Android 13+ / target 33+ requests notifications after consent. A grant or a recorded automatic request result skips later prompts; denial still continues. Set it to `false` if your app owns this prompt.
+- `notificationPermissionEnabled = true`: Android 13+ / target 33+ requests notifications after consent and the remote fetch step, so a remote value fetched in that step applies to the same launch. A grant or a recorded automatic request result skips later prompts; denial still continues. Set it to `false` if your app owns this prompt.
 - `noInternetPromptEnabled = true`: splash asks the user to connect before continuing. Set it to `false` if your app should allow an offline start.
 - `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Keep the splash `configChanges` above so the lock, dark mode or font scale does not recreate it. Landscape apps must set it to `false` and review merged manifest orientation rules too.
 - `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
-- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI. By default the first-open flow (language/onboarding) uses `AFTER_AD`, and a launcher start past completed onboarding (your app or the returning-user question) uses `UNDER_AD`; notification, widget and uninstall entries always use `AFTER_AD`; override `nextScreenTiming()` in your splash and call `super` for the cases that keep the default. Both timings wait out the remaining minimum before showing the interstitial: `UNDER_AD` opens the destination and shows the ad together, while `AFTER_AD` opens the destination as soon as the ad is dismissed.
+- Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI. By default the first-open flow (language/onboarding) uses `AFTER_AD`, and a launcher start past completed onboarding (your app or the returning-user question) uses `UNDER_AD`; notification, widget and uninstall entries always use `AFTER_AD`; override `nextScreenTiming()` in your splash and call `super` for the cases that keep the default. On a launcher start, a remote `splash.navigation.next_screen_timing` other than `AUTO` outranks your override. Both timings wait out the remaining minimum before showing the interstitial: `UNDER_AD` opens the destination and shows the ad together, while `AFTER_AD` opens the destination as soon as the ad is dismissed.
 
 ### Splash and language options
 
@@ -146,13 +148,14 @@ this flow. Configure only the defaults you need to change:
 
 | Option | Default / use |
 |---|---|
-| `SplashConfig.minDisplayTimeMs` | 3000 ms before the splash interstitial shows, or before navigation when there is no ad. Remote `ob_splash_min_display_ms` (default 3000) overrides this field when greater than 0, so this field applies only after that Firebase value is set to `0`; without Firebase the minimum stays 3000 ms. |
+| `SplashConfig.minDisplayTimeMs` | 3000 ms before the splash interstitial shows, or before navigation when there is no ad. A remote `splash.timing.min_display_ms`, a delivered `ob_splash_min_display_ms` above 0, or `splash.timing.min_display_ms` in your app asset overrides it; otherwise your value applies. |
 | `ob_splash_ad_budget_ms` | 60000 ms of ad waiting, starting after notification completes and splash has focus. |
 | `ob_splash_lfo_parallel_preload_enabled` | `false`: preload the first language native after the splash waterfall settles or its wait expires. `true`: preload alongside splash ads. |
-| `LanguageConfig.tapHintEnabled` + `ob_show_language_tap_hint` | Both must be enabled to show the language selection hand. |
+| `LanguageConfig.tapHintEnabled` | Shows the language selection hand. A remote `lfo.tap_hint.enabled` or a delivered `ob_show_language_tap_hint` decides instead, on or off. |
 | `ob_language_tap_hint_delay_sec` | 3 seconds; `0` shows immediately. Selecting a language cancels the hint; SETTINGS/preselected language hides it. |
 
-`ob_*` values are optional Firebase Remote Config parameters. See
+`ob_*` values are optional Firebase Remote Config parameters. A key the backend delivered outranks
+the matching Kotlin option; one it never sent leaves your value in charge. See
 [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) for other supported options.
 Native slots outside onboarding follow the [Ads guide](../ads/README.md#native-preload-repeated-show-and-refresh).
 
@@ -172,9 +175,9 @@ Leave optional slots unset unless you need them; some slots inherit fallback uni
 `defaultSteps()` creates OB1, Full1, OB2, Full2, OB3, OB4. For your copy and images, replace it with `steps(ContentStepDefinition(...), ...)`; see [step definitions](src/main/java/io/onboardkit/config/StepDefinition.kt).
 Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in request order; banners take one ID.
 
-JSON names such as `inter_splash` or `native_lang` must be mapped into `AdsConfig`; the SDK does not infer every mapping from the field name.
-Use `AdRemoteConfig.getInstance().tiersFor(key)` and rebuild the config after refreshed IDs arrive in `onRemoteFetched()`.
-`tiersFor` returns an empty list when the base key is declared `isEnable: false` — the base key is the placement's master switch and turns off every `_high*` floor with it — so a disabled slot maps to a null ad unit and the flow skips it.
+`AdsConfig.fromAdConfig()`, the `onboardKitConfig` default, binds the standard JSON names such as `inter_splash` or `native_lang` and keeps them live after each fetch; pass it a map for names that differ in your app.
+Your own `ad_config.json` replaces a unit written in code only for keys bound this way. A standard key the backend's `ad_remote_config` declares applies without a binding and outranks any unit written in code, including `stepNatives` and `splashInterstitialOldUser`, so there is no need to rebuild the config in `onRemoteFetched()`.
+A base key declared `isEnable: false` is the placement's master switch and turns off every `_high*` floor with it, so the slot gets no ad unit and the flow skips it.
 The sample's [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
 
 ## Fullscreen page and onboarding exit ad
@@ -215,25 +218,31 @@ content page uses the same exit interstitial as its CTA when `swipeCompletesLast
 pager entry and waits up to 8 seconds for a fill on completion. By default
 (`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) the next screen starts
 underneath the ad; notification, widget and uninstall entries wait for dismissal. Set
-`NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) to always wait. Both
-`afterOnboardingInterstitialEnabled` and remote `ob_ads_inter_after_ob3_enabled`
-must be true. Set the local switch to `false` if your app owns this ad trigger; this disables
-both automatic preload and show. Keep this placement out of your content AutoBuffer group.
+`NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) to always wait.
+`afterOnboardingInterstitialEnabled` switches this placement; a remote
+`onboarding.exit_interstitial.enabled` or a delivered `ob_ads_inter_after_ob3_enabled` decides
+instead, on or off. Set the local switch to `false` if your app owns this ad trigger; while remote
+is silent this disables both automatic preload and show. Keep this placement out of your content
+AutoBuffer group.
 
 ## App-open on return
 
-Complete the [Ads app-open setup](../ads/README.md#app-open-on-return), then add
+Complete the [Ads app-open setup](../ads/README.md#app-open-on-return). `AdsConfig.fromAdConfig()`
+already binds `appResume` to `open_resume`, and an `open_resume` in the backend's `ad_remote_config`
+fills it without a binding. With a hand-built `AdsConfig` and no remote entry, add
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
-to `AdsConfig`, so both read the same `open_resume` placement.
+so both read the same `open_resume` placement.
 Language and onboarding content pages allow a ready resume ad on a genuine background/return.
 Splash, standalone fullscreen and survey screens are excluded; fullscreen pager pages,
-page transitions and the language confirmation dialog temporarily block it.
+page transitions and the language confirmation dialog temporarily block it. The return from a
+click on an onboarding ad skips it too, unless remote sets `app_open.presentation.skip_after_ad_click`
+to `false`.
 Remove any app-owned exclusion of language/content Activities only if you want resume ads there.
 The SDK manages loading and screen eligibility; no Activity lifecycle callback is needed.
 
 ## Optional integrations
 
-- **Firebase:** `ob_*` flags are fetched by splash when Firebase is configured; otherwise cached/default flags apply. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) lists the supported keys. For remote ad JSON or a GA4 sink, add [suite-firebase](../suite-firebase/README.md); installing an ad config source alone does not fetch it.
+- **Firebase:** `ob_*` flags are fetched by splash when Firebase is configured; a host without `ObSplashActivity` picks them up after `AdConfig.refresh()`. Until a fetch lands, the values Firebase last delivered apply, and keys it never sent leave your configuration in charge. A fetch that lands after the splash deadline still applies for the rest of the session. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) lists the supported keys. For remote ad JSON or a GA4 sink, add [suite-firebase](../suite-firebase/README.md); installing an ad config source alone does not fetch it.
 - **Paywall:** install [PayKit](../paykit/README.md) first, then set `paywallGate = OnboardKitPaywallGate()` in `OnboardingSdk.install` (`io.paykit.integration`). Leaving the gate unset skips paywalls. Follow the billing readiness step below when purchases and ads are both used.
 - **Custom consent:** keep the default `onConsentRequired()` for UMP. A custom override must publish its CMP result with `ConsentCenter.setHostConsent(canRequestAds, personalized)` before returning. Returning `true` alone is not permission to request ads; `setCanRequestAds(false)` is a separate host restriction, and `true` only removes that restriction. Always call `super.onDestroy()` if you override it.
 - **Custom UI / survey:** see [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) and [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Only splash and content-step `layoutRes` overrides are supported; unsupported layout fields fail validation. Preserve IDs when overriding SDK resources.
@@ -267,7 +276,7 @@ val intent = SplashEntry.WIDGET.intent(context, SplashActivity::class.java)
 ```
 
 The listener above forwards extras for `Completed`/`Skipped`. Read them in your destination's `onCreate` and `onNewIntent`.
-Entries use `inter_noti`, `inter_widget` or `inter_uninstall`, falling back to the normal splash unit; these entries always navigate after the ad is dismissed, because their destination opens a screen of its own, which would cover an ad still on screen. A launcher start opens LFO after the ad on first open, and your app underneath it once onboarding is done.
+Entries use `inter_noti`, `inter_widget` or `inter_uninstall`; a key that is missing or switched off falls back to the user's segment (`inter_splash_o` for returning users, `inter_splash` for new ones), and switching a segment off silences its entries too; these entries always navigate after the ad is dismissed, because their destination opens a screen of its own, which would cover an ad still on screen. A launcher start opens LFO after the ad on first open, and your app underneath it once onboarding is done.
 
 ## Troubleshooting
 
@@ -286,4 +295,4 @@ For a later language change, call `OnboardingSdk.openLanguagePicker(activity, La
 
 ## Grouped remote settings
 
-`ad_behavior_config` and `onboarding_config` control behavior and SDK ad presentation experiments: native templates, Skip/X style, CTA corner radius and LFO confirm appearance. Ad IDs, unit switches, CTA color/height/position/components, banner reload cadence and resume load delay remain in `ad_remote_config` / `ad_config.json` / `ad_config_debug.json`. App layout/resource references, system bars, orientation and progress indicators remain in host code. Explicit onboarding templates select the frame before ad_config positionCTA; absent overrides preserve the existing fallback. Preloaded ads use the current template when bound without another network load. `onboardKitConfig` defaults to `AdsConfig.fromAdConfig()`, which keeps standard placement bindings live after fetch without configuring the SDK again. See the [complete field/default reference](../partner-integration/remote-settings.vi.md). Missing or invalid fields preserve local options; failed fetches preserve the last valid snapshot.
+`ad_behavior_config` and `onboarding_config` control behavior and SDK ad presentation experiments: native templates, Skip/X style, CTA corner radius and LFO confirm appearance. Ad IDs, unit switches, CTA color/height/position/components, banner reload cadence and resume load delay remain in `ad_remote_config` / `ad_config.json` / `ad_config_debug.json`. App layout/resource references, system bars, orientation and progress indicators remain in host code. For every field, remote wins — the document's own field, then a legacy `ob_*` key the backend delivered — over your app-asset JSON at any scope, then options set in code, then bundled defaults; keys the backend never sent do not count. `AdsConfig.enabled = false` therefore yields to a remote `flow.ads_enabled = true`. Native frames follow the same order: a remote onboarding template, then `positionCTA` from the backend's `ad_remote_config`, then a template in your app asset, then `positionCTA` from your `ad_config.json`, then the host template. Preloaded ads use the current template when bound without another network load. `onboardKitConfig` defaults to `AdsConfig.fromAdConfig()`, which keeps standard placement bindings live after fetch without configuring the SDK again. See the [complete field/default reference](../partner-integration/remote-settings.vi.md). Missing or invalid fields preserve local options, and a fetched document logs the fields it dropped under the `AdLogicSettings` tag; failed fetches preserve the last valid snapshot.

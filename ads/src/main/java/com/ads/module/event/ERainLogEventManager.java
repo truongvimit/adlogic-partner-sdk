@@ -40,7 +40,8 @@ public class ERainLogEventManager {
 
     /**
      * AdMob paid impression. Currency and precision come from the SDK — never hardcoded — and the
-     * placement is resolved from the ad unit id registered by {@code TrackingAdCallback}.
+     * placement is resolved from the ad unit id registered by {@code TrackingAdCallback}. Sends both
+     * Adjust signals, so no format can report ad revenue without the impression token event.
      */
     public static void logPaidAdImpression(Context context, AdValue adValue, String adUnitId,
                                            String mediationAdapterClassName, AdType adType) {
@@ -61,6 +62,7 @@ public class ERainLogEventManager {
         // Trackkit fans out to Firebase / Meta; the MMP is Adjust's own trackAdRevenue API,
         // keyed by a source string rather than an event token, so it needs no configuration.
         ERainAdjust.pushTrackEventAdmob(adValue, unitId, mediationAdapterClassName, placement);
+        logPaidAdjustWithToken(adValue, unitId);
     }
 
     /**
@@ -123,6 +125,8 @@ public class ERainLogEventManager {
     /**
      * Optional token-keyed impression event, on top of {@code Adjust.trackAdRevenue}. Networks that
      * cannot consume Adjust's ad-revenue API (TikTok, Meta) read this token instead.
+     * {@link #logPaidAdImpression} already sends it; call this only for an impression reported
+     * some other way.
      *
      * <p>Set the token on {@code ERainAdConfig.adjustConfig.eventAdImpression} — the single door.
      * Leaving it blank is the normal case and skips the event silently: this fires on every

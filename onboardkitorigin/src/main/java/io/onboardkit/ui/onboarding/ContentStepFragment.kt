@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.LayoutRes
 import androidx.core.os.bundleOf
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.bumptech.glide.Glide
@@ -22,11 +23,14 @@ import io.onboardkit.databinding.ObFragmentContentStepBinding
 import io.onboardkit.remote.uiconfig.UiStepStyle
 import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Content step (OB1 through OB4). Layout resolves in three tiers: app-injected layout →
- * remote UI (only when this step's asset is cached) → SDK default. The ExoPlayer used for
- * remote video is released on unselect and on view destroy.
+ * remote UI → SDK default. Remote text, colors and labels apply at bind; the remote image or
+ * video replaces the host art only once its asset is cached. The ExoPlayer used for remote
+ * video is released on unselect and on view destroy.
  */
 class ContentStepFragment : LazyStepFragment() {
 
@@ -34,6 +38,8 @@ class ContentStepFragment : LazyStepFragment() {
     private var player: ExoPlayer? = null
     private var adBound = false
     private var adRequested = false
+    private var remoteStyle: UiStepStyle? = null
+    private var remoteMediaShown = false
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
@@ -95,7 +101,8 @@ class ContentStepFragment : LazyStepFragment() {
 
         bindStaticContent(b, definition)
 
-        val style = remoteStyleIfReady()
+        val style = OnboardingSdk.remoteOrNull()?.uiConfig?.value?.styleFor(stepId.value)
+        remoteStyle = style
         if (style != null) applyRemoteStyle(b, style)
 
         b.obStepIndicator.count = totalSteps()
@@ -110,6 +117,7 @@ class ContentStepFragment : LazyStepFragment() {
         }
         // Completion is reported by the host, which sees every page type and both exit paths
         b.obPrimaryCta.setOnClickListener { requireStepHost().next(StepExit.CTA) }
+        showRemoteMediaWhenReady()
     }
 
     private fun bindStaticContent(
@@ -133,12 +141,6 @@ class ContentStepFragment : LazyStepFragment() {
     // step that declared none.
     private fun defaultSampleImage(): Int = R.drawable.ob_img_onboard_placeholder
 
-    private fun remoteStyleIfReady(): UiStepStyle? {
-        val remote = OnboardingSdk.remoteOrNull() ?: return null
-        if (!remote.isUiStyleReady(stepId.value)) return null
-        return remote.uiConfig.value.styleFor(stepId.value)
-    }
-
     private fun applyRemoteStyle(b: ObFragmentContentStepBinding, style: UiStepStyle) {
         style.title?.let { b.obStepTitle.text = it }
         style.subtitle?.let { b.obStepSubtitle.text = it }
@@ -151,13 +153,36 @@ class ContentStepFragment : LazyStepFragment() {
                 b.obStepCard.background?.mutate()?.setTint(color)
             }
         }
-        val url = style.contentUrl ?: return
-        if (style.isImage) {
-            Glide.with(this).load(url).centerCrop().into(b.obStepImage)
-        } else {
-            b.obStepImage.visibility = View.GONE
-            b.obStepPlayer.visibility = View.VISIBLE
+    }
+
+    /** The host art stays until the remote asset is cached; a prefetch that never lands keeps it. */
+    private fun showRemoteMediaWhenReady() {
+        val url = remoteStyle?.contentUrl ?: return
+        val cache = OnboardingSdk.remoteOrNull()?.assetCache ?: return
+        if (cache.isReady(url)) {
+            showRemoteMedia()
+            return
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            cache.readyUrls.first { url in it }
+            showRemoteMedia()
+        }
+    }
+
+    private fun showRemoteMedia() {
+        val b = binding ?: return
+        val style = remoteStyle ?: return
+        val url = style.contentUrl ?: return
+        if (!remoteMediaShown) {
+            remoteMediaShown = true
+            if (style.isImage) {
+                Glide.with(this).load(url).centerCrop().into(b.obStepImage)
+            } else {
+                b.obStepImage.visibility = View.GONE
+                b.obStepPlayer.visibility = View.VISIBLE
+            }
+        }
+        if (isCurrentStepVisit(stepVisitVersion)) startVideoIfAny()
     }
 
     override fun onStepSelected() {
@@ -198,9 +223,9 @@ class ContentStepFragment : LazyStepFragment() {
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun startVideoIfAny() {
         val b = binding ?: return
-        val style = remoteStyleIfReady() ?: return
+        val style = remoteStyle ?: return
         val url = style.contentUrl ?: return
-        if (style.isImage || player != null) return
+        if (style.isImage || player != null || !remoteMediaShown) return
         val remote = OnboardingSdk.remoteOrNull() ?: return
         val exo = ExoPlayer.Builder(requireContext()).build()
         player = exo
@@ -232,6 +257,8 @@ class ContentStepFragment : LazyStepFragment() {
         binding = null
         adBound = false
         adRequested = false
+        remoteStyle = null
+        remoteMediaShown = false
         super.onDestroyView()
     }
 

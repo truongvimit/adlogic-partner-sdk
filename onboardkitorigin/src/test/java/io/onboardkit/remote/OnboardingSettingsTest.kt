@@ -33,7 +33,7 @@ class OnboardingSettingsTest {
         assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
     }
 
-    @Test fun `remote order is a subset of the app catalog and absent order preserves app order`() {
+    @Test fun `remote order selects from the app catalog, including pages the app disabled`() {
         val cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB4), AdFullScreenStepDefinition(StepId.FULL2),
                 ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false))
@@ -41,7 +41,7 @@ class OnboardingSettingsTest {
         assertEquals(listOf(StepId.OB4, StepId.FULL2, StepId.OB1),
             io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(cfg), RemoteFlags()))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob4"]}}""")
-        assertEquals(listOf(StepId.FULL2, StepId.OB4), OnboardingSettings.resolve(cfg).steps.map { it.id })
+        assertEquals(listOf(StepId.FULL2, StepId.OB2, StepId.OB4), OnboardingSettings.resolve(cfg).steps.map { it.id })
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
         assertTrue(OnboardingSettings.resolve(cfg).steps.isEmpty())
     }
@@ -63,6 +63,7 @@ class OnboardingSettingsTest {
 
     @After fun clearRemote() {
         OnboardingSettings.document.acceptSuccessfulFetch(null)
+        OnboardingSettings.acceptLegacy(RemoteFlags(supplied = emptySet()))
         AdBehavior.document.acceptSuccessfulFetch(null)
         AdRemoteConfig.reset()
     }
@@ -75,12 +76,12 @@ class OnboardingSettingsTest {
         assertEquals(3000L, OnboardingSettings.number("ob5.skip.delay_ms"))
     }
 
-    @Test fun `sparse remote resolves screens and preserves host values and hard ads gate`() {
+    @Test fun `sparse remote resolves screens, preserves host values it omits and reopens a host ads gate`() {
         val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(enabled = false), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
             steps = listOf(AdFullScreenStepDefinition(StepId.OB3, autoNextDelayMs = 9000)))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":true},"onboarding":{"navigation":{"lock_pager_swipe":false},"fullscreen":{"auto_next":{"enabled":false}},"steps":{"ob3":{"fullscreen":{"skip":{"delay_ms":0}}}}}}""")
         val effective = OnboardingSettings.resolve(c)
-        assertFalse(effective.ads.enabled)
+        assertTrue(effective.ads.enabled)
         assertFalse(effective.behavior.lockPagerSwipe)
         assertEquals(4500L, effective.splash.minDisplayTimeMs)
         val step = effective.steps.single() as AdFullScreenStepDefinition

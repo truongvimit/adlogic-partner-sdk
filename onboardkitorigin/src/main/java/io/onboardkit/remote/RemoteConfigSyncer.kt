@@ -7,6 +7,7 @@ import com.google.android.gms.tasks.Task
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +32,7 @@ class RemoteConfigSyncer internal constructor(
     private val prefs =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val _flags = MutableStateFlow(loadCached())
+    private val _flags = MutableStateFlow(loadCached().also(OnboardingSettings::acceptLegacy))
     val flags: StateFlow<RemoteFlags> = _flags.asStateFlow()
 
     private val fetchLock = Any()
@@ -53,8 +54,14 @@ class RemoteConfigSyncer internal constructor(
 
         // A failed/timed-out fetch must not replace a valid disk assignment with SDK defaults.
         if (!fetched) return false
+        // Activated values are applied whole: a caller whose deadline lands mid-apply must not
+        // leave one document updated and the rest on the app's own values for the session.
+        withContext(NonCancellable) { apply(FirebaseReader(remote)) }
+        return true
+    }
+
+    private suspend fun apply(reader: RemoteValueReader) {
         val revision = synchronized(snapshotLock) { ++snapshotRevision }
-        val reader = FirebaseReader(remote)
         com.ads.module.config.settings.SettingsRegistry.acceptSuccessfulFetch(
             listOf("ad_behavior_config", "onboarding_config").associateWith(reader::string),
         )
@@ -66,11 +73,36 @@ class RemoteConfigSyncer internal constructor(
                 // Parsing/persistence can suspend; a newer manual assignment must not be lost.
                 if (revision == snapshotRevision) {
                     persist(snapshot)
-                    _flags.value = snapshot
+                    publish(snapshot)
                 }
             }
         }
-        return fetched
+    }
+
+    /**
+     * Publishes the values Firebase already activated, without fetching. False when Firebase has
+     * not completed a fetch of its own, or a newer assignment landed while they were read.
+     */
+    internal suspend fun rereadActivated(): Boolean {
+        val remote = remoteConfigProvider() ?: return false
+        // Another backend's fetch says nothing about these keys; Firebase's defaults would then
+        // replace the cached delivery.
+        val fetched = withContext(Dispatchers.Default) {
+            remote.info.lastFetchStatus == FirebaseRemoteConfig.LAST_FETCH_STATUS_SUCCESS
+        }
+        if (!fetched) return false
+        val revision = synchronized(snapshotLock) { ++snapshotRevision }
+        val snapshot = withContext(Dispatchers.Default) { RemoteFlags.from(FirebaseReader(remote)) }
+        return withContext(Dispatchers.IO) {
+            synchronized(snapshotLock) {
+                (revision == snapshotRevision).also { current ->
+                    if (current) {
+                        persist(snapshot)
+                        publish(snapshot)
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun fetchLocally(remote: FirebaseRemoteConfig, timeoutMs: Long): Boolean =
@@ -88,6 +120,11 @@ class RemoteConfigSyncer internal constructor(
     fun applySnapshot(snapshot: RemoteFlags) = synchronized(snapshotLock) {
         snapshotRevision++
         persist(snapshot)
+        publish(snapshot)
+    }
+
+    private fun publish(snapshot: RemoteFlags) {
+        OnboardingSettings.acceptLegacy(snapshot)
         _flags.value = snapshot
     }
 
@@ -95,6 +132,7 @@ class RemoteConfigSyncer internal constructor(
         prefs.edit {
             clear()
             cachedValues(snapshot).forEach { (key, value) -> putString(key, value) }
+            snapshot.supplied?.let { putString(SUPPLIED_KEY, it.joinToString(",")) }
         }
     }
 
@@ -103,7 +141,10 @@ class RemoteConfigSyncer internal constructor(
         val reader = object : RemoteValueReader {
             override fun string(key: String): String? = prefs.getString(key, null)
         }
-        return RemoteFlags.from(reader)
+        // A cache written before delivery was recorded holds every key; null then counts only
+        // values that differ from their defaults, so a cached default never outranks the app.
+        val supplied = prefs.getString(SUPPLIED_KEY, null)?.split(',')?.filter { it.isNotBlank() }?.toSet()
+        return RemoteFlags.from(reader).copy(supplied = supplied)
     }
 
     private fun cachedValues(snapshot: RemoteFlags): Map<String, String> = buildMap {
@@ -178,6 +219,7 @@ class RemoteConfigSyncer internal constructor(
     internal companion object {
         private const val TAG = "OnboardKit.Remote"
         private const val PREFS_NAME = "ob_remote_cache"
+        private const val SUPPLIED_KEY = "__supplied"
 
         @Volatile
         var fetchDelegate: (suspend (Long) -> Boolean)? = null

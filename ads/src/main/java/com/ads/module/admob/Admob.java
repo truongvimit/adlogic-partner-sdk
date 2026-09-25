@@ -472,7 +472,6 @@ public class Admob {
                     mInterstitialSplash.getAdUnitId(),
                     mInterstitialSplash.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
         });
 
         if (handlerTimeout != null && rdTimeout != null) {
@@ -616,8 +615,6 @@ public class Admob {
                     mInterstitialSplash.getAdUnitId(),
                     mInterstitialSplash.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-
-            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterstitialSplash.getAdUnitId());
         });
 
         if (handlerTimeout != null && rdTimeout != null) {
@@ -777,7 +774,6 @@ public class Admob {
                                     interstitialAd.getAdUnitId(),
                                     interstitialAd.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, interstitialAd.getAdUnitId());
                         });
                     }
 
@@ -1292,7 +1288,6 @@ public class Admob {
                                     adView.getAdUnitId(),
                                     adView.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.BANNER);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                         });
                     }
 
@@ -1381,7 +1376,6 @@ public class Admob {
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.BANNER);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                     });
                     if (callback != null) {
                         callback.onAdLoaded();
@@ -1457,7 +1451,6 @@ public class Admob {
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
                                         .getMediationAdapterClassName(), AdType.BANNER);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, adView.getAdUnitId());
                     });
                     if (callback != null) {
                         callback.onAdLoaded();
@@ -1558,7 +1551,6 @@ public class Admob {
                                 adValue,
                                 id,
                                 nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                     });
                 })
                 .withAdListener(new AdListener() {
@@ -1622,7 +1614,6 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                     }
                 })
@@ -1682,7 +1673,6 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                         populateUnifiedNativeAdView(nativeAd, adView);
                         frameLayout.removeAllViews();
@@ -1747,7 +1737,6 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                         populateUnifiedNativeAdView(nativeAd, adView);
                         frameLayout.removeAllViews();
@@ -1805,8 +1794,6 @@ public class Admob {
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                         });
                     }
                 })
@@ -1866,7 +1853,6 @@ public class Admob {
                                 adValue,
                                 id,
                                 nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        ERainLogEventManager.logPaidAdjustWithToken(adValue, id);
                     });
                     populateUnifiedNativeAdView(nativeAd, adView);
                     frameLayout.removeAllViews();
@@ -2008,7 +1994,6 @@ public class Admob {
                             adValue,
                             rewardedAd.getAdUnitId(), Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
             }
 
@@ -2037,7 +2022,6 @@ public class Admob {
                             rewardedAd.getAdUnitId(),
                             rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
                 callback.onRewardAdLoaded(rewardedAd);
             }
@@ -2071,7 +2055,6 @@ public class Admob {
                             rewardedAd.getAdUnitId(),
                             rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
-                    ERainLogEventManager.logPaidAdjustWithToken(adValue, rewardedAd.getAdUnitId());
                 });
             }
 
@@ -2908,8 +2891,6 @@ public class Admob {
                                     mInterSplashHigh1.getAdUnitId(),
                                     mInterSplashHigh1.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh1.getAdUnitId());
                         }
                     });
 
@@ -3152,8 +3133,6 @@ public class Admob {
                                     mInterSplashHigh2.getAdUnitId(),
                                     mInterSplashHigh2.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh2.getAdUnitId());
                         }
                     });
 
@@ -3395,8 +3374,6 @@ public class Admob {
                                     mInterSplashHigh3.getAdUnitId(),
                                     mInterSplashHigh3.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashHigh3.getAdUnitId());
                         }
                     });
 
@@ -3638,8 +3615,6 @@ public class Admob {
                                     mInterSplashNormal.getAdUnitId(),
                                     mInterSplashNormal.getResponseInfo()
                                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-
-                            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId());
                         }
                     });
 
@@ -3683,7 +3658,6 @@ public class Admob {
                     mInterSplashNormal.getAdUnitId(),
                     mInterSplashNormal.getResponseInfo()
                             .getMediationAdapterClassName(), AdType.INTERSTITIAL);
-            ERainLogEventManager.logPaidAdjustWithToken(adValue, mInterSplashNormal.getAdUnitId());
         });
 
         if (handlerTimeoutNormal != null && rdTimeoutNormal != null) {

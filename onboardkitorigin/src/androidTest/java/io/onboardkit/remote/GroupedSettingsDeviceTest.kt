@@ -103,7 +103,7 @@ class GroupedSettingsDeviceTest {
         assertEquals(AdLoadStrategy.SAME_TIME, updated.splash.adLoadStrategy)
         assertTrue(updated.behavior.lockPagerSwipe)
         assertFalse(updated.behavior.backNavigatesBack)
-        assertFalse("Remote cannot undo the host ads veto", updated.ads.enabled)
+        assertTrue("Remote reopens a host ads gate", updated.ads.enabled)
         assertEquals(0L, OnboardingSettings.resolveFlags(legacy).splashMinDisplayMs)
         assertTrue(OnboardingSettings.resolveFlags(legacy).enableLanguageNative2)
     }

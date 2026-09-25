@@ -11,9 +11,10 @@ import android.os.Bundle
  * Every partner app has these three entries or a subset, always with this wiring, which is why
  * the enum lives in the SDK: an app that follows the standard keys declares nothing. The tap
  * fires [intent], [ObSplashActivity] resolves the entry's [interKey] on its own — full
- * `<key>_high`, `<key>_high1`, …, `<key>` waterfall — and a key that is missing or disabled in
- * config falls back to the regular splash unit, so an entry costs nothing until its id is
- * actually configured. Only an app that diverges — different keys, its own segmentation —
+ * `<key>_high`, `<key>_high1`, …, `<key>` waterfall. A key that is missing or switched off falls
+ * back to the user's segment — `inter_splash_o` for a returning user, `inter_splash` for a new one
+ * — so an entry costs nothing until its id is actually configured, and a segment switched off
+ * silences its entries too. Only an app that diverges — different keys, its own segmentation —
  * overrides [ObSplashActivity.splashInterstitialOverride].
  */
 enum class SplashEntry(val interKey: String) {

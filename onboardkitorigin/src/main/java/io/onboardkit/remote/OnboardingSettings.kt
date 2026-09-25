@@ -11,7 +11,10 @@ import io.onboardkit.ads.NextScreenTiming
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdPlacement
 
-/** Defaults come from onboarding_config.json; only explicit valid overrides replace host options. */
+/**
+ * Defaults come from onboarding_config.json. Remote (this document, then the legacy `ob_*` keys the
+ * backend delivered) > app asset > host option > bundled default, for every field.
+ */
 object OnboardingSettings {
     val document = SettingsDocument("onboarding_config", BundledOnboarding.VALUES, ::extraDefault)
     val values: SettingsSnapshot get() = document.snapshot
@@ -96,7 +99,8 @@ object OnboardingSettings {
             else AdBehavior.defaultText("native.click.action")
         return NativeClickAction.fromRemote(defaultAction) ?: NativeClickAction.RELOAD
     }
-    internal fun behavior(p: AdPlacement): com.ads.module.config.settings.BehaviorValues {
+    /** @param adConfigKey the key whose `placement_overrides` apply, when not the placement's own. */
+    internal fun behavior(p: AdPlacement, adConfigKey: String? = null): com.ads.module.config.settings.BehaviorValues {
         val format = when (p) {
             AdPlacement.SplashBanner -> "banner"
             AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial,
@@ -111,33 +115,86 @@ object OnboardingSettings {
         }
         val path = slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior" else ".behavior"
         val snapshot = values
-        val key = io.onboardkit.OnboardingSdk.configuredPlacementKey(p) ?: p.key
-        return AdBehavior.values(format, key, snapshot, path, base)
+        val key = adConfigKey ?: io.onboardkit.OnboardingSdk.configuredPlacementKey(p)
+            ?: io.onboardkit.OnboardingSdk.configOrNull()?.ads?.standardKeyFor(p) ?: p.key
+        // The exit ad's own wait outranks the placement and format waits.
+        val aliases = if (p == AdPlacement.AfterOnboardingInterstitial)
+            mapOf("load_and_show.wait_timeout_ms" to "onboarding.exit_interstitial.wait_timeout_ms") else emptyMap()
+        return AdBehavior.values(format, key, snapshot, path, base, aliases)
     }
 
     private data class ResolvedConfig(
         val source: OnboardKitConfig,
         val snapshot: SettingsSnapshot,
         val adUnits: Map<String, com.ads.module.config.AdUnitConfig>,
+        val steps: Map<String, Boolean>,
         val value: OnboardKitConfig,
     )
     private data class ResolvedFlags(val source: RemoteFlags, val snapshot: SettingsSnapshot, val value: RemoteFlags)
     @Volatile private var configCache: ResolvedConfig? = null
     @Volatile private var flagsCache: ResolvedFlags? = null
 
+    /** Delivered `ob_enable_step_ob1..4`, by step id; they have no path in this document. */
+    @Volatile private var legacySteps: Map<String, Boolean> = emptyMap()
+
+    /**
+     * Moves the legacy `ob_*` values the backend actually delivered into the remote tier, so a
+     * delivered key outranks the app asset and the host config the same way this document does.
+     */
+    fun acceptLegacy(f: RemoteFlags) {
+        val k = ObRemoteKeys
+        val mapped = mutableMapOf<String, Any>()
+        fun putMapped(key: RemoteKey<*>, raw: Any, value: Any?, vararg paths: String) {
+            if (value != null && f.isSupplied(key, raw)) paths.forEach { mapped[it] = value }
+        }
+        fun put(key: RemoteKey<*>, raw: Any, path: String) = putMapped(key, raw, raw, path)
+        put(k.ENABLE_ALL_ADS, f.enableAllAds, "flow.ads_enabled")
+        put(k.ENABLE_STEP_OB5, f.enableStepOb5, "ob5.enabled")
+        put(k.ENABLE_QUESTION, f.enableQuestion, "question.enabled")
+        put(k.ENABLE_QUESTION_OLD_USER, f.enableQuestionOldUser, "question.old_user_enabled")
+        put(k.ENABLE_LANGUAGE_NATIVE_2, f.enableLanguageNative2, "lfo.native2.enabled")
+        put(k.SHOW_LANGUAGE_TAP_HINT, f.showLanguageTapHint, "lfo.tap_hint.enabled")
+        putMapped(k.LANGUAGE_TAP_HINT_DELAY_SEC, f.languageTapHintDelaySec, f.languageTapHintDelaySec * 1000, "lfo.tap_hint.delay_ms")
+        put(k.SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT, f.showLanguageConfirmBeforeSelect, "lfo.confirm_button.visible_before_selection")
+        put(k.SHOW_LANGUAGE_CONFIRM_DIALOG, f.showLanguageConfirmDialog, "lfo.confirm_dialog.enabled")
+        putMapped(k.LANGUAGE_SUPPORTED_CODES, f.languageSupportedCodes,
+            f.languageSupportedCodes.split(',').map(String::trim).filter(String::isNotEmpty), "lfo.languages.supported_codes")
+        put(k.REUSE_SPLASH_INTER, f.reuseSplashInter, "lfo.exit.reuse_splash_inter")
+        put(k.ADS_AFTER_ONBOARD_INTER, f.adsAfterOnboardInter, "onboarding.exit_interstitial.enabled")
+        putMapped(k.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED, f.splashLfoParallelPreloadEnabled,
+            if (f.splashLfoParallelPreloadEnabled) "PARALLEL" else "SEQUENTIAL", "splash.load.lfo1_preload_mode")
+        put(k.SPLASH_NOTIFICATION_SETTLE_MS, f.splashNotificationSettleMs, "splash.timing.notification_settle_ms")
+        // A non-positive legacy minimum always meant "use the local value".
+        putMapped(k.SPLASH_MIN_DISPLAY_MS, f.splashMinDisplayMs, f.splashMinDisplayMs.takeIf { it > 0 }, "splash.timing.min_display_ms")
+        put(k.SPLASH_AD_BUDGET_MS, f.splashAdBudgetMs, "splash.timing.ad_budget_ms")
+        put(k.SPLASH_SLOT_MIN_VISIBLE_MS, f.splashSlotMinVisibleMs, "splash.timing.slot_min_visible_ms")
+        putMapped(k.SKIP_BUTTON_DELAY_SEC, f.skipButtonDelaySec, f.skipButtonDelaySec.takeIf { it >= 0 }?.times(1000),
+            "onboarding.fullscreen.skip.delay_ms", "ob5.skip.delay_ms")
+        putMapped(k.FULLSCREEN_AUTO_DISMISS_SEC, f.fullScreenAutoDismissSec, f.fullScreenAutoDismissSec.coerceAtLeast(5) * 1000, "ob5.auto_dismiss_ms")
+        put(k.SHOW_SKIP_OB3, f.showSkipOb3, "onboarding.fullscreen.skip.enabled")
+        put(k.SHOW_SKIP_OB5, f.showSkipOb5, "ob5.skip.enabled")
+        legacySteps = listOf(k.ENABLE_STEP_OB1 to f.enableStepOb1, k.ENABLE_STEP_OB2 to f.enableStepOb2,
+            k.ENABLE_STEP_OB3 to f.enableStepOb3, k.ENABLE_STEP_OB4 to f.enableStepOb4)
+            .filter { (key, on) -> f.isSupplied(key, on) }
+            .associate { (key, on) -> key.key.removePrefix("ob_enable_step_") to on }
+        document.acceptLegacyRemote(mapped)
+    }
+
     @Synchronized fun resolve(c: OnboardKitConfig): OnboardKitConfig {
         val snapshot = values
         val adConfig = AdRemoteConfig.getInstance()
-        configCache?.takeIf { it.source === c && it.snapshot === snapshot && it.adUnits === adConfig.ads }
+        val steps = legacySteps
+        configCache?.takeIf { it.source === c && it.snapshot === snapshot && it.adUnits === adConfig.ads && it.steps === steps }
             ?.let { return it.value }
-        return resolveConfig(c, snapshot, adConfig).also {
-            configCache = ResolvedConfig(c, snapshot, adConfig.ads, it)
+        return resolveConfig(c, snapshot, adConfig, steps).also {
+            configCache = ResolvedConfig(c, snapshot, adConfig.ads, steps, it)
         }
     }
 
-    private fun resolveConfig(c: OnboardKitConfig, v: SettingsSnapshot, adConfig: AdRemoteConfig): OnboardKitConfig {
+    private fun resolveConfig(c: OnboardKitConfig, v: SettingsSnapshot, adConfig: AdRemoteConfig, legacySteps: Map<String, Boolean>): OnboardKitConfig {
         val ads = resolveAds(c.ads, adConfig, v)
-        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "question").none(v::hasOverride) && ads == c.ads) return c
+        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "question").none(v::hasOverride) &&
+            ads == c.ads && legacySteps.isEmpty()) return c
         val splash = c.splash.copy(
             minDisplayTimeMs = v.long("splash.timing.min_display_ms", c.splash.minDisplayTimeMs),
             remoteFetchTimeoutMs = v.long("splash.load.remote_fetch_timeout_ms", c.splash.remoteFetchTimeoutMs),
@@ -147,15 +204,22 @@ object OnboardingSettings {
             noInternetPromptEnabled = v.boolean("splash.permissions.no_internet_prompt_enabled", c.splash.noInternetPromptEnabled),
             notificationPermissionEnabled = v.boolean("splash.permissions.notification_enabled", c.splash.notificationPermissionEnabled),
         )
+        // Remote codes pick from the app catalog (remote cannot add a language the app has no
+        // strings for); a default that is not on the offered list would preselect a hidden row.
+        val listed = v.strings("lfo.languages.supported_codes")
+            .mapNotNull { code -> c.language.languages.firstOrNull { it.code == code } }
+            .distinctBy { it.code }
+        val offered = listed.ifEmpty { c.language.languages }
+        fun offers(code: String?) = code != null && offered.any { it.code == code }
         val language = c.language.copy(
+            languages = offered,
             secondNativeOnSelectEnabled = v.boolean("lfo.native2.enabled", c.language.secondNativeOnSelectEnabled),
             tapHintEnabled = v.boolean("lfo.tap_hint.enabled", c.language.tapHintEnabled),
             confirmVisibleBeforeSelect = v.boolean("lfo.confirm_button.visible_before_selection", c.language.confirmVisibleBeforeSelect),
             saveButtonOnBackEnabled = v.boolean("lfo.confirm_button.save_on_back", c.language.saveButtonOnBackEnabled),
             confirmDialogOnReselectEnabled = v.boolean("lfo.confirm_dialog.enabled", c.language.confirmDialogOnReselectEnabled),
-            defaultCode = v.string("lfo.languages.default_code", c.language.defaultCode.orEmpty())
-                .takeIf { candidate -> candidate.isNotBlank() && c.language.languages.any { it.code == candidate } }
-                ?: c.language.defaultCode,
+            defaultCode = v.string("lfo.languages.default_code", "").takeIf(::offers)
+                ?: c.language.defaultCode?.takeIf { listed.isEmpty() || offers(it) },
         )
         val behavior = c.behavior.copy(
             lockPagerSwipe = v.boolean("onboarding.navigation.lock_pager_swipe", c.behavior.lockPagerSwipe),
@@ -163,12 +227,14 @@ object OnboardingSettings {
             backNavigatesBack = v.boolean("onboarding.navigation.back_navigates_back", c.behavior.backNavigatesBack),
             adClickReturnCompletesStep = v.boolean("onboarding.navigation.ad_click_return_completes_step", c.behavior.adClickReturnCompletesStep),
         )
+        // A remote order names the pages outright, so a page it lists shows even when the app
+        // disabled it. Remote order > delivered legacy step keys > app asset order > the catalog.
         val catalog = c.steps.associateBy { it.id.value }
-        val ordered = if (v.hasOverride("onboarding.order")) {
-            v.strings("onboarding.order").mapNotNull(catalog::get)
-        } else c.steps
-        val steps = ordered.filter { it.enabled }.map { step ->
-            if (step !is AdFullScreenStepDefinition) step else {
+        fun order(value: Any?) = (value as? List<*>)?.filterIsInstance<String>()?.mapNotNull(catalog::get)
+        val selected = order(v.remoteValue("onboarding.order"))
+            ?: withLegacySteps((order(v.assetValue("onboarding.order")) ?: c.steps).filter { it.enabled }, c.steps, legacySteps)
+        val steps = selected.map { step ->
+            if (step !is AdFullScreenStepDefinition) (step as ContentStepDefinition).copy(enabled = true) else {
                 val page = step.id.value
                 step.copy(
                     showSkipButton = FullScreenSetting.SkipEnabled.on(page, v).boolean(step.showSkipButton),
@@ -180,6 +246,7 @@ object OnboardingSettings {
                         .string(step.skipButtonStyle?.name ?: ads.fullScreenSkipStyle.name)),
                     skipButtonPosition = FullScreenSkipPosition.valueOf(FullScreenSetting.SkipPosition.on(page, v)
                         .string(step.skipButtonPosition.name)),
+                    enabled = true,
                 )
             }
         }
@@ -187,23 +254,49 @@ object OnboardingSettings {
         return OnboardKitConfig(splash, language, steps, question, ads, c.system, behavior)
     }
 
+    /** A legacy step key removes its page or brings back one the app disabled, at its catalog position. */
+    private fun withLegacySteps(base: List<StepDefinition>, catalog: List<StepDefinition>, gates: Map<String, Boolean>): List<StepDefinition> {
+        if (gates.isEmpty()) return base
+        val result = base.filter { gates[it.id.value] != false }.toMutableList()
+        catalog.filter { gates[it.id.value] == true && result.none { r -> r.id == it.id } }.forEach { added ->
+            val position = catalog.indexOf(added)
+            result.add(result.indexOfLast { catalog.indexOf(it) in 0 until position } + 1, added)
+        }
+        return result
+    }
+
     internal fun ob5SkipStyle(fallback: FullScreenSkipStyle): FullScreenSkipStyle =
-        FullScreenSkipStyle.valueOf(values.string("ob5.skip.style", fallback.name))
+        FullScreenSkipStyle.valueOf(values.scoped("ob5.skip.style", "flow.fullscreen_skip_style").string(fallback.name))
+
+    /**
+     * The question a run shows: valid remote `ob_question_config` replaces the app's title and
+     * options, and null means neither side has one. Gate and screen both ask this, so they agree.
+     */
+    internal fun questionContent(compiled: QuestionConfig?, remoteJson: String): QuestionConfig? {
+        val remote = io.onboardkit.remote.uiconfig.RemoteQuestionParser.parse(remoteJson)
+        val base = compiled ?: if (remote != null) QuestionConfig() else return null
+        return resolveQuestion(base.copy(
+            title = remote?.title?.takeIf { it.isNotBlank() } ?: base.title,
+            options = remote?.options ?: base.options,
+        ))
+    }
 
     internal fun resolveQuestion(q: QuestionConfig, v: SettingsSnapshot = values): QuestionConfig {
         val mode = SelectionMode.valueOf(v.string("question.selection.mode", q.selectionMode.name))
         val max = if (mode == SelectionMode.SINGLE) 1 else q.options.size.coerceAtLeast(1)
+        // Clamped even without a selection override: remote options can leave fewer than the
+        // app's minimum, and an unreachable minimum hides the CTA for good.
         return q.copy(
             refreshAdOnSelect = v.boolean("question.native.refresh_on_select", q.refreshAdOnSelect),
             selectionMode = mode,
-            minSelection = if (v.hasOverride("question.selection.min_count") || v.hasOverride("question.selection.mode"))
-                v.long("question.selection.min_count", q.minSelection.toLong()).toInt().coerceIn(1, max)
-                else q.minSelection,
+            minSelection = v.long("question.selection.min_count", q.minSelection.toLong()).toInt().coerceIn(1, max),
         )
     }
 
     private fun resolveAds(a: AdsConfig, adConfig: AdRemoteConfig, v: SettingsSnapshot): AdsConfig =
         a.resolvePlacements(adConfig).copy(
+            // Only remote overrides the host switch; an app asset "off" still reaches the guard via flags.
+            enabled = v.remoteValue("flow.ads_enabled") as? Boolean ?: a.enabled,
             afterOnboardingInterstitialEnabled = v.boolean("onboarding.exit_interstitial.enabled", a.afterOnboardingInterstitialEnabled),
             skipAdOnlyStepsWhenPremium = v.boolean("flow.skip_ad_only_steps_when_premium", a.skipAdOnlyStepsWhenPremium),
             fullScreenSkipStyle = FullScreenSkipStyle.valueOf(v.string("flow.fullscreen_skip_style", a.fullScreenSkipStyle.name)),
@@ -220,15 +313,19 @@ object OnboardingSettings {
     }
 
     private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot): RemoteFlags {
-        // An explicit order owns pager membership; old scalar flags cannot hide selected pages.
-        val order = v.strings("onboarding.order").takeIf { v.hasOverride("onboarding.order") }
+        // Same precedence as the page list: remote order > delivered legacy key > asset order.
+        fun listed(value: Any?) = (value as? List<*>)?.filterIsInstance<String>()
+        val remoteOrder = listed(v.remoteValue("onboarding.order"))
+        val assetOrder = listed(v.assetValue("onboarding.order"))
+        fun step(id: String, key: RemoteKey<Boolean>, legacy: Boolean) = remoteOrder?.contains(id)
+            ?: legacy.takeIf { f.isSupplied(key, it) } ?: assetOrder?.contains(id) ?: legacy
         return f.copy(
             enableAllAds = v.boolean("flow.ads_enabled", f.enableAllAds),
             languageSupportedCodes = v.strings("lfo.languages.supported_codes", f.languageSupportedCodes.split(',').filter { it.isNotBlank() }).joinToString(","),
-            enableStepOb1 = order?.contains("ob1") ?: f.enableStepOb1,
-            enableStepOb2 = order?.contains("ob2") ?: f.enableStepOb2,
-            enableStepOb3 = order?.contains("ob3") ?: f.enableStepOb3,
-            enableStepOb4 = order?.contains("ob4") ?: f.enableStepOb4,
+            enableStepOb1 = step("ob1", ObRemoteKeys.ENABLE_STEP_OB1, f.enableStepOb1),
+            enableStepOb2 = step("ob2", ObRemoteKeys.ENABLE_STEP_OB2, f.enableStepOb2),
+            enableStepOb3 = step("ob3", ObRemoteKeys.ENABLE_STEP_OB3, f.enableStepOb3),
+            enableStepOb4 = step("ob4", ObRemoteKeys.ENABLE_STEP_OB4, f.enableStepOb4),
             enableStepOb5 = v.boolean("ob5.enabled", f.enableStepOb5),
             enableQuestion = v.boolean("question.enabled", f.enableQuestion),
             enableQuestionOldUser = v.boolean("question.old_user_enabled", f.enableQuestionOldUser),

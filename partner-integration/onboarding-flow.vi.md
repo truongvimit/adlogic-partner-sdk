@@ -30,11 +30,11 @@ val config = onboardKitConfig {
 OnboardingSdk.configure(config).getOrThrow()
 ```
 
-Thêm `enabled = false` vào definition để app khóa màn đó; remote không bật lại được. Có thể bỏ hẳn màn khỏi `steps(...)`. App tự cung cấp title/subtitle/image/layout như trước. `defaultSteps()` tạo sáu màn theo thứ tự trên với nội dung mẫu SDK.
+Thêm `enabled = false` vào definition để ẩn màn đó khi remote không gửi `onboarding.order` và không gửi `ob_enable_step_obN` cho màn đó. `order` remote có liệt kê màn (hoặc `ob_enable_step_obN = true` đã gửi) sẽ hiện màn; `order` trong asset app vẫn giữ màn ẩn. Muốn remote không hiện được màn, bỏ hẳn màn khỏi `steps(...)`: remote không thêm được màn app chưa khai báo. App tự cung cấp title/subtitle/image/layout như trước. `defaultSteps()` tạo sáu màn theo thứ tự trên với nội dung mẫu SDK.
 
 ## Đổi danh sách trên Firebase
 
-Dùng ngay file **`onboarding_config.json`** và parameter Firebase **`onboarding_config`** hiện có, không tạo file hay parameter mới. Đặt `order` trong object `onboarding`. Partner có thể chỉ khai báo phần cần đổi như ví dụ dưới. Các field thiếu (splash, LFO, timeout, skip…) vẫn dùng fallback: Firebase hợp lệ → JSON partner → cấu hình Kotlin app → mặc định SDK. Không cần copy toàn bộ default SDK; chỉ giữ lại những tùy chỉnh riêng đã có của partner. Mảng `order` được thay thế toàn bộ, không nối với danh sách mặc định:
+Dùng ngay file **`onboarding_config.json`** và parameter Firebase **`onboarding_config`** hiện có, không tạo file hay parameter mới. Đặt `order` trong object `onboarding`. Partner có thể chỉ khai báo phần cần đổi như ví dụ dưới. Các field thiếu (splash, LFO, timeout, skip…) vẫn dùng fallback: Firebase hợp lệ → key `ob_*` cũ mà backend đã gửi → JSON partner → cấu hình Kotlin app → mặc định SDK. Không cần copy toàn bộ default SDK; chỉ giữ lại những tùy chỉnh riêng đã có của partner. Mảng `order` được thay thế toàn bộ, không nối với danh sách mặc định:
 
 ```json
 {
@@ -49,13 +49,13 @@ Ví dụ này hiển thị **OB4 → Full2 → OB1 → OB3**, không preload OB2
 
 - Không có `order`: giữ thứ tự app khai báo.
 - `order: []`: bỏ toàn bộ pager OB; tiếp tục nhánh hoàn tất hiện có.
-- Chỉ các ID app khai báo và `enabled = true` mới được chọn. ID chưa biết được bỏ qua.
-- Danh sách sai kiểu, ID rỗng hoặc trùng ID: bỏ override `order`, dùng fallback app/local.
-- `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Khi có `order` hợp lệ, các cờ cũ `ob_enable_step_ob1..4` không lọc thêm màn; nếu thiếu `order`, SDK vẫn hỗ trợ các cờ này cho tích hợp cũ.
+- Chỉ các ID app khai báo mới được chọn. `order` remote chọn được cả màn `enabled = false`; `order` trong asset app chỉ chọn màn `enabled = true`. ID chưa biết được bỏ qua.
+- Danh sách sai kiểu, ID rỗng hoặc trùng ID: bỏ override `order`, dùng nguồn kế tiếp bên dưới.
+- `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Thứ tự ưu tiên: `order` remote > cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi > `order` trong asset app. Khi có `order` remote hợp lệ, các cờ cũ không lọc thêm màn; cờ đã gửi bật hoặc tắt màn theo cả hai chiều, kể cả khi asset app có `order`.
 - Không cần khai báo `steps`. Chỉ dùng `steps.<id>` nếu cần ghi đè riêng template, hành vi ads hoặc nút Skip/auto-next; không có công tắc bật/tắt màn hay placement ở đây. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`.
-- Quy tắc ưu tiên settings vẫn là remote hợp lệ → custom asset → app → default SDK. Không khai báo lại ad unit ID trong `onboarding_config`.
+- Quy tắc ưu tiên settings là remote hợp lệ → key `ob_*` backend đã gửi → custom asset → app → default SDK; remote ở bất kỳ scope nào ưu tiên hơn asset ở bất kỳ scope nào. Không khai báo lại ad unit ID trong `onboarding_config`.
 
-Danh sách màn được chốt tại lần preload OB đầu tiên ở LFO; LFO exit và pager dùng chung danh sách đó. Nếu vào thẳng pager mà chưa preload thì chốt tại pager entry. Remote đổi `order` sau thời điểm này áp dụng từ lượt splash tiếp theo, không loại một màn đã lên kế hoạch preload. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại.
+Danh sách màn được chốt tại lần preload OB đầu tiên ở LFO; LFO exit và pager dùng chung danh sách đó. Nếu vào thẳng pager mà chưa preload thì chốt tại pager entry. Remote đổi `order` sau thời điểm này áp dụng từ lượt splash tiếp theo, không loại một màn đã lên kế hoạch preload. Không có fetch riêng cho OB. Firebase cache/fetch interval vẫn áp dụng như tích hợp hiện tại; SDK không tự đặt interval, mặc định của Firebase là 12 giờ.
 
 ## Bật ads trên Firebase
 
@@ -76,8 +76,8 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 - Thiếu placement hoặc tất cả tầng bị tắt/ID không hợp lệ: không request. Content vẫn hiện, vùng ads ẩn; fullscreen bị bỏ qua.
 - Consent, premium, master switch, UA và force-update gate vẫn được kiểm tra.
 - Example release để cả sáu placement và các tầng của chúng `isEnable = false`: cài mới chưa có remote sẽ không tải ads OB. Remote đã activate/cache vẫn có thể dùng khi fetch thất bại.
-- SDK nói chung vẫn hỗ trợ assets/raw ID của partner. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải giữ các entry local tắt như example.
-- Debug mặc định dùng `ad_config_debug.json` với ad unit test và chặn remote thay ad IDs. Settings `onboarding_config` vẫn có thể thử qua remote. Không dùng ad unit production để test.
+- SDK nói chung vẫn hỗ trợ assets/raw ID của partner; placement nào `ad_remote_config` của backend khai báo thì remote ưu tiên hơn raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải giữ các entry local tắt như example.
+- Debug mặc định giữ ad unit test của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) và không để remote thay ad IDs; các field khác của `ad_remote_config` (ví dụ `isEnable`) và settings `onboarding_config` vẫn thử được qua remote. Key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Không dùng ad unit production để test.
 
 ## Preload và vòng đời ads
 

@@ -109,7 +109,7 @@ Ad unit IDs contain **`/`**. Each file follows the [debug example](../app/src/ma
 
 `inter_after_ob3` shows after the entire configured OB list. See [migration](onboarding-flow.vi.md) for the former OB3/OB4 mapping.
 
-The SDK picks the file by debuggable. A debug build with a missing or invalid JSON falls back to the real file; it does not substitute test IDs for live IDs. A debug asset that loads successfully blocks remote overrides by default.
+The SDK picks the file by debuggable. A debug build with a missing or invalid JSON falls back to the real file; it does not substitute test IDs for live IDs. A debug build keeps the ad unit IDs of the file it loaded by default: remote `ad_remote_config` sets every other field, and keys only remote declares are dropped unless they switch a slot off.
 
 The sample IDs come from [Google demo ad units](https://developers.google.com/admob/android/test-ads#demo_ad_units) and [AdMob App ID](https://developers.google.com/admob/android/quick-start). The fullscreen page uses a **native ID**. The sample shares one test ID per format; production needs separate IDs to split configuration, style and reporting per placement.
 
@@ -117,7 +117,7 @@ The sample IDs come from [Google demo ad units](https://developers.google.com/ad
 
 Two additional documents are already bundled in the SDK: [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) and [onboarding_config.json](examples/ads-onboarding/onboarding_config.json). To tune them remotely, follow [Firebase: publish the three String parameters](firebase-integration.md#remote-json). Keep `ad_remote_config` for unit configuration; add `ad_behavior_config` and `onboarding_config` as separate String values containing the respective JSON objects.
 
-To customize fallback values, create same-named files in `app/src/main/assets/`, copy the full defaults or include only the fields you want to change, then rebuild. If SDK defaults suit the app, neither extra file is required. Valid remote/cache fields take priority; an offline fetch preserves a previous valid remote cache instead of forcing local values. See the [two local JSON examples and fallback rules](firebase-integration.md#local-defaults), and the [field/default reference](remote-settings.md).
+To customize fallback values, create same-named files in `app/src/main/assets/`, copy the full defaults or include only the fields you want to change, then rebuild. If SDK defaults suit the app, neither extra file is required. Valid remote/cache fields, then legacy `ob_*` keys the backend delivered, take priority over these files at any scope and over your Kotlin config; an offline fetch preserves a previous valid remote cache instead of forcing local values. See the [two local JSON examples and fallback rules](firebase-integration.md#local-defaults), and the [field/default reference](remote-settings.md).
 
 ## 3. Prepare the onboarding content
 
@@ -161,7 +161,7 @@ Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) into the s
 
 A declared disabled placement keeps an empty unit, so it cannot borrow a different slot's ad. Only an absent LFO2 unit falls back to LFO1; turn the replacement action off with `onboarding_config.lfo.native2.enabled = false`.
 
-Native templates can be controlled by `lfo.native_template`, `onboarding.ads.content_template`, `onboarding.steps.<id>.native_template` and `question.native.template`. Explicit template overrides take priority; without one, each placement uses its own `positionCTA`, then the host/SDK template. Fullscreen/popup retain their fixed layouts. Colors, CTA height and components stay in ad_config; app resource/layout references stay in code.
+Native templates can be controlled by `lfo.native_template`, `onboarding.ads.content_template`, `onboarding.steps.<id>.native_template` and `question.native.template`. A remote template override comes first, then `positionCTA` from the backend's `ad_remote_config`, then a template in your app asset, then `positionCTA` from your `ad_config.json`, then the host/SDK template. Fullscreen/popup retain their fixed layouts. Colors, CTA height and components stay in ad_config; app resource/layout references stay in code.
 
 ## 5. Initialize in your Application
 
@@ -263,26 +263,26 @@ Steps 1–6 are enough to run the standard flow. Verify it with the [checklist](
 
 ### Flow defaults
 
-The table below describes SDK defaults and existing local/legacy fallback APIs. For remote experiments or app-side JSON defaults, use the corresponding fields in the [grouped settings reference](remote-settings.md); valid grouped overrides take precedence over these fallback values.
+The table below describes SDK defaults and existing local/legacy fallback APIs. For remote experiments or app-side JSON defaults, use the corresponding fields in the [grouped settings reference](remote-settings.md). Precedence for every setting: remote `onboarding_config` / `ad_behavior_config` field > legacy `ob_*` key the backend delivered > your app-asset JSON > the Kotlin options and hooks below > bundled SDK default.
 
-Add only the options you need to change to the `onboardKitConfig { ... }` block in step 4; call `ERainAd`/`ConsentCenter` where the table says. `ob_*` keys belong to Firebase Remote Config and are **not in the ad JSON**; without Firebase the cached/default values apply.
+Add only the options you need to change to the `onboardKitConfig { ... }` block in step 4; call `ERainAd`/`ConsentCenter` where the table says. `ob_*` keys belong to Firebase Remote Config and are **not in the ad JSON**; without Firebase the values it last delivered (cached) apply, and a key it never sent leaves your configuration in charge.
 
 | Behavior | Default | Change it only when / where to change it |
 | --- | --- | --- |
-| Splash screen | SDK layout; minimum display 3000 ms from the ad-loading phase | `onboarding_config.splash.timing.min_display_ms`; valid `0` explicitly removes this minimum. Existing local/legacy values are fallbacks. |
-| Opening the next screen after the splash interstitial | The interstitial shows after the minimum display time. First-open LFO: wait for dismissal. Launcher → app / returning-user question: open underneath the ad. Notification/widget/uninstall: wait for dismissal | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), or `super.nextScreenTiming()` to keep the default |
+| Splash screen | SDK layout; minimum display 3000 ms from the ad-loading phase | `onboarding_config.splash.timing.min_display_ms` (valid `0` explicitly removes this minimum) or a delivered `ob_splash_min_display_ms` (`<= 0` keeps the local value); while remote is silent, your app asset, then `SplashConfig.minDisplayTimeMs`. |
+| Opening the next screen after the splash interstitial | The interstitial shows after the minimum display time. First-open LFO: wait for dismissal. Launcher → app / returning-user question: open underneath the ad. Notification/widget/uninstall: wait for dismissal | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), or `super.nextScreenTiming()` to keep the default. On launcher starts a remote `splash.navigation.next_screen_timing` other than `AUTO` outranks the override |
 | Waiting for the splash ad | Up to 60 seconds, after the notification step and once splash has focus | Remote `ob_splash_ad_budget_ms`; do not add a timer of your own |
-| Fetching and loading ads | `ALTERNATE`: wait for the remote step before requesting splash ads | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` permits earlier splash banner/interstitial requests. The strategy is selected at splash entry. |
+| Fetching and loading ads | `ALTERNATE`: wait for the remote step before requesting splash ads | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` requests the splash banner/interstitial as soon as the remote step settles, before `onRemoteFetched()`; `ALTERNATE` also waits for that hook. The strategy is read once the remote step settles, so a value fetched in that step applies to the same launch. |
 | Preloading the first LFO native | After remote, then after the splash interstitial load settles (`SEQUENTIAL`) | `onboarding_config.splash.load.lfo1_preload_mode = "PARALLEL"` removes the interstitial-load wait, not the remote wait. |
 | No network | Ask the user to connect and do not continue | `SplashConfig.noInternetPromptEnabled = false` to start offline through the UMP fallback below; the next splash asks for UMP again |
 | Consent | 20-second network timeout; the form itself waits for the user | In your Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Keep the SDK hook; `SplashConfig.consentTimeoutMs` does not change the UMP timeout |
 | The UMP form during QA | Debuggable: every device counts as EEA (`setForceTesting`), no hashed ID needed; release: real geography | `ConsentOptions(debug = false)` to debug against real geography. `configure` replaces every option, so to change the timeout as well pass one `ConsentOptions(timeoutMs = ..., debug = false)` |
-| Notifications | Requested after consent on Android 13+ / target 33+; a denial still continues and is not asked again | `SplashConfig.notificationPermissionEnabled = false` if your app sends no notifications or owns the prompt |
-| Language | 21 languages, hand hint after 3 seconds, confirmation hidden before a selection | `LanguageConfig.languages`: keep the languages you have translated; `tapHintEnabled` and `confirmVisibleBeforeSelect` also need their matching remote flags enabled |
+| Notifications | Requested after consent and the remote step on Android 13+ / target 33+; a denial still continues and is not asked again | `SplashConfig.notificationPermissionEnabled = false` if your app sends no notifications or owns the prompt |
+| Language | 21 languages, hand hint after 3 seconds, confirmation hidden before a selection | `LanguageConfig.languages`: keep the languages you have translated; remote `lfo.languages.supported_codes` narrows this list, and a `defaultCode` it leaves out is not preselected. A remote or app-asset value sets `tapHintEnabled` and `confirmVisibleBeforeSelect` either way |
 | Back on LFO | Nothing selected: Back is ignored. After a selection: Save appears and the language screen stays | `LanguageConfig.saveButtonOnBackEnabled = false`: ignore Back after a selection too. In SETTINGS, Back closes the screen |
 | Replacing the native after a language selection | Enabled; the first native stays until the replacement ad can bind | `LanguageConfig.secondNativeOnSelectEnabled = false` to turn it off |
 | Language popup | Re-selecting the current language opens it immediately. Selecting another language opens it from the fourth total tap onward; re-select taps still count. Its native is first requested when the popup opens | `LanguageConfig.confirmDialogOnReselectEnabled = false` to turn it off; SETTINGS shows no popup |
-| Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; sample ad_config uses per-slot `positionCTA` | Set the template fields in `onboarding_config`; absent overrides use `ad_config.<key>.positionCTA` then host/default. [Precedence](remote-settings.md). |
+| Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; sample ad_config uses per-slot `positionCTA` | Set the template fields in `onboarding_config`; absent overrides use `ad_config.<key>.positionCTA` then host/default. A `positionCTA` from the backend's `ad_remote_config` also beats a template in your app asset. [Precedence](remote-settings.md). |
 | System bars | Status/caption bars shown, navigation bar hidden | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
 | Native click and return on OB | Advances the step (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 disable the replacement preload on click | `adClickReturnCompletesStep = false` to stay on the page; do not re-enable click preload in the provider |
 | Native click on LFO/popup or an app screen | Preloads as soon as the ad is clicked/opened; on return it binds a ready ad or waits for the in-flight request | `NativeAdConfig.reloadOnAdClick = true` by default, independent of timed refresh; [app-screen native example](#app-screen-native-with-a-placement-constant) |
@@ -292,9 +292,9 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | OB navigation | With swipe enabled: OB1 stays locked; OB2 and the last content page allow swipe. A fullscreen page remains locked while loading/binding and unlocks only after an ad impression. Each new visit starts locked. The global swipe lock still wins. | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back always exits the app), `lockPortrait`; a landscape app must change the manifest too |
 | Interstitial interval | `ERainAdConfig.intervalInterstitialAd = 0` (no limit); it applies to the `InterstitialAutoBuffer` group only, not to splash/OB or interstitials you load yourself | Set it before init, or use `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` |
 | Interstitial click cap | Off (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: at most `n` clicks per ad unit per 24 hours, then loading/showing stops. Call it when needed, usually after the remote fetch |
-| OB5, question, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. A null `ob5Native` uses `fullScreenStepNative` (host setup). The other features are not wired | `AdsConfig.ob5Native` to give it its own ID; wire the question/paywall/app-open only when you need them |
+| OB5, question, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. A null `ob5Native` uses `fullScreenStepNative` (host setup). The paywall is not wired. The question and app-open stay off unless you wire them or remote turns them on: a valid `ob_question_config` shows the question to new users, and an `open_resume` with an ID in the backend's `ad_remote_config` enables [app-open](#app-open-on-return) | `AdsConfig.ob5Native` to give it its own ID; wire the question/paywall/app-open only when you need them |
 
-A UMP error or timeout can allow an **attempted request** in-process through the [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt); it grants no consent and guarantees no fill. A host that turns ads off still wins; do not infer request permission from a timer or from personalization.
+A UMP error or timeout can allow an **attempted request** in-process through the [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt); it grants no consent and guarantees no fill. A host that turns requests off with `OnboardingSdk.setCanRequestAds(false)` still wins; do not infer request permission from a timer or from personalization.
 
 ### Fields in the sample JSON
 
@@ -308,7 +308,7 @@ Both JSON files keep the example debug fields and values; only the interstitials
 | `reloadIntervalSeconds` | Banner: `30` | Parsed only; the helpers ignore it and it changes no refresh, splash included. For refresh, see [App-screen banner](#additional-integrations). |
 | `colorCTA` | `"default"` | Keeps the template color; set a color when you need a custom native. |
 | `heightCTA` | `45` for ordinary natives, `36` for the popup | CTA height in dp; the SDK uses `40` when the field is absent and clamps the value to 36–52 when applying it. |
-| `positionCTA` | `"BOTTOM"` or `null` | Per-placement LFO/content/question frame when no explicit onboarding template overrides it. `null` keeps the host/SDK fallback; fullscreen/popup use fixed layouts. |
+| `positionCTA` | `"BOTTOM"` or `null` | Per-placement LFO/content/question frame when no remote onboarding template overrides it. From this file it also yields to a template in your app asset; from the backend's `ad_remote_config` it does not. `null` keeps the host/SDK fallback; fullscreen/popup use fixed layouts. |
 | `components` | `["icon_headline", "body", "media", "cta"]` | A missing block is hidden; an empty array shows everything. OB changes visibility only; an [app-screen native](#app-screen-native-with-a-placement-constant) also uses the order when `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | How long to wait before loading the app-open ad after the app goes to background; it only takes effect once app-resume is enabled. |
 
@@ -414,9 +414,9 @@ Defaults: 30 seconds per load tier, one cached ad/request per placement, no auto
 | CTA / native style | Keep every field as in the example; the [JSON field table](#fields-in-the-sample-json) explains the values and where they apply. Step 4 already wires `positionCTA` into the native templates. |
 | App-screen banner | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; add a `bannerType` argument, for example `BannerType.Collapsible()` ([the types](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt)). To change the type: `flagUserEnableReload = false`, `cancel()` the old helper, then create a new one. SDK refresh requires disabling AdMob refresh on every floor, then building `BannerAdConfig.forPlacement("banner_home", bannerType, canReloadAds = true)` and passing it to the `BannerAdHelper` constructor. |
 | UA / Adjust | Fill in the resources and use the wiring from [step 5](#adjust-tokens-and-verification). `enable_ua_check` keeps the example values; see the JSON field table for where it applies. |
-| JSON from Firebase | [Publish the three String parameters](firebase-integration.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Install `FirebaseAdConfigSource()` once after assets; SDK splash refreshes them. [Custom local fallback](firebase-integration.md#local-defaults) is optional. |
+| JSON from Firebase | [Publish the three String parameters](firebase-integration.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Install `FirebaseAdConfigSource()` once after assets; SDK splash refreshes them. A key the backend's `ad_remote_config` declares outranks ad unit IDs written in code. [Custom local fallback](firebase-integration.md#local-defaults) is optional. |
 | Firebase Analytics | Add `suite-firebase` and register `Tracker.addSink(FirebaseSink())` right after `Tracker.install`; choose the consent policy from the [Firebase guide](firebase-integration.md#initial-consent). |
-| App-open on return | Not enabled; the JSON already contains `open_resume`, but adding the JSON alone does not enable the feature. Follow [App-open on return](#app-open-on-return). |
+| App-open on return | Not enabled by the asset: `open_resume` in `ad_config.json` alone does not turn it on. An `open_resume` with an ID in the backend's `ad_remote_config` does; to keep app-open off, call `AppOpenManager.getInstance().disableAppResume()` or remove `open_resume` from remote. Follow [App-open on return](#app-open-on-return). |
 | App with premium / paywall | Follow [BillingKit](billing-integration.md) / [PayKit](paywall-integration.md) and the [hook that awaits billing before ads](../onboardkitorigin/README.md#optional-integrations). `onInitBilling()` is empty by default; calling billing install does not mean premium has been restored. |
 | Language change from Settings | `registerForActivityResult(StartActivityForResult())`, then `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (the types are in `io.onboardkit.ui.language`). On `RESULT_OK`: read `ObLanguageActivity.RESULT_LANGUAGE_CODE`, save it as in step 5 and call `recreate()`; Back returns no code. This screen has no ads. `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` returns no result; read the choice with `OnboardingSdk.selectedLanguage()`. |
 | Notification/widget entries | Use `SplashEntry` and keep the passthrough in your listener; see [OnboardKit](../onboardkitorigin/README.md#optional-integrations). A normal launcher start needs none of these entries. |
@@ -431,7 +431,7 @@ import io.onboardkit.ui.splash.ObSplashActivity
 class SplashActivity : ObSplashActivity()
 ```
 
-The SDK refreshes the documents before the relevant flow reads them. Do not call `OnboardKitSetup.configure()` again in `onRemoteFetched` just to copy fetched values. Keep that hook for your app's own preload/integration work if needed. `ALTERNATE` waits for the remote step; LFO1 preload follows that step under both strategies. [Timing and QA](firebase-integration.md#remote-notes).
+The SDK refreshes the documents before the relevant flow reads them. Do not call `OnboardKitSetup.configure()` again in `onRemoteFetched` just to copy fetched values. Keep that hook for your app's own preload/integration work if needed. Both strategies wait for the remote step (`ALTERNATE` also for `onRemoteFetched()`); LFO1 preload follows that step under both strategies. [Timing and QA](firebase-integration.md#remote-notes).
 
 ### App-open on return
 
@@ -440,12 +440,12 @@ The SDK refreshes the documents before the relevant flow reads them. Do not call
 
 Do this only if your product uses app-open. `AppOpenManager` is in `com.ads.module.admob`.
 
-1. **Step 4:** `AdsConfig.fromAdConfig()` already binds `open_resume`. With a manually built `AdsConfig(...)`, supply `appResume = InterstitialAdUnit(...)` yourself; otherwise OnboardKit blocks app-open on all screens.
+1. **Step 4:** `AdsConfig.fromAdConfig()` already binds `open_resume`. With a manually built `AdsConfig(...)`, supply `appResume = InterstitialAdUnit(...)` yourself unless the backend's `ad_remote_config` declares `open_resume`; with neither, OnboardKit blocks app-open on all screens.
 2. **Step 5**, in the `ERainAdConfig` `apply` block: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`.
-3. **Remote JSON:** nothing to add — the SDK re-points the app-resume unit at `open_resume` on every config change, including on/off through `isEnable`. Two conditions: your app has already seeded a non-empty app-resume ID in step 2, and `open_resume` carries an ad unit ID. Because step 2 is read at init (when only the asset config exists), ship `open_resume` **enabled with a real ID** in `ad_config.json`.
+3. **Remote JSON:** nothing to add — the SDK re-points the app-resume unit at `open_resume` on every config change, including on/off through `isEnable`, as long as `open_resume` carries an ad unit ID. An `open_resume` from the backend's `ad_remote_config` needs no seed; one from `ad_config.json` applies only after step 2 seeded a non-empty ID. Because step 2 is read at init, ship `open_resume` **enabled with a real ID** in `ad_config.json` when you rely on the asset.
 4. **Outbound intents** (browser/share/review): call `AppOpenManager.getInstance().disableAdResumeByClickAction()` right after `startActivity(...)` to skip that return. `disableAppResume()`/`enableAppResume()` are process-wide switches.
 
-Splash, OB5 and the question screen exclude themselves; register only your app's own sensitive screens. LFO and OB content pages may show a ready app-open ad on return, except on the fullscreen page, during page transitions and while the popup is open. For delay and gating see [app-open](../onboardkitorigin/README.md#app-open-on-return).
+Splash, OB5 and the question screen exclude themselves; register only your app's own sensitive screens. LFO and OB content pages may show a ready app-open ad on return, except on the fullscreen page, during page transitions, while the popup is open and after a click on an onboarding ad (unless remote sets `app_open.presentation.skip_after_ad_click` to `false`). For delay and gating see [app-open](../onboardkitorigin/README.md#app-open-on-return).
 
 </details>
 
@@ -468,7 +468,7 @@ Splash, OB5 and the question screen exclude themselves; register only your app's
 | OB is empty or skipped | `install` before `configure`; use `steps(...)` in step 4 for your app's content, and check whether the remote cache has disabled the flow or a step |
 | No ads | The file loaded, the key mapping, `isEnable`, consent/premium state, the remote flags; do not add a timer to show one anyway |
 | Debug uses the wrong IDs | A valid debug file is present; `setAllowRemoteOverrideInDebug(true)` is not enabled in the standard setup |
-| Remote changed the IDs but OB still uses the old ones | Install `FirebaseAdConfigSource`, use `AdsConfig.fromAdConfig()` with the correct keys and let splash refresh. Debug pins ad IDs by default; grouped settings still apply. |
+| Remote changed the IDs but OB still uses the old ones | Install `FirebaseAdConfigSource`, use `AdsConfig.fromAdConfig()` with the correct keys and let splash refresh. Firebase's minimum fetch interval is 12 hours unless your app lowers it. Debug pins ad IDs by default; every other `ad_remote_config` field and the grouped settings still apply. |
 | Native style/reporting does not separate per slot in testing | The demo IDs of one format are shared; the provider looks style/placement back up by ID in places. Use separate IDs when verifying the real configuration |
 
 ## Files your app actually needs

@@ -30,13 +30,16 @@ class AdsGuard internal constructor(
      * @param unit the ad units actually about to be requested, when the caller resolved them
      *   itself. A remote id override is invisible in [OnboardKitConfig], so judging the compiled
      *   slot would report [AdSkipReason.NO_AD_UNIT] for a placement that does have one.
+     * @param adConfigKey the ad_config key those units belong to, when it is not the placement's
+     *   own — a splash entry or returning-user key — so its own `enable_ua_check` applies.
      */
     fun skipReason(
         context: Context,
         placement: AdPlacement,
         unit: AdUnitTiers? = null,
+        adConfigKey: String? = null,
     ): AdSkipReason? {
-        val reason = evaluate(context, placement, unit)
+        val reason = evaluate(context, placement, unit, adConfigKey)
         log(placement, reason)
         return reason
     }
@@ -72,9 +75,11 @@ class AdsGuard internal constructor(
         if (isPremium(context)) return AdSkipReason.PREMIUM
         if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
         if (provider == null) return AdSkipReason.NO_PROVIDER
+        // Remote first. cfg.ads.enabled is already resolved (remote > app asset > host), so a
+        // remote "on" has overridden a host "off" there; a remote "off" is reported as remote's.
+        if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") || !flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
         if (!cfg.ads.enabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") || !flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
         return null
     }
 
@@ -82,16 +87,18 @@ class AdsGuard internal constructor(
         context: Context,
         placement: AdPlacement,
         unit: AdUnitTiers?,
+        adConfigKey: String? = null,
     ): AdSkipReason? {
         resumeEntrySkipReason(context)?.let { return it }
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
+        // Placement-wide: for the splash interstitial it silences every position, entries included.
+        if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
         if (placement == AdPlacement.AfterOnboardingInterstitial &&
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT
-        cfg.ads.placementKeyFor(placement)?.let { key ->
+        (adConfigKey ?: cfg.ads.placementKeyFor(placement))?.let { key ->
             if (!com.ads.module.helper.AdGate.placementPassesUaGate(key)) return AdSkipReason.UA_GATE
         }
 

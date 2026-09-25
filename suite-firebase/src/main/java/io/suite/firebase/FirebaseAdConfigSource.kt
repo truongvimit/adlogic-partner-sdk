@@ -22,10 +22,13 @@ class FirebaseAdConfigSource @JvmOverloads constructor(
 
     override val id: String = "firebase"
 
+    /** After a failed fetch, the document activated last still outranks the app's own. */
     override suspend fun fetch(timeoutMs: Long): String? {
-        if (!RemoteConfigClient.fetchOnce(timeoutMs)) return null
-        // Console-set values only: an in-app default here would replace a live configuration with
-        // whatever the app happened to ship.
-        return RemoteConfigClient.remoteString(key)
+        RemoteConfigClient.fetchOnce(timeoutMs)
+        return cached()
     }
+
+    // Console-set values only: an in-app default here would replace a live configuration with
+    // whatever the app happened to ship.
+    override suspend fun cached(): String? = RemoteConfigClient.remoteString(key)
 }

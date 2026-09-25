@@ -74,7 +74,7 @@ Manifest में अपनी `Application` class दर्ज करें।
 
 OnboardKit का splash consent और notification चरण चलाता है। केवल ads इस्तेमाल करने पर ad request से पहले Activity से `ConsentCenter.request(...)` बुलाएँ। Firebase के लिए ऐप की `google-services.json` और Google Services plugin भी चाहिए; [Firebase गाइड](suite-firebase/README.md) देखें।
 
-UMP error देने पर या network timeout पूरा होने पर (default 20 सेकंड) AdLogic ad request की कोशिश करने देता है, पहली बार खोलने पर भी। यह SDK का अपना fallback है: consent को सहमति के रूप में दर्ज नहीं करता, `npa` नहीं जोड़ता, और fill की गारंटी नहीं देता। दिख रहा form फिर भी user के जवाब का इंतज़ार करता है। Fallback नए process में सहेजा नहीं जाता; UMP पहले से request की अनुमति न दे चुका हो तो हर नई call नया इंतज़ार शुरू करती है। Host का जानबूझकर ads बंद करना फिर भी प्राथमिकता रखता है। यह व्यवहार केवल `ConsentInformation.canRequestAds()` को gate मानने वाली Google गाइड से अलग है।
+UMP error देने पर या network timeout पूरा होने पर (default 20 सेकंड) AdLogic ad request की कोशिश करने देता है, पहली बार खोलने पर भी। यह SDK का अपना fallback है: consent को सहमति के रूप में दर्ज नहीं करता, `npa` नहीं जोड़ता, और fill की गारंटी नहीं देता। दिख रहा form फिर भी user के जवाब का इंतज़ार करता है। Fallback नए process में सहेजा नहीं जाता; UMP पहले से request की अनुमति न दे चुका हो तो हर नई call नया इंतज़ार शुरू करती है। Requests बंद करने वाला host (`OnboardingSdk.setCanRequestAds(false)`, या अपने CMP से `ConsentCenter.setHostConsent(false, false)`) फिर भी प्राथमिकता रखता है। यह व्यवहार केवल `ConsentInformation.canRequestAds()` को gate मानने वाली Google गाइड से अलग है।
 
 ## ऐप की अपनी जानकारी दें
 

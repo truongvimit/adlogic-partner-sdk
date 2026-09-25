@@ -169,7 +169,11 @@ data class AdsConfig(
     val afterOnboardingInterstitialTiming: NextScreenTiming = NextScreenTiming.valueOf(OnboardingSettings.defaultText("onboarding.exit_interstitial.next_screen_timing")),
     /** Shared Skip/X appearance for fullscreen steps and standalone OB5. */
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
-    /** App-owned association with ad_config keys; never duplicated in behavior JSON. */
+    /**
+     * App-owned association with ad_config keys; never duplicated in behavior JSON. A standard key
+     * the backend's ad_config declares applies even when absent here, so a unit written in code is
+     * only the fallback for a placement remote says nothing about.
+     */
     val placementKeys: Map<AdPlacement, String> = emptyMap(),
     /** Optional full-screen native between the splash interstitial and LFO; absent means off. */
     val splashNative: NativeAdUnit? = null,
@@ -183,8 +187,10 @@ data class AdsConfig(
         /** Standard partner keys. Override only associations whose names differ in your app. */
         @JvmStatic
         @JvmOverloads
-        fun fromAdConfig(placements: Map<AdPlacement, String> = emptyMap()): AdsConfig = AdsConfig(
-            placementKeys = mapOf(
+        fun fromAdConfig(placements: Map<AdPlacement, String> = emptyMap()): AdsConfig =
+            AdsConfig(placementKeys = STANDARD_PLACEMENT_KEYS + placements)
+
+        private val STANDARD_PLACEMENT_KEYS: Map<AdPlacement, String> = mapOf(
                 AdPlacement.SplashBanner to "banner_splash",
                 AdPlacement.SplashInlineNative to "native_splash",
                 AdPlacement.SplashInterstitial to "inter_splash",
@@ -203,30 +209,53 @@ data class AdsConfig(
                 AdPlacement.QuestionNative to "native_question",
                 AdPlacement.QuestionInterstitial to "inter_question",
                 AdPlacement.AppResume to "open_resume",
-            ) + placements,
-        )
+            )
     }
 
-    internal fun placementKeyFor(placement: AdPlacement): String? = placementKeys[placement]
+    /** The standard ad_config key of [placement], whether or not anything declares it. */
+    internal fun standardKeyFor(placement: AdPlacement): String? = STANDARD_PLACEMENT_KEYS[placement]
+
+    // The splash key also joins when remote declares only its returning-user `_o`.
+    private val keys: Map<AdPlacement, String>
+        get() = STANDARD_PLACEMENT_KEYS.filter { (placement, key) ->
+            AdRemoteConfig.remoteDeclares(key) ||
+                placement == AdPlacement.SplashInterstitial && AdRemoteConfig.remoteDeclares(key + "_o")
+        } + placementKeys
+
+    /**
+     * The key a placement reads ad_config under. LFO2 with no units of its own shows LFO1's, so it
+     * follows LFO1's template, UA gate and overrides too rather than those of a key that is absent.
+     */
+    internal fun placementKeyFor(placement: AdPlacement): String? =
+        if (placement == AdPlacement.Language2 && languageDupNative == null) keys[AdPlacement.Language1]
+        else keys[placement]
 
     /** Resolve from the current ad document for both flow eligibility and ad requests. */
     internal fun resolvePlacements(config: AdRemoteConfig): AdsConfig {
-        if (placementKeys.isEmpty()) return this
-        fun tiers(p: AdPlacement): List<String>? = placementKeys[p]?.takeIf(config::declares)?.let(config::tiersFor)
+        val keys = keys
+        fun tiers(p: AdPlacement): List<String>? = keys[p]?.takeIf(config::declares)?.let(config::tiersFor)
+        if (keys.isEmpty()) return this
         fun native(p: AdPlacement, local: NativeAdUnit?) = tiers(p)?.let(::NativeAdUnit) ?: local
         fun inter(p: AdPlacement, local: InterstitialAdUnit?) = tiers(p)?.let(::InterstitialAdUnit) ?: local
-        val oldSplashKey = placementKeys[AdPlacement.SplashInterstitial]?.plus("_o")
+        val splashKey = keys[AdPlacement.SplashInterstitial]
+        val oldSplashKey = splashKey?.plus("_o")
         return copy(
             splashBanner = tiers(AdPlacement.SplashBanner)?.let { BannerAdUnit(it.firstOrNull().orEmpty()) } ?: splashBanner,
             splashInterstitial = inter(AdPlacement.SplashInterstitial, splashInterstitial),
             splashNative = native(AdPlacement.SplashNative, splashNative),
             splashInlineNative = native(AdPlacement.SplashInlineNative, splashInlineNative),
-            splashInterstitialOldUser = oldSplashKey?.takeIf(config::declares)?.let { InterstitialAdUnit(config.tiersFor(it)) } ?: splashInterstitialOldUser,
+            // A remote inter_splash speaks for returning users too unless _o is declared: the app's
+            // own old-user unit is the fallback only while remote is silent on both.
+            splashInterstitialOldUser = when {
+                oldSplashKey != null && config.declares(oldSplashKey) -> InterstitialAdUnit(config.tiersFor(oldSplashKey))
+                splashKey != null && AdRemoteConfig.remoteDeclares(splashKey) -> null
+                else -> splashInterstitialOldUser
+            },
             languageNative = native(AdPlacement.Language1, languageNative),
             languageDupNative = native(AdPlacement.Language2, languageDupNative),
             languageConfirmNative = native(AdPlacement.LanguageConfirm, languageConfirmNative),
             stepNatives = stepNatives.toMutableMap().apply {
-                placementKeys.keys.forEach { p ->
+                keys.keys.forEach { p ->
                     val id = when (p) {
                         is AdPlacement.StepNative -> p.stepId
                         is AdPlacement.StepFullScreen -> p.stepId

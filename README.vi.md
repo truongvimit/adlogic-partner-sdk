@@ -74,7 +74,7 @@ Khai báo class `Application` của app trong manifest. Trong `Application.onCre
 
 Khi dùng OnboardKit, splash tự chạy consent và bước notification. Nếu chỉ dùng ads, gọi `ConsentCenter.request(...)` từ Activity trước khi request quảng cáo. Firebase cần `google-services.json` của app và Google Services plugin; xem [hướng dẫn Firebase](suite-firebase/README.md).
 
-AdLogic cho phép thử request ads khi UMP báo lỗi hoặc hết timeout mạng (mặc định 20 giây), kể cả lần mở đầu tiên. Đây là fallback riêng của SDK: không ghi consent thành đồng ý, không thêm `npa`, và không bảo đảm có fill. Form đang hiển thị vẫn chờ user trả lời. Fallback không lưu qua lần chạy process mới; mỗi lần gọi lại UMP bắt đầu một lượt chờ mới, trừ khi UMP đã cho phép request. Host chủ động tắt ads vẫn được ưu tiên. Hành vi này khác hướng dẫn Google dùng riêng `ConsentInformation.canRequestAds()` làm gate.
+AdLogic cho phép thử request ads khi UMP báo lỗi hoặc hết timeout mạng (mặc định 20 giây), kể cả lần mở đầu tiên. Đây là fallback riêng của SDK: không ghi consent thành đồng ý, không thêm `npa`, và không bảo đảm có fill. Form đang hiển thị vẫn chờ user trả lời. Fallback không lưu qua lần chạy process mới; mỗi lần gọi lại UMP bắt đầu một lượt chờ mới, trừ khi UMP đã cho phép request. Host tắt request (`OnboardingSdk.setCanRequestAds(false)`, hoặc `ConsentCenter.setHostConsent(false, false)` từ CMP riêng) vẫn được ưu tiên. Hành vi này khác hướng dẫn Google dùng riêng `ConsentInformation.canRequestAds()` làm gate.
 
 ## Giá trị app cần cung cấp
 

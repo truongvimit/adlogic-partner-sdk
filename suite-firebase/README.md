@@ -91,20 +91,25 @@ AdConfig.install(FirebaseAdConfigSource())
 PayKit.configSource(FirebaseConfigSource())
 ```
 
-Keep only the imports and lines for modules your app uses. Installing a source does not fetch.
-From a coroutine, call `AdConfig.refresh()` or `PayKit.sync()` before using its remote config.
+Keep only the imports and lines for modules your app uses. Installing a source does not fetch;
+`AdConfig.install` does apply the `ad_remote_config` value Firebase last activated, if any, right away.
+From a coroutine, call `AdConfig.refresh()` or `PayKit.sync()` before using its remote config;
+`AdConfig.refresh()` returns whether an `ad_remote_config` document was applied.
 `ObSplashActivity` already calls `AdConfig.refresh()`; do not add a duplicate call there.
 
 Publish these **String** parameters on Firebase Console → Remote Config:
 
 | Parameter | Content |
 |---|---|
-| `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. |
+| `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. With OnboardKit, a key declared here also outranks ad unit IDs written in code. |
 | `paywall_config` | Your paywall JSON, including product IDs and optional placements. |
 
 Both sources accept a custom name through `key = "your_key"`. Blank values and in-app Firebase
 defaults are ignored. The two sources share a pending fetch and keep a successful result for
-the process; a failure permits a later retry. A failed refresh leaves the kit's existing config.
+the process; a failure permits a later retry. When a fetch fails, ads use the `ad_remote_config`
+value Firebase last activated and PayKit keeps its existing config. An `ad_remote_config` removed
+on the Console stays in effect for the session whose fetch sees the removal; the next launch runs
+on your asset.
 
 ## Troubleshooting
 
@@ -112,5 +117,5 @@ the process; a failure permits a later retry. A failed refresh leaves the kit's 
 |---|---|
 | Firebase is unavailable | Matching `app/google-services.json`, app plugin and a rebuilt APK. |
 | Remote values are ignored | Publish the parameter; check its name, nonblank JSON and the module's parser requirements. |
-| Debug ads keep local configuration | A successfully loaded debug asset is pinned by default; see [ads debug setup](../ads/README.md). |
+| Debug ads keep local ad unit IDs | A debuggable build keeps the ad unit IDs of the asset it loaded and applies every other `ad_remote_config` field; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs too. See [ads debug setup](../ads/README.md#2-add-placements). |
 | Analytics stops after a consent update | `Tracker.currentConsent` and your selected collection policy. |
