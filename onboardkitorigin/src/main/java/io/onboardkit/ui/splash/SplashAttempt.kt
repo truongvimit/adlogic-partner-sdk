@@ -88,7 +88,7 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
      *
      * The minimum-visible window runs from the later of this and the load, because both have to be
      * true before anyone can look at the ad: a banner renders behind the permission dialog, and a
-     * native binds only once that dialog is gone.
+     * native that loads under it binds only once the splash resumes.
      */
     var focusedAtMs: Long? = null
 
@@ -99,8 +99,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     }
     val interstitialSettled = CompletableDeferred<InterResult>()
     var budgetDeadlineMs: Long? = null
-    /** Past this, a slot that has neither loaded nor failed no longer holds the interstitial. */
-    var slotWaitDeadlineMs: Long? = null
+    /** When the interstitial settled as loaded; with the prompt gone, a silent slot's wait starts. */
+    var interLoadedAtMs: Long? = null
     var notificationPermissionRequested = false
     val notificationOpen = MutableStateFlow(false)
     val notificationPermissionResult = CompletableDeferred<Unit>()
@@ -118,8 +118,13 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     }
 
     fun settleInterstitial(result: InterResult) {
-        val expired = budgetDeadlineMs?.let { SystemClock.elapsedRealtime() >= it } == true
-        interstitialSettled.complete(if (expired) InterResult.TIMED_OUT else result)
+        if (interstitialSettled.isCompleted) return
+        val now = SystemClock.elapsedRealtime()
+        val expired = budgetDeadlineMs?.let { now >= it } == true
+        val settled = if (expired) InterResult.TIMED_OUT else result
+        // Before complete: an awaiter on Main.immediate resumes inside it and reads this at once.
+        if (settled == InterResult.LOADED) interLoadedAtMs = now
+        interstitialSettled.complete(settled)
     }
 
     fun notificationAnswered() {

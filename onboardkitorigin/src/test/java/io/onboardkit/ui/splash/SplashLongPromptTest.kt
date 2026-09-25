@@ -635,41 +635,115 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun aSilentSlotHoldsAReadyInterstitialOnlyUntilSlotWait() {
+    fun aSilentSlotGetsTenSecondsCountedFromTheInterstitialLoad() {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        LongPromptFixture.provider.ready = true
-        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        idleUntilAfterInterRequest(9_500)
+        // Well past ten seconds of splash, so a clock started anywhere but the load would fire at once.
+        main.idleFor(Duration.ofSeconds(15))
+        assertEquals(0, LongPromptFixture.flowStarts)
+        val loadedAt = loadInterstitialNow()
+        idleUntil(loadedAt + 9_500)
         assertEquals("A silent slot still has its ten seconds", listOf("native"), LongPromptFixture.provider.order)
-        idleUntilAfterInterRequest(10_500)
+        idleUntil(loadedAt + 10_500)
         assertEquals("Not the 60s ad budget", listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun remoteSlotWaitOutranksTheBundledTen() {
-        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"slot_wait_ms":5000}}}""")
+    fun remoteSlotWaitAfterInterOutranksTheBundledTen() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"slot_wait_after_inter_ms":5000}}}""")
         try {
             LongPromptFixture.provider.settleBanner = false
             launch(notification = false)
             drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-            LongPromptFixture.provider.ready = true
-            requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-            idleUntilAfterInterRequest(4_500)
+            val loadedAt = loadInterstitialNow()
+            idleUntil(loadedAt + 4_500)
             assertEquals(listOf("native"), LongPromptFixture.provider.order)
-            idleUntilAfterInterRequest(5_500)
+            idleUntil(loadedAt + 5_500)
             assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
         } finally {
             io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
         }
     }
 
-    /** The slot wait starts a beat after the request, so these marks sit 500ms either side of it. */
-    private fun idleUntilAfterInterRequest(ms: Long) {
-        val target = LongPromptFixture.provider.interstitialRequestAtMs + ms
-        main.idleFor(Duration.ofMillis((target - SystemClock.elapsedRealtime()).coerceAtLeast(0)))
+    @Test
+    fun aSilentSlotWithAFailedInterstitialStillRunsTheSplashBudget() {
+        LongPromptFixture.provider.settleBanner = false
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
+        main.idleFor(Duration.ofSeconds(20))
+        assertEquals("The ten seconds belong to a loaded interstitial only", 0, LongPromptFixture.flowStarts)
+        main.idleFor(Duration.ofSeconds(45))
+        assertEquals("The splash budget still ends the wait", 1, LongPromptFixture.flowStarts)
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+    }
+
+    @Test
+    fun splashSlotAndInterstitialGoOutBeforeTheNotificationPrompt() {
+        val promptOpenAtRequest = mutableListOf<Boolean?>()
+        LongPromptFixture.provider.onSplashRequest = {
+            promptOpenAtRequest += controller?.get()?.let { shadowOf(it).lastRequestedPermission != null }
+        }
+        launch(notification = true)
+        val host = requireNotNull(controller).get()
+        drainUntil("The prompt still follows the requests") { shadowOf(host).lastRequestedPermission != null }
+        assertEquals("Banner and inter both went out before the prompt", listOf(false, false), promptOpenAtRequest)
+    }
+
+    @Test
+    fun aSilentSlotsTenSecondsAlsoWaitForThePromptToClose() {
+        LongPromptFixture.provider.settleBanner = false
+        launch(notification = true)
+        val host = requireNotNull(controller).get()
+        drainUntil("Prompt and inter must start") {
+            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.provider.interstitialLoads == 1
+        }
+        host.onWindowFocusChanged(false)
+        loadInterstitialNow()
+        main.idleFor(Duration.ofSeconds(15))
+        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
+        host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
+            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
+        val closedAt = SystemClock.elapsedRealtime()
+        host.onWindowFocusChanged(true)
+        idleUntil(closedAt + 9_500)
+        assertEquals("Ten seconds from the prompt closing, not from the load", listOf("native"), LongPromptFixture.provider.order)
+        idleUntil(closedAt + 10_500)
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+    }
+
+    @Test
+    fun slotAndInterstitialFilledUnderThePromptStillGiveTheSlotItsMinimum() {
+        LongPromptFixture.provider.fillBanner = true
+        launch(notification = true)
+        val host = requireNotNull(controller).get()
+        drainUntil("Prompt and inter must start") {
+            shadowOf(host).lastRequestedPermission != null && LongPromptFixture.provider.interstitialLoads == 1
+        }
+        host.onWindowFocusChanged(false)
+        loadInterstitialNow()
+        main.idleFor(Duration.ofSeconds(5))
+        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
+        host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
+            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
+        val closedAt = SystemClock.elapsedRealtime()
+        host.onWindowFocusChanged(true)
+        idleUntil(closedAt + 900)
+        assertEquals("The slot gets its full second in front of the user", listOf("native"), LongPromptFixture.provider.order)
+        idleUntil(closedAt + 1_200)
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+    }
+
+    private fun loadInterstitialNow(): Long {
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        return SystemClock.elapsedRealtime()
+    }
+
+    private fun idleUntil(elapsedRealtimeMs: Long) {
+        main.idleFor(Duration.ofMillis((elapsedRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)))
     }
 
     @Test
@@ -1234,6 +1308,8 @@ private object LongPromptFixture {
         provider.releases = 0
         provider.loadedKeys.clear()
         provider.interstitialRequestAtMs = 0L
+        provider.onSplashRequest = null
+        provider.fillBanner = false
         provider.pending = null
         provider.ready = false
         provider.order.clear()
@@ -1251,6 +1327,8 @@ private class LongPromptProvider : OnboardingAdProvider {
     var immediateInterResult = 0
     var premium = false
     var interstitialRequestAtMs = 0L
+    var onSplashRequest: (() -> Unit)? = null
+    var fillBanner = false
     var interstitialLoads = 0
     var pending: AdEventListener? = null
     var ready = false
@@ -1273,6 +1351,7 @@ private class LongPromptProvider : OnboardingAdProvider {
         loadedUnits += unit.loadOrder
         interstitialLoads++
         interstitialRequestAtMs = SystemClock.elapsedRealtime()
+        onSplashRequest?.invoke()
         pending = listener
         if (immediateInterResult == 1) { ready = true; listener?.onLoaded() }
         if (immediateInterResult == 2) listener?.onFailedToLoad()
@@ -1310,7 +1389,8 @@ private class LongPromptProvider : OnboardingAdProvider {
     }
     override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
         bannerLoads++
-        if (settleBanner) listener?.onFailedToLoad()
+        onSplashRequest?.invoke()
+        if (fillBanner) listener?.onLoaded() else if (settleBanner) listener?.onFailedToLoad()
     }
     override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
     override fun releaseAll() = Unit

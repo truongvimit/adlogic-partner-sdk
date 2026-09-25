@@ -53,6 +53,7 @@ import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.splash.SplashAttempt.InterResult
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -222,8 +223,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Completing the step and authorizing requests are separate. The SDK reads current
             // authority at each gate, so a later answer can recover without overwriting host-off.
             val mayRequestAds = consent.await()
+            // The prompt waits for the splash's own requests, so the bottom slot loads under it
+            // whichever format it is: a native cannot start its request once the prompt has focus.
+            val adsRequested = CompletableDeferred<Unit>()
             val notification = async {
                 remote.await()
+                adsRequested.await()
                 awaitNotificationPermission()
             }
             if (!mayRequestAds) {
@@ -241,6 +246,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 packageManager.getPackageInfo(packageName, 0),
             )
             if (attempt.updateConfig.isRequired(installed)) {
+                // No ad may go out before a mandatory update, so the prompt does not wait for one.
+                adsRequested.complete(Unit)
                 notification.await()
                 awaitSplashFocus()
                 ForceUpdateGate.await(this@ObSplashActivity, attempt.updateConfig)
@@ -259,6 +266,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             if (attempt.startDecision == null) attempt.startDecision = OnboardingSdk.shouldStart()
             ObLog.d(ObLog.Section.SPLASH, "start_decision=${describe(checkNotNull(attempt.startDecision))} returning=${isReturningUser()}")
             requestSplashAds()
+            adsRequested.complete(Unit)
             lifecycleScope.launch {
                 val reason = if (checkNotNull(attempt.flags).splashLfoParallelPreloadEnabled) "parallel_start"
                     else attempt.interstitialSettled.await().lfoReason
@@ -537,20 +545,14 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     /**
-     * The shared ad budget and the slot's own wait, both armed once, after notification and
-     * foreground focus, so a recreated splash keeps the original deadlines.
+     * One monotonic deadline, first armed after notification and foreground focus. Armed even when
+     * both ads settled under the prompt: the slot's minimum-visible hold is clamped to it.
      */
     private fun beginAdWait() {
         if (attempt.budgetDeadlineMs != null) return
         val flags = checkNotNull(attempt.flags)
-        if (!attempt.interstitialSettled.isCompleted ||
-            flags.splashSlotMinVisibleMs > 0 && !attempt.bannerSettled.isCompleted) {
-            val now = SystemClock.elapsedRealtime()
-            val slotWaitMs = OnboardingSettings.number("splash.timing.slot_wait_ms")
-            attempt.budgetDeadlineMs = now + flags.splashAdBudgetMs.coerceAtLeast(0)
-            attempt.slotWaitDeadlineMs = now + slotWaitMs
-            ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs} slot_wait_ms=$slotWaitMs")
-        }
+        attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
+        ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
     }
 
     private fun remainingBudgetMs(): Long = remainingMs(attempt.budgetDeadlineMs)
@@ -562,20 +564,26 @@ open class ObSplashActivity : BaseOnboardActivity() {
      * Holds the interstitial until the bottom slot has had its minimum time on screen.
      *
      * The window runs from the later of the slot loading and the splash getting the screen back,
-     * because both have to be true before anyone can look at it: a banner that filled behind the
-     * notification dialog was on screen but not in front of the user, and a native binds only once
-     * that dialog is gone.
+     * because both have to be true before anyone can look at it: a slot that filled behind the
+     * notification dialog was not in front of the user yet.
      *
      * Nothing here can strand the flow. A slot that fails, is skipped or has no ad unit settles
      * without ever being marked filled and returns at once. One that has answered nothing is
-     * waited for only until `splash.timing.slot_wait_ms` or the shared ad budget runs out,
-     * whichever comes first, and is then given up for the interstitial.
+     * waited for within what is left of the shared ad budget — except once the interstitial has
+     * loaded and the notification prompt is gone, when it gets only
+     * `splash.timing.slot_wait_after_inter_ms` from the later of the two before it is given up and
+     * the interstitial shows.
      */
     private suspend fun awaitSlotVisible() {
         val minVisibleMs = checkNotNull(attempt.flags).splashSlotMinVisibleMs
         if (minVisibleMs <= 0) return
         if (!attempt.bannerSettled.isCompleted) {
-            val waitMs = minOf(remainingBudgetMs(), remainingMs(attempt.slotWaitDeadlineMs))
+            val slotDeadline = attempt.interLoadedAtMs?.let { loadedAt ->
+                maxOf(loadedAt, attempt.notificationAnsweredAtMs ?: loadedAt) +
+                    OnboardingSettings.number("splash.timing.slot_wait_after_inter_ms")
+            }
+            val waitMs = if (slotDeadline == null) remainingBudgetMs()
+                else minOf(remainingBudgetMs(), remainingMs(slotDeadline))
             withTimeoutOrNull(waitMs.milliseconds) { attempt.bannerSettled.await() }
         }
         val loadedAt = attempt.slotLoadedAtMs

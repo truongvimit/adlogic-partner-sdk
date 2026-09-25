@@ -81,10 +81,11 @@ thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.
 Khoảng đó tính từ mốc **muộn hơn** giữa lúc slot **load xong** và lúc splash **lấy lại màn hình**,
 vì phải đủ cả hai thì mới có ai nhìn được: ad fill sau lưng dialog là có trên màn nhưng không ở
 trước mặt user. Slot lỗi, bị skip hoặc không có ad unit thì không khởi động khoảng này và không bị
-chờ. Slot chưa phản hồi gì, không load xong cũng không lỗi, chỉ được chờ tối đa
-`splash.timing.slot_wait_ms` tính từ lúc dialog noti đóng, hoặc tới khi `splash.timing.ad_budget_ms`
-hết nếu hết trước; quá mốc đó inter show luôn, bỏ slot. Mọi lần giữ đều bị chặn trên bởi phần còn lại
-của budget đó. Hoàn toàn không dùng impression
+chờ. Slot chưa phản hồi gì, không load xong cũng không lỗi, được chờ trong phần còn lại của
+`splash.timing.ad_budget_ms`, trừ khi inter đã load xong và dialog noti đã ẩn: tính từ mốc muộn hơn
+trong hai mốc đó, slot chỉ được chờ tối đa `splash.timing.slot_wait_after_inter_ms`, quá mốc thì inter
+show luôn, bỏ slot. Mọi lần giữ đều bị chặn
+trên bởi phần còn lại của budget. Hoàn toàn không dùng impression
 của vendor, vì banner collapsible không bao giờ báo. Đặt `0` là quay lại hành vi cũ,
 không bảo vệ gì.
 
@@ -302,7 +303,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |
 | `splash.timing.slot_min_visible_ms` | `1000` | Thời gian tối thiểu slot phải hiện trước khi inter phủ lên. |
-| `splash.timing.slot_wait_ms` | `10000` | Tính từ lúc dialog noti đóng; slot vẫn chưa load/lỗi quá mốc này thì inter đã sẵn sàng show luôn, không chờ slot. |
+| `splash.timing.slot_wait_after_inter_ms` | `10000` | Tính từ mốc muộn hơn giữa lúc inter splash load xong và lúc dialog noti ẩn; slot vẫn chưa load/lỗi quá mốc này thì show inter luôn. Inter chưa load thì không dùng, vẫn chờ theo `ad_budget_ms`. |
 | `splash.timing.notification_settle_ms` | `800` | Sàn tối thiểu sau khi user trả lời prompt noti, trước khi inter được show. |
 | `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; đọc sau khi bước remote kết thúc, giá trị fetch ở bước đó áp dụng ngay lượt mở này. |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` | PARALLEL/SEQUENTIAL so với inter splash; độc lập ad_strategy. |

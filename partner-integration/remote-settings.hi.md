@@ -72,9 +72,10 @@ entry। इनमें से कोई एक भी न हो तो slot �
 यह window slot के **load** होने और splash के **स्क्रीन वापस पाने** में से जो बाद में हो, वहाँ से चलती है — दोनों
 सच होने पर ही कोई उसे देख सकता है: notification dialog के पीछे भरा ad स्क्रीन पर था, पर user के सामने नहीं।
 जो slot fail हो, skip हो या जिसका ad unit न हो, वह window शुरू ही नहीं करता और उसका इंतज़ार नहीं होता;
-जिस slot ने कोई जवाब नहीं दिया — न load हुआ, न fail — उसका इंतज़ार notification dialog बंद होने से
-ज़्यादा से ज़्यादा `splash.timing.slot_wait_ms` तक होता है, या `splash.timing.ad_budget_ms` पहले ख़त्म हो
-तो तब तक; उसके बाद interstitial उसके बिना दिखता है। हर hold उसी budget के बचे हुए हिस्से तक सीमित रहता है। Vendor impression बिल्कुल नहीं देखा जाता,
+जिस slot ने कोई जवाब नहीं दिया — न load हुआ, न fail — उसका इंतज़ार `splash.timing.ad_budget_ms` के बचे
+हुए हिस्से में होता है, सिवाय तब जब interstitial load हो चुका हो और notification dialog हट चुका हो: इन दोनों में
+जो बाद में हो, उस पल से उसे ज़्यादा से ज़्यादा `splash.timing.slot_wait_after_inter_ms` मिलता है, उसके बाद interstitial उसके बिना दिखता है। हर hold budget
+के बचे हुए हिस्से तक सीमित रहता है। Vendor impression बिल्कुल नहीं देखा जाता,
 क्योंकि collapsible banner कभी report नहीं करता। `0` पुराना असुरक्षित व्यवहार लौटाता है।
 
 Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
@@ -281,7 +282,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
 | `splash.timing.slot_min_visible_ms` | `1000` |
-| `splash.timing.slot_wait_ms` | `10000` |
+| `splash.timing.slot_wait_after_inter_ms` | `10000` |
 | `splash.timing.notification_settle_ms` | `800` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |
