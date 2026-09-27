@@ -325,6 +325,48 @@ Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass th
 Use the manager APIs for these placements and remove app-side refill timers or temporary
 interval overrides. Call `stop()` only when you want to disable buffering.
 
+### Limit automatic preload to selected screens
+
+For a placement such as Back, let the app report the active screen and allow automatic requests
+only where that placement has a useful show opportunity. Activity, Fragment and Compose hosts use
+the same API; the SDK does not depend on Compose or Navigation.
+
+```kotlin
+// Once, alongside your existing configure(...), before content-entry start(...).
+InterstitialAutoBuffer.setPreloadScreens(
+    mapOf(AppAdPlacement.INTER_BACK to setOf("translate", "camera", "conversation")),
+)
+
+// Main thread: report the screen once it is selected and resumed.
+val screen = InterstitialAutoBuffer.setCurrentScreen("translate")
+// Close from this screen owner's pause/disposal callback.
+screen.close()
+```
+
+Start the buffer from the first content screen, including Home; entering a feature must not
+start a new timer. Changing the screen wakes the buffer to check existing eligibility. If the
+preload deadline is still ahead, it waits only the remaining time. If the deadline and taps were
+already satisfied on Home, entering an allowed screen prompts a request immediately, subject to
+the other gates and existing cache/request. Screen changes never reset clocks or tap counts.
+
+`setPreloadScreens` replaces the complete whitelist snapshot. An omitted placement keeps its
+existing behavior; a present empty set disables its automatic preload. Restricted placements
+require a matching screen; `null` means no active screen. Both setters and handle cleanup run on
+the main thread. Closing an older screen handle cannot clear a newer registration. Re-registering
+the same ID transfers ownership without restarting scheduling; there is no stack of old screens
+to restore when a handle closes.
+
+This gate controls auto-buffer preload/refill and `topUpNow()` only. Explicit manager `load`,
+`loadAndShow` and `show` retain their existing behavior. Remove explicit Home/splash Back preloads
+if the buffer should own that inventory. Leaving an allowed screen retains ready ads and pending
+loads, so Back can still show a ready ad after navigation returns to Home. There is no automatic
+show on entry and no change to the existing dismissal/final-failure clock semantics.
+
+Use one active screen source for each navigation hierarchy and report Home/other destinations
+too. See the [Vietnamese integration guide](../partner-integration/interstitial-preload-screens.vi.md)
+for lifecycle-safe Activity, Fragment, custom navigation and Compose examples, timing scenarios
+and the TranslatorGuru mapping.
+
 ### Opt-in content wait and independent placement clocks
 
 For selected content placements, use the existing buffer with independent clocks. The buffer
