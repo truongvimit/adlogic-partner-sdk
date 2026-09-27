@@ -1,5 +1,8 @@
 package io.onboardkit.ui.splash
 
+import kotlin.math.ceil
+import kotlin.math.sqrt
+
 /**
  * Counts only time during which the splash is visible. Keep one instance per splash attempt,
  * and pause it while a prompt, another screen, or the background hides the splash.
@@ -35,5 +38,21 @@ internal class SplashProgress {
         val remainingFraction = 1.0 - slowFraction
         // Ease out over the remaining budget, reserving 100% for actual completion.
         return (100.0 - 10.0 * remainingFraction * remainingFraction).toInt().coerceAtMost(99)
+    }
+
+    /** Sleep until the next integer percentage; no timer is needed while hidden or complete. */
+    fun nextUpdateDelayMs(nowMs: Long, timeoutMs: Long = 60_000L): Long? {
+        if (!isActive) return null
+        val nextPercent = percent(nowMs, timeoutMs) + 1
+        if (nextPercent > 100) return null
+        val fastPhaseMs = minOf(10_000L, timeoutMs)
+        val targetMs = when {
+            nextPercent == 100 -> timeoutMs
+            nextPercent <= 90 -> (nextPercent * fastPhaseMs + 89) / 90
+            else -> fastPhaseMs + ceil(
+                (timeoutMs - fastPhaseMs) * (1.0 - sqrt((100 - nextPercent) / 10.0)),
+            ).toLong()
+        }
+        return (targetMs - elapsedMs(nowMs)).coerceAtLeast(1)
     }
 }

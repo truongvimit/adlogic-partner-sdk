@@ -81,19 +81,16 @@
                 tools:text="64%" />
         </LinearLayout>
 
-        <com.google.android.material.progressindicator.LinearProgressIndicator
+        <ProgressBar
             android:id="@+id/ob_splash_progress"
-            style="@style/Widget.MaterialComponents.LinearProgressIndicator"
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="8dp"
             android:layout_marginTop="12dp"
             android:indeterminate="false"
             android:max="100"
             android:progress="0"
-            app:indicatorColor="@color/ob_splash_progress"
-            app:trackColor="@color/ob_splash_progress_track"
-            app:trackCornerRadius="4dp"
-            app:trackThickness="8dp" />
+            android:progressDrawable="@drawable/ob_splash_progress" />
 
         <TextView
             android:layout_width="match_parent"

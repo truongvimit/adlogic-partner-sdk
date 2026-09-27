@@ -58,7 +58,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -75,6 +75,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
         ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[SplashAttempt::class.java]
     }
     private val windowFocused = MutableStateFlow(false)
+    private var progressBar: ProgressBar? = null
+    private var progressPercent: TextView? = null
+    private var renderedPercent = -1
+    private var progressTimeoutMs = 60_000L
+    private var progressJob: Job? = null
+    private var budgetJob: Job? = null
 
     private val nativeScreenLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -88,6 +94,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             .putBoolean("notification_handled", true).apply()
         ObLog.d(ObLog.Section.SPLASH, "notification permission result granted=$granted")
         attempt.promptAnswered()
+        refreshProgress()
     }
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
@@ -129,11 +136,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         windowFocused.value = hasFocus
-        if (!restartedByGuard) updateProgress()
+        if (!restartedByGuard) refreshProgress()
     }
 
     override fun onPause() {
-        if (!restartedByGuard) attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+        if (!restartedByGuard) pauseProgress()
         super.onPause()
     }
 
@@ -141,30 +148,59 @@ open class ObSplashActivity : BaseOnboardActivity() {
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 try {
-                    while (isActive && !attempt.showRequested) {
-                        updateProgress()
-                        delay(50)
-                    }
+                    // A form can cover a RESUMED activity. React to visibility instead of polling UMP.
+                    ConsentCenter.formShowing.collect { refreshProgress() }
                 } finally {
-                    attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+                    pauseProgress()
                 }
             }
         }
     }
 
-    private fun updateProgress() {
+    private fun pauseProgress() {
+        progressJob?.cancel()
+        budgetJob?.cancel()
+        attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+    }
+
+    /** Called only for lifecycle, focus, prompt, configuration, or presentation changes. */
+    private fun refreshProgress() {
+        progressJob?.cancel()
+        budgetJob?.cancel()
         val now = SystemClock.elapsedRealtime()
         val visible = !isFinishing && !isDestroyed && !attempt.showRequested &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && windowFocused.value &&
             attempt.prompt.value != SplashPrompt.Open && !ConsentCenter.isFormShowing()
         attempt.progress.setActive(visible, now)
-        val timeoutMs = attempt.budgetTimeoutMs ?: sdk.flags().splashAdBudgetMs.coerceAtLeast(0)
-        val percent = if (attempt.showRequested) 100 else attempt.progress.percent(now, timeoutMs)
-        findViewById<ProgressBar?>(R.id.ob_splash_progress)?.progress = percent
-        findViewById<TextView?>(R.id.ob_splash_progress_percent)?.text = getString(R.string.ob_splash_percent, percent)
-        if (attempt.budgetTimeoutMs != null && attempt.progress.elapsedMs(now) >= timeoutMs) {
-            attempt.onInterResult(InterResult.TIMED_OUT)
+        renderProgress(now)
+        if (!visible) return
+
+        // Deadline scheduling is independent of rendering, including custom layouts without a bar.
+        attempt.budgetTimeoutMs?.let { timeout ->
+            if (!attempt.interstitialSettled.isCompleted) {
+                budgetJob = lifecycleScope.launch {
+                    delay((timeout - attempt.progress.elapsedMs(SystemClock.elapsedRealtime())).coerceAtLeast(0))
+                    attempt.onInterResult(InterResult.TIMED_OUT)
+                }
+            }
         }
+        if (progressBar == null && progressPercent == null) return
+        progressJob = lifecycleScope.launch {
+            while (true) {
+                val wait = attempt.progress.nextUpdateDelayMs(SystemClock.elapsedRealtime(), progressTimeoutMs)
+                    ?: break
+                delay(wait)
+                renderProgress(SystemClock.elapsedRealtime())
+            }
+        }
+    }
+
+    private fun renderProgress(now: Long) {
+        val percent = if (attempt.showRequested) 100 else attempt.progress.percent(now, progressTimeoutMs)
+        if (percent == renderedPercent) return
+        renderedPercent = percent
+        progressBar?.progress = percent
+        progressPercent?.text = getString(R.string.ob_splash_percent, percent)
     }
 
     private suspend fun awaitNetworkGate(cfg: OnboardKitConfig) {
@@ -244,6 +280,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
             attempt.remoteHookResolved = true
             onRemoteFetched()
             if (!attempt.showRequested) {
+                if (attempt.budgetTimeoutMs == null) {
+                    progressTimeoutMs = sdk.flags().splashAdBudgetMs.coerceAtLeast(0)
+                    refreshProgress()
+                }
                 val policy = readForceUpdateConfig()
                 if (policy != attempt.updateConfig) {
                     attempt.updateConfig = policy
@@ -307,7 +347,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             if (!shouldAskNotificationPermission()) return
             awaitSplashFocus()
             attempt.promptOpened()
-            updateProgress()
+            refreshProgress()
             try {
                 ObLog.d(ObLog.Section.SPLASH, "requesting notification permission")
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -478,7 +518,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         if (attempt.budgetTimeoutMs != null) return
         val flags = sdk.flags()
         attempt.budgetTimeoutMs = flags.splashAdBudgetMs.coerceAtLeast(0)
-        updateProgress()
+        progressTimeoutMs = checkNotNull(attempt.budgetTimeoutMs)
+        refreshProgress()
         ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} visible_budget ms=${flags.splashAdBudgetMs}")
     }
 
@@ -521,7 +562,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Remote can publish a required update while the paywall owns the screen.
             awaitUpdateGate()
             attempt.showRequested = true
-            updateProgress()
+            refreshProgress()
             val state = attempt
             if (purchased || state.interstitialSettled.await() != InterResult.LOADED) {
                 if (purchased) AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PURCHASED_AT_PAYWALL)
@@ -646,14 +687,16 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 name.text = applicationInfo.loadLabel(packageManager)
             }
         }
-        findViewById<ProgressBar?>(R.id.ob_splash_progress)?.apply {
+        progressTimeoutMs = attempt.budgetTimeoutMs ?: sdk.flags().splashAdBudgetMs.coerceAtLeast(0)
+        progressPercent = findViewById(R.id.ob_splash_progress_percent)
+        progressBar = findViewById<ProgressBar?>(R.id.ob_splash_progress)?.apply {
             isIndeterminate = false
             max = 100
         }
     }
 
     override fun onDestroy() {
-        if (!restartedByGuard) attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+        if (!restartedByGuard) pauseProgress()
         ConsentCenter.detach(this)
         // Also on recreation, unlike other screens: the slot is requested once per attempt.
         sdk.provider()?.releaseNative(AdPlacement.SplashInlineNative)

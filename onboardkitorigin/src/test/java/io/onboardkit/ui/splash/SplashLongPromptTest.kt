@@ -74,13 +74,9 @@ class SplashLongPromptTest {
 
     @Before
     fun setUp() {
-        // Robolectric resets Choreographer but AndroidX's spring scheduler retains the old one.
-        // Drop that test-only cache so determinate progress cannot advance to a prior test's time.
-        org.robolectric.util.ReflectionHelpers.getStaticField<ThreadLocal<*>>(
-            Class.forName("androidx.dynamicanimation.animation.AnimationHandler"), "sAnimatorHandler",
-        ).remove()
         LongPromptFixture.reset()
         app.applicationInfo.targetSdkVersion = 34
+
         ConsentCenter.reset(app)
         ConsentCenter.configure(ConsentOptions(debug = false, timeoutMs = 20_000))
         OnboardingSdk.install(app) {
@@ -719,10 +715,11 @@ class SplashLongPromptTest {
         val closedAt = SystemClock.elapsedRealtime()
         host.onWindowFocusChanged(true)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
-        idleUntil(closedAt + 999)
+        idleUntil(closedAt + 900)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         idleUntil(closedAt + 1_000)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        assertNotificationSettle(closedAt)
     }
 
     @Test
@@ -739,10 +736,11 @@ class SplashLongPromptTest {
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
         val closedAt = SystemClock.elapsedRealtime()
-        idleUntil(closedAt + 999)
+        idleUntil(closedAt + 900)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         idleUntil(closedAt + 1_000)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        assertNotificationSettle(closedAt)
     }
 
     @Test
@@ -767,6 +765,33 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun progressTextChangesOnlyWhenTheIntegerPercentChanges() {
+        launch(notification = false)
+        drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
+        val host = requireNotNull(controller).get()
+        val label = host.findViewById<android.widget.TextView>(io.onboardkit.R.id.ob_splash_progress_percent)
+        val rendered = mutableListOf<String>()
+        label.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                rendered += s.toString()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        main.idleFor(Duration.ofSeconds(10))
+        val beforePopup = rendered.size
+        host.onWindowFocusChanged(false)
+        main.idleFor(Duration.ofSeconds(70))
+        assertEquals("No UI writes while the splash is hidden", beforePopup, rendered.size)
+        host.onWindowFocusChanged(true)
+        main.idleFor(Duration.ofSeconds(50))
+        assertEquals("No repeated percentage writes", rendered.distinct(), rendered)
+        assertTrue("At most one write for each integer percent", rendered.size <= 100)
+        assertEquals("100%", label.text.toString())
+        assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
     fun aFilledSlotAddsNoHoldAfterNotification() {
         LongPromptFixture.provider.fillBanner = true
         launch(notification = true)
@@ -782,10 +807,11 @@ class SplashLongPromptTest {
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
         val closedAt = SystemClock.elapsedRealtime()
         host.onWindowFocusChanged(true)
-        idleUntil(closedAt + 999)
+        idleUntil(closedAt + 900)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         idleUntil(closedAt + 1_000)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
+        assertNotificationSettle(closedAt)
     }
 
     @Test
@@ -1019,6 +1045,14 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         return SystemClock.elapsedRealtime()
+    }
+
+    private fun assertNotificationSettle(closedAt: Long) {
+        // View rendering can advance Robolectric's clock slightly past an idleFor deadline.
+        // Assert the actual show timestamp so a late test wake cannot hide an early ad.
+        val shownAt = requireNotNull(LongPromptFixture.provider.interstitialShowAtMs)
+        assertTrue("Never show before the one-second settle", shownAt >= closedAt + 1_000)
+        assertTrue("A ready ad shows within the next frame", shownAt <= closedAt + 1_016)
     }
 
     private fun idleUntil(elapsedRealtimeMs: Long) {
@@ -1723,6 +1757,7 @@ private object LongPromptFixture {
         provider.onSplashRequest = null
         provider.fillBanner = false
         provider.bannerListener = null
+        provider.interstitialShowAtMs = null
         provider.pending = null
         provider.ready = false
         provider.order.clear()
@@ -1740,6 +1775,7 @@ private class LongPromptProvider : FakeAdProvider() {
     var immediateInterResult = 0
     var premium = false
     var interstitialRequestAtMs = 0L
+    var interstitialShowAtMs: Long? = null
     var onSplashRequest: (() -> Unit)? = null
     var fillBanner = false
     var bannerListener: AdEventListener? = null
@@ -1819,6 +1855,7 @@ private class LongPromptProvider : FakeAdProvider() {
     }
 
     override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
+        interstitialShowAtMs = SystemClock.elapsedRealtime()
         order += "show"
         if (successfulShow) {
             presentation = callback

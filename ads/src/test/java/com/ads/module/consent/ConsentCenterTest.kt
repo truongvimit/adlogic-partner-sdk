@@ -94,6 +94,7 @@ class ConsentCenterTest {
         assertFalse(ConsentCenter.canPersonalize())
         assertTrue(ConsentCenter.isResolving())
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         assertTrue(completions.isEmpty())
     }
 
@@ -199,6 +200,7 @@ class ConsentCenterTest {
         assertEquals(listOf(true), completions)
         assertTrue(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         assertFalse(ConsentCenter.hasAnswered())
         val lateForm = FakeConsentForm()
         pendingForm.onLoaded(lateForm)
@@ -282,6 +284,7 @@ class ConsentCenterTest {
 
         assertTrue(ConsentCenter.isResolving())
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
         assertTrue(completions.isEmpty())
         assertTrue(answers.isEmpty())
         assertFalse(ConsentCenter.canRequestAds())
@@ -298,6 +301,7 @@ class ConsentCenterTest {
         assertTrue(ConsentCenter.canPersonalize())
         assertFalse(ConsentCenter.isResolving())
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
     }
 
     @Test
@@ -310,6 +314,7 @@ class ConsentCenterTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(3))
         assertTrue(ConsentCenter.isResolving())
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
         assertTrue(completions.isEmpty())
         vendor.information.obtained()
         form.dismiss(null)
@@ -321,6 +326,7 @@ class ConsentCenterTest {
         assertEquals(ConsentState.DENIED, ConsentCenter.state.value)
         assertTrue(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         assertEquals(0, vendor.information.resetCount)
         assertEquals(1, vendor.information.updates.size)
     }
@@ -357,6 +363,7 @@ class ConsentCenterTest {
         assertTrue(answers.isEmpty())
         assertFalse(ConsentCenter.hasAnswered())
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         ConsentCenter.request(activity) {}
         assertEquals(2, vendor.information.updates.size)
     }
@@ -370,6 +377,7 @@ class ConsentCenterTest {
         val replacement = Robolectric.buildActivity(Activity::class.java).setup().get()
         ConsentCenter.detach(replacement)
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
 
         ConsentCenter.detach(activity)
         ConsentCenter.request(replacement, onCompleted = second::add)
@@ -420,8 +428,10 @@ class ConsentCenterTest {
         assertTrue(ConsentCenter.canRequestAds())
         assertFalse(ConsentCenter.isResolving())
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
         form.dismiss(null)
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         assertEquals(listOf(true), completions)
         assertTrue(answers.isEmpty())
     }
@@ -435,10 +445,12 @@ class ConsentCenterTest {
         ConsentCenter.reset(activity)
 
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
         assertFalse(ConsentCenter.isResolving())
         assertFalse(ConsentCenter.canRequestAds())
         form.dismiss(null)
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         assertTrue(completions.isEmpty())
     }
 
@@ -455,12 +467,14 @@ class ConsentCenterTest {
         oldForm.dismiss(null)
 
         assertTrue(ConsentCenter.isFormShowing())
+        assertTrue(ConsentCenter.formShowing.value)
         assertTrue(ConsentCenter.isResolving())
         assertTrue(completions.isEmpty())
         vendor.information.obtained()
         newForm.dismiss(null)
         assertEquals(listOf(true), completions)
         assertFalse(ConsentCenter.isFormShowing())
+        assertFalse(ConsentCenter.formShowing.value)
         replacement.finish()
     }
 

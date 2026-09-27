@@ -82,4 +82,42 @@ class SplashProgressTest {
         assertEquals(100, progress.percent(nowMs = 5_000, timeoutMs = 5_000))
         assertEquals(100, progress.percent(nowMs = 0, timeoutMs = 0))
     }
+    @Test
+    fun `scheduler wakes only when the displayed percent changes`() {
+        val progress = SplashProgress()
+        progress.setActive(true, nowMs = 0)
+        var now = 0L
+        var previous = 0
+        var wakes = 0
+        while (true) {
+            val wait = progress.nextUpdateDelayMs(now, 60_000) ?: break
+            assertTrue("Every scheduled wake must be in the future", wait > 0)
+            assertEquals(previous, progress.percent(now + wait - 1))
+            now += wait
+            val percent = progress.percent(now)
+            assertEquals(previous + 1, percent)
+            previous = percent
+            wakes++
+        }
+        assertEquals(100, wakes)
+        assertEquals(60_000L, now)
+    }
+
+    @Test
+    fun `scheduler sleeps while paused and recalculates after resuming or a late wake`() {
+        val progress = SplashProgress()
+        assertEquals(null, progress.nextUpdateDelayMs(0))
+        progress.setActive(true, 0)
+        assertEquals(112L, progress.nextUpdateDelayMs(0))
+        progress.setActive(false, 5_000)
+        assertEquals(null, progress.nextUpdateDelayMs(90_000))
+        progress.setActive(true, 90_000)
+        assertEquals(112L, progress.nextUpdateDelayMs(90_000))
+        val lateNow = 115_000L
+        val wait = requireNotNull(progress.nextUpdateDelayMs(lateNow))
+        assertEquals(progress.percent(lateNow) + 1, progress.percent(lateNow + wait))
+        assertEquals(100, progress.percent(145_000))
+        assertEquals(null, progress.nextUpdateDelayMs(145_000))
+    }
+
 }

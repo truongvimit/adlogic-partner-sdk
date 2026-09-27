@@ -66,7 +66,14 @@ object ConsentCenter {
     @Volatile private var hostConsent: HostConsent? = null
     @Volatile private var generation = 0L
     @Volatile private var pendingFlow: PendingFlow? = null
+    private val _formShowing = MutableStateFlow(false)
+    /** Form visibility events, independent of consent eligibility and UMP network updates. */
+    val formShowing: StateFlow<Boolean> = _formShowing.asStateFlow()
     @Volatile private var visibleForm: VisibleForm? = null
+        set(value) {
+            field = value
+            _formShowing.value = isFormShowing()
+        }
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
 
