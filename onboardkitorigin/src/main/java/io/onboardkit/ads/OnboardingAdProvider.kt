@@ -1,154 +1,89 @@
 package io.onboardkit.ads
 
-import com.ads.module.helper.adnative.NativeClickAction
-
 import android.app.Activity
-import android.content.Context
-import android.view.View
-import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
 import androidx.annotation.LayoutRes
 import androidx.appcompat.app.AppCompatActivity
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
 
-/** Load-time callbacks a screen can observe for one placement. All optional. */
-interface AdEventListener {
+internal interface AdEventListener {
     fun onLoaded() {}
     fun onFailedToLoad() {}
-    /** The native was displayed, not merely loaded or bound into a view. */
     fun onImpression() {}
     fun onClicked() {}
 
-    /**
-     * The ad's destination took the screen. Reported instead of the click by Meta's native
-     * adapter, and never by Pangle's — a screen that must catch every departure listens to
-     * this and [onClicked] both.
-     */
+    // Meta's native adapter reports only this and Pangle's only the click: listen to both.
     fun onAdOpened() {}
+
+    fun onDetached() {}
 }
 
-data class NativeAdRequest @JvmOverloads constructor(
+internal data class NativeAdRequest(
     val placement: AdPlacement,
     val unit: NativeAdUnit,
     @LayoutRes val layoutRes: Int,
-    /** Only the visible splash beneath its own notification prompt may opt into this window. */
     val allowWhileVisible: Boolean = false,
 )
 
-/**
- * Vendor seam: the flow talks to this interface only.
- *
- * The SDK ships [io.onboardkit.ads.erain.ERainAdProvider], which bridges the project's `:ads`
- * module (AdMob legacy). Apps may inject any other implementation, or none at all — every
- * placement then reports [AdSkipReason.NO_PROVIDER] instead of failing.
- */
-interface OnboardingAdProvider {
+internal enum class NativeStatus { IDLE, LOADING, READY, FAILED }
 
-    /** The click-time decision, shared by native replacement and host navigation. */
-    fun nativeClickAction(placement: AdPlacement): NativeClickAction =
-        io.onboardkit.remote.OnboardingSettings.nativeClickAction(placement)
+/** The flow's ad engine; [io.onboardkit.ads.erain.ERainAdProvider] is the only implementation. */
+abstract class OnboardingAdProvider internal constructor() {
 
-    fun isPremium(context: Context): Boolean
+    internal abstract fun pendingClickAction(placement: AdPlacement): NativeClickAction?
 
-    /**
-     * Fire-and-forget waterfall preload, highest floor first. Idempotent per placement.
-     * Join existing loads; start new ones only with resumed foreground focus, or when
-     * [NativeAdRequest.allowWhileVisible] permits the visible splash notification window.
-     * A queued foreground wait should transfer when a new Activity requests the same placement.
-     */
-    fun preloadNative(activity: Activity, request: NativeAdRequest)
+    internal abstract fun preloadNative(activity: Activity, request: NativeAdRequest)
 
-    fun isNativeReady(placement: AdPlacement): Boolean
+    internal abstract fun nativeStatus(placement: AdPlacement): NativeStatus
 
-    fun isNativeLoading(placement: AdPlacement): Boolean
-
-    /** Terminal preload outcome, used by a handoff that must not immediately retry no-fill. */
-    fun isNativeLoadFailed(placement: AdPlacement): Boolean = false
-
-    /**
-     * Binds the buffered native into [container], swapping [shimmer] out.
-     * Returns false when nothing is buffered — the caller keeps or hides the shimmer.
-     */
-    fun bindNative(
-        activity: Activity,
-        placement: AdPlacement,
-        container: ViewGroup,
-        shimmer: View?,
-        listener: AdEventListener? = null,
+    // True for a bind done inside this call, not echoed as onLoaded; later binds report onLoaded.
+    internal abstract fun bindNative(
+        activity: ComponentActivity,
+        request: NativeAdRequest,
+        container: FrameLayout,
+        listener: AdEventListener,
     ): Boolean
 
-    /** Ends this screen's presentation; unused fills and shared pending loads survive departure. */
-    fun releaseNative(placement: AdPlacement)
+    internal abstract fun releaseNative(placement: AdPlacement)
 
-    fun loadInterstitial(
-        context: Context,
+    internal abstract fun loadInterstitial(
+        activity: Activity,
         placement: AdPlacement,
         unit: InterstitialAdUnit,
+        adConfigKey: String? = null,
         listener: AdEventListener? = null,
     )
 
-    /**
-     * [loadInterstitial] for units that belong to another ad_config key than the placement's own —
-     * a splash entry or the returning-user key — so that key's UA gate and behavior overrides
-     * apply. The default ignores the key.
-     */
-    fun loadInterstitial(
-        context: Context,
-        placement: AdPlacement,
-        unit: InterstitialAdUnit,
-        adConfigKey: String?,
-        listener: AdEventListener?,
-    ) = loadInterstitial(context, placement, unit, listener)
+    internal abstract fun isInterstitialReady(placement: AdPlacement): Boolean
 
-    fun isInterstitialReady(placement: AdPlacement): Boolean
+    internal abstract fun readyInterstitialUnitId(placement: AdPlacement): String?
 
-    /**
-     * The ad unit id of [placement]'s buffered fill, so a placement shared by several ad_config
-     * keys can tell whose fill it holds. `null` when unknown; the default knows nothing.
-     */
-    fun readyInterstitialUnitId(placement: AdPlacement): String? = null
+    internal abstract fun releaseInterstitial(placement: AdPlacement)
 
-    /** Drops [placement]'s buffered fill. The default keeps it. */
-    fun releaseInterstitial(placement: AdPlacement) = Unit
-
-    /**
-     * Shows the buffered interstitial for [placement].
-     *
-     * Must call [ObInterstitialCallback.onNextAction] at most once, and exactly one terminal
-     * callback. Callers rely on "the ad is on screen" and "the ad is gone" being two distinct
-     * moments — see [showInterstitial].
-     */
-    fun showInterstitial(
+    internal abstract fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,
         callback: ObInterstitialCallback,
     )
 
-    /**
-     * Use a buffered fill or wait at most [timeoutMs] for a load, then report a terminal skip.
-     * Every provider must implement this contract. The timeout bounds waiting for a fill,
-     * not show preparation or ad dismissal. A late fill must not auto-show for an expired call.
-     * The bundled ERain provider delegates to InterstitialAdManager.loadAndShow.
-     */
-    fun loadAndShowInterstitial(
+    // timeoutMs bounds the wait for a fill only; a late fill never auto-shows for this call.
+    internal abstract fun loadAndShowInterstitial(
         activity: AppCompatActivity,
         placement: AdPlacement,
         unit: InterstitialAdUnit,
         callback: ObInterstitialCallback,
-        timeoutMs: Long = 8_000L,
+        timeoutMs: Long,
     )
 
-    /** Wall clock of the last interstitial impression, `0` when the provider does not track it. */
-    fun lastInterstitialShownAtMs(context: Context): Long = 0L
+    internal abstract fun loadBanner(
+        activity: AppCompatActivity,
+        unit: BannerAdUnit,
+        listener: AdEventListener,
+    )
 
-    /** Clicks spent on [adUnitId] in the current 24 h window, `0` when unknown. */
-    fun clicksToday(context: Context, adUnitId: String): Int = 0
-
-    /** Requires the ads-module banner include (`banner_container` + `shimmer_container_banner`). */
-    fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener? = null)
-
-    fun suppressAppResume(activityClass: Class<out Activity>)
-
-    fun releaseAll()
+    internal abstract fun releaseAll()
 }

@@ -81,10 +81,6 @@ object OnboardingSdk {
     private var paywallGate: PaywallGate? = null
     private var listener: OnboardingListener? = null
 
-    /** Gate for every ad request; see [setCanRequestAds]. */
-    @Volatile
-    private var adsAllowed: Boolean = true
-
     private val eventBus = EventBus()
     internal val session = OnboardingSession()
     private val sdkScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -139,8 +135,8 @@ object OnboardingSdk {
         com.ads.module.config.settings.SettingsRegistry.addFetchListener("onboardkit.remote") {
             remote?.rereadActivated()
         }
-        adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
-        appResumeGuard = ObAppResume(adsGuard, adProvider)
+        adsGuard = AdsGuard(adProvider != null, ::configOrNull, ::flags, ConsentCenter::canRequestAds)
+        appResumeGuard = ObAppResume(adsGuard, adProvider != null)
         // Same transient/master policy for both entry paths; OPEN retains its own slot checks.
         AppOpenManager.getInstance().setResumeSkipPolicy(object : ResumeSkipPolicy {
             override fun skipReasonFor(activity: Activity): String? =
@@ -181,25 +177,6 @@ object OnboardingSdk {
     fun setListener(newListener: OnboardingListener) {
         listener = newListener
     }
-
-    /**
-     * Host policy for onboarding ads, AND-ed with the current consent authority.
-     *
-     * `false` disables requests even if consent is later granted. `true` removes only this host
-     * restriction; it cannot grant consent. Defaults to `true` so ConsentCenter controls requests,
-     * including its fallback after UMP errors or network timeouts.
-     *
-     * A host that runs another CMP must publish its result with [ConsentCenter.setHostConsent]
-     * before completing `ObSplashActivity.onConsentRequired`. Step completion is not authorization.
-     */
-    fun setCanRequestAds(allowed: Boolean) {
-        if (adsAllowed == allowed) return
-        adsAllowed = allowed
-        ObLog.d(ObLog.Section.GATE, "hostAllowsAds=$allowed")
-    }
-
-    /** Reads current authority directly, including revocation and later consent recovery. */
-    fun canRequestAds(): Boolean = adsAllowed && ConsentCenter.canRequestAds()
 
     fun addAnalyticsPlugin(plugin: AnalyticsPlugin) = AnalyticsHub.addPlugin(plugin)
 

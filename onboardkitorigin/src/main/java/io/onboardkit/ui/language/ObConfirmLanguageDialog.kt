@@ -1,6 +1,5 @@
 package io.onboardkit.ui.language
 
-import android.app.Activity
 import android.app.Dialog
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -12,6 +11,7 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import com.ads.module.util.AdSystemBars
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -64,7 +64,7 @@ internal class ConfirmAdSlot {
  * SDK's theme is AppCompat and a Material dialog needs a theme overlay this module does not carry.
  */
 internal class ObConfirmLanguageDialog(
-    private val activity: Activity,
+    private val activity: ComponentActivity,
     private val language: ObLanguage,
     private val adSlot: ConfirmAdSlot,
     private val onConfirmed: () -> Unit,

@@ -2,42 +2,64 @@ package io.onboardkit.ui.splash
 
 import com.ads.module.update.ForceUpdateConfig
 import com.ads.module.helper.AdGate
-import android.app.Activity
 import android.app.Application
-import android.os.Bundle
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
+import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.flow.StartDecision
 import io.onboardkit.remote.RemoteFlags
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.lang.ref.WeakReference
 
-/** One in-memory launch attempt. No Activity, View or ad objects survive through this owner. */
 internal class SplashAttempt(application: Application) : AndroidViewModel(application) {
-    // Unlike ProcessLifecycleOwner's delayed pause, this closes immediately on Home. An ad's
-    // resumed Activity keeps UNDER_AD handoff eligible even though splash itself is paused.
-    val foreground = MutableStateFlow(false)
-    private var resumedActivities = 0
-    private val visibility = object : Application.ActivityLifecycleCallbacks {
-        override fun onActivityResumed(activity: Activity) {
-            resumedActivities++
-            foreground.value = true
-        }
-        override fun onActivityPaused(activity: Activity) {
-            resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
-            foreground.value = resumedActivities > 0
-        }
-        override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
-        override fun onActivityStarted(activity: Activity) = Unit
-        override fun onActivityStopped(activity: Activity) = Unit
-        override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
-        override fun onActivityDestroyed(activity: Activity) = Unit
+    private var updateAdHold: AutoCloseable? = AdGate.holdRequests()
+    private var host = WeakReference<ObSplashActivity>(null)
+
+    var startedAtMs = System.currentTimeMillis()
+    val id = java.util.UUID.randomUUID().toString().take(8)
+    var announced = false
+    var consentAnswered: Boolean? = null
+    var billingResolved = false
+    var updateConfig: ForceUpdateConfig? = null
+    var updateGatePassed = false
+    var flags: RemoteFlags? = null
+    var startDecision: StartDecision? = null
+    var returningUser: Boolean? = null
+    var adPhaseStartedAtMs: Long? = null
+    val preloadsRequested = mutableSetOf<AdPlacement>()
+    val slotSettled = CompletableDeferred<Unit>()
+
+    // Fill time, not impression: a collapsible banner never reports one.
+    var slotLoadedAtMs: Long? = null
+    val interstitialSettled = CompletableDeferred<InterResult>()
+    var interLoadedAtMs: Long? = null
+    var budgetDeadlineMs: Long? = null
+    private val _prompt = MutableStateFlow<SplashPrompt>(SplashPrompt.NotAsked)
+    val prompt: StateFlow<SplashPrompt> = _prompt.asStateFlow()
+    var nextScreenTiming: NextScreenTiming? = null
+    var showRequested = false
+    val showNext = CompletableDeferred<Unit>()
+    val showFinished = CompletableDeferred<Unit>()
+    var nativeScreenRequested = false
+    var nativeScreenResolved = false
+    val nativeScreenFinished = CompletableDeferred<Unit>()
+    var flowStarted = false
+
+    val promptAnsweredAtMs: Long? get() = (prompt.value as? SplashPrompt.Answered)?.atMs
+
+    enum class InterResult(val lfoReason: String) {
+        LOADED("inter_loaded"), FAILED("inter_failed_all"), SKIPPED("inter_skipped"),
+        TIMED_OUT("splash_budget_expired")
     }
 
-    init { application.registerActivityLifecycleCallbacks(visibility) }
-
-    private var updateAdHold: AutoCloseable? = AdGate.holdRequests()
+    fun attach(splash: ObSplashActivity) {
+        host = WeakReference(splash)
+    }
 
     fun allowAdRequests() {
         updateAdHold?.close()
@@ -46,89 +68,40 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
 
     override fun onCleared() {
         allowAdRequests()
-        getApplication<Application>().unregisterActivityLifecycleCallbacks(visibility)
     }
-
-    var startedAtMs = System.currentTimeMillis()
-    val id = java.util.UUID.randomUUID().toString().take(8)
-    var announced = false
-    var consentAnswered: Boolean? = null
-    var billingResolved = false
-    var remoteResolved = false
-    var updateConfig = ForceUpdateConfig()
-    var updateGatePassed = false
-    var remoteHookResolved = false
-    var flags: RemoteFlags? = null
-    var startDecision: StartDecision? = null
-    /** Whether this launch spends the returning-user splash interstitial position. */
-    var returningUser: Boolean? = null
-    var adPhaseStartedAtMs = 0L
-    var adsRequested = false
-    var lfo1Scheduled = false
-    var nativeScheduled = false
-    var nativeScreenRequested = false
-    var nativeScreenResolved = false
-    val nativeScreenFinished = CompletableDeferred<Unit>()
-    /** Settles whichever format `splash.ads.slot_format` gave the bottom slot — banner or native. */
-    val bannerSettled = CompletableDeferred<Unit>()
-
-    /** True once the slot has an ad to show. A slot that failed has nothing worth waiting on. */
-    var slotFilled = false
-
-    /**
-     * When that ad arrived.
-     *
-     * The vendor impression is deliberately not used: a collapsible banner never reports one, so
-     * anything waiting on it would be waiting for something that may never come.
-     */
-    var slotLoadedAtMs: Long? = null
-
-    /**
-     * When the splash last had the screen to itself, i.e. resumed and focused.
-     *
-     * The minimum-visible window runs from the later of this and the load, because both have to be
-     * true before anyone can look at the ad: a banner renders behind the permission dialog, and a
-     * native that loads under it binds only once the splash resumes.
-     */
-    var focusedAtMs: Long? = null
 
     fun markSlotLoaded() {
-        slotFilled = true
         if (slotLoadedAtMs == null) slotLoadedAtMs = SystemClock.elapsedRealtime()
-        bannerSettled.complete(Unit)
-    }
-    val interstitialSettled = CompletableDeferred<InterResult>()
-    var budgetDeadlineMs: Long? = null
-    /** When the interstitial settled as loaded; with the prompt gone, a silent slot's wait starts. */
-    var interLoadedAtMs: Long? = null
-    var notificationPermissionRequested = false
-    val notificationOpen = MutableStateFlow(false)
-    val notificationPermissionResult = CompletableDeferred<Unit>()
-    var notificationAnsweredAtMs: Long? = null
-    var showRequested = false
-    var nextScreenTiming: NextScreenTiming? = null
-    val showNext = CompletableDeferred<Unit>()
-    val showFinished = CompletableDeferred<Unit>()
-    var flowStarted = false
-    var completed = false
-
-    enum class InterResult(val lfoReason: String) {
-        LOADED("inter_loaded"), FAILED("inter_failed_all"), SKIPPED("inter_skipped"),
-        TIMED_OUT("splash_budget_expired")
+        slotSettled.complete(Unit)
     }
 
-    fun settleInterstitial(result: InterResult) {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun settledInterOrNull(): InterResult? =
+        if (interstitialSettled.isCompleted) interstitialSettled.getCompleted() else null
+
+    fun onInterResult(result: InterResult) {
         if (interstitialSettled.isCompleted) return
         val now = SystemClock.elapsedRealtime()
         val expired = budgetDeadlineMs?.let { now >= it } == true
         val settled = if (expired) InterResult.TIMED_OUT else result
-        // Before complete: an awaiter on Main.immediate resumes inside it and reads this at once.
         if (settled == InterResult.LOADED) interLoadedAtMs = now
+        // Before complete(), whose awaiter at once reads interLoadedAtMs and preloadsRequested.
+        host.get()?.takeUnless { it.isDestroyed }?.requestSplashPreloads(settled)
         interstitialSettled.complete(settled)
     }
 
-    fun notificationAnswered() {
-        if (notificationPermissionResult.complete(Unit)) notificationAnsweredAtMs = SystemClock.elapsedRealtime()
-        notificationOpen.value = false
+    fun promptOpened() {
+        if (_prompt.value == SplashPrompt.NotAsked) _prompt.value = SplashPrompt.Open
     }
+
+    fun promptAnswered() {
+        if (_prompt.value is SplashPrompt.Answered) return
+        _prompt.value = SplashPrompt.Answered(SystemClock.elapsedRealtime())
+    }
+}
+
+internal sealed interface SplashPrompt {
+    data object NotAsked : SplashPrompt
+    data object Open : SplashPrompt
+    data class Answered(val atMs: Long) : SplashPrompt
 }

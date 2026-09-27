@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -286,7 +287,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
     private fun adBlockFor(placement: AdPlacement): ViewGroup =
         if (placement == AdPlacement.Language2) binding.obAdBlock2 else binding.obAdBlock
 
-    private fun containerFor(placement: AdPlacement): ViewGroup =
+    private fun containerFor(placement: AdPlacement): FrameLayout =
         if (placement == AdPlacement.Language2) {
             binding.obNativeContainer2
         } else {

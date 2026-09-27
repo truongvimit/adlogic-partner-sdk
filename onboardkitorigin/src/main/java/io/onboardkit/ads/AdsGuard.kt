@@ -1,6 +1,7 @@
 package io.onboardkit.ads
 
 import android.content.Context
+import com.ads.module.helper.AdGate
 import io.onboardkit.config.AdUnitTiers
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.core.ObLog
@@ -15,14 +16,13 @@ import io.onboardkit.remote.RemoteFlags
  * reported as premium, which is the truth a dashboard can act on.
  */
 class AdsGuard internal constructor(
-    private val provider: OnboardingAdProvider?,
+    private val providerInstalled: Boolean,
     private val config: () -> OnboardKitConfig?,
     private val flags: () -> RemoteFlags,
     private val canRequestAds: () -> Boolean = { true },
-    private val clock: () -> Long = System::currentTimeMillis,
 ) {
 
-    fun isPremium(context: Context): Boolean = provider?.isPremium(context) == true
+    fun isPremium(context: Context): Boolean = providerInstalled && AdGate.isPurchased(context)
 
     /**
      * `null` means the ad may show.
@@ -71,10 +71,10 @@ class AdsGuard internal constructor(
 
     /** Shared master/host/consent eligibility; no OPEN-only placement flag or unit requirement. */
     internal fun resumeEntrySkipReason(context: Context): AdSkipReason? {
-        if (com.ads.module.helper.AdGate.areRequestsHeld()) return AdSkipReason.REQUESTS_HELD
+        if (AdGate.areRequestsHeld()) return AdSkipReason.REQUESTS_HELD
         if (isPremium(context)) return AdSkipReason.PREMIUM
         if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
-        if (provider == null) return AdSkipReason.NO_PROVIDER
+        if (!providerInstalled) return AdSkipReason.NO_PROVIDER
         // Remote first. cfg.ads.enabled is already resolved (remote > app asset > host), so a
         // remote "on" has overridden a host "off" there; a remote "off" is reported as remote's.
         if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") || !flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
@@ -99,7 +99,7 @@ class AdsGuard internal constructor(
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT
         (adConfigKey ?: cfg.ads.placementKeyFor(placement))?.let { key ->
-            if (!com.ads.module.helper.AdGate.placementPassesUaGate(key)) return AdSkipReason.UA_GATE
+            if (!AdGate.placementPassesUaGate(key)) return AdSkipReason.UA_GATE
         }
 
         // Interstitial interval and click cap are enforced by the ads module, which owns the

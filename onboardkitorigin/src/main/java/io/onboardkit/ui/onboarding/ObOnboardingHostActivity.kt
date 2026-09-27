@@ -12,6 +12,7 @@ import androidx.lifecycle.withResumed
 import androidx.viewpager2.widget.ViewPager2
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.loadAndShowInterstitial
@@ -383,7 +384,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             flags = sdk.flags(),
             config = config,
             hasReusableSplashInterstitial = false,
-            isOb5NativeReady = provider?.isNativeReady(AdPlacement.Ob5) == true,
+            isOb5NativeReady = provider?.nativeStatus(AdPlacement.Ob5) == NativeStatus.READY,
         )
         ObLog.d(ObLog.Section.NAV, "ob_onboarding exit_decision=$decision")
         when (decision) {

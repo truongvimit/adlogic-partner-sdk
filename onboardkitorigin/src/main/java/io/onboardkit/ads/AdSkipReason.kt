@@ -17,8 +17,7 @@ enum class AdSkipReason(val key: String) {
     /**
      * The consent flow has not answered yet, or the user refused.
      *
-     * Requesting an ad before that answer is a policy violation, not just a bad impression, so
-     * this blocks every format until [io.onboardkit.OnboardingSdk.setCanRequestAds] says otherwise.
+     * Requesting an ad before that answer is a policy violation, not just a bad impression.
      */
     CONSENT_NOT_GRANTED("consent_not_granted"),
 

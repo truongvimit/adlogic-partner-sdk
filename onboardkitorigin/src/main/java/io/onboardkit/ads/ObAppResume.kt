@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class ObAppResume internal constructor(
     private val guard: AdsGuard,
-    private val provider: OnboardingAdProvider?,
+    private val providerInstalled: Boolean,
 ) {
 
     /** Counted rather than boolean: two overlapping full-screen ads must both hold it down. */
@@ -73,7 +73,9 @@ class ObAppResume internal constructor(
      * use the ordinary background/ready-only resume path, with transient screen checks above.
      */
     fun excludeScreen(activityClass: Class<out Activity>) {
-        provider?.suppressAppResume(activityClass)
+        if (providerInstalled) {
+            runCatching { AppOpenManager.getInstance().disableAppResumeWithActivity(activityClass) }
+        }
     }
 
     private companion object {

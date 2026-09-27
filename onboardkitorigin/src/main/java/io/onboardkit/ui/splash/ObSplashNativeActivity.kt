@@ -6,6 +6,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.FullScreenSkipPosition
 import io.onboardkit.config.FullScreenSkipStyle
@@ -23,7 +24,7 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         if (sdk.guard().skipReason(this, AdPlacement.SplashNative) != null ||
-            sdk.provider()?.isNativeReady(AdPlacement.SplashNative) != true) {
+            sdk.provider()?.nativeStatus(AdPlacement.SplashNative) != NativeStatus.READY) {
             close()
             return
         }

@@ -1,39 +1,24 @@
 package io.onboardkit.ads
 
-import com.ads.module.helper.adnative.NativeClickAction
-
 import android.app.Activity
 import android.view.View
-import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.ads.module.helper.adnative.NativeAdShimmer
+import com.ads.module.helper.adnative.NativeClickAction
 import com.facebook.shimmer.ShimmerFrameLayout
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.core.ObLog
+import io.onboardkit.remote.OnboardingSettings
 
-/**
- * Fills one native slot: asks the guard, binds what is already buffered, requests what is not.
- *
- * Every screen used to repeat these twenty lines, and every copy drifted — one reported the real
- * skip reason, the next hard-coded `placement_off_remote`; one hid its ad block, another left the
- * shimmer spinning forever. One implementation means a partner reading any screen sees the same
- * three outcomes.
- *
- * Exactly one of [onBound] / [onUnavailable] runs for a given attempt, always on the main thread.
- *
- * While the request is in flight the slot shows a skeleton auto-derived from the
- * placement's resolved template layout ([NativeAdShimmer]) — no per-template shimmer XML,
- * and the skeleton's geometry always matches the ad that replaces it.
- *
- * @param onBound the ad is in [container]; the skeleton has been swapped out.
- * @param onShown the provider confirms the ad has been displayed. The built-in provider waits
- * for the vendor impression; restoring an already impressed ad also confirms display.
- * @param onUnavailable nothing can be shown here — hide the slot, show a fallback, or move on.
- */
-internal fun Activity.showNativeAd(
+// Ends each attempt with onBound or onUnavailable on main; an unavailability waits for RESUMED.
+internal fun ComponentActivity.showNativeAd(
     placement: AdPlacement,
     unit: NativeAdUnit?,
-    container: ViewGroup,
+    container: FrameLayout,
     onBound: () -> Unit = {},
     onShown: () -> Unit = {},
     onUnavailable: (AdSkipReason) -> Unit = {},
@@ -51,18 +36,19 @@ internal fun Activity.showNativeAd(
         return
     }
 
+    val request = NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement))
     var skeleton: ShimmerFrameLayout? = null
-    // Captured: inside the object below, the name resolves to the override, not the parameter.
-    val notifyAdEngaged = onAdEngaged
-    val listener = placement.tracked(
+    val unavailable = ResumedDelivery(container.findViewTreeLifecycleOwner() ?: this)
+    val tracked = placement.tracked(
         object : AdEventListener {
-            override fun onLoaded() = onMainThread {
-                if (bindBuffered(provider, placement, container, skeleton)) onBound()
-            }
+            override fun onLoaded() = onMainThread { onBound() }
 
-            override fun onClicked() = onMainThread { notifyAdEngaged(provider.nativeClickAction(placement)) }
+            override fun onClicked() = onMainThread { onAdEngaged(clickAction()) }
 
-            override fun onAdOpened() = onMainThread { notifyAdEngaged(provider.nativeClickAction(placement)) }
+            override fun onAdOpened() = onMainThread { onAdEngaged(clickAction()) }
+
+            private fun clickAction() = provider.pendingClickAction(placement)
+                ?: OnboardingSettings.nativeClickAction(placement)
 
             override fun onFailedToLoad() = onMainThread {
                 skeleton?.stopShimmer()
@@ -73,32 +59,35 @@ internal fun Activity.showNativeAd(
             override fun onImpression() = onMainThread { onShown() }
         },
     )
+    val listener = object : AdEventListener by tracked {
+        override fun onFailedToLoad() = runOnUiThread {
+            unavailable.deliver(tracked::onFailedToLoad)
+        }
+
+        override fun onDetached() = unavailable.cancel()
+    }
 
     placement.trackRequest()
-    // Buffered by the preload chain on the common path, so the slot paints without a round trip
-    if (bindBuffered(provider, placement, container, shimmer = null, listener)) {
-        onBound()
+    if (bindBuffered(provider, request, container, listener)) {
+        listener.onLoaded()
         return
     }
     if (bufferedOnly) {
         placement.reportUnavailable(AdSkipReason.NOT_READY, onUnavailable)
         return
     }
-    if (reuseFailedPreload && provider.isNativeLoadFailed(placement)) {
+    if (reuseFailedPreload && provider.nativeStatus(placement) == NativeStatus.FAILED) {
         provider.releaseNative(placement)
         placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)
         return
     }
-    // Occupy the slot for the whole load window; the bind's removeAllViews swaps it out
-    skeleton = NativeAdShimmer.from(this, NativeTemplates.layoutForPlacement(placement)).also {
+    skeleton = NativeAdShimmer.from(this, request.layoutRes).also {
         container.removeAllViews()
         container.addView(it)
         container.visibility = View.VISIBLE
         it.startShimmer()
     }
-    if (!OnboardingSdk.preload().requestNativeOnce(
-        this, NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement)),
-    )) {
+    if (!OnboardingSdk.preload().requestNativeOnce(this, request)) {
         skeleton.stopShimmer()
         placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)
     }
@@ -112,18 +101,36 @@ private fun AdPlacement.reportUnavailable(
     onUnavailable(reason)
 }
 
-private fun Activity.bindBuffered(
+private fun ComponentActivity.bindBuffered(
     provider: OnboardingAdProvider,
-    placement: AdPlacement,
-    container: ViewGroup,
-    shimmer: View?,
-    listener: AdEventListener? = null,
+    request: NativeAdRequest,
+    container: FrameLayout,
+    listener: AdEventListener,
 ): Boolean {
     if (isFinishing || isDestroyed) return false
-    return provider.bindNative(this, placement, container, shimmer, listener)
+    return provider.bindNative(this, request, container, listener)
 }
 
-/** Vendor callbacks arrive on the main thread today, but nothing in the contract promises it. */
+private class ResumedDelivery(private val owner: LifecycleOwner) {
+    private var pending = false
+    private var stopWaiting: () -> Unit = {}
+
+    fun deliver(block: () -> Unit) {
+        if (pending) return
+        pending = true
+        stopWaiting = owner.whenResumed(onHostLost = { pending = false }) {
+            pending = false
+            block()
+        }
+    }
+
+    fun cancel() {
+        pending = false
+        stopWaiting()
+        stopWaiting = {}
+    }
+}
+
 private fun Activity.onMainThread(block: () -> Unit) {
     if (isFinishing || isDestroyed) return
     runOnUiThread {
