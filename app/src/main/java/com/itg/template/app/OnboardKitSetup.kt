@@ -33,20 +33,20 @@ object OnboardKitSetup {
                     subtitleRes = R.string.onboarding_des_1,
                     imageRes = R.drawable.img_onboard_sample_1,
                 ),
-                AdFullScreenStepDefinition(StepId.FULL1),
                 ContentStepDefinition(
                     StepId.OB2,
                     titleRes = R.string.onboarding_title_2,
                     subtitleRes = R.string.onboarding_des_2,
                     imageRes = R.drawable.img_onboard_sample_2,
                 ),
-                AdFullScreenStepDefinition(StepId.FULL2),
+                AdFullScreenStepDefinition(StepId.FULL1),
                 ContentStepDefinition(
                     StepId.OB3,
                     titleRes = R.string.onboarding_title_3,
                     subtitleRes = R.string.onboarding_des_3,
                     imageRes = R.drawable.img_onboard_sample_4,
                 ),
+                AdFullScreenStepDefinition(StepId.FULL2),
                 ContentStepDefinition(
                     StepId.OB4,
                     titleRes = R.string.onboarding_title_4,

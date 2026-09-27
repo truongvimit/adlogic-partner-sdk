@@ -506,7 +506,7 @@
   },
   "native_fs_high": {
     "id": "ca-app-pub-3940256099942544/1044960115",
-    "isEnable": false,
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -516,11 +516,11 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "native_fs": {
     "id": "ca-app-pub-3940256099942544/2247696110",
-    "isEnable": false,
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -530,7 +530,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "inter_splash_high1": {
     "id": "ca-app-pub-3940256099942544/1033173712",

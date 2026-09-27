@@ -185,7 +185,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         attempt.budgetTimeoutMs?.let { timeout ->
             if (!attempt.interstitialSettled.isCompleted) {
                 budgetJob = lifecycleScope.launch {
-                    delay((timeout - attempt.progress.elapsedMs(SystemClock.elapsedRealtime())).coerceAtLeast(0))
+                    delay((timeout - attempt.progress.elapsedMs(SystemClock.elapsedRealtime())).coerceAtLeast(0).milliseconds)
                     attempt.onInterResult(InterResult.TIMED_OUT)
                 }
             }
