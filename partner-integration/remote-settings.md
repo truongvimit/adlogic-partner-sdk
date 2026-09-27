@@ -281,7 +281,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
 | `lfo.tap_hint.enabled` | `true` |
 | `lfo.tap_hint.delay_ms` | `3000` |
-| `lfo.confirm_button.visible_before_selection` | `false` |
+| `lfo.confirm_button.visible_before_selection` | `true` |
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.image_url` | `""` |
 | `lfo.confirm_button.tint_color` | `""` |

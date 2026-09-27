@@ -77,9 +77,8 @@ data class LanguageConfig(
     /**
      * Whether the confirm button is on screen before the user has picked anything.
      *
-     * `false` (default) hides it until the first tap, which makes selecting a language the only
-     * thing the screen offers. `true` keeps it visible but dimmed, so the way out of the screen
-     * is obvious from the start. Remote `lfo.confirm_button.visible_before_selection` (or a
+     * `true` (default) keeps it visible but dimmed before the first selection. `false` hides
+     * it until the first tap. Remote `lfo.confirm_button.visible_before_selection` (or a
      * delivered `ob_show_language_confirm_before_select`) overrides this.
      */
     val confirmVisibleBeforeSelect: Boolean = OnboardingSettings.defaultBool("lfo.confirm_button.visible_before_selection"),

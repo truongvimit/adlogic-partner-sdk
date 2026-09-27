@@ -78,7 +78,7 @@
       "delay_ms": 3000
     },
     "confirm_button": {
-      "visible_before_selection": false,
+      "visible_before_selection": true,
       "save_on_back": true,
       "image_url": "",
       "tint_color": ""

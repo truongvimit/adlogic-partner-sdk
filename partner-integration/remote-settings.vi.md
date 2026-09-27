@@ -301,7 +301,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` | LFO_SHOWN hoặc FIRST_SELECTION. Không tắt hiển thị slot 2. |
 | `lfo.tap_hint.enabled` | `true` | Thay ob_show_language_tap_hint. |
 | `lfo.tap_hint.delay_ms` | `3000` | Thay ob_language_tap_hint_delay_sec. |
-| `lfo.confirm_button.visible_before_selection` | `false` | Remote (hoặc `ob_show_language_confirm_before_select` đã gửi), rồi asset app, ghi đè `LanguageConfig.confirmVisibleBeforeSelect` theo cả hai chiều. |
+| `lfo.confirm_button.visible_before_selection` | `true` | Remote (hoặc `ob_show_language_confirm_before_select` đã gửi), rồi asset app, ghi đè `LanguageConfig.confirmVisibleBeforeSelect` theo cả hai chiều. |
 | `lfo.confirm_button.save_on_back` | `true` | Back trước chọn vẫn inert. |
 | `lfo.confirm_button.image_url` | `""` | Rỗng giữ drawable check hiện tại; URL lỗi giữ icon dự phòng. |
 | `lfo.confirm_button.tint_color` | `""` | Rỗng giữ tint local; màu không parse được bị bỏ qua. |
