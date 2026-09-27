@@ -74,6 +74,9 @@ class SplashLongPromptTest {
 
     @Before
     fun setUp() {
+        // Advance frames only with the test clock; auto-vsync would drain the whole animation.
+        org.robolectric.shadows.ShadowChoreographer.setPaused(true)
+        org.robolectric.shadows.ShadowChoreographer.setFrameDelay(Duration.ofMillis(16))
         LongPromptFixture.reset()
         app.applicationInfo.targetSdkVersion = 34
 
@@ -152,7 +155,7 @@ class SplashLongPromptTest {
         assertEquals(false, com.ads.module.helper.AdGate.areRequestsHeld())
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         reachUpdateBoundary()
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
             .getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
@@ -182,7 +185,7 @@ class SplashLongPromptTest {
         LongPromptFixture.remoteWait!!.complete(Unit)
         drainUntil("Remote hook receives the late policy") { LongPromptFixture.remoteHookCalled }
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         reachUpdateBoundary()
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertEquals(1, LongPromptFixture.provider.interstitialLoads)
@@ -198,7 +201,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter request starts") { LongPromptFixture.provider.pending != null }
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("Paywall holds presentation") { LongPromptFixture.paywallCalls == 1 }
         LongPromptFixture.updateConfig = mandatoryUpdate()
         LongPromptFixture.remoteWait!!.complete(Unit)
@@ -259,13 +262,13 @@ class SplashLongPromptTest {
         drainUntil("Remote observer settles") { LongPromptFixture.remoteHookCalled }
         val readsBeforeRecreation = LongPromptFixture.updateReads
         val previous = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-        requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
+        recreateSplash().visible().get().onWindowFocusChanged(true)
         main.idle()
         assertEquals(false, previous.isShowing)
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
         assertEquals(0, LongPromptFixture.provider.interstitialLoads)
         LongPromptFixture.updateConfig = null
-        requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
+        recreateSplash().visible().get().onWindowFocusChanged(true)
         main.idle()
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
         assertEquals(readsBeforeRecreation, LongPromptFixture.updateReads)
@@ -301,7 +304,7 @@ class SplashLongPromptTest {
         drainUntil("Inter loads") { LongPromptFixture.provider.pending != null }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("Ad is open") { LongPromptFixture.provider.presentation != null }
         val readsBeforeAd = LongPromptFixture.updateReads
         LongPromptFixture.updateConfig = mandatoryUpdate()
@@ -325,7 +328,7 @@ class SplashLongPromptTest {
         main.idle()
         assertEquals(setOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests.toSet())
         LongPromptFixture.provider.nativeReady = true
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals("An optional splash native prevents UNDER_AD from opening LFO early", 0, LongPromptFixture.flowStarts)
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
@@ -349,11 +352,11 @@ class SplashLongPromptTest {
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
         LongPromptFixture.provider.nativeReady = true
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
         val request = requireNotNull(shadowOf(requireNotNull(controller).get()).nextStartedActivityForResult)
-        requireNotNull(controller).recreate().visible()
+        recreateSplash().visible()
         val recreated = requireNotNull(controller).get()
         recreated.onWindowFocusChanged(true)
         main.idle()
@@ -373,7 +376,7 @@ class SplashLongPromptTest {
         drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
         assertEquals(1, LongPromptFixture.flowStarts)
@@ -387,7 +390,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(listOf(AdPlacement.Language1), LongPromptFixture.provider.nativeRequests)
         assertEquals(1, LongPromptFixture.flowStarts)
     }
@@ -401,7 +404,7 @@ class SplashLongPromptTest {
         val bar = requireNotNull(controller).get()
             .findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
 
-        main.idleFor(Duration.ofMillis(250))
+        idleFrames(Duration.ofMillis(250))
         assertFalse("Progress must be determinate before UMP returns", bar.isIndeterminate)
         assertTrue("Visible network wait advances progress", bar.progress > 0)
         assertTrue(bar.isShown)
@@ -409,9 +412,9 @@ class SplashLongPromptTest {
 
         requireNotNull(LongPromptFixture.ump.pendingUpdate).onConsentInfoUpdateSuccess()
         drainUntil("UMP form must be open") { LongPromptFixture.form.dismiss != null }
-        main.idleFor(Duration.ofMillis(100))
+        idleFrames(Duration.ofMillis(100))
         val beforeFormWait = bar.progress
-        main.idleFor(Duration.ofSeconds(70))
+        idleFrames(Duration.ofSeconds(70))
         assertEquals("A visible UMP form pauses progress and the budget", beforeFormWait, bar.progress)
         assertEquals(0, LongPromptFixture.flowStarts)
         assertEquals(0, LongPromptFixture.provider.bannerLoads)
@@ -429,7 +432,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("UMP form must actually be shown through ConsentCenter") { LongPromptFixture.form.dismiss != null }
 
-        main.idleFor(Duration.ofMinutes(10))
+        idleFrames(Duration.ofMinutes(10))
 
         assertEquals("A live unanswered UMP form must not hand off the flow", 0, LongPromptFixture.flowStarts)
         assertEquals(0, LongPromptFixture.provider.bannerLoads)
@@ -439,7 +442,7 @@ class SplashLongPromptTest {
         drainUntil("Accept must start the normal splash load pair") { LongPromptFixture.provider.interstitialLoads == 1 }
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertTrue(LongPromptFixture.provider.order.isEmpty())
-        main.idleFor(Duration.ofSeconds(30))
+        idleFrames(Duration.ofSeconds(30))
         completeInterstitialAndAssertNormalHandoff()
     }
 
@@ -449,7 +452,7 @@ class SplashLongPromptTest {
         drainUntil("Resolved consent must start splash loading") { LongPromptFixture.provider.interstitialLoads == 1 }
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertTrue(LongPromptFixture.provider.order.isEmpty())
-        main.idleFor(Duration.ofSeconds(5))
+        idleFrames(Duration.ofSeconds(5))
         completeInterstitialAndAssertNormalHandoff()
     }
 
@@ -464,7 +467,7 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(6))
+        idleFrames(Duration.ofSeconds(6))
         assertTrue("show" !in LongPromptFixture.provider.order)
         requireNotNull(controller).start().resume().visible()
         host.onWindowFocusChanged(true)
@@ -512,7 +515,7 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals("One LFO preload while the permission is unanswered", listOf("native"), LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
 
@@ -538,7 +541,7 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(2))
+        idleFrames(Duration.ofSeconds(2))
         assertTrue(LongPromptFixture.provider.order.isEmpty())
         requireNotNull(controller).restart().start().resume().visible()
         main.idle()
@@ -551,11 +554,11 @@ class SplashLongPromptTest {
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashAdBudgetMs = 10_000, splashMinDisplayMs = 100)
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        main.idleFor(Duration.ofMillis(200))
+        idleFrames(Duration.ofMillis(200))
         val host = requireNotNull(controller).get()
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
-        main.idleFor(Duration.ofSeconds(11))
+        idleFrames(Duration.ofSeconds(11))
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
@@ -582,7 +585,7 @@ class SplashLongPromptTest {
         val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
-        main.idleFor(Duration.ofSeconds(3))
+        idleFrames(Duration.ofSeconds(3))
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         host.onWindowFocusChanged(true)
         main.idle()
@@ -603,7 +606,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.premium = true
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
         launch(notification = false)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(0, LongPromptFixture.provider.interstitialLoads)
         assertEquals(0, LongPromptFixture.provider.bannerLoads)
         assertTrue(LongPromptFixture.provider.order.isEmpty())
@@ -625,7 +628,7 @@ class SplashLongPromptTest {
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
         launch(notification = false)
         drainUntil("Inter must start for the resolved returning route") { LongPromptFixture.provider.interstitialLoads == 1 }
-        main.idleFor(Duration.ofSeconds(1))
+        idleFrames(Duration.ofSeconds(1))
         assertTrue(LongPromptFixture.provider.order.isEmpty())
     }
 
@@ -636,7 +639,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        main.idleFor(Duration.ofSeconds(6))
+        idleFrames(Duration.ofSeconds(6))
         assertEquals("Banner cannot add four more seconds to the inter budget", 1, LongPromptFixture.flowStarts)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         LongPromptFixture.provider.ready = true
@@ -651,7 +654,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
-        main.idleFor(Duration.ofSeconds(15))
+        idleFrames(Duration.ofSeconds(15))
         loadInterstitialNow()
         main.idle()
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
@@ -666,7 +669,7 @@ class SplashLongPromptTest {
             LongPromptFixture.provider.settleBanner = false
             launch(notification = false)
             drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
-            main.idleFor(Duration.ofSeconds(4))
+            idleFrames(Duration.ofSeconds(4))
             loadInterstitialNow()
             main.idle()
             assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
@@ -681,7 +684,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(1, LongPromptFixture.flowStarts)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
     }
@@ -708,7 +711,7 @@ class SplashLongPromptTest {
         }
         host.onWindowFocusChanged(false)
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(15))
+        idleFrames(Duration.ofSeconds(15))
         val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
@@ -749,19 +752,84 @@ class SplashLongPromptTest {
         drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
         val host = requireNotNull(controller).get()
         val bar = host.findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
-        main.idleFor(Duration.ofSeconds(10))
-        assertEquals(90, bar.progress)
+        idleFrames(Duration.ofSeconds(10))
+        assertTrue("90% within one animation frame", bar.progress in 8_980..9_010)
         host.onWindowFocusChanged(false)
-        main.idleFor(Duration.ofSeconds(70))
-        assertEquals(90, bar.progress)
+        idleFrames(Duration.ofSeconds(70))
+        assertTrue("90% within one animation frame", bar.progress in 8_980..9_010)
         assertEquals(0, LongPromptFixture.flowStarts)
         host.onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(40))
-        assertEquals(99, bar.progress)
+        idleFrames(Duration.ofSeconds(40))
+        assertTrue("Slow final segment", bar.progress in 9_950..9_999)
         assertEquals(0, LongPromptFixture.flowStarts)
-        main.idleFor(Duration.ofSeconds(10))
-        assertEquals(100, bar.progress)
+        idleFrames(Duration.ofSeconds(10))
+        assertEquals(10_000, bar.progress)
         assertEquals(1, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun valueAnimatorMovesTheBarBetweenIntegerPercentages() {
+        launch(notification = false)
+        drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
+        idleFrames(Duration.ofMillis(550))
+        val host = requireNotNull(controller).get()
+        val bar = host.findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
+        assertEquals(10_000, bar.max)
+        assertTrue("The bar has sub-percent precision", bar.progress % 100 != 0)
+        val animator = org.robolectric.util.ReflectionHelpers.getField<android.animation.ValueAnimator>(host, "progressAnimator")
+        assertTrue(animator.isRunning)
+        host.onWindowFocusChanged(false)
+        assertFalse("Hidden splash cancels animation frames", animator.isRunning)
+        val paused = bar.progress
+        idleFrames(Duration.ofSeconds(70))
+        assertEquals(paused, bar.progress)
+        assertEquals(0, LongPromptFixture.flowStarts)
+    }
+
+    @Test
+    fun disablingAnimationsKeepsNumericProgressWithoutCompletingTheBudgetEarly() {
+        org.robolectric.util.ReflectionHelpers.callStaticMethod<Void>(
+            android.animation.ValueAnimator::class.java, "setDurationScale",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, 0f),
+        )
+        try {
+            launch(notification = false)
+            drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
+            idleFrames(Duration.ofSeconds(10))
+            val bar = requireNotNull(controller).get().findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
+            assertTrue("Reduced motion still reports 90% after ten seconds", bar.progress in 9_000..9_010)
+            idleFrames(Duration.ofSeconds(49))
+            assertEquals(99, bar.progress / 100)
+            assertEquals(0, LongPromptFixture.flowStarts)
+            idleFrames(Duration.ofSeconds(1))
+            assertEquals(1, LongPromptFixture.flowStarts)
+        } finally {
+            org.robolectric.util.ReflectionHelpers.callStaticMethod<Void>(
+                android.animation.ValueAnimator::class.java, "setDurationScale",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, 1f),
+            )
+        }
+    }
+
+    @Test
+    fun fasterSystemAnimationScaleKeepsTheTenSecondProgressCurve() {
+        org.robolectric.util.ReflectionHelpers.callStaticMethod<Void>(
+            android.animation.ValueAnimator::class.java, "setDurationScale",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, 0.5f),
+        )
+        try {
+            launch(notification = false)
+            drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
+            idleFrames(Duration.ofSeconds(10))
+            val bar = requireNotNull(controller).get().findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
+            assertTrue("System animation scale must not speed up the progress curve", bar.progress in 8_980..9_010)
+            assertEquals(0, LongPromptFixture.flowStarts)
+        } finally {
+            org.robolectric.util.ReflectionHelpers.callStaticMethod<Void>(
+                android.animation.ValueAnimator::class.java, "setDurationScale",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, 1f),
+            )
+        }
     }
 
     @Test
@@ -778,13 +846,13 @@ class SplashLongPromptTest {
             }
             override fun afterTextChanged(s: android.text.Editable?) = Unit
         })
-        main.idleFor(Duration.ofSeconds(10))
-        val beforePopup = rendered.size
+        idleFrames(Duration.ofSeconds(10))
         host.onWindowFocusChanged(false)
-        main.idleFor(Duration.ofSeconds(70))
+        val beforePopup = rendered.size
+        idleFrames(Duration.ofSeconds(70))
         assertEquals("No UI writes while the splash is hidden", beforePopup, rendered.size)
         host.onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(50))
+        idleFrames(Duration.ofSeconds(50))
         assertEquals("No repeated percentage writes", rendered.distinct(), rendered)
         assertTrue("At most one write for each integer percent", rendered.size <= 100)
         assertEquals("100%", label.text.toString())
@@ -801,7 +869,7 @@ class SplashLongPromptTest {
         }
         host.onWindowFocusChanged(false)
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(5))
+        idleFrames(Duration.ofSeconds(5))
         val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
         host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
@@ -840,7 +908,7 @@ class SplashLongPromptTest {
             launch(notification = false)
             drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
             assertEquals(listOf(AdPlacement.SplashInlineNative), LongPromptFixture.provider.nativeRequests)
-            main.idleFor(Duration.ofSeconds(15))
+            idleFrames(Duration.ofSeconds(15))
             val loadedAt = loadInterstitialNow()
             idleUntil(loadedAt + 100)
             assertTrue("Not the 60s ad budget", "show" in LongPromptFixture.provider.order)
@@ -855,7 +923,7 @@ class SplashLongPromptTest {
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashSlotMinVisibleMs = 4_000)
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        main.idleFor(Duration.ofSeconds(5))
+        idleFrames(Duration.ofSeconds(5))
         val reloadedAt = SystemClock.elapsedRealtime()
         requireNotNull(LongPromptFixture.provider.bannerListener).onLoaded()
         loadInterstitialNow()
@@ -871,7 +939,7 @@ class SplashLongPromptTest {
             launch(notification = false)
             drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
             loadInterstitialNow()
-            main.idleFor(Duration.ofSeconds(4))
+            idleFrames(Duration.ofSeconds(4))
             drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
             assertEquals("Remote AFTER_AD outranks the hook's UNDER_AD", 0, LongPromptFixture.provider.flowStartsAtVendorShow)
             assertEquals(0, LongPromptFixture.flowStarts)
@@ -891,7 +959,7 @@ class SplashLongPromptTest {
             launch(notification = false, entry = SplashEntry.NOTIFICATION)
             drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
             loadInterstitialNow()
-            main.idleFor(Duration.ofSeconds(4))
+            idleFrames(Duration.ofSeconds(4))
             drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
             assertEquals("An entry asks the hook, which says UNDER_AD", 1, LongPromptFixture.provider.flowStartsAtVendorShow)
         } finally {
@@ -907,7 +975,7 @@ class SplashLongPromptTest {
         launch(notification = false, entry = SplashEntry.WIDGET)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
         assertEquals("An entry never opens its destination under the ad", 0, LongPromptFixture.provider.handoffsAtVendorShow)
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
@@ -934,10 +1002,10 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(1))
+        idleFrames(Duration.ofSeconds(1))
         assertTrue(LongPromptFixture.provider.order.isEmpty())
-        requireNotNull(controller).recreate()
-        main.idleFor(Duration.ofSeconds(4))
+        recreateSplash()
+        idleFrames(Duration.ofSeconds(4))
         assertEquals("The waiting request goes out once", listOf("native"), LongPromptFixture.provider.order)
         assertTrue("From the new instance", LongPromptFixture.provider.nativeSenders.single() === requireNotNull(controller).get())
         assertEquals(1, LongPromptFixture.flowStarts)
@@ -953,11 +1021,11 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertTrue(LongPromptFixture.provider.nativeRequests.isEmpty())
         requireNotNull(controller).restart().start().resume().visible()
         host.onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(1))
+        idleFrames(Duration.ofSeconds(1))
         assertEquals(setOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests.toSet())
         drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
         assertEquals("Both preloads go out before the show", listOf("native", "native", "show"), LongPromptFixture.provider.order)
@@ -972,12 +1040,12 @@ class SplashLongPromptTest {
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertTrue("Not asked while the splash is away", LongPromptFixture.timingAskedIn.isEmpty())
         assertTrue(LongPromptFixture.provider.order.isEmpty())
         requireNotNull(controller).restart().start().resume().visible()
         host.onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(1))
+        idleFrames(Duration.ofSeconds(1))
         assertEquals("Asked once, with the splash in front", listOf(Lifecycle.State.RESUMED), LongPromptFixture.timingAskedIn)
         assertEquals(1, LongPromptFixture.flowStarts)
         assertEquals("LFO1 goes out before the handoff", listOf(0), LongPromptFixture.provider.handoffsAtNative)
@@ -996,7 +1064,7 @@ class SplashLongPromptTest {
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
         assertEquals("The hook is not asked again", 1, LongPromptFixture.timingAskedIn.size)
         assertEquals("The first answer, AFTER_AD, governs the show", 0, LongPromptFixture.provider.flowStartsAtVendorShow)
@@ -1055,8 +1123,28 @@ class SplashLongPromptTest {
         assertTrue("A ready ad shows within the next frame", shownAt <= closedAt + 1_016)
     }
 
+    private fun idleFrames(duration: Duration) {
+        val end = SystemClock.uptimeMillis() + duration.toMillis()
+        while (SystemClock.uptimeMillis() < end) {
+            main.idleFor(Duration.ofMillis(minOf(16, end - SystemClock.uptimeMillis())))
+        }
+        main.idle()
+    }
+
+    private fun recreateSplash(): org.robolectric.android.controller.ActivityController<LongPromptSplashActivity> {
+        val current = requireNotNull(controller)
+        val resumed = current.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        current.configurationChange(android.content.res.Configuration(current.get().resources.configuration)
+            .apply { fontScale += 0.1f })
+        if (!resumed) current.start().resume()
+        current.visible()
+        idleFrames(Duration.ofMillis(16))
+        current.get().onWindowFocusChanged(true)
+        return current
+    }
+
     private fun idleUntil(elapsedRealtimeMs: Long) {
-        main.idleFor(Duration.ofMillis((elapsedRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)))
+        idleFrames(Duration.ofMillis((elapsedRealtimeMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)))
     }
 
     @Test
@@ -1069,7 +1157,7 @@ class SplashLongPromptTest {
         main.idle()
         assertEquals("A ready inter waits out the splash minimum", listOf("native"), LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("Show after the minimum, then one handoff") { LongPromptFixture.flowStarts == 1 }
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
     }
@@ -1080,13 +1168,13 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofMillis(2_100))
+        idleFrames(Duration.ofMillis(2_100))
         assertEquals("The original banner deadline must release the ready inter", listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
         assertEquals(1, LongPromptFixture.provider.interstitialLoads)
@@ -1102,7 +1190,7 @@ class SplashLongPromptTest {
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idle()
         assertTrue("The minimum is spent before the ad shows", "show" !in LongPromptFixture.provider.order)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
         assertEquals("LFO must not start under the ad", 0, LongPromptFixture.provider.handoffsAtVendorShow)
         assertEquals(0, LongPromptFixture.splashHandoffs)
@@ -1120,7 +1208,7 @@ class SplashLongPromptTest {
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
         assertEquals("The destination starts inside the vendor callback", 1, LongPromptFixture.provider.handoffsAtVendorShow)
     }
@@ -1135,7 +1223,7 @@ class SplashLongPromptTest {
         main.idle()
         assertEquals("No show before the minimum", listOf("native"), LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals("Navigation must finish inside onNext, before the vendor opens its Activity",
             1, LongPromptFixture.provider.flowStartsAtVendorShow)
         assertEquals(1, LongPromptFixture.flowStarts)
@@ -1159,7 +1247,7 @@ class SplashLongPromptTest {
         val host = requireNotNull(controller).get()
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
-        main.idleFor(Duration.ofSeconds(11))
+        idleFrames(Duration.ofSeconds(11))
         assertEquals(0, LongPromptFixture.flowStarts)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
         requireNotNull(controller).restart().start().resume().visible()
@@ -1181,7 +1269,7 @@ class SplashLongPromptTest {
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals("Minimum waiting must not reopen an already resolved paywall after recreation",
             1, LongPromptFixture.paywallCalls)
         assertEquals(1, LongPromptFixture.provider.interstitialLoads)
@@ -1196,7 +1284,7 @@ class SplashLongPromptTest {
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         val old = requireNotNull(controller).get()
         val callback = requireNotNull(LongPromptFixture.provider.presentation)
         requireNotNull(controller).configurationChange(android.content.res.Configuration(old.resources.configuration)
@@ -1221,7 +1309,7 @@ class SplashLongPromptTest {
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(0, LongPromptFixture.flowStarts)
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
@@ -1233,7 +1321,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter must be in flight") { LongPromptFixture.provider.interstitialLoads == 1 }
         val pending = requireNotNull(LongPromptFixture.provider.pending)
-        main.idleFor(Duration.ofSeconds(5))
+        idleFrames(Duration.ofSeconds(5))
         val beforeRecreation = requireNotNull(controller).get()
             .findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress).progress
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
@@ -1241,7 +1329,7 @@ class SplashLongPromptTest {
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
-        main.idleFor(Duration.ofMillis(100))
+        idleFrames(Duration.ofMillis(100))
         val bar = requireNotNull(controller).get()
             .findViewById<ProgressBar>(io.onboardkit.R.id.ob_splash_progress)
         assertFalse(
@@ -1249,7 +1337,7 @@ class SplashLongPromptTest {
             bar.isIndeterminate
         )
         assertTrue(bar.isShown)
-        assertTrue("Recreation must retain elapsed progress", bar.progress in beforeRecreation..(beforeRecreation + 2))
+        assertTrue("Recreation must retain elapsed progress", bar.progress in beforeRecreation..(beforeRecreation + 200))
         assertEquals("Recreation must rejoin the original request", 1, LongPromptFixture.provider.interstitialLoads)
         drainUntil("Recreation reads the current preload mode") { "native" in LongPromptFixture.provider.order }
         LongPromptFixture.provider.ready = true
@@ -1282,7 +1370,7 @@ class SplashLongPromptTest {
         loadInterstitialNow()
         main.idle()
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
         assertEquals("An eligible native_fs forces AFTER_AD", 0, LongPromptFixture.provider.flowStartsAtVendorShow)
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests)
@@ -1296,7 +1384,7 @@ class SplashLongPromptTest {
             LongPromptFixture.provider.nativeRequests == listOf(AdPlacement.Language1)
         }
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(listOf(AdPlacement.Language1), LongPromptFixture.provider.nativeRequests)
         assertEquals(1, LongPromptFixture.flowStarts)
     }
@@ -1321,7 +1409,7 @@ class SplashLongPromptTest {
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         assertEquals(1, LongPromptFixture.flowStarts)
         assertEquals(listOf(AdPlacement.Language1), LongPromptFixture.provider.nativeRequests)
     }
@@ -1358,7 +1446,7 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         loadInterstitialNow()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
         assertEquals("The hook's UNDER_AD, not native_fs's AFTER_AD", 1, LongPromptFixture.provider.flowStartsAtVendorShow)
         val splashPreloads = listOf(AdPlacement.Language1, AdPlacement.SplashNative)
@@ -1374,14 +1462,14 @@ class SplashLongPromptTest {
         drainUntil("Splash must preload under its own notification prompt") {
             LongPromptFixture.provider.interstitialLoads == 1
         }
-        main.idleFor(Duration.ofMinutes(2))
+        idleFrames(Duration.ofMinutes(2))
         assertEquals(0, LongPromptFixture.flowStarts)
         assertTrue(LongPromptFixture.provider.order.isEmpty())
         val permission = requireNotNull(shadowOf(activity).lastRequestedPermission)
         activity.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
         activity.onWindowFocusChanged(true)
-        main.idleFor(Duration.ofSeconds(30))
+        idleFrames(Duration.ofSeconds(30))
         assertEquals("The 60-second budget starts after the prompt", 0, LongPromptFixture.flowStarts)
         completeInterstitialAndAssertNormalHandoff()
     }
@@ -1405,7 +1493,7 @@ class SplashLongPromptTest {
         val permission = requireNotNull(shadowOf(activity).lastRequestedPermission)
         assertTrue(Manifest.permission.POST_NOTIFICATIONS in permission.requestedPermissions)
         activity.onWindowFocusChanged(false)
-        main.idleFor(if (promptMinutes == 0L) Duration.ofSeconds(5) else Duration.ofMinutes(promptMinutes))
+        idleFrames(if (promptMinutes == 0L) Duration.ofSeconds(5) else Duration.ofMinutes(promptMinutes))
         assertEquals(0, LongPromptFixture.flowStarts)
         assertTrue("Pending notification must not preload destination", LongPromptFixture.provider.order.isEmpty())
         assertEquals("Splash banner loads while the notification is open", 1, LongPromptFixture.provider.bannerLoads)
@@ -1418,7 +1506,7 @@ class SplashLongPromptTest {
 
         assertEquals("Answering permission must not skip an in-flight splash ad", 0, LongPromptFixture.flowStarts)
         assertTrue("Destination must wait for splash fill after a long notification prompt", LongPromptFixture.provider.order.isEmpty())
-        if (!minimumAlreadyElapsed) main.idleFor(Duration.ofSeconds(30))
+        if (!minimumAlreadyElapsed) idleFrames(Duration.ofSeconds(30))
         completeInterstitialAndAssertNormalHandoff(minimumAlreadyElapsed = minimumAlreadyElapsed)
     }
 
@@ -1433,7 +1521,7 @@ class SplashLongPromptTest {
         assertEquals(listOf<String?>(key), LongPromptFixture.provider.loadedKeys)
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
-        main.idleFor(Duration.ofSeconds(4))
+        idleFrames(Duration.ofSeconds(4))
         drainUntil("The show gate must pass the position the load spent") { "show" in LongPromptFixture.provider.order }
     }
 
@@ -1612,7 +1700,7 @@ class SplashLongPromptTest {
         controller = Robolectric.buildActivity(LongPromptSplashActivity::class.java,
             entry?.intent(app, LongPromptSplashActivity::class.java)).setup().visible()
         requireNotNull(controller).get().onWindowFocusChanged(true)
-        main.idle()
+        idleFrames(Duration.ofMillis(16))
     }
 
     private fun completeInterstitialAndAssertNormalHandoff(minimumAlreadyElapsed: Boolean = false) {
@@ -1622,9 +1710,9 @@ class SplashLongPromptTest {
         if (minimumAlreadyElapsed) {
             // Past the notification settle but far short of the 3s minimum display, which the long
             // prompt already consumed — that distinction is what this case exists to prove.
-            main.idleFor(Duration.ofSeconds(1))
+            idleFrames(Duration.ofSeconds(1))
             assertEquals("Long prompt time already consumed the minimum", 1, LongPromptFixture.flowStarts)
-        } else main.idleFor(Duration.ofSeconds(4))
+        } else idleFrames(Duration.ofSeconds(4))
         drainUntil("Ready splash must show and hand off once; order=${LongPromptFixture.provider.order}") { LongPromptFixture.flowStarts == 1 }
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.provider.bannerLoads)
@@ -1636,7 +1724,7 @@ class SplashLongPromptTest {
         while (!condition() && System.nanoTime() < deadline) {
             // Virtual time, not just pending work: the splash now settles for a beat after the
             // notification result, and a bare idle() would never reach a scheduled delay.
-            main.idleFor(Duration.ofMillis(50))
+            idleFrames(Duration.ofMillis(50))
             Thread.sleep(5) // DataStore IO completion; virtual prompt durations use only the main looper.
         }
         assertTrue(message, condition())

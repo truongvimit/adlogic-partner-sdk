@@ -88,7 +88,7 @@
             android:layout_height="8dp"
             android:layout_marginTop="12dp"
             android:indeterminate="false"
-            android:max="100"
+            android:max="10000"
             android:progress="0"
             android:progressDrawable="@drawable/ob_splash_progress" />
 

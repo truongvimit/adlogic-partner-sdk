@@ -1,6 +1,7 @@
 package io.onboardkit.ui.splash
 
 import io.onboardkit.remote.OnboardingSettings
+import android.animation.ValueAnimator
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.animation.LinearInterpolator
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -79,7 +81,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private var progressPercent: TextView? = null
     private var renderedPercent = -1
     private var progressTimeoutMs = 60_000L
-    private var progressJob: Job? = null
+    private var progressAnimator: ValueAnimator? = null
+    private var reducedMotionJob: Job? = null
     private var budgetJob: Job? = null
 
     private val nativeScreenLauncher = registerForActivityResult(
@@ -158,21 +161,24 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun pauseProgress() {
-        progressJob?.cancel()
+        progressAnimator?.cancel()
+        reducedMotionJob?.cancel()
         budgetJob?.cancel()
         attempt.progress.setActive(false, SystemClock.elapsedRealtime())
     }
 
     /** Called only for lifecycle, focus, prompt, configuration, or presentation changes. */
     private fun refreshProgress() {
-        progressJob?.cancel()
+        progressAnimator?.cancel()
+        reducedMotionJob?.cancel()
         budgetJob?.cancel()
         val now = SystemClock.elapsedRealtime()
         val visible = !isFinishing && !isDestroyed && !attempt.showRequested &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && windowFocused.value &&
             attempt.prompt.value != SplashPrompt.Open && !ConsentCenter.isFormShowing()
         attempt.progress.setActive(visible, now)
-        renderProgress(now)
+        val elapsed = attempt.progress.elapsedMs(now)
+        renderProgress(elapsed)
         if (!visible) return
 
         // Deadline scheduling is independent of rendering, including custom layouts without a bar.
@@ -184,22 +190,35 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 }
             }
         }
-        if (progressBar == null && progressPercent == null) return
-        progressJob = lifecycleScope.launch {
-            while (true) {
-                val wait = attempt.progress.nextUpdateDelayMs(SystemClock.elapsedRealtime(), progressTimeoutMs)
-                    ?: break
-                delay(wait)
-                renderProgress(SystemClock.elapsedRealtime())
+        if ((progressBar == null && progressPercent == null) || elapsed >= progressTimeoutMs) return
+        val scale = if (Build.VERSION.SDK_INT >= 33) ValueAnimator.getDurationScale()
+        else Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        if (scale <= 0f || (Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled())) {
+            // Reduced motion still reports progress, without animation frames or percentage scheduling.
+            reducedMotionJob = lifecycleScope.launch {
+                while (attempt.progress.elapsedMs(SystemClock.elapsedRealtime()) < progressTimeoutMs) {
+                    delay(1_000.milliseconds)
+                    renderProgress(attempt.progress.elapsedMs(SystemClock.elapsedRealtime()))
+                }
             }
+            return
+        }
+        progressAnimator = ValueAnimator.ofFloat(elapsed.toFloat(), progressTimeoutMs.toFloat()).apply {
+            // This represents elapsed time, so keep the 10s/60s curve at non-default system scales.
+            duration = ((progressTimeoutMs - elapsed) / scale).toLong().coerceAtLeast(1)
+            interpolator = LinearInterpolator()
+            addUpdateListener { renderProgress((it.animatedValue as Float).toLong()) }
+            start()
         }
     }
 
-    private fun renderProgress(now: Long) {
-        val percent = if (attempt.showRequested) 100 else attempt.progress.percent(now, progressTimeoutMs)
+    private fun renderProgress(elapsedMs: Long) {
+        val fraction = if (attempt.showRequested) 1f else attempt.progress.fractionAt(elapsedMs, progressTimeoutMs)
+        val level = (fraction * 10_000).toInt()
+        progressBar?.let { if (it.progress != level) it.progress = level }
+        val percent = level / 100
         if (percent == renderedPercent) return
         renderedPercent = percent
-        progressBar?.progress = percent
         progressPercent?.text = getString(R.string.ob_splash_percent, percent)
     }
 
@@ -691,7 +710,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
         progressPercent = findViewById(R.id.ob_splash_progress_percent)
         progressBar = findViewById<ProgressBar?>(R.id.ob_splash_progress)?.apply {
             isIndeterminate = false
-            max = 100
+            max = 10_000
         }
     }
 

@@ -67,8 +67,8 @@ class SplashProgressDeviceTest {
                     scenario.onActivity { activity ->
                         val bar = activity.findViewById<ProgressBar>(R.id.ob_splash_progress)
                         assertFalse(bar.isIndeterminate)
-                        assertEquals(100, bar.max)
-                        value = bar.progress
+                        assertEquals(10_000, bar.max)
+                        value = bar.progress / 100
                         assertEquals("$value%", activity.findViewById<TextView>(R.id.ob_splash_progress_percent).text.toString())
                         assertFalse(activity.isFinishing)
                     }
