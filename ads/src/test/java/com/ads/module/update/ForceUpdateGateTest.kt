@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.verifyNoInteractions
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -19,6 +21,17 @@ import org.robolectric.shadows.ShadowAlertDialog
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ForceUpdateGateTest {
+    @Test fun `disabled policy never inspects the host or suspends navigation`() {
+        val activity = mock(Activity::class.java)
+        var proceeded = false
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            ForceUpdateGate.await(activity, ForceUpdateConfig(minVersionCode = Long.MAX_VALUE, force = true))
+            proceeded = true
+        }
+        assertTrue(proceeded)
+        verifyNoInteractions(activity)
+    }
+
     @Test fun `mandatory gate stays closed after back and store return until scope dies`() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         var proceeded = false

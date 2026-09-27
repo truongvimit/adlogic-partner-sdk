@@ -19,6 +19,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.ads.module.update.ForceUpdateConfig
 import com.ads.module.update.ForceUpdateGate
 import com.ads.module.consent.ConsentCenter
@@ -57,6 +58,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -110,6 +112,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
         attempt.attach(this)
         if (!attempt.showRequested) forgetIdlePreloads()
+        observeProgress()
         lifecycleScope.launch { runSplash() }
     }
 
@@ -126,6 +129,42 @@ open class ObSplashActivity : BaseOnboardActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         windowFocused.value = hasFocus
+        if (!restartedByGuard) updateProgress()
+    }
+
+    override fun onPause() {
+        if (!restartedByGuard) attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+        super.onPause()
+    }
+
+    private fun observeProgress() {
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                try {
+                    while (isActive && !attempt.showRequested) {
+                        updateProgress()
+                        delay(50)
+                    }
+                } finally {
+                    attempt.progress.setActive(false, SystemClock.elapsedRealtime())
+                }
+            }
+        }
+    }
+
+    private fun updateProgress() {
+        val now = SystemClock.elapsedRealtime()
+        val visible = !isFinishing && !isDestroyed && !attempt.showRequested &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && windowFocused.value &&
+            attempt.prompt.value != SplashPrompt.Open && !ConsentCenter.isFormShowing()
+        attempt.progress.setActive(visible, now)
+        val timeoutMs = attempt.budgetTimeoutMs ?: sdk.flags().splashAdBudgetMs.coerceAtLeast(0)
+        val percent = if (attempt.showRequested) 100 else attempt.progress.percent(now, timeoutMs)
+        findViewById<ProgressBar?>(R.id.ob_splash_progress)?.progress = percent
+        findViewById<TextView?>(R.id.ob_splash_progress_percent)?.text = getString(R.string.ob_splash_percent, percent)
+        if (attempt.budgetTimeoutMs != null && attempt.progress.elapsedMs(now) >= timeoutMs) {
+            attempt.onInterResult(InterResult.TIMED_OUT)
+        }
     }
 
     private suspend fun awaitNetworkGate(cfg: OnboardKitConfig) {
@@ -179,7 +218,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
         }
         val updateConfig = checkNotNull(attempt.updateConfig)
-        if (updateConfig.isRequired(installedVersionCode())) {
+        if (updateConfig.enabled && updateConfig.force && updateConfig.isRequired(installedVersionCode())) {
             awaitNotificationPermission()
             awaitSplashFocus()
             ForceUpdateGate.await(this, updateConfig)
@@ -268,6 +307,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             if (!shouldAskNotificationPermission()) return
             awaitSplashFocus()
             attempt.promptOpened()
+            updateProgress()
             try {
                 ObLog.d(ObLog.Section.SPLASH, "requesting notification permission")
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -435,20 +475,15 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun beginAdWait() {
-        if (attempt.budgetDeadlineMs != null) return
+        if (attempt.budgetTimeoutMs != null) return
         val flags = sdk.flags()
-        attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
-        ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
+        attempt.budgetTimeoutMs = flags.splashAdBudgetMs.coerceAtLeast(0)
+        updateProgress()
+        ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} visible_budget ms=${flags.splashAdBudgetMs}")
     }
 
-    private fun remainingBudgetMs(): Long = remainingMs(attempt.budgetDeadlineMs, SystemClock.elapsedRealtime())
-
     private suspend fun awaitInterstitial() {
-        if (!attempt.interstitialSettled.isCompleted) {
-            val remaining = remainingBudgetMs()
-            val result = withTimeoutOrNull(remaining.milliseconds) { attempt.interstitialSettled.await() }
-            if (result == null) attempt.onInterResult(InterResult.TIMED_OUT)
-        }
+        // The visible-time clock resolves the budget; prompts/background must not spend it.
         if (attempt.interstitialSettled.await() == InterResult.TIMED_OUT) {
             ObLog.w(ObLog.Section.LOAD, "attempt=${attempt.id} splash_inter BUDGET_EXPIRED")
         }
@@ -486,6 +521,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Remote can publish a required update while the paywall owns the screen.
             awaitUpdateGate()
             attempt.showRequested = true
+            updateProgress()
             val state = attempt
             if (purchased || state.interstitialSettled.await() != InterResult.LOADED) {
                 if (purchased) AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PURCHASED_AT_PAYWALL)
@@ -538,6 +574,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private suspend fun awaitMinimumDisplay() {
+        // An answered notification has its own settle interval; a quick answer must not add
+        // the splash minimum on top of the one second requested before presenting a ready ad.
+        if (attempt.promptAnsweredAtMs != null) return
         val remaining = minDisplayLeftMs(
             sdk.requireConfig().splash.minDisplayTimeMs,
             checkNotNull(attempt.adPhaseStartedAtMs),
@@ -607,10 +646,14 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 name.text = applicationInfo.loadLabel(packageManager)
             }
         }
-        findViewById<ProgressBar?>(R.id.ob_splash_progress)?.isIndeterminate = true
+        findViewById<ProgressBar?>(R.id.ob_splash_progress)?.apply {
+            isIndeterminate = false
+            max = 100
+        }
     }
 
     override fun onDestroy() {
+        if (!restartedByGuard) attempt.progress.setActive(false, SystemClock.elapsedRealtime())
         ConsentCenter.detach(this)
         // Also on recreation, unlike other screens: the slot is requested once per attempt.
         sdk.provider()?.releaseNative(AdPlacement.SplashInlineNative)

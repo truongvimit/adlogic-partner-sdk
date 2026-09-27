@@ -24,7 +24,7 @@
       "ad_budget_ms": 60000,
       "slot_min_visible_ms": 1000,
       "slot_wait_after_inter_ms": 10000,
-      "notification_settle_ms": 800
+      "notification_settle_ms": 1000
     },
     "load": {
       "ad_strategy": "ALTERNATE",

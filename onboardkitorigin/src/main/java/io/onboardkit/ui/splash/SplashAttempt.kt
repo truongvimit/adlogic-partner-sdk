@@ -34,7 +34,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var adPhaseStartedAtMs: Long? = null
     val preloadsRequested = mutableSetOf<AdPlacement>()
     val interstitialSettled = CompletableDeferred<InterResult>()
-    var budgetDeadlineMs: Long? = null
+    val progress = SplashProgress()
+    var budgetTimeoutMs: Long? = null
     private val _prompt = MutableStateFlow<SplashPrompt>(SplashPrompt.NotAsked)
     val prompt: StateFlow<SplashPrompt> = _prompt.asStateFlow()
     var nextScreenTiming: NextScreenTiming? = null
@@ -73,7 +74,7 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     fun onInterResult(result: InterResult) {
         if (interstitialSettled.isCompleted) return
         val now = SystemClock.elapsedRealtime()
-        val expired = budgetDeadlineMs?.let { now >= it } == true
+        val expired = budgetTimeoutMs?.let { progress.elapsedMs(now) >= it } == true
         val settled = if (expired) InterResult.TIMED_OUT else result
         // Queue preloads before completing the result and waking the presentation path.
         host.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.requestSplashPreloads(settled)

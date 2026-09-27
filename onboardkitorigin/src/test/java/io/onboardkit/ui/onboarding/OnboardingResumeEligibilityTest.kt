@@ -5,6 +5,8 @@ import android.app.Application
 import android.os.Looper
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
@@ -13,7 +15,10 @@ import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.AdEventListener
+import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.NativeAdUnit
@@ -24,6 +29,7 @@ import io.onboardkit.core.StepId
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,9 +56,25 @@ class OnboardingResumeEligibilityTest {
 
     @Before fun setup() {
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
-            adProvider = FakeAdProvider()
+            adProvider = object : FakeAdProvider() {
+                override fun bindNative(
+                    activity: ComponentActivity,
+                    request: NativeAdRequest,
+                    container: FrameLayout,
+                    listener: AdEventListener,
+                ): Boolean {
+                    if (request.placement !is AdPlacement.StepFullScreen) return false
+                    // This suite exercises a visible ad page. An empty provider would exhaust
+                    // its first attempt and auto-skip the page when the test navigates back.
+                    container.removeAllViews()
+                    container.addView(View(activity))
+                    return true
+                }
+            }
             trackkitAutoTracking(false)
         }
+        // Language selection freezes the step plan; each case configures a different flow.
+        runBlocking { OnboardingSdk.reset() }
         ConsentCenter.setHostConsent(true, false)
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
@@ -95,6 +117,7 @@ class OnboardingResumeEligibilityTest {
         assertNull(manager.resumeSkipReasonFor(activity))
         pager.setCurrentItem(0, false)
         shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("The filled fullscreen page stays selected on return", 0, pager.currentItem)
         assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
     }
 

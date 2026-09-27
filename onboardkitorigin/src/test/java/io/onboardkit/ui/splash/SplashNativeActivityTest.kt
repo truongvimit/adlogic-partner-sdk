@@ -51,7 +51,7 @@ class SplashNativeActivityTest {
                 request: NativeAdRequest,
                 container: FrameLayout,
                 listener: AdEventListener,
-            ) = binds
+            ) = ready && binds
             override fun preloadNative(activity: Activity, request: NativeAdRequest) { loads++ }
             override fun releaseNative(placement: AdPlacement) { released += placement }
         }

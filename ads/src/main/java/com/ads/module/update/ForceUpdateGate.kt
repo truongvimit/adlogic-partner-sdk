@@ -26,18 +26,21 @@ object ForceUpdateGate {
     const val REQUEST_CODE = 0xAD10
 
     @JvmStatic
-    suspend fun await(activity: Activity, config: ForceUpdateConfig) = withContext(Dispatchers.Main.immediate) {
-        if (!config.enabled || config.minVersionCode <= 0) return@withContext
-        val installed = PackageInfoCompat.getLongVersionCode(
-            activity.packageManager.getPackageInfo(activity.packageName, 0),
-        )
-        if (!config.needsUpdate(installed)) return@withContext
-        if (activity.isFinishing || activity.isDestroyed) throw kotlinx.coroutines.CancellationException("Host destroyed")
-        val requestHold = if (config.isRequired(installed)) AdGate.holdRequests() else null
-        try {
-            awaitDialog(activity, config)
-        } finally {
-            requestHold?.close()
+    suspend fun await(activity: Activity, config: ForceUpdateConfig) {
+        // Disabled defaults do not dispatch UI work or query the installed version.
+        if (!config.enabled || config.minVersionCode <= 0) return
+        withContext(Dispatchers.Main.immediate) {
+            val installed = PackageInfoCompat.getLongVersionCode(
+                activity.packageManager.getPackageInfo(activity.packageName, 0),
+            )
+            if (!config.needsUpdate(installed)) return@withContext
+            if (activity.isFinishing || activity.isDestroyed) throw kotlinx.coroutines.CancellationException("Host destroyed")
+            val requestHold = if (config.isRequired(installed)) AdGate.holdRequests() else null
+            try {
+                awaitDialog(activity, config)
+            } finally {
+                requestHold?.close()
+            }
         }
     }
 

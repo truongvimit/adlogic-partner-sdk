@@ -10,7 +10,10 @@
     <color name="ob_text_subtitle">#131318</color>
     <color name="ob_text_secondary">#797C80</color>
     <color name="ob_text_splash_title">#2F2F2F</color>
-    <color name="ob_text_splash_loading">#646C79</color>
+    <!-- Figma A048 Live Translator loading cluster, node 8105:22841. -->
+    <color name="ob_text_splash_loading">#2D2B29</color>
+    <color name="ob_splash_progress">#175CFF</color>
+    <color name="ob_splash_progress_track">#D1DEFF</color>
     <color name="ob_icon_gray">#949494</color>
 
     <color name="ob_placeholder_bg">#F0F1F5</color>
