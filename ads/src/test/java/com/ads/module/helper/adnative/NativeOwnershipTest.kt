@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.ads.ERainAd
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.interstitial.Int02Application
 import com.ads.module.helper.interstitial.Int02FacebookShadow
@@ -439,6 +440,283 @@ class NativeOwnershipTest {
         assertEquals("the original 10 second deadline survives rotation", 2, requests.size)
     }
 
+    @Test fun `a click replacement that fails while away is not requested again on return`() {
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        requests.single().listener.onAdClicked()
+        assertEquals("The click still starts one replacement", 2, requests.size)
+        controller.pause().stop()
+        requests.last().fail()
+        controller.restart().start().resume()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(2, requests.size)
+        assertSame(first, helper.nativeAd?.admobNativeAd)
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loaded)
+        assertFalse(first.destroyed)
+    }
+
+    @Test fun `rotation after a no fill restores the failure without another request`() {
+        val old = helper()
+        old.show()
+        requests.single().fail()
+        assertTrue(old.nativeAdState.value is AdNativeState.Fail)
+        controller.configurationChange(android.content.res.Configuration(activity.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        controller.visible()
+        val restored = helper()
+        restored.show()
+        assertEquals(1, requests.size)
+        assertTrue(restored.nativeAdState.value is AdNativeState.Fail)
+    }
+
+    @Test fun `a join only helper polls or joins but never dispatches its own load`() {
+        val joinOnly = joinOnlyHelper()
+        joinOnly.show()
+        assertEquals(0, requests.size)
+        assertTrue(joinOnly.nativeAdState.value is AdNativeState.Fail)
+        NativeAdManager.preload(activity, "a", config)
+        joinOnly.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertSame(ad, joinOnly.nativeAd?.admobNativeAd)
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `a join only helper whose parked fill was taken does not load again on resume`() {
+        controller.pause()
+        val joinOnly = joinOnlyHelper()
+        NativeAdManager.preload(activity, "a", config)
+        requests.single().fill(NativeVendorAd())
+        assertFalse(joinOnly.bindAvailable())
+        assertNotNull(NativeAdManager.poll("a"))
+        controller.resume()
+        main.idle()
+        assertEquals(1, requests.size)
+        assertTrue(joinOnly.nativeAdState.value is AdNativeState.Fail)
+    }
+
+    @Test fun `a join only helper still requests its timed refresh`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"allowed":true}}}""")
+        try {
+            val joinOnly = joinOnlyHelper().applyReloadByTime(10_000)
+            NativeAdManager.preload(activity, "a", config)
+            joinOnly.show()
+            requests.single().fill(NativeVendorAd())
+            main.idleFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            assertEquals(2, requests.size)
+        } finally {
+            AdBehavior.document.acceptSuccessfulFetch(null)
+        }
+    }
+
+    @Test fun `a join only helper still requests its resume refresh`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"allowed":true}}}""")
+        try {
+            val joinOnly = joinOnlyHelper()
+            NativeAdManager.preload(activity, "a", config)
+            joinOnly.show()
+            requests.single().fill(NativeVendorAd())
+            main.idleFor(4, java.util.concurrent.TimeUnit.SECONDS)
+            controller.pause().resume()
+            main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+            assertEquals(2, requests.size)
+        } finally {
+            AdBehavior.document.acceptSuccessfulFetch(null)
+        }
+    }
+
+    @Test fun `a join only helper attached to its view after its parked fill was taken does not load`() {
+        val joinOnly = NativeAdHelper(activity, activity,
+            NativeAdConfig.forUnits(config.adUnitIds, config.layoutId, joinOnly = true), "a")
+        NativeAdManager.preload(activity, "a", config)
+        joinOnly.show()
+        requests.single().fill(NativeVendorAd())
+        assertTrue(joinOnly.nativeAdState.value is AdNativeState.Loading)
+        assertNotNull(NativeAdManager.poll("a"))
+        joinOnly.setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        assertEquals(1, requests.size)
+        assertTrue(joinOnly.nativeAdState.value is AdNativeState.Fail)
+    }
+
+    private fun joinOnlyHelper(): NativeAdHelper = NativeAdHelper(activity, activity,
+        NativeAdConfig.forUnits(config.adUnitIds, config.layoutId, joinOnly = true), "a")
+        .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+        .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+
+    @Test fun `remote preload switches neither parse nor move a placement helper off its store`() {
+        assertFalse(AdBehavior.supportsPlacementField("native", "preload.enabled"))
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+            mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", true))))
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"preload":{"enabled":true}},""" +
+            """"placement_overrides":{"home":{"native":{"preload":{"enabled":true}}}}}""")
+        try {
+            val placementConfig = NativeAdConfig.forPlacement("home", config.layoutId)
+            NativeAdManager.preload(activity, "home", placementConfig)
+            val ad = NativeVendorAd()
+            requests.single().fill(ad)
+            val helper = NativeAdHelper(activity, activity, placementConfig, "home")
+                .setNativeAdBinder { _, bound, container, _ -> container.tag = bound }
+                .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+            helper.show()
+            assertEquals(1, requests.size)
+            assertFalse(helper.isEnablePreload)
+            assertSame(ad, helper.nativeAd?.admobNativeAd)
+        } finally {
+            AdBehavior.document.acceptSuccessfulFetch(null)
+            com.ads.module.config.AdRemoteConfig.reset()
+        }
+    }
+
+    @Test fun `a placement helper with preload enabled binds the fill preloaded under its placement`() {
+        val helper = NativeAdHelper(activity, activity, config)
+            .also { it.placement = "home" }
+            .setEnablePreload(true)
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        NativeAdManager.preload(activity, "home", config)
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertTrue(helper.bindAvailable())
+        assertSame(ad, helper.nativeAd?.admobNativeAd)
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `the placement constructor names the store and refills it after show`() {
+        val helper = NativeAdHelper(activity, activity, config, "home")
+            .setEnablePreload(true)
+            .setPreloadAdOption(NativeAdPreloadClientOption(preloadAfterShow = true))
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        assertEquals("home", helper.placement)
+        helper.show()
+        requests.single().fill(NativeVendorAd())
+        assertEquals(2, requests.size)
+        assertTrue(NativeAdManager.isLoading("home"))
+    }
+
+    @Test fun `an explicit preload key still outranks the placement`() {
+        val helper = NativeAdHelper(activity, activity, config, "home")
+            .setEnablePreload(true, "custom")
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preloadWithKey("custom", activity, config)
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertTrue(helper.bindAvailable())
+        assertSame(ad, helper.nativeAd?.admobNativeAd)
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `a passed joined unit ids key outranks the placement and binds that preload`() {
+        val helper = NativeAdHelper(activity, activity, config, "home")
+            .setEnablePreload(true, preload.keyOf(config))
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preload(activity, config)
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        helper.show()
+        assertSame(ad, helper.nativeAd?.admobNativeAd)
+        assertEquals(1, requests.size)
+        assertEquals(preload.keyOf(config), helper.preloadKey)
+    }
+
+    @Test fun `an explicit key names the store even with refill off`() {
+        val helper = NativeAdHelper(activity, activity, config, "home")
+            .setEnablePreload(false, "custom")
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preloadWithKey("custom", activity, config)
+        requests.single().fill(NativeVendorAd())
+        assertTrue(helper.bindAvailable())
+        assertEquals("custom", helper.preloadKey)
+    }
+
+    @Test fun `a placement helper leaves a fill preloaded under the joined unit ids and requests its own`() {
+        val helper = NativeAdHelper(activity, activity, config, "home")
+            .setEnablePreload(true)
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preload(activity, config)
+        requests.single().fill(NativeVendorAd())
+        assertFalse(helper.bindAvailable())
+        helper.show()
+        assertEquals(2, requests.size)
+        assertTrue(NativeAdManager.isReady(NativeAdManager.keyOf(config)))
+    }
+
+    @Test fun `enabling preload after the unit ids change keeps the placement as store`() {
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+            mapOf("home" to com.ads.module.config.AdUnitConfig("unit-old", true))))
+        try {
+            val placementConfig = NativeAdConfig.forPlacement("home", config.layoutId)
+            val helper = NativeAdHelper(activity, activity, placementConfig, "home")
+                .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+                .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+            com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+                mapOf("home" to com.ads.module.config.AdUnitConfig("unit-new", true))))
+            helper.setEnablePreload(true)
+            NativeAdManager.preload(activity, "home", placementConfig)
+            val ad = NativeVendorAd()
+            requests.single().fill(ad)
+            assertTrue(helper.bindAvailable())
+            assertSame(ad, helper.nativeAd?.admobNativeAd)
+            assertEquals("home", helper.preloadKey)
+        } finally {
+            com.ads.module.config.AdRemoteConfig.reset()
+        }
+    }
+
+    @Test fun `a helper without placement or explicit key keeps the joined unit store`() {
+        val helper = NativeAdHelper(activity, activity, config)
+            .setEnablePreload(true)
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preload(activity, config)
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertTrue(helper.bindAvailable())
+        assertSame(ad, helper.nativeAd?.admobNativeAd)
+    }
+
+    @Test fun `rotation while a click replacement fails keeps the current ad without another request`() {
+        val old = helper()
+        old.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        requests.single().listener.onAdClicked()
+        assertEquals(2, requests.size)
+        controller.configurationChange(android.content.res.Configuration(activity.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        requests.last().fail()
+        val restored = helper()
+        restored.show()
+        assertSame(first, restored.nativeAd?.admobNativeAd)
+        assertTrue(restored.nativeAdState.value is AdNativeState.Loaded)
+        assertEquals(2, requests.size)
+        assertFalse(first.destroyed)
+    }
+
+    @Test fun `rotation after the shown ad expired ends in Fail without a request`() {
+        val old = helper()
+        old.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        main.idleFor(61, java.util.concurrent.TimeUnit.MINUTES)
+        controller.configurationChange(android.content.res.Configuration(activity.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        val restored = helper()
+        restored.show()
+        assertEquals(1, requests.size)
+        assertTrue(first.destroyed)
+        assertTrue(restored.nativeAdState.value is AdNativeState.Fail)
+    }
+
     @Test fun `failed replacement bind keeps the current ad and disposes the failed candidate`() {
         val helper = helper()
         helper.requestAds(NativeAdParam.Request)
@@ -540,6 +818,153 @@ class NativeOwnershipTest {
         assertEquals("legacy buffer count cannot start extra batches", 3, requests.size)
         assertTrue(NativeAdManager.isReady("a"))
         assertTrue(NativeAdManager.isReady("b"))
+    }
+
+    @Test fun `a load result is told once after listeners and before waiters and leaves the fill to them`() {
+        val order = mutableListOf<String>()
+        NativeAdManager.register("a", object : com.ads.module.funtion.AdCallback() {
+            override fun onNativeAdLoaded(nativeAd: com.ads.module.ads.wrapper.ApNativeAd) { order += "listener" }
+        })
+        assertTrue(NativeAdManager.preload(activity, "a", config, onResult = { order += "result:$it" }))
+        var taken: com.ads.module.ads.wrapper.ApNativeAd? = null
+        NativeAdManager.awaitNext("a") { order += "waiter"; taken = it }
+        requests.single().fill(NativeVendorAd())
+        assertEquals(listOf("listener", "result:null", "waiter"), order)
+        assertNotNull(taken)
+        assertFalse(NativeAdManager.isReady("a"))
+    }
+
+    @Test fun `a ready placement answers at once and a loading one attaches without a second request`() {
+        val answers = mutableListOf<com.ads.module.helper.AdSkipReason?>()
+        NativeAdManager.preload(activity, "a", config)
+        assertFalse(NativeAdManager.preload(activity, "a", config, onResult = { answers += it }))
+        assertTrue(answers.isEmpty())
+        requests.single().fill(NativeVendorAd())
+        assertEquals(listOf<com.ads.module.helper.AdSkipReason?>(null), answers)
+        assertFalse(NativeAdManager.preload(activity, "a", config, onResult = { answers += it }))
+        assertEquals(listOf<com.ads.module.helper.AdSkipReason?>(null, null), answers)
+        assertTrue("A result listener never takes the fill", NativeAdManager.isReady("a"))
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `a gate refusal answers its reason while a no fill is remembered until the next load`() {
+        val answers = mutableListOf<com.ads.module.helper.AdSkipReason?>()
+        ConsentCenter.setHostConsent(false, false)
+        assertFalse(NativeAdManager.preload(activity, "a", config, onResult = { answers += it }))
+        assertEquals(listOf(com.ads.module.helper.AdSkipReason.CONSENT_NOT_GRANTED), answers)
+        assertFalse("A refusal is not a failed load", NativeAdManager.isFailed("a"))
+        ConsentCenter.setHostConsent(true, false)
+        NativeAdManager.preload(activity, "a", config, onResult = { answers += it })
+        requests.single().fail()
+        assertEquals(com.ads.module.helper.AdSkipReason.NOT_READY, answers.last())
+        assertTrue(NativeAdManager.isFailed("a"))
+        NativeAdManager.preload(activity, "a", config)
+        assertFalse(NativeAdManager.isFailed("a"))
+        requests.last().fill(NativeVendorAd())
+        assertFalse(NativeAdManager.isFailed("a"))
+    }
+
+    @Test fun `release answers a pending result not ready and the late fill is not reported again`() {
+        val answers = mutableListOf<com.ads.module.helper.AdSkipReason?>()
+        NativeAdManager.preload(activity, "a", config, onResult = { answers += it })
+        NativeAdManager.preload(activity, "b", config, onResult = { answers += it })
+        NativeAdManager.release("a")
+        assertEquals(listOf(com.ads.module.helper.AdSkipReason.NOT_READY), answers)
+        requests.first().fill(NativeVendorAd())
+        NativeAdManager.releaseAll()
+        assertEquals(listOf(com.ads.module.helper.AdSkipReason.NOT_READY, com.ads.module.helper.AdSkipReason.NOT_READY), answers)
+        assertFalse(NativeAdManager.isFailed("a"))
+    }
+
+    @Test fun `a no fill is told once after listeners and before waiters`() {
+        val order = mutableListOf<String>()
+        NativeAdManager.register("a", object : com.ads.module.funtion.AdCallback() {
+            override fun onAdFailedToLoad(error: LoadAdError?) { order += "listener" }
+        })
+        NativeAdManager.preload(activity, "a", config, onResult = { order += "result:$it" })
+        NativeAdManager.awaitNext("a") { order += "waiter:$it" }
+        requests.single().fail()
+        val noFill = com.ads.module.helper.AdSkipReason.NOT_READY
+        assertEquals(listOf("listener", "result:$noFill", "waiter:null"), order)
+    }
+
+    @Test fun `a gate refusal heard by a load result is still reported as one skip`() {
+        val skips = mutableListOf<String>()
+        val sink = object : io.trackkit.TrackSink {
+            override val id = "native-skip-sink"
+            override fun onEvent(name: String, params: Map<String, Any?>) {
+                if (name == io.trackkit.TrackkitEvents.AD_SKIPPED) skips += params["reason"].toString()
+            }
+        }
+        io.trackkit.Tracker.install(activity.application)
+        io.trackkit.Tracker.setConsent(true, true)
+        io.trackkit.Tracker.addSink(sink)
+        try {
+            var answer: com.ads.module.helper.AdSkipReason? = null
+            ConsentCenter.setHostConsent(false, false)
+            assertFalse(NativeAdManager.preload(activity, "a", config, onResult = { answer = it }))
+            assertEquals(com.ads.module.helper.AdSkipReason.CONSENT_NOT_GRANTED, answer)
+            assertEquals(listOf(com.ads.module.helper.AdSkipReason.CONSENT_NOT_GRANTED.key), skips)
+        } finally {
+            io.trackkit.Tracker.removeSink(sink)
+        }
+    }
+
+    @Test fun `a bind the helper may no longer show ends in Cancel and leaves the fill unused`() {
+        val helper = helper()
+        preload.preloadWithKey("a", activity, config)
+        requests.single().fill(NativeVendorAd())
+        ConsentCenter.setHostConsent(false, false)
+        assertFalse(helper.bindAvailable())
+        assertTrue(helper.nativeAdState.value is AdNativeState.Cancel)
+        assertTrue(NativeAdManager.isReady("a"))
+    }
+
+    @Test fun `a bind while loading still cancels when consent is revoked`() {
+        val helper = helper()
+        helper.show()
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loading)
+        ConsentCenter.setHostConsent(false, false)
+        assertFalse(helper.bindAvailable())
+        assertTrue(helper.nativeAdState.value is AdNativeState.Cancel)
+    }
+
+    @Test fun `a bind refused after a purchase tears down the ad on screen`() {
+        var premium = false
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = premium })
+        val helper = helper()
+        helper.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        premium = true
+        assertFalse(helper.bindAvailable())
+        assertTrue(helper.nativeAdState.value is AdNativeState.Cancel)
+        assertTrue(first.destroyed)
+        assertNull(helper.nativeAd)
+    }
+
+    @Test fun `a fill parked for resume is cancelled when the user has purchased by then`() {
+        var premium = false
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = premium })
+        controller.pause()
+        val helper = helper()
+        helper.show()
+        requests.single().fill(NativeVendorAd())
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loading)
+        premium = true
+        controller.resume()
+        assertTrue(helper.nativeAdState.value is AdNativeState.Cancel)
+    }
+
+    @Test fun `a bind refused by the UA gate ends in Cancel and leaves the fill unused`() {
+        val gated = NativeAdConfig(config.adUnitIds, true, false, config.layoutId).apply { forceUaCheck = true }
+        val helper = NativeAdHelper(activity, activity, gated, "a")
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+        preload.preloadWithKey("a", activity, config)
+        requests.single().fill(NativeVendorAd())
+        assertFalse(helper.bindAvailable())
+        assertTrue(helper.nativeAdState.value is AdNativeState.Cancel)
+        assertTrue(NativeAdManager.isReady("a"))
     }
 
     @Test fun `explicit release keeps pending work deduplicated and discards its late fill`() {

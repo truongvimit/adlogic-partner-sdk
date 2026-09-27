@@ -40,10 +40,6 @@
       "timer_enabled": false,
       "interval_ms": 15000
     },
-    "preload": {
-      "enabled": false,
-      "after_show": false
-    },
     "presentation": {
       "auto_shimmer": true,
       "empty_visibility": "GONE",

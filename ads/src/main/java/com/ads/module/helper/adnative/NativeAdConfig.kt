@@ -34,12 +34,15 @@ open class NativeAdConfig(
      */
     private var placementKey: String? = null
 
-    /** A containing flow can forbid replacement preloads even when global policy enables them. */
+    private var overridesKey: String? = null
+
+    /** Lets a containing flow forbid the replacement preloads that setEnablePreload asks for. */
     open val canPreloadReplacement: Boolean get() = true
 
     var behavior: BehaviorValues? = null
     private val declaredCanReloadAds = canReloadAds
-    internal fun behaviorValues() = behavior ?: AdBehavior.values("native", placementKey)
+    internal fun behaviorValues() =
+        behavior ?: AdBehavior.values("native", placementKey ?: overridesKey)
     override val canReloadAds: Boolean get() = behaviorValues().boolean("reload.allowed", declaredCanReloadAds)
 
     private val declaredCanShowAds: Boolean = canShowAds
@@ -81,7 +84,18 @@ open class NativeAdConfig(
         get() = behaviorValues().long("reload.resume_debounce_ms", field)
 
     /** Routes the request through the UA/organic gate before it may go out. */
-    var forceUaCheck: Boolean = false
+    private var explicitForceUaCheck: Boolean? = null
+    var forceUaCheck: Boolean
+        get() = explicitForceUaCheck ?: (placementKey ?: overridesKey)?.let { uaCheckFor(it) } ?: false
+        set(value) {
+            explicitForceUaCheck = value
+        }
+
+    /** Reads a placement's current UA gate; raw configs keep their explicit value. */
+    internal fun shouldForceUaCheck(): Boolean = forceUaCheck
+
+    /** The helper binds a ready fill or joins a pending load; only reloads and clicks request. */
+    var joinOnly: Boolean = false
 
     /** How long one waterfall tier may take before the next floor is tried. */
     var tierTimeoutMs: Long = AdBehavior.defaultNumber("native.load.tier_timeout_ms")
@@ -102,7 +116,44 @@ open class NativeAdConfig(
             canReloadAds: Boolean = AdBehavior.defaultBool("native.reload.allowed"),
         ): NativeAdConfig = NativeAdConfig(emptyList(), true, canReloadAds, layoutId).apply {
             placementKey = placement
-            forceUaCheck = AdRemoteConfig.getInstance().ads[placement]?.enableUaCheck == true
         }
+
+        /** Explicit [tiers]; [singleFill] never refills or reloads. Lambdas serve an embedding SDK. */
+        @JvmStatic
+        @JvmOverloads
+        fun forUnits(
+            tiers: List<String>,
+            @LayoutRes layoutId: Int,
+            adConfigKey: String? = null,
+            joinOnly: Boolean = false,
+            singleFill: Boolean = false,
+            liveLayoutId: (() -> Int)? = null,
+            liveClickAction: (() -> NativeClickAction)? = null,
+        ): NativeAdConfig {
+            val config: NativeAdConfig =
+                UnitsConfig(tiers, layoutId, singleFill, liveLayoutId, liveClickAction)
+            config.overridesKey = adConfigKey
+            config.joinOnly = joinOnly
+            return config
+        }
+
+        private fun uaCheckFor(key: String?): Boolean =
+            key?.let { AdRemoteConfig.getInstance().ads[it]?.enableUaCheck } == true
+    }
+
+    private class UnitsConfig(
+        tiers: List<String>,
+        @LayoutRes layoutId: Int,
+        private val singleFill: Boolean,
+        private val liveLayoutId: (() -> Int)?,
+        private val liveClickAction: (() -> NativeClickAction)?,
+    ) : NativeAdConfig(tiers, true, false, layoutId) {
+        override val layoutId: Int get() = liveLayoutId?.invoke() ?: super.layoutId
+        override val canPreloadReplacement: Boolean get() = !singleFill
+        override val canReloadAds: Boolean get() = !singleFill && super.canReloadAds
+        override val resolvedClickAction: NativeClickAction
+            get() = (liveClickAction?.invoke() ?: super.resolvedClickAction).let {
+                if (singleFill && it == NativeClickAction.RELOAD) NativeClickAction.NONE else it
+            }
     }
 }
