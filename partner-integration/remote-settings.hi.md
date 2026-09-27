@@ -20,7 +20,7 @@ Console setup के लिए [तीन String parameters publish करने
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK asset](../onboardkitorigin/src/main/assets/onboarding_config.json) |
 
 - **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
-- **ad_behavior_config:** format के अनुसार timeout/cache, reload/preload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
+- **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
 - **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back/click-return, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation और Activity exclusions। SDK ad-presentation presets remote से बदले जा सकते हैं।
 
@@ -88,12 +88,12 @@ Banner notification permission dialog के पीछे render होता �
 लेकिन नीचे दी गई गारंटी दोनों के लिए एक जैसी है, क्योंकि वह impression से नहीं बल्कि splash को screen
 वापस मिलने के क्षण से नापी जाती है।
 
-**5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और यह release उसमें
-`SplashInlineNative` जोड़ता है, इसलिए आपका exhaustive `when (placement)` — सबसे अधिक संभावना custom
-`OnboardingAdProvider` में — तब तक compile नहीं होगा जब तक नए placement के लिए एक branch न जुड़े।
-इसके अलावा कुछ नहीं टूटता: `AdsConfig.splashInlineNative` का default है इसलिए मौजूदा constructor
-calls अप्रभावित हैं, और bundled `slot_format` `BANNER` ही रहता है, इसलिए बिना बदलाव वाला app पहले
-जैसा ही चलता है।
+**5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और इस release में
+`SplashInlineNative` जुड़ता है, इसलिए जिस code में provider अभी partner के पास है वहाँ exhaustive
+`when (placement)` में नए placement की branch जोड़नी होगी। `AdsConfig.splashInlineNative` का default
+है, इसलिए मौजूदा constructor calls अप्रभावित हैं और bundled `slot_format` `BANNER` ही रहता है।
+मौजूदा SDK `OnboardingAdProvider` को SDK के अंदर बंद रखता है; partner का अपना provider
+[5.5.2 से upgrade](ads-onboarding-integration.md#upgrading-from-552) में बताए अनुसार हटाएँ।
 
 
 
@@ -119,7 +119,7 @@ ads = AdsConfig.fromAdConfig(mapOf(
 - Successful fetch पर remote overrides हटाने के लिए `{}` या `{"schema_version":1}` publish करें। Empty String malformed है, reset नहीं। नया remote object पुराने remote overrides को replace करता है, patch नहीं; missing fields अगले नीचे वाले source पर fallback करते हैं।
 - Custom/partial app asset का हर मौजूद valid field explicit assignment है, `false`/`0` समेत। पूरी bundled asset की बिना बदली copy host constructor/setter fallback रखती है। Firebase की published default value remote है, SDK local default नहीं; source Firebase in-app defaults को fetched remote नहीं मानता।
 - SDK defaults build के समय assets से generate होते हैं, Context से पहले उपलब्ध हैं और `null` नहीं रखते। अलग Kotlin/XML defaults maintain नहीं करने पड़ते। App के invalid fields fallback लेते हैं; app को नया parser नहीं चाहिए।
-- Consent, premium, `setCanRequestAds(false)`, remote `global.ads_enabled=false`, runtime reload pause और lifecycle अब भी ads रोकते हैं। `AdsConfig.enabled=false` तब तक लागू रहता है जब तक remote `flow.ads_enabled=true` (या backend द्वारा भेजा गया `ob_enable_all_ads=true`) onboarding ads चालू न करे; app asset ऐसा नहीं कर सकता। AutoBuffer के लिए host का `start` integration आवश्यक है; JSON Activities या host features initialize नहीं करता।
+- Consent, premium, remote `global.ads_enabled=false`, runtime reload pause और lifecycle अब भी ads रोकते हैं। `AdsConfig.enabled=false` तब तक लागू रहता है जब तक remote `flow.ads_enabled=true` (या backend द्वारा भेजा गया `ob_enable_all_ads=true`) onboarding ads चालू न करे; app asset ऐसा नहीं कर सकता। AutoBuffer के लिए host का `start` integration आवश्यक है; JSON Activities या host features initialize नहीं करता।
 - पुराने `ob_*` keys compatible रहते हैं। Backend द्वारा भेजी गई key अपनी value दोनों दिशाओं में तय करती है, grouped documents से नीचे और app asset/host से ऊपर; `ob_splash_min_display_ms <= 0` local value रखता है।
 - Debuggable build remote `ad_remote_config` का हर field लागू करता है, लेकिन ad unit IDs `ad_config_debug.json` (debug file न हो तो `ad_config.json`) के ही रखता है; जो keys केवल remote declare करता है वे हटा दी जाती हैं, जब तक वे किसी slot को बंद न करें। एक `WARN` log pinned file का नाम बताता है, और `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` remote IDs भी ले लेता है। दोनों grouped documents release की तरह लागू होते हैं; नए parameters के automatic `_debug` variants नहीं हैं।
 
@@ -130,9 +130,11 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | placement_overrides में format | Supported fields |
 | --- | --- |
 | banner | `reload.allowed`, `reload.auto_enabled`, `reload.resume_debounce_ms`, `presentation.*` |
-| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `preload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
+| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
+
+**5.5.2 से अपग्रेड।** `preload.enabled` और `preload.after_show` अब किसी भी scope पर नहीं पढ़े जाते: `native.preload.*`, `placement_overrides.<key>.native.preload.*`, या `onboarding_config` में कोई `behavior.preload.*` field जैसे `lfo.native1.behavior.preload.enabled`। जिस document में ये fields अब भी हैं वह इन fields के बिना लागू होता है, और इन्हें `AdLogicSettings` के तहत ignored के रूप में log किया जाता है। Native ठीक वहीं preload होता है जहाँ app या SDK का code उसे preload करता है। Onboarding की preload settings, जैसे `lfo1_preload_mode`, `preload_trigger` और `onboarding.preload.*`, नहीं बदलतीं। `ERainAdProvider(tierTimeoutMs)` हटा दिया गया है; `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` (default 30000) onboarding ads के लिए वही per-tier timeout सेट करते हैं।
 
 OB interstitial slots tier और wait timeout support करते हैं; exit interstitial के लिए `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
@@ -231,8 +233,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native.reload.min_after_bind_ms` | `3000` |
 | `native.reload.timer_enabled` | `false` |
 | `native.reload.interval_ms` | `15000` |
-| `native.preload.enabled` | `false` |
-| `native.preload.after_show` | `false` |
 | `native.presentation.auto_shimmer` | `true` |
 | `native.presentation.empty_visibility` | `"GONE"` |
 | `native.presentation.cta_corner_radius_dp` | `20` |

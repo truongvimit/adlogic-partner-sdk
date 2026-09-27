@@ -18,7 +18,7 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 ## Mỗi giá trị có một nơi quản lý
 
 - **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `open_resume.app_resume_load_delay_ms`. Hai JSON mới không khai báo lại các field này, mapping ad unit hoặc công tắc từng ad unit.
-- **ad_behavior_config:** timeout/cache, policy reload/preload, frequency/AutoBuffer, consent timeout, telemetry, bo góc CTA native và hành vi app-open. Banner type/size là preset định dạng quảng cáo của SDK; không chứa resource/layout của app.
+- **ad_behavior_config:** timeout/cache, policy reload, frequency/AutoBuffer, consent timeout, telemetry, bo góc CTA native và hành vi app-open. Banner type/size là preset định dạng quảng cáo của SDK; không chứa resource/layout của app.
 - **onboarding_config:** bật/tắt bước của luồng, skip/X delay, auto-next, swipe/back/click-return, chiến lược splash, thời điểm preload LFO/OB và hành vi exit/question; template native, kiểu nút X/Skip, hình/màu nút xác nhận LFO và lựa chọn ngôn ngữ trong catalog của app. Bật bước không bật lại placement đang `isEnable=false` trong ad_config.
 - **Code/resource của app:** reference `R.layout`, `R.drawable`, `R.string`, layout custom của trang, catalog/resource ngôn ngữ, progress indicator, system bars/orientation và Activity exclusions. Các preset trình bày quảng cáo có sẵn trong SDK vẫn được remote điều khiển; không cần truyền resource ID qua JSON.
 
@@ -100,10 +100,10 @@ Banner có hiển thị sau lưng dialog xin quyền thông báo, còn native đ
 từ lúc có impression.
 
 **Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
-nên `when (placement)` exhaustive của bạn — hay gặp nhất là khi tự implement
-`OnboardingAdProvider` — sẽ không compile cho tới khi thêm nhánh cho placement mới. Ngoài ra không
-vỡ gì: `AdsConfig.splashInlineNative` có giá trị mặc định nên mọi lời gọi constructor hiện tại giữ
-nguyên, và `slot_format` mặc định vẫn là `BANNER` nên app không đụng gì thì hành vi y như cũ.
+nên `when (placement)` exhaustive trong phần code còn tự giữ provider cần thêm nhánh cho placement
+mới. `AdsConfig.splashInlineNative` có giá trị mặc định nên lời gọi constructor hiện tại giữ nguyên,
+và `slot_format` mặc định vẫn là `BANNER`. SDK hiện tại đã đóng `OnboardingAdProvider` trong SDK,
+vì vậy partner phải bỏ provider tự viết như mô tả ở [Nâng từ 5.5.2](ads-onboarding-integration.vi.md#nâng-từ-552).
 
 
 
@@ -139,7 +139,7 @@ Ví dụ local hoặc remote chỉ đổi swipe và thời gian X:
 - Fetch lỗi/timeout, JSON hỏng hoặc schema chưa hỗ trợ: giữ snapshot hợp lệ gần nhất; document bị từ chối được log dưới `AdLogicSettings`. Lần đầu chưa có remote dùng local/default. Cache lưu SharedPreferences, khôi phục ở lần chạy sau; lỗi cache không làm mất default trong bộ nhớ. Fetch lỗi không ép local ghi đè remote cache hợp lệ. Fetch về sau `splash.load.remote_fetch_timeout_ms` của splash vẫn được áp dụng cho phần còn lại của phiên. Muốn bỏ override, publish `{}` hoặc `{"schema_version":1}` rồi fetch thành công; không dùng String rỗng. Đổi asset local cần build và khởi động lại process.
 - `AdConfig.install` áp ngay `ad_remote_config` mà backend gửi gần nhất (giá trị Firebase activate gần nhất), nên fetch chậm hoặc lỗi vẫn chạy trên document đó thay vì asset. Fetch settings lỗi không chặn `ad_remote_config` được áp dụng.
 - Defaults SDK sinh từ chính asset khi build, dùng được trước Context; không có bản Kotlin/XML cần đồng bộ cho các field thuộc hai JSON. Build từ chối null/sai schema.
-- Consent, premium, `setCanRequestAds(false)`, remote `global.ads_enabled=false`, runtime pause reload và lifecycle vẫn chặn ads. `AdsConfig.enabled=false` giữ hiệu lực cho tới khi remote `flow.ads_enabled=true` (hoặc `ob_enable_all_ads=true` đã gửi) bật ads onboarding; asset app không bật lại được. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
+- Consent, premium, remote `global.ads_enabled=false`, runtime pause reload và lifecycle vẫn chặn ads. `AdsConfig.enabled=false` giữ hiệu lực cho tới khi remote `flow.ads_enabled=true` (hoặc `ob_enable_all_ads=true` đã gửi) bật ads onboarding; asset app không bật lại được. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
 - Key `ob_*` cũ tiếp tục tương thích. Key đã gửi đặt giá trị theo cả hai chiều, xếp dưới hai document nhóm và trên asset app/host; `ob_splash_min_display_ms <= 0` giữ giá trị local. Custom UI legacy qua `ob_ui_content`/`ob_ui_design_tokens`/`ob_question_config` vẫn theo API cũ, không được nhân bản sang hai JSON mới. Các API remote nội dung cũ vẫn sử dụng được; reference layout/resource và nội dung mặc định do app khai báo. Không nhầm nhóm nội dung trang này với template/style của quảng cáo trong hai JSON mới.
 - Build debuggable áp mọi field của `ad_remote_config` remote nhưng giữ ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug); key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Log `WARN` nêu tên file đang pin, và `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Hai JSON hành vi áp dụng như release.
 - Timer/request đang chạy giữ thời điểm đã capture; lần đọc/request sau nhận cấu hình mới. Cả hai strategy chờ bước remote kết thúc/timeout rồi mới request ads splash; `ALTERNATE` chờ thêm `onRemoteFetched()`, còn `SAME_TIME` request banner/interstitial splash mà không chờ hook đó. **LFO1 được lên lịch preload sau remote ở cả hai strategy**. LFO `PARALLEL` nghĩa là không đợi interstitial splash tải xong. Strategy và quyết định hỏi quyền thông báo được đọc sau khi bước remote kết thúc, nên giá trị fetch ở bước đó áp dụng ngay lượt mở này. Prompt thông báo chờ bước remote; consent và billing vẫn chạy song song với bước đó. `splash.navigation.next_screen_timing` remote khác `AUTO` ưu tiên hơn `nextScreenTiming()` đã override khi mở từ launcher; entry notification/widget/uninstall giữ hook, còn giá trị trong asset app chỉ làm default cho hook.
@@ -151,9 +151,11 @@ Slot behavior > nhóm content/fullscreen OB > placement override > format overri
 | Format trong placement_overrides | Field được hỗ trợ |
 |---|---|
 | banner | reload.allowed, reload.auto_enabled, reload.resume_debounce_ms, presentation.* |
-| native | click.action, load.tier_timeout_ms, reload.*, preload.*, presentation.auto_shimmer, presentation.empty_visibility, presentation.cta_corner_radius_dp |
+| native | click.action, load.tier_timeout_ms, reload.*, presentation.auto_shimmer, presentation.empty_visibility, presentation.cta_corner_radius_dp |
 | interstitial | load.tier_timeout_ms, load_and_show.wait_timeout_ms, load_and_show.buffer_wait_timeout_ms, presentation.loading_enabled, cache.max_age_ms |
 | rewarded | load.tier_timeout_ms, cache.max_age_ms |
+
+**Nâng từ 5.5.2.** `preload.enabled` và `preload.after_show` không còn được đọc ở scope nào: `native.preload.*`, `placement_overrides.<key>.native.preload.*`, hoặc field `behavior.preload.*` trong `onboarding_config` như `lfo.native1.behavior.preload.enabled`. Document còn chứa các field này vẫn được áp dụng nhưng bỏ các field đó, và chúng được log là bị bỏ qua dưới tag `AdLogicSettings`. Native được preload đúng chỗ code app hoặc SDK gọi preload. Các cài đặt preload của onboarding như `lfo1_preload_mode`, `preload_trigger` và `onboarding.preload.*` không đổi. `ERainAdProvider(tierTimeoutMs)` đã bị xoá; `native.load.tier_timeout_ms` và `interstitial.load.tier_timeout_ms` (mặc định 30000) đặt cùng timeout mỗi tier cho ads onboarding.
 
 Slot interstitial OB hỗ trợ tier timeout và wait timeout; với inter cuối OB, `onboarding.exit_interstitial.wait_timeout_ms` ưu tiên hơn `placement_overrides` và `interstitial.load_and_show.wait_timeout_ms` ở scope format. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
 
@@ -252,8 +254,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native.reload.min_after_bind_ms` | `3000` | >0; cooldown sau bind. |
 | `native.reload.timer_enabled` | `false` | Tách trạng thái timer khỏi interval để không tự bật khi chỉ đổi time. |
 | `native.reload.interval_ms` | `15000` | >0; bị ràng buộc bởi min_after_bind_ms. |
-| `native.preload.enabled` | `false` | Map setEnablePreload; không tắt preload chain OB qua global false không rõ scope. Chain OB có nhóm riêng. |
-| `native.preload.after_show` | `false` | Map preloadAfterShow; chỉ một unused ad. |
 | `native.presentation.auto_shimmer` | `true` | Tắt tự sinh shimmer; custom shimmer host vẫn là local. |
 | `native.presentation.empty_visibility` | `"GONE"` | GONE/INVISIBLE. |
 | `native.presentation.cta_corner_radius_dp` | `20` | Bo góc CTA (dp) khi có ctaBackgroundColor/colorCTA tường minh; màu default giữ XML. |

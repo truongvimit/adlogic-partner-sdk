@@ -244,7 +244,7 @@ The SDK manages loading and screen eligibility; no Activity lifecycle callback i
 
 - **Firebase:** `ob_*` flags are fetched by splash when Firebase is configured; a host without `ObSplashActivity` picks them up after `AdConfig.refresh()`. Until a fetch lands, the values Firebase last delivered apply, and keys it never sent leave your configuration in charge. A fetch that lands after the splash deadline still applies for the rest of the session. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) lists the supported keys. For remote ad JSON or a GA4 sink, add [suite-firebase](../suite-firebase/README.md); installing an ad config source alone does not fetch it.
 - **Paywall:** install [PayKit](../paykit/README.md) first, then set `paywallGate = OnboardKitPaywallGate()` in `OnboardingSdk.install` (`io.paykit.integration`). Leaving the gate unset skips paywalls. Follow the billing readiness step below when purchases and ads are both used.
-- **Custom consent:** keep the default `onConsentRequired()` for UMP. A custom override must publish its CMP result with `ConsentCenter.setHostConsent(canRequestAds, personalized)` before returning. Returning `true` alone is not permission to request ads; `setCanRequestAds(false)` is a separate host restriction, and `true` only removes that restriction. Always call `super.onDestroy()` if you override it.
+- **Custom consent:** keep the default `onConsentRequired()` for UMP. A custom override must publish its CMP result with `ConsentCenter.setHostConsent(canRequestAds, personalized)` before returning; returning `true` alone is not permission to request ads. Always call `super.onDestroy()` if you override it.
 - **Custom UI / survey:** see [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) and [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Only splash and content-step `layoutRes` overrides are supported; unsupported layout fields fail validation. Preserve IDs when overriding SDK resources.
 
 **Purchases and ads:** `PayKit.install()` / BillingKit initialization starts purchase verification asynchronously; it does not mean premium has already been restored. The base `onInitBilling()` hook is empty.
@@ -284,7 +284,7 @@ Entries use `inter_noti`, `inter_widget` or `inter_uninstall`; a key that is mis
 |---|---|
 | Flow skips immediately | `install()` ran before `configure()` and neither `Result` failed |
 | Flow ends without entering your app | Listener handles `Completed`, `Skipped` and `Aborted` |
-| `no_provider` / `consent_not_granted` | Provider is installed; inspect `ConsentCenter.canRequestAds()` and the host restriction |
+| `no_provider` / `consent_not_granted` | Provider is installed; inspect `ConsentCenter.canRequestAds()` |
 | Ad-only page absent | `fullScreenStepNative` or its `stepNatives` override is usable |
 | Custom splash banner absent | Layout contains `ob_splash_ad_container` with `layout_banner_control` included |
 

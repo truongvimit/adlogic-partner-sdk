@@ -284,7 +284,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Popup ngôn ngữ | Chọn lại ngôn ngữ hiện tại thì mở ngay. Chọn ngôn ngữ khác chỉ mở từ tổng click thứ 4; click chọn lại vẫn được cộng count. Native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
 | Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. `positionCTA` từ `ad_remote_config` của backend còn thắng cả template trong asset app. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại; không bật lại click preload ở provider |
+| Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại |
 | Click native ở LFO/popup hoặc màn app | Preload ngay khi click/open; quay lại bind ad sẵn có hoặc chờ request đang chạy | `NativeAdConfig.reloadOnAdClick = true` mặc định, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
 | Mở lại khi chưa xong flow | Chạy lại Splash → LFO → OB; chỉ bỏ OB khi hoàn thành toàn bộ | Không cần tự lưu cờ first-open/checkpoint trong app |
 | Trang native fullscreen | X sau 5 giây, auto-next sau 15 giây từ lúc chọn trang; thời gian background vẫn được tính. Shimmer phủ đầy khung native, media toàn khung và CTA ở đáy. | Các trường của `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` giữ delay local |
@@ -294,7 +294,11 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Giới hạn click interstitial | Tắt (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: mỗi ad unit tối đa `n` click/24 giờ rồi ngừng load/show. Gọi lúc cần, thường sau fetch remote |
 | OB5, khảo sát, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (host setup). Paywall chưa nối. Khảo sát và app-open vẫn tắt trừ khi app tự nối hoặc remote bật: `ob_question_config` hợp lệ hiện khảo sát cho người dùng mới, và `open_resume` kèm ID trong `ad_remote_config` của backend bật [app-open](#app-open-khi-quay-lại) | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối khảo sát/paywall/app-open khi cần |
 
-UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `OnboardingSdk.setCanRequestAds(false)` vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
+UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `ConsentCenter.setHostConsent(false, false)` từ CMP riêng vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
+
+**Nâng từ 5.5.2.** `OnboardingSdk.setCanRequestAds` và `OnboardingSdk.canRequestAds` đã bị xoá, nên code còn gọi chúng sẽ không compile. Consent giờ là công tắc request duy nhất, luồng onboarding và helper ads của chính app đọc cùng một câu trả lời: công bố kết quả CMP bằng `ConsentCenter.setHostConsent(canRequestAds, personalized)` và đọc bằng `ConsentCenter.canRequestAds()`.
+
+**Nâng từ 5.5.2.** `OnboardingAdProvider` không còn tự cài được bên ngoài SDK. Giữ `adProvider = ERainAdProvider()`, hoặc bỏ trống `adProvider` nếu onboarding không có ads. Class provider tự viết sẽ không compile, code dùng các type đã xoá `AdEventListener`, `NativeAdRequest`, `ObInterstitialCallback`, hoặc truyền `tierTimeoutMs` vào `ERainAdProvider(...)` cũng vậy: đặt `native.load.tier_timeout_ms` và `interstitial.load.tier_timeout_ms` trong [remote settings](remote-settings.vi.md) thay thế. Khi splash không request được native đầu của màn chọn ngôn ngữ vì máy offline hoặc form consent đang hiện, màn ngôn ngữ giờ request lại một lần thay vì ẩn slot; native đã load mà không fill vẫn ẩn slot, không thử lại.
 
 ### Field trong JSON mẫu
 
@@ -345,6 +349,12 @@ SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, CTA style của placem
 Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. `reloadOnAdClick` mặc định bật; chỉ tắt khi app tự điều hướng sau click-return.
 
 Preload cho Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` trong `SplashActivity.onRemoteFetched()`. Helper cùng placement lấy ad khi hiện; ad quá 60 phút bị tải lại. Xem [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
+
+**Nâng từ 5.5.2.** Ba hành vi của native helper thay đổi:
+
+- Helper có placement (`forPlacement`, hoặc tham số `placement` của constructor `NativeAdHelper`) bind và refill từ store của placement đó, nên hãy preload bằng đúng key placement như trên. Ad preload theo chuỗi unit ID ghép (`NativeAdPreload.preload(activity, config)`) bị để lại, helper tự request ad của mình, trừ khi bạn truyền key đó như dưới đây. Key truyền vào `setEnablePreload(enabled, key)` quyết định store trước cả placement, kể cả key chuỗi unit ID ghép (`NativeAdPreload.getInstance().keyOf(config)`).
+- `bindAvailable()` trả `false` và huỷ helper khi user đã mua, consent bị rút hoặc cổng UA từ chối; ad đang hiện bị gỡ. Ad preload chưa dùng vẫn nằm trong store.
+- Khi quay lại sau click ad, helper bind ad thay thế đã tải lúc click hoặc chờ nó; nếu ad thay thế đó lỗi thì ad hiện tại được giữ và không có request thứ hai. Sau thay đổi cấu hình như xoay màn, helper khôi phục ad của nó, hoặc join lượt tải nó đang chờ, mà không request mới; slot đã kết thúc bằng no-fill vẫn trống.
 
 </details>
 

@@ -233,7 +233,7 @@ SDK loading और screen eligibility संभालता है; नया Ac
 
 - **Firebase:** Firebase configured हो तो splash `ob_*` flags fetch करता है; `ObSplashActivity` के बिना host उन्हें `AdConfig.refresh()` के बाद पाता है। Fetch आने तक Firebase की पिछली भेजी values लागू रहती हैं, और जो keys उसने कभी नहीं भेजीं उनके लिए आपकी configuration लागू रहती है। Splash deadline के बाद आया fetch भी बाकी session पर लागू होता है। [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) में supported keys हैं। Remote ad JSON या GA4 sink के लिए [suite-firebase](../suite-firebase/README.md) जोड़ें; सिर्फ ad config source install करने से fetch नहीं होता।
 - **Paywall:** पहले [PayKit](../paykit/README.md) install करें, फिर `OnboardingSdk.install` में `paywallGate = OnboardKitPaywallGate()` रखें (`io.paykit.integration`)। Gate unset हो तो paywall skip होता है। App में purchases और ads दोनों हों तो नीचे billing readiness वाला कदम भी पूरा करें।
-- **अपना consent provider:** UMP के लिए default `onConsentRequired()` रखें। Custom override में लौटने से पहले CMP का परिणाम `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें। सिर्फ `true` लौटाना ad request की अनुमति नहीं है; `setCanRequestAds(false)` host की अलग रोक है और `true` सिर्फ उस रोक को हटाता है। `onDestroy()` override करें तो `super.onDestroy()` जरूर बुलाएँ।
+- **अपना consent provider:** UMP के लिए default `onConsentRequired()` रखें। Custom override में लौटने से पहले CMP का परिणाम `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें; सिर्फ `true` लौटाना ad request की अनुमति नहीं है। `onDestroy()` override करें तो `super.onDestroy()` जरूर बुलाएँ।
 - **Custom UI / प्रश्न:** [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) और [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt) देखें। सिर्फ splash और content-step के `layoutRes` overrides supported हैं; बाकी layout fields validation में fail होते हैं। SDK resources override करते समय IDs बनाए रखें।
 
 **Purchases और ads:** `PayKit.install()` / BillingKit initialization purchase verification को asynchronously शुरू करता है; इससे यह तय नहीं होता कि premium restore हो चुका है। Base `onInitBilling()` hook खाली है।
@@ -273,7 +273,7 @@ Entries `inter_noti`, `inter_widget` या `inter_uninstall` इस्तेम
 |---|---|
 | Flow तुरंत skip होता है | `install()` पहले, फिर `configure()` चला और दोनों `Result` सफल हैं |
 | Flow खत्म होता है, app नहीं खुलती | Listener `Completed`, `Skipped`, `Aborted` तीनों संभालता है |
-| `no_provider` / `consent_not_granted` | Provider installed है; `ConsentCenter.canRequestAds()` और host की रोक देखें |
+| `no_provider` / `consent_not_granted` | Provider installed है; `ConsentCenter.canRequestAds()` देखें |
 | सिर्फ ad वाला page नहीं दिखता | `fullScreenStepNative` या उसका `stepNatives` override usable है |
 | Custom splash banner नहीं दिखता | Layout में `ob_splash_ad_container` के अंदर `layout_banner_control` include है |
 
