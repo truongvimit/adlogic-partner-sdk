@@ -161,10 +161,10 @@
     },
     "order": [
       "ob1",
-      "full1",
       "ob2",
-      "full2",
+      "full1",
       "ob3",
+      "full2",
       "ob4"
     ]
   },
