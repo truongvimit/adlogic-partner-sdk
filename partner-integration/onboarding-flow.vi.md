@@ -103,12 +103,4 @@ Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, 
 - No-fill fullscreen tự đi tiếp. Skip, auto-next, click-return và chống điều hướng trùng vẫn giữ.
 - Màn cuối swipe hoàn tất khi `swipe_completes_last_step = true`; CTA vẫn dùng nhánh exit hiện có.
 
-## Chuyển từ mapping cũ
-
-1. Thay fullscreen `AdFullScreenStepDefinition(StepId.OB3)` bằng `FULL1`; thêm `FULL2` nếu dùng.
-2. Chuyển content cũ `OB4`/`native_ob3` thành `OB3`; thêm content `OB4`/`native_ob4`.
-3. Đổi `native_fsob` và từng floor sang `native_full1`; khai báo riêng `native_full2`. Không có alias tự động về key cũ.
-4. Chuyển settings/UI/analytics cũ theo danh tính mới: `ob3` bây giờ là content, fullscreen dùng `full1`/`full2`.
-5. Khi phát hành cho nhiều version app, dùng điều kiện app version trên Firebase để payload mới tới build hỗ trợ mapping mới; giữ payload cũ cho build cũ.
-
 OB5 standalone/question và native splash không nằm trong sáu màn này; cấu hình riêng vẫn được giữ. Trạng thái đã hoàn tất onboarding không bị reset chỉ vì đổi danh sách.

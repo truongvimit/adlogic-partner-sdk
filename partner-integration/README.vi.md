@@ -17,7 +17,7 @@ Chọn hướng dẫn theo tính năng app cần. Làm lần lượt phần tíc
 
 1. **Chọn tính năng chính:** Ads/OB, BillingKit với UI riêng hoặc PayKit có UI sẵn. App có thể ghép ads và mua hàng; PayKit tự khởi tạo billing nên không đăng ký thêm catalog bằng `AppPurchase.initBilling`.
 2. **Nếu thu thập analytics:** install Tracker và sink trong Application trước các kit phát event. Firebase và AdTracer là các nơi nhận tùy chọn; Adjust nối theo [guide ads/Adjust](ads-onboarding-integration.vi.md#adjust-token-và-kiểm-tra).
-3. **Khởi tạo kit và dữ liệu local:** dùng Application hiện có. Với OB có paywall, install PayKit trước OnboardKit; chờ billing trong hook splash trước ads.
+3. **Khởi tạo kit và dữ liệu local:** dùng Application hiện có. Với OB có paywall, install PayKit trước OnboardKit; theo dõi billing trong hook splash song song; ad gate đọc entitlement hiện có.
 4. **Nếu dùng remote:** cài nguồn Firebase sau local setup. Splash OB đã refresh ads; paywall cần `PayKit.sync()` riêng trước lúc cần remote config.
 5. **Kiểm thử:** làm checklist cuối guide đã chọn; thêm AdTracer nếu cần theo dõi luồng ads trên dashboard.
 

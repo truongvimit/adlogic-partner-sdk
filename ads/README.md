@@ -151,7 +151,7 @@ override fun onDestroy() {
 ```
 
 `allowed` means ads may be requested; it is not a consent grant. A failed UMP flow (an error, or a
-required form that is unavailable) or the network timeout (20 seconds by default, stopped before a
+required form that is unavailable) or the network timeout (10 seconds by default, stopped before a
 form is shown) opens an in-process request fallback, so `allowed` can be `true` without consent or
 personalization. When `allowed` is false, continue without ads. By default, debuggable builds treat
 every device as an EEA test device, so no hashed device ID is needed to see the form. Timeout and debug geography: [ConsentOptions](src/main/java/com/ads/module/consent/ConsentOptions.kt).
@@ -546,10 +546,7 @@ versions; a mandatory policy remains blocking after Play cancellation or a Store
 Only activated remote values can enable the Firebase integration; missing/malformed/local defaults
 are off. OnboardKit hosts override `readForceUpdateConfig()` to supply a snapshot after the existing remote
 step. The attempt retains that snapshot and its request hold across recreation. Mandatory updates block
-all new AdLogic requests, including background loaders. Both SAME_TIME and ALTERNATE wait for the
-remote verdict before loading; UMP/billing/remote still overlap and no extra fetch is introduced.
-An optional prompt stays at the presentation boundary after ordinary ad loading.
-Later remote changes apply on the next splash launch, without observers or ad-callback checks. These APIs are opt-in, and do not start from AdsMultiDexApplication.
+all new AdLogic requests, including background loaders. Splash requests start after consent using the current policy; remote fetch does not block them. A required policy already known blocks requests. A policy delivered before presentation can block the show, but cannot undo requests already sent.
 
 See the [detailed Vietnamese integration guide](../partner-integration/force-update-integration.vi.md)
 for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone examples, and Play testing.

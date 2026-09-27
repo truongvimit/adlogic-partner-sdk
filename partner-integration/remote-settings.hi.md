@@ -1,6 +1,6 @@
 # Ads behavior और onboarding settings
 
-**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 JSON में पेज चुनने और उनका क्रम तय करने के लिए केवल `onboarding.order` इस्तेमाल करें; पेज हटाने के लिए उसका ID निकालें। `steps` केवल वैकल्पिक template, behavior या fullscreen overrides के लिए है। `steps.<id>.enabled` अब अनदेखा किया जाता है। Remote `order` backend द्वारा भेजे गए पुराने `ob_enable_step_ob1..4` flags से प्राथमिकता रखता है, और वे flags app asset के `order` से। App में `enabled = false` से declare किया गया page तब तक छिपा रहता है जब तक remote `order` उसे सूची में न रखे या backend द्वारा भेजा गया `ob_enable_step_obN = true` उसे चालू न करे; app asset का `order` उसे छिपा ही रखता है। जो page app ने कभी declare नहीं किया, उसे remote नहीं जोड़ सकता। हर ad placement को `ad_config.<placement>.isEnable` से नियंत्रित करें: ads बंद होने पर content पेज रहता है, fullscreen ad पेज छोड़ दिया जाता है।
 
@@ -65,37 +65,13 @@ Splash में loading bar के नीचे एक ही ad slot है, �
 Native को दोनों चाहिए: `slot_format` को `NATIVE` **और** ad_config में एक usable `native_splash`
 entry। इनमें से कोई एक भी न हो तो slot खाली ही रहता है।
 
-एक launch सिर्फ़ चुने हुए format को request करता है, इसलिए यह बदलना खर्च को हटाता है, दूसरा impression
-नहीं जोड़ता। इंतज़ार भी साझा है: `splash.timing.slot_min_visible_ms` interstitial को उस format से दूर रखता है जो slot भर
-रहा हो, और `ob_ads_splash_banner_enabled` दोनों के लिए इस position को बंद करता है।
-
-यह window slot के **load** होने और splash के **स्क्रीन वापस पाने** में से जो बाद में हो, वहाँ से चलती है — दोनों
-सच होने पर ही कोई उसे देख सकता है: notification dialog के पीछे भरा ad स्क्रीन पर था, पर user के सामने नहीं।
-जो slot fail हो, skip हो या जिसका ad unit न हो, वह window शुरू ही नहीं करता और उसका इंतज़ार नहीं होता;
-जिस slot ने कोई जवाब नहीं दिया — न load हुआ, न fail — उसका इंतज़ार `splash.timing.ad_budget_ms` के बचे
-हुए हिस्से में होता है, सिवाय तब जब interstitial load हो चुका हो और notification dialog हट चुका हो: इन दोनों में
-जो बाद में हो, उस पल से उसे ज़्यादा से ज़्यादा `splash.timing.slot_wait_after_inter_ms` मिलता है, उसके बाद interstitial उसके बिना दिखता है। हर hold budget
-के बचे हुए हिस्से तक सीमित रहता है। Vendor impression बिल्कुल नहीं देखा जाता,
-क्योंकि collapsible banner कभी report नहीं करता। `0` पुराना असुरक्षित व्यवहार लौटाता है।
+हर launch एक format request करता है। Slot स्वतंत्र रूप से load और render होता है: ready interstitial slot के load, impression या minimum visibility का इंतज़ार नहीं करता। `slot_min_visible_ms` और `slot_wait_after_inter_ms` presentation नहीं रोकते। Consent, premium, focus, notification dismissal, splash minimum display और update/paywall gates लागू रहते हैं। `ob_ads_splash_banner_enabled` दोनों formats नियंत्रित करता है।
 
 Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
 हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
 `AdPlacement.SplashNative` अलग हैं; दूसरा splash interstitial के बाद दिखने वाला optional full-screen
 native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
 `AdsConfig.splashInlineNative` में resolve होते हैं।
-
-Banner notification permission dialog के पीछे render होता है और native उसके बंद होने पर bind होता है,
-लेकिन नीचे दी गई गारंटी दोनों के लिए एक जैसी है, क्योंकि वह impression से नहीं बल्कि splash को screen
-वापस मिलने के क्षण से नापी जाती है।
-
-**5.4.0 में अपग्रेड।** `AdPlacement` एक sealed interface है और इस release में
-`SplashInlineNative` जुड़ता है, इसलिए जिस code में provider अभी partner के पास है वहाँ exhaustive
-`when (placement)` में नए placement की branch जोड़नी होगी। `AdsConfig.splashInlineNative` का default
-है, इसलिए मौजूदा constructor calls अप्रभावित हैं और bundled `slot_format` `BANNER` ही रहता है।
-मौजूदा SDK `OnboardingAdProvider` को SDK के अंदर बंद रखता है; partner का अपना provider
-[5.5.2 से upgrade](ads-onboarding-integration.md#upgrading-from-552) में बताए अनुसार हटाएँ।
-
-
 
 केवल अलग नाम वाली associations code में घोषित करें:
 
@@ -134,7 +110,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
-**5.5.2 से अपग्रेड।** `preload.enabled` और `preload.after_show` अब किसी भी scope पर नहीं पढ़े जाते: `native.preload.*`, `placement_overrides.<key>.native.preload.*`, या `onboarding_config` में कोई `behavior.preload.*` field जैसे `lfo.native1.behavior.preload.enabled`। जिस document में ये fields अब भी हैं वह इन fields के बिना लागू होता है, और इन्हें `AdLogicSettings` के तहत ignored के रूप में log किया जाता है। Native ठीक वहीं preload होता है जहाँ app या SDK का code उसे preload करता है। Onboarding की preload settings, जैसे `lfo1_preload_mode`, `preload_trigger` और `onboarding.preload.*`, नहीं बदलतीं। `ERainAdProvider(tierTimeoutMs)` हटा दिया गया है; `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` (default 30000) onboarding ads के लिए वही per-tier timeout सेट करते हैं।
+Native preload app/SDK code शुरू करता है। Replacement preload के लिए `setEnablePreload` और `preloadAfterShow` हैं; remote `preload.enabled` / `preload.after_show` समर्थित नहीं हैं। Onboarding schedule `lfo1_preload_mode`, `preload_trigger` और `onboarding.preload.*` से चलता है। Per-tier timeout `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` से तय होता है (default 30000 ms)।
 
 OB interstitial slots tier और wait timeout support करते हैं; exit interstitial के लिए `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
@@ -172,7 +148,7 @@ Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager क�
 - `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; हर content-step का `native_template`: `""` यानी inherit; `question.native.template`: `CTA_BOTTOM`।
 - Frame priority: remote template (per-step > screen/group) > backend के `ad_remote_config` से placement का `positionCTA` (`TOP`/`BOTTOM`) > custom app asset template (per-step > screen/group) > app की `ad_config.json` का `positionCTA` > host/SDK template। Unmodified SDK asset पुराने settings override नहीं करता। `positionCTA` स्वयं test करने के लिए संबंधित template override हटाएँ।
 - Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only Full1/Full2/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
-- Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। यह default splash order नहीं: दोनों strategies में LFO1 remote के बाद schedule होता है।
+- Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। LFO1 मौजूदा preload mode के अनुसार schedule होता है, remote का इंतज़ार नहीं।
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। एक ही source के भीतर specific scope shared scope से पहले है (किसी भी scope का remote app asset से ऊपर है), फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
 - X/Skip का side हर native full-screen page का अपना है, ऊपर कोई shared scope नहीं: हर full-screen step के लिए `onboarding.steps.<id>.fullscreen.skip.position`, standalone OB5 के लिए `ob5.skip.position`, और splash interstitial से LFO के बीच के native_fs के लिए `splash.native.skip.position`। तीनों में `RIGHT` / `LEFT` मान्य हैं, default `RIGHT` — वही side जहाँ X हमेशा से था; shipped JSON में `full1` और `full2` declare हैं, और app का declare किया कोई भी दूसरा step id उसी path पर स्वीकार होता है। किसी और format में यह control नहीं है: interstitial, app-open, banner और inline native में यह button होता ही नहीं। दोनों sides पूरी तरह mirror हैं: अपने edge से समान inset और समान top margin, इसलिए केवल side बदलता है, size/style/timing नहीं। RTL locale में screen आज की तरह ही mirror होती है: `RIGHT` text end, `LEFT` text start।
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
@@ -198,7 +174,7 @@ Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager क�
 
 ## Fetch timing और QA
 
-दोनों strategies splash ads से पहले remote completion या timeout/fallback का इंतज़ार करती हैं। उसके बाद `ALTERNATE` `onRemoteFetched()` का भी इंतज़ार करता है; `SAME_TIME` उस hook का इंतज़ार किए बिना splash banner/interstitial शुरू करता है। LFO1 preload **दोनों strategies में remote के बाद** schedule होता है; LFO `PARALLEL` का मतलब splash interstitial के load outcome का इंतज़ार न करना है। Strategy और notification-permission का फैसला remote step settle होने के बाद पढ़े जाते हैं, इसलिए उस step में fetch हुई value उसी launch पर लागू होती है। Notification prompt उस step का इंतज़ार करता है; consent और billing फिर भी उसके साथ-साथ चलते हैं। Remote `splash.navigation.next_screen_timing` की `AUTO` के अलावा कोई भी value launcher starts पर overridden `nextScreenTiming()` से ऊपर है; notification/widget/uninstall entries hook ही रखती हैं, और app-asset value सिर्फ default hook को मिलती है।
+Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 
 Firebase in-flight fetch साझा करता है; एक caller का timeout दूसरों को cancel नहीं करता। Parsing/validation Main से बाहर, persistence IO पर और ads/UI notification Main पर होते हैं। Successful fetch process में reuse होता है और Firebase के minimum fetch interval के अधीन रहता है, जो default रूप से 12 घंटे है; SDK इसे set नहीं करता, इसलिए Console edits अगले launch तक पहुँचने ज़रूरी हों तो अपनी app में `minimumFetchIntervalInSeconds` set करें (उदाहरण: debug में `0`, release में `3600`)। Console QA में process restart करें; सिर्फ screen दोबारा खोलना नया fetch सुनिश्चित नहीं करता। `AdConfig.refresh()` बताता है कि कोई `ad_remote_config` document लागू हुआ या नहीं; यह grouped settings के बारे में कुछ नहीं बताता। [QA कदम](firebase-integration.hi.md#remote-notes) देखें।
 
@@ -213,7 +189,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `schema_version` | `1` |
 | `revision` | `0` |
 | `global.ads_enabled` | `true` |
-| `consent.network_timeout_ms` | `20000` |
+| `consent.network_timeout_ms` | `10000` |
 | `diagnostics.flow_logging_enabled` | `true` |
 | `diagnostics.ads_telemetry_enabled` | `true` |
 | `banner.reload.allowed` | `true` |
@@ -281,13 +257,13 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.ads.interstitial.behavior` | `{}` |
 | `splash.timing.min_display_ms` | `3000` |
 | `splash.timing.ad_budget_ms` | `60000` |
-| `splash.timing.slot_min_visible_ms` | `1000` |
-| `splash.timing.slot_wait_after_inter_ms` | `10000` |
+| `splash.timing.slot_min_visible_ms` | `1000` | Compatibility के लिए स्वीकार; splash इसे इस्तेमाल नहीं करता। |
+| `splash.timing.slot_wait_after_inter_ms` | `10000` | Compatibility के लिए स्वीकार; splash इसे इस्तेमाल नहीं करता। |
 | `splash.timing.notification_settle_ms` | `800` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |
 | `splash.load.remote_fetch_timeout_ms` | `10000` |
-| `splash.load.consent_hook_timeout_ms` | `20000` |
+| `splash.load.consent_hook_timeout_ms` | `10000` |
 | `splash.load.billing_timeout_ms` | `5000` |
 | `splash.permissions.no_internet_prompt_enabled` | `true` |
 | `splash.permissions.notification_enabled` | `true` |

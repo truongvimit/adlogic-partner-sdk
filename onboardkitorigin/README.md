@@ -11,7 +11,7 @@ App definitions may set `enabled = false`. A remote `onboarding.order` selects a
 from the whole catalog, disabled ones included; an `order` in your app asset selects among enabled
 pages only. Without a remote order, a delivered `ob_enable_step_obN` adds or removes its page.
 Remove IDs from `order` to omit pages; no `steps.*.enabled` map is needed or read.
-Per-placement ads are controlled by `ad_config` (`isEnable`). See the [configuration and migration guide](../partner-integration/onboarding-flow.vi.md).
+Per-placement ads are controlled by `ad_config` (`isEnable`). See the [configuration guide](../partner-integration/onboarding-flow.vi.md).
 
 [Tiếng Việt](README.vi.md) · [हिन्दी](README.hi.md)
 
@@ -135,11 +135,13 @@ Do not call `OnboardingSdk.start()` or finish splash yourself; `ObSplashActivity
 - Set `lfo.native2.behavior.click.action = "auto_next"` to confirm the selected language on return. LFO1 `auto_next` selects the current/default language and advances to the second language slot. The action is fixed for each click trip and overrides legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches. See the [remote settings guide](../partner-integration/remote-settings.md).
 
 
-- `notificationPermissionEnabled = true`: Android 13+ / target 33+ requests notifications after consent and the remote fetch step, so a remote value fetched in that step applies to the same launch. A grant or a recorded automatic request result skips later prompts; denial still continues. Set it to `false` if your app owns this prompt.
+- `notificationPermissionEnabled = true`: request after consent and splash ad requests, without waiting for remote. Read the current setting when deciding; denial continues the flow and a recorded result skips later automatic prompts.
 - `noInternetPromptEnabled = true`: splash asks the user to connect before continuing. Set it to `false` if your app should allow an offline start.
 - `lockPortrait = true`: SDK screens, including your splash subclass, are locked to portrait. Keep the splash `configChanges` above so the lock, dark mode or font scale does not recreate it. Landscape apps must set it to `false` and review merged manifest orientation rules too.
-- `consentTimeoutMs = 20_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
+- `consentTimeoutMs = 10_000`: the default SDK-owned UMP flow does **not** time out the user's answer. The budget still bounds a custom hook when no SDK-owned consent flow is resolving.
 - Authorized splash ads can load beneath the notification prompt while splash remains visible. Home blocks new requests. The minimum display time begins once the ad phase starts and overlaps loading/notification UI. By default the first-open flow (language/onboarding) uses `AFTER_AD`, and a launcher start past completed onboarding (your app or the returning-user question) uses `UNDER_AD`; notification, widget and uninstall entries always use `AFTER_AD`; override `nextScreenTiming()` in your splash and call `super` for the cases that keep the default. On a launcher start, a remote `splash.navigation.next_screen_timing` other than `AUTO` outranks your override. Both timings wait out the remaining minimum before showing the interstitial: `UNDER_AD` opens the destination and shows the ad together, while `AFTER_AD` opens the destination as soon as the ad is dismissed.
+
+Splash starts consent, remote refresh and billing together. Its banner/native slot and interstitial request as soon as consent resolves, using the currently available configuration and entitlement; they do not wait for remote or billing. Remote values already cached or delivered outrank the asset. SDK-owned refresh continues after splash closes, with a background wait of at least 60 seconds. Later reads use newly applied values; requests, timers and navigation already committed are not restarted. `SAME_TIME` and `ALTERNATE` both follow this sequence. `onRemoteFetched()` runs only if splash is still alive; process-owned integrations should use `SettingsRegistry.addFetchListener`.
 
 ### Splash and language options
 
@@ -248,7 +250,7 @@ The SDK manages loading and screen eligibility; no Activity lifecycle callback i
 - **Custom UI / survey:** see [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) and [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Only splash and content-step `layoutRes` overrides are supported; unsupported layout fields fail validation. Preserve IDs when overriding SDK resources.
 
 **Purchases and ads:** `PayKit.install()` / BillingKit initialization starts purchase verification asynchronously; it does not mean premium has already been restored. The base `onInitBilling()` hook is empty.
-Replace the minimal splash above with an override that awaits `Billing.awaitReady()` before the splash ad phase.
+Use `onInitBilling()` to observe `Billing.awaitReady()` alongside consent. Ads read the current published entitlement; this hook does not delay their first request.
 Calling `Billing` directly also requires `implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` at the same tag; see [BillingKit](../billingkit/README.md).
 
 ```kotlin
@@ -263,7 +265,7 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-`Billing.awaitReady()` returns `Ready`, `Timeout` or `Error`; use the result for your app's error policy. The existing `SplashConfig.billingTimeoutMs` (5,000 ms by default) also bounds the whole hook, so the splash deadline may cancel it before a result returns; a timeout does not establish purchase status.
+`Billing.awaitReady()` returns `Ready`, `Timeout` or `Error`; use the result for your app's error policy. The existing `SplashConfig.billingTimeoutMs` (5,000 ms by default) also bounds the whole hook, so its own timeout or Activity destruction may cancel it before a result returns; a timeout does not establish purchase status.
 See the [sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) for the integration point.
 
 For notification/widget/uninstall launches, target your splash with [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt):

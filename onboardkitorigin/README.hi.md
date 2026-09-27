@@ -126,11 +126,13 @@ class SplashActivity : ObSplashActivity()
 - Action हर click trip के लिए तय रहता है और legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches को override करता है। [Remote settings guide](../partner-integration/remote-settings.hi.md) देखें।
 
 
-- `notificationPermissionEnabled = true`: Android 13+ / target 33+ पर consent और remote fetch चरण के बाद notification permission माँगी जाती है, इसलिए उस चरण में fetch हुई remote value उसी launch पर लागू होती है। Grant या पिछले automatic request का दर्ज परिणाम अगली prompt रोकता है; मना करने पर भी flow चलता है। App खुद prompt संभाले तो `false` रखें।
+- `notificationPermissionEnabled = true`: consent और splash requests के बाद prompt, remote का इंतज़ार नहीं। निर्णय पर मौजूदा flag पढ़ा जाता है; denial पर flow जारी रहता है और दर्ज परिणाम अगली automatic prompt रोकता है।
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
 - `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। ऊपर दिए splash `configChanges` बनाए रखें, ताकि lock, dark mode या font scale बदलने पर Activity दोबारा न बने। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
-- `consentTimeoutMs = 20_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
+- `consentTimeoutMs = 10_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
 - अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, और onboarding पूरा होने के बाद launcher से खुली destination (आपकी app या पुराने user का प्रश्न) `UNDER_AD` इस्तेमाल करती है; notification, widget और uninstall entries हमेशा `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। Launcher start पर `AUTO` के अलावा कोई भी remote `splash.navigation.next_screen_timing` आपके override से ऊपर रहती है। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
+
+Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 
 ### Splash और भाषा के विकल्प
 
@@ -237,7 +239,7 @@ SDK loading और screen eligibility संभालता है; नया Ac
 - **Custom UI / प्रश्न:** [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) और [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt) देखें। सिर्फ splash और content-step के `layoutRes` overrides supported हैं; बाकी layout fields validation में fail होते हैं। SDK resources override करते समय IDs बनाए रखें।
 
 **Purchases और ads:** `PayKit.install()` / BillingKit initialization purchase verification को asynchronously शुरू करता है; इससे यह तय नहीं होता कि premium restore हो चुका है। Base `onInitBilling()` hook खाली है।
-ऊपर की minimal splash को ऐसे override से बदलें जो splash ad phase से पहले `Billing.awaitReady()` का इंतजार करे।
+`onInitBilling()` में consent के साथ `Billing.awaitReady()` का परिणाम देखें। Ads मौजूदा entitlement पढ़ते हैं; यह hook पहली request को नहीं रोकता।
 `Billing` को सीधे बुलाने के लिए उसी tag पर `implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` भी जोड़ें; [BillingKit](../billingkit/README.md) देखें।
 
 ```kotlin
@@ -252,7 +254,7 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-`Billing.awaitReady()` से `Ready`, `Timeout` या `Error` मिलता है; परिणाम के अनुसार अपनी app की error policy लागू करें। मौजूदा `SplashConfig.billingTimeoutMs` (default 5,000 ms) पूरे hook को भी सीमित करता है, इसलिए splash deadline परिणाम आने से पहले hook cancel कर सकती है; timeout purchase status तय नहीं करता।
+`Billing.awaitReady()` से `Ready`, `Timeout` या `Error` मिलता है; परिणाम के अनुसार अपनी app की error policy लागू करें। मौजूदा `SplashConfig.billingTimeoutMs` (default 5,000 ms) पूरे hook को भी सीमित करता है, इसलिए उसका timeout या Activity destruction परिणाम आने से पहले hook cancel कर सकता है; timeout purchase status तय नहीं करता।
 Integration point के लिए [sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) देखें।
 
 Notification/widget/uninstall entry को [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt) से अपनी splash पर भेजें:

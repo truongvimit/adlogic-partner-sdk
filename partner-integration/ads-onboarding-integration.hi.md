@@ -1,6 +1,6 @@
 # Ads + OnboardKit integration
 
-**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← गाइड चुनें](README.hi.md)
 
@@ -272,12 +272,12 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 | Splash स्क्रीन | SDK layout; ad-loading phase से minimum display 3000 ms | `onboarding_config.splash.timing.min_display_ms` (valid `0` यह minimum हटाता है) या backend द्वारा भेजा गया `ob_splash_min_display_ms` (`<= 0` local value रखता है); remote चुप हो तो आपका app asset, फिर `SplashConfig.minDisplayTimeMs`। |
 | Splash interstitial के बाद अगली स्क्रीन खोलना | Interstitial न्यूनतम display समय के बाद दिखता है। पहली बार का LFO: बंद होने का इंतज़ार। Launcher → app / पुराने उपयोगकर्ता का प्रश्न: ad के नीचे खोलें। Notification/widget/uninstall: बंद होने का इंतज़ार | `SplashActivity.nextScreenTiming()` override करें: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), या default रखने के लिए `super.nextScreenTiming()`। Launcher starts पर remote `splash.navigation.next_screen_timing` की `AUTO` के अलावा कोई भी value override से ऊपर है |
 | Splash ad का इंतज़ार | notification कदम के बाद और splash को focus मिलने पर अधिकतम 60 सेकंड | Remote `ob_splash_ad_budget_ms`; अपना timer न जोड़ें |
-| Fetch और ads loading | `ALTERNATE`: splash ads से पहले remote step का इंतज़ार | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` remote step settle होते ही, `onRemoteFetched()` से पहले, splash banner/interstitial request करता है; `ALTERNATE` उस hook का भी इंतज़ार करता है। Strategy remote step settle होने के बाद पढ़ी जाती है, इसलिए उस step में fetch हुई value उसी launch पर लागू होती है। |
-| पहले LFO native का preload | Remote के बाद, फिर splash interstitial load settle होने पर (`SEQUENTIAL`) | `onboarding_config.splash.load.lfo1_preload_mode = "PARALLEL"` interstitial-load wait हटाता है, remote wait नहीं। |
+| Remote / ads | Consent → slot + interstitial; SDK remote साथ चलता है और splash के बाद भी जारी रहता है। | मौजूदा asset/cache/remote values; नीचे fetch timing देखें। |
+| LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
 | नेटवर्क नहीं | उपयोगकर्ता से कनेक्ट करने को कहता है और आगे नहीं बढ़ता | नीचे दिए UMP fallback से offline शुरू करने के लिए `SplashConfig.noInternetPromptEnabled = false`; अगली splash फिर से UMP माँगती है |
-| Consent | 20 सेकंड का network timeout; form खुद उपयोगकर्ता का इंतज़ार करता है | अपनी Application में: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`)। SDK का hook बनाए रखें; `SplashConfig.consentTimeoutMs` UMP timeout नहीं बदलता |
+| Consent | 10 सेकंड का network timeout; form खुद उपयोगकर्ता का इंतज़ार करता है | अपनी Application में: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`)। SDK का hook बनाए रखें; `SplashConfig.consentTimeoutMs` UMP timeout नहीं बदलता |
 | QA के दौरान UMP form | Debuggable: हर device EEA गिना जाता है (`setForceTesting`), hashed ID नहीं चाहिए; release: असली भूगोल | असली भूगोल के अनुसार debug करने के लिए `ConsentOptions(debug = false)`। `configure` हर option बदल देता है, इसलिए timeout भी बदलना हो तो एक ही `ConsentOptions(timeoutMs = ..., debug = false)` दें |
-| Notifications | Android 13+ / target 33+ पर consent, remote step और splash के अपने ad requests के बाद माँगी जाती है, ताकि नीचे का slot — banner हो या native — prompt के नीचे load हो; मना करने पर भी flow चलता है और दोबारा नहीं पूछा जाता | आपकी app notifications न भेजती हो या prompt खुद संभालती हो तो `SplashConfig.notificationPermissionEnabled = false` |
+| Notifications | Consent और splash ad requests के बाद, remote का इंतज़ार नहीं; Android13+/target33+। Denial पर flow जारी, दर्ज result अगली automatic prompt रोकता है। | आपकी app notifications न भेजती हो या prompt खुद संभालती हो तो `SplashConfig.notificationPermissionEnabled = false` |
 | भाषा | 21 भाषाएँ, 3 सेकंड बाद hand hint, चुनने से पहले confirmation छिपा | `LanguageConfig.languages`: जिन भाषाओं का अनुवाद किया है वही रखें; remote `lfo.languages.supported_codes` इस list को छोटा करता है, और जो `defaultCode` उससे बाहर रहे वह preselect नहीं होता। Remote या app-asset value `tapHintEnabled` और `confirmVisibleBeforeSelect` को दोनों दिशाओं में set करती है |
 | LFO पर Back | कुछ न चुना हो: Back नजरअंदाज होता है। चुनने के बाद: Save दिखता है और भाषा स्क्रीन बनी रहती है | `LanguageConfig.saveButtonOnBackEnabled = false`: चुनने के बाद भी Back नजरअंदाज करें। SETTINGS में Back स्क्रीन बंद करता है |
 | भाषा चुनने के बाद native बदलना | चालू; replacement ad bind हो पाने तक पहला native बना रहता है | बंद करने के लिए `LanguageConfig.secondNativeOnSelectEnabled = false` |
@@ -296,9 +296,9 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 
 UMP की error या timeout [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt) के जरिए process में **request की कोशिश** की अनुमति दे सकती है; यह न consent देता है, न fill की गारंटी। अपने CMP से `ConsentCenter.setHostConsent(false, false)` देकर requests बंद करने वाला host फिर भी जीतता है; request की अनुमति timer या personalization से न मानें।
 
-**5.5.2 से अपग्रेड।** `OnboardingSdk.setCanRequestAds` और `OnboardingSdk.canRequestAds` हटा दिए गए हैं, इसलिए इन्हें call करने वाला code compile नहीं होगा। अब consent ही request का एकमात्र switch है, और onboarding flow तथा आपके अपने ad helpers एक ही जवाब पढ़ते हैं: अपने CMP का नतीजा `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें और `ConsentCenter.canRequestAds()` से पढ़ें।
+Consent request की authority है। Custom CMP का परिणाम `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें और `ConsentCenter.canRequestAds()` से पढ़ें। Hook timeout consent नहीं देता।
 
-**5.5.2 से अपग्रेड।** `OnboardingAdProvider` अब SDK के बाहर implement नहीं किया जा सकता। `adProvider = ERainAdProvider()` रखें, या बिना ads वाले onboarding के लिए `adProvider` खाली छोड़ें। आपकी अपनी provider class compile नहीं होगी, और हटाए गए `AdEventListener`, `NativeAdRequest` या `ObInterstitialCallback` को इस्तेमाल करने वाला या `ERainAdProvider(...)` में `tierTimeoutMs` देने वाला code भी नहीं: इसकी जगह [remote settings](remote-settings.hi.md) में `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` सेट करें। जब device offline होने या consent form दिखने के कारण splash language screen का पहला native request नहीं कर पाया, तो language screen अब slot छिपाने के बजाय उसे एक बार request करती है; जो native load हुआ पर fill नहीं हुआ, वह अब भी बिना retry के slot छिपाता है।
+`adProvider = ERainAdProvider()` install करें, या ads के बिना onboarding के लिए unset रखें। `OnboardingAdProvider` SDK-owned है, partner इसे implement नहीं कर सकता। Per-tier timeout `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` से तय करें। Request से पहले gate द्वारा रोका गया language native language screen पर एक बार request हो सकता है; पूरा हुआ no-fill फिर request नहीं होता।
 
 ### नमूना JSON के fields
 
@@ -350,7 +350,7 @@ placement का waterfall, `isEnable`, `enable_ua_check` और CTA style SDK �
 
 Main के लिए preload: `SplashActivity.onRemoteFetched()` में `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))`। उसी placement का helper दिखाते समय वह ad उठा लेता है; 60 मिनट से पुराना ad दोबारा लोड होता है। [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh) देखें।
 
-**5.5.2 से अपग्रेड।** Native helper के तीन व्यवहार बदले हैं:
+Native helper व्यवहार:
 
 - Placement वाला helper (`forPlacement`, या `NativeAdHelper` constructor का `placement` argument) उसी placement के store से bind और refill करता है, इसलिए ऊपर की तरह उसी placement key से preload करें। जोड़े गए unit IDs के तहत preload किया गया ad (`NativeAdPreload.preload(activity, config)`) इस्तेमाल नहीं होता और helper अपना request करता है, जब तक आप नीचे बताए अनुसार वह key न दें। `setEnablePreload(enabled, key)` में दी गई key placement से पहले store तय करती है, जोड़े गए unit IDs की key (`NativeAdPreload.getInstance().keyOf(config)`) भी।
 - User के खरीदने, consent वापस लेने या UA gate के मना करने पर `bindAvailable()` `false` लौटाता है और helper को cancel करता है; screen पर दिख रहा ad हटा दिया जाता है। बिना इस्तेमाल हुआ preloaded ad store में रहता है।
@@ -427,7 +427,7 @@ Defaults: हर load tier के लिए 30 सेकंड, हर placement
 | Firebase से JSON | [तीन String parameters publish करें](firebase-integration.hi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`। Assets के बाद एक बार `FirebaseAdConfigSource()` install करें; SDK splash refresh करता है। Backend के `ad_remote_config` में declare हुई key code में लिखी ad unit IDs से ऊपर है। [Custom local fallback](firebase-integration.hi.md#local-defaults) वैकल्पिक है। |
 | Firebase Analytics | `suite-firebase` जोड़ें और `Tracker.install` के तुरंत बाद `Tracker.addSink(FirebaseSink())` register करें; consent policy [Firebase गाइड](firebase-integration.hi.md#शुरुआती-consent) से चुनें। |
 | लौटने पर app-open | Asset से चालू नहीं होता: `ad_config.json` में `open_resume` अकेले इसे चालू नहीं करता। Backend के `ad_remote_config` में ID वाला `open_resume` इसे चालू करता है; app-open बंद रखने के लिए `AppOpenManager.getInstance().disableAppResume()` बुलाएँ या remote से `open_resume` हटाएँ। [App-open on return](#app-open-on-return) करें। |
-| premium / paywall वाली app | [BillingKit](billing-integration.hi.md) / [PayKit](paywall-integration.hi.md) और [ads से पहले billing का इंतज़ार करने वाला hook](../onboardkitorigin/README.hi.md#वैकल्पिक-integrations) करें। `onInitBilling()` default रूप से खाली है; billing install बुलाने का मतलब यह नहीं कि premium restore हो चुका है। |
+| premium / paywall वाली app | [BillingKit](billing-integration.hi.md) / [PayKit](paywall-integration.hi.md) और [साथ चलने वाला billing hook](../onboardkitorigin/README.hi.md#वैकल्पिक-integrations) करें। `onInitBilling()` default रूप से खाली है; billing install बुलाने का मतलब यह नहीं कि premium restore हो चुका है। |
 | Settings से भाषा बदलना | `registerForActivityResult(StartActivityForResult())`, फिर `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (types `io.onboardkit.ui.language` में हैं)। `RESULT_OK` पर: `ObLanguageActivity.RESULT_LANGUAGE_CODE` पढ़ें, कदम 5 की तरह सहेजें और `recreate()` बुलाएँ; Back कोई code नहीं लौटाता। इस स्क्रीन पर ads नहीं हैं। `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` कोई result नहीं लौटाता; पसंद `OnboardingSdk.selectedLanguage()` से पढ़ें। |
 | Notification/widget entries | `SplashEntry` इस्तेमाल करें और अपने listener में passthrough बनाए रखें; [OnboardKit](../onboardkitorigin/README.hi.md#वैकल्पिक-integrations) देखें। सामान्य launcher start के लिए इनमें से कोई entry नहीं चाहिए। |
 
@@ -441,7 +441,7 @@ import io.onboardkit.ui.splash.ObSplashActivity
 class SplashActivity : ObSplashActivity()
 ```
 
-SDK संबंधित flow के पढ़ने से पहले documents refresh करता है। सिर्फ fetched values copy करने के लिए `onRemoteFetched` में `OnboardKitSetup.configure()` दोबारा न बुलाएँ। App के अपने preload/integration काम हों तो hook रखें। दोनों strategies remote step का इंतज़ार करती हैं (`ALTERNATE` `onRemoteFetched()` का भी); दोनों strategies में LFO1 preload उसके बाद है। [Timing और QA](firebase-integration.hi.md#remote-notes)।
+Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 
 ### App-open on return
 

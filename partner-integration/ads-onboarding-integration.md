@@ -1,6 +1,6 @@
 # Ads + OnboardKit integration
 
-**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← Choose a guide](README.md)
 
@@ -107,7 +107,7 @@ Ad unit IDs contain **`/`**. Each file follows the [debug example](../app/src/ma
 | `native_ob4` | Content 4 — `StepId.OB4` | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | After all of onboarding, before the destination screen | `afterOnboardingInterstitial` |
 
-`inter_after_ob3` shows after the entire configured OB list. See [migration](onboarding-flow.vi.md) for the former OB3/OB4 mapping.
+`inter_after_ob3` shows after the entire configured OB list. See [the current step catalog](onboarding-flow.vi.md).
 
 The SDK picks the file by debuggable. A debug build with a missing or invalid JSON falls back to the real file; it does not substitute test IDs for live IDs. A debug build keeps the ad unit IDs of the file it loaded by default: remote `ad_remote_config` sets every other field, and keys only remote declares are dropped unless they switch a slot off.
 
@@ -272,12 +272,12 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | Splash screen | SDK layout; minimum display 3000 ms from the ad-loading phase | `onboarding_config.splash.timing.min_display_ms` (valid `0` explicitly removes this minimum) or a delivered `ob_splash_min_display_ms` (`<= 0` keeps the local value); while remote is silent, your app asset, then `SplashConfig.minDisplayTimeMs`. |
 | Opening the next screen after the splash interstitial | The interstitial shows after the minimum display time. First-open LFO: wait for dismissal. Launcher → app / returning-user question: open underneath the ad. Notification/widget/uninstall: wait for dismissal | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), or `super.nextScreenTiming()` to keep the default. On launcher starts a remote `splash.navigation.next_screen_timing` other than `AUTO` outranks the override |
 | Waiting for the splash ad | Up to 60 seconds, after the notification step and once splash has focus | Remote `ob_splash_ad_budget_ms`; do not add a timer of your own |
-| Fetching and loading ads | `ALTERNATE`: wait for the remote step before requesting splash ads | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` requests the splash banner/interstitial as soon as the remote step settles, before `onRemoteFetched()`; `ALTERNATE` also waits for that hook. The strategy is read once the remote step settles, so a value fetched in that step applies to the same launch. |
-| Preloading the first LFO native | After remote, then after the splash interstitial load settles (`SEQUENTIAL`) | `onboarding_config.splash.load.lfo1_preload_mode = "PARALLEL"` removes the interstitial-load wait, not the remote wait. |
+| Remote / ads | Consent → slot + interstitial; SDK-owned remote runs in parallel and survives splash. | Current asset/cached/remote values apply; see fetch timing below. |
+| LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
 | No network | Ask the user to connect and do not continue | `SplashConfig.noInternetPromptEnabled = false` to start offline through the UMP fallback below; the next splash asks for UMP again |
-| Consent | 20-second network timeout; the form itself waits for the user | In your Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Keep the SDK hook; `SplashConfig.consentTimeoutMs` does not change the UMP timeout |
+| Consent | 10-second network timeout; the form itself waits for the user | In your Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Keep the SDK hook; `SplashConfig.consentTimeoutMs` does not change the UMP timeout |
 | The UMP form during QA | Debuggable: every device counts as EEA (`setForceTesting`), no hashed ID needed; release: real geography | `ConsentOptions(debug = false)` to debug against real geography. `configure` replaces every option, so to change the timeout as well pass one `ConsentOptions(timeoutMs = ..., debug = false)` |
-| Notifications | Requested after consent, the remote step and the splash's own ad requests on Android 13+ / target 33+, so the bottom slot loads under the prompt whether it is a banner or a native; a denial still continues and is not asked again | `SplashConfig.notificationPermissionEnabled = false` if your app sends no notifications or owns the prompt |
+| Notifications | After consent and splash ad requests, without waiting for remote; Android 13+/target33+. Denial continues; recorded results prevent repeat prompts. | `SplashConfig.notificationPermissionEnabled = false` if your app sends no notifications or owns the prompt |
 | Language | 21 languages, hand hint after 3 seconds, confirmation hidden before a selection | `LanguageConfig.languages`: keep the languages you have translated; remote `lfo.languages.supported_codes` narrows this list, and a `defaultCode` it leaves out is not preselected. A remote or app-asset value sets `tapHintEnabled` and `confirmVisibleBeforeSelect` either way |
 | Back on LFO | Nothing selected: Back is ignored. After a selection: Save appears and the language screen stays | `LanguageConfig.saveButtonOnBackEnabled = false`: ignore Back after a selection too. In SETTINGS, Back closes the screen |
 | Replacing the native after a language selection | Enabled; the first native stays until the replacement ad can bind | `LanguageConfig.secondNativeOnSelectEnabled = false` to turn it off |
@@ -296,9 +296,9 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 
 A UMP error or timeout can allow an **attempted request** in-process through the [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt); it grants no consent and guarantees no fill. A host that turns requests off with `ConsentCenter.setHostConsent(false, false)` from its own CMP still wins; do not infer request permission from a timer or from personalization.
 
-**Upgrading from 5.5.2.** `OnboardingSdk.setCanRequestAds` and `OnboardingSdk.canRequestAds` are removed, so code that calls them stops compiling. Consent is now the only request switch, and the onboarding flow and your own ad helpers read the same answer: publish your CMP's result with `ConsentCenter.setHostConsent(canRequestAds, personalized)` and read it with `ConsentCenter.canRequestAds()`.
+Consent is the request authority. Publish a custom CMP result with `ConsentCenter.setHostConsent(canRequestAds, personalized)` and read it with `ConsentCenter.canRequestAds()`. A hook timeout does not grant consent.
 
-**Upgrading from 5.5.2.** `OnboardingAdProvider` can no longer be implemented outside the SDK. Keep `adProvider = ERainAdProvider()`, or leave `adProvider` unset for an onboarding without ads. A provider class of your own stops compiling, and so does code that uses the removed `AdEventListener`, `NativeAdRequest` or `ObInterstitialCallback`, or that passes `tierTimeoutMs` to `ERainAdProvider(...)`: set `native.load.tier_timeout_ms` and `interstitial.load.tier_timeout_ms` in [remote settings](remote-settings.md) instead. When the splash could not request the first language-screen native because the device was offline or the consent form was on screen, the language screen now requests it once instead of hiding the slot; a native that loaded and did not fill still hides the slot without a retry.
+Install `adProvider = ERainAdProvider()`, or leave it unset for an onboarding without ads. `OnboardingAdProvider` is SDK-owned and cannot be implemented by partners. Set per-tier timeouts with `native.load.tier_timeout_ms` and `interstitial.load.tier_timeout_ms`. A language native blocked before its request may be requested once on the language screen; a completed no-fill is not retried.
 
 ### Fields in the sample JSON
 
@@ -350,7 +350,7 @@ Keep one helper per slot/view and call `show()` to show it again. A Fragment pas
 
 Preload for Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` in `SplashActivity.onRemoteFetched()`. A helper on the same placement picks that ad up when it shows; an ad older than 60 minutes is reloaded. See [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
 
-**Upgrading from 5.5.2.** Three native helper behaviors changed:
+Native helper behavior:
 
 - A helper with a placement (`forPlacement`, or the `placement` argument of the `NativeAdHelper` constructor) binds and refills from that placement's store, so preload with the same placement key as above. An ad preloaded under the joined unit IDs (`NativeAdPreload.preload(activity, config)`) is left unused and the helper requests its own, unless you pass that key as below. A key you pass to `setEnablePreload(enabled, key)` names the store ahead of the placement, the joined unit IDs key (`NativeAdPreload.getInstance().keyOf(config)`) included.
 - `bindAvailable()` returns `false` and cancels the helper when the user has purchased, consent is withdrawn or the UA gate refuses; an ad already on screen is removed. The unused preloaded ad stays stored.
@@ -427,7 +427,7 @@ Defaults: 30 seconds per load tier, one cached ad/request per placement, no auto
 | JSON from Firebase | [Publish the three String parameters](firebase-integration.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Install `FirebaseAdConfigSource()` once after assets; SDK splash refreshes them. A key the backend's `ad_remote_config` declares outranks ad unit IDs written in code. [Custom local fallback](firebase-integration.md#local-defaults) is optional. |
 | Firebase Analytics | Add `suite-firebase` and register `Tracker.addSink(FirebaseSink())` right after `Tracker.install`; choose the consent policy from the [Firebase guide](firebase-integration.md#initial-consent). |
 | App-open on return | Not enabled by the asset: `open_resume` in `ad_config.json` alone does not turn it on. An `open_resume` with an ID in the backend's `ad_remote_config` does; to keep app-open off, call `AppOpenManager.getInstance().disableAppResume()` or remove `open_resume` from remote. Follow [App-open on return](#app-open-on-return). |
-| App with premium / paywall | Follow [BillingKit](billing-integration.md) / [PayKit](paywall-integration.md) and the [hook that awaits billing before ads](../onboardkitorigin/README.md#optional-integrations). `onInitBilling()` is empty by default; calling billing install does not mean premium has been restored. |
+| App with premium / paywall | Follow [BillingKit](billing-integration.md) / [PayKit](paywall-integration.md) and the [concurrent billing hook](../onboardkitorigin/README.md#optional-integrations). `onInitBilling()` is empty by default; calling billing install does not mean premium has been restored. |
 | Language change from Settings | `registerForActivityResult(StartActivityForResult())`, then `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (the types are in `io.onboardkit.ui.language`). On `RESULT_OK`: read `ObLanguageActivity.RESULT_LANGUAGE_CODE`, save it as in step 5 and call `recreate()`; Back returns no code. This screen has no ads. `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` returns no result; read the choice with `OnboardingSdk.selectedLanguage()`. |
 | Notification/widget entries | Use `SplashEntry` and keep the passthrough in your listener; see [OnboardKit](../onboardkitorigin/README.md#optional-integrations). A normal launcher start needs none of these entries. |
 
@@ -441,7 +441,7 @@ import io.onboardkit.ui.splash.ObSplashActivity
 class SplashActivity : ObSplashActivity()
 ```
 
-The SDK refreshes the documents before the relevant flow reads them. Do not call `OnboardKitSetup.configure()` again in `onRemoteFetched` just to copy fetched values. Keep that hook for your app's own preload/integration work if needed. Both strategies wait for the remote step (`ALTERNATE` also for `onRemoteFetched()`); LFO1 preload follows that step under both strategies. [Timing and QA](firebase-integration.md#remote-notes).
+Splash starts consent, remote refresh and billing together. Its banner/native slot and interstitial request as soon as consent resolves, using the currently available configuration and entitlement; they do not wait for remote or billing. Remote values already cached or delivered outrank the asset. SDK-owned refresh continues after splash closes, with a background wait of at least 60 seconds. Later reads use newly applied values; requests, timers and navigation already committed are not restarted. `SAME_TIME` and `ALTERNATE` both follow this sequence. `onRemoteFetched()` runs only if splash is still alive; process-owned integrations should use `SettingsRegistry.addFetchListener`.
 
 ### App-open on return
 

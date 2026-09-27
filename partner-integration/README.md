@@ -18,7 +18,7 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 
 1. **Pick the main feature:** Ads/OB, BillingKit with your own UI, or PayKit with its ready-made UI. An app can combine ads and purchases; PayKit initializes billing itself, so do not register another catalog with `AppPurchase.initBilling`.
 2. **If you collect analytics:** install Tracker and a sink in the Application before the kits emit events. Firebase and AdTracer are optional destinations; wire Adjust through the [ads/Adjust guide](ads-onboarding-integration.md#adjust-tokens-and-verification).
-3. **Initialize the kits and local data:** use your existing Application. With OB plus a paywall, install PayKit before OnboardKit; wait for billing in the splash hook before ads.
+3. **Initialize the kits and local data:** use your existing Application. With OB plus a paywall, install PayKit before OnboardKit; observe billing in the concurrent splash hook; ad gates read the current entitlement.
 4. **If you use remote:** add the Firebase sources after the local setup. The OB splash already refreshes ads; the paywall needs its own `PayKit.sync()` before you need remote config.
 5. **Test:** run the checklist at the end of the guide you chose; add AdTracer if you need to follow the ad flow on a dashboard.
 

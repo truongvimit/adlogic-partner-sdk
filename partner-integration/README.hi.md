@@ -16,7 +16,7 @@
 
 1. **मुख्य feature चुनें:** Ads/OB, अपने UI के साथ BillingKit, या दिए हुए UI के साथ PayKit। App में ads और purchases दोनों हो सकते हैं; PayKit खुद billing initialize करता है, इसलिए `AppPurchase.initBilling` से दूसरा catalog register न करें।
 2. **Analytics इकट्ठा करते हैं:** kits के events भेजने से पहले Application में Tracker और sink install करें। Firebase और AdTracer वैकल्पिक destinations हैं; Adjust को [ads/Adjust गाइड](ads-onboarding-integration.hi.md#adjust-token-और-verification) से जोड़ें।
-3. **Kits और local data initialize करें:** अपनी मौजूदा Application इस्तेमाल करें। OB के साथ paywall हो तो OnboardKit से पहले PayKit install करें; ads से पहले splash hook में billing का इंतज़ार करें।
+3. **Kits और local data initialize करें:** अपनी मौजूदा Application इस्तेमाल करें। OB के साथ paywall हो तो OnboardKit से पहले PayKit install करें; साथ चलने वाले splash hook में billing देखें; ad gates मौजूदा entitlement पढ़ते हैं।
 4. **Remote इस्तेमाल करते हैं:** local setup के बाद Firebase sources जोड़ें। OB splash ads पहले ही refresh करता है; paywall को remote config चाहिए उससे पहले अपना `PayKit.sync()` चाहिए।
 5. **परीक्षण:** चुनी हुई गाइड के अंत वाली checklist चलाएँ; dashboard पर ad flow देखना हो तो AdTracer जोड़ें।
 

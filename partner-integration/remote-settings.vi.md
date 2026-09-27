@@ -1,6 +1,6 @@
 # Cấu hình ads và hành vi onboarding
 
-**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 `onboarding.order` là danh sách duy nhất chọn và sắp xếp màn trong JSON; bỏ ID để bỏ màn. Không cần khai báo `steps` nếu không có tùy chỉnh riêng. `steps.<id>.enabled` đã bỏ và bị bỏ qua. `order` remote ưu tiên hơn các cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi, và các cờ đó ưu tiên hơn `order` trong asset app. Màn app khai báo `enabled = false` vẫn ẩn cho tới khi `order` remote liệt kê nó hoặc `ob_enable_step_obN = true` đã gửi bật nó; `order` trong asset app vẫn giữ màn đó ẩn. Remote không thêm được màn app chưa khai báo. `steps.<id>` chỉ dành cho template, behavior và fullscreen tùy chọn. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`: content vẫn hiện khi ads tắt, màn fullscreen không có ads sẽ được bỏ qua.
 
@@ -74,38 +74,13 @@ lấp vào:
 Native cần đủ hai vế: `slot_format` đặt `NATIVE` **và** một entry `native_splash` dùng được
 trong ad_config. Thiếu một trong hai thì slot chỉ đơn giản là rỗng.
 
-Mỗi lần mở app chỉ request đúng format đã chọn, nên đổi cờ này là dịch chuyển doanh thu chứ không
-thêm impression thứ hai. Thời gian chờ cũng dùng chung: `splash.timing.slot_min_visible_ms` giữ inter lại cho format nào
-đang lấp slot, và `ob_ads_splash_banner_enabled` tắt vị trí này cho cả hai.
-
-Khoảng đó tính từ mốc **muộn hơn** giữa lúc slot **load xong** và lúc splash **lấy lại màn hình**,
-vì phải đủ cả hai thì mới có ai nhìn được: ad fill sau lưng dialog là có trên màn nhưng không ở
-trước mặt user. Slot lỗi, bị skip hoặc không có ad unit thì không khởi động khoảng này và không bị
-chờ. Slot chưa phản hồi gì, không load xong cũng không lỗi, được chờ trong phần còn lại của
-`splash.timing.ad_budget_ms`, trừ khi inter đã load xong và dialog noti đã ẩn: tính từ mốc muộn hơn
-trong hai mốc đó, slot chỉ được chờ tối đa `splash.timing.slot_wait_after_inter_ms`, quá mốc thì inter
-show luôn, bỏ slot. Mọi lần giữ đều bị chặn
-trên bởi phần còn lại của budget. Hoàn toàn không dùng impression
-của vendor, vì banner collapsible không bao giờ báo. Đặt `0` là quay lại hành vi cũ,
-không bảo vệ gì.
+Mỗi lượt mở chỉ request một format. Slot tự load và render độc lập: interstitial ready không chờ slot load, impression hoặc thời gian hiển thị tối thiểu. `slot_min_visible_ms` và `slot_wait_after_inter_ms` không giữ interstitial. Consent, premium, focus, đóng notification, minimum display của splash và gate update/paywall vẫn có hiệu lực. `ob_ads_splash_banner_enabled` điều khiển cả hai format.
 
 Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
 động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
 `AdPlacement.SplashNative` — cái sau vẫn là native full-screen tuỳ chọn (`native_fs`) hiện sau
 inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
 vào `AdsConfig.splashInlineNative`.
-
-Banner có hiển thị sau lưng dialog xin quyền thông báo, còn native đợi dialog đóng mới bind — nhưng
-đảm bảo bên dưới là như nhau cho cả hai, vì nó tính từ lúc splash lấy lại màn hình chứ không phải
-từ lúc có impression.
-
-**Nâng lên 5.4.0.** `AdPlacement` là sealed interface và bản này thêm `SplashInlineNative` vào đó,
-nên `when (placement)` exhaustive trong phần code còn tự giữ provider cần thêm nhánh cho placement
-mới. `AdsConfig.splashInlineNative` có giá trị mặc định nên lời gọi constructor hiện tại giữ nguyên,
-và `slot_format` mặc định vẫn là `BANNER`. SDK hiện tại đã đóng `OnboardingAdProvider` trong SDK,
-vì vậy partner phải bỏ provider tự viết như mô tả ở [Nâng từ 5.5.2](ads-onboarding-integration.vi.md#nâng-từ-552).
-
-
 
 App dùng key khác chỉ khai báo association đó một lần trong code:
 
@@ -142,7 +117,7 @@ Ví dụ local hoặc remote chỉ đổi swipe và thời gian X:
 - Consent, premium, remote `global.ads_enabled=false`, runtime pause reload và lifecycle vẫn chặn ads. `AdsConfig.enabled=false` giữ hiệu lực cho tới khi remote `flow.ads_enabled=true` (hoặc `ob_enable_all_ads=true` đã gửi) bật ads onboarding; asset app không bật lại được. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
 - Key `ob_*` cũ tiếp tục tương thích. Key đã gửi đặt giá trị theo cả hai chiều, xếp dưới hai document nhóm và trên asset app/host; `ob_splash_min_display_ms <= 0` giữ giá trị local. Custom UI legacy qua `ob_ui_content`/`ob_ui_design_tokens`/`ob_question_config` vẫn theo API cũ, không được nhân bản sang hai JSON mới. Các API remote nội dung cũ vẫn sử dụng được; reference layout/resource và nội dung mặc định do app khai báo. Không nhầm nhóm nội dung trang này với template/style của quảng cáo trong hai JSON mới.
 - Build debuggable áp mọi field của `ad_remote_config` remote nhưng giữ ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug); key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Log `WARN` nêu tên file đang pin, và `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Hai JSON hành vi áp dụng như release.
-- Timer/request đang chạy giữ thời điểm đã capture; lần đọc/request sau nhận cấu hình mới. Cả hai strategy chờ bước remote kết thúc/timeout rồi mới request ads splash; `ALTERNATE` chờ thêm `onRemoteFetched()`, còn `SAME_TIME` request banner/interstitial splash mà không chờ hook đó. **LFO1 được lên lịch preload sau remote ở cả hai strategy**. LFO `PARALLEL` nghĩa là không đợi interstitial splash tải xong. Strategy và quyết định hỏi quyền thông báo được đọc sau khi bước remote kết thúc, nên giá trị fetch ở bước đó áp dụng ngay lượt mở này. Prompt thông báo chờ bước remote; consent và billing vẫn chạy song song với bước đó. `splash.navigation.next_screen_timing` remote khác `AUTO` ưu tiên hơn `nextScreenTiming()` đã override khi mở từ launcher; entry notification/widget/uninstall giữ hook, còn giá trị trong asset app chỉ làm default cho hook.
+- Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
 
 ## Scope của behavior
 
@@ -155,7 +130,7 @@ Slot behavior > nhóm content/fullscreen OB > placement override > format overri
 | interstitial | load.tier_timeout_ms, load_and_show.wait_timeout_ms, load_and_show.buffer_wait_timeout_ms, presentation.loading_enabled, cache.max_age_ms |
 | rewarded | load.tier_timeout_ms, cache.max_age_ms |
 
-**Nâng từ 5.5.2.** `preload.enabled` và `preload.after_show` không còn được đọc ở scope nào: `native.preload.*`, `placement_overrides.<key>.native.preload.*`, hoặc field `behavior.preload.*` trong `onboarding_config` như `lfo.native1.behavior.preload.enabled`. Document còn chứa các field này vẫn được áp dụng nhưng bỏ các field đó, và chúng được log là bị bỏ qua dưới tag `AdLogicSettings`. Native được preload đúng chỗ code app hoặc SDK gọi preload. Các cài đặt preload của onboarding như `lfo1_preload_mode`, `preload_trigger` và `onboarding.preload.*` không đổi. `ERainAdProvider(tierTimeoutMs)` đã bị xoá; `native.load.tier_timeout_ms` và `interstitial.load.tier_timeout_ms` (mặc định 30000) đặt cùng timeout mỗi tier cho ads onboarding.
+App/SDK chủ động gọi preload native. Preload replacement dùng `setEnablePreload` và `preloadAfterShow`; remote không hỗ trợ `preload.enabled` / `preload.after_show`. Lịch preload onboarding dùng `lfo1_preload_mode`, `preload_trigger` và `onboarding.preload.*`. Timeout mỗi tier dùng `native.load.tier_timeout_ms` và `interstitial.load.tier_timeout_ms` (mặc định 30000 ms).
 
 Slot interstitial OB hỗ trợ tier timeout và wait timeout; với inter cuối OB, `onboarding.exit_interstitial.wait_timeout_ms` ưu tiên hơn `placement_overrides` và `interstitial.load_and_show.wait_timeout_ms` ở scope format. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên. `onboarding.steps.<id>.native_template` cũng áp dụng cho ID trang custom; chuỗi rỗng kế thừa template nhóm.
 
@@ -193,7 +168,7 @@ Ví dụ override trong `onboarding_config` (LFO2 mặc định là `reload`; v�
 - LFO1/LFO2: `lfo.native_template` (SDK default `CTA_BOTTOM`). Content OB: `onboarding.ads.content_template` (`CTA_TOP`), có thể override từng `onboarding.steps.<id>.native_template` (mặc định `""`, nghĩa là kế thừa). Question: `question.native.template` (`CTA_BOTTOM`).
 - Thứ tự chọn frame: template remote (trang > nhóm/màn) > `positionCTA` (`TOP`/`BOTTOM`) theo placement từ `ad_remote_config` của backend > template trong custom asset app (trang > nhóm/màn) > `positionCTA` từ `ad_config.json` của app > template host/SDK. Bản asset SDK nguyên mẫu không tự ghi đè cấu hình cũ. Khi thử riêng `positionCTA`, bỏ override template tương ứng. `positionCTA` không bị sao chép thành một field mới.
 - Các preset `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` dùng cho native nội dung; field template chung cũng nhận `FULL_SCREEN`/`DIALOG` như API trước. Riêng native trong popup LFO luôn dùng `DIALOG`, native ad-only Full1/Full2/OB5 luôn dùng `FULL_SCREEN` để giữ khung chứa tương ứng. Custom `R.layout` của trang vẫn ở app.
-- Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. Đây không phải thứ tự splash mặc định: LFO1 luôn được lên lịch sau bước remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
+- Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. LFO1 được lên lịch theo preload mode hiện có, không chờ remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
 - `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Trong cùng một nguồn, scope cụ thể ưu tiên scope chung (remote ở bất kỳ scope nào ưu tiên hơn asset app), rồi tới cấu hình host; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
 - Phía đặt X/Skip khai theo từng trang native fullscreen, không có scope chung ở trên: `onboarding.steps.<id>.fullscreen.skip.position` cho mỗi trang fullscreen trong OB, `ob5.skip.position` cho OB5 standalone, `splash.native.skip.position` cho native_fs giữa inter splash và LFO. Cả ba nhận `RIGHT`/`LEFT`, default `RIGHT` — đúng phía X vẫn nằm từ trước; JSON gốc khai sẵn `full1` và `full2`, id step khác do app khai vẫn nhận ở cùng path đó. Các format khác không có cờ này: interstitial, app-open, banner và native inline đều không có nút X này. Hai phía đối xứng tuyệt đối: cùng khoảng cách tới mép và cùng margin trên, chỉ đổi phía chứ không đổi kích thước, style hay thời gian. Locale RTL vẫn lật như hiện tại: `RIGHT` theo mép cuối dòng chữ, `LEFT` theo mép đầu.
 - `native.presentation.cta_corner_radius_dp` mặc định `20` dp, có thể override theo placement hoặc scope native từng màn. Áp dụng khi CTA có màu nền tường minh từ `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; màu `default` giữ drawable XML như trước.
@@ -234,7 +209,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `schema_version` | `1` | Phiên bản schema đang hỗ trợ: 1. |
 | `revision` | `0` | Metadata được lưu cùng document; không phải gate. |
 | `global.ads_enabled` | `true` | Master mới toàn SDK; true vẫn cần host/consent/premium/slot cho phép. |
-| `consent.network_timeout_ms` | `20000` | Timeout network UMP, áp lần request consent sau; không đóng form đang đọc. |
+| `consent.network_timeout_ms` | `10000` | Timeout network UMP, áp lần request consent sau; không đóng form đang đọc. |
 | `diagnostics.flow_logging_enabled` | `true` | OB_FLOW log; không đổi debug/test IDs. |
 | `diagnostics.ads_telemetry_enabled` | `true` | false tắt nguồn telemetry ads; true vẫn giữ ownership chống report trùng. |
 | `banner.reload.allowed` | `true` | Map canReloadAds; đây là policy có thể override, runtime flagUserEnableReload vẫn veto. |
@@ -302,13 +277,13 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.ads.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `splash.timing.min_display_ms` | `3000` | Giữ legacy <=0 fallback local; canonical mới >=0, 0 được ghi rõ là không giữ minimum. |
 | `splash.timing.ad_budget_ms` | `60000` | Budget chung sau notification/focus, không phải timeout tier. |
-| `splash.timing.slot_min_visible_ms` | `1000` | Thời gian tối thiểu slot phải hiện trước khi inter phủ lên. |
-| `splash.timing.slot_wait_after_inter_ms` | `10000` | Tính từ mốc muộn hơn giữa lúc inter splash load xong và lúc dialog noti ẩn; slot vẫn chưa load/lỗi quá mốc này thì show inter luôn. Inter chưa load thì không dùng, vẫn chờ theo `ad_budget_ms`. |
+| `splash.timing.slot_min_visible_ms` | `1000` | Giữ để tương thích; splash không sử dụng. |
+| `splash.timing.slot_wait_after_inter_ms` | `10000` | Giữ để tương thích; splash không sử dụng. |
 | `splash.timing.notification_settle_ms` | `800` | Sàn tối thiểu sau khi user trả lời prompt noti, trước khi inter được show. |
-| `splash.load.ad_strategy` | `"ALTERNATE"` | SAME_TIME/ALTERNATE với fetch remote; đọc sau khi bước remote kết thúc, giá trị fetch ở bước đó áp dụng ngay lượt mở này. |
+| `splash.load.ad_strategy` | `"ALTERNATE"` | Cả hai giá trị dùng luồng consent-first, không chờ remote. |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` | PARALLEL/SEQUENTIAL so với inter splash; độc lập ad_strategy. |
 | `splash.load.remote_fetch_timeout_ms` | `10000` | Đang fetch không tự đổi timeout cho chính lần fetch đó; lần sau dùng cache. |
-| `splash.load.consent_hook_timeout_ms` | `20000` | Riêng hook tùy biến; UMP timeout nằm trong ad_behavior_config.consent. |
+| `splash.load.consent_hook_timeout_ms` | `10000` | Riêng hook tùy biến; UMP timeout nằm trong ad_behavior_config.consent. |
 | `splash.load.billing_timeout_ms` | `5000` | Capture trước khi billing step chạy. |
 | `splash.permissions.no_internet_prompt_enabled` | `true` | Giữ mặc định gating hiện tại. |
 | `splash.permissions.notification_enabled` | `true` | Vẫn giữ granted/đã hỏi/manifest/OS checks. |
