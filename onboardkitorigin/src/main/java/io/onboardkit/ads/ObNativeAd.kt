@@ -25,6 +25,7 @@ internal fun ComponentActivity.showNativeAd(
     onAdEngaged: (NativeClickAction) -> Unit = {},
     reuseFailedPreload: Boolean = false,
     preloadedOnly: Boolean = false,
+    onLoading: () -> Unit = {},
 ) {
     val provider = OnboardingSdk.provider()
     if (provider == null || unit == null) {
@@ -38,6 +39,7 @@ internal fun ComponentActivity.showNativeAd(
 
     val request = NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement))
     var skeleton: ShimmerFrameLayout? = null
+    var loadFailed = false
     val unavailable = ResumedDelivery(container.findViewTreeLifecycleOwner() ?: this)
     val tracked = placement.tracked(
         object : AdEventListener {
@@ -64,6 +66,7 @@ internal fun ComponentActivity.showNativeAd(
     )
     val listener = object : AdEventListener by tracked {
         override fun onFailedToLoad() = runOnUiThread {
+            loadFailed = true
             unavailable.deliver(tracked::onFailedToLoad)
         }
 
@@ -75,6 +78,8 @@ internal fun ComponentActivity.showNativeAd(
         listener.onLoaded()
         return
     }
+    // A provider may reject synchronously while binding; do not resurrect its shimmer.
+    if (loadFailed) return
     if (preloadedOnly && provider.nativeStatus(placement) != NativeStatus.LOADING) {
         placement.reportUnavailable(AdSkipReason.NOT_READY, onUnavailable)
         return
@@ -84,6 +89,7 @@ internal fun ComponentActivity.showNativeAd(
         placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)
         return
     }
+    onLoading()
     skeleton = NativeAdShimmer.from(this, request.layoutRes).also {
         container.removeAllViews()
         container.addView(it)

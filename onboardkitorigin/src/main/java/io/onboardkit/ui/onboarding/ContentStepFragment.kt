@@ -40,6 +40,8 @@ class ContentStepFragment : LazyStepFragment() {
     private var adRequested = false
     private var remoteStyle: UiStepStyle? = null
     private var remoteMediaShown = false
+    private var usesDefaultLayout = false
+    private var adPresentation: ContentStepAdPresentation? = null
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
@@ -52,10 +54,12 @@ class ContentStepFragment : LazyStepFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
+        usesDefaultLayout = false
         val custom = definition()?.layoutRes ?: 0
         if (custom != 0) {
             bindCustomLayout(inflater, container, custom)?.let { return it }
         }
+        usesDefaultLayout = true
         return ObFragmentContentStepBinding.inflate(inflater, container, false)
             .also { binding = it }
             .root
@@ -117,6 +121,14 @@ class ContentStepFragment : LazyStepFragment() {
         }
         // Completion is reported by the host, which sees every page type and both exit paths
         b.obPrimaryCta.setOnClickListener { requireStepHost().next(StepExit.CTA) }
+        if (usesDefaultLayout) {
+            adPresentation = ContentStepAdPresentation(b)
+            // Offscreen pages must also start in the right state, before their first draw.
+            val placement = AdPlacement.StepNative(stepId)
+            val enabled = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement) != null &&
+                OnboardingSdk.guard().skipReason(requireContext(), placement) == null
+            adPresentation?.setAdVisible(enabled, animate = false)
+        }
         showRemoteMediaWhenReady()
     }
 
@@ -176,7 +188,10 @@ class ContentStepFragment : LazyStepFragment() {
         if (!remoteMediaShown) {
             remoteMediaShown = true
             if (style.isImage) {
-                Glide.with(this).load(url).centerCrop().into(b.obStepImage)
+                val request = Glide.with(this).load(url)
+                // Keep the source image intact so the ImageView can switch between ad/no-ad scaling.
+                if (usesDefaultLayout) request.dontTransform().into(b.obStepImage)
+                else request.centerCrop().into(b.obStepImage)
             } else {
                 b.obStepImage.visibility = View.GONE
                 b.obStepPlayer.visibility = View.VISIBLE
@@ -192,6 +207,7 @@ class ContentStepFragment : LazyStepFragment() {
 
     override fun onStepUnselected(dwellMs: Long) {
         releasePlayer()
+        adPresentation?.finishTransition()
         OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId))
         adBound = false
         adRequested = false
@@ -202,7 +218,6 @@ class ContentStepFragment : LazyStepFragment() {
         val activity = activity ?: return
         if (adRequested) return
         adRequested = true
-        b.obAdBlock.visibility = View.VISIBLE
         val placement = AdPlacement.StepNative(stepId)
         val visit = stepVisitVersion
         activity.showNativeAd(
@@ -212,12 +227,31 @@ class ContentStepFragment : LazyStepFragment() {
             // here requested a different unit than the one that was warmed.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onBound = { if (isCurrentStepVisit(visit)) adBound = true },
+            onLoading = { if (isCurrentStepVisit(visit)) showAdSlot(true) },
+            onBound = {
+                if (isCurrentStepVisit(visit)) {
+                    adBound = true
+                    showAdSlot(true)
+                }
+            },
             onUnavailable = {
-                if (isCurrentStepVisit(visit) && !adBound) binding?.obAdBlock?.visibility = View.GONE
+                if (isCurrentStepVisit(visit) && !adBound) {
+                    showAdSlot(false)
+                }
             },
             onAdEngaged = { action -> if (isCurrentStepVisit(visit)) onStepAdEngaged(action) },
         )
+    }
+
+    private fun showAdSlot(visible: Boolean) {
+        val presentation = adPresentation
+        if (presentation != null) presentation.setAdVisible(visible, animate = isResumed)
+        else binding?.obAdBlock?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    override fun onStop() {
+        adPresentation?.finishTransition()
+        super.onStop()
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -254,6 +288,8 @@ class ContentStepFragment : LazyStepFragment() {
 
     override fun onDestroyView() {
         releasePlayer()
+        adPresentation?.finishTransition()
+        adPresentation = null
         binding = null
         adBound = false
         adRequested = false

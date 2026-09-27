@@ -62,6 +62,7 @@ class OnboardingAdLifecycleTest {
         val listeners = mutableMapOf<AdPlacement, AdEventListener>()
         val completions = mutableListOf<AnalyticsEvent.StepCompleted>()
         var failOnBind = false
+        var pendingOnBind = false
         var interstitialLoads = 0
         var interstitial: ObInterstitialCallback? = null
     }
@@ -70,6 +71,7 @@ class OnboardingAdLifecycleTest {
         listeners.clear()
         completions.clear()
         failOnBind = false
+        pendingOnBind = false
         interstitialLoads = 0
         interstitial = null
         val provider = object : FakeAdProvider() {
@@ -81,7 +83,7 @@ class OnboardingAdLifecycleTest {
             ): Boolean {
                 listeners[request.placement] = listener
                 if (failOnBind) listener.onFailedToLoad()
-                return !failOnBind
+                return !failOnBind && !pendingOnBind
             }
 
             override fun loadAndShowInterstitial(
@@ -122,6 +124,7 @@ class OnboardingAdLifecycleTest {
         lastOnly: Boolean = false,
         lockSwipe: Boolean = true,
         swipeCompletesLastStep: Boolean = true,
+        adsOverride: AdsConfig? = null,
     ) {
         OnboardingSdk.configure(onboardKitConfig {
             step(first)
@@ -131,7 +134,7 @@ class OnboardingAdLifecycleTest {
             }
             behavior = BehaviorConfig(adClickReturnCompletesStep = clickReturn,
                 lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
-            ads = AdsConfig(contentStepNative = NativeAdUnit("test-content"),
+            ads = adsOverride ?: AdsConfig(contentStepNative = NativeAdUnit("test-content"),
                 fullScreenStepNative = NativeAdUnit("test-fullscreen"),
                 afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly })
         }.getOrThrow()).getOrThrow()
@@ -161,6 +164,105 @@ class OnboardingAdLifecycleTest {
         assertEquals(1, pager.currentItem)
         assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
         assertEquals(listOf(reason), completions.map { it.exitReason })
+    }
+
+    private fun contentPage() = activity.supportFragmentManager.fragments
+        .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
+
+    @Test fun `disabled ads start without an ad slot or a provider bind`() {
+        launch(adsOverride = AdsConfig(enabled = false, contentStepNative = NativeAdUnit("test")))
+        assertNoAdFromStart()
+    }
+
+    @Test fun `missing native unit starts without an ad slot or a provider bind`() {
+        launch(adsOverride = AdsConfig(contentStepNative = null))
+        assertNoAdFromStart()
+    }
+
+    @Test fun `disabled remote native placement starts without an ad slot or a provider bind`() {
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
+            "native_ob1" to com.ads.module.config.AdUnitConfig("test", false),
+        )))
+        launch(adsOverride = AdsConfig.fromAdConfig())
+        assertNoAdFromStart()
+    }
+
+    private fun assertNoAdFromStart() {
+        val page = contentPage()
+        assertEquals(View.GONE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+        assertEquals(page.height / 2f, page.findViewById<View>(R.id.ob_step_image).height.toFloat(), 1f)
+        assertTrue(listeners.isEmpty())
+        assertEquals(0, page.findViewById<android.widget.FrameLayout>(R.id.ob_native_container).childCount)
+    }
+
+    @Test fun `synchronous native failure does not insert shimmer after reporting unavailable`() {
+        failOnBind = true
+        launch()
+        val page = contentPage()
+        assertEquals(View.GONE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+        assertEquals(0, page.findViewById<android.widget.FrameLayout>(R.id.ob_native_container).childCount)
+    }
+
+    @Test fun `late native fill restores the same views after loading failed`() {
+        pendingOnBind = true
+        launch()
+        val page = contentPage()
+        val image = page.findViewById<View>(R.id.ob_step_image)
+        val card = page.findViewById<View>(R.id.ob_step_card)
+        assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+        listener().onFailedToLoad()
+        settle()
+        layout()
+        assertEquals(View.GONE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+        listener().onLoaded()
+        settle()
+        layout()
+        org.junit.Assert.assertSame(image, contentPage().findViewById(R.id.ob_step_image))
+        org.junit.Assert.assertSame(card, contentPage().findViewById(R.id.ob_step_card))
+        assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+        assertEquals(page.height * .59f, image.height.toFloat(), 1f)
+        listener().onFailedToLoad()
+        settle()
+        assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
+    }
+
+    @Test fun `no ad content moves into the lower panel and restores its ad layout on return`() {
+        launch()
+        fun page() = activity.supportFragmentManager.fragments
+            .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
+        fun geometry() = page().let { view ->
+            val image = view.findViewById<View>(R.id.ob_step_image)
+            val card = view.findViewById<View>(R.id.ob_step_card)
+            listOf(image.top, card.height, image.bottom - card.bottom)
+        }
+        val original = geometry()
+        val originalBackground = page().findViewById<View>(R.id.ob_step_card).background
+        val originalElevation = page().findViewById<View>(R.id.ob_step_card).elevation
+        failOnBind = true
+        pager.setCurrentItem(1, false)
+        layout()
+        pager.setCurrentItem(0, false)
+        layout()
+        val noAdPage = page()
+        val image = noAdPage.findViewById<View>(R.id.ob_step_image)
+        val card = noAdPage.findViewById<View>(R.id.ob_step_card)
+        assertEquals(noAdPage.height / 2f, image.height.toFloat(), 1f)
+        assertEquals(noAdPage.width, image.width)
+        assertEquals(noAdPage.height * .75f - 25 * noAdPage.resources.displayMetrics.density,
+            (card.top + card.bottom) / 2f, 1f)
+        org.junit.Assert.assertSame(originalBackground, card.background)
+        assertEquals(originalElevation, card.elevation, 0f)
+        assertTrue(noAdPage.findViewById<View>(R.id.ob_primary_cta).isShown)
+
+        failOnBind = false
+        pager.setCurrentItem(1, false)
+        layout()
+        pager.setCurrentItem(0, false)
+        layout()
+        assertEquals(original, geometry())
+        assertEquals(page().height * .59f, page().findViewById<View>(R.id.ob_step_image).height.toFloat(), 1f)
+        org.junit.Assert.assertNotNull(page().findViewById<View>(R.id.ob_step_card).background)
+        assertEquals(originalElevation, page().findViewById<View>(R.id.ob_step_card).elevation, 0f)
     }
 
     @Test fun `reload and none override legacy auto advance on content click return`() {
