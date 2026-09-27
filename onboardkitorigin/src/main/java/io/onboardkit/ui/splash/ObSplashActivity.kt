@@ -21,7 +21,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.ads.module.update.ForceUpdateConfig
 import com.ads.module.update.ForceUpdateGate
-import com.ads.module.config.AdConfig
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
@@ -36,7 +35,6 @@ import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.ads.tracked
-import io.onboardkit.config.AdLoadStrategy
 import com.ads.module.config.AdRemoteConfig
 import io.onboardkit.ads.ObInterstitial
 import io.onboardkit.ads.SplashInterCase
@@ -54,11 +52,11 @@ import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.splash.SplashAttempt.InterResult
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -167,7 +165,16 @@ open class ObSplashActivity : BaseOnboardActivity() {
         if (attempt.showRequested) return proceed()
         val configBeforeRemote = sdk.requireConfig()
         awaitNetworkGate(configBeforeRemote)
-        settleConsentRemoteAndBilling(configBeforeRemote)
+        startBackgroundWork(configBeforeRemote)
+        if (attempt.consentAnswered == null) {
+            attempt.consentAnswered = awaitConsentAnswer(
+                roundTripMs = configBeforeRemote.splash.consentTimeoutMs,
+                isResolving = ConsentCenter::isResolving,
+                canRequestAds = ConsentCenter::canRequestAds,
+                request = ::onConsentRequired,
+            )
+        }
+        if (attempt.updateConfig == null) attempt.updateConfig = readForceUpdateConfig()
         if (attempt.consentAnswered != true) {
             ObLog.w(ObLog.Section.SPLASH, "consent has not authorized requests — running the flow without ads")
         }
@@ -178,53 +185,37 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ForceUpdateGate.await(this, updateConfig)
         }
         attempt.allowAdRequests()
-        if (sdk.requireConfig().splash.adLoadStrategy == AdLoadStrategy.SAME_TIME) {
-            requestSplashAds(deferIfUnauthorized = true)
-        }
-        if (attempt.flags == null) {
-            onRemoteFetched()
-            attempt.flags = sdk.flags()
-            ObLog.d(ObLog.Section.REMOTE, "attempt=${attempt.id} ${checkNotNull(attempt.flags).adSummary()}")
-        }
         if (attempt.startDecision == null) attempt.startDecision = OnboardingSdk.shouldStart()
         ObLog.d(ObLog.Section.SPLASH, "start_decision=${describe(checkNotNull(attempt.startDecision))}")
         requestSplashAds()
         requestSplashPreloads(attempt.settledInterOrNull())
         awaitNotificationPermission()
         awaitSplashFocus()
-        val focusedAtMs = SystemClock.elapsedRealtime()
         beginAdWait()
         awaitInterstitial()
-        awaitSlotVisible(focusedAtMs)
         proceed()
     }
 
-    private suspend fun settleConsentRemoteAndBilling(cfg: OnboardKitConfig): Unit = coroutineScope {
-        launch {
-            if (attempt.consentAnswered == null) {
-                attempt.consentAnswered = awaitConsentAnswer(
-                    roundTripMs = cfg.splash.consentTimeoutMs,
-                    isResolving = ConsentCenter::isResolving,
-                    canRequestAds = ConsentCenter::canRequestAds,
-                    request = ::onConsentRequired,
-                )
-            }
-        }
-        launch {
-            if (attempt.updateConfig == null) {
-                val settled = step("remote_fetch", cfg.splash.remoteFetchTimeoutMs) {
-                    sdk.remoteOrNull()?.sync(cfg.splash.remoteFetchTimeoutMs)
-                    AdConfig.refresh(cfg.splash.remoteFetchTimeoutMs)
+    private fun startBackgroundWork(cfg: OnboardKitConfig) {
+        val refresh = attempt.remoteRefresh ?: sdk.refreshRemote(cfg.splash.remoteFetchTimeoutMs)
+            .also { attempt.remoteRefresh = it }
+        if (!attempt.remoteHookResolved) lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            refresh.await()
+            if (isFinishing || isDestroyed || attempt.remoteHookResolved) return@launch
+            attempt.remoteHookResolved = true
+            onRemoteFetched()
+            if (!attempt.showRequested) {
+                val policy = readForceUpdateConfig()
+                if (policy != attempt.updateConfig) {
+                    attempt.updateConfig = policy
+                    attempt.updateGatePassed = false
                 }
-                if (settled == null) OnboardingSdk.applyRemoteWhenLanded()
-                attempt.updateConfig = readForceUpdateConfig()
             }
+            ObLog.d(ObLog.Section.REMOTE, "attempt=${attempt.id} ${sdk.flags().adSummary()}")
         }
-        launch {
-            if (!attempt.billingResolved) {
-                step("billing", cfg.splash.billingTimeoutMs) { onInitBilling() }
-                attempt.billingResolved = true
-            }
+        if (!attempt.billingResolved) lifecycleScope.launch {
+            step("billing", cfg.splash.billingTimeoutMs) { onInitBilling() }
+            attempt.billingResolved = true
         }
     }
 
@@ -234,7 +225,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     // Not windowed here: the provider holds each request until this splash's window opens.
     internal fun requestSplashPreloads(interResult: InterResult?) {
         if ((attempt.startDecision as? StartDecision.Start)?.destination != FlowDestination.LANGUAGE) return
-        val flags = attempt.flags ?: return
+        val flags = sdk.flags()
         val parallel = flags.splashLfoParallelPreloadEnabled
         val allowWhileVisible = attempt.prompt.value == SplashPrompt.Open
         if ((parallel || interResult != null) && attempt.preloadsRequested.add(AdPlacement.Language1)) {
@@ -318,12 +309,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
         return result
     }
 
-    private suspend fun requestSplashAds(deferIfUnauthorized: Boolean = false) {
+    private suspend fun requestSplashAds() {
         if (attempt.adPhaseStartedAtMs != null) return
         // Read before the latch: a recreation during this suspension must not strand the request.
         if (attempt.returningUser == null) attempt.returningUser = OnboardingSdk.isCompleted()
         awaitSplashFocus()
-        if (deferIfUnauthorized && !ConsentCenter.canRequestAds()) return
         attempt.adPhaseStartedAtMs = SystemClock.elapsedRealtime()
         if (splashSlotFormat() == SplashAdSlotFormat.NATIVE) requestSplashSlotNative()
         else requestSplashBanner()
@@ -345,24 +335,20 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 "${placement.key} container missing — a custom splash layout that replaces " +
                     "ob_splash_ad_container has nowhere to put the bottom slot",
             )
-            attempt.slotSettled.complete(Unit)
             return
         }
         // Not cleared here: showNativeAd empties it only once the guard allows, sparing host content.
         container.visibility = View.VISIBLE
-        val state = attempt
         showNativeAd(
             placement = placement,
             unit = sdk.requireConfig().ads.splashInlineNative,
             container = container,
             onBound = {
                 ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
-                state.markSlotLoaded()
             },
             onUnavailable = { reason ->
                 ObLog.w(ObLog.Section.LOAD, "${placement.key} unavailable — $reason")
                 container.visibility = View.GONE
-                state.slotSettled.complete(Unit)
             },
         )
     }
@@ -374,7 +360,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
         val provider = sdk.provider()
         if (skip != null || unit == null || provider == null) {
             skip?.let { placement.trackSkipped(it) }
-            attempt.slotSettled.complete(Unit)
             return
         }
 
@@ -389,7 +374,6 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
         ObLog.d(ObLog.Section.LOAD, "${placement.key} request")
         placement.trackRequest()
-        val state = attempt
         provider.loadBanner(
             this,
             unit,
@@ -397,12 +381,10 @@ open class ObSplashActivity : BaseOnboardActivity() {
                 object : AdEventListener {
                     override fun onLoaded() {
                         ObLog.d(ObLog.Section.LOAD, "${placement.key} loaded")
-                        state.markSlotLoaded()
                     }
 
                     override fun onFailedToLoad() {
                         ObLog.w(ObLog.Section.LOAD, "${placement.key} failed")
-                        state.slotSettled.complete(Unit)
                     }
                 },
             ),
@@ -454,43 +436,12 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private fun beginAdWait() {
         if (attempt.budgetDeadlineMs != null) return
-        val flags = checkNotNull(attempt.flags)
+        val flags = sdk.flags()
         attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + flags.splashAdBudgetMs.coerceAtLeast(0)
         ObLog.d(ObLog.Section.SPLASH, "attempt=${attempt.id} budget_start ms=${flags.splashAdBudgetMs}")
     }
 
     private fun remainingBudgetMs(): Long = remainingMs(attempt.budgetDeadlineMs, SystemClock.elapsedRealtime())
-
-    private suspend fun awaitSlotVisible(focusedAtMs: Long) {
-        val minVisibleMs = checkNotNull(attempt.flags).splashSlotMinVisibleMs
-        if (minVisibleMs <= 0) return
-        if (!attempt.slotSettled.isCompleted) {
-            val waitMs = silentSlotWaitMs(
-                budgetLeftMs = remainingBudgetMs(),
-                interLoadedAtMs = attempt.interLoadedAtMs,
-                promptAnsweredAtMs = attempt.promptAnsweredAtMs,
-                waitAfterInterMs = OnboardingSettings.number("splash.timing.slot_wait_after_inter_ms"),
-                nowMs = SystemClock.elapsedRealtime(),
-            )
-            withTimeoutOrNull(waitMs.milliseconds) { attempt.slotSettled.await() }
-        }
-        val loadedAt = attempt.slotLoadedAtMs
-        if (loadedAt == null) {
-            ObLog.d(
-                ObLog.Section.SPLASH,
-                if (attempt.slotSettled.isCompleted) "slot has no ad — not holding the interstitial"
-                else "slot silent past its wait — showing the interstitial without it",
-            )
-            return
-        }
-        val holdMs = slotHoldMs(
-            minVisibleMs, loadedAt, focusedAtMs, remainingBudgetMs(), SystemClock.elapsedRealtime(),
-        )
-        if (holdMs > 0) {
-            ObLog.d(ObLog.Section.SPLASH, "holding the interstitial ${holdMs}ms so the slot is seen")
-            delay(holdMs.milliseconds)
-        }
-    }
 
     private suspend fun awaitInterstitial() {
         if (!attempt.interstitialSettled.isCompleted) {
@@ -529,13 +480,11 @@ open class ObSplashActivity : BaseOnboardActivity() {
             // Before the paywall and the show for every timing: a dismissed ad navigates at once.
             awaitMinimumDisplay()
             awaitPresentationWindow()
-            if (!attempt.updateGatePassed) {
-                ForceUpdateGate.await(this, checkNotNull(attempt.updateConfig))
-                attempt.updateGatePassed = true
-                awaitSplashFocus()
-            }
+            awaitUpdateGate()
             val purchased = sdk.presentPaywall(this, PaywallPlacement.SPLASH_INTER) == PaywallOutcome.Purchased
             awaitSplashFocus()
+            // Remote can publish a required update while the paywall owns the screen.
+            awaitUpdateGate()
             attempt.showRequested = true
             val state = attempt
             if (purchased || state.interstitialSettled.await() != InterResult.LOADED) {
@@ -579,6 +528,15 @@ open class ObSplashActivity : BaseOnboardActivity() {
         finish()
     }
 
+    private suspend fun awaitUpdateGate() {
+        while (!attempt.updateGatePassed) {
+            val policy = checkNotNull(attempt.updateConfig)
+            ForceUpdateGate.await(this, policy)
+            attempt.updateGatePassed = attempt.updateConfig == policy
+            awaitSplashFocus()
+        }
+    }
+
     private suspend fun awaitMinimumDisplay() {
         val remaining = minDisplayLeftMs(
             sdk.requireConfig().splash.minDisplayTimeMs,
@@ -590,7 +548,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     private suspend fun awaitPresentationWindow() {
         attempt.promptAnsweredAtMs?.let { answeredAt ->
-            val settleMs = checkNotNull(attempt.flags).splashNotificationSettleMs
+            val settleMs = sdk.flags().splashNotificationSettleMs
             delay(remainingMs(answeredAt + settleMs, SystemClock.elapsedRealtime()).milliseconds)
         }
         awaitSplashFocus()
@@ -672,18 +630,21 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
 
     /**
-     * Resolves the purchase entitlement before the first ad request, bounded by `billingTimeoutMs`.
-     * Do only that here: anything slower delays every splash ad.
+     * Refreshes purchase entitlement alongside consent, bounded by `billingTimeoutMs`.
+     * Ad requests use the currently published entitlement without waiting for this hook.
      */
     protected open suspend fun onInitBilling() {}
 
     /**
-     * Update policy, read once when the remote step settles or times out; must not fetch or wait.
-     * A required update blocks every ad request, an optional one is offered before the splash ad.
+     * Reads activated update policy without fetching or waiting. Read before requests and again
+     * if remote finishes before presentation. A known required update blocks ads; an optional one
+     * is offered before the splash ad.
      * Default off; `FirebaseUpdateConfig.activated()` fits here.
      */
     protected open fun readForceUpdateConfig(): ForceUpdateConfig = ForceUpdateConfig()
 
-    /** Called once when the remote step settles or times out, before the start decision; sync app keys here. */
+    /** Called once when background refresh settles, while this splash is alive. SDK settings apply
+     * independently of this hook, including after splash closes; use process-owned fetch listeners
+     * for app settings that must also update after this Activity is gone. */
     protected open fun onRemoteFetched() {}
 }

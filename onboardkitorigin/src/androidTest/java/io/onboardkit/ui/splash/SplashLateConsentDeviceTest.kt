@@ -81,7 +81,7 @@ class SplashLateConsentDeviceTest {
     }
 
     @Test
-    fun authorityPublishedByRemoteHookRequestsEachSplashSlotExactlyOnce() {
+    fun consentCompletionRequestsEachSplashSlotExactlyOnce() {
         runSplash(finalConsentAllowed = true)
         assertEquals(1, LateConsentFixture.provider.bannerLoads)
         assertEquals(1, LateConsentFixture.provider.interstitialLoads)
@@ -109,7 +109,6 @@ class SplashLateConsentDeviceTest {
                 assertTrue("Final attempt must settle, not wait for the 60s ad budget", LateConsentFixture.finished.await(8, TimeUnit.SECONDS))
                 assertEquals(0, LateConsentFixture.bannerLoadsBeforeAuthority)
                 assertEquals(0, LateConsentFixture.interstitialLoadsBeforeAuthority)
-                assertEquals(1, LateConsentFixture.remoteHookCalls)
                 assertEquals(1, LateConsentFixture.outcomes.size)
                 assertTrue(LateConsentFixture.outcomes.single() is OnboardingOutcome.Skipped)
                 SystemClock.sleep(250)
@@ -121,20 +120,15 @@ class SplashLateConsentDeviceTest {
     }
 }
 
-/** A real host splash subclass using only its supported consent/remote hooks. */
+/** A real host splash subclass using its supported consent hook. */
 class LateConsentSplashDeviceActivity : ObSplashActivity() {
     override suspend fun onConsentRequired(): Boolean {
         ConsentCenter.setHostConsent(canRequestAds = false, personalized = false)
-        return false
-    }
-
-    override fun onRemoteFetched() {
-        LateConsentFixture.remoteHookCalls++
+        kotlinx.coroutines.delay(100)
         LateConsentFixture.bannerLoadsBeforeAuthority = LateConsentFixture.provider.bannerLoads
         LateConsentFixture.interstitialLoadsBeforeAuthority = LateConsentFixture.provider.interstitialLoads
-        // Represents a host CMP result arriving before the final request checkpoint.
-        // It deliberately does not change OnboardingSdk's separate host-off policy.
         ConsentCenter.setHostConsent(LateConsentFixture.finalConsentAllowed, personalized = false)
+        return LateConsentFixture.finalConsentAllowed
     }
 }
 
@@ -143,7 +137,6 @@ private object LateConsentFixture {
     var finalConsentAllowed = false
     var bannerLoadsBeforeAuthority = -1
     var interstitialLoadsBeforeAuthority = -1
-    var remoteHookCalls = 0
     var finished = CountDownLatch(1)
     val outcomes = CopyOnWriteArrayList<OnboardingOutcome>()
     val provider = SettlingSplashHostProvider()
@@ -152,7 +145,6 @@ private object LateConsentFixture {
         finalConsentAllowed = false
         bannerLoadsBeforeAuthority = -1
         interstitialLoadsBeforeAuthority = -1
-        remoteHookCalls = 0
         finished = CountDownLatch(1)
         outcomes.clear()
         provider.reset()

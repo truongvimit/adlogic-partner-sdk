@@ -140,13 +140,13 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `first timeout opens the gate at twenty seconds and stale callback cannot settle retry`() {
+    fun `first timeout opens the gate at ten seconds and stale callback cannot settle retry`() {
         val first = mutableListOf<Boolean>()
         val second = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onCompleted = first::add)
         val staleUpdate = vendor.information.updates.single()
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(19_999))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(9_999))
         assertFalse(ConsentCenter.canRequestAds())
         assertTrue(first.isEmpty())
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
@@ -184,17 +184,17 @@ class ConsentCenterTest {
     }
 
     @Test
-    fun `form loading shares the twenty second budget and late loaded form is ignored`() {
+    fun `form loading shares the ten second budget and late loaded form is ignored`() {
         val completions = mutableListOf<Boolean>()
         val answers = mutableListOf<Boolean>()
         ConsentCenter.request(activity, onFormAnswered = answers::add, onCompleted = completions::add)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(12))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6))
         vendor.information.required()
         vendor.information.updates.single().succeed()
         val pendingForm = vendor.forms.single()
         assertFalse(ConsentCenter.canRequestAds())
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(8))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(4))
 
         assertEquals(listOf(true), completions)
         assertTrue(ConsentCenter.canRequestAds())

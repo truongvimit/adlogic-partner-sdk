@@ -30,29 +30,6 @@ internal fun defaultNextScreenTiming(
 internal fun remainingMs(deadlineMs: Long?, nowMs: Long): Long =
     ((deadlineMs ?: nowMs) - nowMs).coerceAtLeast(0)
 
-internal fun silentSlotWaitMs(
-    budgetLeftMs: Long,
-    interLoadedAtMs: Long?,
-    promptAnsweredAtMs: Long?,
-    waitAfterInterMs: Long,
-    nowMs: Long,
-): Long {
-    val loadedAt = interLoadedAtMs ?: return budgetLeftMs
-    val deadline = maxOf(loadedAt, promptAnsweredAtMs ?: loadedAt) + waitAfterInterMs
-    return minOf(budgetLeftMs, remainingMs(deadline, nowMs))
-}
-
-internal fun slotHoldMs(
-    minVisibleMs: Long,
-    slotLoadedAtMs: Long,
-    focusedAtMs: Long,
-    budgetLeftMs: Long,
-    nowMs: Long,
-): Long {
-    val onScreenSince = maxOf(slotLoadedAtMs, focusedAtMs)
-    return minOf(minVisibleMs - (nowMs - onScreenSince), budgetLeftMs).coerceAtLeast(0)
-}
-
 internal fun minDisplayLeftMs(minDisplayMs: Long, adPhaseStartedAtMs: Long, nowMs: Long): Long {
     val target = minDisplayMs.coerceAtLeast(0)
     return (target - (nowMs - adPhaseStartedAtMs)).coerceIn(0, target)

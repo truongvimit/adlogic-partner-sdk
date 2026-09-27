@@ -60,18 +60,18 @@ class SplashOrderingDeviceTest {
     @Test fun splashOrderingAcrossActualAndroidLifecycle() {
         val args = InstrumentationRegistry.getArguments()
         val case = args.getString("splashCase") ?: "success"
-        require(case in setOf("success", "failure", "timeout", "late_fill", "banner_budget", "recreate", "mode_freeze", "rotate",
+        require(case in setOf("success", "failure", "timeout", "late_fill", "banner_budget", "recreate", "mode_refresh", "rotate",
             "inter_off", "no_unit", "premium", "master_off", "consent_denied", "same_time", "other_route",
-            "home_pending", "home_expired", "under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate", "native_ready", "native_loading", "native_failed"))
+            "home_pending", "home_expired", "under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate", "native_ready", "native_loading", "native_failed", "silent_banner", "remote_pending"))
         val parallel = args.getString("lfoParallel") == "true"
         f.flags = RemoteFlags(splashLfoParallelPreloadEnabled = parallel, splashMinDisplayMs = 200,
-            splashAdBudgetMs = 3_000, splashSlotMinVisibleMs = if (case == "banner_budget") 2_200 else 0,
+            splashAdBudgetMs = 3_000, splashSlotMinVisibleMs = if (case == "silent_banner") 60_000 else if (case == "banner_budget") 2_200 else 0,
             adsSplashInter = case != "inter_off", enableAllAds = case != "master_off")
         f.nativeBehavior = case.takeIf { it.startsWith("native_") }
         f.premium = case == "premium"
         f.consentAllowed = case != "consent_denied"
         f.immediate = case == "same_time"
-        f.bannerPending = case == "banner_budget"
+        f.bannerPending = case in setOf("banner_budget", "silent_banner")
         f.realPresentation = case in setOf("under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate")
         f.afterAd = case in setOf("after_ad", "after_ad_recreate")
         if (f.realPresentation && case != "under_ad_slow") f.flags = f.flags.copy(splashMinDisplayMs = 5_000)
@@ -87,6 +87,7 @@ class SplashOrderingDeviceTest {
                     if (it is AnalyticsEvent.SplashCompleted) f.handoffs.incrementAndGet()
                 })
             }
+            OnboardingSdk.remoteOrNull()?.applySnapshot(f.flags)
             OnboardingSdk.configure(onboardKitConfig {
                 splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = false,
                     remoteFetchTimeoutMs = 100, minDisplayTimeMs = 0,
@@ -103,6 +104,17 @@ class SplashOrderingDeviceTest {
             OnboardingSdk.reset()
             if (case == "other_route") OnboardingSdk.markCompleted()
         }
+        val remoteResult = kotlinx.coroutines.CompletableDeferred<Unit>()
+        if (case == "remote_pending") com.ads.module.config.AdConfig.install(
+            object : com.ads.module.config.AdConfigSource, com.ads.module.config.settings.SettingsConfigSource {
+                override val id = "device-delayed-remote"
+                override suspend fun fetch(timeoutMs: Long): String? = null
+                override suspend fun fetchSettings(timeoutMs: Long): Map<String, String?> {
+                    remoteResult.await()
+                    return mapOf("onboarding_config" to """{"lfo":{"tap_hint":{"enabled":false}}}""")
+                }
+            },
+        )
         try {
             ActivityScenario.launch<OrderingSplashDeviceActivity>(Intent(app, OrderingSplashDeviceActivity::class.java)).use { scenario ->
                 lateinit var host: OrderingSplashDeviceActivity
@@ -129,8 +141,8 @@ class SplashOrderingDeviceTest {
                 else assertEquals(0, f.splashLfo.get())
                 assertEquals("OB1/LFO2 must not be pulled into the early request phase", emptyList<String>(), f.splashOther.toList())
 
-                if (case in setOf("recreate", "mode_freeze", "rotate")) {
-                    if (case == "mode_freeze") onMain {
+                if (case in setOf("recreate", "mode_refresh", "rotate")) {
+                    if (case == "mode_refresh") onMain {
                         f.flags = f.flags.copy(splashLfoParallelPreloadEnabled = !parallel)
                         OnboardingSdk.remoteOrNull()?.applySnapshot(f.flags)
                     }
@@ -143,7 +155,7 @@ class SplashOrderingDeviceTest {
                     assertEquals(2, f.creates.get())
                     assertEquals(1, f.remoteHooks.get())
                     assertEquals(1, f.interLoads.get())
-                    assertEquals(if (parallel) 1 else 0, f.splashLfo.get())
+                    assertEquals(if (parallel || case == "mode_refresh") 1 else 0, f.splashLfo.get())
                 }
                 when (case) {
                     "home_pending", "home_expired" -> {
@@ -193,6 +205,19 @@ class SplashOrderingDeviceTest {
                     onMain { f.ad?.finish(); f.presentation?.onAdClosed() }
                 }
                 eventually("Exactly one handoff") { f.handoffs.get() == 1 }
+                if (case == "silent_banner") {
+                    assertTrue("Ready inter ignores the 60-second slot minimum",
+                        SystemClock.elapsedRealtime() - f.requestAt < 2_500)
+                }
+                if (case == "remote_pending") {
+                    assertEquals("Remote is still pending after splash handoff", 0, f.remoteHooks.get())
+                    scenario.close()
+                    remoteResult.complete(Unit)
+                    eventually("Remote settings apply after splash destruction") {
+                        onMain { !OnboardingSdk.requireConfig().language.tapHintEnabled }
+                    }
+                    assertEquals("No callback into a dead Activity", 0, f.remoteHooks.get())
+                }
                 val noShow = case in setOf("failure", "timeout", "late_fill", "banner_budget", "home_expired")
                 assertEquals(if (noShow) 0 else 1, f.shows.get())
                 assertEquals(if (case == "other_route") 0 else 1, f.splashLfo.get())
@@ -225,6 +250,7 @@ class SplashOrderingDeviceTest {
                 assertTrue(f.violations.toString(), f.violations.isEmpty())
             }
         } finally {
+            remoteResult.complete(Unit)
             onMain { f.ad?.finish(); f.presentation?.onAdClosed(); ConsentCenter.clearHostConsent() }
         }
     }
@@ -261,7 +287,6 @@ class OrderingSplashDeviceActivity : ObSplashActivity() {
     }
     override fun onRemoteFetched() {
         OrderingFixture.remoteHooks.incrementAndGet()
-        OnboardingSdk.remoteOrNull()?.applySnapshot(OrderingFixture.flags)
     }
     override fun nextScreenTiming() = if (OrderingFixture.afterAd) NextScreenTiming.AFTER_AD else NextScreenTiming.UNDER_AD
 }

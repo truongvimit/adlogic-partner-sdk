@@ -46,6 +46,7 @@ import kotlinx.coroutines.runBlocking
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -83,7 +84,7 @@ class SplashLongPromptTest {
                 override suspend fun shouldShow(placement: PaywallPlacement) = LongPromptFixture.paywallEnabled
                 override suspend fun present(activity: Activity, placement: PaywallPlacement): PaywallOutcome {
                     LongPromptFixture.paywallCalls++
-                    return PaywallOutcome.ContinueWithAds
+                    return LongPromptFixture.paywallWait?.await() ?: PaywallOutcome.ContinueWithAds
                 }
             }
             trackkitAutoTracking(false)
@@ -101,6 +102,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.presentation?.onAdClosed()
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.reset(app)
+        org.robolectric.util.ReflectionHelpers.getField<kotlinx.coroutines.Deferred<Unit>?>(OnboardingSdk, "remoteRefresh")?.cancel()
         org.robolectric.util.ReflectionHelpers.setField(com.ads.module.config.AdConfig, "source", null)
         com.ads.module.config.AdRemoteConfig.reset()
         main.idle()
@@ -158,34 +160,52 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun consentFinishingFirstStillWaitsForRemoteBeforeUpdateDecision() {
-        LongPromptFixture.remoteTimeoutMs = 60_000
+    fun consentFinishingStartsBothAdsWhileRemoteIsPending() {
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = false)
-        drainUntil("UMP finishes while remote is still pending") {
-            LongPromptFixture.remoteEntered && LongPromptFixture.ump.allowed
+        drainUntil("Consent releases both splash requests without remote") {
+            LongPromptFixture.remoteEntered && LongPromptFixture.provider.interstitialLoads == 1
         }
-        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
-        assertEquals(0, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(1, LongPromptFixture.provider.bannerLoads)
+        assertFalse(LongPromptFixture.remoteWait!!.isCompleted)
+        assertFalse(LongPromptFixture.remoteHookCalled)
+        completeInterstitialAndAssertNormalHandoff()
+    }
+
+    @Test
+    fun lateRemotePolicyBlocksPresentationWithoutHoldingInitialRequests() {
+        LongPromptFixture.remoteWait = CompletableDeferred()
+        launch(notification = false)
+        drainUntil("Consent releases loads") { LongPromptFixture.provider.pending != null }
+        LongPromptFixture.updateConfig = mandatoryUpdate()
         LongPromptFixture.remoteWait!!.complete(Unit)
+        drainUntil("Remote hook receives the late policy") { LongPromptFixture.remoteHookCalled }
+        loadInterstitialNow()
+        main.idleFor(Duration.ofSeconds(4))
         reachUpdateBoundary()
+        assertEquals(1, LongPromptFixture.provider.bannerLoads)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun remoteTimeoutWithDisabledPolicyContinuesWithoutAnUpdateDialog() {
+    fun requiredUpdateArrivingDuringPaywallStillBlocksTheInterstitial() {
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = mandatoryUpdate().copy(enabled = false)
+        LongPromptFixture.paywallEnabled = true
+        LongPromptFixture.paywallWait = CompletableDeferred()
         launch(notification = false)
-        drainUntil("Remote fetch starts") { LongPromptFixture.remoteEntered }
-        main.idleFor(Duration.ofSeconds(1))
-        drainUntil("Remote deadline releases disabled update policy") {
-            LongPromptFixture.provider.interstitialLoads == 1
-        }
-        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
-        assertEquals(true, LongPromptFixture.remoteHookCalled)
-        completeInterstitialAndAssertNormalHandoff()
+        drainUntil("Inter request starts") { LongPromptFixture.provider.pending != null }
+        loadInterstitialNow()
+        main.idleFor(Duration.ofSeconds(4))
+        drainUntil("Paywall holds presentation") { LongPromptFixture.paywallCalls == 1 }
+        LongPromptFixture.updateConfig = mandatoryUpdate()
+        LongPromptFixture.remoteWait!!.complete(Unit)
+        drainUntil("Remote policy applies before paywall closes") { LongPromptFixture.remoteHookCalled }
+        LongPromptFixture.paywallWait!!.complete(PaywallOutcome.ContinueWithAds)
+        reachUpdateBoundary()
+        assertTrue("show" !in LongPromptFixture.provider.order)
+        assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
@@ -209,31 +229,18 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun sameTimeWaitsForRemoteAndSendsZeroRequestsWhenForceUpdateIsRequired() {
+    fun sameTimeDoesNotWaitForRemoteBeforeRequestsOrNotification() {
         LongPromptFixture.strategy = io.onboardkit.config.AdLoadStrategy.SAME_TIME
-        LongPromptFixture.remoteTimeoutMs = 60_000
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = mandatoryUpdate()
         launch(notification = true)
         val host = requireNotNull(controller).get()
-        drainUntil("Consent and billing still overlap pending remote") {
-            LongPromptFixture.billingEntered && LongPromptFixture.remoteEntered
+        drainUntil("Prompt follows requests while remote is pending") {
+            shadowOf(host).lastRequestedPermission != null
         }
-        assertEquals("Remote decides whether the prompt shows, so it waits for the fetch",
-            null, shadowOf(host).lastRequestedPermission)
-        assertNoUpdateAdRequests()
-        assertEquals(false, LongPromptFixture.remoteHookCalled)
-        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
-        LongPromptFixture.remoteWait!!.complete(Unit)
-        drainUntil("The prompt follows the fetch") { shadowOf(host).lastRequestedPermission != null }
-        val permission = requireNotNull(shadowOf(host).lastRequestedPermission)
-        host.onRequestPermissionsResult(permission.requestCode, permission.requestedPermissions,
-            IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
-        reachUpdateBoundary()
-        main.idleFor(Duration.ofSeconds(60))
-        assertNoUpdateAdRequests()
-        assertTrue("show" !in LongPromptFixture.provider.order)
-        assertEquals(0, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
+        assertEquals(1, LongPromptFixture.provider.bannerLoads)
+        assertFalse(LongPromptFixture.remoteHookCalled)
+        assertFalse(LongPromptFixture.remoteWait!!.isCompleted)
     }
 
     @Test
@@ -245,10 +252,11 @@ class SplashLongPromptTest {
         assertEquals(0, LongPromptFixture.provider.bannerLoads)
         assertEquals(true, LongPromptFixture.billingEntered)
         assertEquals(true, LongPromptFixture.ump.allowed)
-        assertEquals(false, LongPromptFixture.remoteHookCalled)
         assertNoUpdateAdRequests()
         assertTrue("show" !in LongPromptFixture.provider.order)
         assertEquals(0, LongPromptFixture.flowStarts)
+        drainUntil("Remote observer settles") { LongPromptFixture.remoteHookCalled }
+        val readsBeforeRecreation = LongPromptFixture.updateReads
         val previous = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
         requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
         main.idle()
@@ -259,32 +267,29 @@ class SplashLongPromptTest {
         requireNotNull(controller).recreate().visible().get().onWindowFocusChanged(true)
         main.idle()
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing)
-        assertEquals(1, LongPromptFixture.updateReads)
+        assertEquals(readsBeforeRecreation, LongPromptFixture.updateReads)
         assertEquals(0, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun lateRemoteAppliesOnNextLaunchWithoutDelayingCurrentMinimum() {
+    fun remoteAppliesAfterSplashIsDestroyedWithoutCallingItsHook() {
         LongPromptFixture.remoteWait = CompletableDeferred()
-        LongPromptFixture.updateConfig = null
+        LongPromptFixture.remoteSettings = mapOf("onboarding_config" to
+            """{"lfo":{"tap_hint":{"enabled":false}}}""")
         launch(notification = false)
-        drainUntil("Remote starts") { LongPromptFixture.remoteEntered }
-        main.idleFor(Duration.ofSeconds(1))
-        drainUntil("Timeout releases normal loads") { LongPromptFixture.provider.pending != null }
-        LongPromptFixture.updateConfig = mandatoryUpdate() // Arrived after this attempt's snapshot.
+        drainUntil("Fetch and requests start") {
+            LongPromptFixture.remoteEntered && LongPromptFixture.provider.pending != null
+        }
+        assertTrue(OnboardingSdk.requireConfig().language.tapHintEnabled)
         completeInterstitialAndAssertNormalHandoff()
-        assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
-        assertEquals(1, LongPromptFixture.updateReads)
-        // A genuinely new launch (not recreation) captures the newly fetched/activated policy.
         requireNotNull(controller).pause().stop().destroy()
-        LongPromptFixture.remoteWait = null
-        LongPromptFixture.provider.pending = null
-        val previousLoads = LongPromptFixture.provider.interstitialLoads
-        launch(notification = false)
-        reachUpdateBoundary()
-        assertEquals(previousLoads, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(2, LongPromptFixture.updateReads)
-        assertEquals(1, LongPromptFixture.flowStarts)
+        controller = null
+        LongPromptFixture.remoteWait!!.complete(Unit)
+        drainUntil("SDK applies late settings after splash destruction") {
+            !OnboardingSdk.requireConfig().language.tapHintEnabled
+        }
+        assertFalse(LongPromptFixture.remoteHookCalled)
+        assertEquals(1, LongPromptFixture.provider.interstitialLoads)
     }
 
     @Test
@@ -297,12 +302,13 @@ class SplashLongPromptTest {
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         main.idleFor(Duration.ofSeconds(4))
         drainUntil("Ad is open") { LongPromptFixture.provider.presentation != null }
+        val readsBeforeAd = LongPromptFixture.updateReads
         LongPromptFixture.updateConfig = mandatoryUpdate()
         requireNotNull(LongPromptFixture.provider.presentation).onNextAction()
         main.idle()
         assertEquals(1, LongPromptFixture.flowStarts)
         assertEquals(null, org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
-        assertEquals(1, LongPromptFixture.updateReads)
+        assertEquals(readsBeforeAd, LongPromptFixture.updateReads)
     }
 
     @Test
@@ -444,26 +450,21 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun homeDuringBillingDefersFreshSplashRequestsUntilResumeAndFocus() {
+    fun billingDoesNotHoldRequestsAndHomeStillDefersPresentation() {
         LongPromptFixture.billing = CompletableDeferred()
         launch(notification = false)
-        drainUntil("The real billing hook must be waiting") { LongPromptFixture.billingEntered }
+        drainUntil("Requests need no billing completion") { LongPromptFixture.provider.pending != null }
+        assertTrue(LongPromptFixture.billingEntered)
+        assertFalse(LongPromptFixture.billing!!.isCompleted)
         val host = requireNotNull(controller).get()
         host.onWindowFocusChanged(false)
         requireNotNull(controller).pause().stop()
-
-        requireNotNull(LongPromptFixture.billing).complete(Unit)
-        drainUntil("Pipeline must leave billing and reach the remote hook") { LongPromptFixture.remoteHookCalled }
-        main.idleFor(Duration.ofSeconds(4))
-        assertEquals("Home while billing must not dispatch the banner", 0, LongPromptFixture.provider.bannerLoads)
-        assertEquals("Home while billing must not dispatch the interstitial", 0, LongPromptFixture.provider.interstitialLoads)
-        assertEquals(0, LongPromptFixture.flowStarts)
-        assertTrue(LongPromptFixture.provider.order.isEmpty())
-
-        requireNotNull(controller).restart().start().resume().visible()
+        loadInterstitialNow()
+        main.idleFor(Duration.ofSeconds(6))
+        assertTrue("show" !in LongPromptFixture.provider.order)
+        requireNotNull(controller).start().resume().visible()
         host.onWindowFocusChanged(true)
-        drainUntil("Returning focus must release the normal splash load pair") { LongPromptFixture.provider.interstitialLoads == 1 }
-        completeInterstitialAndAssertNormalHandoff()
+        drainUntil("A ready interstitial shows after returning") { "show" in LongPromptFixture.provider.order }
     }
 
     @Test
@@ -642,32 +643,28 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun aSilentSlotGetsTenSecondsCountedFromTheInterstitialLoad() {
+    fun aLoadedInterstitialDoesNotWaitForASilentBanner() {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
-        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-        // Well past ten seconds of splash, so a clock started anywhere but the load would fire at once.
+        drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
         main.idleFor(Duration.ofSeconds(15))
-        assertEquals(0, LongPromptFixture.flowStarts)
-        val loadedAt = loadInterstitialNow()
-        idleUntil(loadedAt + 9_500)
-        assertEquals("A silent slot still has its ten seconds", listOf("native"), LongPromptFixture.provider.order)
-        idleUntil(loadedAt + 10_500)
-        assertEquals("Not the 60s ad budget", listOf("native", "show"), LongPromptFixture.provider.order)
+        loadInterstitialNow()
+        main.idle()
+        assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
         assertEquals(1, LongPromptFixture.flowStarts)
     }
 
     @Test
-    fun remoteSlotWaitAfterInterOutranksTheBundledTen() {
-        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"timing":{"slot_wait_after_inter_ms":5000}}}""")
+    fun remoteSlotTimersCannotHoldAReadyInterstitial() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"splash":{"timing":{"slot_wait_after_inter_ms":60000,"slot_min_visible_ms":60000}}}""")
         try {
             LongPromptFixture.provider.settleBanner = false
             launch(notification = false)
-            drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
-            val loadedAt = loadInterstitialNow()
-            idleUntil(loadedAt + 4_500)
-            assertEquals(listOf("native"), LongPromptFixture.provider.order)
-            idleUntil(loadedAt + 5_500)
+            drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
+            main.idleFor(Duration.ofSeconds(4))
+            loadInterstitialNow()
+            main.idle()
             assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
         } finally {
             io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
@@ -675,15 +672,13 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun aSilentSlotWithAFailedInterstitialStillRunsTheSplashBudget() {
+    fun aFailedInterstitialLeavesWithoutWaitingForASilentSlot() {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = false)
-        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        drainUntil("Inter starts") { LongPromptFixture.provider.pending != null }
         requireNotNull(LongPromptFixture.provider.pending).onFailedToLoad()
-        main.idleFor(Duration.ofSeconds(20))
-        assertEquals("The ten seconds belong to a loaded interstitial only", 0, LongPromptFixture.flowStarts)
-        main.idleFor(Duration.ofSeconds(45))
-        assertEquals("The splash budget still ends the wait", 1, LongPromptFixture.flowStarts)
+        main.idleFor(Duration.ofSeconds(4))
+        assertEquals(1, LongPromptFixture.flowStarts)
         assertEquals(listOf("native"), LongPromptFixture.provider.order)
     }
 
@@ -700,7 +695,7 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun aSilentSlotsTenSecondsAlsoWaitForThePromptToClose() {
+    fun aReadyInterstitialWaitsForThePromptButNotTheSilentSlot() {
         LongPromptFixture.provider.settleBanner = false
         launch(notification = true)
         val host = requireNotNull(controller).get()
@@ -715,14 +710,13 @@ class SplashLongPromptTest {
             IntArray(permission.requestedPermissions.size) { PackageManager.PERMISSION_DENIED })
         val closedAt = SystemClock.elapsedRealtime()
         host.onWindowFocusChanged(true)
-        idleUntil(closedAt + 9_500)
-        assertEquals("Ten seconds from the prompt closing, not from the load", listOf("native"), LongPromptFixture.provider.order)
-        idleUntil(closedAt + 10_500)
+        assertEquals(listOf("native"), LongPromptFixture.provider.order)
+        idleUntil(closedAt + 900)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
     }
 
     @Test
-    fun slotAndInterstitialFilledUnderThePromptStillGiveTheSlotItsMinimum() {
+    fun aFilledSlotAddsNoHoldAfterNotification() {
         LongPromptFixture.provider.fillBanner = true
         launch(notification = true)
         val host = requireNotNull(controller).get()
@@ -738,8 +732,6 @@ class SplashLongPromptTest {
         val closedAt = SystemClock.elapsedRealtime()
         host.onWindowFocusChanged(true)
         idleUntil(closedAt + 900)
-        assertEquals("The slot gets its full second in front of the user", listOf("native"), LongPromptFixture.provider.order)
-        idleUntil(closedAt + 1_200)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
     }
 
@@ -763,7 +755,7 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun aSilentNativeSlotGetsTheSameTenSecondsAfterTheInterstitialLoads() {
+    fun aLoadedInterstitialDoesNotWaitForASilentNativeSlot() {
         io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"ads":{"slot_format":"NATIVE"}}}""")
         try {
             launch(notification = false)
@@ -771,9 +763,7 @@ class SplashLongPromptTest {
             assertEquals(listOf(AdPlacement.SplashInlineNative), LongPromptFixture.provider.nativeRequests)
             main.idleFor(Duration.ofSeconds(15))
             val loadedAt = loadInterstitialNow()
-            idleUntil(loadedAt + 9_500)
-            assertTrue("A silent native slot still has its ten seconds", "show" !in LongPromptFixture.provider.order)
-            idleUntil(loadedAt + 10_500)
+            idleUntil(loadedAt + 100)
             assertTrue("Not the 60s ad budget", "show" in LongPromptFixture.provider.order)
             assertEquals(1, LongPromptFixture.flowStarts)
         } finally {
@@ -782,7 +772,7 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun bannerThatFailsThenReloadsStillHoldsTheInterstitial() {
+    fun aBannerReloadDoesNotHoldTheInterstitial() {
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashSlotMinVisibleMs = 4_000)
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
@@ -790,9 +780,7 @@ class SplashLongPromptTest {
         val reloadedAt = SystemClock.elapsedRealtime()
         requireNotNull(LongPromptFixture.provider.bannerListener).onLoaded()
         loadInterstitialNow()
-        idleUntil(reloadedAt + 3_800)
-        assertEquals("A fill after the failure still gets its minimum", listOf("native"), LongPromptFixture.provider.order)
-        idleUntil(reloadedAt + 4_300)
+        idleUntil(reloadedAt + 100)
         assertEquals(listOf("native", "show"), LongPromptFixture.provider.order)
     }
 
@@ -1154,11 +1142,12 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun recreationKeepsTheOriginalModeAndPendingInterstitialRequest() {
+    fun recreationReadsNewFlagsWithoutRepeatingTheInterstitialRequest() {
         launch(notification = false)
         drainUntil("Inter must be in flight") { LongPromptFixture.provider.interstitialLoads == 1 }
         val pending = requireNotNull(LongPromptFixture.provider.pending)
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        OnboardingSdk.remoteOrNull()?.applySnapshot(LongPromptFixture.flags)
         requireNotNull(controller).configurationChange(android.content.res.Configuration(
             requireNotNull(controller).get().resources.configuration).apply { fontScale += 0.1f })
         requireNotNull(controller).visible().get().onWindowFocusChanged(true)
@@ -1171,7 +1160,7 @@ class SplashLongPromptTest {
         )
         assertTrue(bar.isShown)
         assertEquals("Recreation must rejoin the original request", 1, LongPromptFixture.provider.interstitialLoads)
-        assertTrue("A late remote mode cannot turn this sequential attempt into parallel", LongPromptFixture.provider.order.isEmpty())
+        drainUntil("Recreation reads the current preload mode") { "native" in LongPromptFixture.provider.order }
         LongPromptFixture.provider.ready = true
         pending.onLoaded()
         drainUntil("The retained callback must release LFO1") { "native" in LongPromptFixture.provider.order }
@@ -1506,13 +1495,15 @@ class SplashLongPromptTest {
     }
 
     private fun launch(notification: Boolean, entry: SplashEntry? = null) {
-        if (LongPromptFixture.remoteWait != null) com.ads.module.config.AdConfig.install(
+        OnboardingSdk.remoteOrNull()?.applySnapshot(LongPromptFixture.flags)
+        val remoteWait = LongPromptFixture.remoteWait
+        if (remoteWait != null) com.ads.module.config.AdConfig.install(
             object : com.ads.module.config.AdConfigSource, com.ads.module.config.settings.SettingsConfigSource {
                 override val id = "update-test"
                 override suspend fun fetchSettings(timeoutMs: Long): Map<String, String?> {
                     LongPromptFixture.remoteEntered = true
-                    LongPromptFixture.remoteWait?.await()
-                    return emptyMap()
+                    remoteWait.await()
+                    return LongPromptFixture.remoteSettings
                 }
                 override suspend fun fetch(timeoutMs: Long): String? = null
             },
@@ -1577,7 +1568,6 @@ class LongPromptSplashActivity : ObSplashActivity() {
         LongPromptFixture.billing?.await()
     }
     override fun onRemoteFetched() {
-        OnboardingSdk.remoteOrNull()?.applySnapshot(LongPromptFixture.flags)
         LongPromptFixture.remoteHookCalled = true
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1605,6 +1595,7 @@ class LongPromptSplashActivity : ObSplashActivity() {
 private object LongPromptFixture {
     var updateConfig: com.ads.module.update.ForceUpdateConfig? = null
     var remoteWait: CompletableDeferred<Unit>? = null
+    var remoteSettings: Map<String, String?> = emptyMap()
     var remoteEntered = false
     var remoteTimeoutMs = 100L
     var updateReads = 0
@@ -1616,6 +1607,7 @@ private object LongPromptFixture {
     var offlineGate = false
     var paywallEnabled = false
     var paywallCalls = 0
+    var paywallWait: CompletableDeferred<PaywallOutcome>? = null
     var timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
     var useDefaultTiming = false
     val timingAskedIn = mutableListOf<Lifecycle.State>()
@@ -1632,6 +1624,7 @@ private object LongPromptFixture {
         })
         updateConfig = null
         remoteWait = null
+        remoteSettings = emptyMap()
         remoteEntered = false
         remoteTimeoutMs = 100L
         updateReads = 0
@@ -1649,6 +1642,7 @@ private object LongPromptFixture {
         provider.clearNatives()
         paywallEnabled = false
         paywallCalls = 0
+        paywallWait = null
         timing = io.onboardkit.ads.NextScreenTiming.UNDER_AD
         useDefaultTiming = false
         timingAskedIn.clear()

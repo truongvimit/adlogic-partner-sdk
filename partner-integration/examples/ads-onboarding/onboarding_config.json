@@ -30,7 +30,7 @@
       "ad_strategy": "ALTERNATE",
       "lfo1_preload_mode": "SEQUENTIAL",
       "remote_fetch_timeout_ms": 10000,
-      "consent_hook_timeout_ms": 20000,
+      "consent_hook_timeout_ms": 10000,
       "billing_timeout_ms": 5000
     },
     "permissions": {

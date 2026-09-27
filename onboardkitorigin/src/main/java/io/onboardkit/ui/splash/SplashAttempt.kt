@@ -8,7 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.flow.StartDecision
-import io.onboardkit.remote.RemoteFlags
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,17 +27,13 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var billingResolved = false
     var updateConfig: ForceUpdateConfig? = null
     var updateGatePassed = false
-    var flags: RemoteFlags? = null
+    var remoteRefresh: Deferred<Unit>? = null
+    var remoteHookResolved = false
     var startDecision: StartDecision? = null
     var returningUser: Boolean? = null
     var adPhaseStartedAtMs: Long? = null
     val preloadsRequested = mutableSetOf<AdPlacement>()
-    val slotSettled = CompletableDeferred<Unit>()
-
-    // Fill time, not impression: a collapsible banner never reports one.
-    var slotLoadedAtMs: Long? = null
     val interstitialSettled = CompletableDeferred<InterResult>()
-    var interLoadedAtMs: Long? = null
     var budgetDeadlineMs: Long? = null
     private val _prompt = MutableStateFlow<SplashPrompt>(SplashPrompt.NotAsked)
     val prompt: StateFlow<SplashPrompt> = _prompt.asStateFlow()
@@ -70,11 +66,6 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
         allowAdRequests()
     }
 
-    fun markSlotLoaded() {
-        if (slotLoadedAtMs == null) slotLoadedAtMs = SystemClock.elapsedRealtime()
-        slotSettled.complete(Unit)
-    }
-
     @OptIn(ExperimentalCoroutinesApi::class)
     fun settledInterOrNull(): InterResult? =
         if (interstitialSettled.isCompleted) interstitialSettled.getCompleted() else null
@@ -84,9 +75,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
         val now = SystemClock.elapsedRealtime()
         val expired = budgetDeadlineMs?.let { now >= it } == true
         val settled = if (expired) InterResult.TIMED_OUT else result
-        if (settled == InterResult.LOADED) interLoadedAtMs = now
-        // Before complete(), whose awaiter at once reads interLoadedAtMs and preloadsRequested.
-        host.get()?.takeUnless { it.isDestroyed }?.requestSplashPreloads(settled)
+        // Queue preloads before completing the result and waking the presentation path.
+        host.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.requestSplashPreloads(settled)
         interstitialSettled.complete(settled)
     }
 

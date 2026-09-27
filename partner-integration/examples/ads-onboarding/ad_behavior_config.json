@@ -5,7 +5,7 @@
     "ads_enabled": true
   },
   "consent": {
-    "network_timeout_ms": 20000
+    "network_timeout_ms": 10000
   },
   "diagnostics": {
     "flow_logging_enabled": true,

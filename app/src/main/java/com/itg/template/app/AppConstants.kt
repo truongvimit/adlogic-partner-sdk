@@ -5,7 +5,7 @@ object AppConstants {
 
     const val KEY_SET_SHOW_DIALOG_RATE: String = "key_set_show_dialod_rate"
     const val DEFAULT_TIME_SPLASH: Long = 6500          //TODO /* Dont change this value*/
-    const val DEFAULT_TIME_OUT_GDPR: Long = 20000//TODO /* Just use in EU */
+    const val DEFAULT_TIME_OUT_GDPR: Long = 10000//TODO /* Just use in EU */
     const val DEFAULT_LIMIT_TIME_SPLASH: Long = 5000   //TODO /* Dont change this value*/
 
     internal const val KEY_TRACKING_SCREEN_FROM = "key_tracking_screen_from"

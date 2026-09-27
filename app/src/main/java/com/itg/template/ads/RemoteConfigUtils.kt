@@ -67,14 +67,7 @@ object RemoteConfigUtils {
         fun loadSuccess()
     }
 
-    /**
-     * Private and nullable, not a public `lateinit`.
-     *
-     * [Listener] is implemented by the launcher Activity, and this is a process-wide `object`: a
-     * strong field here kept that Activity — its whole view tree and any ad it held — alive for
-     * the life of the process. The reference is dropped the moment it fires, and [detach] lets a
-     * screen that dies before the fetch lands release it early.
-     */
+    /** One-shot callback; process-owned integrations can outlive the launcher Activity. */
     private var listener: Listener? = null
 
     /** Lazy, not `lateinit`: a getter reached before [init] would otherwise throw. */

@@ -31,13 +31,11 @@ class SplashAttemptTest {
         attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() - 1
         attempt.onInterResult(InterResult.LOADED)
         assertEquals(InterResult.TIMED_OUT, runBlocking { attempt.interstitialSettled.await() })
-        assertNull("A late fill never counts as loaded", attempt.interLoadedAtMs)
     }
 
-    @Test fun `a fill before the deadline settles as loaded and stamps its time`() {
+    @Test fun `a fill before the deadline settles as loaded`() {
         attempt.budgetDeadlineMs = SystemClock.elapsedRealtime() + 1
         attempt.onInterResult(InterResult.LOADED)
         assertEquals(InterResult.LOADED, runBlocking { attempt.interstitialSettled.await() })
-        assertEquals(SystemClock.elapsedRealtime(), attempt.interLoadedAtMs)
     }
 }
