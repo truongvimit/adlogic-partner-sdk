@@ -68,6 +68,7 @@ class SplashNativeActivityTest {
     @After fun cleanup() {
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.clearHostConsent()
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
         org.robolectric.util.ReflectionHelpers.setField(OnboardingSdk, "application", null)
         main.idle()
     }
@@ -108,13 +109,17 @@ class SplashNativeActivityTest {
         assertEquals(0, loads)
     }
 
-    @Test fun `auto dismiss pauses while another screen is on top`() {
+    @Test fun `filled native never auto dismisses even with a legacy remote timeout`() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"splash":{"native":{"auto_dismiss_ms":5000}}}""")
         val host = launch()
         requireNotNull(controller).pause().stop()
         main.idleFor(Duration.ofSeconds(30))
         assertFalse(host.isFinishing)
         requireNotNull(controller).restart().start().resume()
-        main.idleFor(Duration.ofSeconds(15))
+        main.idleFor(Duration.ofSeconds(60))
+        assertFalse(host.isFinishing)
+        host.findViewById<View>(R.id.ob_skip_button).performClick()
         assertTrue(host.isFinishing)
     }
 }

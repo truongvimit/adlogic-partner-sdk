@@ -24,7 +24,7 @@ internal fun ComponentActivity.showNativeAd(
     onUnavailable: (AdSkipReason) -> Unit = {},
     onAdEngaged: (NativeClickAction) -> Unit = {},
     reuseFailedPreload: Boolean = false,
-    bufferedOnly: Boolean = false,
+    preloadedOnly: Boolean = false,
 ) {
     val provider = OnboardingSdk.provider()
     if (provider == null || unit == null) {
@@ -41,7 +41,10 @@ internal fun ComponentActivity.showNativeAd(
     val unavailable = ResumedDelivery(container.findViewTreeLifecycleOwner() ?: this)
     val tracked = placement.tracked(
         object : AdEventListener {
-            override fun onLoaded() = onMainThread { onBound() }
+            override fun onLoaded() = onMainThread {
+                skeleton?.stopShimmer()
+                onBound()
+            }
 
             override fun onClicked() = onMainThread { onAdEngaged(clickAction()) }
 
@@ -72,7 +75,7 @@ internal fun ComponentActivity.showNativeAd(
         listener.onLoaded()
         return
     }
-    if (bufferedOnly) {
+    if (preloadedOnly && provider.nativeStatus(placement) != NativeStatus.LOADING) {
         placement.reportUnavailable(AdSkipReason.NOT_READY, onUnavailable)
         return
     }
@@ -87,6 +90,8 @@ internal fun ComponentActivity.showNativeAd(
         container.visibility = View.VISIBLE
         it.startShimmer()
     }
+    // bindNative already subscribed to the pending preload; never start or retry a request here.
+    if (preloadedOnly) return
     if (!OnboardingSdk.preload().requestNativeOnce(this, request)) {
         skeleton.stopShimmer()
         placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)

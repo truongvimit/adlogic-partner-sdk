@@ -343,6 +343,33 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun pendingSplashNativeOpensToWaitWithoutAnotherPreloadAndBlocksLfo() {
+        LongPromptFixture.nativeConfigured = true
+        LongPromptFixture.provider.nativeReady = false
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+        assertTrue(LongPromptFixture.provider.nativeRequests.isEmpty())
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        main.idle()
+        assertEquals(setOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests.toSet())
+        idleFrames(Duration.ofSeconds(4))
+        assertEquals("An optional splash native prevents UNDER_AD from opening LFO early", 0, LongPromptFixture.flowStarts)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        main.idle()
+        val host = requireNotNull(controller).get()
+        val request = requireNotNull(shadowOf(host).nextStartedActivityForResult)
+        assertEquals(ObSplashNativeActivity::class.java.name, request.intent.component?.className)
+        assertEquals(0, LongPromptFixture.flowStarts)
+        assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), LongPromptFixture.provider.nativeRequests)
+        host.activityResultRegistry.dispatchResult(request.requestCode, Activity.RESULT_OK, null)
+        main.idle()
+        assertEquals(1, LongPromptFixture.flowStarts)
+        assertEquals(1, LongPromptFixture.splashHandoffs)
+    }
+
+    @Test
     fun recreationWhileSplashNativeIsOpenWaitsForOneResultWithoutRelaunch() {
         LongPromptFixture.nativeConfigured = true
         LongPromptFixture.provider.successfulShow = true
@@ -377,6 +404,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         idleFrames(Duration.ofSeconds(4))
+        LongPromptFixture.provider.failedNatives += AdPlacement.SplashNative
         requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
         main.idle()
         assertEquals(1, LongPromptFixture.flowStarts)

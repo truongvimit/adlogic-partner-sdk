@@ -291,7 +291,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `splash.native.skip.delay_ms` | `3000` | Native splash trước LFO.
 | `splash.native.skip.style` | `"CLOSE_ICON"` | Native splash trước LFO.
 | `splash.native.skip.position` | `"RIGHT"` | Native splash trước LFO.
-| `splash.native.auto_dismiss_ms` | `15000` | Native splash trước LFO.
 | `splash.native.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
 | `lfo.native_template` | `"CTA_BOTTOM"` | Preset layout native SDK cho LFO1/LFO2; xem thứ tự ưu tiên template. |
 | `lfo.native1.behavior.click.action` | `"reload"` | Request ad thay thế ngay khi click/open. |
@@ -350,6 +349,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `question.interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `question.selection.mode` | `"MULTIPLE"` | SINGLE/MULTIPLE. |
 | `question.selection.min_count` | `1` | >=1, không vượt số option hợp lệ. |
+
+`native_fs` chờ đúng lượt preload từ splash và hiện shimmer trong lúc chờ; vào màn không tạo request mới. Mặc định nút X hiện sau 3 giây kể từ khi bind ad. Màn không tự chuyển tiếp; key cũ `splash.native.auto_dismiss_ms` không còn tác dụng.
 
 `interstitial.auto_buffer` được chuyển thành nhóm cấp cao nhất `interstitial_auto_buffer`, mặc định `enabled: true`. Cập nhật remote config và asset tùy chỉnh của host sang key mới; SDK không còn đọc key cũ. Nhóm này chỉ điều khiển placements khai báo trong `InterstitialAutoBuffer` hoặc remote `rules`, trừ placements đã reserve. Host vẫn phải gọi `configure()` / `start()`; bật field này không tự khởi động buffer hoặc tự show quảng cáo. Các cấu hình interstitial khác vẫn nằm trong `interstitial`.
 

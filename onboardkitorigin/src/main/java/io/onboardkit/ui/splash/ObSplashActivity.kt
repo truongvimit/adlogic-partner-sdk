@@ -346,8 +346,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
     private suspend fun awaitSplashNativeScreen() {
         if (attempt.nativeScreenResolved) return
         if (!attempt.nativeScreenRequested) {
+            val status = sdk.provider()?.nativeStatus(AdPlacement.SplashNative)
             if (!splashNativeEligible() ||
-                sdk.provider()?.nativeStatus(AdPlacement.SplashNative) != NativeStatus.READY
+                (status != NativeStatus.READY && status != NativeStatus.LOADING)
             ) {
                 sdk.provider()?.releaseNative(AdPlacement.SplashNative)
                 attempt.nativeScreenResolved = true

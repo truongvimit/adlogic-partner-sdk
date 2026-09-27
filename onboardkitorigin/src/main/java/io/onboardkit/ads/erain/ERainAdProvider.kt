@@ -157,7 +157,13 @@ class ERainAdProvider : OnboardingAdProvider() {
             NativeSlot(activity, owner, container, request).also { slots[key] = it }
         }
         slot.refresh()
-        return slot.bind(listener)
+        val bound = slot.bind(listener)
+        // A preload may still be waiting for its old host's focus. Move that existing queue
+        // to the destination; an already-dispatched load keeps its original request/callback.
+        if (!bound && queuedNatives[key]?.let { it.activity !== activity && it.job.isActive } == true) {
+            preloadNative(activity, request)
+        }
+        return bound
     }
 
     override fun releaseNative(placement: AdPlacement) {

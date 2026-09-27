@@ -58,6 +58,7 @@ class SplashNativeBindingTest {
     private lateinit var provider: ERainAdProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
+    private val loadListeners = mutableListOf<AdListener>()
     private val unit = NativeAdUnit("splash-native-binding")
     private val main get() = shadowOf(Looper.getMainLooper())
     private val activity get() = requireNotNull(screen).get()
@@ -77,7 +78,7 @@ class SplashNativeBindingTest {
         builders = mockConstruction(AdLoader.Builder::class.java) { builder, _ ->
             var loaded: NativeAd.OnNativeAdLoadedListener? = null
             doAnswer { loaded = it.getArgument(0); builder }.`when`(builder).forNativeAd(any())
-            doReturn(builder).`when`(builder).withAdListener(any(AdListener::class.java))
+            doAnswer { loadListeners += it.getArgument<AdListener>(0); builder }.`when`(builder).withAdListener(any(AdListener::class.java))
             doReturn(builder).`when`(builder).withNativeAdOptions(any())
             val loader = mock(AdLoader::class.java)
             doReturn(loader).`when`(builder).build()
@@ -151,6 +152,63 @@ class SplashNativeBindingTest {
         verify(ad, never()).destroy()
         main.idleFor(Duration.ofSeconds(3))
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_skip_button).visibility)
+    }
+
+    @Test fun `loading preload waits with shimmer and binds the original request`() {
+        provider.preloadNative(preloadHost.get(), NativeAdRequest(
+            AdPlacement.SplashNative, unit, R.layout.ob_layout_native_fullscreen))
+        assertEquals(NativeStatus.LOADING, provider.nativeStatus(AdPlacement.SplashNative))
+        create()
+        resume()
+        assertFalse(activity.isFinishing)
+        assertEquals(1, requests.size)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_native_container).visibility)
+        main.idleFor(Duration.ofSeconds(5))
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.ob_skip_button).visibility)
+        assertFalse(activity.isFinishing)
+        val ad = mock(NativeAd::class.java)
+        doReturn("Late native").`when`(ad).headline
+        requests.single().onNativeAdLoaded(ad)
+        main.idle()
+        assertBound()
+        main.idleFor(Duration.ofMillis(2_999))
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.ob_skip_button).visibility)
+        main.idleFor(Duration.ofMillis(1))
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_skip_button).visibility)
+        main.idleFor(Duration.ofSeconds(60))
+        assertFalse("Only the user's close action leaves a filled native", activity.isFinishing)
+        assertEquals(1, requests.size)
+        activity.findViewById<View>(R.id.ob_skip_button).performClick()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test fun `queued preload follows the native screen without waiting for the hidden splash`() {
+        preloadHost.pause().stop()
+        provider.preloadNative(preloadHost.get(), NativeAdRequest(
+            AdPlacement.SplashNative, unit, R.layout.ob_layout_native_fullscreen))
+        assertEquals(NativeStatus.LOADING, provider.nativeStatus(AdPlacement.SplashNative))
+        assertTrue(requests.isEmpty())
+        create()
+        resume()
+        requireNotNull(screen).windowFocusChanged(true)
+        main.idle()
+        assertFalse(activity.isFinishing)
+        assertEquals("The existing queued preload dispatches once on the new host", 1, requests.size)
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        main.idle()
+        assertBound()
+    }
+
+    @Test fun `failed preload leaves without retrying the network request`() {
+        provider.preloadNative(preloadHost.get(), NativeAdRequest(
+            AdPlacement.SplashNative, unit, R.layout.ob_layout_native_fullscreen))
+        create()
+        resume()
+        assertFalse(activity.isFinishing)
+        loadListeners.single().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        main.idle()
+        assertTrue(activity.isFinishing)
+        assertEquals(1, requests.size)
     }
 
     @Test fun `configuration recreation restores the consumed fullscreen native`() {

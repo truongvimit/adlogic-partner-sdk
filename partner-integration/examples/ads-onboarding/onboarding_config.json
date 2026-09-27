@@ -46,7 +46,6 @@
         "style": "CLOSE_ICON",
         "position": "RIGHT"
       },
-      "auto_dismiss_ms": 15000,
       "behavior": {
         "click": {
           "action": "reload"

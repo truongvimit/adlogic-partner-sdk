@@ -271,7 +271,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.skip.position` | `"RIGHT"` |
-| `splash.native.auto_dismiss_ms` | `15000` |
 | `splash.native.behavior.click.action` | `"reload"` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
 | `lfo.native1.behavior.click.action` | `"reload"` |
@@ -330,5 +329,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `question.interstitial.behavior` | `{}` |
 | `question.selection.mode` | `"MULTIPLE"` |
 | `question.selection.min_count` | `1` |
+
+`native_fs` मौजूदा splash preload का इंतज़ार करता है और loading के दौरान shimmer दिखाता है; स्क्रीन खोलने पर नया request नहीं होता। डिफ़ॉल्ट रूप से ad bind होने के 3 सेकंड बाद X दिखता है। स्क्रीन अपने आप बंद नहीं होती; पुरानी `splash.native.auto_dismiss_ms` key अनदेखी की जाती है।
 
 `interstitial.auto_buffer` has moved to top-level `interstitial_auto_buffer` (default `enabled: true`). Update remote config and custom host assets to the new key; the old key is no longer read. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.

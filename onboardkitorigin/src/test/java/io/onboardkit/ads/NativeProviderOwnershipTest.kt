@@ -976,7 +976,7 @@ class NativeProviderOwnershipTest {
         val idle = lifecycle.observerCount
         vendorEvents.single().onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
         assertEquals("The failure waits for resume", idle + 1, lifecycle.observerCount)
-        host.showNativeAd(placement, request.unit, container, bufferedOnly = true)
+        host.showNativeAd(placement, request.unit, container, preloadedOnly = true)
         assertEquals(idle, lifecycle.observerCount)
     }
 
