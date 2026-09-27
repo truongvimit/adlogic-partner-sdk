@@ -5,10 +5,14 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
+import androidx.activity.ComponentActivity
+import com.ads.module.helper.Entitlement
+import com.ads.module.helper.EntitlementSource
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
+import android.widget.FrameLayout
 import android.view.ViewGroup
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -23,7 +27,8 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BannerAdUnit
@@ -56,7 +61,7 @@ class SplashOrderingDeviceTest {
         val args = InstrumentationRegistry.getArguments()
         val case = args.getString("splashCase") ?: "success"
         require(case in setOf("success", "failure", "timeout", "late_fill", "banner_budget", "recreate", "mode_freeze", "rotate",
-            "inter_off", "no_unit", "premium", "master_off", "host_off", "consent_denied", "same_time", "other_route",
+            "inter_off", "no_unit", "premium", "master_off", "consent_denied", "same_time", "other_route",
             "home_pending", "home_expired", "under_ad", "under_ad_slow", "under_ad_home", "under_ad_recreate", "after_ad", "after_ad_recreate", "native_ready", "native_loading", "native_failed"))
         val parallel = args.getString("lfoParallel") == "true"
         f.flags = RemoteFlags(splashLfoParallelPreloadEnabled = parallel, splashMinDisplayMs = 200,
@@ -72,6 +77,9 @@ class SplashOrderingDeviceTest {
         if (f.realPresentation && case != "under_ad_slow") f.flags = f.flags.copy(splashMinDisplayMs = 5_000)
         onMain {
             assertFalse("Fresh instrumentation process required", OnboardingSdk.isReady())
+            Entitlement.install(object : EntitlementSource {
+                override fun isPremium(context: Context) = f.premium
+            })
             OnboardingSdk.install(app) {
                 adProvider = f.provider
                 trackkitAutoTracking(false)
@@ -90,7 +98,6 @@ class SplashOrderingDeviceTest {
                     languageNative = NativeAdUnit("device-lfo1"), languageDupNative = NativeAdUnit("device-lfo2"),
                     contentStepNative = NativeAdUnit("device-ob1"))
             }.getOrThrow()).getOrThrow()
-            OnboardingSdk.setCanRequestAds(case != "host_off")
         }
         runBlocking {
             OnboardingSdk.reset()
@@ -100,7 +107,7 @@ class SplashOrderingDeviceTest {
             ActivityScenario.launch<OrderingSplashDeviceActivity>(Intent(app, OrderingSplashDeviceActivity::class.java)).use { scenario ->
                 lateinit var host: OrderingSplashDeviceActivity
                 scenario.onActivity { host = it }
-                val blocked = case in setOf("premium", "master_off", "host_off", "consent_denied")
+                val blocked = case in setOf("premium", "master_off", "consent_denied")
                 if (blocked || case in setOf("inter_off", "no_unit")) {
                     eventually("Skip must hand off promptly") { f.handoffs.get() == 1 }
                     assertEquals(0, f.interLoads.get())
@@ -201,7 +208,10 @@ class SplashOrderingDeviceTest {
                         if (case == "native_loading") {
                             eventually("Language must subscribe to the original pending native") { f.nativeListener != null }
                             assertEquals(1, f.nativeRequests.get())
-                            onMain { f.nativeState = "ready"; f.nativeListener?.onLoaded() }
+                            onMain {
+                                f.nativeState = "ready"
+                                if (f.bindReady()) f.nativeListener?.onLoaded()
+                            }
                         }
                         eventually("The ready native must bind exactly once") { f.nativeBinds.get() == 1 }
                         assertEquals("consumed", f.nativeState)
@@ -269,6 +279,7 @@ private object OrderingFixture {
     val nativeBinds = AtomicInteger()
     val nativeReleases = AtomicInteger()
     @Volatile var nativeListener: AdEventListener? = null
+    private var nativeSlot: Pair<Activity, FrameLayout>? = null
     var flags = RemoteFlags()
     var premium = false
     var consentAllowed = true
@@ -293,35 +304,46 @@ private object OrderingFixture {
         ready = success
         if (success) pending?.onLoaded() else pending?.onFailedToLoad()
     }
-    val provider = object : OnboardingAdProvider {
-        override fun isPremium(context: Context) = premium
-        override fun preloadNative(activity: Activity, request: NativeAdRequest) {
+    fun bindReady(): Boolean {
+        val (activity, container) = nativeSlot ?: return false
+        if (nativeState != "ready") return false
+        nativeSlot = null
+        container.removeAllViews()
+        container.addView(android.widget.TextView(activity).apply { text = "Device native" })
+        nativeState = "consumed"
+        nativeBinds.incrementAndGet()
+        return true
+    }
+    val provider = object : FakeAdProvider() {
+        override fun preloadNative(activity: Activity, request: NativeAdRequest) = sendInRequestWindow(activity, request) {
             if (request.placement == AdPlacement.Language1 && nativeBehavior != null && nativeState !in setOf("ready", "loading")) {
                 nativeRequests.incrementAndGet()
                 nativeState = nativeBehavior!!.removePrefix("native_")
             }
             if (activity is OrderingSplashDeviceActivity) {
-                if (request.placement == AdPlacement.Language1) splashLfo.incrementAndGet()
-                else splashOther += request.placement.key
+                if (request.placement == AdPlacement.Language1) {
+                    splashLfo.incrementAndGet()
+                    if (nativeState == null) nativeState = "loading"
+                } else splashOther += request.placement.key
             }
         }
-        override fun isNativeReady(placement: AdPlacement) = placement == AdPlacement.Language1 && nativeState == "ready"
-        override fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.Language1 && nativeState == "loading"
-        override fun isNativeLoadFailed(placement: AdPlacement) = placement == AdPlacement.Language1 && nativeState == "failed"
-        override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?): Boolean {
-            if (placement != AdPlacement.Language1 || nativeBehavior == null) return false
-            if (listener != null) nativeListener = listener
-            if (nativeState != "ready") return false
-            container.removeAllViews()
-            container.addView(android.widget.TextView(activity).apply { text = "Device native" })
-            nativeState = "consumed"
-            nativeBinds.incrementAndGet()
-            return true
+        override fun nativeStatus(placement: AdPlacement) = when {
+            placement != AdPlacement.Language1 -> NativeStatus.IDLE
+            nativeState == "ready" -> NativeStatus.READY
+            nativeState == "loading" -> NativeStatus.LOADING
+            nativeState == "failed" -> NativeStatus.FAILED
+            else -> NativeStatus.IDLE
+        }
+        override fun bindNative(activity: ComponentActivity, request: NativeAdRequest, container: FrameLayout, listener: AdEventListener): Boolean {
+            if (request.placement != AdPlacement.Language1 || nativeBehavior == null) return false
+            nativeListener = listener
+            nativeSlot = activity to container
+            return bindReady()
         }
         override fun releaseNative(placement: AdPlacement) {
-            if (placement == AdPlacement.Language1) { nativeListener = null; nativeReleases.incrementAndGet() }
+            if (placement == AdPlacement.Language1) { nativeListener = null; nativeSlot = null; nativeReleases.incrementAndGet() }
         }
-        override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) {
+        override fun loadInterstitial(activity: Activity, placement: AdPlacement, unit: InterstitialAdUnit, adConfigKey: String?, listener: AdEventListener?) {
             requestAt = SystemClock.elapsedRealtime(); interLoads.incrementAndGet(); pending = listener
             if (immediate) finishLoad(true)
         }
@@ -347,10 +369,8 @@ private object OrderingFixture {
                 activity.startActivity(Intent(activity, OrderingAdDeviceActivity::class.java))
             } else callback.onAdSkipped(AdSkipReason.NOT_READY)
         }
-        override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
-            if (!bannerPending) listener?.onLoaded()
+        override fun loadBanner(activity: androidx.appcompat.app.AppCompatActivity, unit: BannerAdUnit, listener: AdEventListener) {
+            if (!bannerPending) listener.onLoaded()
         }
-        override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-        override fun releaseAll() = Unit
     }
 }

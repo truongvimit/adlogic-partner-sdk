@@ -4,12 +4,13 @@ import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -22,7 +23,8 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
@@ -65,7 +67,6 @@ class Ob3BackgroundDeviceTest {
                     afterOnboardingInterstitialEnabled = false)
             }.getOrThrow()).getOrThrow()
             ConsentCenter.setHostConsent(true, false)
-            OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking { OnboardingSdk.reset() }
         try {
@@ -109,23 +110,20 @@ class Ob3BackgroundDeviceTest {
     }
 }
 
-/** Host implementation of the documented ad-provider extension point, with one buffered native. */
-private class Ob3BufferedNativeProvider : OnboardingAdProvider {
+/** A provider holding one buffered OB3 native. */
+private class Ob3BufferedNativeProvider : FakeAdProvider() {
     val binds = AtomicInteger()
 
-    override fun isPremium(context: Context) = false
-    override fun isNativeReady(placement: AdPlacement) = placement == AdPlacement.StepFullScreen(StepId.OB3)
-    override fun isNativeLoading(placement: AdPlacement) = false
-    override fun preloadNative(activity: Activity, request: NativeAdRequest) = Unit
+    override fun nativeStatus(placement: AdPlacement) =
+        if (placement == AdPlacement.StepFullScreen(StepId.OB3)) NativeStatus.READY else NativeStatus.IDLE
 
     override fun bindNative(
-        activity: Activity,
-        placement: AdPlacement,
-        container: ViewGroup,
-        shimmer: View?,
-        listener: AdEventListener?,
+        activity: ComponentActivity,
+        request: NativeAdRequest,
+        container: FrameLayout,
+        listener: AdEventListener,
     ): Boolean {
-        if (placement != AdPlacement.StepFullScreen(StepId.OB3)) return false
+        if (request.placement != AdPlacement.StepFullScreen(StepId.OB3)) return false
         binds.incrementAndGet()
         container.removeAllViews()
         container.addView(TextView(activity).apply { text = "Buffered host native" })
@@ -133,9 +131,6 @@ private class Ob3BufferedNativeProvider : OnboardingAdProvider {
         return true
     }
 
-    override fun releaseNative(placement: AdPlacement) = Unit
-    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
-    override fun isInterstitialReady(placement: AdPlacement) = false
     override fun loadAndShowInterstitial(
         activity: androidx.appcompat.app.AppCompatActivity,
         placement: AdPlacement,
@@ -145,9 +140,4 @@ private class Ob3BufferedNativeProvider : OnboardingAdProvider {
     ) {
         throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
     }
-
-    override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-    override fun releaseAll() = Unit
 }

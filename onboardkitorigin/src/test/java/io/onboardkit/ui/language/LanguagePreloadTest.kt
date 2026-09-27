@@ -1,8 +1,11 @@
 package io.onboardkit.ui.language
 
+import android.app.Activity
 import android.app.Application
 import android.os.Looper
 import android.view.View
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
@@ -12,7 +15,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ads.NativeAdRequest
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
@@ -25,7 +28,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -43,6 +45,7 @@ class LanguagePreloadTest {
         val binds = mutableListOf<AdPlacement>()
         val listeners = mutableMapOf<AdPlacement, AdEventListener>()
         val completions = mutableListOf<io.onboardkit.core.analytics.AnalyticsEvent.LanguageFlowCompleted>()
+        var holdSecondFill = false
     }
     private var controller: ActivityController<ObLanguageActivity>? = null
     private val main get() = shadowOf(Looper.getMainLooper())
@@ -52,18 +55,19 @@ class LanguagePreloadTest {
         binds.clear()
         listeners.clear()
         completions.clear()
+        holdSecondFill = false
         OnboardingSettings.document.acceptSuccessfulFetch(null)
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "nativeClickAction" -> io.onboardkit.remote.OnboardingSettings.nativeClickAction(call.getArgument(0))
-                "preloadNative" -> { preloads += call.getArgument<NativeAdRequest>(1).placement; null }
-                "bindNative" -> {
-                    val placement = call.getArgument<AdPlacement>(1)
-                    binds += placement
-                    call.getArgument<AdEventListener?>(4)?.let { listeners[placement] = it }
-                    true
-                }
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
+        val provider = object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { preloads += request.placement }
+            override fun bindNative(
+                activity: ComponentActivity,
+                request: NativeAdRequest,
+                container: FrameLayout,
+                listener: AdEventListener,
+            ): Boolean {
+                binds += request.placement
+                listeners[request.placement] = listener
+                return !holdSecondFill || request.placement != AdPlacement.Language2
             }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
@@ -74,7 +78,6 @@ class LanguagePreloadTest {
             })
         }
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         runBlocking { OnboardingSdk.reset() }
         OnboardingSdk.remoteOrNull()?.applySnapshot(RemoteFlags())
     }
@@ -160,6 +163,43 @@ class LanguagePreloadTest {
         main.idle()
         assertEquals(0, completions.size)
     }
+
+    @Test fun `a late LFO2 fill after the swap timed out cannot commit the swap`() {
+        holdSecondFill = true
+        launch()
+        val recorded = recordSwapEvents()
+        tapLanguage()
+        val stale = requireNotNull(listeners[AdPlacement.Language2])
+        main.idleFor(9, java.util.concurrent.TimeUnit.SECONDS)
+        stale.onLoaded()
+        main.idle()
+        val activity = requireNotNull(controller).get()
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_ad_block).visibility)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.ob_ad_block_2).visibility)
+        assertEquals(emptyList<io.onboardkit.core.analytics.AnalyticsEvent>(), recorded)
+    }
+
+    @Test fun `a late LFO2 fill after the screen is destroyed cannot commit the swap`() {
+        holdSecondFill = true
+        launch()
+        val recorded = recordSwapEvents()
+        tapLanguage()
+        val stale = requireNotNull(listeners[AdPlacement.Language2])
+        requireNotNull(controller).pause().stop().destroy()
+        controller = null
+        stale.onLoaded()
+        main.idle()
+        assertEquals(emptyList<io.onboardkit.core.analytics.AnalyticsEvent>(), recorded)
+    }
+
+    private fun recordSwapEvents(): List<io.onboardkit.core.analytics.AnalyticsEvent> =
+        mutableListOf<io.onboardkit.core.analytics.AnalyticsEvent>().also { recorded ->
+            io.onboardkit.core.analytics.AnalyticsHub.addPlugin { event ->
+                val swap = event is io.onboardkit.core.analytics.AnalyticsEvent.LanguageCompleted ||
+                    event is io.onboardkit.core.analytics.AnalyticsEvent.LanguageViewed && event.screenIndex == 2
+                if (swap) recorded += event
+            }
+        }
 
     @Test fun `selection still warms onboarding when LFO2 is disabled`() {
         launch(secondSlot = false)

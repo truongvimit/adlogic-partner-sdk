@@ -85,7 +85,6 @@ class LfoNativeShowAuditTest {
         OnboardingSdk.install(app) { adProvider = provider; trackkitAutoTracking(false) }
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         com.ads.module.config.settings.AdBehavior.document.acceptSuccessfulFetch(null)
-        OnboardingSdk.setCanRequestAds(true)
         runBlocking { OnboardingSdk.reset() }
         OnboardingSdk.remoteOrNull()?.applySnapshot(RemoteFlags())
         OnboardingSdk.configure(onboardKitConfig {
@@ -110,8 +109,9 @@ class LfoNativeShowAuditTest {
         shadowOf(connectivity).setActiveNetworkInfo(ShadowNetworkInfo.newInstance(
             if (connected) NetworkInfo.DetailedState.CONNECTED else NetworkInfo.DetailedState.DISCONNECTED,
             ConnectivityManager.TYPE_WIFI, 0, connected, connected))
-        if (connected) shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
-            NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
+        shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork, NetworkCapabilities().also {
+            if (connected) shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+        })
     }
 
     private fun preload() {
@@ -153,7 +153,7 @@ class LfoNativeShowAuditTest {
         val ad = fill()
         create()
         assertFalse(container().getChildAt(0) is NativeAdView)
-        assertTrue(provider.isNativeReady(AdPlacement.Language1))
+        assertEquals(NativeStatus.READY, provider.nativeStatus(AdPlacement.Language1))
         resume()
         assertFalse(activity.hasWindowFocus())
         assertFirstBound()
@@ -275,6 +275,95 @@ class LfoNativeShowAuditTest {
         assertEquals("Returning again cannot repeat the click reload", 2, requests.count { it.first == "audit-lfo1" })
     }
 
+    @Test fun `LFO1 filled after consent is withdrawn hides the slot instead of shimmering`() {
+        preload()
+        create()
+        resume()
+        ConsentCenter.setHostConsent(false, false)
+        fill()
+        assertEquals(View.GONE, block().visibility)
+        assertFalse(container().getChildAt(0) is NativeAdView)
+        assertEquals(1, requests.count { it.first == "audit-lfo1" })
+    }
+
+    @Test fun `LFO1 click replacement that fails while away is not requested again on return`() {
+        preload()
+        val first = fill()
+        create()
+        resume()
+        val oldView = container().getChildAt(0)
+        events.getValue("audit-lfo1").onAdClicked()
+        assertEquals(2, requests.count { it.first == "audit-lfo1" })
+        requireNotNull(language).pause().stop()
+        events.getValue("audit-lfo1").onAdFailedToLoad(
+            com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        requireNotNull(language).restart().start()
+        resume()
+        main.idleFor(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(2, requests.count { it.first == "audit-lfo1" })
+        assertSame(oldView, container().getChildAt(0))
+        assertEquals(View.VISIBLE, block().visibility)
+        verify(first, never()).destroy()
+    }
+
+    @Test fun `LFO recreated after an on-screen LFO1 no fill stays hidden without a new request`() {
+        preload()
+        create()
+        resume()
+        events.getValue("audit-lfo1").onAdFailedToLoad(
+            com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
+        main.idle()
+        assertEquals(View.GONE, block().visibility)
+        language = requireNotNull(language).recreate()
+        main.idle()
+        assertEquals(1, requests.count { it.first == "audit-lfo1" })
+        assertEquals(View.GONE, block().visibility)
+    }
+
+    @Test fun `LFO recreated before replacing an expired LFO1 fill still requests once and binds`() {
+        preload()
+        fill()
+        main.idleFor(61, java.util.concurrent.TimeUnit.MINUTES)
+        create()
+        requireNotNull(language).stop()
+        main.idle()
+        assertEquals(1, requests.count { it.first == "audit-lfo1" })
+        language = requireNotNull(language).recreate()
+        main.idle()
+        requireNotNull(language).restart().start().resume().visible().windowFocusChanged(true)
+        main.idle()
+        assertEquals(2, requests.count { it.first == "audit-lfo1" })
+        requests.last { it.first == "audit-lfo1" }.second.onNativeAdLoaded(mock(NativeAd::class.java))
+        main.idle()
+        assertEquals(View.VISIBLE, block().visibility)
+        assertTrue(container().getChildAt(0) is NativeAdView)
+    }
+
+    @Test fun `an LFO whose splash preload the ads gate refused requests its native once`() {
+        network(false)
+        OnboardingSdk.preload().preloadLanguage1(host.get())
+        assertEquals(0, requests.count { it.first == "audit-lfo1" })
+        network(true)
+        create()
+        resume()
+        requireNotNull(language).windowFocusChanged(true)
+        main.idle()
+        assertEquals(1, requests.count { it.first == "audit-lfo1" })
+        fill()
+        assertFirstBound()
+    }
+
+    @Test fun `an LFO opened offline hides slot 1 without a request and leaves the store idle`() {
+        network(false)
+        create()
+        resume()
+        requireNotNull(language).windowFocusChanged(true)
+        main.idle()
+        assertEquals(View.GONE, block().visibility)
+        assertEquals(0, requests.count { it.first == "audit-lfo1" })
+        assertEquals(NativeStatus.IDLE, provider.nativeStatus(AdPlacement.Language1))
+    }
+
     @Test fun `native filled after the tier timeout is discarded while LFO remains open`() {
         preload()
         create()
@@ -283,7 +372,7 @@ class LfoNativeShowAuditTest {
         assertEquals(View.GONE, block().visibility)
         val late = fill()
         verify(late).destroy()
-        assertFalse(provider.isNativeReady(AdPlacement.Language1))
+        assertNotEquals(NativeStatus.READY, provider.nativeStatus(AdPlacement.Language1))
         assertEquals(View.GONE, block().visibility)
         assertFalse(container().getChildAt(0) is NativeAdView)
     }

@@ -26,8 +26,9 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BannerAdUnit
@@ -105,7 +106,6 @@ class SplashNotificationPermissionDeviceTest {
                     languageNative = if (fixture.checkPreloadOrder) NativeAdUnit("notification-next-native") else null)
                 if (fixture.checkPreloadOrder) step(ContentStepDefinition(StepId.OB1, title = "Next content"))
             }.getOrThrow()).getOrThrow()
-            OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking {
             OnboardingSdk.reset()
@@ -353,19 +353,16 @@ private object NotificationFixture {
     val presentationOrder = CopyOnWriteArrayList<String>()
     val violations = CopyOnWriteArrayList<String>()
     fun permissionGranted(context: Context) = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-    val provider = object : OnboardingAdProvider {
-        override fun isPremium(context: Context) = false
-        override fun preloadNative(activity: Activity, request: NativeAdRequest) {
+    val provider = object : FakeAdProvider() {
+        override fun preloadNative(activity: Activity, request: NativeAdRequest) = sendInRequestWindow(activity, request) {
             nativeCalls += request.placement.key
             presentationOrder += "native"
             if (activity is NotificationSplashDeviceActivity) splashNativeCalls.incrementAndGet()
             Log.i("NOTIFICATION_DEVICE", "HOST_NATIVE placement=${request.placement.key} host=${activity.javaClass.simpleName}")
         }
-        override fun isNativeReady(placement: AdPlacement) = false
-        override fun isNativeLoading(placement: AdPlacement) = false
-        override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?) = false
-        override fun releaseNative(placement: AdPlacement) = Unit
-        override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) {
+        override fun nativeStatus(placement: AdPlacement) =
+            if (placement.key in nativeCalls) NativeStatus.LOADING else NativeStatus.IDLE
+        override fun loadInterstitial(activity: Activity, placement: AdPlacement, unit: InterstitialAdUnit, adConfigKey: String?, listener: AdEventListener?) {
             loads.incrementAndGet()
             if (holdInterstitial) pendingInterstitial = listener else listener?.onLoaded()
         }
@@ -390,10 +387,8 @@ private object NotificationFixture {
             // Host-provider seam only: settle without pretending a GMA ad was displayed.
             callback.onAdSkipped(AdSkipReason.NOT_READY)
         }
-        override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
-            loads.incrementAndGet(); listener?.onFailedToLoad()
+        override fun loadBanner(activity: androidx.appcompat.app.AppCompatActivity, unit: BannerAdUnit, listener: AdEventListener) {
+            loads.incrementAndGet(); listener.onFailedToLoad()
         }
-        override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-        override fun releaseAll() = Unit
     }
 }

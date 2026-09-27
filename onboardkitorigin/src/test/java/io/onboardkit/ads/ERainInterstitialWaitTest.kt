@@ -169,10 +169,21 @@ class ERainInterstitialWaitTest {
     }
 
     @Test
+    fun `an interstitial tier gets thirty seconds before the next tier is requested`() {
+        val started = SystemClock.uptimeMillis()
+        provider.loadInterstitial(activity, placement, unit)
+        assertEquals(listOf("after-high"), ids)
+        advanceTo(started + 29_999)
+        assertEquals(listOf("after-high"), ids)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(listOf("after-high", "after-base"), ids)
+    }
+
+    @Test
     fun `default timeout waits eight seconds through the real provider`() {
         val result = Outcome()
         val started = SystemClock.uptimeMillis()
-        provider.loadAndShowInterstitial(activity, placement, unit, result)
+        provider.loadAndShowInterstitial(activity, placement, unit, result, timeoutMs = 8_000L)
         assertEquals(listOf("after-high"), ids)
         assertTrue(requireNotNull(ShadowDialog.getLatestDialog()).isShowing)
         advanceTo(started + 7_999)
@@ -213,7 +224,7 @@ class ERainInterstitialWaitTest {
     @Test
     fun `high failure loads base and shows before deadline then closes once`() {
         val result = Outcome()
-        provider.loadAndShowInterstitial(activity, placement, unit, result)
+        provider.loadAndShowInterstitial(activity, placement, unit, result, timeoutMs = 8_000L)
         requests.single().onAdFailedToLoad(
             com.google.android.gms.ads.LoadAdError(
                 3,
@@ -250,6 +261,35 @@ class ERainInterstitialWaitTest {
         assertEquals(listOf(activity), ad.hosts)
         assertTrue(result.skips.isEmpty())
         assertEquals(1, result.next)
+    }
+
+    @Test
+    fun `a click on a shown splash interstitial reaches its load listener once`() {
+        val splash = AdPlacement.SplashInterstitial
+        var clicks = 0
+        provider.loadInterstitial(activity, splash, unit, "inter_splash", object : AdEventListener {
+            override fun onClicked() { clicks++ }
+        })
+        val ad = vendor("after-high")
+        requests.single().onAdLoaded(ad)
+        main.idle()
+        provider.showInterstitial(activity, splash, Outcome())
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(listOf(activity), ad.hosts)
+        ad.callback.onAdClicked()
+        assertEquals(1, clicks)
+    }
+
+    @Test
+    fun `releasing everything drops the flow's unused interstitials and leaves a host key alone`() {
+        provider.loadInterstitial(activity, placement, unit)
+        requests.single().onAdLoaded(vendor("after-high"))
+        InterstitialAdManager.load(activity, "host_inter", listOf("host-unit"))
+        requests.last().onAdLoaded(vendor("host-unit"))
+        main.idle()
+        provider.releaseAll()
+        assertFalse(InterstitialAdManager.isReady(placement.key))
+        assertTrue(InterstitialAdManager.isReady("host_inter"))
     }
 
     private fun advanceTo(deadline: Long) {

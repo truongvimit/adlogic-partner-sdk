@@ -7,13 +7,15 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdEventListener
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.FullScreenSkipStyle
@@ -29,7 +31,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -47,13 +48,15 @@ class AdStepTimingTest {
     private val main get() = shadowOf(Looper.getMainLooper())
 
     private fun launch(definition: AdFullScreenStepDefinition = AdFullScreenStepDefinition(StepId.OB3)) {
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "bindNative" -> {
-                    call.getArgument<AdEventListener?>(4)?.onImpression()
-                    true
-                }
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
+        val provider = object : FakeAdProvider() {
+            override fun bindNative(
+                activity: ComponentActivity,
+                request: NativeAdRequest,
+                container: FrameLayout,
+                listener: AdEventListener,
+            ): Boolean {
+                listener.onImpression()
+                return true
             }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
@@ -65,7 +68,6 @@ class AdStepTimingTest {
             ads = AdsConfig(fullScreenStepNative = NativeAdUnit("test-native"))
         }.getOrThrow()).getOrThrow()
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         controller = Robolectric.buildActivity(TimingHost::class.java).setup().visible()
         fragment = AdStepFragment.newInstance(StepId.OB3, 0)
         controller.get().supportFragmentManager.beginTransaction()

@@ -5,6 +5,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
+import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
 import com.ads.module.consent.ConsentCenter
@@ -14,7 +15,7 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BehaviorConfig
@@ -36,7 +37,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -72,22 +72,27 @@ class OnboardingAdLifecycleTest {
         failOnBind = false
         interstitialLoads = 0
         interstitial = null
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "nativeClickAction" -> io.onboardkit.remote.OnboardingSettings.nativeClickAction(call.getArgument(0))
-                "bindNative" -> {
-                    call.getArgument<AdEventListener?>(4)?.let {
-                        listeners[call.getArgument(1)] = it
-                        if (failOnBind) it.onFailedToLoad()
-                    }
-                    true
-                }
-                "loadAndShowInterstitial" -> {
-                    interstitialLoads++
-                    interstitial = call.getArgument(3)
-                    null
-                }
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
+        val provider = object : FakeAdProvider() {
+            override fun bindNative(
+                activity: ComponentActivity,
+                request: io.onboardkit.ads.NativeAdRequest,
+                container: android.widget.FrameLayout,
+                listener: AdEventListener,
+            ): Boolean {
+                listeners[request.placement] = listener
+                if (failOnBind) listener.onFailedToLoad()
+                return !failOnBind
+            }
+
+            override fun loadAndShowInterstitial(
+                activity: androidx.appcompat.app.AppCompatActivity,
+                placement: AdPlacement,
+                unit: InterstitialAdUnit,
+                callback: ObInterstitialCallback,
+                timeoutMs: Long,
+            ) {
+                interstitialLoads++
+                interstitial = callback
             }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
@@ -98,7 +103,6 @@ class OnboardingAdLifecycleTest {
             })
         }
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         runBlocking { OnboardingSdk.reset() }
     }
 

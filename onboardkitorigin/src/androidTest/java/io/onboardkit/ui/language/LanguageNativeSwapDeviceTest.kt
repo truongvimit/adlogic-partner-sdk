@@ -2,11 +2,12 @@ package io.onboardkit.ui.language
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.os.SystemClock
 import android.view.View
+import android.widget.FrameLayout
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -24,9 +25,9 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
-import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
@@ -88,7 +89,6 @@ class LanguageNativeSwapDeviceTest {
                 )
             }.getOrThrow()).getOrThrow()
             ConsentCenter.setHostConsent(canRequestAds = true, personalized = false)
-            OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking { OnboardingSdk.reset() }
     }
@@ -264,8 +264,8 @@ class LanguageNativeSwapDeviceTest {
     }
 }
 
-/** Concrete host provider; only its external completion timing is controlled by the test. */
-private class DelayedHostNativeProvider : OnboardingAdProvider {
+/** Only the provider's completion timing is controlled by the test. */
+private class DelayedHostNativeProvider : FakeAdProvider() {
     var firstView: TextView? = null
     var secondView: TextView? = null
     var confirmRequests = 0
@@ -281,6 +281,7 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
     var exitInterstitial: ObInterstitialCallback? = null
     private var secondReady = false
     private var secondLoading = false
+    private val waiting = mutableMapOf<AdPlacement, Pair<Activity, FrameLayout>>()
 
     fun reset() {
         firstView = null
@@ -298,14 +299,19 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
         exitInterstitial = null
         secondReady = false
         secondLoading = false
+        waiting.clear()
     }
 
-    override fun isPremium(context: Context) = false
-    override fun isNativeReady(placement: AdPlacement) =
+    private fun isNativeReady(placement: AdPlacement) =
         placement == AdPlacement.Language1 || placement == AdPlacement.Language2 && secondReady ||
             placement == AdPlacement.LanguageConfirm && confirmReady
-    override fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.Language2 && secondLoading ||
+    private fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.Language2 && secondLoading ||
         placement == AdPlacement.LanguageConfirm && confirmLoading
+    override fun nativeStatus(placement: AdPlacement) = when {
+        isNativeReady(placement) -> NativeStatus.READY
+        isNativeLoading(placement) -> NativeStatus.LOADING
+        else -> NativeStatus.IDLE
+    }
 
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         if (request.placement == AdPlacement.LanguageConfirm && !confirmLoading && !confirmReady) {
@@ -318,13 +324,20 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
         }
     }
 
-    override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?): Boolean {
-        if (placement == AdPlacement.Language2 && listener != null) {
+    override fun bindNative(activity: ComponentActivity, request: NativeAdRequest, container: FrameLayout, listener: AdEventListener): Boolean {
+        val placement = request.placement
+        if (placement == AdPlacement.Language2) {
             lastSecondListener = listener
             secondListenerRegistrations++
         }
-        if (placement == AdPlacement.LanguageConfirm && listener != null) confirmListener = listener
+        if (placement == AdPlacement.LanguageConfirm) confirmListener = listener
+        waiting[placement] = activity to container
+        return bindWaiting(placement, listener)
+    }
+
+    private fun bindWaiting(placement: AdPlacement, listener: AdEventListener?): Boolean {
         if (!isNativeReady(placement)) return false
+        val (activity, container) = waiting.remove(placement) ?: return false
         val view = TextView(activity).apply {
             text = if (placement == AdPlacement.Language1) "First native" else "Second native"
         }
@@ -347,14 +360,15 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
     fun deliverConfirmFill() {
         confirmLoading = false
         confirmReady = true
-        confirmListener?.onLoaded()
+        if (bindWaiting(AdPlacement.LanguageConfirm, confirmListener)) confirmListener?.onLoaded()
     }
 
     fun deliverSecondFill() {
         secondLoading = false
         secondReady = true
-        // Retain the old vendor delivery deliberately, even after the host released the request.
-        lastSecondListener?.onLoaded()
+        val released = AdPlacement.Language2 !in waiting
+        // A stale provider still reports its fill after the host released the slot.
+        if (bindWaiting(AdPlacement.Language2, lastSecondListener) || released) lastSecondListener?.onLoaded()
     }
 
     fun failSecond() {
@@ -363,6 +377,7 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
     }
 
     override fun releaseNative(placement: AdPlacement) {
+        waiting.remove(placement)
         if (placement == AdPlacement.LanguageConfirm) {
             confirmReady = false
             confirmLoading = false
@@ -374,7 +389,6 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
             secondReady = false
         }
     }
-    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
     override fun isInterstitialReady(placement: AdPlacement) = placement == AdPlacement.SplashInterstitial
     override fun loadAndShowInterstitial(
         activity: androidx.appcompat.app.AppCompatActivity,
@@ -392,7 +406,4 @@ private class DelayedHostNativeProvider : OnboardingAdProvider {
         exitInterstitial = null
         pending?.onAdSkipped(AdSkipReason.NOT_READY)
     }
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-    override fun releaseAll() = Unit
 }

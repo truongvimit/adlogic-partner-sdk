@@ -1,12 +1,10 @@
 package io.onboardkit.ads
 
-import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.view.View
-import android.view.ViewGroup
+import com.ads.module.helper.Entitlement
+import com.ads.module.helper.EntitlementSource
 import io.onboardkit.config.AdsConfig
-import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.OnboardKitConfig
@@ -31,12 +29,14 @@ class AdsGuardTest {
 
     @Test
     fun `premium beats every other reason`() {
-        // Remote off and no provider as well: entitlement still has to be the reported cause
-        val guard = guard(
-            provider = FakeAdProvider(isPremium = true),
-            flags = RemoteFlags(enableAllAds = false),
-        )
-        assertEquals(AdSkipReason.PREMIUM, guard.skipReason(context, AdPlacement.Language1))
+        // Remote off as well: entitlement still has to be the reported cause
+        val guard = guard(flags = RemoteFlags(enableAllAds = false))
+        Entitlement.install(premium(true))
+        try {
+            assertEquals(AdSkipReason.PREMIUM, guard.skipReason(context, AdPlacement.Language1))
+        } finally {
+            Entitlement.install(premium(false))
+        }
     }
 
     @Test
@@ -50,8 +50,19 @@ class AdsGuardTest {
 
     @Test
     fun `missing provider is reported before config and remote`() {
-        val guard = guard(provider = null, flags = RemoteFlags(enableAllAds = false))
+        val guard = guard(providerInstalled = false, flags = RemoteFlags(enableAllAds = false))
         assertEquals(AdSkipReason.NO_PROVIDER, guard.skipReason(context, AdPlacement.Language1))
+    }
+
+    @Test
+    fun `a premium user without a provider is reported as missing the provider`() {
+        val guard = guard(providerInstalled = false)
+        Entitlement.install(premium(true))
+        try {
+            assertEquals(AdSkipReason.NO_PROVIDER, guard.skipReason(context, AdPlacement.Language1))
+        } finally {
+            Entitlement.install(premium(false))
+        }
     }
 
     @Test
@@ -133,12 +144,15 @@ class AdsGuardTest {
     }
 
     private fun guard(
-        provider: OnboardingAdProvider? = FakeAdProvider(),
+        providerInstalled: Boolean = true,
         config: OnboardKitConfig = config(),
         flags: RemoteFlags = RemoteFlags(),
         canRequestAds: Boolean = true,
-        nowMs: Long = 0L,
-    ): AdsGuard = AdsGuard(provider, { config }, { flags }, { canRequestAds }, { nowMs })
+    ): AdsGuard = AdsGuard(providerInstalled, { config }, { flags }, { canRequestAds })
+
+    private fun premium(value: Boolean) = object : EntitlementSource {
+        override fun isPremium(context: Context) = value
+    }
 
     private fun config(
         ads: AdsConfig = AdsConfig(
@@ -149,65 +163,4 @@ class AdsGuardTest {
         defaultSteps()
         this.ads = ads
     }.getOrThrow()
-}
-
-/** Answers the guard's questions with fixed values; every ad operation is a no-op. */
-private class FakeAdProvider(
-    private val isPremium: Boolean = false,
-    private val lastInterstitialShownAtMs: Long = 0L,
-    private val clicksToday: Int = 0,
-) : OnboardingAdProvider {
-
-    override fun isPremium(context: Context): Boolean = isPremium
-
-    override fun lastInterstitialShownAtMs(context: Context): Long = lastInterstitialShownAtMs
-
-    override fun clicksToday(context: Context, adUnitId: String): Int = clicksToday
-
-    override fun preloadNative(activity: Activity, request: NativeAdRequest) = Unit
-
-    override fun isNativeReady(placement: AdPlacement): Boolean = false
-
-    override fun isNativeLoading(placement: AdPlacement): Boolean = false
-
-    override fun bindNative(
-        activity: Activity,
-        placement: AdPlacement,
-        container: ViewGroup,
-        shimmer: View?,
-        listener: AdEventListener?,
-    ): Boolean = false
-
-    override fun releaseNative(placement: AdPlacement) = Unit
-
-    override fun loadInterstitial(
-        context: Context,
-        placement: AdPlacement,
-        unit: InterstitialAdUnit,
-        listener: AdEventListener?,
-    ) = Unit
-
-    override fun isInterstitialReady(placement: AdPlacement): Boolean = false
-
-    override fun loadAndShowInterstitial(
-        activity: androidx.appcompat.app.AppCompatActivity,
-        placement: AdPlacement,
-        unit: InterstitialAdUnit,
-        callback: ObInterstitialCallback,
-        timeoutMs: Long,
-    ) {
-        throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
-    }
-
-    override fun showInterstitial(
-        activity: Activity,
-        placement: AdPlacement,
-        callback: ObInterstitialCallback,
-    ) = Unit
-
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-
-    override fun releaseAll() = Unit
 }

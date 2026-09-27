@@ -4,12 +4,17 @@ import android.app.Activity
 import android.app.Application
 import android.os.Looper
 import android.view.View
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.AdEventListener
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -18,7 +23,6 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -40,21 +44,22 @@ class SplashNativeActivityTest {
 
     @Before fun setup() {
         org.robolectric.util.ReflectionHelpers.setField(OnboardingSdk, "application", null)
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "isNativeReady" -> ready
-                "bindNative" -> binds
-                "preloadNative" -> { loads++; null }
-                "releaseNative" -> { released += call.getArgument<AdPlacement>(0); null }
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
-            }
+        val provider = object : FakeAdProvider() {
+            override fun nativeStatus(placement: AdPlacement) = if (ready) NativeStatus.READY else NativeStatus.IDLE
+            override fun bindNative(
+                activity: ComponentActivity,
+                request: NativeAdRequest,
+                container: FrameLayout,
+                listener: AdEventListener,
+            ) = binds
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { loads++ }
+            override fun releaseNative(placement: AdPlacement) { released += placement }
         }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
             adProvider = provider
             trackkitAutoTracking(false)
         }
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         OnboardingSdk.configure(onboardKitConfig {
             ads = AdsConfig(splashNative = NativeAdUnit("splash-native"))
         }.getOrThrow()).getOrThrow()

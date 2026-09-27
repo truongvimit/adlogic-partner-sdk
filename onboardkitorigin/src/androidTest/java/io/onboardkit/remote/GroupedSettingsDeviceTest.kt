@@ -1,6 +1,5 @@
 package io.onboardkit.remote
 
-import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -8,7 +7,9 @@ import android.os.Process
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -28,7 +29,8 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.AdsConfig
@@ -175,7 +177,6 @@ class GroupedSettingsDeviceTest {
                 step(ContentStepDefinition(StepId.OB4, title = "Skip destination"))
             }.getOrThrow()).getOrThrow()
             ConsentCenter.setHostConsent(true, false)
-            OnboardingSdk.setCanRequestAds(true)
         }
         OnboardingSdk.reset()
         OnboardingSettings.document.acceptSuccessfulFetch(if (remote)
@@ -243,29 +244,18 @@ class GroupedSettingsDeviceTest {
     }
 }
 
-private class ReadyNativeProvider : OnboardingAdProvider {
-    override fun isPremium(context: Context) = false
-    override fun isNativeReady(placement: AdPlacement) = true
-    override fun isNativeLoading(placement: AdPlacement) = false
-    override fun preloadNative(activity: Activity, request: NativeAdRequest) = Unit
-    override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup,
-        shimmer: View?, listener: AdEventListener?): Boolean {
+private class ReadyNativeProvider : FakeAdProvider() {
+    override fun nativeStatus(placement: AdPlacement) = NativeStatus.READY
+    override fun bindNative(activity: ComponentActivity, request: NativeAdRequest, container: FrameLayout,
+        listener: AdEventListener): Boolean {
         container.removeAllViews()
         container.addView(TextView(activity).apply { text = "Controlled native" })
         container.visibility = View.VISIBLE
-        listener?.onImpression()
+        listener.onImpression()
         return true
     }
-    override fun releaseNative(placement: AdPlacement) = Unit
-    override fun loadInterstitial(context: Context, placement: AdPlacement,
-        unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
-    override fun isInterstitialReady(placement: AdPlacement) = false
     override fun loadAndShowInterstitial(activity: AppCompatActivity, placement: AdPlacement,
         unit: InterstitialAdUnit, callback: ObInterstitialCallback, timeoutMs: Long) {
         error("Unexpected interstitial in a native-only fixture: $placement")
     }
-    override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-    override fun releaseAll() = Unit
 }

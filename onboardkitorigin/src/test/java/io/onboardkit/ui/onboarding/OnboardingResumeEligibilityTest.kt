@@ -13,7 +13,7 @@ import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdSkipReason
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.NativeAdUnit
@@ -32,7 +32,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -50,18 +49,11 @@ class OnboardingResumeEligibilityTest {
     private val manager get() = AppOpenManager.getInstance()
 
     @Before fun setup() {
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            if (call.method.name == "suppressAppResume") {
-                manager.disableAppResumeWithActivity(call.getArgument<Class<out Activity>>(0))
-                null
-            } else Mockito.RETURNS_DEFAULTS.answer(call)
-        }
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) {
-            adProvider = provider
+            adProvider = FakeAdProvider()
             trackkitAutoTracking(false)
         }
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             ads = AdsConfig(appResume = InterstitialAdUnit("test-resume"))
@@ -128,8 +120,10 @@ class OnboardingResumeEligibilityTest {
         assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
         guard.release()
         assertNull(manager.resumeSkipReasonFor(activity))
-        OnboardingSdk.setCanRequestAds(false)
+        ConsentCenter.setHostConsent(false, false)
         assertEquals(AdSkipReason.CONSENT_NOT_GRANTED.key, manager.resumeSkipReasonFor(activity))
+        ConsentCenter.setHostConsent(true, false)
+        assertNull(manager.resumeSkipReasonFor(activity))
     }
 
     @Test fun `language confirmation blocks resume only while the modal is visible`() {

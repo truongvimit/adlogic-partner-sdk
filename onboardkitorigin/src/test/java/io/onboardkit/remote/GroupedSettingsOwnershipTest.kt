@@ -10,7 +10,7 @@ import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeTemplates
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.*
 import io.onboardkit.core.StepId
 import io.onboardkit.flow.FlowNavigator
@@ -19,7 +19,6 @@ import kotlinx.coroutines.test.*
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
-import org.mockito.Mockito.mock
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
@@ -33,7 +32,7 @@ class GroupedSettingsOwnershipTest {
     @Before fun setup() {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
         OnboardingSdk.install(app) {
-            adProvider = mock(OnboardingAdProvider::class.java)
+            adProvider = FakeAdProvider()
             trackkitAutoTracking(false)
         }
         OnboardingSettings.document.acceptSuccessfulFetch(null)

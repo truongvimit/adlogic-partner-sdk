@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import android.app.Activity
 import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
@@ -9,7 +10,9 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.AdEventListener
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
@@ -36,7 +39,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -81,37 +83,44 @@ class OnboardingExitAdTest {
         install()
         OnboardingSdk.remoteOrNull()?.applySnapshot(RemoteFlags())
         ConsentCenter.setHostConsent(true, false)
-        OnboardingSdk.setCanRequestAds(true)
         runBlocking { OnboardingSdk.reset() }
     }
 
     private fun install() {
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "loadInterstitial" -> {
-                    loads += call.getArgument<AdPlacement>(1); null
-                }
+        val provider = object : FakeAdProvider() {
+            override fun loadInterstitial(
+                activity: Activity,
+                placement: AdPlacement,
+                unit: InterstitialAdUnit,
+                adConfigKey: String?,
+                listener: AdEventListener?,
+            ) { loads += placement }
 
-                "loadAndShowInterstitial" -> {
-                    assertEquals(
-                        AdPlacement.AfterOnboardingInterstitial,
-                        call.getArgument<AdPlacement>(1)
-                    )
-                    assertEquals(unit, call.getArgument<InterstitialAdUnit>(2))
-                    assertEquals(8_000L, call.getArgument<Long>(4))
-                    waits++
-                    presentation = call.getArgument(3)
-                    null
-                }
-
-                "showInterstitial" -> {
-                    bufferedShows++; null
-                }
-                // A spare splash must not replace the dedicated end-of-onboarding request.
-                "isInterstitialReady" -> call.getArgument<AdPlacement>(0) == AdPlacement.SplashInterstitial
-                "isNativeReady" -> ob5Ready && call.getArgument<AdPlacement>(0) == AdPlacement.Ob5
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
+            override fun loadAndShowInterstitial(
+                activity: androidx.appcompat.app.AppCompatActivity,
+                placement: AdPlacement,
+                unit: InterstitialAdUnit,
+                callback: ObInterstitialCallback,
+                timeoutMs: Long,
+            ) {
+                assertEquals(AdPlacement.AfterOnboardingInterstitial, placement)
+                assertEquals(OnboardingExitAdTest.unit, unit)
+                assertEquals(8_000L, timeoutMs)
+                waits++
+                presentation = callback
             }
+
+            override fun showInterstitial(
+                activity: android.app.Activity,
+                placement: AdPlacement,
+                callback: ObInterstitialCallback,
+            ) { bufferedShows++ }
+
+            // A spare splash must not replace the dedicated end-of-onboarding request.
+            override fun isInterstitialReady(placement: AdPlacement) = placement == AdPlacement.SplashInterstitial
+
+            override fun nativeStatus(placement: AdPlacement) =
+                if (ob5Ready && placement == AdPlacement.Ob5) NativeStatus.READY else NativeStatus.IDLE
         }
         val app = ApplicationProvider.getApplicationContext<Application>()
         OnboardingSdk.install(app) {
