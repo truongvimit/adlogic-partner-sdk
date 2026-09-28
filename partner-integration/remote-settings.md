@@ -16,8 +16,8 @@ The existing Firebase parameter remains `ad_remote_config`; `ad_config.json` / `
 
 | Parameter | Full default JSON | SDK source |
 | --- | --- | --- |
-| `ad_behavior_config` | [Copy/paste sample](examples/ads-onboarding/ad_behavior_config.json) | [SDK asset](../ads/src/main/assets/ad_behavior_config.json) |
-| `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK asset](../onboardkitorigin/src/main/assets/onboarding_config.json) |
+| `ad_behavior_config` | [Copy/paste sample](examples/ads-onboarding/ad_behavior_config.json) | [SDK source asset](../ads/src/main/assets/adlogic_defaults/ad_behavior_config.json) |
+| `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
 - **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `open_resume.app_resume_load_delay_ms`. The new documents do not duplicate these fields, ad-unit mappings or individual unit switches.
 - **ad_behavior_config:** ad-format timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA corner radius and app-open behavior. Banner type/size uses SDK presets.
@@ -86,7 +86,7 @@ This association also selects `ad_behavior_config.placement_overrides.<key>`: LF
 
 ## Local defaults, remote cache and failure
 
-App files named `app/src/main/assets/ad_behavior_config.json` / `onboarding_config.json` override the SDK assets. Copy a full sample or declare only the fields you want to change, then rebuild and restart the process. With no app file, bundled defaults work without any manual setters. The [Firebase guide](firebase-integration.md#local-defaults) includes two complete minimal examples.
+App files named `app/src/main/assets/ad_behavior_config.json` / `onboarding_config.json` are the app tier. The SDK keeps its bundled copies under `adlogic_defaults/`, so the root app files remain explicit overrides even when their bytes match the bundled defaults. Copy a full sample or declare only the fields you want to change, then rebuild and restart the process. With no app file, bundled defaults work without any manual setters. The [Firebase guide](firebase-integration.md#local-defaults) includes two complete minimal examples.
 
 - Precedence for every setting: valid field of the remote `onboarding_config` / `ad_behavior_config` > legacy `ob_*` key the backend delivered > custom app asset > host Kotlin config/hooks > bundled SDK defaults. Remote at any scope outranks the app asset at any scope. Valid cached remote fields retain this priority at startup; keys the backend never sent do not count.
 - Successful fetch with a missing parameter/field removes its previous remote assignment and falls back to the next source down. Invalid field types/enums/ranges and `null` are ignored and logged under logcat tag `AdLogicSettings`; valid `false`/`0` remain assignments.
@@ -95,7 +95,7 @@ App files named `app/src/main/assets/ad_behavior_config.json` / `onboarding_conf
 - Publish `{}` or `{"schema_version":1}` to clear a document's remote overrides after a successful fetch. An empty String is malformed, not a reset. New remote objects replace previous remote overrides rather than patching them; omitted fields fall back to the next source down.
 - A custom/sparse app asset assigns every valid field present, including `false`/`0`. An unchanged copy of the full bundled asset preserves existing host constructor/setter fallbacks. Firebase's published default value is still remote, not the SDK's local default; Firebase in-app defaults are not accepted as fetched remote by the source.
 - SDK defaults are generated from the assets during build, available before Context initialization and contain no `null`. No duplicate Kotlin/XML defaults need maintenance. Invalid app fields fall back; the app does not need its own parser.
-- Consent, premium, remote `global.ads_enabled=false`, runtime reload pause and lifecycle still block ads. `AdsConfig.enabled=false` holds until remote `flow.ads_enabled=true` (or a delivered `ob_enable_all_ads=true`) turns onboarding ads on; an app asset cannot. AutoBuffer needs the host's `start` integration; JSON does not create Activities or initialize host features.
+- `ad_behavior_config.global.ads_enabled` is the single global ads gate across the SDK. Individual LFO/onboarding positions remain controlled by their own placement `isEnable` and placement flags; the duplicate flow-wide controls were removed. Consent, premium and lifecycle checks still apply. Hosts that previously used `AdsConfig(enabled=false)` should move that decision to `global.ads_enabled=false` or disable the relevant placements.
 - Legacy `ob_*` keys remain compatible. A delivered key sets its value either way, below the grouped documents and above the app asset/host; `ob_splash_min_display_ms <= 0` keeps the local value.
 - A debuggable build applies every field of remote `ad_remote_config` but keeps the ad unit IDs of `ad_config_debug.json` (or `ad_config.json` when there is no debug file); keys only remote declares are dropped unless they switch a slot off. A `WARN` log names the pinned file, and `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs as well. Both grouped documents apply as in release; there are no automatic `_debug` variants for the new parameters.
 
@@ -248,7 +248,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | --- | --- |
 | `schema_version` | `1` |
 | `revision` | `0` |
-| `flow.ads_enabled` | `true` |
 | `flow.skip_ad_only_steps_when_premium` | `true` |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` |
 | `splash.ads.slot_format` | `"BANNER"` |

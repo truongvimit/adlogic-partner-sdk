@@ -34,7 +34,7 @@ allprojects {
     // Note: do NOT use findProperty('version') here — project.version defaults to the string
     // "unspecified" rather than null, so an elvis fallback on it would never trigger.
     group = 'com.github.truongvimit'
-    version = System.getenv('VERSION') ?: '1.0.0-SNAPSHOT'
+    version = System.getenv('VERSION') ?: adlogic_sdk_version
 
     repositories {
         google()

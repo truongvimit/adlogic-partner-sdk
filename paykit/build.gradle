@@ -15,7 +15,7 @@ android {
     defaultConfig {
         minSdk min_sdk_version
 
-        buildConfigField "String", "SDK_VERSION", "\"1.0.0\""
+        buildConfigField "String", "SDK_VERSION", "\"$adlogic_sdk_version\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"

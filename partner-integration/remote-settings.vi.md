@@ -12,8 +12,8 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 
 | Parameter | File mặc định trong SDK |
 |---|---|
-| `ad_behavior_config` | `ads/src/main/assets/ad_behavior_config.json` |
-| `onboarding_config` | `onboardkitorigin/src/main/assets/onboarding_config.json` |
+| `ad_behavior_config` | `ads/src/main/assets/adlogic_defaults/ad_behavior_config.json` |
+| `onboarding_config` | `onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json` |
 
 ## Mỗi giá trị có một nơi quản lý
 
@@ -95,7 +95,7 @@ ads = AdsConfig.fromAdConfig(mapOf(
 
 ## Local JSON và fallback
 
-**App không cần tạo file nếu dùng default SDK.** Khi cần custom, partner có thể đặt `app/src/main/assets/ad_behavior_config.json` / `onboarding_config.json` cùng tên để Android merge thay asset SDK. Có thể dùng JSON thưa, chỉ chứa field cần đổi; field còn thiếu lấy SDK defaults. Một custom asset được xem là assignment local tường minh cho các field hợp lệ có mặt, kể cả false/0. Bản asset nguyên mẫu SDK giữ constructor/setter của host làm fallback.
+**App không cần tạo file nếu dùng default SDK.** Khi cần custom, partner có thể đặt `app/src/main/assets/ad_behavior_config.json` / `onboarding_config.json` ở asset root. SDK giữ bản bundled dưới `adlogic_defaults/`, còn file root của app được loader nhận là app tier riêng, kể cả khi nội dung giống bundled default. Có thể dùng JSON thưa, chỉ chứa field cần đổi; field còn thiếu lấy SDK defaults. Một custom asset được xem là assignment local tường minh cho các field hợp lệ có mặt, kể cả false/0. Bản asset nguyên mẫu SDK giữ constructor/setter của host làm fallback.
 
 Ví dụ local hoặc remote chỉ đổi swipe và thời gian X:
 
@@ -114,7 +114,7 @@ Ví dụ local hoặc remote chỉ đổi swipe và thời gian X:
 - Fetch lỗi/timeout, JSON hỏng hoặc schema chưa hỗ trợ: giữ snapshot hợp lệ gần nhất; document bị từ chối được log dưới `AdLogicSettings`. Lần đầu chưa có remote dùng local/default. Cache lưu SharedPreferences, khôi phục ở lần chạy sau; lỗi cache không làm mất default trong bộ nhớ. Fetch lỗi không ép local ghi đè remote cache hợp lệ. Fetch về sau `splash.load.remote_fetch_timeout_ms` của splash vẫn được áp dụng cho phần còn lại của phiên. Muốn bỏ override, publish `{}` hoặc `{"schema_version":1}` rồi fetch thành công; không dùng String rỗng. Đổi asset local cần build và khởi động lại process.
 - `AdConfig.install` áp ngay `ad_remote_config` mà backend gửi gần nhất (giá trị Firebase activate gần nhất), nên fetch chậm hoặc lỗi vẫn chạy trên document đó thay vì asset. Fetch settings lỗi không chặn `ad_remote_config` được áp dụng.
 - Defaults SDK sinh từ chính asset khi build, dùng được trước Context; không có bản Kotlin/XML cần đồng bộ cho các field thuộc hai JSON. Build từ chối null/sai schema.
-- Consent, premium, remote `global.ads_enabled=false`, runtime pause reload và lifecycle vẫn chặn ads. `AdsConfig.enabled=false` giữ hiệu lực cho tới khi remote `flow.ads_enabled=true` (hoặc `ob_enable_all_ads=true` đã gửi) bật ads onboarding; asset app không bật lại được. AutoBuffer cần host `start`; JSON không tự tích hợp host hoặc tạo Activity.
+- `ad_behavior_config.global.ads_enabled` là cờ global duy nhất áp dụng cho ads toàn SDK. Từng vị trí LFO/onboarding vẫn dùng `isEnable` và placement flag riêng; đã bỏ các cờ bật/tắt toàn flow. Consent, premium và lifecycle vẫn áp dụng. Host từng dùng `AdsConfig(enabled=false)` cần chuyển sang `global.ads_enabled=false` hoặc tắt các placement tương ứng.
 - Key `ob_*` cũ tiếp tục tương thích. Key đã gửi đặt giá trị theo cả hai chiều, xếp dưới hai document nhóm và trên asset app/host; `ob_splash_min_display_ms <= 0` giữ giá trị local. Custom UI legacy qua `ob_ui_content`/`ob_ui_design_tokens`/`ob_question_config` vẫn theo API cũ, không được nhân bản sang hai JSON mới. Các API remote nội dung cũ vẫn sử dụng được; reference layout/resource và nội dung mặc định do app khai báo. Không nhầm nhóm nội dung trang này với template/style của quảng cáo trong hai JSON mới.
 - Build debuggable áp mọi field của `ad_remote_config` remote nhưng giữ ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug); key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Log `WARN` nêu tên file đang pin, và `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Hai JSON hành vi áp dụng như release.
 - Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
@@ -268,7 +268,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 |---|---|---|
 | `schema_version` | `1` | Phiên bản schema đang hỗ trợ: 1. |
 | `revision` | `0` | Metadata được lưu cùng document; không phải gate. |
-| `flow.ads_enabled` | `true` | Thay ob_enable_all_ads; chỉ phạm vi OnboardKit. |
 | `flow.skip_ad_only_steps_when_premium` | `true` | Bỏ trang chỉ chứa ads cho premium; không cho premium xem ads. |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` | Kiểu X/Skip chung; không thay đổi delay/auto-next. |
 | `splash.ads.slot_format` | `"BANNER"` | Chọn định dạng cho slot dưới splash: `BANNER` hoặc `NATIVE`. |

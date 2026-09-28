@@ -34,7 +34,7 @@ class OnboardResumePolicyDeviceTest {
     @Test
     fun installedPolicySeparatesSharedEligibilityFromOpenSlotEligibility() {
         val phase = InstrumentationRegistry.getArguments().getString("resumePolicyPhase") ?: "depth"
-        require(phase in setOf("depth", "click", "open_off", "missing_open_unit", "master_off", "config_off", "consent_off", "premium"))
+        require(phase in setOf("depth", "click", "open_off", "missing_open_unit", "master_off", "consent_off", "premium"))
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = ApplicationProvider.getApplicationContext<Application>()
         val manager = AppOpenManager.getInstance()
@@ -51,8 +51,7 @@ class OnboardResumePolicyDeviceTest {
             Entitlement.install(source) // Public host billing signal, not a replacement SDK manager.
             // Public snapshot/cache API seeds the installed SDK before it reads its immutable flags.
             RemoteConfigSyncer(app) { null }.applySnapshot(RemoteFlags(
-                enableAllAds = phase != "master_off",
-                adsAppResume = phase != "open_off",
+                adsAppResume = phase != "open_off" && phase != "master_off",
             ))
             OnboardingSdk.install(app) {
                 adProvider = ERainAdProvider()
@@ -60,7 +59,6 @@ class OnboardResumePolicyDeviceTest {
             }
             OnboardingSdk.configure(onboardKitConfig {
                 ads = AdsConfig(
-                    enabled = phase != "config_off",
                     appResume = if (phase == "missing_open_unit") null else InterstitialAdUnit(TEST_UNIT),
                 )
             }.getOrThrow()).getOrThrow()
@@ -97,8 +95,7 @@ class OnboardResumePolicyDeviceTest {
                         }
                         else -> {
                             val expected = when (phase) {
-                                "master_off" -> "ads_off_remote"
-                                "config_off" -> "ads_off_config"
+                                "master_off" -> "placement_off_remote"
                                 "premium" -> "purchased" // The ads module's existing Entitlement key.
                                 else -> "consent_not_granted"
                             }

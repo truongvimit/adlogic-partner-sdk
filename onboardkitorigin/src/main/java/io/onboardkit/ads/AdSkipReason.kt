@@ -21,7 +21,7 @@ enum class AdSkipReason(val key: String) {
      */
     CONSENT_NOT_GRANTED("consent_not_granted"),
 
-    /** `AdsConfig.enabled = false` — the host app compiled ads off. */
+    /** No active onboarding ad configuration is available for the requested policy. */
     ADS_OFF_IN_CONFIG("ads_off_config"),
 
     /** No [OnboardingAdProvider] was installed. */
@@ -30,7 +30,7 @@ enum class AdSkipReason(val key: String) {
     /** The placement has no usable ad unit id. */
     NO_AD_UNIT("no_ad_unit"),
 
-    /** Master remote kill switch is off. */
+    /** The SDK-wide remote kill switch is off. */
     ADS_OFF_BY_REMOTE("ads_off_remote"),
 
     /** This placement's own remote flag is off while ads in general are on. */

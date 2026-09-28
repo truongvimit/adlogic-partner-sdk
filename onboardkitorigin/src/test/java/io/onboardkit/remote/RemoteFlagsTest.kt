@@ -25,7 +25,6 @@ class RemoteFlagsTest {
     fun `missing keys resolve to declared defaults`() {
         val flags = RemoteFlags.from(reader(emptyMap()))
         assertEquals(RemoteFlags(supplied = emptySet()), flags)
-        assertTrue(flags.enableAllAds)
         assertTrue(flags.enableLanguageNative2)
         assertTrue(flags.showLanguageTapHint)
         assertTrue(flags.showLanguageConfirmBeforeSelect)

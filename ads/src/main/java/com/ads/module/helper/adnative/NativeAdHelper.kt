@@ -79,8 +79,12 @@ class NativeAdHelper @JvmOverloads constructor(
     /** Store and telemetry key; set it before the first request, or pass it to the constructor. */
     var placement: String? = placement
 
-    var adVisibility: AdOptionVisibility = AdOptionVisibility.valueOf(AdBehavior.defaultText("native.presentation.empty_visibility"))
-        get() = AdOptionVisibility.valueOf(config.behaviorValues().string("presentation.empty_visibility", field.name))
+    var adVisibility: AdOptionVisibility = runCatching {
+        AdOptionVisibility.valueOf(AdBehavior.defaultText("native.presentation.empty_visibility"))
+    }.getOrDefault(AdOptionVisibility.GONE)
+        get() = runCatching {
+            AdOptionVisibility.valueOf(config.behaviorValues().string("presentation.empty_visibility", field.name))
+        }.getOrDefault(field)
 
     /** Minimum gap after the last bind before a reload may fire. */
     var maxValueDebounceAdLoaded: Long = AdBehavior.defaultNumber("native.reload.min_after_bind_ms")

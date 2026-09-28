@@ -122,6 +122,11 @@ afterEvaluate {
 
 // Generate typed defaults from the asset at build time: no startup JSON parsing.
 ext.settingsName = 'ad_behavior_config'
+// Keep the SDK's copy out of the public asset root. A partner asset with the same
+// document name must remain an explicit app tier even when its bytes equal the SDK
+// default; AssetManager does not expose the contributing source-set identity at
+// runtime, so the two copies need distinct paths.
+ext.settingsSourcePath = "src/main/assets/adlogic_defaults/${settingsName}.json"
 ext.settingsPackage = 'com.ads.module.config.settings'
 ext.settingsClass = 'BundledAdBehavior'
 apply from: rootProject.file('gradle/settings-defaults.gradle')

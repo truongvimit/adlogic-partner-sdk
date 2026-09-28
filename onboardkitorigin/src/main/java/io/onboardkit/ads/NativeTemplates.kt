@@ -55,6 +55,7 @@ object NativeTemplates {
         fun explicit(read: (String) -> Any?): NativeTemplate? = templatePaths.firstNotNullOfOrNull { path ->
             (read(path) as? String)?.takeIf { it.isNotBlank() }
         }?.let(NativeTemplate::valueOf)
+        fun present(read: (String) -> Any?): Boolean = templatePaths.any { read(it) != null }
         fun positionCta(): NativeTemplate? {
             if (placement != AdPlacement.Language1 && placement != AdPlacement.Language2 &&
                 placement !is AdPlacement.StepNative && placement != AdPlacement.QuestionNative) return null
@@ -64,10 +65,29 @@ object NativeTemplates {
                 else -> null
             }
         }
-        val remoteAdConfig = ads?.placementKeyFor(placement)?.let(AdRemoteConfig::remoteDeclares) == true
+        val adKey = ads?.placementKeyFor(placement)
+        val remoteAdConfig = adKey?.let(AdRemoteConfig::remoteDeclares) == true
+        val remotePosition = adKey?.let { AdRemoteConfig.remoteDeclaresField(it, "positionCTA") } == true
         explicit(values::remoteValue)?.let { return it }
-        if (remoteAdConfig) positionCta()?.let { return it }
+        if (present(values::remoteValue)) {
+            if (remotePosition) positionCta()?.let { return it }
+            // An explicit empty template clears a lower source. The resolved host config is the
+            // code/default tier and may itself contain a broader same-source template.
+            return when (placement) {
+                AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+                is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
+                AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
+                else -> NativeTemplate.CTA_BOTTOM
+            }
+        }
+        if (remoteAdConfig && remotePosition) positionCta()?.let { return it }
         explicit(values::assetValue)?.let { return it }
+        if (present(values::assetValue)) return when (placement) {
+            AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+            is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
+            AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
+            else -> NativeTemplate.CTA_BOTTOM
+        }
         if (!remoteAdConfig) positionCta()?.let { return it }
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->

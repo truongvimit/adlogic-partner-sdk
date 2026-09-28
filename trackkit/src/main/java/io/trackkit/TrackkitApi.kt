@@ -170,7 +170,7 @@ interface TrackSink {
  */
 data class TrackerConfig @JvmOverloads constructor(
     val appVersionCode: Long = 0L,
-    val sdkVersion: String = BuildConfigCompat.SDK_VERSION,
+    val sdkVersion: String = BuildConfig.SDK_VERSION,
     val reportingCurrency: String = "USD",
     val consentPolicy: ConsentPolicy = ConsentPolicy.SEND_ALWAYS,
     val strictValidation: Boolean = false,
@@ -180,7 +180,3 @@ data class TrackerConfig @JvmOverloads constructor(
     /** Extra params merged into every event. Same effect as calling `Tracker.setDefaults`. */
     val defaultParams: Map<String, Any?> = emptyMap(),
 )
-
-internal object BuildConfigCompat {
-    const val SDK_VERSION: String = "1.0.0"
-}

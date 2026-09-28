@@ -13,7 +13,6 @@ interface RemoteValueReader {
  * never SharedPreferences — the original re-hit disk on every getter call.
  */
 data class RemoteFlags(
-    val enableAllAds: Boolean = ObRemoteKeys.ENABLE_ALL_ADS.default,
     val enableUiContent: Boolean = ObRemoteKeys.ENABLE_UI_CONTENT.default,
     val enableStepOb1: Boolean = ObRemoteKeys.ENABLE_STEP_OB1.default,
     val enableStepOb2: Boolean = ObRemoteKeys.ENABLE_STEP_OB2.default,
@@ -86,8 +85,7 @@ data class RemoteFlags(
      * The point is to see the whole permission surface in a single logcat entry rather than
      * inferring it from which ads failed to appear.
      */
-    fun adSummary(): String = "flags allAds=$enableAllAds " +
-        "splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
+    fun adSummary(): String = "flags splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
             "langConfirm=$adsLanguageConfirmNative afterOnboardInter=$adsAfterOnboardInter " +
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
         "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
@@ -114,7 +112,6 @@ data class RemoteFlags(
                 reader.string(k.key)?.trim()?.toLongOrNull() ?: k.default
 
             return RemoteFlags(
-                enableAllAds = bool(ObRemoteKeys.ENABLE_ALL_ADS),
                 enableUiContent = bool(ObRemoteKeys.ENABLE_UI_CONTENT),
                 enableStepOb1 = bool(ObRemoteKeys.ENABLE_STEP_OB1),
                 enableStepOb2 = bool(ObRemoteKeys.ENABLE_STEP_OB2),

@@ -16,8 +16,6 @@ sealed class RemoteKey<T>(val key: String, val default: T) {
 }
 
 object ObRemoteKeys {
-    // Kill switches
-    val ENABLE_ALL_ADS = RemoteKey.BoolKey("ob_enable_all_ads", OnboardingSettings.defaultBool("flow.ads_enabled"))
     val ENABLE_UI_CONTENT = RemoteKey.BoolKey("ob_enable_ui_content", true)
 
     // Legacy scalar gates: retained for hosts without onboarding.order.
@@ -62,8 +60,7 @@ object ObRemoteKeys {
         RemoteKey.BoolKey("ob_show_language_confirm_before_select", true)
     val LANGUAGE_SUPPORTED_CODES = RemoteKey.StringKey("ob_language_supported_codes", "")
 
-    // Per-placement switches. One key per placement, all AND-ed with ENABLE_ALL_ADS by
-    // RemoteFlags — a placement can never out-vote the master kill switch.
+    // Per-placement switches. One key per placement; disabling a position never affects another.
     val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", OnboardingSettings.defaultBool("lfo.exit.reuse_splash_inter"))
     val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
     val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
@@ -122,7 +119,7 @@ object ObRemoteKeys {
     val CONFIG_VERSION = RemoteKey.LongKey("ob_config_version", 0)
 
     val ALL: List<RemoteKey<*>> = listOf(
-        ENABLE_ALL_ADS, ENABLE_UI_CONTENT,
+        ENABLE_UI_CONTENT,
         ENABLE_STEP_OB1, ENABLE_STEP_OB2, ENABLE_STEP_OB3, ENABLE_STEP_OB4, ENABLE_STEP_OB5,
         ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,

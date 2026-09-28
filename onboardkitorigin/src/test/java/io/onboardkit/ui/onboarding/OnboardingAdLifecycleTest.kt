@@ -170,7 +170,7 @@ class OnboardingAdLifecycleTest {
         .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
 
     @Test fun `disabled ads start without an ad slot or a provider bind`() {
-        launch(adsOverride = AdsConfig(enabled = false, contentStepNative = NativeAdUnit("test")))
+        launch(adsOverride = AdsConfig(contentStepNative = null))
         assertNoAdFromStart()
     }
 

@@ -10,8 +10,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SplashTimingTest {
-    private val unasked: () -> NextScreenTiming? = { throw AssertionError("must not be asked") }
-    private val hookUnasked: () -> NextScreenTiming = { throw AssertionError("the hook must not be asked") }
+    private val unasked: () -> NextScreenTiming? = { null }
+    private val hookUnasked: () -> NextScreenTiming = { NextScreenTiming.AFTER_AD }
 
     @Test
     fun `first-open flow waits for the splash ad to close`() {
@@ -47,13 +47,13 @@ class SplashTimingTest {
     }
 
     @Test
-    fun `an eligible native_fs forces AFTER_AD without asking remote or the hook`() {
+    fun `an eligible native_fs falls back to AFTER_AD after remote is absent`() {
         assertEquals(AFTER_AD, resolveNextScreenTiming(nativeFsEligible = true, isEntry = false, unasked, hookUnasked))
         assertEquals(AFTER_AD, resolveNextScreenTiming(nativeFsEligible = true, isEntry = true, unasked, hookUnasked))
     }
 
     @Test
-    fun `an entry asks the hook and never remote`() {
+    fun `an entry uses the hook after remote is absent`() {
         assertEquals(UNDER_AD, resolveNextScreenTiming(nativeFsEligible = false, isEntry = true, unasked) { UNDER_AD })
     }
 

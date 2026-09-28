@@ -74,7 +74,7 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 Đây chỉ là trích đoạn minh họa: giữ các placement splash/LFO/home khác trong document khi publish. `id` phải là native ad unit thực tế của app. Có thể dùng `ids` hoặc các key floor theo hướng dẫn ads hiện có.
 
 - Thiếu placement hoặc tất cả tầng bị tắt/ID không hợp lệ: không request. Content vẫn hiện, vùng ads ẩn; fullscreen bị bỏ qua.
-- Consent, premium, master switch, UA và force-update gate vẫn được kiểm tra.
+- Consent, premium, cờ từng placement, UA và force-update gate vẫn được kiểm tra.
 - Example release để cả sáu placement và các tầng của chúng `isEnable = false`: cài mới chưa có remote sẽ không tải ads OB. Remote đã activate/cache vẫn có thể dùng khi fetch thất bại.
 - SDK nói chung vẫn hỗ trợ assets/raw ID của partner; placement nào `ad_remote_config` của backend khai báo thì remote ưu tiên hơn raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải giữ các entry local tắt như example.
 - Debug mặc định giữ ad unit test của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) và không để remote thay ad IDs; các field khác của `ad_remote_config` (ví dụ `isEnable`) và settings `onboarding_config` vẫn thử được qua remote. Key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Không dùng ad unit production để test.
@@ -85,7 +85,7 @@ Tại callback **chọn ngôn ngữ đầu tiên** (vị trí trước đây pre
 
 Điều kiện preload là **màn có trong danh sách đã chốt + placement có ID sử dụng được và được bật + các gate ads đều cho phép**. Chỉ có ID trong ad config không tự tạo request. `isEnable = false` ở placement gốc tắt cả waterfall, kể cả tầng `_high` vẫn bật. Request đang chờ foreground/focus kiểm tra lại placement và lấy ID hiện tại trước khi gửi.
 
-Danh sách màn được giữ ổn định, nhưng các chặn ads (placement/master switch, premium, consent, force update, UA) vẫn có hiệu lực. SDK chỉ preload khi chưa biết có điều kiện chặn show; không thể bảo đảm mỗi preload đều có impression: người dùng có thể thoát/chuyển trang trước fill, ads no-fill, hoặc điều kiện ads thay đổi sau khi request đã gửi. Những thay đổi này vẫn phải chặn show; request đã gửi không thể thu hồi.
+Danh sách màn được giữ ổn định, nhưng các chặn ads theo từng placement, premium, consent, force update và UA vẫn có hiệu lực. SDK chỉ preload khi chưa biết có điều kiện chặn show; không thể bảo đảm mỗi preload đều có impression: người dùng có thể thoát/chuyển trang trước fill, ads no-fill, hoặc điều kiện ads thay đổi sau khi request đã gửi. Những thay đổi này vẫn phải chặn show; request đã gửi không thể thu hồi.
 
 `inter_after_ob3` preload khi vào pager (OB1 trong flow mặc định); reorder không biến tên interstitial thành ràng buộc phải gặp OB3. Splash, UMP, billing và LFO giữ lịch chạy hiện có.
 

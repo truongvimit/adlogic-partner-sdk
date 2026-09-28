@@ -2,7 +2,6 @@
   "schema_version": 1,
   "revision": 0,
   "flow": {
-    "ads_enabled": true,
     "skip_ad_only_steps_when_premium": true,
     "fullscreen_skip_style": "CLOSE_ICON"
   },

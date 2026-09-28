@@ -1,6 +1,7 @@
 package io.onboardkit.remote
 
 import android.content.Context
+import android.util.Log
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.settings.SettingsDocument
@@ -16,8 +17,18 @@ import io.onboardkit.ads.AdPlacement
  * backend delivered) > app asset > host option > bundled default, for every field.
  */
 object OnboardingSettings {
+    private const val TAG = "OnboardingSettings"
     val document = SettingsDocument("onboarding_config", BundledOnboarding.VALUES, ::extraDefault)
     val values: SettingsSnapshot get() = document.snapshot
+
+    /** Enum fields are schema values too: an unknown string falls through to the lower tier. */
+    private inline fun <reified T : Enum<T>> SettingsSnapshot.enumOr(path: String, fallback: T): T {
+        val raw = string(path, fallback.name)
+        return runCatching { enumValueOf<T>(raw) }.getOrElse {
+            Log.w(TAG, "$path ignored invalid enum '$raw'; using ${fallback.name}")
+            fallback
+        }
+    }
 
     private fun extraDefault(path: String): Any? {
         if (path.startsWith("onboarding.steps.")) {
@@ -148,7 +159,6 @@ object OnboardingSettings {
             if (value != null && f.isSupplied(key, raw)) paths.forEach { mapped[it] = value }
         }
         fun put(key: RemoteKey<*>, raw: Any, path: String) = putMapped(key, raw, raw, path)
-        put(k.ENABLE_ALL_ADS, f.enableAllAds, "flow.ads_enabled")
         put(k.ENABLE_STEP_OB5, f.enableStepOb5, "ob5.enabled")
         put(k.ENABLE_QUESTION, f.enableQuestion, "question.enabled")
         put(k.ENABLE_QUESTION_OLD_USER, f.enableQuestionOldUser, "question.old_user_enabled")
@@ -200,17 +210,59 @@ object OnboardingSettings {
             remoteFetchTimeoutMs = v.long("splash.load.remote_fetch_timeout_ms", c.splash.remoteFetchTimeoutMs),
             consentTimeoutMs = v.long("splash.load.consent_hook_timeout_ms", c.splash.consentTimeoutMs),
             billingTimeoutMs = v.long("splash.load.billing_timeout_ms", c.splash.billingTimeoutMs),
-            adLoadStrategy = AdLoadStrategy.valueOf(v.string("splash.load.ad_strategy", c.splash.adLoadStrategy.name)),
+            adLoadStrategy = v.enumOr("splash.load.ad_strategy", c.splash.adLoadStrategy),
             noInternetPromptEnabled = v.boolean("splash.permissions.no_internet_prompt_enabled", c.splash.noInternetPromptEnabled),
             notificationPermissionEnabled = v.boolean("splash.permissions.notification_enabled", c.splash.notificationPermissionEnabled),
         )
         // Remote codes pick from the app catalog (remote cannot add a language the app has no
         // strings for); a default that is not on the offered list would preselect a hidden row.
-        val listed = v.strings("lfo.languages.supported_codes")
-            .mapNotNull { code -> c.language.languages.firstOrNull { it.code == code } }
-            .distinctBy { it.code }
-        val offered = listed.ifEmpty { c.language.languages }
+        fun validCodes(raw: Any?): List<ObLanguage>? {
+            if (raw !is List<*>) return null
+            if (raw.isEmpty()) return emptyList()
+            val codes = raw.map { it as? String ?: return null }
+            // A code outside the app's catalog is an invalid field, not a request to show an empty
+            // language screen. Mixed lists are rejected as a unit for deterministic fallback.
+            if (codes.any { code -> c.language.languages.none { it.code == code } }) return null
+            return codes.mapNotNull { code -> c.language.languages.firstOrNull { it.code == code } }
+                .distinctBy { it.code }
+        }
+        val remoteCodes = validCodes(v.remoteValue("lfo.languages.supported_codes"))
+        val assetCodes = validCodes(v.assetValue("lfo.languages.supported_codes"))
+        val configuredCodes = when {
+            v.remoteValue("lfo.languages.supported_codes") != null -> remoteCodes ?: assetCodes
+            v.assetValue("lfo.languages.supported_codes") != null -> assetCodes
+            else -> null
+        }
+        // An explicit [] is a real remote/asset value. Only a missing or invalid field uses the
+        // host catalog; invalid remote first falls back to a valid asset list.
+        val offered = configuredCodes ?: c.language.languages
         fun offers(code: String?) = code != null && offered.any { it.code == code }
+        // Presence is part of the value. In particular, an explicitly configured empty string is
+        // a clear operation and must not fall through to the host's default (`?:` would do that).
+        fun candidate(value: Any?): Pair<Boolean, String?> = when (value) {
+            // Empty is an explicit clear at whichever source supplied it. The Boolean keeps that
+            // clear distinct from an invalid value that must continue to the next tier.
+            is String -> if (value.isEmpty()) true to null else (offers(value) to value.takeIf(::offers))
+            else -> false to null
+        }
+        val remoteDefault = v.remoteValue("lfo.languages.default_code")
+        val assetDefault = v.assetValue("lfo.languages.default_code")
+        val resolvedDefault = when {
+            // A valid remote value (including empty) wins. An invalid remote value falls through
+            // to the asset, then code, instead of letting `?:` accidentally resurrect code first.
+            remoteDefault != null -> {
+                val remote = candidate(remoteDefault)
+                if (remote.first) remote.second else {
+                    val asset = candidate(assetDefault)
+                    if (asset.first) asset.second else c.language.defaultCode?.takeIf { configuredCodes == null || offers(it) }
+                }
+            }
+            assetDefault != null -> {
+                val asset = candidate(assetDefault)
+                if (asset.first) asset.second else c.language.defaultCode?.takeIf { configuredCodes == null || offers(it) }
+            }
+            else -> c.language.defaultCode?.takeIf { configuredCodes == null || offers(it) }
+        }
         val language = c.language.copy(
             languages = offered,
             secondNativeOnSelectEnabled = v.boolean("lfo.native2.enabled", c.language.secondNativeOnSelectEnabled),
@@ -218,8 +270,7 @@ object OnboardingSettings {
             confirmVisibleBeforeSelect = v.boolean("lfo.confirm_button.visible_before_selection", c.language.confirmVisibleBeforeSelect),
             saveButtonOnBackEnabled = v.boolean("lfo.confirm_button.save_on_back", c.language.saveButtonOnBackEnabled),
             confirmDialogOnReselectEnabled = v.boolean("lfo.confirm_dialog.enabled", c.language.confirmDialogOnReselectEnabled),
-            defaultCode = v.string("lfo.languages.default_code", "").takeIf(::offers)
-                ?: c.language.defaultCode?.takeIf { listed.isEmpty() || offers(it) },
+            defaultCode = resolvedDefault,
         )
         val behavior = c.behavior.copy(
             lockPagerSwipe = v.boolean("onboarding.navigation.lock_pager_swipe", c.behavior.lockPagerSwipe),
@@ -230,7 +281,11 @@ object OnboardingSettings {
         // A remote order names the pages outright, so a page it lists shows even when the app
         // disabled it. Remote order > delivered legacy step keys > app asset order > the catalog.
         val catalog = c.steps.associateBy { it.id.value }
-        fun order(value: Any?) = (value as? List<*>)?.filterIsInstance<String>()?.mapNotNull(catalog::get)
+        fun order(value: Any?): List<StepDefinition>? {
+            val raw = value as? List<*> ?: return null
+            if (raw.any { it !is String } || raw.any { it !in catalog }) return null
+            return raw.map { catalog.getValue(it as String) }
+        }
         val selected = order(v.remoteValue("onboarding.order"))
             ?: withLegacySteps((order(v.assetValue("onboarding.order")) ?: c.steps).filter { it.enabled }, c.steps, legacySteps)
         val steps = selected.map { step ->
@@ -242,10 +297,16 @@ object OnboardingSettings {
                         .long(step.skipButtonDelaySec * 1000L) / 1000).toInt(),
                     autoNextEnabled = FullScreenSetting.AutoNextEnabled.on(page, v).boolean(step.autoNextEnabled),
                     autoNextDelayMs = FullScreenSetting.AutoNextDelayMs.on(page, v).long(step.autoNextDelayMs),
-                    skipButtonStyle = FullScreenSkipStyle.valueOf(FullScreenSetting.SkipStyle.on(page, v)
-                        .string(step.skipButtonStyle?.name ?: ads.fullScreenSkipStyle.name)),
-                    skipButtonPosition = FullScreenSkipPosition.valueOf(FullScreenSetting.SkipPosition.on(page, v)
-                        .string(step.skipButtonPosition.name)),
+                    skipButtonStyle = FullScreenSetting.SkipStyle.on(page, v).string(step.skipButtonStyle?.name ?: ads.fullScreenSkipStyle.name)
+                        .let { raw -> runCatching { FullScreenSkipStyle.valueOf(raw) }.getOrElse {
+                            Log.w(TAG, "onboarding.steps.$page.fullscreen.skip.style ignored invalid enum '$raw'")
+                            step.skipButtonStyle ?: ads.fullScreenSkipStyle
+                        } },
+                    skipButtonPosition = FullScreenSetting.SkipPosition.on(page, v).string(step.skipButtonPosition.name)
+                        .let { raw -> runCatching { FullScreenSkipPosition.valueOf(raw) }.getOrElse {
+                            Log.w(TAG, "onboarding.steps.$page.fullscreen.skip.position ignored invalid enum '$raw'")
+                            step.skipButtonPosition
+                        } },
                     enabled = true,
                 )
             }
@@ -265,8 +326,19 @@ object OnboardingSettings {
         return result
     }
 
-    internal fun ob5SkipStyle(fallback: FullScreenSkipStyle): FullScreenSkipStyle =
-        FullScreenSkipStyle.valueOf(values.scoped("ob5.skip.style", "flow.fullscreen_skip_style").string(fallback.name))
+    internal fun ob5SkipStyle(fallback: FullScreenSkipStyle): FullScreenSkipStyle {
+        val raw = values.scoped("ob5.skip.style", "flow.fullscreen_skip_style").string(fallback.name)
+        return runCatching { FullScreenSkipStyle.valueOf(raw) }.getOrElse {
+            Log.w(TAG, "ob5.skip.style ignored invalid enum '$raw'; using ${fallback.name}")
+            fallback
+        }
+    }
+
+    internal fun skipStyle(path: String, fallback: FullScreenSkipStyle): FullScreenSkipStyle =
+        values.enumOr(path, fallback)
+
+    internal fun skipPosition(path: String, fallback: FullScreenSkipPosition): FullScreenSkipPosition =
+        values.enumOr(path, fallback)
 
     /**
      * The question a run shows: valid remote `ob_question_config` replaces the app's title and
@@ -276,13 +348,15 @@ object OnboardingSettings {
         val remote = io.onboardkit.remote.uiconfig.RemoteQuestionParser.parse(remoteJson)
         val base = compiled ?: if (remote != null) QuestionConfig() else return null
         return resolveQuestion(base.copy(
-            title = remote?.title?.takeIf { it.isNotBlank() } ?: base.title,
+            // A delivered empty title is an intentional clear. Only an omitted JSON member
+            // (null in the DTO) falls through to the compiled/app title.
+            title = remote?.title ?: base.title,
             options = remote?.options ?: base.options,
         ))
     }
 
     internal fun resolveQuestion(q: QuestionConfig, v: SettingsSnapshot = values): QuestionConfig {
-        val mode = SelectionMode.valueOf(v.string("question.selection.mode", q.selectionMode.name))
+        val mode = v.enumOr("question.selection.mode", q.selectionMode)
         val max = if (mode == SelectionMode.SINGLE) 1 else q.options.size.coerceAtLeast(1)
         // Clamped even without a selection override: remote options can leave fewer than the
         // app's minimum, and an unreachable minimum hides the CTA for good.
@@ -295,15 +369,13 @@ object OnboardingSettings {
 
     private fun resolveAds(a: AdsConfig, adConfig: AdRemoteConfig, v: SettingsSnapshot): AdsConfig =
         a.resolvePlacements(adConfig).copy(
-            // Only remote overrides the host switch; an app asset "off" still reaches the guard via flags.
-            enabled = v.remoteValue("flow.ads_enabled") as? Boolean ?: a.enabled,
             afterOnboardingInterstitialEnabled = v.boolean("onboarding.exit_interstitial.enabled", a.afterOnboardingInterstitialEnabled),
             skipAdOnlyStepsWhenPremium = v.boolean("flow.skip_ad_only_steps_when_premium", a.skipAdOnlyStepsWhenPremium),
-            fullScreenSkipStyle = FullScreenSkipStyle.valueOf(v.string("flow.fullscreen_skip_style", a.fullScreenSkipStyle.name)),
-            languageTemplate = NativeTemplate.valueOf(v.string("lfo.native_template", a.languageTemplate.name)),
-            contentStepTemplate = NativeTemplate.valueOf(v.string("onboarding.ads.content_template", a.contentStepTemplate.name)),
-            questionTemplate = NativeTemplate.valueOf(v.string("question.native.template", a.questionTemplate.name)),
-            afterOnboardingInterstitialTiming = NextScreenTiming.valueOf(v.string("onboarding.exit_interstitial.next_screen_timing", a.afterOnboardingInterstitialTiming.name)),
+            fullScreenSkipStyle = v.enumOr("flow.fullscreen_skip_style", a.fullScreenSkipStyle),
+            languageTemplate = v.enumOr("lfo.native_template", a.languageTemplate),
+            contentStepTemplate = v.enumOr("onboarding.ads.content_template", a.contentStepTemplate),
+            questionTemplate = v.enumOr("question.native.template", a.questionTemplate),
+            afterOnboardingInterstitialTiming = v.enumOr("onboarding.exit_interstitial.next_screen_timing", a.afterOnboardingInterstitialTiming),
         )
 
     @Synchronized fun resolveFlags(f: RemoteFlags): RemoteFlags {
@@ -314,13 +386,16 @@ object OnboardingSettings {
 
     private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot): RemoteFlags {
         // Same precedence as the page list: remote order > delivered legacy key > asset order.
-        fun listed(value: Any?) = (value as? List<*>)?.filterIsInstance<String>()
+        fun listed(value: Any?): List<String>? {
+            val raw = value as? List<*> ?: return null
+            if (raw.any { it !is String }) return null
+            return raw.map { it as String }
+        }
         val remoteOrder = listed(v.remoteValue("onboarding.order"))
         val assetOrder = listed(v.assetValue("onboarding.order"))
         fun step(id: String, key: RemoteKey<Boolean>, legacy: Boolean) = remoteOrder?.contains(id)
             ?: legacy.takeIf { f.isSupplied(key, it) } ?: assetOrder?.contains(id) ?: legacy
         return f.copy(
-            enableAllAds = v.boolean("flow.ads_enabled", f.enableAllAds),
             languageSupportedCodes = v.strings("lfo.languages.supported_codes", f.languageSupportedCodes.split(',').filter { it.isNotBlank() }).joinToString(","),
             enableStepOb1 = step("ob1", ObRemoteKeys.ENABLE_STEP_OB1, f.enableStepOb1),
             enableStepOb2 = step("ob2", ObRemoteKeys.ENABLE_STEP_OB2, f.enableStepOb2),

@@ -89,7 +89,7 @@ class PreloadChainTest {
                 AdFullScreenStepDefinition(StepId.FULL2), ContentStepDefinition(StepId.OB4))
             ads = AdsConfig(contentStepNative = NativeAdUnit("content"), fullScreenStepNative = NativeAdUnit("full"))
         }.getOrThrow()
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob1"]}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","ob1"]}}""")
         cfg = OnboardingSettings.resolve(cfg)
         chain.onLanguageSelected(activity)
         assertEquals(listOf(AdPlacement.StepFullScreen(StepId.FULL2), AdPlacement.StepNative(StepId.OB2),

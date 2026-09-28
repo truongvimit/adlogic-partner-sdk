@@ -62,8 +62,8 @@ open class BannerAdConfig @JvmOverloads constructor(
     var autoReloadTime: Long = DEFAULT_AUTO_RELOAD_MS
         get() {
             val unit = placementKey?.let { AdRemoteConfig.getInstance().ads[it] }
-            val seconds = unit?.reloadIntervalSeconds?.takeIf { it > 0 }
-            return seconds?.toLong()?.times(1_000) ?: field
+            val seconds = unit?.reloadIntervalSeconds
+            return if (seconds != null && seconds >= 0) seconds.toLong().times(1_000) else field
         }
         set(value) {
             require(value >= MIN_AUTO_RELOAD_MS) { "Time can not < ${MIN_AUTO_RELOAD_MS}ms" }
@@ -102,7 +102,9 @@ open class BannerAdConfig @JvmOverloads constructor(
             "COLLAPSIBLE" -> BannerType.Collapsible(AdBehavior.defaultText("banner.presentation.collapsible_gravity").lowercase(java.util.Locale.ROOT))
             "INLINE" -> BannerType.Inline(if (AdBehavior.defaultText("banner.presentation.inline_style") == "SMALL") com.ads.module.admob.Admob.BANNER_INLINE_SMALL_STYLE else com.ads.module.admob.Admob.BANNER_INLINE_LARGE_STYLE)
             "INLINE_MAX_HEIGHT" -> BannerType.InlineMaxHeight(AdBehavior.defaultNumber("banner.presentation.inline_max_height_dp").toInt())
-            "FIXED" -> BannerType.Fixed(FixedBannerSize.valueOf(AdBehavior.defaultText("banner.presentation.fixed_size")))
+            "FIXED" -> BannerType.Fixed(runCatching {
+                FixedBannerSize.valueOf(AdBehavior.defaultText("banner.presentation.fixed_size"))
+            }.getOrDefault(FixedBannerSize.BANNER))
             else -> BannerType.Normal
         }
 
@@ -120,7 +122,9 @@ open class BannerAdConfig @JvmOverloads constructor(
                 "COLLAPSIBLE" -> BannerType.Collapsible(v.string("presentation.collapsible_gravity", (local as? BannerType.Collapsible)?.gravity?.uppercase(java.util.Locale.ROOT) ?: "BOTTOM").lowercase(java.util.Locale.ROOT))
                 "INLINE" -> BannerType.Inline(if (v.string("presentation.inline_style", if ((local as? BannerType.Inline)?.style == com.ads.module.admob.Admob.BANNER_INLINE_SMALL_STYLE) "SMALL" else "LARGE") == "SMALL") com.ads.module.admob.Admob.BANNER_INLINE_SMALL_STYLE else com.ads.module.admob.Admob.BANNER_INLINE_LARGE_STYLE)
                 "INLINE_MAX_HEIGHT" -> BannerType.InlineMaxHeight(v.long("presentation.inline_max_height_dp", (local as? BannerType.InlineMaxHeight)?.maxHeightDp?.toLong() ?: AdBehavior.number("banner.presentation.inline_max_height_dp")).toInt())
-                "FIXED" -> BannerType.Fixed(FixedBannerSize.valueOf(v.string("presentation.fixed_size", (local as? BannerType.Fixed)?.size?.name ?: "BANNER")))
+                "FIXED" -> BannerType.Fixed(runCatching {
+                    FixedBannerSize.valueOf(v.string("presentation.fixed_size", (local as? BannerType.Fixed)?.size?.name ?: "BANNER"))
+                }.getOrDefault((local as? BannerType.Fixed)?.size ?: FixedBannerSize.BANNER))
                 else -> BannerType.Normal
             }
         }

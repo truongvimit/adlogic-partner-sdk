@@ -980,7 +980,7 @@ class SplashLongPromptTest {
     }
 
     @Test
-    fun anEntryLaunchIgnoresRemoteNextScreenTiming() {
+    fun anEntryLaunchUsesRemoteNextScreenTimingBeforeTheHook() {
         io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"splash":{"navigation":{"next_screen_timing":"AFTER_AD"}}}""")
         try {
             LongPromptFixture.provider.successfulShow = true
@@ -989,7 +989,7 @@ class SplashLongPromptTest {
             loadInterstitialNow()
             idleFrames(Duration.ofSeconds(4))
             drainUntil("The inter shows") { "show" in LongPromptFixture.provider.order }
-            assertEquals("An entry asks the hook, which says UNDER_AD", 1, LongPromptFixture.provider.flowStartsAtVendorShow)
+            assertEquals("A valid remote timing outranks the entry hook", 0, LongPromptFixture.provider.flowStartsAtVendorShow)
         } finally {
             io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
         }

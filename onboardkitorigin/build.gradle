@@ -16,7 +16,7 @@ android {
     defaultConfig {
         minSdk min_sdk_version
 
-        buildConfigField "String", "SDK_VERSION", "\"1.0.0\""
+        buildConfigField "String", "SDK_VERSION", "\"$adlogic_sdk_version\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -104,6 +104,9 @@ afterEvaluate {
 
 // Generate typed defaults from the asset at build time: no startup JSON parsing.
 ext.settingsName = 'onboarding_config'
+// The SDK default lives in a namespaced asset path; a host override, when present,
+// is the document name at the app asset root.
+ext.settingsSourcePath = "src/main/assets/adlogic_defaults/${settingsName}.json"
 ext.settingsPackage = 'io.onboardkit.remote'
 ext.settingsClass = 'BundledOnboarding'
 apply from: rootProject.file('gradle/settings-defaults.gradle')

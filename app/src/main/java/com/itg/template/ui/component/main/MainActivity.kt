@@ -66,6 +66,8 @@ import com.itg.template.app.ResumeAdsEntryMode
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 import java.lang.ref.WeakReference
+import org.json.JSONArray
+import org.json.JSONObject
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity<ActivityMainBinding>() {
@@ -405,14 +407,14 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     private fun overrideAdConfig() {
         if (!AdRemoteConfig.isInitialized()) return
         try {
-            val instance = AdRemoteConfig.getInstance()
-            val updatedAds = instance.ads.mapValues { (_, config) ->
-                config.copy(
-                    colorCTA = currentCtaColor,
-                    components = currentComponents
-                )
+            val patch = JSONObject()
+            AdRemoteConfig.getInstance().ads.keys.forEach { key ->
+                patch.put(key, JSONObject().apply {
+                    put("colorCTA", currentCtaColor)
+                    put("components", JSONArray(currentComponents))
+                })
             }
-            AdRemoteConfig.update(instance.copy(ads = updatedAds))
+            AdRemoteConfig.updateCodeFromJson(patch.toString())
         } catch (e: Exception) {
             Timber.w(e, "Failed to override ad config")
         }
@@ -465,24 +467,18 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         if (!AdRemoteConfig.isInitialized()) return
         try {
-            val instance = AdRemoteConfig.getInstance()
-            val updatedAds = instance.ads.toMutableMap()
-
-            val appResumeConfig = updatedAds[AppAdPlacement.OPEN_RESUME]
-            val nativeWelcomeConfig = updatedAds[AppAdPlacement.NATIVE_WELCOME]
-            val interWelcomeConfig = updatedAds[AppAdPlacement.INTER_WELCOME]
-
-            if (appResumeConfig != null) {
-                updatedAds[AppAdPlacement.OPEN_RESUME] = appResumeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.APP_RESUME))
+            val patch = JSONObject()
+            val placements = AdRemoteConfig.getInstance().ads.keys
+            if (AppAdPlacement.OPEN_RESUME in placements) {
+                patch.put(AppAdPlacement.OPEN_RESUME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.APP_RESUME))
             }
-            if (nativeWelcomeConfig != null) {
-                updatedAds[AppAdPlacement.NATIVE_WELCOME] = nativeWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
+            if (AppAdPlacement.NATIVE_WELCOME in placements) {
+                patch.put(AppAdPlacement.NATIVE_WELCOME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.WELCOME))
             }
-            if (interWelcomeConfig != null) {
-                updatedAds[AppAdPlacement.INTER_WELCOME] = interWelcomeConfig.copy(isEnable = (mode == ResumeAdsEntryMode.WELCOME))
+            if (AppAdPlacement.INTER_WELCOME in placements) {
+                patch.put(AppAdPlacement.INTER_WELCOME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.WELCOME))
             }
-
-            AdRemoteConfig.update(instance.copy(ads = updatedAds))
+            AdRemoteConfig.updateCodeFromJson(patch.toString())
 
             // Dynamically enable/disable AppOpenManager based on mode
             if (mode == ResumeAdsEntryMode.APP_RESUME) {

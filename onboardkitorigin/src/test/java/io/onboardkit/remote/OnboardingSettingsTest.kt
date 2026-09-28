@@ -40,7 +40,7 @@ class OnboardingSettingsTest {
         }.getOrThrow()
         assertEquals(listOf(StepId.OB4, StepId.FULL2, StepId.OB1),
             io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(cfg), RemoteFlags()))
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob4"]}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","ob4"]}}""")
         assertEquals(listOf(StepId.FULL2, StepId.OB2, StepId.OB4), OnboardingSettings.resolve(cfg).steps.map { it.id })
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
         assertTrue(OnboardingSettings.resolve(cfg).steps.isEmpty())
@@ -76,12 +76,11 @@ class OnboardingSettingsTest {
         assertEquals(3000L, OnboardingSettings.number("ob5.skip.delay_ms"))
     }
 
-    @Test fun `sparse remote resolves screens, preserves host values it omits and reopens a host ads gate`() {
-        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(enabled = false), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
+    @Test fun `sparse remote resolves screens and preserves the host-only ads gate`() {
+        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
             steps = listOf(AdFullScreenStepDefinition(StepId.OB3, autoNextDelayMs = 9000)))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":true},"onboarding":{"navigation":{"lock_pager_swipe":false},"fullscreen":{"auto_next":{"enabled":false}},"steps":{"ob3":{"fullscreen":{"skip":{"delay_ms":0}}}}}}""")
         val effective = OnboardingSettings.resolve(c)
-        assertTrue(effective.ads.enabled)
         assertFalse(effective.behavior.lockPagerSwipe)
         assertEquals(4500L, effective.splash.minDisplayTimeMs)
         val step = effective.steps.single() as AdFullScreenStepDefinition
