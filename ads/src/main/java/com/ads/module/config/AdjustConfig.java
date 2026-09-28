@@ -25,10 +25,10 @@ public class AdjustConfig {
     private String eventNamePurchase = "";
 
     /**
-     * Event token fired on every paid ad impression, in addition to {@code Adjust.trackAdRevenue}.
-     * Networks that cannot consume Adjust's ad-revenue API (TikTok, Meta) read this one instead.
-     * Leave it empty unless a partner network asked for it — configuring it means the same money
-     * reaches Adjust twice, once as ad revenue and once as event revenue.
+     * Optional count-only event token fired on every paid ad impression. This event carries no
+     * revenue; money is reported once through {@code Adjust.trackAdRevenue}. Leave empty to skip
+     * the extra event. Campaigns requiring revenue must use the ad-revenue sharing configuration,
+     * not this event's value.
      */
     private String eventAdImpression = "";
 
