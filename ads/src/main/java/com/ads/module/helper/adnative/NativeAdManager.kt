@@ -6,6 +6,7 @@ import com.ads.module.ads.AdWaterfall
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
+import com.ads.module.helper.AdSkipReason
 import com.ads.module.tracking.AdTracking
 import com.google.android.gms.ads.LoadAdError
 import io.trackkit.AdFormat
@@ -22,8 +23,10 @@ object NativeAdManager {
     private class Entry {
         var ready: ApNativeAd? = null
         var loading = false
+        var failed = false
         var discardResult = false
         val waiters = linkedSetOf<(ApNativeAd?) -> Unit>()
+        val outcomeListeners = mutableListOf<(AdSkipReason?) -> Unit>()
         val listeners = linkedSetOf<AdCallback>()
     }
 
@@ -31,26 +34,46 @@ object NativeAdManager {
     private val adListeners = java.util.WeakHashMap<ApNativeAd, MutableSet<AdCallback>>()
 
     /** A stable placement is preferred; this fallback preserves existing unnamed callers. */
-    fun keyOf(config: NativeAdConfig): String = config.adUnitIds.joinToString(separator = "")
+    fun keyOf(config: NativeAdConfig): String = config.adUnitIds.joinToString(separator = "\u0000")
 
     @JvmStatic fun isLoading(placement: String): Boolean = entries[placement]?.loading == true
     @JvmStatic fun isReady(placement: String): Boolean = peek(placement) != null
 
-    /** Starts at most one request. false means covered already, or blocked by request gates. */
+    /** The last load ended without a fill, and nothing has loaded or filled [placement] since. */
+    @JvmStatic fun isFailed(placement: String): Boolean =
+        entries[placement]?.failed == true && !isLoading(placement) && !isReady(placement)
+
+    /** Starts at most one request (false: covered or gated); [onResult] hears the outcome once. */
     @JvmStatic
     @JvmOverloads
-    fun preload(context: Context, placement: String, config: NativeAdConfig, reportTelemetry: Boolean = true): Boolean {
-        if (isReady(placement) || isLoading(placement)) return false
+    fun preload(
+        context: Context,
+        placement: String,
+        config: NativeAdConfig,
+        reportTelemetry: Boolean = true,
+        onResult: ((AdSkipReason?) -> Unit)? = null,
+    ): Boolean {
+        if (isReady(placement)) {
+            onResult?.let { runCatching { it(null) } }
+            return false
+        }
+        if (isLoading(placement)) {
+            onResult?.let { entries.getValue(placement).outcomeListeners += it }
+            return false
+        }
         val app = context.applicationContext
         val reason = AdGate.skipReason(app, config.canShowAds && config.adUnitIds.isNotEmpty(),
-            AdGate.passesUaGate(config.forceUaCheck))
+            AdGate.passesUaGate(config.shouldForceUaCheck()))
         if (reason != null) {
             if (reportTelemetry) AdTracking.skipped(placement, AdFormat.NATIVE, reason.key)
+            onResult?.let { runCatching { it(reason) } }
             return false
         }
         val entry = entries.getOrPut(placement) { Entry() }
         entry.loading = true
+        entry.failed = false
         entry.discardResult = false
+        onResult?.let { entry.outcomeListeners += it }
         config.adUnitIds.forEach { AdTracking.registerPlacement(it, placement) }
         if (reportTelemetry) AdTracking.request(placement, AdFormat.NATIVE, config.idAds)
         var filled: ApNativeAd? = null
@@ -75,8 +98,12 @@ object NativeAdManager {
 
     /** Claims a ready ad or joins/starts the placement load. Cancellation only detaches this UI. */
     internal fun acquire(context: Context, placement: String, config: NativeAdConfig,
-        reportTelemetry: Boolean, result: (ApNativeAd?) -> Unit): Subscription {
+        reportTelemetry: Boolean, joinOnly: Boolean, result: (ApNativeAd?) -> Unit): Subscription {
         poll(placement)?.let { result(it); return Subscription {} }
+        if (joinOnly && !isLoading(placement)) {
+            result(null)
+            return Subscription {}
+        }
         val entry = entries.getOrPut(placement) { Entry() }
         entry.waiters.add(result)
         if (!entry.loading && !preload(context, placement, config, reportTelemetry)) {
@@ -135,8 +162,11 @@ object NativeAdManager {
         val accepted = ad?.takeIf { !entry.discardResult && it.isUsable }
         if (accepted == null && ad != null) dispose(ad)
         entry.ready = accepted
+        entry.failed = accepted == null && !entry.discardResult
         val waiting = entry.waiters.toList()
         entry.waiters.clear()
+        val outcomeListeners = entry.outcomeListeners.toList()
+        entry.outcomeListeners.clear()
         // Snapshot before callbacks: a reentrant show/preload starts a separate request.
         entry.listeners.toList().forEach { listener ->
             runCatching {
@@ -144,6 +174,8 @@ object NativeAdManager {
                 else listener.onAdFailedToLoad(error)
             }
         }
+        val outcome = if (accepted != null) null else AdSkipReason.NOT_READY
+        outcomeListeners.forEach { runCatching { it(outcome) } }
         waiting.forEach { waiter ->
             // Persistent legacy listeners may already have claimed or released this fill.
             val available = entry.ready?.takeIf { it === accepted && it.isUsable }
@@ -161,7 +193,10 @@ object NativeAdManager {
         entry.listeners.clear()
         val waiting = entry.waiters.toList()
         entry.waiters.clear()
+        val outcomeListeners = entry.outcomeListeners.toList()
+        entry.outcomeListeners.clear()
         if (!entry.loading) entries.remove(placement)
+        outcomeListeners.forEach { runCatching { it(AdSkipReason.NOT_READY) } }
         waiting.forEach { runCatching { it(null) } }
     }
 

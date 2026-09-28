@@ -67,7 +67,6 @@ class AppOpenEarlyFlowDeviceTest {
                 step(ContentStepDefinition(StepId.OB1, title = "Resume device verification"))
                 ads = AdsConfig(appResume = InterstitialAdUnit(UNIT))
             }.getOrThrow()).getOrThrow()
-            OnboardingSdk.setCanRequestAds(true)
             ConsentCenter.setHostConsent(true, false)
             manager.disableAppResume()
             manager.init(app, "")

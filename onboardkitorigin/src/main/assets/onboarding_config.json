@@ -24,13 +24,13 @@
       "ad_budget_ms": 60000,
       "slot_min_visible_ms": 1000,
       "slot_wait_after_inter_ms": 10000,
-      "notification_settle_ms": 800
+      "notification_settle_ms": 1000
     },
     "load": {
       "ad_strategy": "ALTERNATE",
       "lfo1_preload_mode": "SEQUENTIAL",
       "remote_fetch_timeout_ms": 10000,
-      "consent_hook_timeout_ms": 20000,
+      "consent_hook_timeout_ms": 10000,
       "billing_timeout_ms": 5000
     },
     "permissions": {
@@ -46,7 +46,6 @@
         "style": "CLOSE_ICON",
         "position": "RIGHT"
       },
-      "auto_dismiss_ms": 15000,
       "behavior": {
         "click": {
           "action": "reload"
@@ -78,7 +77,7 @@
       "delay_ms": 3000
     },
     "confirm_button": {
-      "visible_before_selection": false,
+      "visible_before_selection": true,
       "save_on_back": true,
       "image_url": "",
       "tint_color": ""
@@ -161,10 +160,10 @@
     },
     "order": [
       "ob1",
-      "full1",
       "ob2",
-      "full2",
+      "full1",
       "ob3",
+      "full2",
       "ob4"
     ]
   },

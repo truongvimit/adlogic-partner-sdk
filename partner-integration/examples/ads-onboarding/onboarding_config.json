@@ -30,7 +30,7 @@
       "ad_strategy": "ALTERNATE",
       "lfo1_preload_mode": "SEQUENTIAL",
       "remote_fetch_timeout_ms": 10000,
-      "consent_hook_timeout_ms": 20000,
+      "consent_hook_timeout_ms": 10000,
       "billing_timeout_ms": 5000
     },
     "permissions": {
@@ -46,7 +46,6 @@
         "style": "CLOSE_ICON",
         "position": "RIGHT"
       },
-      "auto_dismiss_ms": 15000,
       "behavior": {
         "click": {
           "action": "reload"
@@ -78,7 +77,7 @@
       "delay_ms": 3000
     },
     "confirm_button": {
-      "visible_before_selection": false,
+      "visible_before_selection": true,
       "save_on_back": true,
       "image_url": "",
       "tint_color": ""

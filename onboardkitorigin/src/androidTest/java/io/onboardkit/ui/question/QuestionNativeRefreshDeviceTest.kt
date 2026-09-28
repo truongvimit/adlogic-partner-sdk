@@ -2,12 +2,13 @@ package io.onboardkit.ui.question
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.view.View
+import android.widget.FrameLayout
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -20,9 +21,9 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
-import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.QuestionConfig
@@ -57,7 +58,6 @@ class QuestionNativeRefreshDeviceTest {
             }
             provider.reset()
             ConsentCenter.setHostConsent(canRequestAds = true, personalized = false)
-            OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking { OnboardingSdk.reset() }
     }
@@ -190,8 +190,8 @@ class QuestionNativeRefreshDeviceTest {
     }
 }
 
-/** Host-side native pool mirrors the public contract: bound ads are not returned by isNativeReady. */
-private class BufferedQuestionHostProvider : OnboardingAdProvider {
+/** A native pool where a bound ad no longer counts as READY. */
+private class BufferedQuestionHostProvider : FakeAdProvider() {
     var requests = 0
     var binds = 0
     var releases = 0
@@ -199,6 +199,7 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
     private var bufferedText: String? = "First native"
     private var pending = false
     private var nativeListener: AdEventListener? = null
+    private var waitingSlot: Pair<Activity, FrameLayout>? = null
 
     fun reset() {
         requests = 0
@@ -208,21 +209,31 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
         bufferedText = "First native"
         pending = false
         nativeListener = null
+        waitingSlot = null
     }
     fun clearInitialBuffer() { bufferedText = null }
-    override fun isPremium(context: Context) = false
-    override fun isNativeReady(placement: AdPlacement) = placement == AdPlacement.QuestionNative && bufferedText != null
-    override fun isNativeLoading(placement: AdPlacement) = placement == AdPlacement.QuestionNative && pending
+    override fun nativeStatus(placement: AdPlacement) = when {
+        placement != AdPlacement.QuestionNative -> NativeStatus.IDLE
+        bufferedText != null -> NativeStatus.READY
+        pending -> NativeStatus.LOADING
+        else -> NativeStatus.IDLE
+    }
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         if (request.placement == AdPlacement.QuestionNative && bufferedText == null && !pending) {
             requests++
             pending = true
         }
     }
-    override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?): Boolean {
-        if (placement != AdPlacement.QuestionNative) return false
-        if (listener != null) nativeListener = listener
+    override fun bindNative(activity: ComponentActivity, request: NativeAdRequest, container: FrameLayout, listener: AdEventListener): Boolean {
+        if (request.placement != AdPlacement.QuestionNative) return false
+        nativeListener = listener
+        waitingSlot = activity to container
+        return bindBuffered()
+    }
+    private fun bindBuffered(): Boolean {
+        val (activity, container) = waitingSlot ?: return false
         val text = bufferedText ?: return false
+        waitingSlot = null
         bufferedText = null
         binds++
         val view = TextView(activity).apply { this.text = text }
@@ -237,7 +248,7 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
         assertTrue("A vendor fill needs an outstanding request", pending)
         pending = false
         bufferedText = text
-        nativeListener?.onLoaded()
+        if (bindBuffered()) nativeListener?.onLoaded()
     }
     fun failRequest() {
         assertTrue("A vendor failure needs an outstanding request", pending)
@@ -250,10 +261,9 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
             bufferedText = null
             pending = false
             nativeListener = null
+            waitingSlot = null
         }
     }
-    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
-    override fun isInterstitialReady(placement: AdPlacement) = false
     override fun loadAndShowInterstitial(
         activity: androidx.appcompat.app.AppCompatActivity,
         placement: AdPlacement,
@@ -264,8 +274,4 @@ private class BufferedQuestionHostProvider : OnboardingAdProvider {
         throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
     }
 
-    override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-    override fun releaseAll() = Unit
 }

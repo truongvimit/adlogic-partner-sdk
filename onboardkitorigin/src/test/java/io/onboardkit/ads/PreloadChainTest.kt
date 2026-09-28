@@ -2,6 +2,9 @@ package io.onboardkit.ads
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
+import com.ads.module.helper.Entitlement
+import com.ads.module.helper.EntitlementSource
 import androidx.test.core.app.ApplicationProvider
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.*
@@ -14,7 +17,6 @@ import org.junit.Before
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -42,19 +44,25 @@ class PreloadChainTest {
                 afterOnboardingInterstitial = InterstitialAdUnit("exit"))
         }.getOrThrow()
         OnboardingSdk.configure(cfg).getOrThrow()
-        val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-            when (call.method.name) {
-                "preloadNative" -> { requests += call.getArgument<NativeAdRequest>(1).placement; null }
-                "loadInterstitial" -> { interstitials += call.getArgument<AdPlacement>(1); null }
-                "isPremium" -> premium
-                else -> Mockito.RETURNS_DEFAULTS.answer(call)
-            }
+        val provider = object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+            override fun loadInterstitial(
+                activity: Activity,
+                placement: AdPlacement,
+                unit: InterstitialAdUnit,
+                adConfigKey: String?,
+                listener: AdEventListener?,
+            ) { interstitials += placement }
         }
-        chain = PreloadChain(provider, AdsGuard(provider, { cfg }, { flags }, { allowed }), { cfg }, { flags })
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = premium })
+        chain = PreloadChain(provider, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
         activity = Robolectric.buildActivity(Activity::class.java).get()
     }
 
-    @After fun cleanup() { OnboardingSettings.document.acceptSuccessfulFetch(null) }
+    @After fun cleanup() {
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
+    }
 
     @Test fun `splash and LFO entry do not warm onboarding natives`() {
         chain.onSplashRemoteReady(activity, FlowDestination.LANGUAGE, 0)

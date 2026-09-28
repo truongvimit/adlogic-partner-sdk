@@ -2,12 +2,13 @@ package io.onboardkit.ui.onboarding
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -57,7 +58,6 @@ class FlexibleOnboardingDeviceTest {
             if (case == "reorder") OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4","full2","ob1","ob3"]}}""")
             if (case == "empty") OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
             ConsentCenter.setHostConsent(true, false)
-            OnboardingSdk.setCanRequestAds(true)
         }
         runBlocking { OnboardingSdk.reset() }
         val expectedPages = when (case) {
@@ -112,30 +112,23 @@ class FlexibleOnboardingDeviceTest {
     }
 }
 
-private class CatalogProvider : OnboardingAdProvider {
+private class CatalogProvider : FakeAdProvider() {
     val requests = mutableListOf<AdPlacement>()
     val listeners = mutableMapOf<AdPlacement, AdEventListener>()
     private val ready = mutableSetOf<AdPlacement>()
-    override fun isPremium(context: Context) = false
-    override fun isNativeReady(placement: AdPlacement) = placement in ready
-    override fun isNativeLoading(placement: AdPlacement) = false
+    override fun nativeStatus(placement: AdPlacement) =
+        if (placement in ready) NativeStatus.READY else NativeStatus.IDLE
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         requests += request.placement
         ready += request.placement
     }
-    override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?): Boolean {
-        listener?.let { listeners[placement] = it }
+    override fun bindNative(activity: ComponentActivity, request: NativeAdRequest, container: FrameLayout, listener: AdEventListener): Boolean {
+        val placement = request.placement
+        listeners[placement] = listener
         if (!ready.remove(placement)) return false
         container.removeAllViews()
         container.addView(TextView(activity).apply { text = "Test native ${placement.key}" })
         return true
     }
-    override fun releaseNative(placement: AdPlacement) = Unit
-    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) = Unit
-    override fun isInterstitialReady(placement: AdPlacement) = false
-    override fun loadAndShowInterstitial(activity: AppCompatActivity, placement: AdPlacement, unit: InterstitialAdUnit, callback: ObInterstitialCallback, timeoutMs: Long) = Unit
-    override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) = Unit
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
     override fun releaseAll() { ready.clear() }
 }

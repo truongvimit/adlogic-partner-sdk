@@ -4,7 +4,9 @@
     <string name="ob_next">Next</string>
     <string name="ob_get_started">Get Started</string>
     <string name="ob_skip">Skip</string>
-    <string name="ob_loading">Loading…</string>
+    <string name="ob_loading">Loading...</string>
+    <string name="ob_splash_percent">%1$d%%</string>
+    <string name="ob_splash_ads_notice">This action might contain ads</string>
     <string name="ob_ad_badge" translatable="false">Ad</string>
     <string name="ob_sponsored" translatable="false">Sponsored</string>
 

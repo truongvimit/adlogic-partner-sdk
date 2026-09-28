@@ -126,11 +126,13 @@ Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` 
 - Action cố định cho mỗi lượt click và override các switch cũ `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep`. Xem [hướng dẫn remote settings](../partner-integration/remote-settings.vi.md).
 
 
-- `notificationPermissionEnabled = true`: Android 13+ / target 33+ hỏi quyền thông báo sau consent và bước fetch remote, nên giá trị remote fetch ở bước đó áp dụng ngay trong lần mở này. Đã cấp quyền hoặc đã ghi nhận kết quả hỏi tự động thì không hỏi lại; từ chối vẫn đi tiếp. Đặt `false` nếu app tự quản lý lời nhắc này.
+- `notificationPermissionEnabled = true`: hỏi sau consent và request ads splash, không đợi remote. Đọc cờ hiện có khi quyết định; từ chối vẫn đi tiếp và kết quả đã ghi nhận tránh hỏi tự động lần sau.
 - `noInternetPromptEnabled = true`: splash yêu cầu kết nối mạng trước khi tiếp tục. Đặt `false` nếu app cần cho phép mở offline.
 - `lockPortrait = true`: các màn SDK, gồm splash kế thừa của app, bị khóa dọc. Giữ `configChanges` của splash như mẫu trên để việc khóa dọc, đổi dark mode hay cỡ chữ không tạo lại Activity. App hỗ trợ ngang cần đặt `false` và kiểm tra cả quy tắc hướng màn hình trong merged manifest.
-- `consentTimeoutMs = 20_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
+- `consentTimeoutMs = 10_000`: luồng UMP mặc định do SDK quản lý **không giới hạn thời gian người dùng trả lời**. Ngân sách này vẫn giới hạn custom hook khi không có luồng consent do SDK quản lý đang chạy.
 - Splash có thể tải ads đã được cho phép dưới hộp thoại notification khi còn hiển thị; nhấn Home sẽ chặn request mới. Minimum bắt đầu cùng pha tải ads và chạy chồng với loading/notification. Mặc định luồng lần đầu (ngôn ngữ/onboarding) dùng `AFTER_AD`, mở từ launcher khi onboarding đã xong (vào app hoặc khảo sát người dùng cũ) dùng `UNDER_AD`; entry notification, widget, uninstall luôn dùng `AFTER_AD`; override `nextScreenTiming()` trong splash và gọi `super` cho trường hợp giữ mặc định. Khi mở từ launcher, remote `splash.navigation.next_screen_timing` khác `AUTO` được ưu tiên hơn override của app. Cả hai kiểu đều chờ đủ minimum rồi mới show inter: `UNDER_AD` mở màn và show inter liên tiếp, còn `AFTER_AD` chuyển màn ngay khi đóng quảng cáo.
+
+Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
 
 ### Tùy chọn splash và ngôn ngữ
 
@@ -231,12 +233,12 @@ SDK quản lý tải và điều kiện màn hình; không cần thêm callback 
 ## Tích hợp tùy chọn
 
 - **Firebase:** splash fetch flag `ob_*` khi Firebase được cấu hình; host không dùng `ObSplashActivity` nhận các flag này sau `AdConfig.refresh()`. Trước khi fetch xong, dùng giá trị Firebase đã gửi lần gần nhất; key chưa từng được gửi thì giữ cấu hình của app. Fetch xong sau deadline splash vẫn được áp dụng cho phần còn lại của phiên. [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) liệt kê key hỗ trợ. Muốn remote JSON quảng cáo hoặc sink GA4, thêm [suite-firebase](../suite-firebase/README.md); chỉ cài nguồn ad config chưa thực hiện fetch.
-- **Paywall:** cài [PayKit](../paykit/README.md) trước, rồi đặt `paywallGate = OnboardKitPaywallGate()` trong `OnboardingSdk.install` (`io.paykit.integration`). Không đặt gate thì bỏ qua paywall. Nếu app có cả mua hàng và quảng cáo, làm thêm bước chờ billing bên dưới.
-- **Consent riêng:** giữ `onConsentRequired()` mặc định nếu dùng UMP. Nếu override bằng CMP riêng, công bố kết quả qua `ConsentCenter.setHostConsent(canRequestAds, personalized)` trước khi trả về. Chỉ trả `true` không cấp quyền request; `setCanRequestAds(false)` là giới hạn riêng của host, còn `true` chỉ gỡ giới hạn đó. Nếu override `onDestroy()`, luôn gọi `super.onDestroy()`.
+- **Paywall:** cài [PayKit](../paykit/README.md) trước, rồi đặt `paywallGate = OnboardKitPaywallGate()` trong `OnboardingSdk.install` (`io.paykit.integration`). Không đặt gate thì bỏ qua paywall. Nếu app có cả mua hàng và quảng cáo, tích hợp hook billing bên dưới.
+- **Consent riêng:** giữ `onConsentRequired()` mặc định nếu dùng UMP. Nếu override bằng CMP riêng, công bố kết quả qua `ConsentCenter.setHostConsent(canRequestAds, personalized)` trước khi trả về; chỉ trả `true` không cấp quyền request. Nếu override `onDestroy()`, luôn gọi `super.onDestroy()`.
 - **Giao diện / khảo sát:** xem [cấu hình màn](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) và [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt). Chỉ splash và bước nội dung hỗ trợ ghi đè `layoutRes`; trường layout chưa hỗ trợ sẽ báo lỗi validation. Giữ nguyên ID khi ghi đè resource SDK.
 
 **Mua hàng và quảng cáo:** `PayKit.install()` / khởi tạo BillingKit bắt đầu xác minh giao dịch bất đồng bộ; gọi xong chưa có nghĩa đã khôi phục premium. Hook `onInitBilling()` mặc định đang trống.
-Thay splash tối thiểu bên trên bằng override chờ `Billing.awaitReady()` trước giai đoạn quảng cáo splash.
+Dùng `onInitBilling()` để theo dõi `Billing.awaitReady()` song song với consent. Ads đọc entitlement hiện có; hook này không giữ request đầu tiên.
 Gọi trực tiếp `Billing` còn cần thêm `implementation "com.github.truongvimit.adlogic-partner-sdk:billingkit:$sdkVersion"` cùng tag; xem [BillingKit](../billingkit/README.md).
 
 ```kotlin
@@ -251,7 +253,7 @@ class SplashActivity : ObSplashActivity() {
 }
 ```
 
-`Billing.awaitReady()` trả `Ready`, `Timeout` hoặc `Error`; dùng kết quả theo chính sách xử lý lỗi của app. `SplashConfig.billingTimeoutMs` hiện có (mặc định 5.000 ms) cũng giới hạn toàn bộ hook, nên deadline splash có thể hủy hook trước khi có kết quả; timeout không xác định trạng thái mua hàng.
+`Billing.awaitReady()` trả `Ready`, `Timeout` hoặc `Error`; dùng kết quả theo chính sách xử lý lỗi của app. `SplashConfig.billingTimeoutMs` hiện có (mặc định 5.000 ms) cũng giới hạn toàn bộ hook, nên timeout riêng hoặc Activity bị hủy có thể hủy hook trước khi có kết quả; timeout không xác định trạng thái mua hàng.
 Xem vị trí tích hợp trong [splash mẫu](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt).
 
 Với entry từ thông báo/widget/uninstall, trỏ về splash bằng [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt):
@@ -272,7 +274,7 @@ Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`; key thiếu h
 |---|---|
 | Luồng bị bỏ qua ngay | `install()` chạy trước `configure()` và cả hai `Result` không lỗi |
 | Kết thúc luồng nhưng chưa vào app | Listener xử lý đủ `Completed`, `Skipped`, `Aborted` |
-| `no_provider` / `consent_not_granted` | Đã cài provider; xem `ConsentCenter.canRequestAds()` và giới hạn từ host |
+| `no_provider` / `consent_not_granted` | Đã cài provider; xem `ConsentCenter.canRequestAds()` |
 | Không có trang chỉ quảng cáo | `fullScreenStepNative` hoặc giá trị ghi đè trong `stepNatives` dùng được |
 | Banner splash tùy chỉnh không xuất hiện | Layout có `ob_splash_ad_container` chứa include `layout_banner_control` |
 

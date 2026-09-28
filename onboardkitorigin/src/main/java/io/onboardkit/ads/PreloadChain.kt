@@ -177,7 +177,7 @@ class PreloadChain internal constructor(
             return
         }
         if (guard.skipReason(activity, placement) != null) return
-        if (adProvider.isNativeReady(placement)) {
+        if (adProvider.nativeStatus(placement) == NativeStatus.READY) {
             ObLog.d(ObLog.Section.PRELOAD, "${placement.key} skip — already buffered")
             return
         }
@@ -194,7 +194,8 @@ class PreloadChain internal constructor(
         if (placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen) {
             if (!requestedSteps.add(placement)) {
                 // Keep the in-flight request; attaching the screen may transfer its focus wait.
-                if (!adProvider.isNativeLoading(placement) && !adProvider.isNativeReady(placement)) return false
+                val status = adProvider.nativeStatus(placement)
+                if (status != NativeStatus.LOADING && status != NativeStatus.READY) return false
             }
         }
         adProvider.preloadNative(activity, request)

@@ -5,7 +5,7 @@
     "ads_enabled": true
   },
   "consent": {
-    "network_timeout_ms": 20000
+    "network_timeout_ms": 10000
   },
   "diagnostics": {
     "flow_logging_enabled": true,
@@ -39,10 +39,6 @@
       "min_after_bind_ms": 3000,
       "timer_enabled": false,
       "interval_ms": 15000
-    },
-    "preload": {
-      "enabled": false,
-      "after_show": false
     },
     "presentation": {
       "auto_shimmer": true,

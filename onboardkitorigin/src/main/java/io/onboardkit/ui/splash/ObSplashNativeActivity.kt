@@ -7,6 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
+import io.onboardkit.ads.whenResumed
 import io.onboardkit.config.FullScreenSkipPosition
 import io.onboardkit.config.FullScreenSkipStyle
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
@@ -20,10 +21,10 @@ import kotlinx.coroutines.launch
 class ObSplashNativeActivity : BaseOnboardActivity() {
     override val screenName = "splash_native"
     private lateinit var binding: ObActivityFullscreenAdBinding
+    private var skipTimerStarted = false
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
-        if (sdk.guard().skipReason(this, AdPlacement.SplashNative) != null ||
-            sdk.provider()?.isNativeReady(AdPlacement.SplashNative) != true) {
+        if (sdk.guard().skipReason(this, AdPlacement.SplashNative) != null) {
             close()
             return
         }
@@ -34,23 +35,27 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
             FullScreenSkipPosition.valueOf(OnboardingSettings.text("splash.native.skip.position")),
         )
         binding.obSkipButton.setOnClickListener { close() }
-        showNativeAd(
-            placement = AdPlacement.SplashNative,
-            unit = sdk.requireConfig().ads.splashNative,
-            container = binding.obNativeContainer,
-            onUnavailable = { close() },
-            bufferedOnly = true,
-        )
+        // A ready fill cannot bind before RESUMED. On recreation the helper may instead own a
+        // retained presentation, so a READY-only buffer check would wrongly close this screen.
+        whenResumed(onHostLost = {}) {
+            showNativeAd(
+                placement = AdPlacement.SplashNative,
+                unit = sdk.requireConfig().ads.splashNative,
+                container = binding.obNativeContainer,
+                onBound = ::startSkipTimer,
+                onUnavailable = { close() },
+                preloadedOnly = true,
+            )
+        }
+    }
+
+    private fun startSkipTimer() {
+        if (skipTimerStarted) return
+        skipTimerStarted = true
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                launch {
-                    delay(OnboardingSettings.number("splash.native.skip.delay_ms"))
-                    binding.obSkipButton.visibility = View.VISIBLE
-                }
-                launch {
-                    delay(OnboardingSettings.number("splash.native.auto_dismiss_ms"))
-                    close()
-                }
+                delay(OnboardingSettings.number("splash.native.skip.delay_ms"))
+                binding.obSkipButton.visibility = View.VISIBLE
             }
         }
     }

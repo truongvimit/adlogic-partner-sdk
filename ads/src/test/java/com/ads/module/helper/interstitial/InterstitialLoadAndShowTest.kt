@@ -479,6 +479,33 @@ class InterstitialLoadAndShowTest {
         assertEquals(2, requests.size)
     }
 
+    @Test
+    fun `a gate refusal through either load overload is reported as one skip`() {
+        val skips = mutableListOf<String>()
+        val sink = object : io.trackkit.TrackSink {
+            override val id = "int01-skip-sink"
+            override fun onEvent(name: String, params: Map<String, Any?>) {
+                if (name == io.trackkit.TrackkitEvents.AD_SKIPPED) skips += params["reason"].toString()
+            }
+        }
+        io.trackkit.Tracker.install(activity.application)
+        io.trackkit.Tracker.setConsent(true, true)
+        io.trackkit.Tracker.addSink(sink)
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+            mapOf(PLACEMENT to com.ads.module.config.AdUnitConfig(UNIT, true))))
+        try {
+            ConsentCenter.setHostConsent(false, false)
+            InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT))
+            InterstitialAdManager.load(activity, PLACEMENT)
+            val refused = AdSkipReason.CONSENT_NOT_GRANTED
+            assertEquals(listOf(refused.key, refused.key), skips)
+            assertEquals(0, requests.size)
+        } finally {
+            io.trackkit.Tracker.removeSink(sink)
+            com.ads.module.config.AdRemoteConfig.reset()
+        }
+    }
+
     private fun newVendor() = Int02VendorAd(UNIT).also { vendorAds += it }
 
     private fun loadAndFill(raw: Int02VendorAd): ApInterstitialAd {

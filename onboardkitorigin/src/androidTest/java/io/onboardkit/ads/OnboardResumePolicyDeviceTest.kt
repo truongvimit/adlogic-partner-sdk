@@ -34,7 +34,7 @@ class OnboardResumePolicyDeviceTest {
     @Test
     fun installedPolicySeparatesSharedEligibilityFromOpenSlotEligibility() {
         val phase = InstrumentationRegistry.getArguments().getString("resumePolicyPhase") ?: "depth"
-        require(phase in setOf("depth", "click", "open_off", "missing_open_unit", "master_off", "config_off", "host_off", "consent_off", "premium"))
+        require(phase in setOf("depth", "click", "open_off", "missing_open_unit", "master_off", "config_off", "consent_off", "premium"))
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = ApplicationProvider.getApplicationContext<Application>()
         val manager = AppOpenManager.getInstance()
@@ -64,7 +64,6 @@ class OnboardResumePolicyDeviceTest {
                     appResume = if (phase == "missing_open_unit") null else InterstitialAdUnit(TEST_UNIT),
                 )
             }.getOrThrow()).getOrThrow()
-            OnboardingSdk.setCanRequestAds(phase != "host_off")
         }
         try {
             ActivityScenario.launch<AppOpenResumeDeviceActivity>(

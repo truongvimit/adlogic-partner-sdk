@@ -2,7 +2,6 @@ package io.onboardkit.ui.splash
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.view.View
@@ -17,7 +16,7 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.OnboardingAdProvider
+import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdLoadStrategy
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.BannerAdUnit
@@ -72,7 +71,6 @@ class SplashLateConsentDeviceTest {
                     splashInterstitial = InterstitialAdUnit("host-interstitial"),
                 )
             }.getOrThrow()).getOrThrow()
-            OnboardingSdk.setCanRequestAds(true)
             ConsentCenter.setHostConsent(canRequestAds = false, personalized = false)
         }
         // Public persisted state selects the existing skipped-flow host callback after splash.
@@ -83,8 +81,8 @@ class SplashLateConsentDeviceTest {
     }
 
     @Test
-    fun authorityPublishedByRemoteHookRequestsEachSplashSlotExactlyOnce() {
-        runSplash(finalConsentAllowed = true, hostAllowsAds = true)
+    fun consentCompletionRequestsEachSplashSlotExactlyOnce() {
+        runSplash(finalConsentAllowed = true)
         assertEquals(1, LateConsentFixture.provider.bannerLoads)
         assertEquals(1, LateConsentFixture.provider.interstitialLoads)
         assertEquals(listOf(true, true), LateConsentFixture.provider.requestAuthorizations.toList())
@@ -92,24 +90,15 @@ class SplashLateConsentDeviceTest {
 
     @Test
     fun finalDeniedAuthoritySettlesWithoutWaitingForTheAdBudget() {
-        runSplash(finalConsentAllowed = false, hostAllowsAds = true)
+        runSplash(finalConsentAllowed = false)
         assertEquals(0, LateConsentFixture.provider.bannerLoads)
         assertEquals(0, LateConsentFixture.provider.interstitialLoads)
-        assertFalse(OnboardingSdk.canRequestAds())
+        assertFalse(ConsentCenter.canRequestAds())
     }
 
-    @Test
-    fun hostOffRemainsOffWhenTheRemoteHookPublishesConsent() {
-        runSplash(finalConsentAllowed = true, hostAllowsAds = false)
-        assertEquals(0, LateConsentFixture.provider.bannerLoads)
-        assertEquals(0, LateConsentFixture.provider.interstitialLoads)
-        assertFalse(OnboardingSdk.canRequestAds())
-    }
-
-    private fun runSplash(finalConsentAllowed: Boolean, hostAllowsAds: Boolean) {
+    private fun runSplash(finalConsentAllowed: Boolean) {
         instrumentation.runOnMainSync {
             LateConsentFixture.finalConsentAllowed = finalConsentAllowed
-            OnboardingSdk.setCanRequestAds(hostAllowsAds)
         }
         try {
             ActivityScenario.launch<LateConsentSplashDeviceActivity>(
@@ -120,7 +109,6 @@ class SplashLateConsentDeviceTest {
                 assertTrue("Final attempt must settle, not wait for the 60s ad budget", LateConsentFixture.finished.await(8, TimeUnit.SECONDS))
                 assertEquals(0, LateConsentFixture.bannerLoadsBeforeAuthority)
                 assertEquals(0, LateConsentFixture.interstitialLoadsBeforeAuthority)
-                assertEquals(1, LateConsentFixture.remoteHookCalls)
                 assertEquals(1, LateConsentFixture.outcomes.size)
                 assertTrue(LateConsentFixture.outcomes.single() is OnboardingOutcome.Skipped)
                 SystemClock.sleep(250)
@@ -132,20 +120,15 @@ class SplashLateConsentDeviceTest {
     }
 }
 
-/** A real host splash subclass using only its supported consent/remote hooks. */
+/** A real host splash subclass using its supported consent hook. */
 class LateConsentSplashDeviceActivity : ObSplashActivity() {
     override suspend fun onConsentRequired(): Boolean {
         ConsentCenter.setHostConsent(canRequestAds = false, personalized = false)
-        return false
-    }
-
-    override fun onRemoteFetched() {
-        LateConsentFixture.remoteHookCalls++
+        kotlinx.coroutines.delay(100)
         LateConsentFixture.bannerLoadsBeforeAuthority = LateConsentFixture.provider.bannerLoads
         LateConsentFixture.interstitialLoadsBeforeAuthority = LateConsentFixture.provider.interstitialLoads
-        // Represents a host CMP result arriving before the final request checkpoint.
-        // It deliberately does not change OnboardingSdk's separate host-off policy.
         ConsentCenter.setHostConsent(LateConsentFixture.finalConsentAllowed, personalized = false)
+        return LateConsentFixture.finalConsentAllowed
     }
 }
 
@@ -154,7 +137,6 @@ private object LateConsentFixture {
     var finalConsentAllowed = false
     var bannerLoadsBeforeAuthority = -1
     var interstitialLoadsBeforeAuthority = -1
-    var remoteHookCalls = 0
     var finished = CountDownLatch(1)
     val outcomes = CopyOnWriteArrayList<OnboardingOutcome>()
     val provider = SettlingSplashHostProvider()
@@ -163,15 +145,14 @@ private object LateConsentFixture {
         finalConsentAllowed = false
         bannerLoadsBeforeAuthority = -1
         interstitialLoadsBeforeAuthority = -1
-        remoteHookCalls = 0
         finished = CountDownLatch(1)
         outcomes.clear()
         provider.reset()
     }
 }
 
-/** Public host-provider seam: records admission, then returns no fill to settle the real barriers. */
-private class SettlingSplashHostProvider : OnboardingAdProvider {
+/** Records admission, then returns no fill to settle the real barriers. */
+private class SettlingSplashHostProvider : FakeAdProvider() {
     var bannerLoads = 0
     var interstitialLoads = 0
     val requestAuthorizations = CopyOnWriteArrayList<Boolean>()
@@ -180,18 +161,11 @@ private class SettlingSplashHostProvider : OnboardingAdProvider {
         interstitialLoads = 0
         requestAuthorizations.clear()
     }
-    override fun isPremium(context: Context) = false
-    override fun preloadNative(activity: Activity, request: NativeAdRequest) = Unit
-    override fun isNativeReady(placement: AdPlacement) = false
-    override fun isNativeLoading(placement: AdPlacement) = false
-    override fun bindNative(activity: Activity, placement: AdPlacement, container: ViewGroup, shimmer: View?, listener: AdEventListener?) = false
-    override fun releaseNative(placement: AdPlacement) = Unit
-    override fun loadInterstitial(context: Context, placement: AdPlacement, unit: InterstitialAdUnit, listener: AdEventListener?) {
+    override fun loadInterstitial(activity: Activity, placement: AdPlacement, unit: InterstitialAdUnit, adConfigKey: String?, listener: AdEventListener?) {
         interstitialLoads++
-        requestAuthorizations += OnboardingSdk.canRequestAds()
+        requestAuthorizations += ConsentCenter.canRequestAds()
         listener?.onFailedToLoad()
     }
-    override fun isInterstitialReady(placement: AdPlacement) = false
     override fun loadAndShowInterstitial(
         activity: androidx.appcompat.app.AppCompatActivity,
         placement: AdPlacement,
@@ -202,12 +176,9 @@ private class SettlingSplashHostProvider : OnboardingAdProvider {
         throw AssertionError("This fixture does not expect a loadAndShow request: ${placement.key}")
     }
 
-    override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) = Unit
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
+    override fun loadBanner(activity: androidx.appcompat.app.AppCompatActivity, unit: BannerAdUnit, listener: AdEventListener) {
         bannerLoads++
-        requestAuthorizations += OnboardingSdk.canRequestAds()
-        listener?.onFailedToLoad()
+        requestAuthorizations += ConsentCenter.canRequestAds()
+        listener.onFailedToLoad()
     }
-    override fun suppressAppResume(activityClass: Class<out Activity>) = Unit
-    override fun releaseAll() = Unit
 }

@@ -5,7 +5,13 @@ import com.ads.module.ads.wrapper.ApNativeAd
 
 /** Configuration recreation transfers a presentation; final owner destruction disposes it. */
 internal class NativePresentationStore : ViewModel() {
-    class Presentation(val ad: ApNativeAd?, val shownAtMs: Long, val refreshAtMs: Long, val awaiting: Boolean)
+    class Presentation(
+        val ad: ApNativeAd?,
+        val shownAtMs: Long,
+        val refreshAtMs: Long,
+        val awaiting: Boolean,
+        val failed: Boolean = false,
+    )
     private val retained = mutableMapOf<String, Presentation>()
 
     fun retain(key: String, presentation: Presentation) {

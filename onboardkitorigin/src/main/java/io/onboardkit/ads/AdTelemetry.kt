@@ -5,33 +5,19 @@ import io.onboardkit.core.analytics.AnalyticsEvent
 import io.trackkit.AdFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Internal bind signal keeps flow analytics separate from the public display callback. */
-internal interface NativeBindListener {
-    fun onNativeBound()
-}
-
-/**
- * Reports the lifecycle of one ad slot, then forwards to the screen's own listener.
- *
- * Revenue, impressions-with-money and clicks all arrive through the vendor callback inside `:ads`.
- * What only this layer knows is the *opportunity*: which onboarding screen asked, and whether it
- * got anything. Wrapping the listener keeps that reporting in one place — the screens used to
- * duplicate it, or more often skip it.
- *
- * The native bind signal and failure are latched for flow analytics. The legacy
- * `ob_ad_impression` event maps to `fo_ad_bound`; vendor-counted `ad_show` remains owned by `:ads`.
- * Listener forwarding is unchanged for screens and partner providers.
- */
+// Latches a native bind (fo_ad_bound) and a failure once per slot; vendor ad_show stays in :ads.
 internal class TrackedAdListener(
     private val placementKey: String,
     private val format: AdFormat,
     private val delegate: AdEventListener?,
-) : AdEventListener, NativeBindListener {
+) : AdEventListener {
 
     private val boundReported = AtomicBoolean(false)
     private val failureReported = AtomicBoolean(false)
+    private val native = format == AdFormat.NATIVE || format == AdFormat.NATIVE_FULL_SCREEN
 
     override fun onLoaded() {
+        if (native) reportBound()
         delegate?.onLoaded()
     }
 
@@ -48,14 +34,7 @@ internal class TrackedAdListener(
         }
     }
 
-    override fun onNativeBound() {
-        reportBound()
-        (delegate as? NativeBindListener)?.onNativeBound()
-    }
-
     override fun onImpression() {
-        // Compatibility for partner providers that only report impressions.
-        reportBound()
         delegate?.onImpression()
     }
 

@@ -8,16 +8,26 @@ import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-internal fun Activity.canStartNativeRequest(allowWhileVisible: Boolean): Boolean {
-    if (isFinishing || isDestroyed) return false
-    val state = (this as? LifecycleOwner)?.lifecycle?.currentState
-    return (state == null || state.isAtLeast(Lifecycle.State.RESUMED)) && hasWindowFocus() ||
+internal fun isRequestWindowOpen(
+    alive: Boolean,
+    state: Lifecycle.State?,
+    focused: Boolean,
+    allowWhileVisible: Boolean,
+): Boolean = alive && (
+    (state == null || state.isAtLeast(Lifecycle.State.RESUMED)) && focused ||
         allowWhileVisible && state?.isAtLeast(Lifecycle.State.STARTED) == true
-}
+    )
 
-/** A queued preload owns no network request yet; losing its Activity cancels only this wait. */
-internal suspend fun Activity.awaitNativeRequestWindow(): Boolean {
-    val owner = this as? LifecycleOwner ?: return canStartNativeRequest(false)
+internal fun Activity.canStartNativeRequest(allowWhileVisible: Boolean): Boolean = isRequestWindowOpen(
+    alive = !isFinishing && !isDestroyed,
+    state = (this as? LifecycleOwner)?.lifecycle?.currentState,
+    focused = hasWindowFocus(),
+    allowWhileVisible = allowWhileVisible,
+)
+
+// A queued preload owns no network request yet: losing its Activity cancels only this wait.
+internal suspend fun Activity.awaitNativeRequestWindow(allowWhileVisible: Boolean): Boolean {
+    val owner = this as? LifecycleOwner ?: return canStartNativeRequest(allowWhileVisible)
     return suspendCancellableCoroutine { continuation ->
         val tree = window.decorView.viewTreeObserver
         lateinit var lifecycleObserver: LifecycleEventObserver
@@ -31,7 +41,7 @@ internal suspend fun Activity.awaitNativeRequestWindow(): Boolean {
             if (isFinishing || owner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
                 detach()
                 continuation.resume(false)
-            } else if (canStartNativeRequest(false)) {
+            } else if (canStartNativeRequest(allowWhileVisible)) {
                 detach()
                 continuation.resume(true)
             }

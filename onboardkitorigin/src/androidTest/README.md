@@ -54,7 +54,7 @@ Run each case with `lfoParallel=false` and `true`:
 
 - `success`, `failure`, `timeout`, `late_fill`, `banner_budget`
 - `recreate`, `mode_freeze`, `rotate`
-- `inter_off`, `no_unit`, `premium`, `master_off`, `host_off`, `consent_denied`
+- `inter_off`, `no_unit`, `premium`, `master_off`, `consent_denied`
 - `same_time`, `other_route`, `home_pending`, `home_expired`
 - `under_ad`, `under_ad_slow`, `under_ad_home`, `under_ad_recreate`, `after_ad`, `after_ad_recreate`
 - `native_ready`, `native_loading`, `native_failed` (Language entry binds/joins/ends without retry)
@@ -99,3 +99,19 @@ selects Impl34 against a framework without systemOverlays(); it restores SDK_INT
 This affects only the test process, not the ROM or device properties. The listener must
 keep the screen alive and preserve bar/cutout padding.
 This is a controlled reproduction, not evidence that a particular production device spoofs its API.
+
+## Content page ad presentation
+
+Class: `io.onboardkit.ui.onboarding.ContentAdPresentationDeviceTest`.
+Run each `-e contentCase <case>` in a fresh instrumentation process:
+
+- `disabled`, `no_unit`, `remote_off`: no shimmer, no native request, half-height artwork.
+- `sync_failure`: immediate bind failure must not reinsert shimmer or request again.
+- `ready`, `success`: buffered or delayed fill keeps the original ad geometry.
+- `failure`, `background`: shimmer failure transitions to no-ad geometry; background failure waits for resume.
+- `late_fill`, `reverse`: delayed fill restores the ad slot, including while the failure transition is running.
+- `stale`, `reentry`, `recreate`: old callbacks cannot change another page; revisits/recreation settle correctly.
+
+The test checks view identity, card styling, geometry and intermediate animation frames on a real
+Android window. It uses a deterministic provider, never production ad IDs. Keep device animations
+enabled for motion assertions. Screenshots are saved under the test package's `files/content-*.png`.

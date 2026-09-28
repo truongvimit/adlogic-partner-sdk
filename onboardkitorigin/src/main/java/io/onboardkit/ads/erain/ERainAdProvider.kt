@@ -1,163 +1,99 @@
 package io.onboardkit.ads.erain
 
-import com.ads.module.helper.adnative.NativeClickAction
-
-import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Context
-import android.view.View
-import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
 import com.ads.module.funtion.AdCallback
-import com.ads.module.funtion.AdmobHelper
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.adnative.AdNativeState
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
-import com.ads.module.helper.adnative.NativeAdPreload
-import com.ads.module.helper.adnative.NativeAdStyle
+import com.ads.module.helper.adnative.NativeAdManager
+import com.ads.module.helper.adnative.NativeClickAction
+import com.ads.module.helper.banner.BannerAdConfig
+import com.ads.module.helper.banner.BannerAdHelper
+import com.ads.module.helper.banner.BannerAdParam
 import com.ads.module.helper.interstitial.InterLoadAndShowOptions
 import com.ads.module.helper.interstitial.InterLoadOptions
 import com.ads.module.helper.interstitial.InterNextAction
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
-import com.ads.module.util.SharePreferenceUtils
-import com.facebook.shimmer.ShimmerFrameLayout
+import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
+import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeAdRequest
+import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.awaitNativeRequestWindow
 import io.onboardkit.ads.canStartNativeRequest
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.config.NativeTemplate
 import io.onboardkit.core.ObLog
+import io.onboardkit.remote.OnboardingSettings
 import io.trackkit.PlacementRegistry
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
+import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import com.ads.module.helper.AdSkipReason as SdkAdSkipReason
 
-/**
- * Default [OnboardingAdProvider]: a thin adapter over the `:ads` helper layer.
- *
- * Buffering, expiry, in-flight dedup and the show contract all live in
- * [NativeAdPreload] / [InterstitialAdManager]; this class only translates between the
- * onboarding flow's placement/callback vocabulary and the module's. Telemetry stays with
- * the flow's own AdTelemetry, so the managers are called with reporting off.
- */
-class ERainAdProvider(
-    /**
-     * How long one ad unit may take before the waterfall moves to the next floor.
-     *
-     * `30 s` is the audited `REQUEST_AD_TIMEOUT`; the whole waterfall is bounded by the caller's
-     * own budget (`ob_splash_ad_budget_ms`, `60 s`, the audited `LOAD_AD_TIMEOUT`). Lowering this
-     * trades fill rate for speed — measure before you do.
-     */
-    private val tierTimeoutMs: Long = AdWaterfall.DEFAULT_TIER_TIMEOUT_MS,
-) : OnboardingAdProvider {
+/** The SDK's [OnboardingAdProvider]: the flow's placements translated onto the `:ads` helpers. */
+class ERainAdProvider : OnboardingAdProvider() {
+
+    private val interKeys = listOf(
+        AdPlacement.SplashInterstitial.key,
+        AdPlacement.QuestionInterstitial.key,
+        AdPlacement.AfterOnboardingInterstitial.key,
+    )
 
     init {
-        // Flow placements preload at their own transitions and stay independent of the
-        // content buffer's activation and shared frequency interval.
-        InterstitialAutoBuffer.reserve(
-            AdPlacement.SplashInterstitial.key,
-            AdPlacement.QuestionInterstitial.key,
-            AdPlacement.AfterOnboardingInterstitial.key,
-        )
+        InterstitialAutoBuffer.reserve(*interKeys.toTypedArray())
     }
 
-    private val preload = NativeAdPreload.getInstance()
+    private val nativeKeys = mutableSetOf<String>()
+    private val slots = mutableMapOf<String, NativeSlot>()
 
-    /**
-     * One observer per placement — the screen currently showing it. A list here grew a wrapper per
-     * recycled fragment, and every stale wrapper re-reported load events against a dead Activity.
-     */
-    private val listeners = ConcurrentHashMap<String, AdEventListener>()
-
-    /** Buffer observers, one per placement; also the roster of keys this provider owns. */
-    private val nativeBridges = ConcurrentHashMap<String, AdCallback>()
-    private val interKeys = ConcurrentHashMap.newKeySet<String>()
-
-    private class NativeBinding(
-        val activity: Activity,
-        val owner: LifecycleOwner,
-        val container: FrameLayout,
-        val helper: NativeAdHelper,
-        val config: NativeAdConfig,
-    ) {
-        var inBind = false
-        var justBound = false
-    }
-    // Reattaching the same impressed ad after rotation must not wait for a second vendor
-    // impression (vendors normally count an ad once). Weak keys do not retain destroyed ads.
-    private val impressedNatives = java.util.WeakHashMap<ApNativeAd, Boolean>()
-    private val nativeBindings = mutableMapOf<String, NativeBinding>()
-    private val nativeConfigs = mutableMapOf<String, NativeAdConfig>()
-    private val nativeOwners = mutableMapOf<String, LifecycleOwner>()
-    private val nativeOwnerObservers = mutableMapOf<String, LifecycleEventObserver>()
-    private val deferredNativeFailures = mutableSetOf<String>()
-    private val pendingNativeBinds = mutableSetOf<String>()
-    private val failedNativeLoads = mutableSetOf<String>()
+    private val impressedNatives = WeakHashMap<ApNativeAd, Boolean>()
     private class QueuedNative(val activity: Activity, val job: Job)
     private val queuedNatives = mutableMapOf<String, QueuedNative>()
 
-    /**
-     * Presentation style per placement, resolved from the ad config at request time.
-     *
-     * The flow hands this provider ad unit ids, not config keys, so the style is captured while the
-     * ids are still in hand and read back at bind. Binding with no style ignored `components`,
-     * `colorCTA` and `heightCTA` for every onboarding native — one edit to the ad config moved
-     * every other slot in the app and left these behind.
-     */
-    private val nativeStyles = ConcurrentHashMap<String, NativeAdStyle>()
-
-    // AdGate reads the Entitlement port, so this stays correct whether or not :billingkit ships.
-    override fun isPremium(context: Context): Boolean = AdGate.isPurchased(context)
-
     override fun preloadNative(activity: Activity, request: NativeAdRequest) {
         val key = request.placement.key
-        if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
+        if (slots[key]?.helper?.isRestoringPresentation == true) return
         val queued = queuedNatives[key]
         if (queued?.activity === activity && queued.job.isActive) return
         queued?.job?.cancel()
-        if (isNativeReady(request.placement) || preload.isPreloadInProgress(key) ||
+        if (NativeAdManager.isReady(key) || NativeAdManager.isLoading(key) ||
             activity.canStartNativeRequest(request.allowWhileVisible)) {
             preloadNativeNow(activity, request)
             return
         }
-        val owner = activity as? LifecycleOwner ?: run { notifyNativeFailure(key); return }
+        val owner = activity as? LifecycleOwner ?: run {
+            slots[key]?.onLoadOutcome(filled = false)
+            return
+        }
         val job = owner.lifecycleScope.launch(start = CoroutineStart.LAZY) {
-            if (activity.awaitNativeRequestWindow()) {
-                // Entitlement/host/remote authority can change while focus is absent.
-                val sdk = io.onboardkit.OnboardingSdk
-                val currentRequest = if (sdk.configuredPlacementKey(request.placement) != null) {
-                    sdk.configOrNull()?.ads?.nativeUnitFor(request.placement)?.let { request.copy(unit = it) }
-                } else request
-                if (sdk.isReady() &&
-                    (currentRequest == null || sdk.guard().skipReason(activity, request.placement, currentRequest.unit) != null)) {
-                    failedNativeLoads.add(key)
-                    notifyNativeFailure(key)
-                } else preloadNativeNow(activity, currentRequest ?: request)
+            if (activity.awaitNativeRequestWindow(request.allowWhileVisible)) {
+                dispatchQueued(activity, request)
             }
         }
         val pending = QueuedNative(activity, job)
@@ -166,215 +102,215 @@ class ERainAdProvider(
         job.start()
     }
 
-    private fun preloadNativeNow(activity: Activity, request: NativeAdRequest) {
+    private fun dispatchQueued(activity: Activity, request: NativeAdRequest) {
+        val sdk = OnboardingSdk
+        val placement = request.placement
+        val current = if (sdk.configuredPlacementKey(placement) == null) request
+        else sdk.configOrNull()?.ads?.nativeUnitFor(placement)?.let { request.copy(unit = it) }
+        val refused = sdk.isReady() &&
+            (current == null || sdk.guard().skipReason(activity, placement, current.unit) != null)
+        if (refused) slots[placement.key]?.onLoadOutcome(filled = false)
+        else preloadNativeNow(activity, current ?: request)
+    }
+
+    private fun preloadNativeNow(context: Context, request: NativeAdRequest) {
         val key = request.placement.key
-        if (nativeBindings[key]?.helper?.isRestoringPresentation == true) return
-        deferredNativeFailures.remove(key)
-        failedNativeLoads.remove(key)
+        if (slots[key]?.helper?.isRestoringPresentation == true) return
         val ids = request.unit.loadOrder
         if (ids.isEmpty()) {
             ObLog.w(ObLog.Section.LOAD, "$key skip — no usable ad unit id")
             return
         }
-        // GMA's paid-event callback only knows the ad unit id; this is the only place that knows
-        // which onboarding screen asked for it.
+        nativeKeys += key
         ids.forEach { PlacementRegistry.register(it, key) }
-        ids.firstNotNullOfOrNull { AdRemoteConfig.getInstance().unitForAdId(it) }
-            ?.let { nativeStyles[key] = it.toNativeStyle() }
-        val config = nativeConfig(ids, request.layoutRes, request.placement).apply {
-            behavior = OnboardingSettings.behavior(request.placement)
-            forceUaCheck = io.onboardkit.OnboardingSdk.configuredPlacementKey(request.placement)
-                ?.let { AdRemoteConfig.getInstance().ads[it]?.enableUaCheck } == true
-        }
-        nativeConfigs[key] = config
-        ensureNativeBridge(key)
-        val covered =
-            preload.preloadWithKeyIfEmpty(key, activity, config)
-        // A purchased/offline no-op must still answer, or a waiting screen shimmers forever
-        if (!covered && !isNativeReady(request.placement)) {
-            failedNativeLoads.add(key)
-            notifyNativeFailure(key)
+        val config = nativeConfig(request)
+        NativeAdManager.preload(context, key, config, reportTelemetry = false) { reason ->
+            if (reason == null) ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
+            else ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — ${reason.key}")
+            slots[key]?.onLoadOutcome(filled = reason == null)
         }
     }
 
-    override fun isNativeReady(placement: AdPlacement): Boolean =
-        preload.getAdNative(placement.key) != null
-
-    override fun isNativeLoading(placement: AdPlacement): Boolean =
-        preload.isPreloadInProgress(placement.key) || queuedNatives[placement.key]?.job?.isActive == true
-
-    override fun isNativeLoadFailed(placement: AdPlacement): Boolean =
-        placement.key in failedNativeLoads && !isNativeReady(placement) && !isNativeLoading(placement) &&
-            nativeBindings[placement.key]?.helper?.isRestoringPresentation != true
+    override fun nativeStatus(placement: AdPlacement): NativeStatus {
+        val key = placement.key
+        return when {
+            NativeAdManager.isReady(key) -> NativeStatus.READY
+            NativeAdManager.isLoading(key) || queuedNatives[key]?.job?.isActive == true ->
+                NativeStatus.LOADING
+            NativeAdManager.isFailed(key) && slots[key]?.helper?.isRestoringPresentation != true ->
+                NativeStatus.FAILED
+            else -> NativeStatus.IDLE
+        }
+    }
 
     override fun bindNative(
-        activity: Activity,
-        placement: AdPlacement,
-        container: ViewGroup,
-        shimmer: View?,
-        listener: AdEventListener?,
+        activity: ComponentActivity,
+        request: NativeAdRequest,
+        container: FrameLayout,
+        listener: AdEventListener,
     ): Boolean {
-        val key = placement.key
-        listener?.let { listeners[key] = it }
-        val frame = container as? FrameLayout ?: return false
-        val owner = frame.findViewTreeLifecycleOwner() ?: activity as? LifecycleOwner ?: return false
-        if (nativeOwners[key] !== owner) {
-            detachNativeOwner(key)
-            nativeOwners[key] = owner
-            var observing = false
-            val observer = LifecycleEventObserver { _, event ->
-                if (nativeOwners[key] === owner) {
-                    if (event == Lifecycle.Event.ON_DESTROY) {
-                        detachNativeOwner(key)
-                        // The helper receives the same destruction event and transfers its ad
-                        // on configuration recreation before releasing its own UI references.
-                        nativeBindings.remove(key)
-                        deferredNativeFailures.remove(key)
-                        listeners.remove(key)
-                    } else if (observing && event == Lifecycle.Event.ON_RESUME) {
-                        if (deferredNativeFailures.remove(key)) {
-                            notifyNativeFailure(key)
-                        } else if (key in pendingNativeBinds && !helperAwaitsNative(key) &&
-                            preload.getAdNative(key) != null) notifyListener(key) { it.onLoaded() }
-                    }
-                }
-            }
-            nativeOwnerObservers[key] = observer
-            owner.lifecycle.addObserver(observer)
-            observing = true
+        val key = request.placement.key
+        val owner = container.findViewTreeLifecycleOwner() ?: activity
+        val current = slots[key]
+        val slot = current?.takeIf { it.serves(activity, owner, container, request) } ?: run {
+            current?.release()
+            NativeSlot(activity, owner, container, request).also { slots[key] = it }
         }
-        // A native may have been preloaded before the splash remote fetch completed.
-        nativeConfigs[key]?.let { config ->
-            config.behavior = OnboardingSettings.behavior(placement)
-            // Preloading a replacement can replace nativeConfigs while the helper keeps its config.
-            nativeBindings[key]?.config?.behavior = config.behavior
-            val ads = AdRemoteConfig.getInstance()
-            val unit = io.onboardkit.OnboardingSdk.configuredPlacementKey(placement)?.let { ads.ads[it] }
-                ?: config.adUnitIds.firstNotNullOfOrNull(ads::unitForAdId)
-            if (unit == null) nativeStyles.remove(key) else nativeStyles[key] = unit.toNativeStyle()
-            nativeBindings[key]?.helper?.setNativeStyle(nativeStyles[key])
+        slot.refresh()
+        val bound = slot.bind(listener)
+        // A preload may still be waiting for its old host's focus. Move that existing queue
+        // to the destination; an already-dispatched load keeps its original request/callback.
+        if (!bound && queuedNatives[key]?.let { it.activity !== activity && it.job.isActive } == true) {
+            preloadNative(activity, request)
         }
-        pendingNativeBinds.add(key)
-        deferredNativeFailures.remove(key)
-        val current = nativeBindings[key]
-        val binding = if (current?.activity === activity && current.container === frame && current.owner === owner) current else {
-            current?.helper?.destroy()
-            val config = nativeConfigs[key] ?: return false
-            val helper = NativeAdHelper(activity, owner, config)
-                .setNativeContentView(frame)
-                .setNativeStyle(nativeStyles[key])
-                .also { it.placement = key; it.reportTelemetry = false }
-            (shimmer as? ShimmerFrameLayout)?.let(helper::setShimmerLayoutView)
-            NativeBinding(activity, owner, frame, helper, config).also { created ->
-                nativeBindings[key] = created
-                helper.registerAdListener(object : AdCallback() {
-                    private var boundAd: ApNativeAd? = null
-
-                    override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                        if (nativeBindings[key] !== created) return
-                        boundAd = nativeAd
-                        pendingNativeBinds.remove(key)
-                        created.justBound = true
-                        if (!created.inBind) {
-                            try { notifyListener(key) { it.onLoaded() } }
-                            finally { created.justBound = false }
-                        }
-                        notifyListener(key) { (it as? io.onboardkit.ads.NativeBindListener)?.onNativeBound() }
-                        // Only a previously impressed ad restored into this owner is already
-                        // eligible. A fresh bind is not evidence that the user has seen the ad.
-                        if (impressedNatives[nativeAd] == true) notifyListener(key) { it.onImpression() }
-                    }
-                    override fun onAdImpression() {
-                        if (nativeBindings[key] !== created) return
-                        boundAd?.let { impressedNatives[it] = true }
-                        notifyListener(key) { it.onImpression() }
-                    }
-                    override fun onAdFailedToLoad(error: LoadAdError?) {
-                        pendingNativeBinds.add(key)
-                        notifyNativeFailure(key)
-                    }
-                    override fun onAdClicked() { notifyListener(key) { it.onClicked() } }
-                    override fun onAdOpened() { notifyListener(key) { it.onAdOpened() } }
-                })
-            }
-        }
-        // A helper may finish an in-flight load on resume before the legacy onLoaded callback
-        // asks bindNative again. Acknowledge that bind instead of consuming another ad.
-        if (binding.justBound) {
-            pendingNativeBinds.remove(key)
-            binding.justBound = false
-            return true
-        }
-        binding.inBind = true
-        return try {
-            binding.helper.bindAvailable().also {
-                if (it) {
-                    pendingNativeBinds.remove(key)
-                    binding.justBound = false
-                }
-            }
-        } finally { binding.inBind = false }
-    }
-
-    private fun detachNativeOwner(key: String) {
-        pendingNativeBinds.remove(key)
-        deferredNativeFailures.remove(key)
-        val owner = nativeOwners.remove(key)
-        nativeOwnerObservers.remove(key)?.let { owner?.lifecycle?.removeObserver(it) }
+        return bound
     }
 
     override fun releaseNative(placement: AdPlacement) {
         val key = placement.key
         queuedNatives.remove(key)?.job?.cancel()
-        nativeBindings.remove(key)?.helper?.destroy()
-        detachNativeOwner(key)
-        deferredNativeFailures.remove(key)
-        nativeBridges.remove(key)?.let { preload.unregisterAdCallback(key, it) }
-        listeners.remove(key)
-        // A screen departure cannot cancel the process-owned request or drop its unused fill.
+        slots.remove(key)?.release()
+    }
+
+    override fun pendingClickAction(placement: AdPlacement): NativeClickAction? =
+        slots[placement.key]?.helper?.pendingClickAction
+
+    private inner class NativeSlot(
+        private val activity: Activity,
+        private val owner: LifecycleOwner,
+        private val container: FrameLayout,
+        request: NativeAdRequest,
+    ) : AdCallback() {
+        private val placement = request.placement
+        private val key = placement.key
+        private val loadOrder = request.unit.loadOrder
+        private val layoutRes = request.layoutRes
+        private val config = nativeConfig(request)
+        val helper = NativeAdHelper(activity, owner, config, key)
+            .setNativeContentView(container)
+            .also {
+                it.reportTelemetry = false
+                it.registerAdListener(this)
+            }
+        private var listener: AdEventListener? = null
+        private var waiting = false
+        private var binding = false
+        private val forgetOnDestroy = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY && slots[key] === this) slots.remove(key)
+        }.also { owner.lifecycle.addObserver(it) }
+
+        fun serves(
+            activity: Activity,
+            owner: LifecycleOwner,
+            container: FrameLayout,
+            request: NativeAdRequest,
+        ): Boolean = this.activity === activity && this.owner === owner &&
+            this.container === container && loadOrder == request.unit.loadOrder &&
+            layoutRes == request.layoutRes
+
+        fun refresh() {
+            config.behavior = OnboardingSettings.behavior(placement)
+            val ads = AdRemoteConfig.getInstance()
+            val unit = OnboardingSdk.configuredPlacementKey(placement)?.let { ads.ads[it] }
+                ?: config.adUnitIds.firstNotNullOfOrNull(ads::unitForAdId)
+            helper.setNativeStyle(unit?.toNativeStyle())
+        }
+
+        fun bind(listener: AdEventListener): Boolean {
+            this.listener?.onDetached()
+            this.listener = listener
+            waiting = true
+            binding = true
+            val taken = try {
+                helper.bindAvailable()
+            } finally {
+                binding = false
+            }
+            if (taken) waiting = false
+            return taken
+        }
+
+        fun onLoadOutcome(filled: Boolean) {
+            if (!waiting || helper.nativeAdState.value is AdNativeState.Loading) return
+            if (!filled) return failUnlessShowing()
+            refresh()
+            val refused = !helper.bindAvailable() && helper.nativeAdState.value.let {
+                it is AdNativeState.Fail || it is AdNativeState.Cancel
+            }
+            if (refused && waiting) failUnlessShowing()
+        }
+
+        fun release() {
+            listener?.onDetached()
+            owner.lifecycle.removeObserver(forgetOnDestroy)
+            helper.destroy()
+        }
+
+        override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+            waiting = false
+            if (!binding) report { onLoaded() }
+            if (impressedNatives[nativeAd] == true) report { onImpression() }
+        }
+
+        override fun onAdImpression() {
+            helper.nativeAd?.let { impressedNatives[it] = true }
+            report { onImpression() }
+        }
+
+        override fun onAdFailedToLoad(error: LoadAdError?) = failUnlessShowing()
+
+        override fun onAdFailedToShow(adError: AdError?) {
+            if (!binding) failUnlessShowing()
+        }
+
+        override fun onAdClicked() = report { onClicked() }
+
+        override fun onAdOpened() = report { onAdOpened() }
+
+        private fun failUnlessShowing() {
+            waiting = false
+            if (helper.nativeAd?.isUsable != true) report { onFailedToLoad() }
+        }
+
+        // A screen's exception must not escape into the helper's lifecycle or vendor dispatch.
+        private fun report(event: AdEventListener.() -> Unit) {
+            val screen = listener ?: return
+            runCatching { screen.event() }
+                .onFailure { ObLog.w(ObLog.Section.LOAD, "$key screen callback threw: $it") }
+        }
     }
 
     override fun loadInterstitial(
-        context: Context,
-        placement: AdPlacement,
-        unit: InterstitialAdUnit,
-        listener: AdEventListener?,
-    ) = loadInterstitial(context, placement, unit, null, listener)
-
-    override fun loadInterstitial(
-        context: Context,
+        activity: Activity,
         placement: AdPlacement,
         unit: InterstitialAdUnit,
         adConfigKey: String?,
         listener: AdEventListener?,
     ) {
         val key = placement.key
-        listener?.let { listeners[key] = it }
-        interKeys.add(key)
         InterstitialAdManager.load(
-            context,
+            activity,
             key,
             unit.loadOrder,
-            // The show path reads the placement's own enable_ua_check for any key ad_config.json
-            // declares; loading past it would buy a fill that show then refuses.
             InterLoadOptions(
                 passesUaGate = AdGate.placementPassesUaGate(
-                    adConfigKey ?: io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: key),
-                tierTimeoutMs = tierTimeoutMs,
+                    adConfigKey ?: OnboardingSdk.configuredPlacementKey(placement) ?: key),
                 reportTelemetry = false,
             ).apply { behavior = OnboardingSettings.behavior(placement, adConfigKey) },
             object : AdCallback() {
                 override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
                     ObLog.d(ObLog.Section.LOAD, "$key inter FILLED")
-                    notifyListener(key) { it.onLoaded() }
+                    listener?.onLoaded()
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError?) {
                     ObLog.w(ObLog.Section.LOAD, "$key inter UNFILLED")
-                    notifyListener(key) { it.onFailedToLoad() }
+                    listener?.onFailedToLoad()
                 }
-                // No onAdClicked here: the show path already forwards clicks, and the manager
-                // pings this same bridge — overriding both would deliver every click twice
+
+                override fun onAdClicked() {
+                    listener?.onClicked()
+                }
             },
         )
     }
@@ -389,25 +325,12 @@ class ERainAdProvider(
         InterstitialAdManager.release(placement.key)
     }
 
-    /**
-     * Maps the store's show contract onto the flow's two moments: `onComplete` without a
-     * preceding skip is the commit — the ad is on screen and the next screen may start
-     * underneath it — while a skip suppresses `onNextAction` entirely.
-     *
-     * The mode is pinned per show rather than read from [InterstitialAdManager.defaultNextAction]
-     * because it is what [ObInterstitialCallback.onNextAction] *means*: `UnderAd` is the only mode
-     * under which `onComplete` says "the ad is on screen". An app that prefers `AfterDismiss` for
-     * its own placements must not be able to redefine that. A flow screen whose destination has to
-     * wait for the dismissal leaves `onNext` unused instead — see
-     * [io.onboardkit.ads.NextScreenTiming].
-     */
     override fun showInterstitial(
         activity: Activity,
         placement: AdPlacement,
         callback: ObInterstitialCallback,
     ) {
         val key = placement.key
-        interKeys.add(key)
         InterstitialAdManager.show(
             activity,
             key,
@@ -424,7 +347,6 @@ class ERainAdProvider(
         callback: ObInterstitialCallback,
         timeoutMs: Long,
     ) {
-        interKeys.add(placement.key)
         InterstitialAdManager.loadAndShow(
             activity,
             placement.key,
@@ -432,16 +354,18 @@ class ERainAdProvider(
             interstitialCallback(placement.key, callback),
             InterLoadAndShowOptions(
                 timeoutMs = timeoutMs,
-                passesUaGate = AdGate.placementPassesUaGate(io.onboardkit.OnboardingSdk.configuredPlacementKey(placement) ?: placement.key),
+                passesUaGate = AdGate.placementPassesUaGate(
+                    OnboardingSdk.configuredPlacementKey(placement) ?: placement.key),
                 reportTelemetry = false,
                 nextAction = InterNextAction.UnderAd,
             ).apply { behavior = OnboardingSettings.behavior(placement) },
         )
     }
 
+    // Shows pin UnderAd: only there does onComplete without a skip mean the ad is on screen.
     private fun interstitialCallback(
         key: String,
-        callback: ObInterstitialCallback
+        callback: ObInterstitialCallback,
     ): InterShowCallback =
         object : InterShowCallback() {
             private val skipped = AtomicBoolean(false)
@@ -459,143 +383,67 @@ class ERainAdProvider(
             override fun onClosed() {
                 callback.onAdClosed()
             }
-
-            override fun onClicked() {
-                notifyListener(key) { it.onClicked() }
-            }
         }
 
-    override fun lastInterstitialShownAtMs(context: Context): Long =
-        runCatching { SharePreferenceUtils.getLastImpressionInterstitialTime(context) }
-            .getOrDefault(0L)
-
-    override fun clicksToday(context: Context, adUnitId: String): Int =
-        runCatching { AdmobHelper.getNumClickAdsPerDay(context, adUnitId) }.getOrDefault(0)
-
-    override fun loadBanner(activity: Activity, unit: BannerAdUnit, listener: AdEventListener?) {
+    override fun loadBanner(
+        activity: AppCompatActivity,
+        unit: BannerAdUnit,
+        listener: AdEventListener,
+    ) {
         val callback = object : AdCallback() {
-            override fun onAdLoaded() { listener?.onLoaded() }
-            override fun onAdFailedToLoad(error: LoadAdError?) { listener?.onFailedToLoad() }
-            override fun onAdClicked() { listener?.onClicked() }
+            override fun onAdLoaded() { listener.onLoaded() }
+            override fun onAdFailedToLoad(error: LoadAdError?) { listener.onFailedToLoad() }
+            override fun onAdClicked() { listener.onClicked() }
         }
-        val owner = activity as? LifecycleOwner
-        if (owner == null) {
-            // The public provider also accepts plain Activities without lifecycle integration.
-            ERainAd.getInstance().loadBanner(activity, unit.id, callback)
-            return
-        }
-        val placementKey = io.onboardkit.OnboardingSdk.configuredPlacementKey(AdPlacement.SplashBanner)
-        val config = (if (placementKey != null && AdRemoteConfig.getInstance().declares(placementKey))
-            com.ads.module.helper.banner.BannerAdConfig.forPlacement(placementKey)
-        else com.ads.module.helper.banner.BannerAdConfig(unit.id, true, false)).apply {
-            behavior = OnboardingSettings.behavior(AdPlacement.SplashBanner)
-        }
-        com.ads.module.helper.banner.BannerAdHelper(activity, owner, config).apply {
+        val declaredKey = OnboardingSdk.configuredPlacementKey(AdPlacement.SplashBanner)
+            ?.takeIf { AdRemoteConfig.getInstance().declares(it) }
+        val config = declaredKey?.let { BannerAdConfig.forPlacement(it) }
+            ?: BannerAdConfig(unit.id, true, false)
+        config.behavior = OnboardingSettings.behavior(AdPlacement.SplashBanner)
+        BannerAdHelper(activity, activity, config).apply {
             registerAdListener(callback)
-            requestAds(com.ads.module.helper.banner.BannerAdParam.Request)
+            requestAds(BannerAdParam.Request)
         }
-    }
-
-    override fun suppressAppResume(activityClass: Class<out Activity>) {
-        runCatching { AppOpenManager.getInstance().disableAppResumeWithActivity(activityClass) }
     }
 
     override fun releaseAll() {
         queuedNatives.values.toList().forEach { it.job.cancel() }
         queuedNatives.clear()
-        // Per-key release: the stores are process-wide and the host app owns keys of its own
-        (nativeBridges.keys + nativeConfigs.keys).toSet().forEach { preload.release(it) }
-        nativeBridges.clear()
-        nativeBindings.values.forEach { it.helper.destroy() }
-        nativeBindings.clear()
+        slots.values.toList().forEach { it.release() }
+        slots.clear()
+        // After the slots: releasing a key answers its pending loads, which must not reach a slot.
+        nativeKeys.forEach(NativeAdManager::release)
+        nativeKeys.clear()
         impressedNatives.clear()
-        nativeOwners.keys.toList().forEach(::detachNativeOwner)
-        deferredNativeFailures.clear()
-        pendingNativeBinds.clear()
-        failedNativeLoads.clear()
-        nativeConfigs.clear()
-        nativeStyles.clear()
-        interKeys.forEach { InterstitialAdManager.release(it) }
-        interKeys.clear()
-        listeners.clear()
+        interKeys.forEach(InterstitialAdManager::release)
     }
 
-    override fun nativeClickAction(placement: AdPlacement): NativeClickAction =
-        nativeBindings[placement.key]?.helper?.pendingClickAction ?: OnboardingSettings.nativeClickAction(placement)
-
-    private fun nativeConfig(ids: List<String>, layoutRes: Int, placement: AdPlacement): NativeAdConfig {
-        val sdkTemplate = io.onboardkit.config.NativeTemplate.entries.any {
-            io.onboardkit.ads.NativeTemplates.layoutFor(it) == layoutRes
+    private fun nativeConfig(request: NativeAdRequest): NativeAdConfig {
+        val placement = request.placement
+        val layoutRes = request.layoutRes
+        val sdkTemplate = NativeTemplate.entries.any {
+            NativeTemplates.layoutFor(it) == layoutRes
+        }
+        val liveSdkFrame: (() -> Int)? = if (sdkTemplate) {
+            {
+                if (OnboardingSdk.configOrNull() != null)
+                    NativeTemplates.layoutForPlacement(placement) else layoutRes
+            }
+        } else {
+            null
         }
         val step = placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen
-        return object : NativeAdConfig(ids, true, false, layoutRes) {
-            override val canPreloadReplacement: Boolean get() = !step
-            override val canReloadAds: Boolean get() = !step && super.canReloadAds
-            override val resolvedClickAction: NativeClickAction
-                get() = OnboardingSettings.nativeClickAction(placement).let {
-                    if (step && it == NativeClickAction.RELOAD) NativeClickAction.NONE else it
-                }
-            // Resolve SDK frames at bind too, retaining the fill and any custom host layout.
-            override val layoutId: Int
-                get() = if (sdkTemplate && io.onboardkit.OnboardingSdk.configOrNull() != null)
-                    io.onboardkit.ads.NativeTemplates.layoutForPlacement(placement) else layoutRes
-        }.also {
-            it.tierTimeoutMs = tierTimeoutMs
-        }
+        return NativeAdConfig.forUnits(
+            request.unit.loadOrder,
+            layoutRes,
+            adConfigKey = OnboardingSdk.configuredPlacementKey(placement),
+            joinOnly = true,
+            singleFill = step,
+            liveLayoutId = liveSdkFrame,
+            liveClickAction = { OnboardingSettings.nativeClickAction(placement) },
+        ).also { it.behavior = OnboardingSettings.behavior(placement) }
     }
 
-    private fun ensureNativeBridge(key: String) {
-        nativeBridges.computeIfAbsent(key) {
-            object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
-                    ObLog.d(ObLog.Section.LOAD, "$key native FILLED")
-                    failedNativeLoads.remove(key)
-                    deferredNativeFailures.remove(key)
-                    notifyNativeLoadListener(key) { it.onLoaded() }
-                }
-
-                override fun onAdFailedToLoad(error: LoadAdError?) {
-                    ObLog.w(ObLog.Section.LOAD, "$key native UNFILLED — no fill")
-                    failedNativeLoads.add(key)
-                    if (!helperAwaitsNative(key)) notifyNativeFailure(key)
-                }
-
-                // Click/open belong to the consumed ad's helper, not the preload listener.
-            }.also { preload.registerAdCallback(key, it) }
-        }
-    }
-
-    // A restored or resumed helper joins the load itself and reports its outcome. The
-    // legacy preload bridge only resolves attempts which have no helper waiting on them.
-    private fun helperAwaitsNative(key: String): Boolean =
-        nativeBindings[key]?.helper?.nativeAdState?.value is AdNativeState.Loading
-
-    private fun notifyNativeFailure(key: String) {
-        // A failed replacement does not make the slot unavailable: its previous ad is
-        // still displayed. Screen-level failure handlers would otherwise hide that ad.
-        if (nativeBindings[key]?.helper?.nativeAd?.isUsable == true) {
-            pendingNativeBinds.remove(key)
-            deferredNativeFailures.remove(key)
-            return
-        }
-        if (key !in pendingNativeBinds) return
-        val owner = nativeOwners[key]
-        if (owner != null && !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            deferredNativeFailures.add(key)
-        } else {
-            pendingNativeBinds.remove(key)
-            notifyListener(key) { it.onFailedToLoad() }
-        }
-    }
-
-    private fun notifyNativeLoadListener(key: String, block: (AdEventListener) -> Unit) {
-        if (key !in pendingNativeBinds || helperAwaitsNative(key)) return
-        val owner = nativeOwners[key]
-        if (owner != null && !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
-        notifyListener(key, block)
-    }
-
-    // Exhaustive so adding a store reason forces a mapping decision here
     private fun mapReason(reason: SdkAdSkipReason): AdSkipReason = when (reason) {
         SdkAdSkipReason.REQUESTS_HELD -> AdSkipReason.REQUESTS_HELD
         SdkAdSkipReason.NOT_READY -> AdSkipReason.NOT_READY
@@ -606,13 +454,7 @@ class ERainAdProvider(
         SdkAdSkipReason.CONSENT_NOT_GRANTED -> AdSkipReason.CONSENT_NOT_GRANTED
         SdkAdSkipReason.CONSENT_FORM_SHOWING -> AdSkipReason.SUPPRESSED_BY_FLOW
         SdkAdSkipReason.DISABLED_CONFIG -> AdSkipReason.NO_AD_UNIT
-        // 1:1 rather than collapsed into NOT_READY: reporting an offline or gated request as
-        // "nothing buffered" hid the two causes a funnel actually needs to tell apart.
         SdkAdSkipReason.OFFLINE -> AdSkipReason.OFFLINE
         SdkAdSkipReason.UA_GATE -> AdSkipReason.UA_GATE
-    }
-
-    private fun notifyListener(key: String, block: (AdEventListener) -> Unit) {
-        listeners[key]?.let { runCatching { block(it) } }
     }
 }

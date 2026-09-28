@@ -1,6 +1,6 @@
 # Tích hợp Ads + OnboardKit
 
-**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration and migration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
+**OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
 [← Chọn hướng dẫn](README.vi.md)
 
@@ -107,7 +107,7 @@ Ad unit ID chứa **`/`**. Mỗi file bám theo [example debug](../app/src/main/
 | `native_ob4` | Content 4 — `StepId.OB4` | `stepNatives[StepId.OB4]` |
 | `inter_after_ob3` | Sau toàn bộ onboarding, trước màn đích | `afterOnboardingInterstitial` |
 
-`inter_after_ob3` shows after the entire configured OB list. See [migration](onboarding-flow.vi.md) for the former OB3/OB4 mapping.
+`inter_after_ob3` shows after the entire configured OB list. See [the current step catalog](onboarding-flow.vi.md).
 
 SDK chọn file theo debuggable. Debug thiếu/sai JSON sẽ dùng file thật, không tự đổi live ID thành test ID. Build debug mặc định giữ ad unit ID của file đã nạp: `ad_remote_config` remote đặt mọi field khác, còn key chỉ remote khai báo bị bỏ trừ khi nó tắt slot.
 
@@ -272,19 +272,19 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Màn splash | Layout SDK; minimum display 3000 ms tính từ pha tải ads | `onboarding_config.splash.timing.min_display_ms` (`0` hợp lệ nghĩa là không giữ minimum này) hoặc `ob_splash_min_display_ms` đã gửi (`<= 0` giữ giá trị local); khi remote không gửi thì dùng asset app, rồi `SplashConfig.minDisplayTimeMs`. |
 | Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu: chờ đóng inter. Launcher → app/khảo sát người dùng cũ: mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định. Khi mở từ launcher, `splash.navigation.next_screen_timing` remote khác `AUTO` ưu tiên hơn override này |
 | Chờ quảng cáo splash | Tối đa 60 giây sau notification và khi splash có focus | Remote `ob_splash_ad_budget_ms`; không tự thêm timer |
-| Fetch và tải ads | `ALTERNATE`: chờ bước remote rồi mới request ads splash | `onboarding_config.splash.load.ad_strategy`; `SAME_TIME` request banner/interstitial splash ngay khi bước remote kết thúc, trước `onRemoteFetched()`; `ALTERNATE` chờ thêm hook đó. Strategy được đọc khi bước remote kết thúc, nên giá trị fetch ở bước đó áp dụng ngay lượt mở này. |
-| Preload native LFO đầu | Sau remote, rồi chờ interstitial splash tải xong (`SEQUENTIAL`) | `onboarding_config.splash.load.lfo1_preload_mode = "PARALLEL"` bỏ chờ tải interstitial, không bỏ chờ remote. |
+| Remote / ads | Consent → slot + interstitial; remote chạy song song trong SDK và tiếp tục sau splash. | Dùng giá trị asset/cache/remote hiện có; xem mục timing bên dưới. |
+| LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
 | Không có mạng | Hiện yêu cầu kết nối, chưa đi tiếp | `SplashConfig.noInternetPromptEnabled = false` để mở offline qua fallback UMP bên dưới; splash lần sau hỏi UMP lại |
-| Consent | Timeout mạng 20 giây; form chờ người dùng | Trong Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Giữ hook SDK; `SplashConfig.consentTimeoutMs` không đổi timeout UMP |
+| Consent | Timeout mạng 10 giây; form chờ người dùng | Trong Application: `ConsentCenter.configure(ConsentOptions(timeoutMs = ...))` (`com.ads.module.consent`). Giữ hook SDK; `SplashConfig.consentTimeoutMs` không đổi timeout UMP |
 | Form UMP khi QA | Debuggable: mọi máy là EEA (`setForceTesting`), không cần hashed id; release: địa lý thật | `ConsentOptions(debug = false)` để debug theo địa lý thật. `configure` thay toàn bộ option; muốn đổi cả timeout dùng một lần `ConsentOptions(timeoutMs = ..., debug = false)` |
-| Thông báo | Hỏi sau consent, bước remote và sau khi splash đã gửi request ad của nó, trên Android 13+/target 33+, nên slot đáy load được dưới popup dù là banner hay native; từ chối vẫn đi tiếp và không tự hỏi lại | `SplashConfig.notificationPermissionEnabled = false` nếu app không gửi thông báo hoặc tự hỏi |
-| Ngôn ngữ | 21 ngôn ngữ, hand hint sau 3 giây, ẩn xác nhận trước chọn | `LanguageConfig.languages`: giữ ngôn ngữ đã dịch; remote `lfo.languages.supported_codes` thu hẹp danh sách này, và `defaultCode` bị loại khỏi danh sách đó không được chọn sẵn. Giá trị remote hoặc asset app đặt `tapHintEnabled` và `confirmVisibleBeforeSelect` theo cả hai chiều |
+| Thông báo | Sau consent và request ads splash, không chờ remote; Android 13+/target33+. Từ chối vẫn đi tiếp, kết quả đã ghi tránh hỏi lại. | `SplashConfig.notificationPermissionEnabled = false` nếu app không gửi thông báo hoặc tự hỏi |
+| Ngôn ngữ | 21 ngôn ngữ, hand hint sau 3 giây, hiện nút tick mờ trước khi chọn | `LanguageConfig.languages`: giữ ngôn ngữ đã dịch; remote `lfo.languages.supported_codes` thu hẹp danh sách này, và `defaultCode` bị loại khỏi danh sách đó không được chọn sẵn. Giá trị remote hoặc asset app đặt `tapHintEnabled` và `confirmVisibleBeforeSelect` theo cả hai chiều |
 | Back ở LFO | Chưa chọn: bỏ qua Back. Đã chọn: hiện Save, vẫn ở màn ngôn ngữ | `LanguageConfig.saveButtonOnBackEnabled = false`: bỏ qua Back cả sau khi chọn. SETTINGS Back đóng màn |
 | Thay native sau chọn ngôn ngữ | Bật; native đầu giữ nguyên đến khi ad thay thế bind được | `LanguageConfig.secondNativeOnSelectEnabled = false` để tắt |
 | Popup ngôn ngữ | Chọn lại ngôn ngữ hiện tại thì mở ngay. Chọn ngôn ngữ khác chỉ mở từ tổng click thứ 4; click chọn lại vẫn được cộng count. Native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
 | Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. `positionCTA` từ `ad_remote_config` của backend còn thắng cả template trong asset app. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại; không bật lại click preload ở provider |
+| Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại |
 | Click native ở LFO/popup hoặc màn app | Preload ngay khi click/open; quay lại bind ad sẵn có hoặc chờ request đang chạy | `NativeAdConfig.reloadOnAdClick = true` mặc định, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
 | Mở lại khi chưa xong flow | Chạy lại Splash → LFO → OB; chỉ bỏ OB khi hoàn thành toàn bộ | Không cần tự lưu cờ first-open/checkpoint trong app |
 | Trang native fullscreen | X sau 5 giây, auto-next sau 15 giây từ lúc chọn trang; thời gian background vẫn được tính. Shimmer phủ đầy khung native, media toàn khung và CTA ở đáy. | Các trường của `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` giữ delay local |
@@ -294,7 +294,11 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Giới hạn click interstitial | Tắt (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: mỗi ad unit tối đa `n` click/24 giờ rồi ngừng load/show. Gọi lúc cần, thường sau fetch remote |
 | OB5, khảo sát, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (host setup). Paywall chưa nối. Khảo sát và app-open vẫn tắt trừ khi app tự nối hoặc remote bật: `ob_question_config` hợp lệ hiện khảo sát cho người dùng mới, và `open_resume` kèm ID trong `ad_remote_config` của backend bật [app-open](#app-open-khi-quay-lại) | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối khảo sát/paywall/app-open khi cần |
 
-UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `OnboardingSdk.setCanRequestAds(false)` vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
+UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `ConsentCenter.setHostConsent(false, false)` từ CMP riêng vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
+
+Consent là nguồn quyết định quyền request. CMP riêng publish bằng `ConsentCenter.setHostConsent(canRequestAds, personalized)` và đọc bằng `ConsentCenter.canRequestAds()`. Timeout hook không tự cấp consent.
+
+Cài `adProvider = ERainAdProvider()`, hoặc bỏ trống nếu onboarding không có ads. `OnboardingAdProvider` thuộc nội bộ SDK, partner không tự triển khai. Timeout mỗi tier dùng `native.load.tier_timeout_ms` và `interstitial.load.tier_timeout_ms`. Native ngôn ngữ bị gate chặn trước request có thể được request một lần ở màn ngôn ngữ; request đã no-fill không thử lại.
 
 ### Field trong JSON mẫu
 
@@ -345,6 +349,12 @@ SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, CTA style của placem
 Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. `reloadOnAdClick` mặc định bật; chỉ tắt khi app tự điều hướng sau click-return.
 
 Preload cho Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` trong `SplashActivity.onRemoteFetched()`. Helper cùng placement lấy ad khi hiện; ad quá 60 phút bị tải lại. Xem [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
+
+Hành vi native helper:
+
+- Helper có placement (`forPlacement`, hoặc tham số `placement` của constructor `NativeAdHelper`) bind và refill từ store của placement đó, nên hãy preload bằng đúng key placement như trên. Ad preload theo chuỗi unit ID ghép (`NativeAdPreload.preload(activity, config)`) bị để lại, helper tự request ad của mình, trừ khi bạn truyền key đó như dưới đây. Key truyền vào `setEnablePreload(enabled, key)` quyết định store trước cả placement, kể cả key chuỗi unit ID ghép (`NativeAdPreload.getInstance().keyOf(config)`).
+- `bindAvailable()` trả `false` và huỷ helper khi user đã mua, consent bị rút hoặc cổng UA từ chối; ad đang hiện bị gỡ. Ad preload chưa dùng vẫn nằm trong store.
+- Khi quay lại sau click ad, helper bind ad thay thế đã tải lúc click hoặc chờ nó; nếu ad thay thế đó lỗi thì ad hiện tại được giữ và không có request thứ hai. Sau thay đổi cấu hình như xoay màn, helper khôi phục ad của nó, hoặc join lượt tải nó đang chờ, mà không request mới; slot đã kết thúc bằng no-fill vẫn trống.
 
 </details>
 
@@ -417,7 +427,7 @@ Mặc định: 30 giây/tầng tải, một cache/request theo placement, không
 | JSON từ Firebase | [Publish ba parameter String](firebase-integration.vi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Cài `FirebaseAdConfigSource()` một lần sau assets; splash SDK tự refresh. Key mà `ad_remote_config` của backend khai báo ưu tiên hơn ad unit ID ghi trong code. [Custom fallback local](firebase-integration.vi.md#local-defaults) là tùy chọn. |
 | Firebase Analytics | Cài `suite-firebase`, đăng ký `Tracker.addSink(FirebaseSink())` ngay sau `Tracker.install`; chọn consent policy theo [hướng dẫn Firebase](firebase-integration.vi.md#consent-ban-đầu). |
 | App-open khi quay lại | Asset không bật tính năng: chỉ có `open_resume` trong `ad_config.json` thì chưa bật. `open_resume` kèm ID trong `ad_remote_config` của backend thì bật; muốn giữ app-open tắt, gọi `AppOpenManager.getInstance().disableAppResume()` hoặc bỏ `open_resume` khỏi remote. Làm theo [App-open khi quay lại](#app-open-khi-quay-lại). |
-| App có premium / paywall | Làm [BillingKit](billing-integration.vi.md) / [PayKit](paywall-integration.vi.md) và [hook chờ billing trước ads](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). `onInitBilling()` mặc định trống; gọi install billing chưa có nghĩa đã khôi phục premium. |
+| App có premium / paywall | Làm [BillingKit](billing-integration.vi.md) / [PayKit](paywall-integration.vi.md) và [hook billing chạy song song](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). `onInitBilling()` mặc định trống; gọi install billing chưa có nghĩa đã khôi phục premium. |
 | Đổi ngôn ngữ từ Settings | `registerForActivityResult(StartActivityForResult())`, rồi `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (kiểu trong `io.onboardkit.ui.language`). `RESULT_OK`: lấy `ObLanguageActivity.RESULT_LANGUAGE_CODE`, lưu như bước 5 và `recreate()`; Back không trả mã. Màn này không ads. `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` không trả result; đọc lựa chọn qua `OnboardingSdk.selectedLanguage()`. |
 | Entry từ notification/widget | Dùng `SplashEntry` và giữ passthrough trong listener; xem [OnboardKit](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). Không cần các entry này cho launcher thông thường. |
 
@@ -431,7 +441,7 @@ import io.onboardkit.ui.splash.ObSplashActivity
 class SplashActivity : ObSplashActivity()
 ```
 
-SDK refresh các document trước điểm luồng cần dùng. Không gọi lại `OnboardKitSetup.configure()` trong `onRemoteFetched` chỉ để chép giá trị vừa fetch. Giữ hook nếu app có preload/tích hợp riêng. Cả hai strategy đều chờ bước remote (`ALTERNATE` chờ thêm `onRemoteFetched()`); LFO1 preload sau bước đó ở cả hai strategy. [Thời điểm áp dụng và QA](firebase-integration.vi.md#remote-notes).
+Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
 
 ### App-open khi quay lại
 

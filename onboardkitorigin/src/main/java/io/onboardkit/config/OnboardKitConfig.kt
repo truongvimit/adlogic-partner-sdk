@@ -8,10 +8,10 @@ import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 
 enum class AdLoadStrategy {
-    /** Load ads in parallel with remote fetch — faster, ids may be stale. */
+    /** Compatibility value: ads start after consent, alongside remote fetch. */
     SAME_TIME,
 
-    /** Load ads after remote fetch — ids always fresh. Default. */
+    /** Compatibility value: also starts ads after consent without waiting for remote. */
     ALTERNATE,
 }
 
@@ -46,7 +46,7 @@ data class SplashConfig(
      */
     val noInternetPromptEnabled: Boolean = OnboardingSettings.defaultBool("splash.permissions.no_internet_prompt_enabled"),
     /**
-     * Requests POST_NOTIFICATIONS on Android 13+ after consent and the remote fetch, when the
+     * Requests POST_NOTIFICATIONS on Android 13+ after consent and splash requests, when the
      * splash is foreground.
      * Enabled by default. Authorized splash requests and the minimum display clock may run under
      * this prompt while splash is visible. The ad wait budget and fullscreen presentation require
@@ -77,9 +77,8 @@ data class LanguageConfig(
     /**
      * Whether the confirm button is on screen before the user has picked anything.
      *
-     * `false` (default) hides it until the first tap, which makes selecting a language the only
-     * thing the screen offers. `true` keeps it visible but dimmed, so the way out of the screen
-     * is obvious from the start. Remote `lfo.confirm_button.visible_before_selection` (or a
+     * `true` (default) keeps it visible but dimmed before the first selection. `false` hides
+     * it until the first tap. Remote `lfo.confirm_button.visible_before_selection` (or a
      * delivered `ob_show_language_confirm_before_select`) overrides this.
      */
     val confirmVisibleBeforeSelect: Boolean = OnboardingSettings.defaultBool("lfo.confirm_button.visible_before_selection"),

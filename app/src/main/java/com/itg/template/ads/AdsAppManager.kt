@@ -7,6 +7,7 @@ import com.ads.module.config.AdConfig
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdjustConfig
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.SettingsRegistry
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.consent.ConsentOptions
 import com.itg.template.BuildConfig
@@ -18,9 +19,11 @@ import com.itg.template.ui.component.uninstall.SurveyActivity
 import com.itg.template.ui.component.welcome.WelcomeActivity
 import io.onboardkit.ads.erain.ERainTuning
 import io.suite.firebase.FirebaseAdConfigSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** App configuration, initialization and resume policy. Screens call the SDK directly. */
-object AdsAppManager {
+object AdsAppManager : RemoteConfigUtils.Listener {
     fun initialize(application: Application): ERainAdConfig {
         AdRemoteConfig.initializeFromAssets(application)
         AdConfig.install(FirebaseAdConfigSource())
@@ -35,7 +38,7 @@ object AdsAppManager {
                 fbAppId = application.getString(R.string.facebook_app_id)
             }
             facebookClientToken = application.getString(R.string.facebook_client_token)
-            // SplashActivity applies the remote interval after fetching it.
+            // The process-owned remote callback applies the interval after fetching it.
             intervalInterstitialAd = 0
             idAdResume = ""
             listDeviceTest = listOf("1E25A7D66221E2116062EA114AFE2982")
@@ -51,6 +54,25 @@ object AdsAppManager {
             disableAppResumeWithActivity(WelcomeActivity::class.java)
             disableAppResumeWithActivity(SurveyActivity::class.java)
         }
+        // Product flags and caps must still apply if remote finishes after splash is gone.
+        SettingsRegistry.addFetchListener("demo-ad-policy") {
+            withContext(Dispatchers.Main.immediate) { applyAdPolicy() }
+        }
+        RemoteConfigUtils.init(application, this)
         return config
+    }
+
+    override fun loadSuccess() {
+        applyAdPolicy()
+    }
+
+    private fun applyAdPolicy() {
+        ERainAd.getInstance().setMaxClickAdsPerDay(RemoteConfigUtils.getMaxClickAdsPerDay())
+        ERainAd.getInstance().setIntervalInterstitialAd(RemoteConfigUtils.getInterstitialIntervalSec())
+        // Seed the bundled app-open placement; subsequent remote documents own its live switch/ID.
+        if (com.itg.template.app.ResumeAdsEntryRule.shouldEnableAppResume()) {
+            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.id)
+            AppOpenManager.getInstance().enableAppResume()
+        }
     }
 }

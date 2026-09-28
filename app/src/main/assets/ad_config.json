@@ -506,7 +506,7 @@
   },
   "native_fs_high": {
     "id": "ca-app-pub-7208941695689653/8727507290",
-    "isEnable": false,
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -520,7 +520,7 @@
   },
   "native_fs": {
     "id": "ca-app-pub-7208941695689653/8727507290",
-    "isEnable": false,
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",

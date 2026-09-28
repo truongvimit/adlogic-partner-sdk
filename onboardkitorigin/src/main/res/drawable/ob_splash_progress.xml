@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A static drawable avoids animation callbacks for integer progress updates. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape>
+            <solid android:color="@color/ob_splash_progress_track" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <scale android:scaleWidth="100%" android:gravity="start">
+            <shape>
+                <solid android:color="@color/ob_splash_progress" />
+                <corners android:radius="4dp" />
+            </shape>
+        </scale>
+    </item>
+</layer-list>

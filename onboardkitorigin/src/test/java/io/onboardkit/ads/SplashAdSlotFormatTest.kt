@@ -20,7 +20,6 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito.mock
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
@@ -43,7 +42,7 @@ class SplashAdSlotFormatTest {
     @Before fun setup() {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
         OnboardingSdk.install(app) {
-            adProvider = mock(OnboardingAdProvider::class.java)
+            adProvider = FakeAdProvider()
             trackkitAutoTracking(false)
         }
         OnboardingSettings.document.acceptSuccessfulFetch(null)

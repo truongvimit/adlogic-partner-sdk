@@ -2,10 +2,13 @@ package io.onboardkit.ads
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.config.settings.AdBehavior
+import com.ads.module.helper.Entitlement
+import com.ads.module.helper.EntitlementSource
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.config.*
 import io.onboardkit.core.StepId
@@ -34,19 +37,20 @@ class ObPreloadEligibilityTest {
     private var flags = RemoteFlags()
     private var premium = false
     private var consent = true
-    private val provider = Mockito.mock(OnboardingAdProvider::class.java) { call ->
-        when (call.method.name) {
-            "preloadNative" -> { requests += call.getArgument<NativeAdRequest>(1); null }
-            "isPremium" -> premium
-            else -> Mockito.RETURNS_DEFAULTS.answer(call)
-        }
+    private val provider = object : FakeAdProvider() {
+        override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request }
     }
 
     @Before fun setup() {
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = premium })
         OnboardingSdk.install(ApplicationProvider.getApplicationContext()) { trackkitAutoTracking(false) }
         activity = Robolectric.buildActivity(Activity::class.java).get()
         clearRemote()
         resetChain()
+    }
+
+    @After fun restoreEntitlement() {
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
     }
 
     @After fun clearRemote() {
@@ -59,7 +63,7 @@ class ObPreloadEligibilityTest {
         requests.clear()
         val config = { OnboardingSettings.resolve(cfg) }
         val remoteFlags = { OnboardingSettings.resolveFlags(flags) }
-        guard = AdsGuard(provider, config, remoteFlags, { consent })
+        guard = AdsGuard(true, config, remoteFlags, { consent })
         chain = PreloadChain(provider, guard, config, remoteFlags) {
             guard.canFillAdOnlyStep(activity, AdPlacement.StepFullScreen(it))
         }

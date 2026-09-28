@@ -71,7 +71,7 @@ class OnboardingSettingsTest {
     @Test fun `all defaults are available before application initialization`() {
         assertEquals(AdLoadStrategy.ALTERNATE, SplashConfig().adLoadStrategy)
         assertFalse(BehaviorConfig().lockPagerSwipe)
-        assertFalse(LanguageConfig().confirmVisibleBeforeSelect)
+        assertTrue(LanguageConfig().confirmVisibleBeforeSelect)
         assertEquals(5000L, OnboardingSettings.number("onboarding.fullscreen.skip.delay_ms"))
         assertEquals(3000L, OnboardingSettings.number("ob5.skip.delay_ms"))
     }

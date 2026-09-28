@@ -48,6 +48,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CancellationException
 
 /** Options for one flow run. */
 data class StartOptions(
@@ -80,10 +84,6 @@ object OnboardingSdk {
     private var adProvider: OnboardingAdProvider? = null
     private var paywallGate: PaywallGate? = null
     private var listener: OnboardingListener? = null
-
-    /** Gate for every ad request; see [setCanRequestAds]. */
-    @Volatile
-    private var adsAllowed: Boolean = true
 
     private val eventBus = EventBus()
     internal val session = OnboardingSession()
@@ -139,8 +139,8 @@ object OnboardingSdk {
         com.ads.module.config.settings.SettingsRegistry.addFetchListener("onboardkit.remote") {
             remote?.rereadActivated()
         }
-        adsGuard = AdsGuard(adProvider, ::configOrNull, ::flags, ::canRequestAds)
-        appResumeGuard = ObAppResume(adsGuard, adProvider)
+        adsGuard = AdsGuard(adProvider != null, ::configOrNull, ::flags, ConsentCenter::canRequestAds)
+        appResumeGuard = ObAppResume(adsGuard, adProvider != null)
         // Same transient/master policy for both entry paths; OPEN retains its own slot checks.
         AppOpenManager.getInstance().setResumeSkipPolicy(object : ResumeSkipPolicy {
             override fun skipReasonFor(activity: Activity): String? =
@@ -181,25 +181,6 @@ object OnboardingSdk {
     fun setListener(newListener: OnboardingListener) {
         listener = newListener
     }
-
-    /**
-     * Host policy for onboarding ads, AND-ed with the current consent authority.
-     *
-     * `false` disables requests even if consent is later granted. `true` removes only this host
-     * restriction; it cannot grant consent. Defaults to `true` so ConsentCenter controls requests,
-     * including its fallback after UMP errors or network timeouts.
-     *
-     * A host that runs another CMP must publish its result with [ConsentCenter.setHostConsent]
-     * before completing `ObSplashActivity.onConsentRequired`. Step completion is not authorization.
-     */
-    fun setCanRequestAds(allowed: Boolean) {
-        if (adsAllowed == allowed) return
-        adsAllowed = allowed
-        ObLog.d(ObLog.Section.GATE, "hostAllowsAds=$allowed")
-    }
-
-    /** Reads current authority directly, including revocation and later consent recovery. */
-    fun canRequestAds(): Boolean = adsAllowed && ConsentCenter.canRequestAds()
 
     fun addAnalyticsPlugin(plugin: AnalyticsPlugin) = AnalyticsHub.addPlugin(plugin)
 
@@ -345,19 +326,27 @@ object OnboardingSdk {
     internal fun configuredPlacementKey(placement: AdPlacement): String? =
         configOrNull()?.ads?.placementKeyFor(placement)
 
-    @Volatile private var lateRemote: kotlinx.coroutines.Job? = null
+    private var remoteRefresh: Deferred<Unit>? = null
 
-    /**
-     * Applies a fetch that outlived the splash's wait. The splash keeps its own deadline; without
-     * this, a slow network left the rest of the session on the app's own values although the
-     * backend answered moments later.
-     */
-    internal fun applyRemoteWhenLanded() {
-        if (lateRemote?.isActive == true) return
-        lateRemote = sdkScope.launch {
-            remote?.sync(LATE_REMOTE_TIMEOUT_MS)
-            com.ads.module.config.AdConfig.refresh(LATE_REMOTE_TIMEOUT_MS)
-        }
+    /** SDK-owned: screens may observe completion, but leaving a screen never cancels the fetch. */
+    @Synchronized
+    internal fun refreshRemote(timeoutMs: Long): Deferred<Unit> {
+        remoteRefresh?.takeIf { it.isActive }?.let { return it }
+        return sdkScope.async<Unit> {
+            // The background allowance is independent of how quickly splash can leave.
+            val backgroundTimeoutMs = maxOf(timeoutMs, LATE_REMOTE_TIMEOUT_MS)
+            try {
+                coroutineScope {
+                    launch { remote?.sync(backgroundTimeoutMs) }
+                    launch { com.ads.module.config.AdConfig.refresh(backgroundTimeoutMs) }
+                }
+                Log.d(TAG, "Background remote refresh settled")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.w(TAG, "Background remote refresh failed; keeping current settings", failure)
+            }
+        }.also { remoteRefresh = it }
     }
 
     internal fun configOrNull(): OnboardKitConfig? = config?.let(io.onboardkit.remote.OnboardingSettings::resolve)

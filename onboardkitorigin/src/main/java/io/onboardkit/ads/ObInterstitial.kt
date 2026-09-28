@@ -244,41 +244,6 @@ private fun AppCompatActivity.endWhenBackInFront(
 }
 
 /**
- * Runs [block] once this Activity is RESUMED, immediately if it already is, or [onHostLost] if it
- * is destroyed first. Exactly one of the two always runs.
- */
-private fun AppCompatActivity.whenResumed(onHostLost: () -> Unit, block: () -> Unit) {
-    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-        block()
-        return
-    }
-    if (lifecycle.currentState == Lifecycle.State.DESTROYED) {
-        onHostLost()
-        return
-    }
-    ObLog.d(ObLog.Section.SHOW, "holding for RESUMED state=${lifecycle.currentState}")
-    lifecycle.addObserver(
-        object : LifecycleEventObserver {
-            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
-                when (event) {
-                    Lifecycle.Event.ON_RESUME -> {
-                        source.lifecycle.removeObserver(this)
-                        block()
-                    }
-
-                    Lifecycle.Event.ON_DESTROY -> {
-                        source.lifecycle.removeObserver(this)
-                        onHostLost()
-                    }
-
-                    else -> Unit
-                }
-            }
-        },
-    )
-}
-
-/**
  * Runs [block] for the first caller only.
  *
  * Both moments of a presentation can be reached from more than one callback, and the vendor is
