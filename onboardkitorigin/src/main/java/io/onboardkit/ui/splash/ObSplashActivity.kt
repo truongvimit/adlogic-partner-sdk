@@ -655,8 +655,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun remoteNextScreenTiming(): NextScreenTiming? =
-        (OnboardingSettings.values.remoteValue("splash.navigation.next_screen_timing") as? String)
-            ?.takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+        OnboardingSettings.text("splash.navigation.next_screen_timing")
+            .takeUnless { it == "AUTO" }
+            ?.let { raw -> runCatching { NextScreenTiming.valueOf(raw) }.getOrNull() }
 
     /**
      * Asked once, with the splash in front, before its ad would show, unless native_fs forces
@@ -668,7 +669,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         entry = SplashEntry.from(intent),
         configured = {
             OnboardingSettings.text("splash.navigation.next_screen_timing")
-                .takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+                .takeUnless { it == "AUTO" }
+                ?.let { raw -> runCatching { NextScreenTiming.valueOf(raw) }.getOrNull() }
         },
         decision = attempt.startDecision,
     )

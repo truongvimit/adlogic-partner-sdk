@@ -101,6 +101,11 @@
     <style name="text_medium_6" parent="text_medium">
         <item name="android:textSize">@dimen/_6ssp</item>
     </style>
+    <style name="PrivacyGoalTool">
+        <item name="android:layout_width">0dp</item><item name="android:layout_height">80dp</item><item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item><item name="android:textColor">#FFD13538</item><item name="android:textSize">12sp</item>
+        <item name="android:background">#FFF2EDEC</item>
+    </style>
 
     <style name="text_semi_bold_24" parent="text_semi_bold">
         <item name="android:textSize">@dimen/_24ssp</item>

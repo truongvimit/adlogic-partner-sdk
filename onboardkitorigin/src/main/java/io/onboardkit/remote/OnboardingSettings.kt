@@ -11,6 +11,7 @@ import io.onboardkit.config.*
 import io.onboardkit.ads.NextScreenTiming
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.isPrivacyGoalsNative
 
 /**
  * Defaults come from onboarding_config.json. Remote (this document, then the legacy `ob_*` keys the
@@ -96,9 +97,10 @@ object OnboardingSettings {
         if (behavior.hasOverride("reload.on_ad_click")) {
             return if (behavior.boolean("reload.on_ad_click", true)) NativeClickAction.RELOAD else NativeClickAction.NONE
         }
-        val path = when (p) {
-            is AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.click.action"
-            is AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.click.action"
+        val path = when {
+            p.isPrivacyGoalsNative -> slotPath(p) + ".behavior.click.action"
+            p is AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.click.action"
+            p is AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.click.action"
             else -> slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior.click.action" else ".behavior.click.action"
         }
         // Compatibility for hosts using the old step switch. It cannot override click.action.
@@ -203,7 +205,7 @@ object OnboardingSettings {
 
     private fun resolveConfig(c: OnboardKitConfig, v: SettingsSnapshot, adConfig: AdRemoteConfig, legacySteps: Map<String, Boolean>): OnboardKitConfig {
         val ads = resolveAds(c.ads, adConfig, v)
-        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "question").none(v::hasOverride) &&
+        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "question", "privacy_goals_screen").none(v::hasOverride) &&
             ads == c.ads && legacySteps.isEmpty()) return c
         val splash = c.splash.copy(
             minDisplayTimeMs = v.long("splash.timing.min_display_ms", c.splash.minDisplayTimeMs),
@@ -312,7 +314,9 @@ object OnboardingSettings {
             }
         }
         val question = c.question?.let { resolveQuestion(it, v) }
-        return OnboardKitConfig(splash, language, steps, question, ads, c.system, behavior)
+        return OnboardKitConfig(splash, language, steps, question, ads, c.system, behavior, c.privacyGoalsScreen.copy(
+            enabled = v.boolean("privacy_goals_screen.enabled", c.privacyGoalsScreen.enabled),
+        ))
     }
 
     /** A legacy step key removes its page or brings back one the app disabled, at its catalog position. */

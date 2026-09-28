@@ -9,10 +9,10 @@ internal fun resolveNextScreenTiming(
     isEntry: Boolean,
     remote: () -> NextScreenTiming?,
     hook: () -> NextScreenTiming,
-): NextScreenTiming = when {
+): NextScreenTiming = remote() ?: when {
     nativeFsEligible -> NextScreenTiming.AFTER_AD
     isEntry -> hook()
-    else -> remote() ?: hook()
+    else -> hook()
 }
 
 internal fun defaultNextScreenTiming(

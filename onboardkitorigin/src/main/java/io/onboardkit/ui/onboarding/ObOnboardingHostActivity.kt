@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import com.ads.module.config.settings.AdBehavior
 import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Intent
@@ -31,6 +32,7 @@ import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import io.onboardkit.ui.pager.AdvanceFlingDetector
 import io.onboardkit.ui.pager.StepPage
 import io.onboardkit.ui.pager.StepPagerAdapter
@@ -362,12 +364,14 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val adGone = CompletableDeferred<Unit>().also { exitAdGone = it }
         val timing = sdk.requireConfig().ads.afterOnboardingInterstitialTiming
         val entry = SplashEntry.from(OnboardingSdk.session.passthrough)
-        val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
+        val underAd = timing == NextScreenTiming.UNDER_AD && entry == null && !sdk.privacyGoalsScreenEnabled()
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
-            // Only the last fallback: the placement's behavior chain already reads this screen's
-            // wait, ranked above the placement and format waits.
-            timeoutMs = OnboardingSettings.defaultNumber("onboarding.exit_interstitial.wait_timeout_ms"),
+            // The placement behavior chain is the centralized resolver for this field.  Passing
+            // the bundled number here bypassed remote and app-asset overrides before the ads
+            // module had a chance to inspect the snapshot.
+            timeoutMs = OnboardingSettings.behavior(AdPlacement.AfterOnboardingInterstitial)
+                .long("load_and_show.wait_timeout_ms", AdBehavior.defaultNumber("interstitial.load_and_show.wait_timeout_ms")),
             onNext = { if (underAd) continueWhenResumed() },
             onFinished = {
                 adGone.complete(Unit)
@@ -390,6 +394,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     private fun continueAfterOnboardingAd() {
         if (isFinishing || isDestroyed) return
+        if (sdk.privacyGoalsScreenEnabled()) {
+            PrivacyGoalsActivity.start(this)
+            lifecycleScope.launch { finishAfterExitAd() }
+            return
+        }
         val config = sdk.requireConfig()
         val provider = sdk.provider()
         val decision = FlowNavigator.decideExit(

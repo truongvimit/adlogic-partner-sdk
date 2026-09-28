@@ -28,10 +28,10 @@ object NativeTemplates {
      */
     @LayoutRes
     internal fun layoutForPlacement(placement: AdPlacement): Int =
-        // The splash bottom native ships one fixed frame, so it stays out of [NativeTemplate]
-        // rather than being added to it: a partner can neither ask for this layout elsewhere nor
-        // re-skin the slot, and the public enum keeps its five constants.
-        if (placement == AdPlacement.SplashInlineNative) R.layout.ob_layout_native_media_left
+        // These horizontal slots use the same 4:3 media-left frame at preload and bind time.
+        // A content-template / positionCTA override must not turn one of the ALT ads vertical.
+        if (placement == AdPlacement.SplashInlineNative || placement.isPrivacyGoalsNative)
+            R.layout.ob_layout_native_media_left
         else layoutFor(templateForPlacement(placement))
 
     /**

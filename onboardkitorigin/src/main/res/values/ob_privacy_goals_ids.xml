@@ -1,0 +1,17 @@
+<resources>
+    <!-- Minimal partner contract. Text, images and selected visuals stay entirely app-owned. -->
+    <item name="ob_privacy_consent_checkbox" type="id" />
+    <item name="ob_goal_options" type="id" />
+    <item name="ob_privacy_goals_ad" type="id" />
+    <!-- Optional marker for a non-standard action view; ordinary clickable Buttons are auto-found. -->
+    <item name="ob_privacy_goals_continue" type="id" />
+
+    <!-- Legacy names remain available for source/resource compatibility. -->
+    <item name="ob_privacy_get_started" type="id" />
+    <item name="ob_privacy_ad" type="id" />
+    <item name="ob_goal_next" type="id" />
+    <item name="ob_goal_ad" type="id" />
+    <item name="ob_goal_option_title" type="id" />
+    <item name="ob_goal_option_icon" type="id" />
+    <item name="ob_goal_option_selected" type="id" />
+</resources>

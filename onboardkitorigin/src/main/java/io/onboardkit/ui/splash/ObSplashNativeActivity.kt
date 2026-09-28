@@ -31,8 +31,8 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
         binding = ObActivityFullscreenAdBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.obSkipButton.applyFullScreenSkip(
-            FullScreenSkipStyle.valueOf(OnboardingSettings.text("splash.native.skip.style")),
-            FullScreenSkipPosition.valueOf(OnboardingSettings.text("splash.native.skip.position")),
+            OnboardingSettings.skipStyle("splash.native.skip.style", FullScreenSkipStyle.CLOSE_ICON),
+            OnboardingSettings.skipPosition("splash.native.skip.position", FullScreenSkipPosition.RIGHT),
         )
         binding.obSkipButton.setOnClickListener { close() }
         // A ready fill cannot bind before RESUMED. On recreation the helper may instead own a

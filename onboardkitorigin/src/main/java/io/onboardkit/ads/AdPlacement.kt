@@ -3,6 +3,12 @@ package io.onboardkit.ads
 import io.onboardkit.core.StepId
 import io.trackkit.AdFormat
 
+internal val AdPlacement.isPrivacyGoalsNative: Boolean
+    get() = this is AdPlacement.StepNative && stepId in setOf(
+        StepId.PARTNER_PRIVACY, StepId.PARTNER_PRIVACY_ALT,
+        StepId.PARTNER_GOAL, StepId.PARTNER_GOAL_ALT,
+    )
+
 /**
  * Every ad slot the flow knows about. Preload buffers, enable flags and analytics all key
  * off [key] — the SDK never references vendor ad objects by screen name.

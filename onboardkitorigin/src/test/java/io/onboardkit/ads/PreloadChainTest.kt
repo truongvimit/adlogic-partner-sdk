@@ -106,6 +106,43 @@ class PreloadChainTest {
         assertEquals(listOf(AdPlacement.StepNative(StepId.OB1)), requests)
     }
 
+    @Test fun `privacy goals disabled never preload`() {
+        cfg = onboardKitConfig {
+            defaultSteps()
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(enabled = true)
+            ads = AdsConfig(
+                contentStepNative = NativeAdUnit("content"),
+                stepNatives = mapOf(
+                    StepId.PARTNER_PRIVACY to NativeAdUnit("privacy"),
+                    StepId.PARTNER_PRIVACY_ALT to NativeAdUnit("privacy-alt"),
+                    StepId.PARTNER_GOAL to NativeAdUnit("goal"),
+                    StepId.PARTNER_GOAL_ALT to NativeAdUnit("goal-alt"),
+                ),
+            )
+        }.getOrThrow()
+        chain = PreloadChain(provider = object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+        }, guard = AdsGuard(true, { cfg }, { flags }, { allowed }), config = { cfg }, flags = { flags })
+        flags = flags.copy(adsContentNative = false)
+        chain.preloadPrivacy1(activity)
+        chain.preloadPrivacy2(activity)
+        chain.preloadGoal1(activity)
+        chain.preloadGoal2(activity)
+        assertTrue(requests.isEmpty())
+
+        flags = RemoteFlags()
+        cfg = onboardKitConfig {
+            defaultSteps()
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(enabled = false)
+            ads = AdsConfig(stepNatives = mapOf(StepId.PARTNER_PRIVACY to NativeAdUnit("privacy")))
+        }.getOrThrow()
+        chain = PreloadChain(object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+        }, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
+        chain.preloadPrivacy1(activity)
+        assertTrue(requests.isEmpty())
+    }
+
     @Test fun `premium consent and force update hold prevent every native request`() {
         premium = true
         chain.onLanguageSelected(activity)

@@ -144,6 +144,7 @@ class OnboardKitConfig internal constructor(
     val ads: AdsConfig,
     val system: SystemBarConfig,
     val behavior: BehaviorConfig,
+    val privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig(),
 ) {
     fun stepById(id: StepId): StepDefinition? = steps.firstOrNull { it.id == id }
 
@@ -154,6 +155,7 @@ class OnboardKitConfigBuilder internal constructor() {
     var splash: SplashConfig = SplashConfig()
     var language: LanguageConfig = LanguageConfig()
     var question: QuestionConfig? = null
+    var privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig()
     var ads: AdsConfig = AdsConfig.fromAdConfig()
     var system: SystemBarConfig = SystemBarConfig()
     var behavior: BehaviorConfig = BehaviorConfig()
@@ -197,6 +199,7 @@ class OnboardKitConfigBuilder internal constructor() {
         if (language.languages.isEmpty()) {
             errors += "[language] Language list must not be empty"
         }
+        validatePrivacyGoalsScreen(errors)
         validateAdIds(errors)
         validateCustomLayouts(errors)
 
@@ -207,6 +210,7 @@ class OnboardKitConfigBuilder internal constructor() {
                     language = language,
                     steps = stepList.toList(),
                     question = question,
+                    privacyGoalsScreen = privacyGoalsScreen,
                     ads = ads,
                     system = system,
                     behavior = behavior,
@@ -225,6 +229,19 @@ class OnboardKitConfigBuilder internal constructor() {
      * do nothing at all — the app shipped its own design, saw the SDK's, and had no way to tell
      * why. Failing here says so at `configure()`, which is the only moment the answer is cheap.
      */
+    private fun validatePrivacyGoalsScreen(errors: MutableList<String>) {
+        // Layouts and IDs come from SDK defaults and may be overridden by app resources with the
+        // same names. This validation remains for callers using the deprecated explicit override.
+        if (!privacyGoalsScreen.enabled) return
+        val p = privacyGoalsScreen.privacy; val g = privacyGoalsScreen.goal
+        if (p.layoutRes == 0) errors += "[privacyGoalsScreen.privacy] layoutRes must be non-zero"
+        if (p.consentViewId == 0) errors += "[privacyGoalsScreen.privacy] consentViewId must be non-zero"
+        if (g.layoutRes == 0) errors += "[privacyGoalsScreen.goal] layoutRes must be non-zero"
+        if (g.optionLayoutRes == 0) errors += "[privacyGoalsScreen.goal] optionLayoutRes must be non-zero"
+        if (g.optionsViewId == 0) errors += "[privacyGoalsScreen.goal] optionsViewId must be non-zero"
+        if (g.minSelection < 1) errors += "[privacyGoalsScreen.goal] minSelection must be >= 1"
+    }
+
     private fun validateCustomLayouts(errors: MutableList<String>) {
         fun reject(name: String, value: Int) {
             if (value == 0) return

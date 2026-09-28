@@ -326,6 +326,14 @@ object OnboardingSdk {
     internal fun configuredPlacementKey(placement: AdPlacement): String? =
         configOrNull()?.ads?.placementKeyFor(placement)
 
+    /** Screen availability is independent of ad fill, entitlement and placement switches. */
+    internal fun privacyGoalsScreenEnabled(): Boolean {
+        val flow = configOrNull()?.privacyGoalsScreen ?: return false
+        // The SDK always ships a convention-based fallback layout. Partners can override those
+        // resources by name; no layout/id object is required in the app config.
+        return flow.enabled
+    }
+
     private var remoteRefresh: Deferred<Unit>? = null
 
     /** SDK-owned: screens may observe completion, but leaving a screen never cancels the fetch. */

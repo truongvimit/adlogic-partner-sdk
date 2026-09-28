@@ -139,10 +139,24 @@ class PreloadChain internal constructor(
 
     fun onStepSelected(activity: Activity, enabledSteps: List<StepId>, index: Int) {
         if (index != enabledSteps.lastIndex) return
+        // Privacy slot 1 belongs to the first screen after the exit interstitial. Warm it on the
+        // actual last item in the resolved order, including a last FULL step.
+        if (config()?.privacyGoalsScreen?.enabled == true) preloadPrivacy1(activity)
         // Last pager step: warm every possible exit. OB5 used to have a preload nobody called, so
         // its native was never ready and the whole screen was unreachable.
         if (flags().enableStepOb5 && OnboardingSettings.bool("onboarding.preload.ob5_on_last_step")) preloadOb5(activity)
         if (OnboardingSettings.bool("onboarding.preload.question_on_last_step")) preloadQuestion(activity)
+    }
+
+    fun preloadPrivacy1(activity: Activity) = preloadPartner(activity, StepId.PARTNER_PRIVACY)
+    fun preloadPrivacy2(activity: Activity) = preloadPartner(activity, StepId.PARTNER_PRIVACY_ALT)
+    fun preloadGoal1(activity: Activity) = preloadPartner(activity, StepId.PARTNER_GOAL)
+    fun preloadGoal2(activity: Activity) = preloadPartner(activity, StepId.PARTNER_GOAL_ALT)
+
+    private fun preloadPartner(activity: Activity, id: StepId) {
+        val group = config()?.privacyGoalsScreen ?: return
+        if (!group.enabled) return
+        preloadNative(activity, AdPlacement.StepNative(id))
     }
 
     fun preloadQuestion(activity: Activity) {

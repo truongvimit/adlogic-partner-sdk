@@ -94,6 +94,12 @@ class AdsGuard internal constructor(
         if (placement == AdPlacement.AfterOnboardingInterstitial &&
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
 
+        if (placement.isPrivacyGoalsNative) {
+            if (!cfg.privacyGoalsScreen.enabled) {
+                return AdSkipReason.ADS_OFF_IN_CONFIG
+            }
+        }
+
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT
         (adConfigKey ?: cfg.ads.placementKeyFor(placement))?.let { key ->

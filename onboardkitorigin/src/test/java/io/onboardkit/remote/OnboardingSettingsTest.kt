@@ -33,6 +33,14 @@ class OnboardingSettingsTest {
         assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
     }
 
+    @Test fun `privacy and goal native slots default to reload on click`() {
+        val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_GOAL)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_GOAL_ALT)))
+    }
+
     @Test fun `remote order selects from the app catalog, including pages the app disabled`() {
         val cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB4), AdFullScreenStepDefinition(StepId.FULL2),

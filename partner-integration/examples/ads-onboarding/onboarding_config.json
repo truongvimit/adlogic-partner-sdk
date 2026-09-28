@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "privacy_goals_screen": { "enabled": false },
   "revision": 0,
   "flow": {
     "skip_ad_only_steps_when_premium": true,
@@ -131,6 +132,10 @@
       }
     },
     "steps": {
+      "partner_privacy": { "behavior": { "click": { "action": "reload" } } },
+      "partner_privacy_alt": { "behavior": { "click": { "action": "reload" } } },
+      "partner_goal": { "behavior": { "click": { "action": "reload" } } },
+      "partner_goal_alt": { "behavior": { "click": { "action": "reload" } } },
       "full1": {
         "fullscreen": {
           "skip": {
