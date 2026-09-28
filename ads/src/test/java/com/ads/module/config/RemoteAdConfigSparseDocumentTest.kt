@@ -1,5 +1,6 @@
 package com.ads.module.config
 
+import com.ads.module.helper.adnative.NativeClickAction
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,6 +29,7 @@ class RemoteAdConfigSparseDocumentTest {
                     components = listOf("body"),
                     ids = listOf("code-high"),
                     appResumeLoadDelayMs = 700L,
+                    clickAction = NativeClickAction.AUTO_NEXT,
                 ),
             ),
         )
@@ -47,6 +49,7 @@ class RemoteAdConfigSparseDocumentTest {
                     components = emptyList(),
                     ids = emptyList(),
                     appResumeLoadDelayMs = 0L,
+                    clickAction = NativeClickAction.NONE,
                 ),
             ),
         )
@@ -62,6 +65,7 @@ class RemoteAdConfigSparseDocumentTest {
         assertEquals(emptyList<String>(), active.components)
         assertEquals(emptyList<String>(), active.ids)
         assertEquals(0L, active.appResumeLoadDelayMs)
+        assertEquals(NativeClickAction.NONE, active.clickAction)
 
         // Firebase's successful {} payload means the whole remote document was removed. The code
         // tier is visible again immediately; a failed fetch would leave the remote instance intact.
@@ -77,6 +81,7 @@ class RemoteAdConfigSparseDocumentTest {
         assertEquals(listOf("body"), restored.components)
         assertEquals(listOf("code-high"), restored.ids)
         assertEquals(700L, restored.appResumeLoadDelayMs)
+        assertEquals(NativeClickAction.AUTO_NEXT, restored.clickAction)
     }
 
     @Test

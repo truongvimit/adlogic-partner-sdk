@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdEventListener
@@ -128,7 +129,7 @@ class OnboardingAdLifecycleTest {
 
     private fun launch(
         first: StepDefinition = ContentStepDefinition(StepId.OB1, title = "One"),
-        clickReturn: Boolean = true,
+        clickAction: NativeClickAction? = null,
         second: StepDefinition = ContentStepDefinition(StepId.OB2, title = "Two"),
         lastOnly: Boolean = false,
         lockSwipe: Boolean = true,
@@ -141,17 +142,26 @@ class OnboardingAdLifecycleTest {
                 step(second)
                 step(ContentStepDefinition(StepId.OB4, title = "Three"))
             }
-            behavior = BehaviorConfig(adClickReturnCompletesStep = clickReturn,
-                lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
+            behavior = BehaviorConfig(lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
             ads = adsOverride ?: AdsConfig(contentStepNative = NativeAdUnit("test-content"),
                 fullScreenStepNative = NativeAdUnit("test-fullscreen"),
                 afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly })
         }.getOrThrow()).getOrThrow()
+        clickAction?.let(::pagerClickAction)
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
         activity.setTheme(R.style.ob_Theme_OnboardKit)
         requireNotNull(controller).setup().visible()
         main.idle()
         layout()
+    }
+
+    private fun pagerClickAction(action: NativeClickAction) {
+        val pages = listOf(AdPlacement.StepNative(StepId.OB1), AdPlacement.StepFullScreen(StepId.OB1))
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
+            "native_ob1" to com.ads.module.config.AdUnitConfig("test-content", true, clickAction = action),
+            AdPlacement.StepFullScreen(StepId.OB1).key to com.ads.module.config.AdUnitConfig("test-fullscreen", true, clickAction = action),
+        )))
+        pages.forEach { assertEquals(it.key, action, io.onboardkit.remote.OnboardingSettings.nativeClickAction(it)) }
     }
 
     private fun layout() {
@@ -270,23 +280,23 @@ class OnboardingAdLifecycleTest {
         assertEquals(originalElevation, page().findViewById<View>(R.id.ob_step_card).elevation, 0f)
     }
 
-    @Test fun `reload and none override legacy auto advance on content click return`() {
-        launch(clickReturn = true)
-        for (action in listOf("reload", "none")) {
-            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"$action"}}}}}}""")
+    @Test fun `reload and none on the pager key leave content in place on click return`() {
+        launch()
+        for (action in listOf(NativeClickAction.RELOAD, NativeClickAction.NONE)) {
+            pagerClickAction(action)
             listener().onClicked()
             listener().onAdOpened()
             pause()
             resume()
             settle()
-            assertEquals(action, 0, pager.currentItem)
+            assertEquals(action.remoteValue, 0, pager.currentItem)
             assertTrue(completions.isEmpty())
         }
     }
 
-    @Test fun `explicit auto next overrides disabled legacy navigation and enabled reload`() {
-        launch(clickReturn = false)
-        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}}""")
+    @Test fun `an ad_config change to auto next reaches the next click on the pager key`() {
+        launch(clickAction = NativeClickAction.NONE)
+        pagerClickAction(NativeClickAction.AUTO_NEXT)
         listener().onClicked()
         pause()
         resume()
@@ -580,7 +590,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `disabled click return leaves content in place`() {
-        launch(clickReturn = false)
+        launch(clickAction = NativeClickAction.NONE)
         listener().onClicked()
         pause(); resume(); settle()
         assertEquals(0, pager.currentItem)
@@ -673,7 +683,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `disabled click return does not disable fullscreen deadline catchup`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickReturn = false)
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickAction = NativeClickAction.NONE)
         listener(true).onClicked()
         pause()
         ShadowSystemClock.advanceBy(Duration.ofSeconds(4))

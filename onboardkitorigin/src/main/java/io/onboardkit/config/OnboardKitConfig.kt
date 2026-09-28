@@ -118,13 +118,6 @@ data class BehaviorConfig(
      * the exit interstitial. Requires [lockPagerSwipe] to be false; fullscreen also needs a shown ad.
      */
     val swipeCompletesLastStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.swipe_completes_last_step"),
-    /**
-     * Legacy default for step click-return. An explicit behavior.click.action overrides this flag.
-     * When enabled, coming back from a step ad's click completes that step exactly like its CTA — the next
-     * step on a middle page, the flow exit on the last one. Only clicks on the pager's own
-     * step ads count; a click on the language or question screen never moves the pager.
-     */
-    val adClickReturnCompletesStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.ad_click_return_completes_step"),
     /** Also locks the app splash; configChanges orientation|screenSize stops that recreating it. */
     val lockPortrait: Boolean = true,
 )

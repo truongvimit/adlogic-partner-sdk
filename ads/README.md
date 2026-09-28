@@ -256,12 +256,15 @@ logical waterfalls, but do not impose a global limit on vendor requests across p
 
 ### Native click return
 
-`native.click.action` in `ad_behavior_config` selects exactly one action:
+Each native takes exactly one click action from `click_action` on its placement's base key in
+`ad_config`; values, defaults and precedence are in the
+[remote settings guide](../partner-integration/remote-settings.md#native-click-actions).
 
-- `reload` (default): click/open immediately preloads a replacement. On return, the helper
-  consumes a ready ad or joins that same request. It does not wait for resume to start loading.
-  The current ad stays visible while waiting, without shimmer. Only a successful replacement
-  bind removes the old ad; a failed reload keeps it. Shimmer is for initial loading without an ad.
+- `reload` (default for app screens): click/open immediately preloads a replacement. On return,
+  the helper consumes a ready ad or joins that same request. It does not wait for resume to start
+  loading. The current ad stays visible while waiting, without shimmer. Only a successful
+  replacement bind removes the old ad; a failed reload keeps it. Shimmer is for initial loading
+  without an ad.
 - `none`: keep the current ad, with no click replacement or automatic navigation.
 - `auto_next`: no click replacement; the onboarding host advances on ad return.
 
@@ -270,21 +273,14 @@ if remote settings change. Duplicate click/open callbacks share one request. Ord
 resume does not count as an ad click. Popup destinations that pause without stopping the
 host are supported. Consent, purchase and network gates still apply.
 
-Host code can supply a fallback; a valid explicit remote/custom-asset `click.action` wins:
+When the key declares no `click_action`, the helper uses its code default, `reload`. To make
+that default `none`, call the following; `click_action` in ad_config still wins:
 
 ```kotlin
-nativeConfig.clickAction = NativeClickAction.NONE
+nativeHelper.setReloadOnAdClick(false)
 ```
 
-The built-in onboarding provider defaults content/fullscreen pager steps to `auto_next`;
-LFO1, LFO2 and all other natives default to `reload`. Set
-`lfo.native2.behavior.click.action = "auto_next"` in `onboarding_config` to confirm the
-selected language on ad return. Screen/group/placement overrides are documented in the
-[remote settings guide](../partner-integration/remote-settings.md).
-
-The legacy `reloadOnAdClick` / `reload.on_ad_click` and step navigation flag are fallbacks
-only; an explicit `click.action` overrides them, so auto-next and click reload cannot both
-run. Explicit timer/resume refresh options remain separate and are disabled by default.
+Explicit timer/resume refresh options remain separate and are disabled by default.
 
 ## Optional integrations
 

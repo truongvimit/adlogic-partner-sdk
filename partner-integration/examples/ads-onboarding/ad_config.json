@@ -13,6 +13,7 @@
   "native_splash": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 44,
     "enable_ua_check": false
@@ -26,6 +27,7 @@
   "native_language_1": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -40,6 +42,7 @@
   "native_language_1_click": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -54,6 +57,7 @@
   "native_language_2": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -68,6 +72,7 @@
   "native_language_2_click": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -82,6 +87,7 @@
   "native_onboarding_1_1": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -96,6 +102,7 @@
   "native_onboarding_2_1": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -110,6 +117,7 @@
   "native_onboarding_1_4": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -124,6 +132,7 @@
   "native_onboarding_2_4": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -138,6 +147,7 @@
   "native_onboarding_fullscreen_1_3": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -152,6 +162,7 @@
   "native_onboarding_fullscreen_2_3": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -166,6 +177,7 @@
   "native_onboarding_fullscreen_1_4": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -180,6 +192,7 @@
   "native_onboarding_fullscreen_2_4": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -194,6 +207,7 @@
   "native_permission": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -208,6 +222,7 @@
   "native_home": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -249,6 +264,7 @@
   "native_survey": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -263,6 +279,7 @@
   "native_confirm_uninstall": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -277,6 +294,7 @@
   "native_welcome": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -325,6 +343,7 @@
   "native_lang": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -353,6 +372,7 @@
   "native_lang_alt": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -381,6 +401,7 @@
   "native_popup_lang": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 36,
     "positionCTA": null,
@@ -409,6 +430,7 @@
   "native_ob1": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -437,6 +459,7 @@
   "native_ob2": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -465,6 +488,7 @@
   "native_ob3": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -493,6 +517,7 @@
   "native_fs": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -512,6 +537,7 @@
   "native_uninstall": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": true,
+    "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": null,
@@ -540,6 +566,7 @@
   "native_full1": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "TOP",
@@ -568,6 +595,7 @@
   "native_ob4": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -596,6 +624,7 @@
   "native_full2": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "TOP",

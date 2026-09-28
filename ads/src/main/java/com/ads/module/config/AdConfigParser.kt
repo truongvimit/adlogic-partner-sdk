@@ -4,6 +4,7 @@ import android.util.JsonReader
 import android.util.JsonToken
 import android.util.Log
 import android.graphics.Color
+import com.ads.module.helper.adnative.NativeClickAction
 import java.io.Reader
 import java.util.Locale
 
@@ -73,6 +74,7 @@ internal object AdConfigParser {
         var positionCTA: String? = null
         var components: List<String> = DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
+        var clickAction: NativeClickAction? = null
 
         reader.beginObject()
         while (reader.hasNext()) {
@@ -108,6 +110,10 @@ internal object AdConfigParser {
                         fields += field
                     } else invalid(key, field, parsed.raw)
                 }
+                "click_action" -> readString(reader).also { parsed ->
+                    val action = parsed.value?.let(NativeClickAction::fromRemote)
+                    if (action != null) { clickAction = action; fields += field } else invalid(key, field, parsed.raw ?: parsed.value)
+                }
                 "components", "ids" -> readStringList(reader).also { parsed ->
                     val componentValuesValid = field != "components" ||
                         parsed.value.orEmpty().all { it in DEFAULT_COMPONENTS }
@@ -133,6 +139,7 @@ internal object AdConfigParser {
             components = components,
             ids = ids,
             appResumeLoadDelayMs = appResumeLoadDelayMs,
+            clickAction = clickAction,
         ), fields)
     }
 

@@ -1,5 +1,6 @@
 package com.ads.module.config
 
+import com.ads.module.helper.adnative.NativeClickAction
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,5 +52,22 @@ class RemoteAdConfigPrecedenceTest {
         AdRemoteConfig.setAllowRemoteOverrideInDebug(true)
         AdRemoteConfig.applyRemote(AdRemoteConfig(mapOf("native_ob1" to AdUnitConfig("live_ob1", true))))
         assertEquals(listOf("live_ob1"), AdRemoteConfig.getInstance().tiersFor("native_ob1"))
+    }
+
+    @Test fun `a remote click action patches the asset one and a silent remote keeps it`() {
+        AdRemoteConfig.pinAssets(checkNotNull(AdRemoteConfig.fromJson("""
+            {"native_ob1":{"id":"test_ob1","isEnable":true,"click_action":"auto_next"},
+             "native_lang":{"id":"test_lang","isEnable":true,"click_action":"reload"}}
+        """)), AdRemoteConfig.DEBUG_FILE_NAME)
+        AdRemoteConfig.initializeFromJson("""{"native_ob1":{"id":"live_ob1","click_action":"none"},"native_lang":{"isEnable":true}}""")
+        val active = AdRemoteConfig.getInstance()
+        assertEquals(NativeClickAction.NONE, active.ads.getValue("native_ob1").clickAction)
+        assertEquals("The debug pin keeps only the id", "test_ob1", active.ads.getValue("native_ob1").id)
+        assertEquals(NativeClickAction.RELOAD, active.ads.getValue("native_lang").clickAction)
+
+        AdRemoteConfig.initializeFromJson("""{"native_ob1":{"click_action":"typo"}}""")
+        assertEquals(NativeClickAction.AUTO_NEXT, AdRemoteConfig.getInstance().ads.getValue("native_ob1").clickAction)
+        AdRemoteConfig.initializeFromJson("{}")
+        assertEquals(NativeClickAction.AUTO_NEXT, AdRemoteConfig.getInstance().ads.getValue("native_ob1").clickAction)
     }
 }

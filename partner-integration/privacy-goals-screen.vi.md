@@ -61,15 +61,16 @@ Trong `ad_config_debug.json` và `ad_config.json`, thêm bốn placement (mặc 
 
 ```json
 "native_select_high": { "id": "...", "isEnable": true },
-"native_select": { "id": "...", "isEnable": true },
+"native_select": { "id": "...", "isEnable": true, "click_action": "reload" },
 "native_select_alt_high": { "id": "...", "isEnable": true },
-"native_select_alt": { "id": "...", "isEnable": true }
+"native_select_alt": { "id": "...", "isEnable": true, "click_action": "reload" }
 ```
 
 `native_select` và `native_select_high` là ad đầu tiên. Khi consent hoặc lựa chọn đầu tiên xảy
 ra, `native_select_alt`/`native_select_alt_high` thay thế nó. Bốn placement này dùng layout native
 4:3 media-left của SDK (`ob_layout_native_media_left.xml`), cùng frame cho preload và show. Ad đầu
 tiên được giữ nguyên đến khi ad ALT bind thành công; ALT không fill thì ad đầu tiên vẫn giữ.
+Click ad dùng action `reload` mặc định; đổi bằng `click_action` trên `native_select`/`native_select_alt` (không đọc ở key `_high`).
 
 Nếu `enabled = false`, SDK không inflate các layout nên partner không cần khai báo chúng. Logic
 consent, chọn/bỏ chọn, preload, swap ad, reload khi click và hoàn tất flow vẫn do SDK xử lý.

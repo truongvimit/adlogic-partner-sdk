@@ -19,9 +19,9 @@ The existing Firebase parameter remains `ad_remote_config`; `ad_config.json` / `
 | `ad_behavior_config` | [Copy/paste sample](examples/ads-onboarding/ad_behavior_config.json) | [SDK source asset](../ads/src/main/assets/adlogic_defaults/ad_behavior_config.json) |
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
-- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `open_resume.app_resume_load_delay_ms`. The new documents do not duplicate these fields, ad-unit mappings or individual unit switches.
+- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`. The new documents do not duplicate these fields, ad-unit mappings or individual unit switches.
 - **ad_behavior_config:** ad-format timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA corner radius and app-open behavior. Banner type/size uses SDK presets.
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back/click-return, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation and Activity exclusions. SDK ad-presentation presets remain remotely configurable.
 
 The removed aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches and grouped app-content payloads `ui`/`question.content` are ignored, including in old cached JSON. Existing remote UI APIs still work through `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config` and `ob_enable_ui_content`; these are not new fields in the two grouped documents. A valid `ob_question_config` shows the question to new users even when the app configured no `QuestionConfig`; its `cta_text` sets the question button copy, with `QuestionConfig.ctaTextRes` as the fallback, and the minimum selection is clamped to the options shown. That button is separate from an ad's CTA.
@@ -82,7 +82,7 @@ ads = AdsConfig.fromAdConfig(mapOf(
 ))
 ```
 
-This association also selects `ad_behavior_config.placement_overrides.<key>`: LFO1 normally uses `native_lang`, not the internal telemetry/buffer key `language1`. IDs, floors, unit switches and existing CTA fields remain in ad_config.
+This association also selects `ad_behavior_config.placement_overrides.<key>`: LFO1 normally uses `native_lang`, not the internal telemetry/buffer key `language1`. IDs, floors, unit switches, CTA fields and the native click action remain in ad_config.
 
 ## Local defaults, remote cache and failure
 
@@ -106,7 +106,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | Format in placement_overrides | Supported fields |
 | --- | --- |
 | banner | `reload.allowed`, `reload.auto_enabled`, `reload.resume_debounce_ms`, `presentation.*` |
-| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
+| native | `load.tier_timeout_ms`, `reload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
@@ -118,28 +118,31 @@ Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, othe
 
 ## Native click actions
 
-`click.action` accepts `auto_next`, `none`, or `reload`. Exactly one action is captured on the first click/open callback and retained until return, even if remote changes during the trip.
+A native's click action has one source: `click_action` on its `ad_config` key, set to `auto_next`, `none` or `reload`. Like `enable_ua_check` and the CTA fields, it is read only from the placement's base key (`native_ob1`, `native_lang`, `native_home`…); a value on a `_high`, `_high1`…`_high9` floor key is ignored. `ad_behavior_config` and `onboarding_config` have no click action field. Exactly one action is captured on the first click/open callback and retained until return, even if remote changes during the trip.
 
 - `reload`: request the replacement immediately on click/open; consume it, or wait for that same request, on return. No fixed click delay. Ordinary app resume does not trigger click reload.
   Keep the old ad visible without shimmer until a replacement binds successfully. Failure keeps the old ad and slot visible. Shimmer is only for initial loading without an ad.
-- `auto_next`: advance the active onboarding page on return, without loading a replacement. On LFO2, confirm the selected language; on LFO1, select the current/default language to enter LFO2.
+- `auto_next`: advance the active onboarding page on return, without loading a replacement. On LFO2, confirm the selected language; on LFO1, repeat the user's tap on the language they already picked, as tapping that row again would; before any row is tapped it does nothing. On any other native it only skips the replacement, as `none` does; navigation stays with your app.
 - `none`: keep the current ad and page; no click replacement or automatic navigation.
 
-Defaults: LFO1/LFO2 and all other natives use `reload`; content/fullscreen onboarding pager steps use `auto_next`. The separate splash native and OB5 use `reload`. Content pages use `ob1..ob4`; fullscreen pages use `full1/full2`. Pager step ads never reload: `reload` is treated as `none`.
+Defaults when the key has no `click_action`:
 
-Set format/placement defaults in `ad_behavior_config` (`native.click.action`, `placement_overrides.<key>.click.action`). In `onboarding_config`, use screen/group paths below or `onboarding.steps.<id>.behavior.click.action`. An explicit valid action overrides both legacy `reload.on_ad_click` and `navigation.ad_click_return_completes_step` flags, so auto-next and click reload cannot run together. Timer/resume refresh and fullscreen page timeout are separate settings.
+| Natives | Default |
+| --- | --- |
+| Onboarding pager pages: content `ob1..ob4` and app-declared content steps, fullscreen `full1/full2` | `auto_next` |
+| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, question, OB5, splash natives (`native_splash`, `native_fs`) and app-screen natives | `reload` |
 
-Example override in `onboarding_config` (LFO2 defaults to `reload`, this changes it to automatic confirmation):
+Pager page ads never reload: `reload` on those keys acts as `none`. LFO2 without a unit of its own uses LFO1's key, and with it LFO1's action, once that key is bound: `AdsConfig.fromAdConfig` (the builder default) binds it, and so does the backend declaring it. A hand-built `AdsConfig(...)` with neither reads `native_lang_alt` for LFO2. The [sample ad_config](examples/ads-onboarding/ad_config.json) declares these same values explicitly on every native base key.
+
+`click_action` follows ad_config precedence field by field: the backend's `ad_remote_config` > the app's `ad_config.json` > code default. A remote key that omits `click_action` keeps the asset value; an invalid value is logged and ignored. A debuggable build pins only the ad unit IDs of `ad_config_debug.json`, so `click_action` follows remote as in release; keep the same values in `ad_config.json` and `ad_config_debug.json`. For an app-screen native the code default is `reload`; `NativeAdHelper.setReloadOnAdClick(false)` changes it to `none`, and `click_action` still wins. Timer/resume refresh and fullscreen page timeout are separate settings.
+
+Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confirms the language on return. The `_high` floor carries no `click_action`:
 
 ```json
 {
-  "lfo": {
-    "native1": { "behavior": { "click": { "action": "reload" } } },
-    "native2": { "behavior": { "click": { "action": "auto_next" } } }
-  },
-  "onboarding": {
-    "steps": { "ob1": { "behavior": { "click": { "action": "none" } } } }
-  }
+  "native_ob1_high": { "id": "ca-app-pub-xxx/ob1_high", "isEnable": true },
+  "native_ob1": { "id": "ca-app-pub-xxx/ob1", "isEnable": true, "click_action": "none" },
+  "native_lang_alt": { "id": "ca-app-pub-xxx/lfo2", "isEnable": true, "click_action": "auto_next" }
 }
 ```
 
@@ -203,8 +206,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native.load.tier_timeout_ms` | `30000` |
 | `native.cache.max_age_ms` | `3600000` |
 | `native.reload.allowed` | `false` |
-| `native.click.action` | `"reload"` |
-| `native.reload.on_ad_click` (legacy fallback) | `true` |
 | `native.reload.resume_debounce_ms` | `500` |
 | `native.reload.min_after_bind_ms` | `3000` |
 | `native.reload.timer_enabled` | `false` |
@@ -270,11 +271,11 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.skip.position` | `"RIGHT"` |
-| `splash.native.behavior.click.action` | `"reload"` |
+| `splash.native.behavior` | `{}` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
-| `lfo.native1.behavior.click.action` | `"reload"` |
+| `lfo.native1.behavior` | `{}` |
 | `lfo.native2.enabled` | `true` |
-| `lfo.native2.behavior.click.action` | `"reload"` |
+| `lfo.native2.behavior` | `{}` |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
 | `lfo.tap_hint.enabled` | `true` |
@@ -286,17 +287,16 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
-| `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` |
+| `lfo.confirm_dialog.native_behavior` | `{}` |
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
 | `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
-| `onboarding.navigation.ad_click_return_completes_step` | `true` |
 | `onboarding.ads.content_template` | `"CTA_TOP"` |
-| `onboarding.ads.content_native_behavior.click.action` | `"auto_next"` |
-| `onboarding.ads.fullscreen_native_behavior.click.action` | `"auto_next"` |
+| `onboarding.ads.content_native_behavior` | `{}` |
+| `onboarding.ads.fullscreen_native_behavior` | `{}` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
 | `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
@@ -313,7 +313,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` |
 | `onboarding.exit_interstitial.behavior` | `{}` |
 | `ob5.enabled` | `false` |
-| `ob5.native.behavior.click.action` | `"reload"` |
+| `ob5.native.behavior` | `{}` |
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
@@ -321,7 +321,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |
-| `question.native.behavior.click.action` | `"reload"` |
+| `question.native.behavior` | `{}` |
 | `question.native.template` | `"CTA_BOTTOM"` |
 | `question.native.refresh_on_select` | `false` |
 | `question.native.refresh_throttle_ms` | `2000` |

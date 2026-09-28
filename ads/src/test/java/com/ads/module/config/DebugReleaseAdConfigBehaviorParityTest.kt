@@ -30,6 +30,7 @@ class DebugReleaseAdConfigBehaviorParityTest {
             assertEquals("$key heightCTA", r.heightCTA, d.heightCTA)
             assertEquals("$key positionCTA", r.positionCTA, d.positionCTA)
             assertEquals("$key components", r.components, d.components)
+            assertEquals("$key click_action", r.clickAction, d.clickAction)
         }
     }
 }

@@ -121,9 +121,9 @@ class SplashActivity : ObSplashActivity()
 - Default रूप से status/caption bars दिखते हैं और navigation bar छिपता है; बदलने के लिए `SystemBarConfig` इस्तेमाल करें।
 - अधूरा flow अगली बार खुलने पर दोबारा Splash → LFO → OB से शुरू होता है। पूरा हो चुका flow onboarding छोड़ देता है।
 - मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है। दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है; re-select tap भी count होता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
-- Native `behavior.click.action` में `auto_next`, `none` या `reload` में से एक चुना जाता है। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, OB5, splash, popup और प्रश्न के natives का default `reload` है।
+- Native का click action `ad_config` में उसके placement की base key पर `click_action` से आता है: `auto_next`, `none` या `reload`। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, Privacy/Goal, OB5, splash, popup और प्रश्न के natives का default `reload` है।
 - `reload` ad click/open पर तुरंत replacement request शुरू करता है और वापसी पर उसका result दिखाता है; सामान्य app resume click reload नहीं करता। `auto_next` वापसी पर replacement माँगे बिना आगे बढ़ता है; `none` दोनों में से कुछ नहीं करता।
-- Action हर click trip के लिए तय रहता है और legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches को override करता है। [Remote settings guide](../partner-integration/remote-settings.hi.md) देखें।
+- `native_lang_alt` पर `"click_action": "auto_next"` वापसी पर चुनी हुई भाषा confirm करता है। LFO1 पर `auto_next` user की चुनी हुई भाषा पर tap दोहराता है, जैसे उस row को दोबारा tap करना; कोई row tap न हुई हो तो कुछ नहीं करता। Action हर click trip के लिए तय रहता है। [Remote settings guide](../partner-integration/remote-settings.hi.md#native-click-actions) देखें।
 
 
 - `notificationPermissionEnabled = true`: consent और splash requests के बाद prompt, remote का इंतज़ार नहीं। निर्णय पर मौजूदा flag पढ़ा जाता है; denial पर flow जारी रहता है और दर्ज परिणाम अगली automatic prompt रोकता है।

@@ -11,26 +11,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OnboardingSettingsTest {
-    @Test fun `native click defaults and per step actions are exclusive`() {
+    @Test fun `native click defaults auto advance pager pages and reload every other native`() {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.Ob5).forEach {
+            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
             assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
         }
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepFullScreen(StepId.OB3)))
+        listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId("custom_page")).forEach {
+            assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(it)))
+        }
+        listOf(StepId.FULL1, StepId.FULL2, StepId.OB3).forEach {
+            assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepFullScreen(it)))
+        }
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
             {
-              "lfo": {"native2": {"behavior": {"click": {"action": "auto_next"}, "reload": {"on_ad_click": true}}}},
-              "onboarding": {
-                "steps": {"ob1": {"behavior": {"click": {"action": "reload"}}}},
-                "navigation": {"ad_click_return_completes_step": true}
-              }
+              "lfo": {"native2": {"behavior": {"click": {"action": "auto_next"}}}},
+              "onboarding": {"steps": {"ob1": {"behavior": {"click": {"action": "reload"}}}}}
             }
         """.trimIndent()))
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
-        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
+        assertEquals("onboarding_config no longer carries a click action",
+            reload, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
     }
 
     @Test fun `privacy and goal native slots default to reload on click`() {

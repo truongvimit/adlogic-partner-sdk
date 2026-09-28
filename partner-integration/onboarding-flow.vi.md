@@ -89,7 +89,7 @@ Danh sách màn được giữ ổn định, nhưng các chặn ads theo từng 
 
 `inter_after_ob3` preload khi vào pager (OB1 trong flow mặc định); reorder không biến tên interstitial thành ràng buộc phải gặp OB3. Splash, UMP, billing và LFO giữ lịch chạy hiện có.
 
-Mỗi placement OB có tối đa một lượt load/waterfall trong một lần chạy. Preload và màn hiển thị chia sẻ request đang chạy. Chọn ngôn ngữ lại, no-fill, swipe/back không khởi động lượt tải mới. Không refresh/reload hoặc preload replacement sau impression/click cho sáu màn này, kể cả policy native chung bật reload. `click.action = auto_next` vẫn chuyển trang khi quay lại; `none` giữ trang; `reload` được xử lý như `none` trong pager OB.
+Mỗi placement OB có tối đa một lượt load/waterfall trong một lần chạy. Preload và màn hiển thị chia sẻ request đang chạy. Chọn ngôn ngữ lại, no-fill, swipe/back không khởi động lượt tải mới. Không refresh/reload hoặc preload replacement sau impression/click cho sáu màn này, kể cả policy native chung bật reload. Hành động click lấy từ `click_action` trên base key của trang trong ad_config (`native_ob1..4`, `native_full1/2`; không đọc ở `_high`), mặc định `auto_next`: chuyển trang khi quay lại; `none` giữ trang; `reload` được xử lý như `none` trong pager OB. Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native).
 
 Khi rời màn, ads đã hiển thị được giải phóng như trước. Quay lại content vẫn thấy nội dung nhưng không xin ads mới; fullscreen đã tiêu thụ ads sẽ đi tiếp nếu không còn ad hợp lệ. Request chưa hoàn tất/ads chưa dùng vẫn có thể được nhận. Activity recreation giữ trạng thái lượt tải; splash mới hoặc `OnboardingSdk.reset()` bắt đầu lượt mới.
 

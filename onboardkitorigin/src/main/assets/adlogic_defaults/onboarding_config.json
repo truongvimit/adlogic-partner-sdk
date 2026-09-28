@@ -48,29 +48,17 @@
         "style": "CLOSE_ICON",
         "position": "RIGHT"
       },
-      "behavior": {
-        "click": {
-          "action": "reload"
-        }
-      }
+      "behavior": {}
     }
   },
   "lfo": {
     "native_template": "CTA_BOTTOM",
     "native1": {
-      "behavior": {
-        "click": {
-          "action": "reload"
-        }
-      }
+      "behavior": {}
     },
     "native2": {
       "enabled": true,
-      "behavior": {
-        "click": {
-          "action": "reload"
-        }
-      },
+      "behavior": {},
       "swap_wait_timeout_ms": 8000,
       "preload_trigger": "LFO_SHOWN"
     },
@@ -88,11 +76,7 @@
       "enabled": true,
       "show_from_tap": 4,
       "native_preload_trigger": "DIALOG_OPEN",
-      "native_behavior": {
-        "click": {
-          "action": "reload"
-        }
-      }
+      "native_behavior": {}
     },
     "languages": {
       "supported_codes": [],
@@ -106,21 +90,12 @@
     "navigation": {
       "lock_pager_swipe": false,
       "swipe_completes_last_step": true,
-      "back_navigates_back": true,
-      "ad_click_return_completes_step": true
+      "back_navigates_back": true
     },
     "ads": {
       "content_template": "CTA_TOP",
-      "content_native_behavior": {
-        "click": {
-          "action": "auto_next"
-        }
-      },
-      "fullscreen_native_behavior": {
-        "click": {
-          "action": "auto_next"
-        }
-      }
+      "content_native_behavior": {},
+      "fullscreen_native_behavior": {}
     },
     "fullscreen": {
       "skip": {
@@ -134,10 +109,6 @@
       }
     },
     "steps": {
-      "partner_privacy": { "behavior": { "click": { "action": "reload" } } },
-      "partner_privacy_alt": { "behavior": { "click": { "action": "reload" } } },
-      "partner_goal": { "behavior": { "click": { "action": "reload" } } },
-      "partner_goal_alt": { "behavior": { "click": { "action": "reload" } } },
       "full1": {
         "fullscreen": {
           "skip": {
@@ -176,11 +147,7 @@
   "ob5": {
     "enabled": false,
     "native": {
-      "behavior": {
-        "click": {
-          "action": "reload"
-        }
-      }
+      "behavior": {}
     },
     "skip": {
       "enabled": true,
@@ -194,11 +161,7 @@
     "enabled": true,
     "old_user_enabled": false,
     "native": {
-      "behavior": {
-        "click": {
-          "action": "reload"
-        }
-      },
+      "behavior": {},
       "template": "CTA_BOTTOM",
       "refresh_on_select": false,
       "refresh_throttle_ms": 2000

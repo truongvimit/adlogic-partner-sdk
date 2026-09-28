@@ -235,7 +235,6 @@ class SettingsDocument(
         }
         if (value is String) {
             val allowed = when {
-                path.endsWith("click.action") -> setOf("auto_next", "none", "reload")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
                 path.endsWith("slot_format") -> setOf("BANNER", "NATIVE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")

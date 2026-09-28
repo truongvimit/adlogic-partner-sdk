@@ -45,9 +45,7 @@ object OnboardingSettings {
         if (path.contains("behavior.")) {
             val scope = path.substringBefore("behavior.") + "behavior"
             val stepScope = scope.split('.').let { it.size == 4 && it.take(2) == listOf("onboarding", "steps") && it.last() == "behavior" }
-            val declaredScope = document.defaultValue(scope) is Map<*, *> ||
-                document.defaultValue("$scope.reload.on_ad_click") != null ||
-                document.defaultValue("$scope.click.action") != null
+            val declaredScope = document.defaultValue(scope) is Map<*, *>
             if (!stepScope && !declaredScope) return null
             val suffix = path.substringAfter("behavior.")
             val format = when {
@@ -90,28 +88,16 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.QuestionInterstitial -> "question.interstitial"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
+    /** `ad_config.<key>.click_action`; absent, pager pages auto-advance and every other native reloads. */
     internal fun nativeClickAction(p: AdPlacement): NativeClickAction {
-        val behavior = behavior(p)
-        // A new action always wins over both legacy switches, even when they conflict.
-        NativeClickAction.fromRemote(behavior.string("click.action", ""))?.let { return it }
-        if (behavior.hasOverride("reload.on_ad_click")) {
-            return if (behavior.boolean("reload.on_ad_click", true)) NativeClickAction.RELOAD else NativeClickAction.NONE
-        }
-        val path = when {
-            p.isPrivacyGoalsNative -> slotPath(p) + ".behavior.click.action"
-            p is AdPlacement.StepNative -> "onboarding.ads.content_native_behavior.click.action"
-            p is AdPlacement.StepFullScreen -> "onboarding.ads.fullscreen_native_behavior.click.action"
-            else -> slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior.click.action" else ".behavior.click.action"
-        }
-        // Compatibility for hosts using the old step switch. It cannot override click.action.
-        if ((p is AdPlacement.StepNative || p is AdPlacement.StepFullScreen) &&
-            io.onboardkit.OnboardingSdk.configOrNull()?.behavior?.adClickReturnCompletesStep == false) {
-            return NativeClickAction.NONE
-        }
-        val defaultAction = if (document.defaultValue(path) != null) document.localSnapshot.string(path)
-            else AdBehavior.defaultText("native.click.action")
-        return NativeClickAction.fromRemote(defaultAction) ?: NativeClickAction.RELOAD
+        AdRemoteConfig.getInstance().ads[placementKeyOf(p)]?.clickAction?.let { return it }
+        val pagerPage = p is AdPlacement.StepFullScreen || p is AdPlacement.StepNative && !p.isPrivacyGoalsNative
+        return if (pagerPage) NativeClickAction.AUTO_NEXT else NativeClickAction.RELOAD
     }
+
+    private fun placementKeyOf(p: AdPlacement): String = io.onboardkit.OnboardingSdk.configuredPlacementKey(p)
+        ?: io.onboardkit.OnboardingSdk.configOrNull()?.ads?.standardKeyFor(p) ?: p.key
+
     /** @param adConfigKey the key whose `placement_overrides` apply, when not the placement's own. */
     internal fun behavior(p: AdPlacement, adConfigKey: String? = null): com.ads.module.config.settings.BehaviorValues {
         val format = when (p) {
@@ -128,8 +114,7 @@ object OnboardingSettings {
         }
         val path = slotPath(p) + if (p == AdPlacement.LanguageConfirm) ".native_behavior" else ".behavior"
         val snapshot = values
-        val key = adConfigKey ?: io.onboardkit.OnboardingSdk.configuredPlacementKey(p)
-            ?: io.onboardkit.OnboardingSdk.configOrNull()?.ads?.standardKeyFor(p) ?: p.key
+        val key = adConfigKey ?: placementKeyOf(p)
         // The exit ad's own wait outranks the placement and format waits.
         val aliases = if (p == AdPlacement.AfterOnboardingInterstitial)
             mapOf("load_and_show.wait_timeout_ms" to "onboarding.exit_interstitial.wait_timeout_ms") else emptyMap()
@@ -278,7 +263,6 @@ object OnboardingSettings {
             lockPagerSwipe = v.boolean("onboarding.navigation.lock_pager_swipe", c.behavior.lockPagerSwipe),
             swipeCompletesLastStep = v.boolean("onboarding.navigation.swipe_completes_last_step", c.behavior.swipeCompletesLastStep),
             backNavigatesBack = v.boolean("onboarding.navigation.back_navigates_back", c.behavior.backNavigatesBack),
-            adClickReturnCompletesStep = v.boolean("onboarding.navigation.ad_click_return_completes_step", c.behavior.adClickReturnCompletesStep),
         )
         // A remote order names the pages outright, so a page it lists shows even when the app
         // disabled it. Remote order > delivered legacy step keys > app asset order > the catalog.

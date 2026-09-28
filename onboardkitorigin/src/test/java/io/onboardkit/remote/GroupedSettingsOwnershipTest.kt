@@ -59,6 +59,20 @@ class GroupedSettingsOwnershipTest {
         assertEquals(3456L, OnboardingSettings.behavior(AdPlacement.Language1).long("load.tier_timeout_ms", 30000L))
     }
 
+    @Test fun `the partner sample onboarding_config leaves ad_behavior native values reaching every onboarding native`() {
+        OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
+            java.io.File("../partner-integration/examples/ads-onboarding/onboarding_config.json").readText()))
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"load":{"tier_timeout_ms":4321}},"placement_overrides":{"native_lang":{"native":{"load":{"tier_timeout_ms":2345}}}}}""")
+        listOf(AdPlacement.Language1, AdPlacement.Language2).forEach {
+            assertEquals(it.key, 2345L, OnboardingSettings.behavior(it).long("load.tier_timeout_ms", 30000L))
+        }
+        listOf(AdPlacement.SplashNative, AdPlacement.LanguageConfirm, AdPlacement.StepNative(StepId.OB1),
+            AdPlacement.StepFullScreen(StepId.FULL1), AdPlacement.Ob5, AdPlacement.QuestionNative).forEach {
+            assertEquals(it.key, 4321L, OnboardingSettings.behavior(it).long("load.tier_timeout_ms", 30000L))
+        }
+    }
+
     @Test fun `adding and disabling remote fullscreen updates page membership without configuring again`() {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
         fun pages() = FlowNavigator.enabledSteps(OnboardingSdk.requireConfig(), OnboardingSdk.flags(),

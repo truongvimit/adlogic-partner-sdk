@@ -1,5 +1,6 @@
 package com.ads.module.config
 
+import com.ads.module.helper.adnative.NativeClickAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -26,7 +27,8 @@ class AdConfigParserFieldMatrixTest {
                 "heightCTA":0,
                 "positionCTA":"",
                 "components":[],
-                "ids":[]
+                "ids":[],
+                "click_action":"none"
               }
             }
         """.trimIndent())!!
@@ -41,6 +43,7 @@ class AdConfigParserFieldMatrixTest {
         assertEquals("", unit.positionCTA)
         assertEquals(emptyList<String>(), unit.components)
         assertEquals(emptyList<String>(), unit.ids)
+        assertEquals(NativeClickAction.NONE, unit.clickAction)
     }
 
     @Test
@@ -56,6 +59,7 @@ class AdConfigParserFieldMatrixTest {
         assertEquals(null, unit.positionCTA)
         assertEquals(listOf("icon_headline", "body", "media", "cta"), unit.components)
         assertEquals(emptyList<String>(), unit.ids)
+        assertEquals(null, unit.clickAction)
     }
 
     @Test
@@ -73,6 +77,7 @@ class AdConfigParserFieldMatrixTest {
                 "positionCTA":123,
                 "components":["media",3,false],
                 "ids":["high",3,null],
+                "click_action":3,
                 "ignored":{"value":"drop"}
               }
             }
@@ -89,6 +94,25 @@ class AdConfigParserFieldMatrixTest {
         // to its lower-tier default instead of silently filtering the payload.
         assertEquals(listOf("icon_headline", "body", "media", "cta"), unit.components)
         assertEquals(emptyList<String>(), unit.ids)
+        assertEquals(null, unit.clickAction)
+    }
+
+    @Test
+    fun `every click action value parses and an unknown one is ignored alone`() {
+        NativeClickAction.entries.forEach { action ->
+            val config = AdRemoteConfig.fromJson("""{"matrix":{"click_action":"${action.remoteValue}"}}""")!!
+            assertEquals(action, config.unit("matrix").clickAction)
+            assertTrue(config.fieldsFor("matrix").contains("click_action"))
+        }
+        for (raw in listOf("\"typo\"", "\"RELOAD\"", "\"\"", "null", "true")) {
+            val config = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","click_action":$raw}}""")!!
+            assertEquals(raw, null, config.unit("matrix").clickAction)
+            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertFalse(raw, config.fieldsFor("matrix").contains("click_action"))
+        }
+        val absent = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!
+        assertEquals(null, absent.unit("matrix").clickAction)
+        assertFalse(absent.fieldsFor("matrix").contains("click_action"))
     }
 
     @Test

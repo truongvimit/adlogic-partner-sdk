@@ -284,8 +284,8 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Popup ngôn ngữ | Chọn lại ngôn ngữ hiện tại thì mở ngay. Chọn ngôn ngữ khác chỉ mở từ tổng click thứ 4; click chọn lại vẫn được cộng count. Native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
 | Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. `positionCTA` từ `ad_remote_config` của backend còn thắng cả template trong asset app. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| Click native rồi quay lại OB | Next bước (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 tắt preload thay native khi click | `adClickReturnCompletesStep = false` để ở lại |
-| Click native ở LFO/popup hoặc màn app | Preload ngay khi click/open; quay lại bind ad sẵn có hoặc chờ request đang chạy | `NativeAdConfig.reloadOnAdClick = true` mặc định, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
+| Click native rồi quay lại OB | Trang content và fullscreen trong pager tự chuyển khi quay lại (`auto_next`), không bao giờ tải ad thay thế | `"click_action": "none"` trên base key của trang (`native_ob1`…) để ở lại; [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native) |
+| Click native ở LFO/popup, OB5, question hoặc màn app | Preload ngay khi click/open (`reload`); quay lại bind ad sẵn có hoặc chờ request đang chạy | `click_action` trên base key của placement trong ad_config, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
 | Mở lại khi chưa xong flow | Chạy lại Splash → LFO → OB; chỉ bỏ OB khi hoàn thành toàn bộ | Không cần tự lưu cờ first-open/checkpoint trong app |
 | Trang native fullscreen | X sau 5 giây, auto-next sau 15 giây từ lúc chọn trang; thời gian background vẫn được tính. Shimmer phủ đầy khung native, media toàn khung và CTA ở đáy. | Các trường của `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` giữ delay local |
 | Inter cuối onboarding | Preload lúc vào pager, đợi fill tối đa 8 giây khi hoàn thành; mở màn dưới inter. Notification/widget/uninstall: chờ đóng | `AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.AFTER_AD` để luôn chờ đóng; `afterOnboardingInterstitialEnabled = false` nếu app tự quản lý. Không đưa vào `InterstitialAutoBuffer` |
@@ -315,6 +315,7 @@ Hai JSON giữ field/giá trị example debug, chỉ chuẩn hóa interstitial s
 | `positionCTA` | `"BOTTOM"` hoặc `null` | Chọn khung LFO/content/question theo từng placement khi chưa có template onboarding override từ remote. Giá trị từ file này còn nhường cho template trong asset app; giá trị từ `ad_remote_config` của backend thì không. `null` giữ host/SDK fallback; fullscreen/popup dùng layout cố định. |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Khối thiếu bị ẩn, mảng rỗng hiện đủ. OB chỉ đổi visibility; [native màn app](#native-ở-màn-app-dùng-placement-constant) dùng cả thứ tự khi `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | Thời gian chờ tải app-open sau khi app ra background; chỉ có tác dụng khi đã bật app-resume. |
+| `click_action` | `"auto_next"` ở `native_ob1..4` và `native_full1/2`; `"reload"` ở mọi native khác | Hành động khi quay lại sau click ad native. Chỉ đọc ở base key, không đọc ở floor `_high`; giữ cùng giá trị ở cả hai file. Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native). |
 
 Waterfall đọc `_high`, `_high1`… rồi key gốc; có thể dùng `ids` để khai báo nhiều tầng trong một entry. ID trùng bị loại; dùng ID riêng khi cần kiểm tra từng tầng/style.
 
@@ -346,7 +347,7 @@ NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 
 SDK tự đọc waterfall, `isEnable`, `enable_ua_check`, CTA style của placement. Thêm `layoutRes` để đổi template; mặc định là `com.ads.module.R.layout.custom_native_admob_medium` (không có media — cần media dùng `custom_native_admob_free_size`). Layout riêng giữ root `NativeAdView`, `ad_container`, `block_icon_headline`, asset IDs và nhãn Ad.
 
-Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. `reloadOnAdClick` mặc định bật; chỉ tắt khi app tự điều hướng sau click-return.
+Giữ một helper/slot/view, gọi `show()` để hiện lại. Fragment dùng Activity + `viewLifecycleOwner`. Click reload mặc định bật; chỉ đặt `"click_action": "none"` trên base key của placement khi app tự điều hướng sau click-return.
 
 Preload cho Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` trong `SplashActivity.onRemoteFetched()`. Helper cùng placement lấy ad khi hiện; ad quá 60 phút bị tải lại. Xem [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
 

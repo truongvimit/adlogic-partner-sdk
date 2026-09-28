@@ -19,9 +19,9 @@ Console setup के लिए [तीन String parameters publish करने
 | `ad_behavior_config` | [Copy/paste sample](examples/ads-onboarding/ad_behavior_config.json) | [SDK source asset](../ads/src/main/assets/adlogic_defaults/ad_behavior_config.json) |
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
-- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
+- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
 - **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back/click-return, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation और Activity exclusions। SDK ad-presentation presets remote से बदले जा सकते हैं।
 
 हटाए गए aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches और app-content groups `ui`/`question.content` ignore होते हैं, पुराने cached JSON में भी। पुराने remote UI APIs `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`, `ob_enable_ui_content` से चलते रहते हैं; वे नए grouped documents में fields नहीं हैं। Valid `ob_question_config` नए users को question दिखाता है, भले app ने कोई `QuestionConfig` configure न किया हो; उसका `cta_text` question button का text तय करता है, `QuestionConfig.ctaTextRes` fallback है, और minimum selection दिखाए गए options तक सीमित (clamp) होता है। यह button ad CTA से अलग है।
@@ -82,7 +82,7 @@ ads = AdsConfig.fromAdConfig(mapOf(
 ))
 ```
 
-यही association `ad_behavior_config.placement_overrides.<key>` भी चुनती है: LFO1 सामान्यतः `native_lang` इस्तेमाल करता है, internal telemetry/buffer key `language1` नहीं। IDs, floors, unit switches और मौजूदा CTA fields ad_config में रहते हैं।
+यही association `ad_behavior_config.placement_overrides.<key>` भी चुनती है: LFO1 सामान्यतः `native_lang` इस्तेमाल करता है, internal telemetry/buffer key `language1` नहीं। IDs, floors, unit switches, CTA fields और native click action ad_config में रहते हैं।
 
 ## Local defaults, remote cache और failure
 
@@ -106,7 +106,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 | placement_overrides में format | Supported fields |
 | --- | --- |
 | banner | `reload.allowed`, `reload.auto_enabled`, `reload.resume_debounce_ms`, `presentation.*` |
-| native | `click.action`, `load.tier_timeout_ms`, `reload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
+| native | `load.tier_timeout_ms`, `reload.*`, `presentation.auto_shimmer`, `presentation.empty_visibility`, `presentation.cta_corner_radius_dp` |
 | interstitial | `load.tier_timeout_ms`, `load_and_show.wait_timeout_ms`, `load_and_show.buffer_wait_timeout_ms`, `presentation.loading_enabled`, `cache.max_age_ms` |
 | rewarded | `load.tier_timeout_ms`, `cache.max_age_ms` |
 
@@ -118,28 +118,31 @@ Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नह�
 
 ## Native click actions
 
-`click.action` में `auto_next`, `none` या `reload` चुनें। पहले click/open callback पर केवल एक action तय होता है; वापस आने तक remote बदलने पर भी वही action रहता है।
+Native के click action का एक ही source है: `ad_config` में उसकी key पर `click_action`, जिसकी value `auto_next`, `none` या `reload` होती है। `enable_ua_check` और CTA fields की तरह यह केवल placement की base key (`native_ob1`, `native_lang`, `native_home`…) से पढ़ा जाता है; `_high`, `_high1`…`_high9` floor key पर दी गई value ignore होती है। `ad_behavior_config` और `onboarding_config` में click action field नहीं है। पहले click/open callback पर केवल एक action तय होता है; वापस आने तक remote बदलने पर भी वही action रहता है।
 
 - `reload`: click/open पर तुरंत replacement request शुरू होती है। वापस आने पर तैयार ad या उसी pending request का उपयोग होता है। कोई fixed delay नहीं; सामान्य app resume click reload नहीं है।
   नया ad सफलतापूर्वक bind होने तक पुराना ad बिना shimmer दिखता रहता है। Load fail होने पर पुराना ad और slot बने रहते हैं। Shimmer केवल पहली loading में, जब कोई ad नहीं है, दिखता है।
-- `auto_next`: वापस आने पर onboarding page आगे जाता है; replacement request नहीं होती। LFO2 में चुनी हुई भाषा confirm होती है; LFO1 में current/default भाषा चुनकर LFO2 खुलता है।
+- `auto_next`: वापस आने पर onboarding page आगे जाता है; replacement request नहीं होती। LFO2 में चुनी हुई भाषा confirm होती है; LFO1 में user की पहले से चुनी हुई भाषा पर tap दोहराया जाता है, जैसे उस row को दोबारा tap करना; कोई row tap न हुई हो तो कुछ नहीं होता। किसी दूसरे native पर यह `none` की तरह केवल replacement छोड़ता है; navigation आपकी app के हाथ में रहता है।
 - `none`: मौजूदा ad/page रखें; click reload या automatic navigation नहीं।
 
-Defaults: LFO1/LFO2 और बाकी natives `reload`; onboarding pager के content/fullscreen pages `auto_next`। अलग splash native और OB5 `reload` हैं। Example में अंतिम content page का step ID `ob4` और fullscreen का `ob3` है।
+Key पर `click_action` न हो तो defaults:
 
-`ad_behavior_config` में `native.click.action` या `placement_overrides.<key>.click.action` उपयोग करें। `onboarding_config` में नीचे दिए screen/group paths या `onboarding.steps.<id>.behavior.click.action` उपयोग करें। Explicit valid action पुराने `reload.on_ad_click` और `navigation.ad_click_return_completes_step` flags से ऊपर है: auto-next और click reload साथ नहीं चलते। Timer/resume refresh और fullscreen timeout अलग settings हैं।
+| Natives | Default |
+| --- | --- |
+| Onboarding pager pages: content `ob1..ob4` और app के declared content steps, fullscreen `full1/full2` | `auto_next` |
+| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, question, OB5, splash natives (`native_splash`, `native_fs`) और app-screen natives | `reload` |
 
-`onboarding_config` example: LFO2 का default `reload` बदलकर automatic confirmation:
+Pager page ads कभी reload नहीं होते: उन keys पर `reload` `none` की तरह चलता है। जिस LFO2 का अपना unit नहीं है वह LFO1 की key इस्तेमाल करता है, और उसके साथ LFO1 का action भी, बशर्ते वह key bound हो: `AdsConfig.fromAdConfig` (builder default) उसे bind करता है, और backend का उस key को declare करना भी। दोनों के बिना hand-built `AdsConfig(...)` में LFO2 `native_lang_alt` पढ़ता है। [Sample ad_config](examples/ads-onboarding/ad_config.json) हर native base key पर यही values explicit रूप से declare करता है।
+
+`click_action` field-दर-field ad_config precedence मानता है: backend का `ad_remote_config` > app का `ad_config.json` > code default। जो remote key `click_action` छोड़ देती है वह asset की value रखती है; invalid value log होकर ignore होती है। Debuggable build केवल `ad_config_debug.json` के ad unit IDs pin करता है, इसलिए `click_action` release की तरह remote मानता है; `ad_config.json` और `ad_config_debug.json` में एक जैसी values रखें। App-screen native का code default `reload` है; `NativeAdHelper.setReloadOnAdClick(false)` इसे `none` कर देता है, फिर भी `click_action` ऊपर रहता है। Timer/resume refresh और fullscreen timeout अलग settings हैं।
+
+`ad_config` example: ad click के बाद OB1 अपने page पर रहता है, और LFO2 वापसी पर भाषा confirm करता है। `_high` floor पर `click_action` नहीं है:
 
 ```json
 {
-  "lfo": {
-    "native1": { "behavior": { "click": { "action": "reload" } } },
-    "native2": { "behavior": { "click": { "action": "auto_next" } } }
-  },
-  "onboarding": {
-    "steps": { "ob1": { "behavior": { "click": { "action": "none" } } } }
-  }
+  "native_ob1_high": { "id": "ca-app-pub-xxx/ob1_high", "isEnable": true },
+  "native_ob1": { "id": "ca-app-pub-xxx/ob1", "isEnable": true, "click_action": "none" },
+  "native_lang_alt": { "id": "ca-app-pub-xxx/lfo2", "isEnable": true, "click_action": "auto_next" }
 }
 ```
 
@@ -203,8 +206,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native.load.tier_timeout_ms` | `30000` |
 | `native.cache.max_age_ms` | `3600000` |
 | `native.reload.allowed` | `false` |
-| `native.click.action` | `"reload"` |
-| `native.reload.on_ad_click` (legacy fallback) | `true` |
 | `native.reload.resume_debounce_ms` | `500` |
 | `native.reload.min_after_bind_ms` | `3000` |
 | `native.reload.timer_enabled` | `false` |
@@ -270,11 +271,11 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.native.skip.delay_ms` | `3000` |
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.skip.position` | `"RIGHT"` |
-| `splash.native.behavior.click.action` | `"reload"` |
+| `splash.native.behavior` | `{}` |
 | `lfo.native_template` | `"CTA_BOTTOM"` |
-| `lfo.native1.behavior.click.action` | `"reload"` |
+| `lfo.native1.behavior` | `{}` |
 | `lfo.native2.enabled` | `true` |
-| `lfo.native2.behavior.click.action` | `"reload"` |
+| `lfo.native2.behavior` | `{}` |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
 | `lfo.tap_hint.enabled` | `true` |
@@ -286,17 +287,16 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
-| `lfo.confirm_dialog.native_behavior.click.action` | `"reload"` |
+| `lfo.confirm_dialog.native_behavior` | `{}` |
 | `lfo.languages.supported_codes` | `[]` |
 | `lfo.languages.default_code` | `""` |
 | `lfo.exit.reuse_splash_inter` | `true` |
 | `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
-| `onboarding.navigation.ad_click_return_completes_step` | `true` |
 | `onboarding.ads.content_template` | `"CTA_TOP"` |
-| `onboarding.ads.content_native_behavior.click.action` | `"auto_next"` |
-| `onboarding.ads.fullscreen_native_behavior.click.action` | `"auto_next"` |
+| `onboarding.ads.content_native_behavior` | `{}` |
+| `onboarding.ads.fullscreen_native_behavior` | `{}` |
 | `onboarding.fullscreen.skip.enabled` | `true` |
 | `onboarding.fullscreen.skip.delay_ms` | `5000` |
 | `onboarding.fullscreen.skip.style` | `"CLOSE_ICON"` |
@@ -313,7 +313,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` |
 | `onboarding.exit_interstitial.behavior` | `{}` |
 | `ob5.enabled` | `false` |
-| `ob5.native.behavior.click.action` | `"reload"` |
+| `ob5.native.behavior` | `{}` |
 | `ob5.skip.enabled` | `true` |
 | `ob5.skip.delay_ms` | `3000` |
 | `ob5.skip.style` | `"CLOSE_ICON"` |
@@ -321,7 +321,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `ob5.auto_dismiss_ms` | `15000` |
 | `question.enabled` | `true` |
 | `question.old_user_enabled` | `false` |
-| `question.native.behavior.click.action` | `"reload"` |
+| `question.native.behavior` | `{}` |
 | `question.native.template` | `"CTA_BOTTOM"` |
 | `question.native.refresh_on_select` | `false` |
 | `question.native.refresh_throttle_ms` | `2000` |

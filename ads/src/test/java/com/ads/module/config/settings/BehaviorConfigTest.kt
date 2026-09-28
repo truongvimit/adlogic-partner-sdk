@@ -1,6 +1,7 @@
 package com.ads.module.config.settings
 
 import com.ads.module.helper.adnative.NativeAdConfig
+import com.ads.module.helper.adnative.NativeClickAction
 import com.ads.module.helper.banner.BannerAdConfig
 import com.ads.module.helper.banner.BannerType
 import org.junit.After
@@ -8,15 +9,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BehaviorConfigTest {
-    @Test fun `native click action wins over legacy reload flag and rejects invalid actions`() {
-        val config = NativeAdConfig("native", true, false, 1)
-        val actions = com.ads.module.helper.adnative.NativeClickAction.entries
-        actions.forEach { action ->
-            AdBehavior.document.acceptSuccessfulFetch("""{"native":{"click":{"action":"${action.remoteValue}"},"reload":{"on_ad_click":${action != com.ads.module.helper.adnative.NativeClickAction.RELOAD}}}}""")
-            assertEquals(action, config.resolvedClickAction)
-        }
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"click":{"action":"typo"}}}""")
-        assertEquals(com.ads.module.helper.adnative.NativeClickAction.RELOAD, config.resolvedClickAction)
+    @Test fun `ad behavior carries no native click action at any scope`() {
+        val config = NativeAdConfig.forUnits(listOf("native"), 1, adConfigKey = "native_home")
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch(
+            """{"native":{"click":{"action":"none"},"reload":{"on_ad_click":false}},""" +
+                """"placement_overrides":{"native_home":{"native":{"click":{"action":"auto_next"}}}}}"""))
+        assertFalse(AdBehavior.document.snapshot.hasRemoteOverride("native.click.action"))
+        assertFalse(AdBehavior.document.snapshot.hasRemoteOverride("native.reload.on_ad_click"))
+        assertFalse(AdBehavior.supportsPlacementField("native", "click.action"))
+        assertEquals(NativeClickAction.RELOAD, config.resolvedClickAction)
     }
 
     @After fun clearRemote() { AdBehavior.document.acceptSuccessfulFetch(null) }
@@ -33,24 +34,24 @@ class BehaviorConfigTest {
 
     @Test fun `existing config receives remote then restores explicit local options`() {
         val banner = BannerAdConfig("test", true, false).apply { autoReloadTime = 22_000L }
-        val native = NativeAdConfig("test", true, false, 1).apply { reloadOnAdClick = false }
-        AdBehavior.document.acceptSuccessfulFetch("""{"banner":{"reload":{"allowed":true,"interval_ms":12000},"presentation":{"type":"LARGE_ANCHORED"}},"native":{"reload":{"on_ad_click":true}}}""")
+        val native = NativeAdConfig("test", true, false, 1).apply { autoShimmer = false }
+        AdBehavior.document.acceptSuccessfulFetch("""{"banner":{"reload":{"allowed":true,"interval_ms":12000},"presentation":{"type":"LARGE_ANCHORED"}},"native":{"presentation":{"auto_shimmer":true}}}""")
         assertTrue(banner.canReloadAds)
         assertEquals(22_000L, banner.autoReloadTime) // Removed JSON alias cannot override ad_config/local cadence.
         assertEquals(BannerType.LargeAnchored, banner.bannerType)
-        assertTrue(native.reloadOnAdClick)
+        assertTrue(native.autoShimmer)
         AdBehavior.document.acceptSuccessfulFetch(null)
         assertFalse(banner.canReloadAds)
         assertEquals(22_000L, banner.autoReloadTime)
-        assertFalse(native.reloadOnAdClick)
+        assertFalse(native.autoShimmer)
     }
 
     @Test fun `new config defaults do not capture remote as sticky fallback`() {
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"on_ad_click":false}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"auto_shimmer":false}}}""")
         val native = NativeAdConfig("test", true, false, 1)
-        assertFalse(native.reloadOnAdClick)
+        assertFalse(native.autoShimmer)
         AdBehavior.document.acceptSuccessfulFetch(null)
-        assertTrue(native.reloadOnAdClick)
+        assertTrue(native.autoShimmer)
     }
 
     @Test fun `screen then placement then format override specificity`() {

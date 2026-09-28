@@ -129,10 +129,10 @@ Do not call `OnboardingSdk.start()` or finish splash yourself; `ObSplashActivity
 - System bars show status/caption bars and hide navigation by default; use `SystemBarConfig` to customize them.
 - An incomplete flow starts again through Splash → LFO → OB on a new launch. A completed flow skips onboarding.
 - Re-selecting the current language opens the popup immediately. Selecting another language opens it from the configured total tap count onward; re-select taps still count. Its native loads when the popup opens; click/open preloads a replacement to show on return.
-- Native `behavior.click.action` selects one of `auto_next`, `none`, or `reload`. Content/fullscreen pager steps default to `auto_next`; LFO1/LFO2, OB5, splash, popup and question natives default to `reload`.
+- A native's click action comes from `click_action` on its placement's base key in `ad_config`: `auto_next`, `none`, or `reload`. Content/fullscreen pager steps default to `auto_next`; LFO1/LFO2, Privacy/Goal, OB5, splash, popup and question natives default to `reload`.
 - `reload` starts a replacement request immediately on ad click/open and uses the result on return. Ordinary app resume does not trigger click reload. `auto_next` advances after return without requesting a replacement; `none` does neither.
 - Native reload keeps the old ad visible without shimmer until a replacement binds successfully. Load failure keeps the old ad and its slot visible. Initial loading without an ad still uses shimmer.
-- Set `lfo.native2.behavior.click.action = "auto_next"` to confirm the selected language on return. LFO1 `auto_next` selects the current/default language and advances to the second language slot. The action is fixed for each click trip and overrides legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches. See the [remote settings guide](../partner-integration/remote-settings.md).
+- `"click_action": "auto_next"` on `native_lang_alt` confirms the selected language on return. LFO1 `auto_next` repeats the user's tap on the language they already picked, as tapping that row again would; before any row is tapped it does nothing. The action is fixed for each click trip. See the [remote settings guide](../partner-integration/remote-settings.md#native-click-actions).
 
 
 - `notificationPermissionEnabled = true`: request after consent and splash ad requests, without waiting for remote. Read the current setting when deciding; denial continues the flow and a recorded result skips later automatic prompts.

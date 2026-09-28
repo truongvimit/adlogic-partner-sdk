@@ -433,16 +433,14 @@ class ERainAdProvider : OnboardingAdProvider() {
         } else {
             null
         }
-        // Privacy/Goal reuse StepNative for placement identity, but their native click contract is
-        // reload. The onboarding pager's step natives are single-fill/auto-next and must remain so.
-        val step = (placement is AdPlacement.StepNative && !placement.isPrivacyGoalsNative) ||
+        val pagerPage = (placement is AdPlacement.StepNative && !placement.isPrivacyGoalsNative) ||
             placement is AdPlacement.StepFullScreen
         return NativeAdConfig.forUnits(
             request.unit.loadOrder,
             layoutRes,
             adConfigKey = OnboardingSdk.configuredPlacementKey(placement),
             joinOnly = true,
-            singleFill = step,
+            singleFill = pagerPage,
             liveLayoutId = liveSdkFrame,
             liveClickAction = { OnboardingSettings.nativeClickAction(placement) },
         ).also { it.behavior = OnboardingSettings.behavior(placement) }

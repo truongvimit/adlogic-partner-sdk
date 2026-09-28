@@ -47,7 +47,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         internal val ALL_FIELDS: Set<String> = setOf(
             "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA",
-            "heightCTA", "positionCTA", "components", "ids", "app_resume_load_delay_ms",
+            "heightCTA", "positionCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
         )
 
         private fun defaultUnit() = AdUnitConfig(id = "", isEnable = false)
@@ -99,6 +99,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             components = if ("components" in fields) top.components else base.components,
             ids = if ("ids" in fields) top.ids else base.ids,
             appResumeLoadDelayMs = if ("app_resume_load_delay_ms" in fields) top.appResumeLoadDelayMs else base.appResumeLoadDelayMs,
+            clickAction = if ("click_action" in fields) top.clickAction else base.clickAction,
         )
 
         /**

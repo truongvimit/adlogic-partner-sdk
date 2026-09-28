@@ -16,6 +16,7 @@ import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import com.ads.module.helper.adnative.NativeAdManager
+import com.ads.module.helper.adnative.NativeClickAction
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
@@ -621,38 +622,39 @@ class NativeProviderOwnershipTest {
         }
     }
 
-    @Test fun `LFO2 auto next emits no replacement requests even with legacy reload and refresh enabled`() {
+    @Test fun `LFO2 auto next emits no replacement requests even with reload and refresh enabled`() {
         val host = controller.get()
         val page = AdPlacement.Language2
-        for (timerEnabled in listOf(false, true)) {
-            assertTrue(io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""
-                {"lfo":{"native2":{"behavior":{
-                  "click":{"action":"auto_next"},
-                  "reload":{"on_ad_click":true,"allowed":true,"timer_enabled":$timerEnabled,"interval_ms":5000}
-                }}}}
-            """.trimIndent()))
-            val container = FrameLayout(host).also(host::setContentView)
-            provider.preloadNative(host, request.copy(placement = page))
-            requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
-            assertTrue(bind(container, page))
-            val baseline = requests.size
-            val events = vendorEvents.last()
-            for (stopped in listOf(false, true)) {
-                events.onAdClicked()
-                events.onAdOpened()
-                assertEquals("No click/open replacement", baseline, requests.size)
-                controller.pause()
-                if (stopped) controller.stop()
-                main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
-                assertEquals("No background replacement", baseline, requests.size)
-                if (stopped) controller.restart().start()
-                controller.resume()
-                // Leave the helper alive longer than both timer and resume debounce;
-                // real auto-next navigation releases it much earlier.
-                main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
-                assertEquals("No resume or delayed replacement", baseline, requests.size)
+        withClickActions("native_lang" to null, "native_lang_alt" to NativeClickAction.AUTO_NEXT) {
+            for (timerEnabled in listOf(false, true)) {
+                assertTrue(io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""
+                    {"lfo":{"native2":{"behavior":{
+                      "reload":{"allowed":true,"timer_enabled":$timerEnabled,"interval_ms":5000}
+                    }}}}
+                """.trimIndent()))
+                val container = FrameLayout(host).also(host::setContentView)
+                provider.preloadNative(host, request.copy(placement = page))
+                requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+                assertTrue(bind(container, page))
+                val baseline = requests.size
+                val events = vendorEvents.last()
+                for (stopped in listOf(false, true)) {
+                    events.onAdClicked()
+                    events.onAdOpened()
+                    assertEquals("No click/open replacement", baseline, requests.size)
+                    controller.pause()
+                    if (stopped) controller.stop()
+                    main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                    assertEquals("No background replacement", baseline, requests.size)
+                    if (stopped) controller.restart().start()
+                    controller.resume()
+                    // Leave the helper alive longer than both timer and resume debounce;
+                    // real auto-next navigation releases it much earlier.
+                    main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                    assertEquals("No resume or delayed replacement", baseline, requests.size)
+                }
+                provider.releaseNative(page)
             }
-            provider.releaseNative(page)
         }
     }
 
@@ -695,30 +697,64 @@ class NativeProviderOwnershipTest {
         assertEquals(0, unavailable)
     }
 
-    @Test fun `step click never reloads even when remote requests reload`() {
+    @Test fun `step click never reloads even when ad_config requests reload`() {
         val host = controller.get()
         val page = AdPlacement.StepNative(io.onboardkit.core.StepId.OB1)
-        val settings = io.onboardkit.remote.OnboardingSettings.document
+        withClickActions("native_ob1" to NativeClickAction.AUTO_NEXT) {
+            val container = FrameLayout(host).also(host::setContentView)
+            provider.preloadNative(host, request.copy(placement = page))
+            requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+            assertTrue(bind(container, page))
+            vendorEvents.single().onAdClicked()
+            assertEquals(1, requests.size)
+            assertEquals(NativeClickAction.AUTO_NEXT, provider.pendingClickAction(page))
+            clickActions("native_ob1" to NativeClickAction.RELOAD)
+            vendorEvents.single().onAdOpened()
+            assertEquals(NativeClickAction.AUTO_NEXT, provider.pendingClickAction(page))
+            controller.pause().stop().restart().start().resume()
+            assertEquals(1, requests.size)
+            vendorEvents.single().onAdClicked()
+            assertEquals("Onboarding never reloads its consumed slot", 1, requests.size)
+            assertEquals(NativeClickAction.NONE, provider.pendingClickAction(page))
+            clickActions("native_ob1" to NativeClickAction.NONE)
+            controller.pause().resume()
+            assertEquals(1, requests.size)
+            assertNotEquals(NativeStatus.READY, provider.nativeStatus(page))
+        }
+    }
+
+    private fun clickActions(vararg units: Pair<String, NativeClickAction?>) =
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(units.associate { (key, action) ->
+            key to com.ads.module.config.AdUnitConfig("native-test", true, clickAction = action)
+        }))
+
+    private fun withClickActions(
+        vararg units: Pair<String, NativeClickAction?>,
+        block: () -> Unit,
+    ) {
+        io.onboardkit.OnboardingSdk.install(controller.get().application) { adProvider = provider; trackkitAutoTracking(false) }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            ads = io.onboardkit.config.AdsConfig.fromAdConfig()
+        }.getOrThrow())
+        clickActions(*units)
+        try { block() } finally { com.ads.module.config.AdRemoteConfig.reset() }
+    }
+
+    @Test fun `privacy goal native click reloads its replacement on return`() {
+        val host = controller.get()
+        val page = AdPlacement.StepNative(io.onboardkit.core.StepId.PARTNER_PRIVACY)
         val container = FrameLayout(host).also(host::setContentView)
         provider.preloadNative(host, request.copy(placement = page))
-        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
         assertTrue(bind(container, page))
-        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}}""")
-        vendorEvents.single().onAdClicked()
-        assertEquals(1, requests.size)
-        assertEquals(com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT, provider.pendingClickAction(page))
-        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"reload"}}}}}}""")
-        vendorEvents.single().onAdOpened()
-        assertEquals(com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT, provider.pendingClickAction(page))
+        val baseline = requests.size
+        val oldView = container.getChildAt(0)
+        vendorEvents.last().onAdClicked()
+        assertEquals("Privacy click must start a replacement preload", baseline + 1, requests.size)
+        requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
         controller.pause().stop().restart().start().resume()
-        assertEquals(1, requests.size)
-        vendorEvents.single().onAdClicked()
-        assertEquals("Onboarding never reloads its consumed slot", 1, requests.size)
-        assertEquals(com.ads.module.helper.adnative.NativeClickAction.NONE, provider.pendingClickAction(page))
-        settings.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"none"}}}}}}""")
-        controller.pause().resume()
-        assertEquals(1, requests.size)
-        assertNotEquals(NativeStatus.READY, provider.nativeStatus(page))
+        assertEquals("Replacement is consumed after return", baseline + 1, requests.size)
+        assertNotSame("Privacy replacement must bind in the same ad slot", oldView, container.getChildAt(0))
     }
 
     @Test fun `remote preload switches at every scope leave a preloaded language native on its placement key`() {

@@ -314,9 +314,9 @@ class NativeAdHelper @JvmOverloads constructor(
         listeners.clear()
     }
 
-    /** Enables click-time preload and return-time show for this native slot. Default: true. */
+    /** Code default when `ad_config.<key>.click_action` is absent: RELOAD or NONE. Default: true. */
     fun setReloadOnAdClick(enabled: Boolean): NativeAdHelper = apply {
-        config.reloadOnAdClick = enabled
+        config.clickAction = if (enabled) NativeClickAction.RELOAD else NativeClickAction.NONE
     }
 
     /** Requests another ad after a bind; under [NativeAdConfig.joinOnly] it only polls or joins. */

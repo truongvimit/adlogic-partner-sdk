@@ -65,19 +65,14 @@ open class NativeAdConfig(
         get() = behaviorValues().boolean("presentation.auto_shimmer", field)
 
     /**
-     * Preload an unused replacement immediately on click/open, then show it on return (or
-     * wait for the in-flight load). Independent of [canReloadAds]. Disable for slots whose
-     * host navigates away on click-return, such as onboarding steps.
+     * Code default for a click; `ad_config.<key>.click_action` outranks it. RELOAD preloads an
+     * unused replacement on click/open and shows it on return, independent of [canReloadAds].
+     * AUTO_NEXT navigation belongs to the host.
      */
-    var reloadOnAdClick: Boolean = AdBehavior.defaultBool("native.reload.on_ad_click")
-        get() = behaviorValues().boolean("reload.on_ad_click", field)
-
-    /** New action overrides the legacy reload flag. AUTO_NEXT navigation belongs to the host. */
-    var clickAction: NativeClickAction? = null
+    var clickAction: NativeClickAction = NativeClickAction.RELOAD
     open val resolvedClickAction: NativeClickAction
-        get() = NativeClickAction.fromRemote(behaviorValues().string("click.action", ""))
+        get() = (placementKey ?: overridesKey)?.let { AdRemoteConfig.getInstance().ads[it]?.clickAction }
             ?: clickAction
-            ?: if (reloadOnAdClick) NativeClickAction.RELOAD else NativeClickAction.NONE
 
     /** Trailing debounce for the reload-on-resume trigger. */
     var timeDebounceResume: Long = AdBehavior.defaultNumber("native.reload.resume_debounce_ms")
