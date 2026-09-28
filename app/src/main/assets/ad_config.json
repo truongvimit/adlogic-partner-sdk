@@ -510,7 +510,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "native_ob3_high": {
     "id": "ca-app-pub-7208941695689653/8727507290",
@@ -613,7 +613,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "native_ob4_high": {
     "id": "ca-app-pub-7208941695689653/8727507290",

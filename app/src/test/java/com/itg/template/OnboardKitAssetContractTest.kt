@@ -23,11 +23,14 @@ class OnboardKitAssetContractTest {
                 assertTrue("$path/$sdkKey must be enabled", sdk.enabled)
                 assertTrue("$path/$sdkKey must have an id", sdk.id.isNotBlank())
                 assertEquals("$path/$sdkKey must use the app's onboarding unit", legacy.id, sdk.id)
+                if (sdkKey == "native_full1" || sdkKey == "native_full2") {
+                    assertTrue("$path/$sdkKey must not require Adjust attribution in the example", !sdk.uaCheck)
+                }
             }
         }
     }
 
-    private data class Entry(val id: String, val enabled: Boolean)
+    private data class Entry(val id: String, val enabled: Boolean, val uaCheck: Boolean)
 
     private fun entry(json: String, key: String): Entry {
         val body = Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\{(.*?)\\}", RegexOption.DOT_MATCHES_ALL)
@@ -36,6 +39,8 @@ class OnboardKitAssetContractTest {
             ?: error("missing id for $key")
         val enabled = Regex("\\\"isEnable\\\"\\s*:\\s*(true|false)").find(body)?.groupValues?.get(1)?.toBoolean()
             ?: error("missing isEnable for $key")
-        return Entry(id, enabled)
+        val uaCheck = Regex("\\\"enable_ua_check\\\"\\s*:\\s*(true|false)").find(body)?.groupValues?.get(1)?.toBoolean()
+            ?: error("missing enable_ua_check for $key")
+        return Entry(id, enabled, uaCheck)
     }
 }
