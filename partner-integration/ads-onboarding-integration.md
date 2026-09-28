@@ -208,7 +208,7 @@ The sample uses **`com.ads.module.config.AdjustConfig`**. The SDK owns Adjust, i
 | `event_token` | `eventAdImpression` | A 6-character event token for paid impressions; fill it in only when you need it. |
 | `adjust_event_token_purchase` | `eventNamePurchase` | The 6-character purchase event **token**, not the event name; leave it empty until you have IAP. |
 
-The SDK already calls the Adjust ad-revenue API. `event_token` additionally sends the revenue as an event for Meta/TikTok…; do not add both sources together in reporting. An empty token is skipped, and revenue is not re-sent from an app callback.
+The SDK reports advertising revenue once through the Adjust ad-revenue API. `event_token` additionally sends a count-only impression event without revenue, so it does not inflate All Revenue, ROAS or gross profit. An empty token skips this extra event. Do not re-send it from an app callback. When upgrading from a version that attached revenue to this token, coordinate with UA to move any campaigns using its value to the appropriate ad-revenue sharing configuration. This change applies to new events from updated apps; it does not correct historical data or Firebase reporting.
 
 Debug uses the Adjust **sandbox**, release **production**. Check the `ERainAdjust` log for `Adjust initialised (sandbox)` or a token error, then cross-check sessions/events in Adjust. Testing purchases needs billing and a test transaction, not just the event token.
 

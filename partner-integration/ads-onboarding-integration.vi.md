@@ -208,7 +208,7 @@ Mẫu dùng **`com.ads.module.config.AdjustConfig`**. SDK quản lý Adjust, lif
 | `event_token` | `eventAdImpression` | Event token 6 ký tự cho paid impression; chỉ điền khi cần. |
 | `adjust_event_token_purchase` | `eventNamePurchase` | Purchase event **token** 6 ký tự, không phải tên event; chưa có IAP để trống. |
 
-SDK đã gọi Adjust ad-revenue API. `event_token` gửi thêm cùng doanh thu dưới dạng event cho Meta/TikTok…; tránh cộng cả hai nguồn trong báo cáo. Token trống được bỏ qua, không gửi lại revenue ở callback app.
+SDK gửi doanh thu quảng cáo một lần qua Adjust ad-revenue API. `event_token` chỉ gửi thêm event đếm paid impression, không gắn revenue, để tránh cộng trùng vào All Revenue, ROAS và gross profit. Token trống bỏ qua event bổ sung; không gửi lại event trong callback app. Khi nâng cấp từ bản có gắn revenue vào token này, phối hợp với UA chuyển campaign đang dùng giá trị của event sang cấu hình chia sẻ ad revenue phù hợp. Thay đổi chỉ áp dụng cho event mới từ app đã cập nhật, không sửa dữ liệu lịch sử hay báo cáo Firebase.
 
 Debug dùng Adjust **sandbox**, release **production**. Kiểm tra log `ERainAdjust`: `Adjust initialised (sandbox)` hoặc lỗi token; đối chiếu session/event trên Adjust. Test purchase cần billing và giao dịch test, không chỉ event token.
 
