@@ -444,7 +444,7 @@
   },
   "native_ob1": {
     "id": "ca-app-pub-7208941695689653/5251296713",
-    "isEnable": false,
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -471,8 +471,8 @@
     "enable_ua_check": false
   },
   "native_ob2": {
-    "id": "ca-app-pub-7208941695689653/5251296713",
-    "isEnable": false,
+    "id": "ca-app-pub-7208941695689653/8919078982",
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -499,8 +499,8 @@
     "enable_ua_check": false
   },
   "native_full1": {
-    "id": "ca-app-pub-3940256099942544/2247696110",
-    "isEnable": false,
+    "id": "ca-app-pub-7208941695689653/8727507290",
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "TOP",
@@ -510,7 +510,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": false
+    "enable_ua_check": true
   },
   "native_ob3_high": {
     "id": "ca-app-pub-7208941695689653/8727507290",
@@ -527,8 +527,8 @@
     "enable_ua_check": false
   },
   "native_ob3": {
-    "id": "ca-app-pub-7208941695689653/8727507290",
-    "isEnable": false,
+    "id": "ca-app-pub-7208941695689653/4756472697",
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -602,8 +602,8 @@
     "enable_ua_check": false
   },
   "native_full2": {
-    "id": "ca-app-pub-3940256099942544/2247696110",
-    "isEnable": false,
+    "id": "ca-app-pub-7208941695689653/9849017274",
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "TOP",
@@ -613,7 +613,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": false
+    "enable_ua_check": true
   },
   "native_ob4_high": {
     "id": "ca-app-pub-7208941695689653/8727507290",
@@ -630,8 +630,8 @@
     "enable_ua_check": false
   },
   "native_ob4": {
-    "id": "ca-app-pub-7208941695689653/8727507290",
-    "isEnable": false,
+    "id": "ca-app-pub-7208941695689653/4967638957",
+    "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
