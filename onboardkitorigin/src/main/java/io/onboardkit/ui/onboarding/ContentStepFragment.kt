@@ -30,7 +30,8 @@ import kotlinx.coroutines.launch
  * Content step (OB1 through OB4). Layout resolves in three tiers: app-injected layout →
  * remote UI → SDK default. Remote text, colors and labels apply at bind; the remote image or
  * video replaces the host art only once its asset is cached. The ExoPlayer used for remote
- * video is released on unselect and on view destroy.
+ * video is released on unselect and on view destroy; the native ad is kept until view destroy
+ * so swiping back shows the same ad.
  */
 class ContentStepFragment : LazyStepFragment() {
 
@@ -208,9 +209,6 @@ class ContentStepFragment : LazyStepFragment() {
     override fun onStepUnselected(dwellMs: Long) {
         releasePlayer()
         adPresentation?.finishTransition()
-        OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId))
-        adBound = false
-        adRequested = false
     }
 
     private fun requestNativeAd() {
@@ -219,7 +217,7 @@ class ContentStepFragment : LazyStepFragment() {
         if (adRequested) return
         adRequested = true
         val placement = AdPlacement.StepNative(stepId)
-        val visit = stepVisitVersion
+        val viewVersion = stepViewVersion
         activity.showNativeAd(
             placement = placement,
             // nativeUnitFor, not contentStepNative: a page with its own entry in `stepNatives` is
@@ -227,19 +225,19 @@ class ContentStepFragment : LazyStepFragment() {
             // here requested a different unit than the one that was warmed.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onLoading = { if (isCurrentStepVisit(visit)) showAdSlot(true) },
+            onLoading = { if (isCurrentStepView(viewVersion)) showAdSlot(true) },
             onBound = {
-                if (isCurrentStepVisit(visit)) {
+                if (isCurrentStepView(viewVersion)) {
                     adBound = true
                     showAdSlot(true)
                 }
             },
             onUnavailable = {
-                if (isCurrentStepVisit(visit) && !adBound) {
+                if (isCurrentStepView(viewVersion) && !adBound) {
                     showAdSlot(false)
                 }
             },
-            onAdEngaged = { action -> if (isCurrentStepVisit(visit)) onStepAdEngaged(action) },
+            onAdEngaged = { action -> if (isCurrentStepView(viewVersion)) onStepAdEngaged(action) },
         )
     }
 
@@ -290,6 +288,9 @@ class ContentStepFragment : LazyStepFragment() {
         releasePlayer()
         adPresentation?.finishTransition()
         adPresentation = null
+        if (activity?.isChangingConfigurations != true) {
+            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId))
+        }
         binding = null
         adBound = false
         adRequested = false

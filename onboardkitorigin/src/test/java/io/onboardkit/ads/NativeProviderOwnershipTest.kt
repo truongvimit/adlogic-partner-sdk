@@ -1109,12 +1109,12 @@ class NativeProviderOwnershipTest {
         assertEquals(1, requests.size)
     }
 
-    @Test fun `content pager departure consumes old ad and return joins a pending preload`() {
+    @Test fun `content pager departure keeps its ad until the page view is destroyed`() {
         verifyPagerReturn(io.onboardkit.ui.onboarding.ContentStepFragment.newInstance(io.onboardkit.core.StepId.OB1, 0),
             AdPlacement.StepNative(io.onboardkit.core.StepId.OB1))
     }
 
-    @Test fun `full screen pager departure consumes old ad and return joins a pending preload`() {
+    @Test fun `full screen pager departure keeps its ad until the page view is destroyed`() {
         verifyPagerReturn(io.onboardkit.ui.onboarding.AdStepFragment.newInstance(io.onboardkit.core.StepId.FULL1, 0),
             AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL1))
     }
@@ -1141,17 +1141,14 @@ class NativeProviderOwnershipTest {
         fragment.dispatchUnselected()
         host.supportFragmentManager.beginTransaction()
             .setMaxLifecycle(fragment, androidx.lifecycle.Lifecycle.State.STARTED).commitNow()
-        verify(first).destroy()
-        provider.preloadNative(host, request.copy(placement = page))
-        assertEquals(2, requests.size)
+        verify(first, never()).destroy()
         host.supportFragmentManager.beginTransaction()
             .setMaxLifecycle(fragment, androidx.lifecycle.Lifecycle.State.RESUMED).commitNow()
         fragment.dispatchSelected()
-        assertEquals("return must join the pending preload", 2, requests.size)
-        val second = mock(NativeAd::class.java)
-        requests.last().onNativeAdLoaded(second)
-        assertNotEquals("return must bind and consume the new fill", NativeStatus.READY, provider.nativeStatus(page))
-        verify(second, never()).destroy()
+        assertEquals("return must show the kept ad, not request another", 1, requests.size)
+        verify(first, never()).destroy()
+        host.supportFragmentManager.beginTransaction().remove(fragment).commitNow()
+        verify(first).destroy()
     }
 
     @Test fun `cold fill while paused waits for resume without binding the old view`() {
@@ -1253,6 +1250,7 @@ class NativeProviderOwnershipTest {
             defaultSteps()
             ads = io.onboardkit.config.AdsConfig(contentStepNative = request.unit)
         }.getOrThrow())
+        kotlinx.coroutines.runBlocking { io.onboardkit.OnboardingSdk.reset() }
         val parentId = android.view.View.generateViewId()
         host.setContentView(FrameLayout(host).apply { id = parentId })
         val page = io.onboardkit.ui.onboarding.ContentStepFragment.newInstance(io.onboardkit.core.StepId.OB1, 0)

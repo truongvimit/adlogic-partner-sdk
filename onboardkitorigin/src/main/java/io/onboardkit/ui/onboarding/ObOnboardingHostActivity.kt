@@ -203,6 +203,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         lastSelectedPosition = position
         _currentIndex.value = position
         updatePagerSwipe()
+        keepVisitedPages(position)
 
         val stepId = enabledStepIds.getOrNull(position) ?: return
         OnboardingSdk.session.recordStepShown(stepId)
@@ -221,6 +222,17 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             ) {
                 pagerAdapter.fragmentAt(position)?.dispatchSelected()
             }
+        }
+    }
+
+    /**
+     * A visited page's view, and the native ad bound in it, must survive until the flow ends:
+     * a fixed limit of 1 destroyed pages two swipes back, and a revisit found its ad gone.
+     * Growing with the furthest page reached keeps them without inflating the whole flow up front.
+     */
+    private fun keepVisitedPages(position: Int) {
+        if (position > binding.obStepPager.offscreenPageLimit) {
+            binding.obStepPager.offscreenPageLimit = position
         }
     }
 
