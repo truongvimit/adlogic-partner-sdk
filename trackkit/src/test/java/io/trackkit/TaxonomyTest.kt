@@ -20,6 +20,11 @@ import java.lang.reflect.Modifier
  * not silently inside GA4 six weeks after release.
  */
 class TaxonomyTest {
+    @Test
+    fun `public aggregate count parameter remains available to consumers`() {
+        assertEquals("count", TrackkitEvents.PARAM_COUNT)
+    }
+
 
     // Documented grammar: lowercase snake_case, no leading digit, no double or trailing underscore.
     private val snakeCase = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")

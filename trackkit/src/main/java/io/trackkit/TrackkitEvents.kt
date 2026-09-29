@@ -43,6 +43,8 @@ object TrackkitEvents {
     const val PARAM_PRODUCT_ID = "product_id"
     const val PARAM_SCREEN_INDEX = "screen_index"
     const val PARAM_STATUS = "status"
+    /** A count carried by app-level aggregate events. Kept as a public API compatibility key. */
+    const val PARAM_COUNT = "count"
 
     /** Whether the language confirm prompt opened with an ad already bound. */
     const val PARAM_HAS_AD = "has_ad"
