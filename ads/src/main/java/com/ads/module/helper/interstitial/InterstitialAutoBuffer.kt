@@ -24,9 +24,8 @@ class InterstitialBufferOptions @JvmOverloads constructor(
     val placements: List<String> = emptyList(),
 
     /**
-     * How often to check, in milliseconds. `0` follows the interstitial interval,
-     * `interstitial.frequency.interval_ms` with `ERainAdConfig.intervalInterstitialAd` as its host
-     * fallback, which is the point: one ad per interval is exactly one ad per showable moment.
+     * How often to check, in milliseconds. `0` follows `ERainAdConfig.intervalInterstitialAd`,
+     * which is the point: one ad per interval is exactly one ad per showable moment.
      */
     val tickMs: Long = AdBehavior.defaultNumber("interstitial_auto_buffer.tick_ms"),
 
@@ -208,8 +207,7 @@ object InterstitialAutoBuffer {
             }.toMap(),
             isPlacementEnabled = { key ->
                 local.isPlacementEnabled(key) && v.boolean(path(key, "enabled"),
-                    (key in local.placements || key in remotePlacements) &&
-                        AdBehavior.document.defaultValue(path(key, "enabled")) != false)
+                    key in local.placements && AdBehavior.document.defaultValue(path(key, "enabled")) != false)
             },
             tickMs = v.long("interstitial_auto_buffer.tick_ms", local.tickMs),
             idleTickMs = v.long("interstitial_auto_buffer.idle_tick_ms", local.idleTickMs),
@@ -327,17 +325,13 @@ object InterstitialAutoBuffer {
         )
     }
 
-    /**
-     * Recalculate wakeup when a show closes, a waterfall fails, or remote settings change. While
-     * running, a placement that became owned since the last call starts its first interval here.
-     */
+    /** Recalculate wakeup when a show closes, a waterfall fails, or remote interval changes. */
     @JvmStatic
     fun onGateChanged() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             handler.post { onGateChanged() }
             return
         }
-        if (running) InterstitialFrequency.activate()
         gateObservers.toList().forEach { runCatching { it() } }
         if (!running) return
         val remaining = nextPreloadDelay()
