@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -94,6 +95,70 @@ object InterstitialAutoBuffer {
     private val handler = Handler(Looper.getMainLooper())
     private val reserved = ConcurrentHashMap.newKeySet<String>()
     private val gateObservers = linkedSetOf<() -> Unit>()
+
+    private var preloadScreens: Map<String, Set<String>> = emptyMap()
+    private var currentScreen: String? = null
+    private var currentScreenOwner: Any? = null
+
+    /**
+     * Restricts automatic preload/refill to the active screen IDs supplied by the host.
+     * Missing placements keep their existing behavior; an empty set disables automatic loads
+     * for that placement. An empty map removes every screen restriction. Inputs are copied.
+     *
+     * This does not enable/start placements, change their clocks/taps, clear cached ads, or gate
+     * explicit load/show calls. Configure once at setup, then report ALL screen changes, including
+     * Home. Keep [start] at first content entry so time spent on Home still counts.
+     */
+    @MainThread
+    @JvmStatic
+    fun setPreloadScreens(screensByPlacement: Map<String, Set<String>>) {
+        checkScreenThread()
+        val snapshot = screensByPlacement.mapValues { (_, screens) -> screens.toSet() }
+        if (preloadScreens == snapshot) return
+        preloadScreens = snapshot
+        topUpNow()
+    }
+
+    /**
+     * Reports the selected, resumed content screen, or `null` when none is active. The host can
+     * use Activity/Fragment lifecycle callbacks or its own Compose/navigation adapter; no UI
+     * framework is required here. Call on main and use one authoritative screen source per host.
+     *
+     * Returning to a screen only reevaluates eligibility: it never restarts a cooldown or adds
+     * a tap. Repeated IDs do not wake the buffer. The returned handle may be closed on main when
+     * that screen leaves; a stale handle cannot clear a newer screen, even with the same ID.
+     * A central navigation listener can ignore the handle and report the next screen instead.
+     */
+    @MainThread
+    @JvmStatic
+    fun setCurrentScreen(screenId: String?): AutoCloseable {
+        checkScreenThread()
+        val owner = Any()
+        currentScreenOwner = owner
+        updateCurrentScreen(screenId)
+        return AutoCloseable {
+            checkScreenThread()
+            if (currentScreenOwner === owner) {
+                currentScreenOwner = null
+                updateCurrentScreen(null)
+            }
+        }
+    }
+
+    private fun updateCurrentScreen(screenId: String?) {
+        if (currentScreen == screenId) return
+        currentScreen = screenId
+        // Evaluate now, even when the regular tick is far away or the interval is zero.
+        // topUp/nextPreloadDelay continue to read the original frequency clock.
+        topUpNow()
+    }
+
+    private fun checkScreenThread() {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Preload screens must be updated on main" }
+    }
+
+    private fun canAutoPreload(placement: String): Boolean =
+        preloadScreens[placement]?.let { currentScreen in it } ?: true
 
     internal fun observeGates(observer: () -> Unit) { gateObservers += observer }
     internal fun removeGateObserver(observer: () -> Unit) { gateObservers -= observer }
@@ -340,6 +405,7 @@ object InterstitialAutoBuffer {
         if (!ConsentCenter.canRequestAds()) return options.minTickMs
         if (AdGate.isPurchased(context)) return 0L
         options.placements.distinct().forEach { placement ->
+            if (!canAutoPreload(placement)) return@forEach
             if (loadSkipReason(placement) != null) return@forEach
             val ids = runCatching { AdRemoteConfig.getInstance().tiersFor(placement) }
                 .getOrDefault(emptyList())
@@ -370,6 +436,7 @@ object InterstitialAutoBuffer {
 
     private fun nextPreloadDelay(): Long = options.placements.asSequence()
         .filter { owns(it) && InterstitialFrequency.hasTaps(it) }
+        .filter { canAutoPreload(it) }
         .filter { placement -> appContext?.let { placementSkipReason(it, placement) } == null }
         .filter { !InterstitialAdManager.isReady(it) && !InterstitialAdManager.isLoading(it) }
         .map { InterstitialFrequency.preloadRemainingMs(it) }
