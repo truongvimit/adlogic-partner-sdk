@@ -66,7 +66,7 @@ class ObFullScreenAdPauseDeviceTest {
         val provider = BufferedHostNativeProvider()
         val config = onboardKitConfig {
             ads = AdsConfig(ob5Native = NativeAdUnit("host-test-native"))
-            // No question or paywall: observe the existing terminal route via the host listener.
+            // No paywall: observe the existing terminal route via the host listener.
         }.getOrThrow()
 
         assertFalse("Run this class in a fresh process", OnboardingSdk.isReady())

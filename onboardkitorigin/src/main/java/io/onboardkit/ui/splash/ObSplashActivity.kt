@@ -279,7 +279,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
             ForceUpdateGate.await(this, updateConfig)
         }
         attempt.allowAdRequests()
-        if (attempt.startDecision == null) attempt.startDecision = OnboardingSdk.shouldStart()
+        if (attempt.startDecision == null) {
+            attempt.startDecision = OnboardingSdk.shouldStart(launcherLaunch = SplashEntry.from(intent) == null)
+        }
         ObLog.d(ObLog.Section.SPLASH, "start_decision=${describe(checkNotNull(attempt.startDecision))}")
         requestSplashAds()
         requestSplashPreloads(attempt.settledInterOrNull())
@@ -322,18 +324,26 @@ open class ObSplashActivity : BaseOnboardActivity() {
 
     // Not windowed here: the provider holds each request until this splash's window opens.
     internal fun requestSplashPreloads(interResult: InterResult?) {
-        if ((attempt.startDecision as? StartDecision.Start)?.destination != FlowDestination.LANGUAGE) return
+        val destination = (attempt.startDecision as? StartDecision.Start)?.destination
+        // Welcome Back slot 1 rides the LFO1 trigger and mode; native_fs stays LANGUAGE-only.
+        val firstNative = when (destination) {
+            FlowDestination.LANGUAGE -> AdPlacement.Language1
+            FlowDestination.WELCOME_BACK -> AdPlacement.WelcomeBack1
+            else -> return
+        }
         val flags = sdk.flags()
         val parallel = flags.splashLfoParallelPreloadEnabled
         val allowWhileVisible = attempt.prompt.value == SplashPrompt.Open
-        if ((parallel || interResult != null) && attempt.preloadsRequested.add(AdPlacement.Language1)) {
+        if ((parallel || interResult != null) && attempt.preloadsRequested.add(firstNative)) {
             val reason = if (parallel) "parallel_start" else interResult?.lfoReason
             ObLog.d(
                 ObLog.Section.PRELOAD,
-                "splash_lfo attempt=${attempt.id} mode=${if (parallel) "parallel" else "sequential"} reason=$reason",
+                "splash_lfo attempt=${attempt.id} slot=${firstNative.key} mode=${if (parallel) "parallel" else "sequential"} reason=$reason",
             )
-            sdk.preload().preloadLanguage1(this, allowWhileVisible)
+            if (firstNative == AdPlacement.WelcomeBack1) sdk.preload().preloadWelcome1(this, allowWhileVisible)
+            else sdk.preload().preloadLanguage1(this, allowWhileVisible)
         }
+        if (destination != FlowDestination.LANGUAGE) return
         if (interResult == InterResult.LOADED && attempt.preloadsRequested.add(AdPlacement.SplashNative)) {
             sdk.preload().preloadSplashNative(this, allowWhileVisible)
         }
@@ -682,7 +692,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         val decision = attempt.startDecision ?: StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         (decision as? StartDecision.Start)?.let {
             sdk.preload().onSplashRemoteReady(this, it.destination, it.resumeStepIndex,
-                language1AlreadyScheduled = AdPlacement.Language1 in attempt.preloadsRequested)
+                firstNativeAlreadyScheduled = AdPlacement.Language1 in attempt.preloadsRequested ||
+                    AdPlacement.WelcomeBack1 in attempt.preloadsRequested)
         }
         ObLog.d(ObLog.Section.NAV, "ob_splash -> ${describe(decision)}")
         OnboardingSdk.startResolved(this, decision, StartOptions(passthrough = intent.extras))

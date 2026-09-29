@@ -14,7 +14,7 @@ hoàn tất và chỉ khi partner bật cờ riêng trong
 Mặc định là `false`. Code cũng bật được bằng `PrivacyGoalsScreenConfig(enabled = true)` (ví dụ
 bên dưới); remote rồi asset app thắng giá trị trong code. Đặt `false` để bỏ cả cụm màn; khi đó
 host tiếp tục nhánh hoàn tất thông thường. Cụm màn còn cần danh sách lựa chọn trong code:
-`goal.options`, hoặc `question.options` khi không khai goal. Không có cả hai thì cờ bật bị bỏ qua
+`goal.options`. Không có danh sách này thì cờ bật bị bỏ qua
 (logcat ghi cảnh báo), SDK không preload native Privacy và onboarding tiếp tục nhánh hoàn tất thông thường.
 Nếu user đóng app khi đang ở Privacy hoặc Goal, state flow vẫn chưa completed và lần mở sau sẽ
 chạy lại từ Splash → LFO.
@@ -53,9 +53,9 @@ privacyGoalsScreen = PrivacyGoalsScreenConfig(
     enabled = true,
     goal = GoalsScreenConfig(
         options = listOf(
-            QuestionOption("work", title = "Work", imageRes = R.drawable.partner_work),
-            QuestionOption("study", title = "Study", imageRes = R.drawable.partner_study),
-            QuestionOption("personal", title = "Personal", imageRes = R.drawable.partner_personal),
+            GoalOption("work", title = "Work", imageRes = R.drawable.partner_work),
+            GoalOption("study", title = "Study", imageRes = R.drawable.partner_study),
+            GoalOption("personal", title = "Personal", imageRes = R.drawable.partner_personal),
         ),
         selectionMode = SelectionMode.MULTIPLE,
         minSelection = 1,
@@ -85,4 +85,4 @@ consent, chọn/bỏ chọn, preload, swap ad, reload khi click và hoàn tất 
 
 Native Privacy đầu được preload khi tới trang cuối trong `onboarding.order`, kể cả fullscreen. Interstitial cuối OB vẫn theo `onboarding.exit_interstitial.next_screen_timing`: `UNDER_AD` mở Privacy bên dưới interstitial; `AFTER_AD` chờ ad đóng. Entry notification/widget/uninstall vẫn chờ ad đóng ở nhánh exit này.
 
-Privacy chỉ cho tiếp tục sau khi đồng ý. Goal dùng `SelectionMode.SINGLE` hoặc `MULTIPLE` và `minSelection` của host; đặt minimum phù hợp số option (SINGLE dùng 1). Hoàn tất Goal lưu `QuestionAnswer` và phát `OnboardingEvent.QuestionAnswered` trước khi hoàn tất flow. Cụm Privacy/Goal hoàn tất trực tiếp, không mở tiếp OB5/question/paywall của nhánh exit thông thường. Back tại Goal quay về Privacy; Back tại Privacy đóng task. Lựa chọn Goal được chọn lại khi màn Goal được tạo lại; không phải tiến trình đã lưu qua process death.
+Privacy chỉ cho tiếp tục sau khi đồng ý. Goal dùng `SelectionMode.SINGLE` hoặc `MULTIPLE` và `minSelection` của host; đặt minimum phù hợp số option (SINGLE dùng 1). Hoàn tất Goal ghi lựa chọn thành `GoalAnswer` (phát qua `OnboardingEvent.GoalsSelected`, có trong `OnboardingOutcome.Completed.goals` và đọc lại bằng `OnboardingSdk.selectedGoals()`) trước khi hoàn tất flow. Cụm Privacy/Goal hoàn tất trực tiếp, không mở tiếp OB5/paywall của nhánh exit thông thường. Back tại Goal quay về Privacy; Back tại Privacy đóng task. Lựa chọn Goal được chọn lại khi màn Goal được tạo lại; không phải tiến trình đã lưu qua process death.

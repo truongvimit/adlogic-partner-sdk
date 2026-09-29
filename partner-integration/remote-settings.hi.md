@@ -12,6 +12,8 @@ Console setup के लिए [तीन String parameters publish करने
 
 वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
 
+Launcher से app खोलने वाला लौटता user splash के बाद Welcome Back स्क्रीन पर आता है; `welcome_back.enabled` इसे बंद करता है। [Welcome Back](welcome-back-screen.hi.md) देखें।
+
 ## Documents और field ownership
 
 मौजूदा Firebase parameter `ad_remote_config` ही है; `ad_config.json` / `ad_config_debug.json` उसके local asset filenames हैं। सिर्फ दो नए String parameters जोड़ें:
@@ -23,10 +25,10 @@ Console setup के लिए [तीन String parameters publish करने
 
 - **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
 - **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit/question behavior, native templates, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, native templates, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation और Activity exclusions। SDK ad-presentation presets remote से बदले जा सकते हैं।
 
-हटाए गए aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches और app-content groups `ui`/`question.content` ignore होते हैं, पुराने cached JSON में भी। पुराने remote UI APIs `ob_ui_content`, `ob_ui_design_tokens`, `ob_question_config`, `ob_enable_ui_content` से चलते रहते हैं; वे नए grouped documents में fields नहीं हैं। Valid `ob_question_config` नए users को question दिखाता है, भले app ने कोई `QuestionConfig` configure न किया हो; उसका `cta_text` question button का text तय करता है, `QuestionConfig.ctaTextRes` fallback है, और minimum selection दिखाए गए options तक सीमित (clamp) होता है। यह button ad CTA से अलग है।
+हटाए गए aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches और app-content group `ui` ignore होते हैं, पुराने cached JSON में भी। पुराने remote UI APIs `ob_ui_content`, `ob_ui_design_tokens`, `ob_enable_ui_content` से चलते रहते हैं; वे नए grouped documents में fields नहीं हैं।
 
 ## App को एक बार configure करें
 
@@ -49,7 +51,7 @@ ads = AdsConfig.fromAdConfig()
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
 | Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
 | OB5 | `native_onboarding_fullscreen_1_4` |
-| Question native / interstitial | `native_question` / `inter_question` |
+| Welcome Back initial; ALT | `native_welcome1`; `native_welcome2` (हर एक का अपना `_high` tier) |
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume`; backend इसे ID के साथ declare करे तो `idAdResume` seed के बिना भी app-open चालू हो जाता है। App-open बंद रखने के लिए `AppOpenManager.getInstance().disableAppResume()` बुलाएँ |
 
@@ -117,7 +119,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 
 Native preload app/SDK code शुरू करता है। Replacement preload के लिए `setEnablePreload` और `preloadAfterShow` हैं; remote `preload.enabled` / `preload.after_show` समर्थित नहीं हैं। Onboarding schedule `lfo1_preload_mode`, `preload_trigger` और `onboarding.preload.*` से चलता है। Per-tier timeout `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` से तय होता है (default 30000 ms)।
 
-Splash और question interstitial slots पहले load होते हैं, फिर buffer से show होते हैं, इसलिए उनका `behavior` केवल `load.tier_timeout_ms` लेता है; `load_and_show.*` wait को अनदेखा किया जाता है क्योंकि slot पहले load और बाद में show होता है; वहाँ `load_and_show.*` field ignore होता है। केवल exit interstitial fill का इंतज़ार करता है: `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
+Splash interstitial slot पहले load होता है, फिर buffer से show होता है, इसलिए उसका `behavior` केवल `load.tier_timeout_ms` लेता है; `load_and_show.*` wait को अनदेखा किया जाता है क्योंकि slot पहले load और बाद में show होता है; वहाँ `load_and_show.*` field ignore होता है। केवल exit interstitial fill का इंतज़ार करता है: `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
 Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। Interval सेट करना timer चालू नहीं करता। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। Onboarding ad पर click अगला app-open छोड़ देता है, जब तक remote `app_open.presentation.skip_after_ad_click` को `false` न करे। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
 
@@ -137,7 +139,7 @@ Key पर `click_action` न हो तो defaults:
 | Natives | Default |
 | --- | --- |
 | Onboarding pager pages: content `ob1..ob4` और app के declared content steps, fullscreen `full1/full2` | `auto_next` |
-| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, question, OB5, splash natives (`native_splash`, `native_fs`) और app-screen natives | `reload` |
+| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash natives (`native_splash`, `native_fs`) और app-screen natives | `reload` |
 
 Pager page ads कभी reload नहीं होते: उन keys पर `reload` `none` की तरह चलता है। जिस LFO2 का अपना unit नहीं है वह LFO1 की key इस्तेमाल करता है, और उसके साथ LFO1 का action भी, बशर्ते वह key bound हो: `AdsConfig.fromAdConfig` (builder default) उसे bind करता है, और backend का उस key को declare करना भी। दोनों के बिना hand-built `AdsConfig(...)` में LFO2 `native_lang_alt` पढ़ता है। [Sample ad_config](examples/ads-onboarding/ad_config.json) हर native base key पर यही values explicit रूप से declare करता है।
 
@@ -155,7 +157,7 @@ Pager page ads कभी reload नहीं होते: उन keys पर `r
 
 ## Native template, CTA और X/Skip प्रयोग
 
-- `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; हर content-step का `native_template`: `""` यानी inherit; `question.native.template`: `CTA_BOTTOM`।
+- `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; हर content-step का `native_template`: `""` यानी inherit; Welcome Back `lfo.native_template` का पालन करता है।
 - Frame priority: remote template (per-step > screen/group) > backend के `ad_remote_config` से placement का `positionCTA` (`TOP`/`BOTTOM`) > custom app asset template (per-step > screen/group) > app की `ad_config.json` का `positionCTA` > host/SDK template। SDK-bundled asset अंतिम fallback है; app asset root की copy explicit override है। `positionCTA` स्वयं test करने के लिए संबंधित template override हटाएँ।
 - Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only Full1/Full2/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
 - Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। LFO1 मौजूदा preload mode के अनुसार schedule होता है, remote का इंतज़ार नहीं।
@@ -314,7 +316,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.steps.full2.fullscreen.skip.position` | `"RIGHT"` |
 | `onboarding.order` | App order when absent; array selects/reorders app catalog, `[]` skips pager. |
 | `onboarding.preload.ob5_on_last_step` | `true` |
-| `onboarding.preload.question_on_last_step` | `true` |
 | `onboarding.exit_interstitial.enabled` | `true` |
 | `onboarding.exit_interstitial.preload_on_entry` | `true` |
 | `onboarding.exit_interstitial.wait_timeout_ms` | `8000` |
@@ -327,15 +328,9 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `ob5.skip.style` | `"CLOSE_ICON"` |
 | `ob5.skip.position` | `"RIGHT"` |
 | `ob5.auto_dismiss_ms` | `15000` |
-| `question.enabled` | `true` |
-| `question.old_user_enabled` | `false` |
-| `question.native.behavior` | `{}` |
-| `question.native.template` | `"CTA_BOTTOM"` |
-| `question.native.refresh_on_select` | `false` |
-| `question.native.refresh_throttle_ms` | `2000` |
-| `question.interstitial.behavior` | `{}` |
-| `question.selection.mode` | `"MULTIPLE"` |
-| `question.selection.min_count` | `1` |
+| `welcome_back.enabled` | `true` |
+| `welcome_back.native1.behavior` | `{}` |
+| `welcome_back.native2.behavior` | `{}` |
 
 `native_fs` मौजूदा splash preload का इंतज़ार करता है और loading के दौरान shimmer दिखाता है; स्क्रीन खोलने पर नया request नहीं होता। डिफ़ॉल्ट रूप से ad bind होने के 3 सेकंड बाद X दिखता है। स्क्रीन अपने आप बंद नहीं होती; पुरानी `splash.native.auto_dismiss_ms` key अनदेखी की जाती है।
 

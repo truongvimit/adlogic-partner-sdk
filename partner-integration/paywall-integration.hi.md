@@ -139,10 +139,9 @@ fun Activity.openPremium(onFinished: (PaywallResult) -> Unit) {
 | OB checkpoint | PayKit का `PaywallPlacement` |
 | --- | --- |
 | Splash inter से पहले | `SPLASH` |
-| Onboarding या नए user के survey के बाद | `AFTER_ONBOARDING` |
-| पुराने user के survey के बाद | `OTHER` |
+| Onboarding के बाद | `AFTER_ONBOARDING` |
 
-SDK उसे checkpoint पर खोलता है; OB पूरा होने वाले listener से दोबारा launch न करें। `OTHER` पुराने user वाले checkpoint और आपकी app के अपने `OTHER` call site के बीच साझा है।
+SDK उसे checkpoint पर खोलता है; OB पूरा होने वाले listener से दोबारा launch न करें।
 
 ## 7. जाँच
 

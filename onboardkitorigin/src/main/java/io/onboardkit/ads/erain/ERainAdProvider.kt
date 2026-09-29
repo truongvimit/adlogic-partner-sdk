@@ -62,7 +62,6 @@ class ERainAdProvider : OnboardingAdProvider() {
 
     private val interKeys = listOf(
         AdPlacement.SplashInterstitial.key,
-        AdPlacement.QuestionInterstitial.key,
         AdPlacement.AfterOnboardingInterstitial.key,
     )
 

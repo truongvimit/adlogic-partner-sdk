@@ -112,7 +112,7 @@ class AdsGuardTest {
     fun `placement without an ad unit`() {
         assertEquals(
             AdSkipReason.NO_AD_UNIT,
-            guard().skipReason(context, AdPlacement.QuestionNative),
+            guard().skipReason(context, AdPlacement.WelcomeBack1),
         )
     }
 
@@ -122,7 +122,7 @@ class AdsGuardTest {
         assertNull(
             guard().skipReason(
                 context,
-                AdPlacement.QuestionInterstitial,
+                AdPlacement.AfterOnboardingInterstitial,
                 InterstitialAdUnit("remote-override"),
             ),
         )

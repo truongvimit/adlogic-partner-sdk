@@ -17,14 +17,13 @@ class SplashTimingTest {
     fun `first-open flow waits for the splash ad to close`() {
         assertEquals(AFTER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Start(FlowDestination.LANGUAGE, 0)))
         assertEquals(AFTER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Start(FlowDestination.ONBOARDING, 2)))
-        assertEquals(AFTER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Start(FlowDestination.QUESTION_NEW_USER, 0)))
+        assertEquals(AFTER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Start(FlowDestination.WELCOME_BACK, 0)))
     }
 
     @Test
     fun `launcher start after onboarding opens the destination under the splash ad`() {
         assertEquals(UNDER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Skip(SkipReason.ALREADY_COMPLETED)))
         assertEquals(UNDER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)))
-        assertEquals(UNDER_AD, defaultNextScreenTiming(null, { null }, StartDecision.Start(FlowDestination.QUESTION_OLD_USER, 0)))
     }
 
     @Test

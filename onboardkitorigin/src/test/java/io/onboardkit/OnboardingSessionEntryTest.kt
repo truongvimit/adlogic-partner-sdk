@@ -7,7 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
-import io.onboardkit.core.QuestionAnswer
+import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.StepId
 import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.StartDecision
@@ -33,6 +33,7 @@ import java.time.Duration
 class OnboardingSessionEntryTest {
     private lateinit var activity: ActivityController<Activity>
     private val outcomes = mutableListOf<OnboardingOutcome.Completed>()
+    private val skips = mutableListOf<OnboardingOutcome.Skipped>()
 
     @Before
     fun setUp() {
@@ -42,6 +43,7 @@ class OnboardingSessionEntryTest {
         }
         OnboardingSdk.setListener(OnboardingListener { _, outcome ->
             if (outcome is OnboardingOutcome.Completed) outcomes += outcome
+            if (outcome is OnboardingOutcome.Skipped) skips += outcome
         })
         OnboardingSdk.configure(onboardKitConfig {}.getOrThrow()).getOrThrow()
         runBlocking { OnboardingSdk.reset() }
@@ -54,17 +56,17 @@ class OnboardingSessionEntryTest {
     }
 
     @Test
-    fun `a later splash survey delivers its own completion once in the same process`() {
+    fun `a later splash run delivers its own completion once in the same process`() {
         startResolved(FlowDestination.LANGUAGE, "first")
         OnboardingSdk.persistLanguage("vi")
         OnboardingSdk.session.recordStepShown(StepId.OB1)
-        OnboardingSdk.session.answers += QuestionAnswer("old", "Old answer")
+        OnboardingSdk.session.goals += GoalAnswer("old", "Old goal")
         OnboardingSdk.completeFlow(activity.get())
         OnboardingSdk.completeFlow(activity.get())
         assertEquals(1, outcomes.size)
 
         // A returning user's splash calls startResolved directly, without public start().
-        startResolved(FlowDestination.QUESTION_OLD_USER, "returning")
+        startResolved(FlowDestination.WELCOME_BACK, "returning")
         OnboardingSdk.completeFlow(activity.get())
         OnboardingSdk.completeFlow(activity.get())
 
@@ -72,8 +74,29 @@ class OnboardingSessionEntryTest {
         val returning = outcomes.last()
         assertEquals("returning", returning.passthrough?.getString("entry"))
         assertEquals("vi", returning.selectedLanguage)
-        assertTrue("Prior onboarding steps cannot leak into a new survey", returning.stepsShown.isEmpty())
-        assertTrue("Prior survey answers cannot leak into a new run", returning.answers.isEmpty())
+        assertTrue("Prior onboarding steps cannot leak into a new run", returning.stepsShown.isEmpty())
+        assertTrue("Prior goals cannot leak into a new run", returning.goals.isEmpty())
+    }
+
+    @Test
+    fun `welcome back hands over without marking or completing anything`() {
+        val completedAt = runBlocking {
+            val store = requireNotNull(OnboardingSdk.stateStoreOrNull())
+            store.markFlowCompleted(nowMs = 42L)
+            store.current().flowCompletedAtMs
+        }
+        repeat(2) { launch ->
+            startResolved(FlowDestination.WELCOME_BACK, "launcher$launch")
+            OnboardingSdk.recordGoals(listOf(GoalAnswer("edit", "Edit PDF")))
+            OnboardingSdk.finishWelcomeBack(activity.get())
+            OnboardingSdk.finishWelcomeBack(activity.get())
+        }
+
+        assertTrue("Welcome Back never reports a completed flow", outcomes.isEmpty())
+        assertEquals("One hand-over per launch, every launch", listOf("launcher0", "launcher1"),
+            skips.map { it.passthrough?.getString("entry") })
+        assertTrue(skips.all { it.reason == io.onboardkit.core.SkipReason.ALREADY_COMPLETED })
+        assertEquals(completedAt, runBlocking { OnboardingSdk.stateStoreOrNull()!!.current().flowCompletedAtMs })
     }
 
     @Test

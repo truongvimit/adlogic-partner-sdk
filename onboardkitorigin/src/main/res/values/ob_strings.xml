@@ -15,8 +15,6 @@
     <string name="ob_sample_title_2">Enhance and beautify photos</string>
     <string name="ob_sample_subtitle_2">Improve the quality and aesthetics of your photos with advanced editing tools.</string>
 
-    <string name="ob_question_title_default">What do you want to explore?</string>
-    <string name="ob_question_cta_default">Continue</string>
     <string name="ob_no_internet_title">No Internet Connection</string>
     <string name="ob_no_internet_description">It seem you\'re offline. Reconnect to enjoy the full app experience</string>
     <string name="ob_no_internet_action">Enable Internet</string>
@@ -30,4 +28,12 @@
     <string name="ob_confirm_language_close">Close</string>
     <string name="ob_ad_badge_plural" translatable="false">Ads</string>
     <string name="ob_goal_continue">Continue</string>
+    <!-- Welcome Back: returning user, launcher tap -->
+    <string name="ob_welcome_back_title">What do you want to do with PDFs?</string>
+    <string name="ob_welcome_back_subtitle">Pick a goal and we’ll put the right tools up front.</string>
+    <string name="ob_welcome_back_option_edit">Edit PDF</string>
+    <string name="ob_welcome_back_option_add_text">Add text</string>
+    <string name="ob_welcome_back_option_sign">Sign &amp; fill</string>
+    <string name="ob_welcome_back_option_split_merge">Split &amp; merge</string>
+    <string name="ob_welcome_back_continue">Continue</string>
 </resources>

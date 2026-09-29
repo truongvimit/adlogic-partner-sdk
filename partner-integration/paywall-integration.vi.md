@@ -139,10 +139,9 @@ Kết quả: `Purchased(productId)`, `ContinueWithAds`, `Dismissed`, `Error(code
 | Checkpoint OB | `PaywallPlacement` của PayKit |
 | --- | --- |
 | Trước inter splash | `SPLASH` |
-| Sau onboarding hoặc khảo sát user mới | `AFTER_ONBOARDING` |
-| Sau khảo sát user cũ | `OTHER` |
+| Sau onboarding | `AFTER_ONBOARDING` |
 
-SDK mở tại checkpoint; không launch thêm từ listener hoàn tất OB. `OTHER` dùng chung cho checkpoint user cũ và điểm gọi `OTHER` của app.
+SDK mở tại checkpoint; không launch thêm từ listener hoàn tất OB.
 
 ## 7. Kiểm tra
 

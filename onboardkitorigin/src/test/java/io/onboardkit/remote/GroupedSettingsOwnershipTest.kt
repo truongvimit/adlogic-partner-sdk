@@ -68,7 +68,7 @@ class GroupedSettingsOwnershipTest {
             assertEquals(it.key, 2345L, OnboardingSettings.behavior(it).long("load.tier_timeout_ms", 30000L))
         }
         listOf(AdPlacement.SplashNative, AdPlacement.LanguageConfirm, AdPlacement.StepNative(StepId.OB1),
-            AdPlacement.StepFullScreen(StepId.FULL1), AdPlacement.Ob5, AdPlacement.QuestionNative).forEach {
+            AdPlacement.StepFullScreen(StepId.FULL1), AdPlacement.Ob5, AdPlacement.WelcomeBack1).forEach {
             assertEquals(it.key, 4321L, OnboardingSettings.behavior(it).long("load.tier_timeout_ms", 30000L))
         }
     }
@@ -117,11 +117,11 @@ class GroupedSettingsOwnershipTest {
 
     @Test fun `per step templates inherit group defaults and fixed ad hosts keep their geometry`() {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_BOTTOM"},"custom":{"native_template":"CTA_TOP"},"ob3":{"native_template":"COMPACT"}}},"question":{"native":{"template":"CTA_TOP"}}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_BOTTOM"},"custom":{"native_template":"CTA_TOP"},"ob3":{"native_template":"COMPACT"}}},"lfo":{"native_template":"CTA_TOP"}}""")
         assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId("custom"))))
-        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.QuestionNative))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.WelcomeBack1))
         assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.StepFullScreen(StepId.OB3)))
         assertEquals(NativeTemplate.DIALOG, NativeTemplates.templateForPlacement(AdPlacement.LanguageConfirm))
         assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.SplashNative))
@@ -136,11 +136,10 @@ class GroupedSettingsOwnershipTest {
         OnboardingSdk.configure(config)
         val remote = OnboardingSdk.remoteOrNull()!!
         remote.applySnapshot(RemoteFlags(uiContentJson = """{"steps":[{"id":"ob1","title":"Legacy title"}]}"""))
-        SettingsRegistry.acceptSuccessfulFetch(mapOf("onboarding_config" to """{"onboarding":{"navigation":{"lock_pager_swipe":false},"order":["ob1","full1","ob2","full2","ob3","ob4"]},"ui":{"content":{"steps":[{"id":"ob1","title":"Ignored"}]},"behavior":{"reload":{"allowed":true}}},"question":{"content":{"title":"Ignored","options":[]}}}"""))
+        SettingsRegistry.acceptSuccessfulFetch(mapOf("onboarding_config" to """{"onboarding":{"navigation":{"lock_pager_swipe":false},"order":["ob1","full1","ob2","full2","ob3","ob4"]},"ui":{"content":{"steps":[{"id":"ob1","title":"Ignored"}]},"behavior":{"reload":{"allowed":true}}}}"""))
         assertFalse(OnboardingSdk.requireConfig().behavior.lockPagerSwipe)
         assertNull(OnboardingSdk.requireConfig().stepById(StepId("custom")))
         assertFalse(OnboardingSettings.values.hasOverride("ui"))
-        assertFalse(OnboardingSettings.values.hasOverride("question.content"))
         assertEquals("Legacy title", remote.uiConfig.value.styleFor("ob1")?.title)
         SettingsRegistry.acceptSuccessfulFetch(mapOf("onboarding_config" to null))
         assertTrue(OnboardingSdk.requireConfig().behavior.lockPagerSwipe)

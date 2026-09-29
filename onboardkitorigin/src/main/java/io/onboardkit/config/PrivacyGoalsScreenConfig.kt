@@ -43,7 +43,7 @@ data class GoalsScreenConfig(
     /** @deprecated selected state is exposed through the item root's isSelected/Checkable state. */
     @Deprecated("Use the item root selected state or a selector drawable.")
     @IdRes val optionSelectedViewId: Int = 0,
-    val options: List<QuestionOption> = emptyList(),
+    val options: List<GoalOption> = emptyList(),
     val selectionMode: SelectionMode = SelectionMode.MULTIPLE,
     val minSelection: Int = 1,
 )

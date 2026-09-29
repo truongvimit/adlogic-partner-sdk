@@ -1,7 +1,6 @@
 package io.onboardkit.ui.splash
 
 import io.onboardkit.ads.NextScreenTiming
-import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.StartDecision
 
 internal fun resolveNextScreenTiming(
@@ -22,9 +21,8 @@ internal fun defaultNextScreenTiming(
 ): NextScreenTiming {
     if (entry != null) return NextScreenTiming.AFTER_AD
     configured()?.let { return it }
-    val opensFirstOpenFlow = (decision as? StartDecision.Start)
-        ?.let { it.destination != FlowDestination.QUESTION_OLD_USER } == true
-    return if (opensFirstOpenFlow) NextScreenTiming.AFTER_AD else NextScreenTiming.UNDER_AD
+    // Every SDK screen (LFO, Welcome Back) opens after the ad; only a skip lands under it.
+    return if (decision is StartDecision.Start) NextScreenTiming.AFTER_AD else NextScreenTiming.UNDER_AD
 }
 
 internal fun remainingMs(deadlineMs: Long?, nowMs: Long): Long =

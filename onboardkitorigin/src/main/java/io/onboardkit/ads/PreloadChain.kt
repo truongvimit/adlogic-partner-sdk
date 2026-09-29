@@ -16,7 +16,7 @@ import io.onboardkit.remote.RemoteFlags
  *   splash ready     → only the ads of the screen the flow is actually about to open
  *   LFO shown        → language native slot 2 (when the second slot is on)
  *   language picked  → all eligible content and fullscreen natives
- *   last step shown  → OB5 and question
+ *   last step shown  → OB5
  */
 class PreloadChain internal constructor(
     private val provider: OnboardingAdProvider?,
@@ -30,12 +30,14 @@ class PreloadChain internal constructor(
     private var plannedSteps: List<StepDefinition>? = null
     private var splashAttemptId: String? = null
     private var language1HandoffPending = false
+    private var welcome1HandoffPending = false
 
     internal fun beginSplashAttempt(id: String) {
         if (splashAttemptId == id) return
         resetStepRequests()
         splashAttemptId = id
         language1HandoffPending = false
+        welcome1HandoffPending = false
     }
 
     internal fun resetStepRequests() {
@@ -64,6 +66,11 @@ class PreloadChain internal constructor(
         language1HandoffPending = false
     }
 
+    /** [takeLanguage1Preload] for Welcome Back slot 1. */
+    internal fun takeWelcome1Preload(): Boolean = welcome1HandoffPending.also {
+        welcome1HandoffPending = false
+    }
+
     /**
      * Splash has settled remote, its configured ad waits and its permission prompt, and is ready to proceed.
      * Only the ads of [destination] are requested — a returning
@@ -71,20 +78,20 @@ class PreloadChain internal constructor(
      * paying for an LFO and an OB native that will never be shown.
      */
     @JvmOverloads
-    fun onSplashRemoteReady(activity: Activity, destination: FlowDestination?, resumeIndex: Int, language1AlreadyScheduled: Boolean = false) {
+    fun onSplashRemoteReady(activity: Activity, destination: FlowDestination?, resumeIndex: Int, firstNativeAlreadyScheduled: Boolean = false) {
         ObLog.d(ObLog.Section.PRELOAD, "splash_ready destination=$destination resumeIndex=$resumeIndex")
         config() ?: return
         when (destination) {
             FlowDestination.LANGUAGE -> {
-                if (!language1AlreadyScheduled) preloadLanguage1(activity)
+                if (!firstNativeAlreadyScheduled) preloadLanguage1(activity)
+            }
+
+            FlowDestination.WELCOME_BACK -> {
+                if (!firstNativeAlreadyScheduled) preloadWelcome1(activity)
             }
 
             FlowDestination.ONBOARDING ->
                 stepDefinitions().getOrNull(resumeIndex)?.let { preloadForStep(activity, it) }
-
-            FlowDestination.QUESTION_NEW_USER,
-            FlowDestination.QUESTION_OLD_USER,
-            -> preloadQuestion(activity)
 
             null -> Unit
         }
@@ -95,6 +102,18 @@ class PreloadChain internal constructor(
     fun preloadLanguage1(activity: Activity, allowWhileVisible: Boolean = false) {
         language1HandoffPending = true
         preloadNative(activity, AdPlacement.Language1, allowWhileVisible)
+    }
+
+    /** Same splash trigger and mode as [preloadLanguage1], for a returning launcher launch. */
+    @JvmOverloads
+    fun preloadWelcome1(activity: Activity, allowWhileVisible: Boolean = false) {
+        welcome1HandoffPending = true
+        preloadNative(activity, AdPlacement.WelcomeBack1, allowWhileVisible)
+    }
+
+    /** Welcome Back is on screen; slot 2 is buffered before the first tap swaps it in. */
+    fun preloadWelcome2(activity: Activity) {
+        preloadNative(activity, AdPlacement.WelcomeBack2)
     }
 
     /** Called only after the splash interstitial loads; owns a separate buffer from OB. */
@@ -145,7 +164,6 @@ class PreloadChain internal constructor(
         // Last pager step: warm every possible exit. OB5 used to have a preload nobody called, so
         // its native was never ready and the whole screen was unreachable.
         if (flags().enableStepOb5 && OnboardingSettings.bool("onboarding.preload.ob5_on_last_step")) preloadOb5(activity)
-        if (OnboardingSettings.bool("onboarding.preload.question_on_last_step")) preloadQuestion(activity)
     }
 
     fun preloadPrivacy1(activity: Activity) = preloadPartner(activity, StepId.PARTNER_PRIVACY)
@@ -157,15 +175,6 @@ class PreloadChain internal constructor(
         val cfg = config() ?: return
         if (!io.onboardkit.OnboardingSdk.offersPrivacyGoals(cfg)) return
         preloadNative(activity, AdPlacement.StepNative(id))
-    }
-
-    fun preloadQuestion(activity: Activity) {
-        val cfg = config() ?: return
-        preloadNative(activity, AdPlacement.QuestionNative)
-        val interUnit = cfg.ads.questionInterstitial ?: return
-        if (guard.skipReason(activity, AdPlacement.QuestionInterstitial) == null) {
-            provider?.loadInterstitial(activity, AdPlacement.QuestionInterstitial, interUnit)
-        }
     }
 
     private fun preloadOb5(activity: Activity) {

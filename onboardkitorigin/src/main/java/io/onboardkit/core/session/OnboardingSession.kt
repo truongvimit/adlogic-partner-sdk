@@ -1,7 +1,7 @@
 package io.onboardkit.core.session
 
 import android.os.Bundle
-import io.onboardkit.core.QuestionAnswer
+import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.StepId
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -19,7 +19,7 @@ internal class OnboardingSession {
     var selectedLanguage: String? = null
 
     val stepsShown = CopyOnWriteArrayList<StepId>()
-    val answers = CopyOnWriteArrayList<QuestionAnswer>()
+    val goals = CopyOnWriteArrayList<GoalAnswer>()
 
     /** CAS guard: the completion callback must fire exactly once per run. */
     val finished = AtomicBoolean(false)
@@ -47,7 +47,7 @@ internal class OnboardingSession {
     fun begin(passthrough: Bundle?, nowMs: Long = System.currentTimeMillis()) {
         this.passthrough = passthrough
         stepsShown.clear()
-        answers.clear()
+        goals.clear()
         finished.set(false)
         startedAtMs = nowMs
     }
@@ -56,7 +56,7 @@ internal class OnboardingSession {
         passthrough = null
         selectedLanguage = null
         stepsShown.clear()
-        answers.clear()
+        goals.clear()
         finished.set(false)
         startedAtMs = 0L
     }

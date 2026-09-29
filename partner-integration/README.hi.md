@@ -14,6 +14,8 @@
 
 वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
 
+Launcher से app खोलने वाला लौटता user splash के बाद Welcome Back स्क्रीन पर आता है; `welcome_back.enabled` इसे बंद करता है। [Welcome Back](welcome-back-screen.hi.md) देखें।
+
 ## App में जोड़ने का क्रम
 
 1. **मुख्य feature चुनें:** Ads/OB, अपने UI के साथ BillingKit, या दिए हुए UI के साथ PayKit। App में ads और purchases दोनों हो सकते हैं; PayKit खुद billing initialize करता है, इसलिए `AppPurchase.initBilling` से दूसरा catalog register न करें।

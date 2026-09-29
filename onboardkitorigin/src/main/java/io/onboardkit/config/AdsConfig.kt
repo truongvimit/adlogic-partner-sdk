@@ -106,8 +106,8 @@ enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
  * | [contentStepNative] | native on each onboarding content page |
  * | [fullScreenStepNative] | the ad-only onboarding pages |
  * | [ob5Native] | native on the extra onboarding page after OB4 (OB5) |
- * | [questionNative] | native on the survey/question screen |
- * | [questionInterstitial] | full-screen ad after the survey is submitted |
+ * | [welcomeBackNative] | native on the returning-user Welcome Back screen |
+ * | [welcomeBackDupNative] | native that replaces it on the first option tap |
  */
 data class AdsConfig(
     val splashBanner: BannerAdUnit? = null,
@@ -150,13 +150,12 @@ data class AdsConfig(
     val stepNatives: Map<StepId, NativeAdUnit> = emptyMap(),
     /** OB5 pool is its own field — the original reused OB3's config by accident. */
     val ob5Native: NativeAdUnit? = null,
-    val questionNative: NativeAdUnit? = null,
-    val questionInterstitial: InterstitialAdUnit? = null,
+    val welcomeBackNative: NativeAdUnit? = null,
+    val welcomeBackDupNative: NativeAdUnit? = null,
     /** App-resume / app-open ad, shown when the app returns to the foreground. */
     val appResume: InterstitialAdUnit? = null,
     val contentStepTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("onboarding.ads.content_template")),
     val languageTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("lfo.native_template")),
-    val questionTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("question.native.template")),
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
     val skipAdOnlyStepsWhenPremium: Boolean = OnboardingSettings.defaultBool("flow.skip_ad_only_steps_when_premium"),
     /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */
@@ -208,8 +207,8 @@ data class AdsConfig(
                 AdPlacement.StepFullScreen(StepId.FULL1) to "native_full1",
                 AdPlacement.StepFullScreen(StepId.FULL2) to "native_full2",
                 AdPlacement.Ob5 to "native_onboarding_fullscreen_1_4",
-                AdPlacement.QuestionNative to "native_question",
-                AdPlacement.QuestionInterstitial to "inter_question",
+                AdPlacement.WelcomeBack1 to "native_welcome1",
+                AdPlacement.WelcomeBack2 to "native_welcome2",
                 AdPlacement.AppResume to "open_resume",
             )
     }
@@ -267,8 +266,8 @@ data class AdsConfig(
                 }
             },
             ob5Native = native(AdPlacement.Ob5, ob5Native),
-            questionNative = native(AdPlacement.QuestionNative, questionNative),
-            questionInterstitial = inter(AdPlacement.QuestionInterstitial, questionInterstitial),
+            welcomeBackNative = native(AdPlacement.WelcomeBack1, welcomeBackNative),
+            welcomeBackDupNative = native(AdPlacement.WelcomeBack2, welcomeBackDupNative),
             afterOnboardingInterstitial = inter(AdPlacement.AfterOnboardingInterstitial, afterOnboardingInterstitial),
             appResume = inter(AdPlacement.AppResume, appResume),
         )
@@ -295,8 +294,8 @@ data class AdsConfig(
         is AdPlacement.StepNative -> stepNatives[placement.stepId] ?: contentStepNative
         is AdPlacement.StepFullScreen -> stepNatives[placement.stepId] ?: fullScreenStepNative
         AdPlacement.Ob5 -> ob5Native ?: stepNatives[StepId.OB5] ?: fullScreenStepNative
-        AdPlacement.QuestionNative -> questionNative
-        AdPlacement.QuestionInterstitial -> questionInterstitial
+        AdPlacement.WelcomeBack1 -> welcomeBackNative
+        AdPlacement.WelcomeBack2 -> welcomeBackDupNative
         AdPlacement.AppResume -> appResume
     }
 }

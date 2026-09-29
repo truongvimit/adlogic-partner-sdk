@@ -12,6 +12,8 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
+User cũ mở app từ launcher sẽ vào màn Welcome Back sau splash; tắt bằng `welcome_back.enabled`. Xem [Welcome Back](welcome-back-screen.vi.md).
+
 Native trong pager được giữ khi view của trang còn tồn tại; quay lại content hoặc Full1/Full2 hiển thị cùng ad, không xin request mới. Auto-next fullscreen bắt đầu lại mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật hoặc cần chống kẹt. No-fill lần đầu tự đi tiếp; quay lại trang lỗi hiện fallback và Skip. Ad được giải phóng khi view bị hủy.
 
 ## 1. Thêm dependency
@@ -165,7 +167,7 @@ Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) cùng pack
 
 Placement đã khai báo nhưng bị tắt giữ unit rỗng, không lấy quảng cáo của slot khác. Chỉ khi LFO2 không có unit mới fallback LFO1; tắt hành động thay native bằng `onboarding_config.lfo.native2.enabled = false`.
 
-Template native điều khiển qua `lfo.native_template`, `onboarding.ads.content_template`, `onboarding.steps.<id>.native_template` và `question.native.template`. Template override từ remote ưu tiên trước, rồi `positionCTA` từ `ad_remote_config` của backend, rồi template trong asset app, rồi `positionCTA` từ `ad_config.json` của app, rồi template host/SDK. Fullscreen/popup giữ layout cố định. Màu, chiều cao CTA và components vẫn ở ad_config; reference resource/layout của app vẫn trong code.
+Template native điều khiển qua `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template`; Welcome Back theo `lfo.native_template`. Template override từ remote ưu tiên trước, rồi `positionCTA` từ `ad_remote_config` của backend, rồi template trong asset app, rồi `positionCTA` từ `ad_config.json` của app, rồi template host/SDK. Fullscreen/popup giữ layout cố định. Màu, chiều cao CTA và components vẫn ở ad_config; reference resource/layout của app vẫn trong code.
 
 ## 5. Khởi tạo trong Application
 
@@ -274,7 +276,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Hành vi | Mặc định | Chỉ đổi khi / nơi đổi |
 | --- | --- | --- |
 | Màn splash | Layout SDK; minimum display 3000 ms tính từ pha tải ads | `onboarding_config.splash.timing.min_display_ms` (`0` hợp lệ nghĩa là không giữ minimum này) hoặc `ob_splash_min_display_ms` đã gửi (`<= 0` giữ giá trị local); khi remote không gửi thì dùng asset app, rồi `SplashConfig.minDisplayTimeMs`. |
-| Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu: chờ đóng inter. Launcher → app/khảo sát người dùng cũ: mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định. `splash.navigation.next_screen_timing` khác `AUTO`, từ remote hoặc asset app, ưu tiên hơn override này ở mọi lần mở, kể cả notification/widget/uninstall; `UNDER_AD` còn bỏ màn native_fs của splash ở lần mở đó |
+| Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu và Welcome Back của người dùng cũ: chờ đóng inter. Launcher → app (tắt `welcome_back.enabled`): mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định. `splash.navigation.next_screen_timing` khác `AUTO`, từ remote hoặc asset app, ưu tiên hơn override này ở mọi lần mở, kể cả notification/widget/uninstall; `UNDER_AD` còn bỏ màn native_fs của splash ở lần mở đó |
 | Chờ quảng cáo splash | Tối đa 60 giây sau notification và khi splash có focus | Remote `ob_splash_ad_budget_ms`; không tự thêm timer |
 | Remote / ads | Consent → slot + interstitial; remote chạy song song trong SDK và tiếp tục sau splash. | Dùng giá trị asset/cache/remote hiện có; xem mục timing bên dưới. |
 | LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
@@ -286,17 +288,17 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Back ở LFO | Chưa chọn: bỏ qua Back. Đã chọn: hiện Save, vẫn ở màn ngôn ngữ | `LanguageConfig.saveButtonOnBackEnabled = false`: bỏ qua Back cả sau khi chọn. SETTINGS Back đóng màn |
 | Thay native sau chọn ngôn ngữ | Bật; native đầu giữ nguyên đến khi ad thay thế bind được | `LanguageConfig.secondNativeOnSelectEnabled = false` để tắt |
 | Popup ngôn ngữ | Chọn lại ngôn ngữ hiện tại thì mở ngay. Chọn ngôn ngữ khác chỉ mở từ tổng click thứ 4; click chọn lại vẫn được cộng count. Native request lần đầu khi mở popup | `LanguageConfig.confirmDialogOnReselectEnabled = false` để tắt; SETTINGS không hiện popup |
-| Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. `positionCTA` từ `ad_remote_config` của backend còn thắng cả template trong asset app. [Thứ tự ưu tiên](remote-settings.vi.md). |
+| Native template | SDK: LFO/Welcome Back `CTA_BOTTOM`, content `CTA_TOP`; ad_config mẫu dùng `positionCTA` từng slot | Chỉnh template trong `onboarding_config`; thiếu override thì dùng `ad_config.<key>.positionCTA` rồi host/default. `positionCTA` từ `ad_remote_config` của backend còn thắng cả template trong asset app. [Thứ tự ưu tiên](remote-settings.vi.md). |
 | System bars | Hiện status/caption bar, ẩn navigation bar | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
 | Click native rồi quay lại OB | Trang content và fullscreen trong pager tự chuyển khi quay lại (`auto_next`), không bao giờ tải ad thay thế | `"click_action": "none"` trên base key của trang (`native_ob1`…) để ở lại; [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native) |
-| Click native ở LFO/popup, OB5, question hoặc màn app | Preload ngay khi click/open (`reload`); quay lại bind ad sẵn có hoặc chờ request đang chạy | `click_action` trên base key của placement trong ad_config, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
+| Click native ở LFO/popup, Welcome Back, OB5 hoặc màn app | Preload ngay khi click/open (`reload`); quay lại bind ad sẵn có hoặc chờ request đang chạy | `click_action` trên base key của placement trong ad_config, độc lập refresh theo thời gian; [ví dụ native trong app](#native-ở-màn-app-dùng-placement-constant) |
 | Mở lại khi chưa xong flow | Chạy lại Splash → LFO → OB; chỉ bỏ OB khi hoàn thành toàn bộ | Không cần tự lưu cờ first-open/checkpoint trong app |
 | Trang native fullscreen | X sau 5 giây, auto-next sau 15 giây từ lúc chọn trang; thời gian background vẫn được tính. Shimmer phủ đầy khung native, media toàn khung và CTA ở đáy. | Các trường của `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` giữ delay local |
 | Inter cuối onboarding | Preload lúc vào pager, đợi fill tối đa 8 giây khi hoàn thành; mở màn dưới inter. Notification/widget/uninstall: chờ đóng | `AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.AFTER_AD` để luôn chờ đóng; `afterOnboardingInterstitialEnabled = false` nếu app tự quản lý. Không đưa vào `InterstitialAutoBuffer` |
 | Điều hướng OB | Khi bật swipe: OB1 vẫn khóa; OB2 và trang nội dung cuối được swipe. Fullscreen khóa khi đang load/bind, chỉ mở sau impression của ads; mỗi lần vào lại trang bắt đầu ở trạng thái khóa. Cờ khóa swipe toàn cục vẫn ưu tiên. | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back luôn thoát app), `lockPortrait`; app ngang cần sửa cả manifest |
 | Khoảng cách interstitial | `ERainAdConfig.intervalInterstitialAd = 0` (không giới hạn); chỉ áp nhóm `InterstitialAutoBuffer`, không áp splash/OB/inter tự load | Đặt trước init hoặc dùng `ERainAd.getInstance().setIntervalInterstitialAd(giây)` |
 | Giới hạn click interstitial | Tắt (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: mỗi ad unit tối đa `n` click/24 giờ rồi ngừng load/show. Gọi lúc cần, thường sau fetch remote |
-| OB5, khảo sát, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (host setup). Paywall chưa nối. Khảo sát và app-open vẫn tắt trừ khi app tự nối hoặc remote bật: `ob_question_config` hợp lệ hiện khảo sát cho người dùng mới, và `open_resume` kèm ID trong `ad_remote_config` của backend bật [app-open](#app-open-khi-quay-lại) | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối khảo sát/paywall/app-open khi cần |
+| OB5, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. `ob5Native` null dùng `fullScreenStepNative` (host setup). Paywall chưa nối. App-open vẫn tắt trừ khi app tự nối hoặc remote bật: `open_resume` kèm ID trong `ad_remote_config` của backend bật [app-open](#app-open-khi-quay-lại) | `AdsConfig.ob5Native` để đặt ID riêng; chỉ nối paywall/app-open khi cần |
 
 UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `ConsentCenter.setHostConsent(false, false)` từ CMP riêng vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
 
@@ -316,7 +318,7 @@ Hai JSON giữ field/giá trị example debug, chỉ chuẩn hóa interstitial s
 | `reloadIntervalSeconds` | Banner: `30` | Số dương đặt nhịp auto-reload (giây) cho mọi banner gắn placement, kể cả splash, khi `banner.reload.auto_enabled` là `true` (mặc định). Thiếu, `0` hoặc sai dùng giá trị host/SDK (15000ms). Cách gắn ở màn app: [Banner ở màn app](#tích-hợp-bổ-sung). |
 | `colorCTA` | `"default"` | Giữ màu template; thay màu khi cần tùy biến native. |
 | `heightCTA` | Native thường `45`, popup `36` | Chiều cao CTA (dp); SDK dùng `40` nếu bỏ field và ép giá trị vào khoảng 36–52 khi áp dụng. |
-| `positionCTA` | `"BOTTOM"` hoặc `null` | Chọn khung LFO/content/question theo từng placement khi chưa có template onboarding override từ remote. Giá trị từ file này còn nhường cho template trong asset app; giá trị từ `ad_remote_config` của backend thì không. `null` giữ host/SDK fallback; fullscreen/popup dùng layout cố định. |
+| `positionCTA` | `"BOTTOM"` hoặc `null` | Chọn khung LFO/content theo từng placement khi chưa có template onboarding override từ remote. Giá trị từ file này còn nhường cho template trong asset app; giá trị từ `ad_remote_config` của backend thì không. `null` giữ host/SDK fallback; fullscreen/popup dùng layout cố định. |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Khối thiếu bị ẩn, mảng rỗng giữ visibility và thứ tự của XML. OB chỉ đổi visibility; [native màn app](#native-ở-màn-app-dùng-placement-constant) dùng cả thứ tự khi `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | Thời gian chờ tải app-open sau khi app ra background; chỉ có tác dụng khi đã bật app-resume. |
 | `click_action` | `"auto_next"` ở `native_ob1..4` và `native_full1/2`; `"reload"` ở mọi native khác | Hành động khi quay lại sau click ad native. Chỉ đọc ở base key, không đọc ở floor `_high`; giữ cùng giá trị ở cả hai file. Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native). |
@@ -460,7 +462,7 @@ Chỉ làm khi sản phẩm dùng app-open. `AppOpenManager` thuộc `com.ads.mo
 3. **Remote JSON:** không cần thêm gì — SDK tự trỏ lại ID app-resume theo `open_resume` mỗi lần config đổi, gồm cả bật/tắt bằng `isEnable`, miễn là `open_resume` có ad unit ID. `open_resume` từ `ad_remote_config` của backend không cần seed; `open_resume` từ `ad_config.json` chỉ áp dụng sau khi bước 2 đã đặt một ID khác rỗng. Vì bước 2 đọc lúc init, hãy ship `open_resume` **bật kèm ID thật** trong `ad_config.json` khi dựa vào asset.
 4. **Intent ra ngoài** (browser/share/review): gọi `AppOpenManager.getInstance().disableAdResumeByClickAction()` ngay sau `startActivity(...)` để bỏ qua lần quay lại. `disableAppResume()`/`enableAppResume()` là công tắc cả process.
 
-Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy cảm của app. LFO/trang nội dung OB có thể hiện app-open sẵn có khi quay lại, trừ fullscreen, lúc chuyển trang, lúc mở popup và sau khi click vào ad onboarding (trừ khi remote đặt `app_open.presentation.skip_after_ad_click` là `false`). Delay/gate xem [app-open](../onboardkitorigin/README.vi.md#app-open-khi-quay-lại-app).
+Splash/OB5/Welcome Back tự loại trừ; chỉ đăng ký thêm màn nhạy cảm của app. LFO/trang nội dung OB có thể hiện app-open sẵn có khi quay lại, trừ fullscreen, lúc chuyển trang, lúc mở popup và sau khi click vào ad onboarding (trừ khi remote đặt `app_open.presentation.skip_after_ad_click` là `false`). Delay/gate xem [app-open](../onboardkitorigin/README.vi.md#app-open-khi-quay-lại-app).
 
 </details>
 

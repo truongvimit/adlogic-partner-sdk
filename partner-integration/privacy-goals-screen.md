@@ -8,15 +8,15 @@ Privacy → Goal is an optional final part of onboarding: Splash → language �
 { "privacy_goals_screen": { "enabled": true } }
 ```
 
-The SDK default is `false`. The host can also enable it in `PrivacyGoalsScreenConfig`; remote and app assets take priority over code. Supply `goal.options`, or the host's `question.options` as fallback. Without either list the SDK logs a warning, skips these screens and their native preloads, and follows the normal onboarding exit. Screen availability does not depend on ad fill or premium status.
+The SDK default is `false`. The host can also enable it in `PrivacyGoalsScreenConfig`; remote and app assets take priority over code. Supply `goal.options`. Without that list the SDK logs a warning, skips these screens and their native preloads, and follows the normal onboarding exit. Screen availability does not depend on ad fill or premium status.
 
 ```kotlin
 privacyGoalsScreen = PrivacyGoalsScreenConfig(
     enabled = true,
     goal = GoalsScreenConfig(
         options = listOf(
-            QuestionOption("work", title = "Work", imageRes = R.drawable.partner_work),
-            QuestionOption("study", title = "Study", imageRes = R.drawable.partner_study),
+            GoalOption("work", title = "Work", imageRes = R.drawable.partner_work),
+            GoalOption("study", title = "Study", imageRes = R.drawable.partner_study),
         ),
         selectionMode = SelectionMode.MULTIPLE,
         minSelection = 1,
@@ -57,6 +57,6 @@ The base `isEnable` controls its entire waterfall, including `_high`. Turning of
 
 Privacy's first native preloads on the actual last pager step, including a fullscreen step. `onboarding.exit_interstitial.next_screen_timing` remains effective: `UNDER_AD` opens Privacy under the exit ad; `AFTER_AD` waits for dismissal. Notification/widget/uninstall entries wait for dismissal in this exit path.
 
-Privacy requires acceptance before Continue. Finishing Goal persists `QuestionAnswer` values, emits `OnboardingEvent.QuestionAnswered`, and completes onboarding directly; this branch does not continue to the ordinary OB5/question/paywall exit. Back from Goal returns to Privacy; Back from Privacy closes the task. Goal choices are selected again when the Goal screen is recreated.
+Privacy requires acceptance before Continue. Finishing Goal records the picks as `GoalAnswer` values (emitted as `OnboardingEvent.GoalsSelected`, returned in `OnboardingOutcome.Completed.goals` and later by `OnboardingSdk.selectedGoals()`) and completes onboarding directly; this branch does not continue to the ordinary OB5/paywall exit. Back from Goal returns to Privacy; Back from Privacy closes the task. Goal choices are selected again when the Goal screen is recreated.
 
 The flow is marked complete only after Goal finishes. Closing the app beforehand leaves it unfinished; the next launch starts again from Splash → language. Disabling the feature skips inflating these layouts and uses the ordinary onboarding exit.

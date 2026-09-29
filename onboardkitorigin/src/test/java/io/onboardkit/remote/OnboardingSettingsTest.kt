@@ -15,7 +15,7 @@ class OnboardingSettingsTest {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
             assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
         }
         listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId("custom_page")).forEach {
@@ -105,17 +105,15 @@ class OnboardingSettingsTest {
         assertEquals("en-US", unrestricted.defaultCode)
     }
 
-    @Test fun `buffered splash and question interstitials drop a load-and-show wait the exit ad keeps`() {
+    @Test fun `the buffered splash interstitial drops a load-and-show wait the exit ad keeps`() {
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
             {
               "splash": {"ads": {"interstitial": {"behavior": {"load": {"tier_timeout_ms": 15000}, "load_and_show": {"wait_timeout_ms": 2000}}}}},
-              "question": {"interstitial": {"behavior": {"load_and_show": {"wait_timeout_ms": 2000}}}},
               "onboarding": {"exit_interstitial": {"behavior": {"load_and_show": {"wait_timeout_ms": 2000}}}}
             }
         """.trimIndent()))
         val v = OnboardingSettings.values
         assertNull(v.remoteValue("splash.ads.interstitial.behavior.load_and_show.wait_timeout_ms"))
-        assertNull(v.remoteValue("question.interstitial.behavior.load_and_show.wait_timeout_ms"))
         assertEquals(15000L, (v.remoteValue("splash.ads.interstitial.behavior.load.tier_timeout_ms") as Number).toLong())
         assertEquals(2000L, (v.remoteValue("onboarding.exit_interstitial.behavior.load_and_show.wait_timeout_ms") as Number).toLong())
     }
@@ -143,7 +141,7 @@ class OnboardingSettingsTest {
     }
 
     @Test fun `sparse remote resolves screens and preserves the host-only ads gate`() {
-        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
+        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(), language = LanguageConfig(), system = SystemBarConfig(), behavior = BehaviorConfig(),
             steps = listOf(AdFullScreenStepDefinition(StepId.OB3, autoNextDelayMs = 9000)))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":true},"onboarding":{"navigation":{"lock_pager_swipe":false},"fullscreen":{"auto_next":{"enabled":false}},"steps":{"ob3":{"fullscreen":{"skip":{"delay_ms":0}}}}}}""")
         val effective = OnboardingSettings.resolve(c)

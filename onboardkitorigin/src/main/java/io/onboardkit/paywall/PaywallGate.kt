@@ -6,7 +6,6 @@ import android.app.Activity
 enum class PaywallPlacement {
     SPLASH_INTER,
     AFTER_ONBOARDING,
-    AFTER_QUESTION_OLD_USER,
 }
 
 sealed interface PaywallOutcome {

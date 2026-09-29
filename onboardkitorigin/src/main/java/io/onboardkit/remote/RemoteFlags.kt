@@ -19,8 +19,6 @@ data class RemoteFlags(
     val enableStepOb3: Boolean = ObRemoteKeys.ENABLE_STEP_OB3.default,
     val enableStepOb4: Boolean = ObRemoteKeys.ENABLE_STEP_OB4.default,
     val enableStepOb5: Boolean = ObRemoteKeys.ENABLE_STEP_OB5.default,
-    val enableQuestion: Boolean = ObRemoteKeys.ENABLE_QUESTION.default,
-    val enableQuestionOldUser: Boolean = ObRemoteKeys.ENABLE_QUESTION_OLD_USER.default,
     val enableLanguageNative2: Boolean = ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2.default,
     /** Legacy remote value; partial progress no longer bypasses LFO on a new launch. */
     val passLfoIfCompleted: Boolean = ObRemoteKeys.PASS_LFO_IF_COMPLETED.default,
@@ -37,8 +35,6 @@ data class RemoteFlags(
     val adsLanguageConfirmNative: Boolean = ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.default,
     val adsContentNative: Boolean = ObRemoteKeys.ADS_CONTENT_NATIVE.default,
     val adsFullScreenNative: Boolean = ObRemoteKeys.ADS_FULLSCREEN_NATIVE.default,
-    val adsQuestionNative: Boolean = ObRemoteKeys.ADS_QUESTION_NATIVE.default,
-    val adsQuestionInter: Boolean = ObRemoteKeys.ADS_QUESTION_INTER.default,
     val adsAppResume: Boolean = ObRemoteKeys.ADS_APP_RESUME.default,
     val splashLfoParallelPreloadEnabled: Boolean = ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED.default,
     val splashNotificationSettleMs: Long = ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.default,
@@ -55,7 +51,6 @@ data class RemoteFlags(
     val showSkipOb5: Boolean = ObRemoteKeys.SHOW_SKIP_OB5.default,
     val uiContentJson: String = ObRemoteKeys.UI_CONTENT_JSON.default,
     val uiDesignTokensJson: String = ObRemoteKeys.UI_DESIGN_TOKENS_JSON.default,
-    val questionConfigJson: String = ObRemoteKeys.QUESTION_CONFIG_JSON.default,
     val configVersion: Long = ObRemoteKeys.CONFIG_VERSION.default,
     val languageTapHintDelaySec: Long = ObRemoteKeys.LANGUAGE_TAP_HINT_DELAY_SEC.default,
     /**
@@ -75,7 +70,6 @@ data class RemoteFlags(
         StepId.OB3 -> enableStepOb3
         StepId.OB4 -> enableStepOb4
         StepId.OB5 -> enableStepOb5
-        StepId.QUESTION -> enableQuestion
         else -> true
     }
 
@@ -88,7 +82,7 @@ data class RemoteFlags(
     fun adSummary(): String = "flags splashBanner=$adsSplashBanner splashInter=$adsSplashInter lang=$adsLanguageNative " +
             "langConfirm=$adsLanguageConfirmNative afterOnboardInter=$adsAfterOnboardInter " +
         "content=$adsContentNative fullScreen=$adsFullScreenNative " +
-        "questionNative=$adsQuestionNative questionInter=$adsQuestionInter resume=$adsAppResume " +
+        "resume=$adsAppResume " +
         "reuseSplashInter=$reuseSplashInter minDisplayMs=$splashMinDisplayMs " +
         "adBudgetMs=$splashAdBudgetMs slotMinVisibleMs=$splashSlotMinVisibleMs " +
         "lfoPreload=${if (splashLfoParallelPreloadEnabled) "parallel" else "sequential"} notificationSettleMs=$splashNotificationSettleMs"
@@ -118,8 +112,6 @@ data class RemoteFlags(
                 enableStepOb3 = bool(ObRemoteKeys.ENABLE_STEP_OB3),
                 enableStepOb4 = bool(ObRemoteKeys.ENABLE_STEP_OB4),
                 enableStepOb5 = bool(ObRemoteKeys.ENABLE_STEP_OB5),
-                enableQuestion = bool(ObRemoteKeys.ENABLE_QUESTION),
-                enableQuestionOldUser = bool(ObRemoteKeys.ENABLE_QUESTION_OLD_USER),
                 enableLanguageNative2 = bool(ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2),
                 passLfoIfCompleted = bool(ObRemoteKeys.PASS_LFO_IF_COMPLETED),
                 showLanguageTapHint = bool(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT),
@@ -138,8 +130,6 @@ data class RemoteFlags(
                 adsLanguageConfirmNative = bool(ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE),
                 adsContentNative = bool(ObRemoteKeys.ADS_CONTENT_NATIVE),
                 adsFullScreenNative = bool(ObRemoteKeys.ADS_FULLSCREEN_NATIVE),
-                adsQuestionNative = bool(ObRemoteKeys.ADS_QUESTION_NATIVE),
-                adsQuestionInter = bool(ObRemoteKeys.ADS_QUESTION_INTER),
                 adsAppResume = bool(ObRemoteKeys.ADS_APP_RESUME),
                 splashLfoParallelPreloadEnabled = bool(ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED),
                 splashNotificationSettleMs = long(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS).coerceAtLeast(0),
@@ -154,8 +144,6 @@ data class RemoteFlags(
                     ?: ObRemoteKeys.UI_CONTENT_JSON.default,
                 uiDesignTokensJson = reader.string(ObRemoteKeys.UI_DESIGN_TOKENS_JSON.key)
                     ?: ObRemoteKeys.UI_DESIGN_TOKENS_JSON.default,
-                questionConfigJson = reader.string(ObRemoteKeys.QUESTION_CONFIG_JSON.key)
-                    ?: ObRemoteKeys.QUESTION_CONFIG_JSON.default,
                 configVersion = long(ObRemoteKeys.CONFIG_VERSION),
                 supplied = ObRemoteKeys.ALL.mapNotNullTo(mutableSetOf()) { k -> k.key.takeIf { reader.string(it) != null } },
             )

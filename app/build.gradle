@@ -168,7 +168,7 @@ dependencies {
     // Billing engine — split out of :ads; this app sells IAP, so it declares the module itself
     implementation project(':billingkit')
 
-    // OnboardKit — first-open flow (splash, language, onboarding, question)
+    // OnboardKit — first-open flow (splash, language, onboarding) and Welcome Back
     implementation project(':onboardkitorigin')
 
     // Trackkit — single analytics fan-out. The core is vendor-free; the Firebase adapter lives in

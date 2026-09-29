@@ -16,6 +16,8 @@ Chọn hướng dẫn theo tính năng app cần. Làm lần lượt phần tíc
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
+User cũ mở app từ launcher sẽ vào màn Welcome Back sau splash; tắt bằng `welcome_back.enabled`. Xem [Welcome Back](welcome-back-screen.vi.md).
+
 ## Thứ tự ghép vào app
 
 1. **Chọn tính năng chính:** Ads/OB, BillingKit với UI riêng hoặc PayKit có UI sẵn. App có thể ghép ads và mua hàng; PayKit tự khởi tạo billing nên không đăng ký thêm catalog bằng `AppPurchase.initBilling`.

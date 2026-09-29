@@ -24,8 +24,6 @@ object ObRemoteKeys {
     val ENABLE_STEP_OB3 = RemoteKey.BoolKey("ob_enable_step_ob3", true)
     val ENABLE_STEP_OB4 = RemoteKey.BoolKey("ob_enable_step_ob4", true)
     val ENABLE_STEP_OB5 = RemoteKey.BoolKey("ob_enable_step_ob5", OnboardingSettings.defaultBool("ob5.enabled"))
-    val ENABLE_QUESTION = RemoteKey.BoolKey("ob_enable_question", OnboardingSettings.defaultBool("question.enabled"))
-    val ENABLE_QUESTION_OLD_USER = RemoteKey.BoolKey("ob_enable_question_old_user", OnboardingSettings.defaultBool("question.old_user_enabled"))
 
     // Language flow
     /** Second native shown in-place on the LFO after the first language tap. */
@@ -70,8 +68,6 @@ object ObRemoteKeys {
         RemoteKey.BoolKey("ob_ads_language_confirm_native_enabled", true)
     val ADS_CONTENT_NATIVE = RemoteKey.BoolKey("ob_ads_content_native_enabled", true)
     val ADS_FULLSCREEN_NATIVE = RemoteKey.BoolKey("ob_ads_fullscreen_native_enabled", true)
-    val ADS_QUESTION_NATIVE = RemoteKey.BoolKey("ob_ads_question_native_enabled", true)
-    val ADS_QUESTION_INTER = RemoteKey.BoolKey("ob_ads_question_inter_enabled", true)
     val ADS_APP_RESUME = RemoteKey.BoolKey("ob_ads_app_resume_enabled", true)
 
     // Splash interstitial ids — the returning-user segment and the SplashEntry keys
@@ -113,7 +109,6 @@ object ObRemoteKeys {
     // Server-driven UI payloads
     val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")
     val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "")
-    val QUESTION_CONFIG_JSON = RemoteKey.StringKey("ob_question_config", "")
 
     /** Version stamp: when it changes, the local cache is cleared before syncing. */
     val CONFIG_VERSION = RemoteKey.LongKey("ob_config_version", 0)
@@ -121,7 +116,6 @@ object ObRemoteKeys {
     val ALL: List<RemoteKey<*>> = listOf(
         ENABLE_UI_CONTENT,
         ENABLE_STEP_OB1, ENABLE_STEP_OB2, ENABLE_STEP_OB3, ENABLE_STEP_OB4, ENABLE_STEP_OB5,
-        ENABLE_QUESTION, ENABLE_QUESTION_OLD_USER,
         ENABLE_LANGUAGE_NATIVE_2, PASS_LFO_IF_COMPLETED, LANGUAGE_SUPPORTED_CODES,
         SHOW_LANGUAGE_TAP_HINT, LANGUAGE_TAP_HINT_DELAY_SEC, SHOW_LANGUAGE_CONFIRM_BEFORE_SELECT,
         SHOW_LANGUAGE_CONFIRM_DIALOG,
@@ -131,12 +125,12 @@ object ObRemoteKeys {
         ADS_AFTER_ONBOARD_INTER,
         ADS_LANGUAGE_NATIVE,
         ADS_LANGUAGE_CONFIRM_NATIVE,
-        ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE, ADS_QUESTION_NATIVE, ADS_QUESTION_INTER,
+        ADS_CONTENT_NATIVE, ADS_FULLSCREEN_NATIVE,
         ADS_APP_RESUME,
         SPLASH_LFO_PARALLEL_PRELOAD_ENABLED, SPLASH_NOTIFICATION_SETTLE_MS,
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_SLOT_MIN_VISIBLE_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,
-        UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, QUESTION_CONFIG_JSON, CONFIG_VERSION,
+        UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, CONFIG_VERSION,
     )
 }

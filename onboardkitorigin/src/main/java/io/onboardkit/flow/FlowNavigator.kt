@@ -5,11 +5,15 @@ import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
 import io.onboardkit.core.StepType
 import io.onboardkit.core.state.OnboardingState
-import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 
 /** Where to go after splash. */
-enum class FlowDestination { LANGUAGE, ONBOARDING, QUESTION_NEW_USER, QUESTION_OLD_USER }
+enum class FlowDestination {
+    LANGUAGE, ONBOARDING,
+
+    /** Returning user, launcher tap: the one-choice Welcome Back screen. */
+    WELCOME_BACK,
+}
 
 sealed interface StartDecision {
     data class Start(val destination: FlowDestination, val resumeStepIndex: Int) : StartDecision
@@ -20,7 +24,6 @@ sealed interface StartDecision {
 sealed interface ExitDecision {
     data object ShowReusedInterstitialThenComplete : ExitDecision
     data object GoToOb5 : ExitDecision
-    data object GoToQuestion : ExitDecision
     data object Complete : ExitDecision
 }
 
@@ -30,7 +33,12 @@ sealed interface ExitDecision {
  */
 object FlowNavigator {
 
-    /** Legacy filtering arguments remain source-compatible; incomplete runs always start at LFO. */
+    /**
+     * Legacy filtering arguments remain source-compatible; incomplete runs always start at LFO.
+     *
+     * @param welcomeBack the launch is a launcher tap with Welcome Back switched on; a completed
+     *   flow then opens Welcome Back instead of skipping.
+     */
     @Suppress("UNUSED_PARAMETER")
     fun decideStart(
         state: OnboardingState,
@@ -38,13 +46,11 @@ object FlowNavigator {
         config: OnboardKitConfig,
         isPremium: Boolean = false,
         canShowAdStep: (StepId) -> Boolean = { true },
+        welcomeBack: Boolean = false,
     ): StartDecision {
         if (state.isFlowCompleted) {
-            return if (flags.enableQuestionOldUser) {
-                StartDecision.Start(FlowDestination.QUESTION_OLD_USER, 0)
-            } else {
-                StartDecision.Skip(SkipReason.ALREADY_COMPLETED)
-            }
+            return if (welcomeBack) StartDecision.Start(FlowDestination.WELCOME_BACK, 0)
+            else StartDecision.Skip(SkipReason.ALREADY_COMPLETED)
         }
 
         // A persisted checkpoint is diagnostic progress, not completion. Every new
@@ -109,10 +115,8 @@ object FlowNavigator {
         else enabledSteps.indexOf(nextStillEnabled)
     }
 
-    /**
-     * End-of-pager handoff, priority top-down. The original gated the Question branch on an
-     * unrelated "OB3 helper created" flag; here the remote flag alone decides.
-     */
+    /** End-of-pager handoff, priority top-down. */
+    @Suppress("UNUSED_PARAMETER")
     fun decideExit(
         flags: RemoteFlags,
         config: OnboardKitConfig,
@@ -124,13 +128,6 @@ object FlowNavigator {
 
         flags.enableStepOb5 && isOb5NativeReady -> ExitDecision.GoToOb5
 
-        asksQuestion(flags, config) -> ExitDecision.GoToQuestion
-
         else -> ExitDecision.Complete
     }
-
-    /** A new user is asked only when the run has a question with options, from remote or the app. */
-    internal fun asksQuestion(flags: RemoteFlags, config: OnboardKitConfig): Boolean =
-        flags.enableQuestion &&
-            OnboardingSettings.questionContent(config.question, flags.questionConfigJson)?.options?.isNotEmpty() == true
 }

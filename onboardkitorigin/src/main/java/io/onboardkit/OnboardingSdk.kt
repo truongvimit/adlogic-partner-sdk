@@ -12,11 +12,11 @@ import io.onboardkit.ads.ObAppResume
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.PreloadChain
 import io.onboardkit.config.OnboardKitConfig
-import io.onboardkit.config.QuestionOption
+import io.onboardkit.config.GoalOption
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
-import io.onboardkit.core.QuestionAnswer
+import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -28,7 +28,7 @@ import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.core.session.OnboardingSession
 import io.onboardkit.core.state.OnboardingState
 import io.onboardkit.core.state.OnboardingStateStore
-import io.onboardkit.core.state.StoredAnswer
+import io.onboardkit.core.state.StoredGoal
 import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.flow.StartDecision
@@ -39,8 +39,7 @@ import io.onboardkit.remote.ObRemote
 import io.onboardkit.ui.language.LanguageScreenMode
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
-import io.onboardkit.ui.question.ObQuestionActivity
-import io.onboardkit.ui.question.QuestionSource
+import io.onboardkit.ui.welcomeback.ObWelcomeBackActivity
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.admob.ResumeSkipPolicy
@@ -195,9 +194,10 @@ object OnboardingSdk {
     suspend fun selectedLanguage(): String? =
         session.selectedLanguage ?: stateStore?.current()?.languageSelected
 
-    suspend fun answers(): List<QuestionAnswer> =
-        stateStore?.current()?.questionAnswers
-            ?.map { QuestionAnswer(it.optionId, it.title) }
+    /** The last goals picked on the Goal or Welcome Back screen, kept across launches. */
+    suspend fun selectedGoals(): List<GoalAnswer> =
+        stateStore?.current()?.selectedGoals
+            ?.map { GoalAnswer(it.id, it.title) }
             .orEmpty()
 
     /** Clears all persisted progress (debug/logout). */
@@ -212,7 +212,10 @@ object OnboardingSdk {
         stateStore?.markFlowCompleted()
     }
 
-    suspend fun shouldStart(): StartDecision {
+    suspend fun shouldStart(): StartDecision = shouldStart(launcherLaunch = false)
+
+    /** [launcherLaunch]: the SDK splash opened from the launcher, not a [io.onboardkit.ui.splash.SplashEntry]. */
+    internal suspend fun shouldStart(launcherLaunch: Boolean): StartDecision {
         val cfg = configOrNull() ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         val store = stateStore ?: return StartDecision.Skip(SkipReason.DISABLED_BY_CONFIG)
         // Only whole-flow completion bypasses LFO on a new launch.
@@ -222,6 +225,7 @@ object OnboardingSdk {
             cfg,
             isPremium = application?.let { adsGuard.isPremium(it) } == true,
             canShowAdStep = ::canFillAdOnlyStep,
+            welcomeBack = launcherLaunch && welcomeBackEnabled(),
         )
     }
 
@@ -300,11 +304,7 @@ object OnboardingSdk {
                 FlowDestination.ONBOARDING ->
                     ObOnboardingHostActivity.start(activity, decision.resumeStepIndex)
 
-                FlowDestination.QUESTION_NEW_USER ->
-                    ObQuestionActivity.start(activity, QuestionSource.NEW_USER)
-
-                FlowDestination.QUESTION_OLD_USER ->
-                    ObQuestionActivity.start(activity, QuestionSource.OLD_USER)
+                FlowDestination.WELCOME_BACK -> ObWelcomeBackActivity.start(activity)
             }
         }
     }
@@ -327,6 +327,11 @@ object OnboardingSdk {
     internal fun configuredPlacementKey(placement: AdPlacement): String? =
         configOrNull()?.ads?.placementKeyFor(placement)
 
+    /** Read live; like the other screen switches it ignores ad fill and entitlement. */
+    internal fun welcomeBackEnabled(): Boolean =
+        io.onboardkit.remote.OnboardingSettings.bool("welcome_back.enabled") &&
+            configOrNull()?.welcomeBackScreen?.options?.isNotEmpty() == true
+
     /** Screen availability is independent of ad fill, entitlement and placement switches. */
     internal fun privacyGoalsScreenEnabled(): Boolean {
         val config = configOrNull() ?: return false
@@ -334,7 +339,7 @@ object OnboardingSdk {
         // resources by name; no layout/id object is required in the app config.
         if (!config.privacyGoalsScreen.enabled) return false
         if (!offersPrivacyGoals(config)) {
-            Log.w(TAG, "privacy_goals_screen.enabled ignored: no goal or question options to offer")
+            Log.w(TAG, "privacy_goals_screen.enabled ignored: no goal options to offer")
             return false
         }
         return true
@@ -344,8 +349,8 @@ object OnboardingSdk {
     internal fun offersPrivacyGoals(config: OnboardKitConfig): Boolean =
         config.privacyGoalsScreen.enabled && privacyGoalOptions(config).isNotEmpty()
 
-    internal fun privacyGoalOptions(config: OnboardKitConfig): List<QuestionOption> =
-        config.privacyGoalsScreen.goal.options.ifEmpty { config.question?.options.orEmpty() }
+    internal fun privacyGoalOptions(config: OnboardKitConfig): List<GoalOption> =
+        config.privacyGoalsScreen.goal.options
 
     private var remoteRefresh: Deferred<Unit>? = null
 
@@ -410,7 +415,7 @@ object OnboardingSdk {
     /**
      * The only way a screen presents the paywall.
      *
-     * Five checkpoints call this (splash, language, pager exit, OB5, question); routing them all
+     * Four checkpoints call this (splash, language, pager exit, OB5); routing them all
      * through here is what makes `iap_paywall_view` comparable across them instead of each screen
      * deciding on its own whether an unshown gate still counts as a view.
      *
@@ -456,11 +461,12 @@ object OnboardingSdk {
         sdkScope.launch { store.setLanguage(code) }
     }
 
-    internal fun persistAnswers(answers: List<QuestionAnswer>) {
-        session.answers.clear()
-        session.answers.addAll(answers)
-        val store = stateStore ?: return
-        sdkScope.launch { store.saveAnswers(answers.map { StoredAnswer(it.optionId, it.title) }) }
+    /** One write path for both goal screens: run outcome, disk, then [OnboardingEvent.GoalsSelected]. */
+    internal fun recordGoals(goals: List<GoalAnswer>) {
+        session.goals.clear()
+        session.goals.addAll(goals)
+        stateStore?.let { store -> sdkScope.launch { store.saveGoals(goals.map { StoredGoal(it.id, it.title) }) } }
+        eventBus.emit(OnboardingEvent.GoalsSelected(goals))
     }
 
     /** Single exit point of the whole flow. CAS-guarded: fires the listener exactly once. */
@@ -475,11 +481,22 @@ object OnboardingSdk {
             context,
             OnboardingOutcome.Completed(
                 selectedLanguage = selectedLanguageOrNull(),
-                answers = session.answers.toList(),
+                goals = session.goals.toList(),
                 passthrough = session.passthrough,
                 stepsShown = session.stepsShown.toList(),
             ),
         )
+    }
+
+    /**
+     * Welcome Back exit. The run was completed on an earlier launch, so nothing is marked or
+     * counted again: the listener gets the same outcome a returning launch always had, and the
+     * pick reaches the app through [OnboardingEvent.GoalsSelected] and [selectedGoals].
+     */
+    internal fun finishWelcomeBack(context: Context) {
+        if (!session.finished.compareAndSet(false, true)) return
+        adProvider?.releaseAll()
+        deliverOutcome(context, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, session.passthrough))
     }
 
     internal fun deliverOutcome(context: Context, outcome: OnboardingOutcome) {

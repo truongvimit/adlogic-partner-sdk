@@ -145,7 +145,7 @@ internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = w
     AdPlacement.LanguageConfirm -> adsLanguageConfirmNative
     is AdPlacement.StepNative -> adsContentNative
     is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> adsFullScreenNative
-    AdPlacement.QuestionNative -> adsQuestionNative
-    AdPlacement.QuestionInterstitial -> adsQuestionInter
+    // Like native_fs: the native_welcome1/2 entries in ad_config own these slots.
+    AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> true
     AdPlacement.AppResume -> adsAppResume
 }

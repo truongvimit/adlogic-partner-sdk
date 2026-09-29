@@ -93,14 +93,16 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.NATIVE_FULL_SCREEN
     }
 
-    data object QuestionNative : AdPlacement {
-        override val key: String = "question_native"
+    /** Native on the returning-user Welcome Back screen, preloaded by the splash like [Language1]. */
+    data object WelcomeBack1 : AdPlacement {
+        override val key: String = "welcome_back1"
         override val format: AdFormat = AdFormat.NATIVE
     }
 
-    data object QuestionInterstitial : AdPlacement {
-        override val key: String = "question_inter"
-        override val format: AdFormat = AdFormat.INTERSTITIAL
+    /** Preloaded when Welcome Back opens; swapped in on the first option tap. */
+    data object WelcomeBack2 : AdPlacement {
+        override val key: String = "welcome_back2"
+        override val format: AdFormat = AdFormat.NATIVE
     }
 
     /**

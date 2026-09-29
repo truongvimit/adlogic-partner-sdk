@@ -61,6 +61,10 @@ object AppAdPlacement {
     const val NATIVE_SURVEY = "native_survey"
     const val NATIVE_UNINSTALL = "native_uninstall"
     const val NATIVE_WELCOME = "native_welcome"
+
+    /** Returning-user Welcome Back screen: slot 1 preloaded by the splash, slot 2 swapped in on the first tap. */
+    const val NATIVE_WELCOME1 = "native_welcome1"
+    const val NATIVE_WELCOME2 = "native_welcome2"
     const val OPEN_RESUME = "open_resume"
     const val REWARD_EXAMPLE = "reward_example"
 }

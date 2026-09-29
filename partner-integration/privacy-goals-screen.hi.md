@@ -8,15 +8,15 @@
 { "privacy_goals_screen": { "enabled": true } }
 ```
 
-Default `false` है। Host `PrivacyGoalsScreenConfig` से भी चालू कर सकता है; remote और app asset code से ऊपर हैं। `goal.options` दें; खाली होने पर host के `question.options` इस्तेमाल होते हैं। दोनों खाली हों तो warning आती है, ये screens और उनके native preloads छोड़ दिए जाते हैं और सामान्य onboarding exit चलता है। Ad fill या premium status इन screens को बंद नहीं करता।
+Default `false` है। Host `PrivacyGoalsScreenConfig` से भी चालू कर सकता है; remote और app asset code से ऊपर हैं। `goal.options` दें। यह list खाली हो तो warning आती है, ये screens और उनके native preloads छोड़ दिए जाते हैं और सामान्य onboarding exit चलता है। Ad fill या premium status इन screens को बंद नहीं करता।
 
 ```kotlin
 privacyGoalsScreen = PrivacyGoalsScreenConfig(
     enabled = true,
     goal = GoalsScreenConfig(
         options = listOf(
-            QuestionOption("work", title = "Work", imageRes = R.drawable.partner_work),
-            QuestionOption("study", title = "Study", imageRes = R.drawable.partner_study),
+            GoalOption("work", title = "Work", imageRes = R.drawable.partner_work),
+            GoalOption("study", title = "Study", imageRes = R.drawable.partner_study),
         ),
         selectionMode = SelectionMode.MULTIPLE,
         minSelection = 1,
@@ -57,6 +57,6 @@ Base `isEnable` पूरे waterfall को नियंत्रित कर
 
 Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
 
-Privacy में acceptance के बाद Continue मिलता है। Goal पूरा होने पर `QuestionAnswer` persist होते हैं, `OnboardingEvent.QuestionAnswered` emit होता है, और onboarding सीधे complete होता है; सामान्य OB5/question/paywall exit आगे नहीं खुलता। Goal में Back से Privacy आता है; Privacy में Back task बंद करता है। Goal screen दोबारा बनने पर choices फिर चुननी पड़ती हैं।
+Privacy में acceptance के बाद Continue मिलता है। Goal पूरा होने पर picks `GoalAnswer` के रूप में दर्ज होते हैं (`OnboardingEvent.GoalsSelected`, `OnboardingOutcome.Completed.goals` और बाद में `OnboardingSdk.selectedGoals()`), और onboarding सीधे complete होता है; सामान्य OB5/paywall exit आगे नहीं खुलता। Goal में Back से Privacy आता है; Privacy में Back task बंद करता है। Goal screen दोबारा बनने पर choices फिर चुननी पड़ती हैं।
 
 Goal पूरा होने पर ही flow completed होता है। उससे पहले app बंद करने पर अगला launch Splash → भाषा से शुरू होता है। Feature बंद हो तो layouts inflate नहीं होते और सामान्य onboarding exit चलता है।

@@ -37,8 +37,6 @@ import io.onboardkit.ui.pager.AdvanceFlingDetector
 import io.onboardkit.ui.pager.StepPage
 import io.onboardkit.ui.pager.StepPagerAdapter
 import io.onboardkit.ui.pager.pageHasHorizontallyScrollableViewUnder
-import io.onboardkit.ui.question.ObQuestionActivity
-import io.onboardkit.ui.question.QuestionSource
 import io.onboardkit.ui.splash.SplashEntry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -413,11 +411,6 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
             ExitDecision.GoToOb5 -> {
                 ObFullScreenAdActivity.start(this)
-                lifecycleScope.launch { finishAfterExitAd() }
-            }
-
-            ExitDecision.GoToQuestion -> {
-                ObQuestionActivity.start(this, QuestionSource.NEW_USER)
                 lifecycleScope.launch { finishAfterExitAd() }
             }
 

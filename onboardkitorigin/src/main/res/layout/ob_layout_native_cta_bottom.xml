@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma "Ad Layout 1": attribution top, media middle, CTA pill bottom. Used on LFO/Question. -->
+<!-- Figma "Ad Layout 1": attribution top, media middle, CTA pill bottom. Used on LFO/Welcome Back. -->
 <com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"

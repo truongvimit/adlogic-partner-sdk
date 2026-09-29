@@ -143,7 +143,7 @@ class TrackkitPluginTest {
         TrackkitPlugin.execute(AnalyticsEvent.AdRequested("language1", AdFormat.NATIVE))
         TrackkitPlugin.execute(AnalyticsEvent.AdFailed("language1", AdFormat.NATIVE))
         TrackkitPlugin.execute(
-            AnalyticsEvent.AdSkipped("question_native", AdFormat.NATIVE, AdSkipReason.PLACEMENT_OFF_BY_REMOTE.key),
+            AnalyticsEvent.AdSkipped("welcome_back1", AdFormat.NATIVE, AdSkipReason.PLACEMENT_OFF_BY_REMOTE.key),
         )
 
         assertEquals(listOf("ad_request", "ad_load_failed", "ad_skipped"), sink.names())
@@ -203,22 +203,6 @@ class TrackkitPluginTest {
     }
 
     @Test
-    fun `question events map onto the canonical question funnel`() {
-        TrackkitPlugin.execute(AnalyticsEvent.QuestionViewed("new_user"))
-        TrackkitPlugin.execute(AnalyticsEvent.QuestionOptionSelected("opt_a", true))
-        TrackkitPlugin.execute(AnalyticsEvent.QuestionCompleted(3))
-
-        assertEquals(
-            listOf("fo_question_view", "fo_question_answer", "fo_question_complete"),
-            sink.names(),
-        )
-        assertEquals("new_user", sink.paramsOf("fo_question_view")["source"])
-        assertEquals("opt_a", sink.paramsOf("fo_question_answer")["option_id"])
-        assertEquals(true, sink.paramsOf("fo_question_answer")["selected"])
-        assertEquals(3, sink.paramsOf("fo_question_complete")["count"])
-    }
-
-    @Test
     fun `flow complete carries the number of steps shown`() {
         TrackkitPlugin.execute(AnalyticsEvent.FlowCompleted(4))
 
@@ -271,9 +255,6 @@ class TrackkitPluginTest {
             AnalyticsEvent.LanguageFlowCompleted("en"),
             AnalyticsEvent.StepViewed(StepId.OB1, 0, "cta_bottom"),
             AnalyticsEvent.StepCompleted(StepId.OB1, 0, 10),
-            AnalyticsEvent.QuestionViewed("old_user"),
-            AnalyticsEvent.QuestionOptionSelected("opt_a", false),
-            AnalyticsEvent.QuestionCompleted(1),
             AnalyticsEvent.FlowCompleted(2),
             AnalyticsEvent.AdRequested("ob5", AdFormat.NATIVE_FULL_SCREEN),
             AnalyticsEvent.AdImpression("ob5"),
@@ -283,7 +264,7 @@ class TrackkitPluginTest {
             AnalyticsEvent.PaywallResolved("after_onboarding", AnalyticsEvent.PAYWALL_DISMISSED),
         ).forEach(TrackkitPlugin::execute)
 
-        assertEquals(19, sink.names().size)
+        assertEquals(16, sink.names().size)
         assertTrue(sink.names().none { it.startsWith("ob_") })
         assertTrue(
             sink.names().all {

@@ -19,12 +19,13 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.config.PrivacyGoalsScreenConfig
 import io.onboardkit.config.GoalsScreenConfig
-import io.onboardkit.config.QuestionOption
+import io.onboardkit.config.GoalOption
+import io.onboardkit.config.label
 import io.onboardkit.config.SelectionMode
-import io.onboardkit.core.QuestionAnswer
+import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.StepId
-import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.widget.GoalOptionAdapter
 
 /** SDK controller for partner-owned Privacy -> Goal XML screens. */
 class PrivacyGoalsActivity : BaseOnboardActivity() {
@@ -34,7 +35,7 @@ class PrivacyGoalsActivity : BaseOnboardActivity() {
     private val boundPlacements = mutableSetOf<AdPlacement>()
     private var screen = Screen.PRIVACY; private var accepted = false
     private var goalConfig: GoalsScreenConfig? = null; private val selectedIds = linkedSetOf<String>()
-    private var adapter: PrivacyGoalsOptionAdapter? = null; private var firstContainer: FrameLayout? = null; private var action: View? = null; private var pending: ViewGroup? = null
+    private var adapter: GoalOptionAdapter? = null; private var firstContainer: FrameLayout? = null; private var action: View? = null; private var pending: ViewGroup? = null
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         val flow = sdk.requireConfig().privacyGoalsScreen
@@ -73,7 +74,7 @@ class PrivacyGoalsActivity : BaseOnboardActivity() {
         val ad = frame(root, cfg.adContainerId.takeIf { it != 0 } ?: io.onboardkit.R.id.ob_privacy_goals_ad, "goal.adContainerId")
         val next = actionView(root, cfg.nextViewId, setOf(list, ad), "goal action"); action = next; setContentView(root)
         if (list.layoutManager == null) list.layoutManager = GridLayoutManager(this, 2)
-        val options = sdk.privacyGoalOptions(sdk.requireConfig()); adapter = PrivacyGoalsOptionAdapter(options, cfg) { option, selected -> toggle(cfg, option.id, selected) }.also { list.adapter = it }
+        val options = sdk.privacyGoalOptions(sdk.requireConfig()); adapter = GoalOptionAdapter(options, cfg.optionLayoutRes) { option, selected -> toggle(cfg, option.id, selected) }.also { list.adapter = it }
         next.isEnabled = false; next.visibility = View.VISIBLE; next.setOnClickListener { if (selectedIds.size >= cfg.minSelection) finishGoal(options) }; firstContainer = ad
         initialAd(placement(StepId.PARTNER_GOAL), ad)
     }
@@ -85,7 +86,7 @@ class PrivacyGoalsActivity : BaseOnboardActivity() {
         }
         if (selected && selectedIds.size == 1) firstContainer?.let { replaceAd(placement(StepId.PARTNER_GOAL_ALT), it) }
     }
-    private fun finishGoal(options: List<QuestionOption>) { val answers = options.filter { it.id in selectedIds }.map { QuestionAnswer(it.id, it.title?.toString() ?: it.id) }; if (answers.isNotEmpty()) { OnboardingSdk.persistAnswers(answers); OnboardingSdk.emitEvent(OnboardingEvent.QuestionAnswered(answers)) }; continueFlow() }
+    private fun finishGoal(options: List<GoalOption>) { val goals = options.filter { it.id in selectedIds }.map { GoalAnswer(it.id, it.label(this)) }; if (goals.isNotEmpty()) OnboardingSdk.recordGoals(goals); continueFlow() }
     private fun initialAd(p: AdPlacement, container: FrameLayout) {
         boundPlacements += p
         showNativeAd(
