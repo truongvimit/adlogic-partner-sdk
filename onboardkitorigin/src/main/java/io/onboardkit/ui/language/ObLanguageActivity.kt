@@ -113,9 +113,6 @@ class ObLanguageActivity : BaseOnboardActivity() {
             ?.takeIf { code -> languageConfig.languages.any { it.code == code } }
         languageTapCount = savedInstanceState?.getInt("ob_language_tap_count") ?: 0
 
-        // An explicit configured [] is a real value. Do not resurrect the full
-        // catalog here; the document resolver already distinguished missing from
-        // an intentional empty list.
         languages = languageConfig.languages
         val hintCode = resolveHintCode()
         if (hintCode != null) languages = DeviceLanguageHint.promote(languages)

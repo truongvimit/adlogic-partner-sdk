@@ -355,6 +355,19 @@ class AppOpenResumeLoadStateTest {
     }
 
     @Test
+    fun `an empty remote backoff list is rejected and a failed load still retries on the bundled schedule`() {
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"load":{"failure_backoff_ms":[]}}}"""))
+        assertFalse(AdBehavior.document.snapshot.hasRemoteOverride("app_open.load.failure_backoff_ms"))
+        assertEquals(listOf(5_000L, 30_000L, 120_000L), AdBehavior.document.snapshot.longList("app_open.load.failure_backoff_ms"))
+        startRequest()
+        fail(0)
+        main.idleFor(4_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, requests.size)
+        main.idleFor(1, TimeUnit.MILLISECONDS)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
     fun `a new background waits for remaining backoff then retries without another lifecycle event`() {
         startRequest()
         for (delayMs in listOf(5_000L, 30_000L, 120_000L)) {

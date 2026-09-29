@@ -18,10 +18,8 @@ private const val MAX_CTA_HEIGHT_DP = 52
  * typo must degrade to the default, not produce an unusable ad.
  */
 fun AdUnitConfig.toNativeStyle(): NativeAdStyle = NativeAdStyle(
-    // All keys unknown -> canonical order.
-    // An explicit empty list is a valid assignment and must remain empty; only an omitted field
-    // receives the parser's canonical component list.
-    components = components.mapNotNull { NativeComponent.fromKey(it) }.distinct(),
+    // Empty keeps the XML layout instead of hiding every block.
+    components = components.mapNotNull { NativeComponent.fromKey(it) }.distinct().ifEmpty { null },
     // An explicit empty position clears a lower-tier TOP/BOTTOM choice; the renderer's nullable
     // style value represents that cleared state.
     ctaPosition = positionCTA?.takeIf { it.isNotBlank() },

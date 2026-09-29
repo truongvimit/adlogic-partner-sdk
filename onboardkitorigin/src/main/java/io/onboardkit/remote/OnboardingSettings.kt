@@ -19,6 +19,7 @@ import io.onboardkit.ads.isPrivacyGoalsNative
  */
 object OnboardingSettings {
     private const val TAG = "OnboardingSettings"
+    private const val SETTINGS_TAG = "AdLogicSettings"
     val document = SettingsDocument("onboarding_config", BundledOnboarding.VALUES, ::extraDefault)
     val values: SettingsSnapshot get() = document.snapshot
 
@@ -48,6 +49,9 @@ object OnboardingSettings {
             val declaredScope = document.defaultValue(scope) is Map<*, *>
             if (!stepScope && !declaredScope) return null
             val suffix = path.substringAfter("behavior.")
+            // Both are loaded, then shown from the buffer: no load-and-show wait ever applies.
+            if (scope in setOf("splash.ads.interstitial.behavior", "question.interstitial.behavior") &&
+                suffix.startsWith("load_and_show.")) return null
             val format = when {
                 path.contains("banner") -> "banner"
                 path.contains("interstitial") -> "interstitial"
@@ -128,7 +132,12 @@ object OnboardingSettings {
         val steps: Map<String, Boolean>,
         val value: OnboardKitConfig,
     )
-    private data class ResolvedFlags(val source: RemoteFlags, val snapshot: SettingsSnapshot, val value: RemoteFlags)
+    private data class ResolvedFlags(
+        val source: RemoteFlags,
+        val snapshot: SettingsSnapshot,
+        val catalog: List<StepDefinition>?,
+        val value: RemoteFlags,
+    )
     @Volatile private var configCache: ResolvedConfig? = null
     @Volatile private var flagsCache: ResolvedFlags? = null
 
@@ -203,25 +212,18 @@ object OnboardingSettings {
         )
         // Remote codes pick from the app catalog (remote cannot add a language the app has no
         // strings for); a default that is not on the offered list would preselect a hidden row.
-        fun validCodes(raw: Any?): List<ObLanguage>? {
-            if (raw !is List<*>) return null
-            if (raw.isEmpty()) return emptyList()
-            val codes = raw.map { it as? String ?: return null }
-            // A code outside the app's catalog is an invalid field, not a request to show an empty
-            // language screen. Mixed lists are rejected as a unit for deterministic fallback.
-            if (codes.any { code -> c.language.languages.none { it.code == code } }) return null
-            return codes.mapNotNull { code -> c.language.languages.firstOrNull { it.code == code } }
-                .distinctBy { it.code }
+        fun codesIn(raw: Any?): List<String>? =
+            if (raw is List<*> && raw.all { it is String }) raw.map { it as String } else null
+        val listed = codesIn(v.remoteValue("lfo.languages.supported_codes"))
+            ?: codesIn(v.assetValue("lfo.languages.supported_codes"))
+        val (knownCodes, unknownCodes) = listed.orEmpty().distinct()
+            .partition { code -> c.language.languages.any { it.code == code } }
+        if (unknownCodes.isNotEmpty()) {
+            Log.w(SETTINGS_TAG, "lfo.languages.supported_codes dropped codes outside the app catalog: ${unknownCodes.joinToString()}")
         }
-        val remoteCodes = validCodes(v.remoteValue("lfo.languages.supported_codes"))
-        val assetCodes = validCodes(v.assetValue("lfo.languages.supported_codes"))
-        val configuredCodes = when {
-            v.remoteValue("lfo.languages.supported_codes") != null -> remoteCodes ?: assetCodes
-            v.assetValue("lfo.languages.supported_codes") != null -> assetCodes
-            else -> null
-        }
-        // An explicit [] is a real remote/asset value. Only a missing or invalid field uses the
-        // host catalog; invalid remote first falls back to a valid asset list.
+        // An empty list, or one naming no catalog language, restricts nothing.
+        val configuredCodes = knownCodes.map { code -> c.language.languages.first { it.code == code } }
+            .takeIf { it.isNotEmpty() }
         val offered = configuredCodes ?: c.language.languages
         fun offers(code: String?) = code != null && offered.any { it.code == code }
         // Presence is part of the value. In particular, an explicitly configured empty string is
@@ -267,11 +269,7 @@ object OnboardingSettings {
         // A remote order names the pages outright, so a page it lists shows even when the app
         // disabled it. Remote order > delivered legacy step keys > app asset order > the catalog.
         val catalog = c.steps.associateBy { it.id.value }
-        fun order(value: Any?): List<StepDefinition>? {
-            val raw = value as? List<*> ?: return null
-            if (raw.any { it !is String } || raw.any { it !in catalog }) return null
-            return raw.map { catalog.getValue(it as String) }
-        }
+        fun order(value: Any?): List<StepDefinition>? = orderIds(value, catalog.keys)?.map { catalog.getValue(it) }
         val selected = order(v.remoteValue("onboarding.order"))
             ?: withLegacySteps((order(v.assetValue("onboarding.order")) ?: c.steps).filter { it.enabled }, c.steps, legacySteps)
         val steps = selected.map { step ->
@@ -301,6 +299,13 @@ object OnboardingSettings {
         return OnboardKitConfig(splash, language, steps, question, ads, c.system, behavior, c.privacyGoalsScreen.copy(
             enabled = v.boolean("privacy_goals_screen.enabled", c.privacyGoalsScreen.enabled),
         ))
+    }
+
+    /** An order naming any id outside [catalog] is invalid as a whole; null [catalog] checks types only. */
+    private fun orderIds(value: Any?, catalog: Set<String>?): List<String>? {
+        val raw = value as? List<*> ?: return null
+        if (raw.any { it !is String || catalog != null && it !in catalog }) return null
+        return raw.map { it as String }
     }
 
     /** A legacy step key removes its page or brings back one the app disabled, at its catalog position. */
@@ -366,21 +371,18 @@ object OnboardingSettings {
             afterOnboardingInterstitialTiming = v.enumOr("onboarding.exit_interstitial.next_screen_timing", a.afterOnboardingInterstitialTiming),
         )
 
-    @Synchronized fun resolveFlags(f: RemoteFlags): RemoteFlags {
+    /** @param catalog the host's steps, which an order must stay within to count, as in [resolve]. */
+    @Synchronized fun resolveFlags(f: RemoteFlags, catalog: List<StepDefinition>? = null): RemoteFlags {
         val snapshot = values
-        flagsCache?.takeIf { it.source == f && it.snapshot === snapshot }?.let { return it.value }
-        return resolveFlags(f, snapshot).also { flagsCache = ResolvedFlags(f, snapshot, it) }
+        flagsCache?.takeIf { it.source == f && it.snapshot === snapshot && it.catalog === catalog }?.let { return it.value }
+        return resolveFlags(f, snapshot, catalog).also { flagsCache = ResolvedFlags(f, snapshot, catalog, it) }
     }
 
-    private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot): RemoteFlags {
+    private fun resolveFlags(f: RemoteFlags, v: SettingsSnapshot, catalog: List<StepDefinition>?): RemoteFlags {
         // Same precedence as the page list: remote order > delivered legacy key > asset order.
-        fun listed(value: Any?): List<String>? {
-            val raw = value as? List<*> ?: return null
-            if (raw.any { it !is String }) return null
-            return raw.map { it as String }
-        }
-        val remoteOrder = listed(v.remoteValue("onboarding.order"))
-        val assetOrder = listed(v.assetValue("onboarding.order"))
+        val ids = catalog?.mapTo(HashSet()) { it.id.value }
+        val remoteOrder = orderIds(v.remoteValue("onboarding.order"), ids)
+        val assetOrder = orderIds(v.assetValue("onboarding.order"), ids)
         fun step(id: String, key: RemoteKey<Boolean>, legacy: Boolean) = remoteOrder?.contains(id)
             ?: legacy.takeIf { f.isSupplied(key, it) } ?: assetOrder?.contains(id) ?: legacy
         return f.copy(

@@ -53,6 +53,12 @@ class SplashTimingTest {
     }
 
     @Test
+    fun `an explicit value outranks an eligible native_fs, entries included`() {
+        assertEquals(UNDER_AD, resolveNextScreenTiming(nativeFsEligible = true, isEntry = false, { UNDER_AD }, hookUnasked))
+        assertEquals(UNDER_AD, resolveNextScreenTiming(nativeFsEligible = true, isEntry = true, { UNDER_AD }, hookUnasked))
+    }
+
+    @Test
     fun `an entry uses the hook after remote is absent`() {
         assertEquals(UNDER_AD, resolveNextScreenTiming(nativeFsEligible = false, isEntry = true, unasked) { UNDER_AD })
     }

@@ -519,6 +519,11 @@ public class ERainAd {
             }
 
             @Override
+            public boolean showsInterstitialLoadingDialog() {
+                return callback.showsInterstitialLoadingDialog();
+            }
+
+            @Override
             public void onInterstitialShow() {
                 super.onInterstitialShow();
                 callback.onInterstitialShow();

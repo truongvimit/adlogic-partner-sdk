@@ -364,7 +364,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val adGone = CompletableDeferred<Unit>().also { exitAdGone = it }
         val timing = sdk.requireConfig().ads.afterOnboardingInterstitialTiming
         val entry = SplashEntry.from(OnboardingSdk.session.passthrough)
-        val underAd = timing == NextScreenTiming.UNDER_AD && entry == null && !sdk.privacyGoalsScreenEnabled()
+        val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
             // The placement behavior chain is the centralized resolver for this field.  Passing

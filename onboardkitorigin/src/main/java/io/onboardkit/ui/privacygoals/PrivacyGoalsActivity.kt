@@ -73,7 +73,7 @@ class PrivacyGoalsActivity : BaseOnboardActivity() {
         val ad = frame(root, cfg.adContainerId.takeIf { it != 0 } ?: io.onboardkit.R.id.ob_privacy_goals_ad, "goal.adContainerId")
         val next = actionView(root, cfg.nextViewId, setOf(list, ad), "goal action"); action = next; setContentView(root)
         if (list.layoutManager == null) list.layoutManager = GridLayoutManager(this, 2)
-        val options = cfg.options.ifEmpty { sdk.requireConfig().question?.options.orEmpty() }; adapter = PrivacyGoalsOptionAdapter(options, cfg) { option, selected -> toggle(cfg, option.id, selected) }.also { list.adapter = it }
+        val options = sdk.privacyGoalOptions(sdk.requireConfig()); adapter = PrivacyGoalsOptionAdapter(options, cfg) { option, selected -> toggle(cfg, option.id, selected) }.also { list.adapter = it }
         next.isEnabled = false; next.visibility = View.VISIBLE; next.setOnClickListener { if (selectedIds.size >= cfg.minSelection) finishGoal(options) }; firstContainer = ad
         initialAd(placement(StepId.PARTNER_GOAL), ad)
     }

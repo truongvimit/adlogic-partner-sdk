@@ -546,3 +546,13 @@ all new AdLogic requests, including background loaders. Splash requests start af
 
 See the [detailed Vietnamese integration guide](../partner-integration/force-update-integration.vi.md)
 for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone examples, and Play testing.
+
+## Placement settings at runtime
+
+Settings resolve as remote > delivered legacy settings > app root asset > host configuration > bundled SDK defaults. Within one source, screen/group overrides precede placement and format overrides. Empty behavior objects add no leaf values and allow fallback. A full default JSON copied into the app asset root is still an explicit override of host values. See [remote settings](../partner-integration/remote-settings.md) for the complete schema.
+
+- `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through ERainAd and tracking wrappers.
+- An AutoBuffer rule in remote or the app asset can add a placement to the host's managed list. The host predicate and explicit `enabled: false` can still block it. The host must configure and start the buffer. A placement added while running starts its first cooldown when settings change; `tickMs = 0` follows the resolved interstitial interval.
+- `BannerAdConfig.forPlacement` reads the placement's current `enable_ua_check` after refresh unless the host explicitly sets `forceUaCheck`. A non-positive `reloadIntervalSeconds` falls back to host cadence; it does not cause immediate reload.
+- Native `components: []` preserves the XML layout. A scoped `presentation.cta_corner_radius_dp` applies even without an explicit native style; a CTA color is needed to replace the XML background.
+- App-open `failure_backoff_ms` accepts 1–10 integers in 1–3,600,000 ms. Empty/invalid arrays fall back to the app/SDK schedule. Consent timeout and interstitial daily click-cap logs report the effective resolved values.

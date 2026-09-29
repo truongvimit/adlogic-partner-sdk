@@ -54,6 +54,46 @@ class BehaviorConfigTest {
         assertTrue(native.autoShimmer)
     }
 
+    @Test fun `an empty placement_overrides object leaves the format value in charge`() {
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch(
+            """{"native":{"load":{"tier_timeout_ms":5000}},"placement_overrides":{}}"""))
+        assertEquals(5000L, AdBehavior.values("native", "native_ob1").long("load.tier_timeout_ms", 30_000L))
+        assertTrue(AdBehavior.values("native", "native_ob1").hasOverride("load.tier_timeout_ms"))
+    }
+
+    @Test fun `an empty screen behavior object leaves the ad behavior scopes in charge`() {
+        val screen = SettingsDocument("screen_empty_scope", """{"splash":{"ads":{"banner":{"behavior":{}}}}}""")
+        assertTrue(screen.acceptSuccessfulFetch("""{"splash":{"ads":{"banner":{"behavior":{}}}}}"""))
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch(
+            """{"banner":{"presentation":{"type":"COLLAPSIBLE"}},"placement_overrides":{}}"""))
+        val values = AdBehavior.values("banner", "banner_splash", screen.snapshot, "splash.ads.banner.behavior")
+        assertEquals("COLLAPSIBLE", values.string("presentation.type", "NORMAL"))
+        val banner = BannerAdConfig.forPlacement("banner_splash").apply { behavior = values }
+        assertTrue(banner.bannerType is BannerType.Collapsible)
+    }
+
+    @Test fun `a pasted empty screen scope keeps the app asset value of that screen`() {
+        val screen = SettingsDocument("screen_asset_scope", """{"slot":{"behavior":{}}}""") { path ->
+            if (path == "slot.behavior.reload.resume_debounce_ms") 500L else null
+        }
+        screen.install("""{"slot":{"behavior":{"reload":{"resume_debounce_ms":900}}}}""", null)
+        assertTrue(screen.acceptSuccessfulFetch("""{"slot":{"behavior":{}}}"""))
+        assertEquals(900L, AdBehavior.values("native", "native_home", screen.snapshot, "slot.behavior")
+            .long("reload.resume_debounce_ms", 500L))
+    }
+
+    @Test fun `the shipped sample published with edits reaches keyed placements`() {
+        val sample = org.json.JSONObject(java.io.File("src/main/assets/adlogic_defaults/ad_behavior_config.json").readText())
+        sample.getJSONObject("banner").getJSONObject("presentation").put("type", "COLLAPSIBLE")
+        sample.getJSONObject("native").getJSONObject("presentation").put("auto_shimmer", false)
+        sample.getJSONObject("interstitial").getJSONObject("load").put("tier_timeout_ms", 5000)
+        assertTrue(sample.getJSONObject("placement_overrides").length() == 0)
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch(sample.toString()))
+        assertEquals("COLLAPSIBLE", AdBehavior.values("banner", "banner_splash").string("presentation.type", "NORMAL"))
+        assertFalse(AdBehavior.values("native", "native_lang").boolean("presentation.auto_shimmer", true))
+        assertEquals(5000L, AdBehavior.values("interstitial", "inter_splash").long("load.tier_timeout_ms", 30_000L))
+    }
+
     @Test fun `screen then placement then format override specificity`() {
         AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"resume_debounce_ms":600}},"placement_overrides":{"native_home":{"native":{"reload":{"resume_debounce_ms":700}}}}}""")
         val screen = SettingsDocument("screen", """{"slot":{"reload":{"resume_debounce_ms":500}}}""")

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "privacy_goals_screen": {
-    "enabled": true
+    "enabled": false
   },
   "revision": 0,
   "flow": {
@@ -137,10 +137,10 @@
     },
     "order": [
       "ob1",
-      "ob2",
       "full1",
-      "ob3",
+      "ob2",
       "full2",
+      "ob3",
       "ob4"
     ]
   },

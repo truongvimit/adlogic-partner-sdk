@@ -10,6 +10,10 @@ Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đ
 
 Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) cho mọi module. Bản mới nhất có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Chỉ thêm key Firebase không nâng cấp SDK cũ đã tích hợp trong app.
 
+Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
+
+Native trong pager được giữ khi view của trang còn tồn tại; quay lại content hoặc Full1/Full2 hiển thị cùng ad, không xin request mới. Auto-next fullscreen bắt đầu lại mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật hoặc cần chống kẹt. No-fill lần đầu tự đi tiếp; quay lại trang lỗi hiện fallback và Skip. Ad được giải phóng khi view bị hủy.
+
 ## 1. Thêm dependency
 
 Yêu cầu JDK 17, `minSdk 24+`, `compileSdk 36+`; AGP/Kotlin theo [versions.gradle](../versions.gradle) và [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties). Ghép code Groovy dưới vào block hiện có.
@@ -270,7 +274,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Hành vi | Mặc định | Chỉ đổi khi / nơi đổi |
 | --- | --- | --- |
 | Màn splash | Layout SDK; minimum display 3000 ms tính từ pha tải ads | `onboarding_config.splash.timing.min_display_ms` (`0` hợp lệ nghĩa là không giữ minimum này) hoặc `ob_splash_min_display_ms` đã gửi (`<= 0` giữ giá trị local); khi remote không gửi thì dùng asset app, rồi `SplashConfig.minDisplayTimeMs`. |
-| Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu: chờ đóng inter. Launcher → app/khảo sát người dùng cũ: mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định. Khi mở từ launcher, `splash.navigation.next_screen_timing` remote khác `AUTO` ưu tiên hơn override này |
+| Mở màn sau inter splash | Show inter sau thời gian tối thiểu. LFO lần đầu: chờ đóng inter. Launcher → app/khảo sát người dùng cũ: mở dưới inter. Notification/widget/uninstall: chờ đóng | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), hoặc `super.nextScreenTiming()` để giữ mặc định. `splash.navigation.next_screen_timing` khác `AUTO`, từ remote hoặc asset app, ưu tiên hơn override này ở mọi lần mở, kể cả notification/widget/uninstall; `UNDER_AD` còn bỏ màn native_fs của splash ở lần mở đó |
 | Chờ quảng cáo splash | Tối đa 60 giây sau notification và khi splash có focus | Remote `ob_splash_ad_budget_ms`; không tự thêm timer |
 | Remote / ads | Consent → slot + interstitial; remote chạy song song trong SDK và tiếp tục sau splash. | Dùng giá trị asset/cache/remote hiện có; xem mục timing bên dưới. |
 | LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
@@ -309,11 +313,11 @@ Hai JSON giữ field/giá trị example debug, chỉ chuẩn hóa interstitial s
 | `id` | Ad unit test đúng format | Thay ID ở file thật khi phát hành; không sửa key placement. |
 | `isEnable` | Theo example: đa số `true`, welcome `false` | Bật/tắt placement. Key gốc là công tắc tổng: `false` ở key gốc tắt cả waterfall. |
 | `enable_ua_check` | Có `true` và `false` | `true` yêu cầu paid/non-organic; chưa có kết quả Adjust thì mặc định organic. Liên kết chuẩn `AdsConfig.fromAdConfig()` áp gate này cho placement OB tương ứng, gồm native LFO/OB và inter cuối OB. Không dùng Adjust thì đặt `false` cho các placement muốn hiện. |
-| `reloadIntervalSeconds` | Banner: `30` | Chỉ parse, helper không dùng; không đổi refresh kể cả splash. Muốn refresh xem [Banner ở màn app](#tích-hợp-bổ-sung). |
+| `reloadIntervalSeconds` | Banner: `30` | Số dương đặt nhịp auto-reload (giây) cho mọi banner gắn placement, kể cả splash, khi `banner.reload.auto_enabled` là `true` (mặc định). Thiếu, `0` hoặc sai dùng giá trị host/SDK (15000ms). Cách gắn ở màn app: [Banner ở màn app](#tích-hợp-bổ-sung). |
 | `colorCTA` | `"default"` | Giữ màu template; thay màu khi cần tùy biến native. |
 | `heightCTA` | Native thường `45`, popup `36` | Chiều cao CTA (dp); SDK dùng `40` nếu bỏ field và ép giá trị vào khoảng 36–52 khi áp dụng. |
 | `positionCTA` | `"BOTTOM"` hoặc `null` | Chọn khung LFO/content/question theo từng placement khi chưa có template onboarding override từ remote. Giá trị từ file này còn nhường cho template trong asset app; giá trị từ `ad_remote_config` của backend thì không. `null` giữ host/SDK fallback; fullscreen/popup dùng layout cố định. |
-| `components` | `["icon_headline", "body", "media", "cta"]` | Khối thiếu bị ẩn, mảng rỗng hiện đủ. OB chỉ đổi visibility; [native màn app](#native-ở-màn-app-dùng-placement-constant) dùng cả thứ tự khi `positionCTA: null`. |
+| `components` | `["icon_headline", "body", "media", "cta"]` | Khối thiếu bị ẩn, mảng rỗng giữ visibility và thứ tự của XML. OB chỉ đổi visibility; [native màn app](#native-ở-màn-app-dùng-placement-constant) dùng cả thứ tự khi `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | Thời gian chờ tải app-open sau khi app ra background; chỉ có tác dụng khi đã bật app-resume. |
 | `click_action` | `"auto_next"` ở `native_ob1..4` và `native_full1/2`; `"reload"` ở mọi native khác | Hành động khi quay lại sau click ad native. Chỉ đọc ở base key, không đọc ở floor `_high`; giữ cùng giá trị ở cả hai file. Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native). |
 
@@ -464,6 +468,7 @@ Splash/OB5/khảo sát tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 
 - [ ] Nếu dùng settings mới, thử remote override, offline lần đầu dùng local và offline giữ remote cache hợp lệ theo [checklist Firebase](firebase-integration.vi.md#remote-notes).
 - [ ] Debug build mở được splash, Logcat tag `AdRemoteConfig` có dòng `Loaded ad_config_debug.json with <n> placements (debug=true)`, `<n>` khớp với example bạn ship, `OB_FLOW` không báo config/provider lỗi.
+- [ ] Sau khi fetch remote, `OB_FLOW` không có dòng `ad_config remote omits …` cho placement bạn sửa trên console. Key có trong danh sách giữ giá trị của app, dù console đặt gì dưới tên key khác: publish field đó dưới đúng key, hoặc bind key của bạn bằng `fromAdConfig(mapOf(...))`.
 - [ ] Đi hết LFO → OB → MainActivity bằng ad test; native fullscreen nằm giữa nội dung 2 và 3, inter cuối chỉ do SDK quản lý. LFO chỉ mở sau khi đóng inter splash; MainActivity đã sẵn khi đóng inter cuối.
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn lại ngôn ngữ hiện tại mở popup ngay, còn chọn ngôn ngữ khác phải chờ đủ tổng số click đã cấu hình.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Click native ở trang OB rồi quay lại chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.

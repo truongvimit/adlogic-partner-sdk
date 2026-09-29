@@ -80,7 +80,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private boolean resumeDispatchAllowed;
     private Runnable pendingBackgroundLoad;
     private java.util.List<Long> resumeFailureBackoffMs() {
-        return AdBehavior.document.getSnapshot().longList("app_open.load.failure_backoff_ms", java.util.Collections.emptyList());
+        String path = "app_open.load.failure_backoff_ms";
+        java.util.List<Long> backoff = AdBehavior.document.getSnapshot().longList(path, java.util.Collections.emptyList());
+        return backoff.isEmpty() ? AdBehavior.document.getLocalSnapshot().longList(path, java.util.Collections.emptyList()) : backoff;
     }
     private final Handler resumeFetchHandler = new Handler(Looper.getMainLooper());
     private long resumeFetchGeneration;

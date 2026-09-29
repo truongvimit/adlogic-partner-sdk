@@ -109,7 +109,10 @@ class PreloadChainTest {
     @Test fun `privacy goals disabled never preload`() {
         cfg = onboardKitConfig {
             defaultSteps()
-            privacyGoalsScreen = PrivacyGoalsScreenConfig(enabled = true)
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(
+                enabled = true,
+                goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+            )
             ads = AdsConfig(
                 contentStepNative = NativeAdUnit("content"),
                 stepNatives = mapOf(
@@ -141,6 +144,27 @@ class PreloadChainTest {
         }, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
         chain.preloadPrivacy1(activity)
         assertTrue(requests.isEmpty())
+    }
+
+    @Test fun `a privacy switch with nothing to choose never warms the privacy native`() {
+        fun chainFor(privacy: PrivacyGoalsScreenConfig): PreloadChain {
+            cfg = onboardKitConfig {
+                defaultSteps()
+                privacyGoalsScreen = privacy
+                ads = AdsConfig(stepNatives = mapOf(StepId.PARTNER_PRIVACY to NativeAdUnit("privacy")))
+            }.getOrThrow()
+            return PreloadChain(object : FakeAdProvider() {
+                override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+            }, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
+        }
+        chainFor(PrivacyGoalsScreenConfig(enabled = true)).onStepSelected(activity, steps, steps.lastIndex)
+        assertTrue(requests.isEmpty())
+
+        chainFor(PrivacyGoalsScreenConfig(
+            enabled = true,
+            goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+        )).onStepSelected(activity, steps, steps.lastIndex)
+        assertEquals(listOf(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)), requests)
     }
 
     @Test fun `premium consent and force update hold prevent every native request`() {

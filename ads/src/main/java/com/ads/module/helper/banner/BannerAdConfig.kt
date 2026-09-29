@@ -63,7 +63,7 @@ open class BannerAdConfig @JvmOverloads constructor(
         get() {
             val unit = placementKey?.let { AdRemoteConfig.getInstance().ads[it] }
             val seconds = unit?.reloadIntervalSeconds
-            return if (seconds != null && seconds >= 0) seconds.toLong().times(1_000) else field
+            return if (seconds != null && seconds > 0) seconds.toLong().times(1_000) else field
         }
         set(value) {
             require(value >= MIN_AUTO_RELOAD_MS) { "Time can not < ${MIN_AUTO_RELOAD_MS}ms" }
@@ -78,8 +78,16 @@ open class BannerAdConfig @JvmOverloads constructor(
     var timeDebounceResume: Long = AdBehavior.defaultNumber("banner.reload.resume_debounce_ms")
         get() = behaviorValues().long("reload.resume_debounce_ms", field)
 
+    private var explicitForceUaCheck: Boolean? = null
+
     /** Routes the request through the UA/organic gate before it may go out. */
-    var forceUaCheck: Boolean = false
+    var forceUaCheck: Boolean
+        get() = explicitForceUaCheck
+            ?: placementKey?.let { AdRemoteConfig.getInstance().ads[it]?.enableUaCheck }
+            ?: false
+        set(value) {
+            explicitForceUaCheck = value
+        }
 
     companion object {
         /**
@@ -94,7 +102,6 @@ open class BannerAdConfig @JvmOverloads constructor(
             canReloadAds: Boolean = AdBehavior.defaultBool("banner.reload.allowed"),
         ): BannerAdConfig = BannerAdConfig(emptyList(), true, canReloadAds, bannerType).apply {
             placementKey = placement
-            forceUaCheck = AdRemoteConfig.getInstance().ads[placement]?.enableUaCheck == true
         }
 
         private fun defaultBannerType(): BannerType = when (AdBehavior.defaultText("banner.presentation.type")) {

@@ -32,6 +32,15 @@ class ScopeChainTest {
         assertEquals(true, values.scoped("native.reload.allowed").boolean(true))
     }
 
+    @Test fun `an empty object at a narrower scope lets a broader scope answer`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"placement_overrides":{},"native":{"reload":{"resume_debounce_ms":222}}}""")
+        assertEquals(222L, values.scoped(
+            "placement_overrides.native_home.native.reload.resume_debounce_ms",
+            "native.reload.resume_debounce_ms",
+        ).long(0L))
+    }
+
     @Test fun `an empty chain is just the host value`() {
         assertEquals(7L, values.scoped().long(7L))
     }

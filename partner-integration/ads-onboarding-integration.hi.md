@@ -10,6 +10,10 @@
 
 सभी modules के लिए [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) का **newest SDK version** इस्तेमाल करें। इसमें grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। केवल Firebase keys जोड़ने से app में पहले से integrated पुराना SDK update नहीं होता।
 
+वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
+
+Pager page का view बने रहने तक native bound रहता है; content या Full1/Full2 पर लौटने पर वही ad दिखता है, नया request नहीं होता। Fullscreen auto-next हर visit पर फिर शुरू होता है; लौटने पर enabled Skip तुरंत दिखता है, और exit न होने पर सुरक्षा के लिए भी दिखता है। पहली no-fill पर अगला page आता है; failed page पर वापस आने पर fallback और Skip दिखते हैं। View नष्ट होने पर ad release होता है।
+
 ## 1. Dependencies जोड़ें
 
 JDK 17, `minSdk 24+` और `compileSdk 36+` चाहिए; AGP/Kotlin [versions.gradle](../versions.gradle) और [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties) के अनुसार। नीचे दिया Groovy अपने मौजूदा blocks में मिलाएँ।
@@ -270,7 +274,7 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 | व्यवहार | Default | कब बदलें / कहाँ बदलें |
 | --- | --- | --- |
 | Splash स्क्रीन | SDK layout; ad-loading phase से minimum display 3000 ms | `onboarding_config.splash.timing.min_display_ms` (valid `0` यह minimum हटाता है) या backend द्वारा भेजा गया `ob_splash_min_display_ms` (`<= 0` local value रखता है); remote चुप हो तो आपका app asset, फिर `SplashConfig.minDisplayTimeMs`। |
-| Splash interstitial के बाद अगली स्क्रीन खोलना | Interstitial न्यूनतम display समय के बाद दिखता है। पहली बार का LFO: बंद होने का इंतज़ार। Launcher → app / पुराने उपयोगकर्ता का प्रश्न: ad के नीचे खोलें। Notification/widget/uninstall: बंद होने का इंतज़ार | `SplashActivity.nextScreenTiming()` override करें: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), या default रखने के लिए `super.nextScreenTiming()`। Launcher starts पर remote `splash.navigation.next_screen_timing` की `AUTO` के अलावा कोई भी value override से ऊपर है |
+| Splash interstitial के बाद अगली स्क्रीन खोलना | Interstitial न्यूनतम display समय के बाद दिखता है। पहली बार का LFO: बंद होने का इंतज़ार। Launcher → app / पुराने उपयोगकर्ता का प्रश्न: ad के नीचे खोलें। Notification/widget/uninstall: बंद होने का इंतज़ार | `SplashActivity.nextScreenTiming()` override करें: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), या default रखने के लिए `super.nextScreenTiming()`। `splash.navigation.next_screen_timing` की `AUTO` के अलावा कोई भी value, remote या आपकी app asset से, हर launch पर override से ऊपर है, notification/widget/uninstall समेत; `UNDER_AD` उस launch में splash की native_fs screen भी छोड़ देता है |
 | Splash ad का इंतज़ार | notification कदम के बाद और splash को focus मिलने पर अधिकतम 60 सेकंड | Remote `ob_splash_ad_budget_ms`; अपना timer न जोड़ें |
 | Remote / ads | Consent → slot + interstitial; SDK remote साथ चलता है और splash के बाद भी जारी रहता है। | मौजूदा asset/cache/remote values; नीचे fetch timing देखें। |
 | LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
@@ -309,11 +313,11 @@ Consent request की authority है। Custom CMP का परिणाम 
 | `id` | सही format का test ad unit | Release से पहले असली file के IDs बदलें; placement keys न बदलें। |
 | `isEnable` | Example जैसा: ज्यादातर `true`, welcome `false` | Placement चालू या बंद करता है। Base key master switch है: base key पर `false` पूरा waterfall बंद कर देता है। |
 | `enable_ua_check` | उदाहरण में `true` और `false` दोनों | `true` के लिए paid/non-organic attribution चाहिए; Adjust उत्तर आने तक default organic है। Standard `AdsConfig.fromAdConfig()` bindings संबंधित OB placements, native LFO/OB और exit interstitial पर भी यह gate लागू करती हैं। Adjust न हो तो दिखाने वाले placements पर इसे `false` रखें। |
-| `reloadIntervalSeconds` | Banner: `30` | सिर्फ parse होता है; helpers इसे नजरअंदाज करते हैं और यह कोई refresh नहीं बदलता, splash समेत। Refresh के लिए [App स्क्रीन का banner](#अतिरिक्त-integrations) देखें। |
+| `reloadIntervalSeconds` | Banner: `30` | Positive value हर placement-bound banner (splash समेत) की auto-reload cadence सेकंड में तय करती है, जब तक `banner.reload.auto_enabled` `true` है (default)। Absent, `0` या invalid होने पर host/SDK value (15000 ms) लगती है। App स्क्रीन setup: [App स्क्रीन का banner](#अतिरिक्त-integrations)। |
 | `colorCTA` | `"default"` | Template का रंग बनाए रखता है; custom native चाहिए तो रंग सेट करें। |
 | `heightCTA` | सामान्य natives के लिए `45`, popup के लिए `36` | dp में CTA height; field न हो तो SDK `40` इस्तेमाल करता है और लागू करते समय value को 36–52 के बीच सीमित करता है। |
 | `positionCTA` | `"BOTTOM"` या `null` | Remote onboarding template override न हो तो हर placement के LFO/content/question frame को चुनता है। इस file से आई value आपके app asset के template को भी रास्ता देती है; backend के `ad_remote_config` से आई value नहीं। `null` host/SDK fallback रखता है; fullscreen/popup तय layouts इस्तेमाल करते हैं। |
-| `components` | `["icon_headline", "body", "media", "cta"]` | गायब block छिपा रहता है; खाली array सब दिखाता है। OB सिर्फ visibility बदलता है; [app स्क्रीन का native](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) `positionCTA: null` होने पर क्रम भी इस्तेमाल करता है। |
+| `components` | `["icon_headline", "body", "media", "cta"]` | गायब block छिपा रहता है; खाली array XML visibility और order रखता है। OB सिर्फ visibility बदलता है; [app स्क्रीन का native](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) `positionCTA: null` होने पर क्रम भी इस्तेमाल करता है। |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | app के background जाने के बाद app-open ad लोड करने से पहले कितना इंतज़ार; यह तभी असर करता है जब app-resume चालू हो। |
 | `click_action` | `native_ob1..4` और `native_full1/2` पर `"auto_next"`; बाकी हर native पर `"reload"` | native ad click के बाद वापसी पर क्या हो। केवल base key से पढ़ा जाता है, `_high` floors से कभी नहीं; दोनों files में एक ही value रखें। [Native click actions](remote-settings.hi.md#native-click-actions) देखें। |
 
@@ -464,6 +468,7 @@ Splash, OB5 और प्रश्न स्क्रीन खुद को ब
 
 - [ ] Grouped settings के लिए remote override, पहली-run offline local fallback और valid remote cache का offline reuse [Firebase checklist](firebase-integration.hi.md#remote-notes) के अनुसार जाँचें।
 - [ ] Debug build splash खोलता है, Logcat tag `AdRemoteConfig` में `Loaded ad_config_debug.json with <n> placements (debug=true)`, जहाँ `<n>` आपके ship किए example से मेल खाता है दिखता है, और `OB_FLOW` कोई config या provider error नहीं बताता।
+- [ ] Remote fetch के बाद, console में edit किए गए placement के लिए `OB_FLOW` में `ad_config remote omits …` line नहीं होती। Listed key app की values रखता है, console किसी दूसरे key नाम के नीचे कुछ भी set करे: field को उसी key के नीचे publish करें, या अपना key `fromAdConfig(mapOf(...))` से bind करें।
 - [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; fullscreen native सामग्री 2 और 3 के बीच रहता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
 - [ ] LFO: भाषा चुनकर Back दबाने पर Save दिखता है और स्क्रीन बनी रहती है; मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है, दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है।
 - [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।

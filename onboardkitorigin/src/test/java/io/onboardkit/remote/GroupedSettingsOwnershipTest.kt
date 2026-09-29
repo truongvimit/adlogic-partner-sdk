@@ -104,6 +104,17 @@ class GroupedSettingsOwnershipTest {
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.Language1))
     }
 
+    @Test fun `a remote key that omits positionCTA keeps the lower tier position`() {
+        OnboardingSdk.configure(onboardKitConfig { ads = AdsConfig.fromAdConfig() }.getOrThrow())
+        val ob1 = AdPlacement.StepNative(StepId.OB1)
+        AdRemoteConfig.updateCodeFromJson("""{"native_ob1":{"id":"ob1","isEnable":true,"positionCTA":"BOTTOM"}}""")
+        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(ob1))
+        AdRemoteConfig.initializeFromJson("""{"native_ob1":{"click_action":"none","heightCTA":50}}""")
+        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(ob1))
+        AdRemoteConfig.initializeFromJson("""{"native_ob1":{"positionCTA":"TOP"}}""")
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(ob1))
+    }
+
     @Test fun `per step templates inherit group defaults and fixed ad hosts keep their geometry`() {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_BOTTOM"},"custom":{"native_template":"CTA_TOP"},"ob3":{"native_template":"COMPACT"}}},"question":{"native":{"template":"CTA_TOP"}}}""")

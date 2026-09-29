@@ -325,7 +325,7 @@ object InterstitialAdManager {
         val deadline = clickedAt + waitMs
         if ((InterstitialAutoBuffer.owns(placement) && !captured.allowWaitForAutoBuffer) || isReady(placement)) {
             reportWait(placement, source, "dispatch", clickedAt, captured)
-            showInternal(activity, placement, callback, captured.reportTelemetry, captured.nextAction)
+            showInternal(activity, placement, callback, captured.reportTelemetry, captured.nextAction, behavior)
             return
         }
         val blockReason = showSkipReason(activity, placement)
@@ -467,7 +467,8 @@ object InterstitialAdManager {
                 !hostCanShow() -> finishSkipped(AdSkipReason.SHOW_IN_BACKGROUND)
                 detach() -> {
                     reportWait(placement, source, "dispatch", clickedAt, options)
-                    showInternal(activity, placement, callback, options.reportTelemetry, options.nextAction)
+                    showInternal(activity, placement, callback, options.reportTelemetry, options.nextAction,
+                        checkNotNull(options.behavior))
                 }
                 else -> Unit
             }
@@ -564,9 +565,24 @@ object InterstitialAdManager {
         callback: InterShowCallback,
         reportTelemetry: Boolean = true,
         nextAction: InterNextAction = defaultNextAction,
+    ) = show(context, placement, callback, reportTelemetry, nextAction, behavior = null)
+
+    /**
+     * [show] with screen-specific [behavior] values captured by the caller for this presentation;
+     * null reads the placement's own values.
+     */
+    @JvmStatic
+    fun show(
+        context: Context,
+        placement: String,
+        callback: InterShowCallback,
+        reportTelemetry: Boolean,
+        nextAction: InterNextAction,
+        behavior: BehaviorValues?,
     ) {
         InterstitialFrequency.recordAction(placement)
-        showInternal(context, placement, callback, reportTelemetry, nextAction)
+        showInternal(context, placement, callback, reportTelemetry, nextAction,
+            behavior ?: AdBehavior.values("interstitial", placement))
     }
 
     /**
@@ -600,6 +616,7 @@ object InterstitialAdManager {
         callback: InterShowCallback,
         reportTelemetry: Boolean,
         nextAction: InterNextAction,
+        behavior: BehaviorValues,
     ) {
         // Decide before touching the buffer. Group timing is placement-scoped here; raw
         // splash/OB calls downstream no longer impose a second, global interval.
@@ -644,6 +661,9 @@ object InterstitialAdManager {
                 }
 
                 override fun usesActualInterstitialImpression(): Boolean = contentPolicy
+
+                override fun showsInterstitialLoadingDialog(): Boolean = behavior.boolean(
+                    "presentation.loading_enabled", AdBehavior.bool("interstitial.presentation.loading_enabled"))
 
                 override fun canShowInterstitial(): Boolean {
                     if (!contentPolicy) return true

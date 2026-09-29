@@ -49,9 +49,9 @@ Ví dụ này hiển thị **OB4 → Full2 → OB1 → OB3**, không preload OB2
 
 - Không có `order`: giữ thứ tự app khai báo.
 - `order: []`: bỏ toàn bộ pager OB; tiếp tục nhánh hoàn tất hiện có.
-- Chỉ các ID app khai báo mới được chọn. `order` remote chọn được cả màn `enabled = false`; `order` trong asset app chỉ chọn màn `enabled = true`. ID chưa biết được bỏ qua.
-- Danh sách sai kiểu, ID rỗng hoặc trùng ID: bỏ override `order`, dùng nguồn kế tiếp bên dưới.
-- `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Thứ tự ưu tiên: `order` remote > cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi > `order` trong asset app. Khi có `order` remote hợp lệ, các cờ cũ không lọc thêm màn; cờ đã gửi bật hoặc tắt màn theo cả hai chiều, kể cả khi asset app có `order`.
+- Chỉ các ID app khai báo mới được chọn. `order` remote chọn được cả màn `enabled = false`; `order` trong asset app chỉ chọn màn `enabled = true`.
+- Danh sách sai kiểu, ID rỗng, trùng ID hoặc có ID ngoài catalog app (sai hoa/thường, `ob5`, `question`, gõ nhầm): bỏ cả override `order`, dùng nguồn kế tiếp bên dưới.
+- `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Thứ tự ưu tiên: `order` remote > cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi > `order` trong asset app. Cùng phép kiểm tra catalog áp dụng cho danh sách màn và flags/preload. Khi có `order` remote hợp lệ, các cờ cũ không lọc thêm màn; cờ đã gửi bật hoặc tắt màn theo cả hai chiều, kể cả khi asset app có `order`.
 - Không cần khai báo `steps`. Chỉ dùng `steps.<id>` nếu cần ghi đè riêng template, hành vi ads hoặc nút Skip/auto-next; không có công tắc bật/tắt màn hay placement ở đây. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`.
 - Quy tắc ưu tiên settings là remote hợp lệ → key `ob_*` backend đã gửi → custom asset → app → default SDK; remote ở bất kỳ scope nào ưu tiên hơn asset ở bất kỳ scope nào. Không khai báo lại ad unit ID trong `onboarding_config`.
 
@@ -75,8 +75,8 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 
 - Thiếu placement hoặc tất cả tầng bị tắt/ID không hợp lệ: không request. Content vẫn hiện, vùng ads ẩn; fullscreen bị bỏ qua.
 - Consent, premium, cờ từng placement, UA và force-update gate vẫn được kiểm tra.
-- Example release để cả sáu placement và các tầng của chúng `isEnable = false`: cài mới chưa có remote sẽ không tải ads OB. Remote đã activate/cache vẫn có thể dùng khi fetch thất bại.
-- SDK nói chung vẫn hỗ trợ assets/raw ID của partner; placement nào `ad_remote_config` của backend khai báo thì remote ưu tiên hơn raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải giữ các entry local tắt như example.
+- App example khai báo và bật sáu placement OB cùng các tầng trong cả debug/release assets; remote hợp lệ có thể ghi đè từng field. Remote đã activate/cache vẫn được dùng khi fetch thất bại.
+- SDK nói chung vẫn hỗ trợ assets/raw ID của partner; placement nào `ad_remote_config` của backend khai báo thì remote ưu tiên hơn raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải chủ động đặt các entry local thành `isEnable = false`.
 - Debug mặc định giữ ad unit test của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) và không để remote thay ad IDs; các field khác của `ad_remote_config` (ví dụ `isEnable`) và settings `onboarding_config` vẫn thử được qua remote. Key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Không dùng ad unit production để test.
 
 ## Preload và vòng đời ads
@@ -91,7 +91,7 @@ Danh sách màn được giữ ổn định, nhưng các chặn ads theo từng 
 
 Mỗi placement OB có tối đa một lượt load/waterfall trong một lần chạy. Preload và màn hiển thị chia sẻ request đang chạy. Chọn ngôn ngữ lại, no-fill, swipe/back không khởi động lượt tải mới. Không refresh/reload hoặc preload replacement sau impression/click cho sáu màn này, kể cả policy native chung bật reload. Hành động click lấy từ `click_action` trên base key của trang trong ad_config (`native_ob1..4`, `native_full1/2`; không đọc ở `_high`), mặc định `auto_next`: chuyển trang khi quay lại; `none` giữ trang; `reload` được xử lý như `none` trong pager OB. Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native).
 
-Khi rời màn, ads đã hiển thị được giải phóng như trước. Quay lại content vẫn thấy nội dung nhưng không xin ads mới; fullscreen đã tiêu thụ ads sẽ đi tiếp nếu không còn ad hợp lệ. Request chưa hoàn tất/ads chưa dùng vẫn có thể được nhận. Activity recreation giữ trạng thái lượt tải; splash mới hoặc `OnboardingSdk.reset()` bắt đầu lượt mới.
+Khi chuyển sang trang khác mà view còn tồn tại, content và fullscreen giữ native đã bind; swipe/back quay lại hiển thị cùng ad, không tạo request hay impression callback mới để mở swipe. Native chỉ được giải phóng khi view bị hủy. Request đang chạy vẫn có thể hoàn tất khi trang không được chọn; callback điều hướng chỉ tác động đến trang đang active. Fullscreen khởi động lại auto-next mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật (hoặc cần chống kẹt). No-fill ở lượt đầu tự đi tiếp; khi quay lại trang lỗi, trang hiện fallback và cho thoát bằng Skip. Activity recreation giữ trạng thái lượt tải, không đảm bảo giữ view/ad đã bị hủy; splash mới hoặc `OnboardingSdk.reset()` bắt đầu lượt mới.
 
 Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, `next_step_enabled`, `upcoming_fullscreen_enabled` đã bỏ: không còn chia nhỏ preload OB theo màn. Preload LFO, OB5 standalone và question giữ cơ chế riêng.
 

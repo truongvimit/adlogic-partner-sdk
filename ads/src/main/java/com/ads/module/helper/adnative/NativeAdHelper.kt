@@ -111,10 +111,14 @@ class NativeAdHelper @JvmOverloads constructor(
     private var shimmerView: ShimmerFrameLayout? = null
     private var nativeStyle: NativeAdStyle? = null
         get() {
-            if (field == null && !config.behaviorValues().hasOverride("presentation.cta_corner_radius_dp")) return null
-            val local = field ?: NativeAdStyle()
+            val declared = field ?: placementStyle?.invoke()
+            if (declared == null && !config.behaviorValues().hasOverride("presentation.cta_corner_radius_dp")) return null
+            val local = declared ?: NativeAdStyle()
             return local.copy(ctaCornerRadiusDp = config.behaviorValues().long("presentation.cta_corner_radius_dp", local.ctaCornerRadiusDp.toLong()).toInt())
         }
+
+    /** Re-reads the placement's `ad_config` style at each bind and skeleton until [setNativeStyle]. */
+    private var placementStyle: (() -> NativeAdStyle)? = null
 
     /** Skeleton the helper itself created and inserted; app-supplied views never land here. */
     private var generatedShimmer: ShimmerFrameLayout? = null
@@ -249,6 +253,7 @@ class NativeAdHelper @JvmOverloads constructor(
      */
     fun setNativeStyle(style: NativeAdStyle?): NativeAdHelper {
         nativeStyle = style
+        placementStyle = null
         return this
     }
 
@@ -775,7 +780,7 @@ class NativeAdHelper @JvmOverloads constructor(
             placement,
         )
             .setNativeContentView(container)
-            .setNativeStyle(AdRemoteConfig.getInstance().unit(placement).toNativeStyle())
+            .also { it.placementStyle = { AdRemoteConfig.getInstance().unit(placement).toNativeStyle() } }
             .also { it.requestAds(NativeAdParam.Request) }
     }
 }

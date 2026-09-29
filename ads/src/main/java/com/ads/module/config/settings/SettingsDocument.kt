@@ -256,7 +256,7 @@ class SettingsDocument(
             if (allowed != null && value !in allowed) return false
         }
         if (value is List<*> && path == "onboarding.order") return value.all { it is String && it.isNotBlank() } && value.distinct().size == value.size
-        if (value is List<*> && path.endsWith("failure_backoff_ms")) return value.size <= 10 && value.all { it is Number && it.toLong() in 1..3_600_000 && it.toDouble() == it.toLong().toDouble() }
+        if (value is List<*> && path.endsWith("failure_backoff_ms")) return value.size in 1..10 && value.all { it is Number && it.toLong() in 1..3_600_000 && it.toDouble() == it.toLong().toDouble() }
         if (value is List<*> && (path.endsWith("supported_codes") || path.endsWith("excluded_hosts"))) return value.all { it is String }
         return true
     }
@@ -327,6 +327,11 @@ class SettingsSnapshot internal constructor(
     /** What the app's own asset assigns to [path], or null. */
     fun assetValue(path: String): Any? = value(asset, path)
 
+    /** An empty object declares a scope, not a value, so a scope walk moves on past it. */
+    internal fun remoteLeaf(path: String): Any? = leaf(remoteValues, path) ?: leaf(legacyValues, path)
+    internal fun assetLeaf(path: String): Any? = leaf(asset, path)
+    private fun leaf(values: Map<String, Any>, path: String): Any? = value(values, path).takeUnless { it is Map<*, *> }
+
     fun overrideValue(path: String): Any? = remoteValue(path) ?: assetValue(path)
     fun hasRemoteOverride(path: String): Boolean = (remoteValues.keys + legacyValues.keys).any {
         it == path || it.startsWith("$path.") || (path.startsWith("$it.") &&
@@ -384,7 +389,7 @@ class ScopeChain internal constructor(
     private val paths: List<String>,
 ) {
     private fun override(): Any? =
-        paths.firstNotNullOfOrNull(values::remoteValue) ?: paths.firstNotNullOfOrNull(values::assetValue)
+        paths.firstNotNullOfOrNull(values::remoteLeaf) ?: paths.firstNotNullOfOrNull(values::assetLeaf)
     fun boolean(fallback: Boolean): Boolean = override() as? Boolean ?: fallback
     fun long(fallback: Long): Long = (override() as? Number)?.toLong() ?: fallback
     fun string(fallback: String): String = override() as? String ?: fallback

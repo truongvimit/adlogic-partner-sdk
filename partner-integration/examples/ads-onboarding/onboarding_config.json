@@ -26,7 +26,7 @@
       "ad_budget_ms": 60000,
       "slot_min_visible_ms": 1000,
       "slot_wait_after_inter_ms": 10000,
-      "notification_settle_ms": 800
+      "notification_settle_ms": 1000
     },
     "load": {
       "ad_strategy": "ALTERNATE",
@@ -47,13 +47,18 @@
         "delay_ms": 3000,
         "style": "CLOSE_ICON",
         "position": "RIGHT"
-      }
+      },
+      "behavior": {}
     }
   },
   "lfo": {
     "native_template": "CTA_BOTTOM",
+    "native1": {
+      "behavior": {}
+    },
     "native2": {
       "enabled": true,
+      "behavior": {},
       "swap_wait_timeout_ms": 8000,
       "preload_trigger": "LFO_SHOWN"
     },
@@ -70,7 +75,8 @@
     "confirm_dialog": {
       "enabled": true,
       "show_from_tap": 4,
-      "native_preload_trigger": "DIALOG_OPEN"
+      "native_preload_trigger": "DIALOG_OPEN",
+      "native_behavior": {}
     },
     "languages": {
       "supported_codes": [],
@@ -87,7 +93,9 @@
       "back_navigates_back": true
     },
     "ads": {
-      "content_template": "CTA_TOP"
+      "content_template": "CTA_TOP",
+      "content_native_behavior": {},
+      "fullscreen_native_behavior": {}
     },
     "fullscreen": {
       "skip": {
@@ -138,6 +146,9 @@
   },
   "ob5": {
     "enabled": false,
+    "native": {
+      "behavior": {}
+    },
     "skip": {
       "enabled": true,
       "delay_ms": 3000,
@@ -150,6 +161,7 @@
     "enabled": true,
     "old_user_enabled": false,
     "native": {
+      "behavior": {},
       "template": "CTA_BOTTOM",
       "refresh_on_select": false,
       "refresh_throttle_ms": 2000

@@ -95,7 +95,7 @@ class AdsGuard internal constructor(
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
 
         if (placement.isPrivacyGoalsNative) {
-            if (!cfg.privacyGoalsScreen.enabled) {
+            if (!io.onboardkit.OnboardingSdk.offersPrivacyGoals(cfg)) {
                 return AdSkipReason.ADS_OFF_IN_CONFIG
             }
         }

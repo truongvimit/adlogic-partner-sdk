@@ -57,8 +57,8 @@ class BehaviorValues internal constructor(
         add(values to "$format.$path")
     }
     private fun override(path: String): Any? = scopes(path).let { scopes ->
-        scopes.firstNotNullOfOrNull { (source, key) -> source.remoteValue(key) }
-            ?: scopes.firstNotNullOfOrNull { (source, key) -> source.assetValue(key) }
+        scopes.firstNotNullOfOrNull { (source, key) -> source.remoteLeaf(key) }
+            ?: scopes.firstNotNullOfOrNull { (source, key) -> source.assetLeaf(key) }
     }
     fun hasOverride(path: String): Boolean = override(path) != null
     fun boolean(path: String, fallback: Boolean): Boolean = override(path) as? Boolean ?: fallback

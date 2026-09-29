@@ -3,6 +3,8 @@ package com.ads.module.helper.interstitial
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.config.settings.AdBehavior
+import com.ads.module.config.settings.SettingsRegistry
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -80,8 +82,36 @@ class InterstitialBufferDefaultsTest {
         assertFalse(InterstitialAutoBuffer.options().isPlacementEnabled(BACK))
     }
 
+    @Test fun `a remote rule for a placement the host did not list opts it in with its tuning`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "interstitial_auto_buffer":{"rules":{"$REMOTE_ONLY":{"interval_ms":7000}}}
+        }""")
+        assertTrue(InterstitialAutoBuffer.owns(REMOTE_ONLY))
+        assertTrue(InterstitialAutoBuffer.options().isPlacementEnabled(REMOTE_ONLY))
+        assertEquals(7_000L, InterstitialFrequency.intervalMs(REMOTE_ONLY))
+        AdBehavior.document.acceptSuccessfulFetch("""{
+            "interstitial_auto_buffer":{"rules":{"$REMOTE_ONLY":{"interval_ms":7000,"enabled":false}}}
+        }""")
+        assertFalse(InterstitialAutoBuffer.options().isPlacementEnabled(REMOTE_ONLY))
+    }
+
+    @Test fun `a placement a fetch adds after start waits its full first interval`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AdBehavior.initialize(context)
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(listOf(ALL)))
+        InterstitialAutoBuffer.start(context)
+        assertFalse(InterstitialAutoBuffer.owns(REMOTE_ONLY))
+        SettingsRegistry.acceptSuccessfulFetch(mapOf("ad_behavior_config" to """{
+            "interstitial_auto_buffer":{"rules":{"$REMOTE_ONLY":{"interval_ms":7000}}}
+        }"""))
+        assertTrue(InterstitialAutoBuffer.owns(REMOTE_ONLY))
+        assertEquals(7_000L, InterstitialFrequency.remainingMs(context, REMOTE_ONLY))
+        assertEquals(30_000L, InterstitialFrequency.remainingMs(context, ALL))
+    }
+
     private companion object {
         const val ALL = "inter_all"
         const val BACK = "inter_back"
+        const val REMOTE_ONLY = "inter_remote_only"
     }
 }

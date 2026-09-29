@@ -31,6 +31,10 @@ class PrivacyGoalsScreenSettingsTest {
         assertTrue(OnboardingSettings.resolve(config).privacyGoalsScreen.enabled)
     }
 
+    @Test fun `the bundled switch matches the code default a host inherits`() {
+        assertEquals(PrivacyGoalsScreenConfig().enabled, OnboardingSettings.defaultBool("privacy_goals_screen.enabled"))
+    }
+
     @Test fun `disabled base suppresses high floor without disabling screen group or alternate`() {
         val document = AdRemoteConfig(ads = mapOf(
             "native_select" to AdUnitConfig(id = "base", isEnable = false),

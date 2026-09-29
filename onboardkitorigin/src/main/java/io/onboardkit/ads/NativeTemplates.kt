@@ -65,9 +65,8 @@ object NativeTemplates {
                 else -> null
             }
         }
-        val adKey = ads?.placementKeyFor(placement)
-        val remoteAdConfig = adKey?.let(AdRemoteConfig::remoteDeclares) == true
-        val remotePosition = adKey?.let { AdRemoteConfig.remoteDeclaresField(it, "positionCTA") } == true
+        val remotePosition = ads?.placementKeyFor(placement)
+            ?.let { AdRemoteConfig.remoteDeclaresField(it, "positionCTA") } == true
         explicit(values::remoteValue)?.let { return it }
         if (present(values::remoteValue)) {
             if (remotePosition) positionCta()?.let { return it }
@@ -80,7 +79,7 @@ object NativeTemplates {
                 else -> NativeTemplate.CTA_BOTTOM
             }
         }
-        if (remoteAdConfig && remotePosition) positionCta()?.let { return it }
+        if (remotePosition) positionCta()?.let { return it }
         explicit(values::assetValue)?.let { return it }
         if (present(values::assetValue)) return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
@@ -88,7 +87,7 @@ object NativeTemplates {
             AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
             else -> NativeTemplate.CTA_BOTTOM
         }
-        if (!remoteAdConfig) positionCta()?.let { return it }
+        if (!remotePosition) positionCta()?.let { return it }
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->
                 ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM

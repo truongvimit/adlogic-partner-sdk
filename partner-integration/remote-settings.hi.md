@@ -10,6 +10,8 @@ Console setup के लिए [तीन String parameters publish करने
 
 सभी modules के लिए [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) का **newest SDK version** इस्तेमाल करें। केवल Firebase keys जोड़ने से app में integrated पुराना SDK update नहीं होता।
 
+वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
+
 ## Documents और field ownership
 
 मौजूदा Firebase parameter `ad_remote_config` ही है; `ad_config.json` / `ad_config_debug.json` उसके local asset filenames हैं। सिर्फ दो नए String parameters जोड़ें:
@@ -42,8 +44,7 @@ ads = AdsConfig.fromAdConfig()
 | Splash native (नीचे का slot, जब `splash.ads.slot_format` = `NATIVE`) | `native_splash` |
 | Returning-user splash | `<splash interstitial key>_o` (`inter_splash_o`); `_o` declare न हो तो returning users को `inter_splash` के units मिलते हैं |
 | Notification / widget / uninstall entry splash | `inter_noti` / `inter_widget` / `inter_uninstall`; key न हो या बंद हो तो user segment की key इस्तेमाल होती है |
-
-नए users के लिए `inter_splash` और returning users के लिए `inter_splash_o` (`_o` declare न हो तो `inter_splash`) master switch है: वहाँ `isEnable: false` उस segment के हर splash interstitial को बंद करता है, entries समेत। Entry अपनी key तभी इस्तेमाल करती है जब वह declare हो और चालू हो, वरना segment की key। Load और show दोनों उसी key से gate होते हैं। पुरानी Firebase key `ob_ads_splash_inter_enabled=false` सभी users के लिए हर splash interstitial बंद करती है।
+| Privacy / Goal initial; ALT | `native_select`; `native_select_alt` (each has its own `_high` tier) |
 | LFO1 / LFO2 / confirmation dialog | `native_lang` / `native_lang_alt` / `native_popup_lang` |
 | Content OB1 / OB2 / OB3 / OB4 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` |
 | Fullscreen Full1 / Full2 | `native_full1` / `native_full2` |
@@ -51,6 +52,8 @@ ads = AdsConfig.fromAdConfig()
 | Question native / interstitial | `native_question` / `inter_question` |
 | Exit interstitial | `inter_after_ob3` |
 | App resume | `open_resume`; backend इसे ID के साथ declare करे तो `idAdResume` seed के बिना भी app-open चालू हो जाता है। App-open बंद रखने के लिए `AppOpenManager.getInstance().disableAppResume()` बुलाएँ |
+
+नए users के लिए `inter_splash` और returning users के लिए `inter_splash_o` (`_o` declare न हो तो `inter_splash`) master switch है: वहाँ `isEnable: false` उस segment के हर splash interstitial को बंद करता है, entries समेत। Entry अपनी key तभी इस्तेमाल करती है जब वह declare हो और चालू हो, वरना segment की key। Load और show दोनों उसी key से gate होते हैं। पुरानी Firebase key `ob_ads_splash_inter_enabled=false` सभी users के लिए हर splash interstitial बंद करती है।
 
 ### Splash का निचला slot
 
@@ -93,11 +96,13 @@ ads = AdsConfig.fromAdConfig(mapOf(
 - Fetch failure/timeout, malformed या blank पूरा JSON, unsupported schema होने पर अंतिम valid document बना रहता है; rejected document `AdLogicSettings` में log होता है। पहली run में valid remote cache न हो तो local/defaults रहते हैं। **Failed fetch valid remote cache के ऊपर local values लागू नहीं करता।** Splash के `splash.load.remote_fetch_timeout_ms` के बाद पहुँचा fetch भी बाकी session के लिए लागू होता है।
 - `AdConfig.install` backend द्वारा भेजा गया अंतिम `ad_remote_config` (Firebase की last activated value) तुरंत लागू करता है, इसलिए धीमा या failed fetch asset पर नहीं, उसी document पर चलता है। Settings fetch fail होने पर भी `ad_remote_config` लागू होने से नहीं रुकता।
 - Successful fetch पर remote overrides हटाने के लिए `{}` या `{"schema_version":1}` publish करें। Empty String malformed है, reset नहीं। नया remote object पुराने remote overrides को replace करता है, patch नहीं; missing fields अगले नीचे वाले source पर fallback करते हैं।
-- Custom/partial app asset का हर मौजूद valid field explicit assignment है, `false`/`0` समेत। पूरी bundled asset की बिना बदली copy host constructor/setter fallback रखती है। Firebase की published default value remote है, SDK local default नहीं; source Firebase in-app defaults को fetched remote नहीं मानता।
+- Custom/partial app asset का हर मौजूद valid field explicit assignment है, `false`/`0` समेत। App asset root में रखी पूरी copy भी host constructor/setter को override करती है, भले values SDK defaults जैसी हों। Firebase की published default value remote है, SDK local default नहीं; source Firebase in-app defaults को fetched remote नहीं मानता।
 - SDK defaults build के समय assets से generate होते हैं, Context से पहले उपलब्ध हैं और `null` नहीं रखते। अलग Kotlin/XML defaults maintain नहीं करने पड़ते। App के invalid fields fallback लेते हैं; app को नया parser नहीं चाहिए।
-- `ad_behavior_config.global.ads_enabled` पूरे ads module का global gate है; consent, premium और lifecycle checks लागू रहते हैं। पहले `AdsConfig(enabled=false)` उपयोग करने वाले host को `global.ads_enabled=false` या संबंधित placements बंद करने चाहिए।
+- `ad_behavior_config.global.ads_enabled` पूरे ads module का global gate है; consent, premium और lifecycle checks लागू रहते हैं। सभी ads रोकने के लिए `global.ads_enabled=false` रखें, या संबंधित placement बंद करें।
 - पुराने `ob_*` keys compatible रहते हैं। Backend द्वारा भेजी गई key अपनी value दोनों दिशाओं में तय करती है, grouped documents से नीचे और app asset/host से ऊपर; `ob_splash_min_display_ms <= 0` local value रखता है।
 - Debuggable build remote `ad_remote_config` का हर field लागू करता है, लेकिन ad unit IDs `ad_config_debug.json` (debug file न हो तो `ad_config.json`) के ही रखता है; जो keys केवल remote declare करता है वे हटा दी जाती हैं, जब तक वे किसी slot को बंद न करें। एक `WARN` log pinned file का नाम बताता है, और `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` remote IDs भी ले लेता है। दोनों grouped documents release की तरह लागू होते हैं; नए parameters के automatic `_debug` variants नहीं हैं।
+
+Refresh के बाद OnboardKit warning उन app-mapped placement keys को बताती है जो remote में नहीं हैं। वे app values रखती हैं; Firebase में अलग नाम की key बदलने से उन पर असर नहीं होता।
 
 ## Behavior scopes
 
@@ -112,9 +117,11 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 
 Native preload app/SDK code शुरू करता है। Replacement preload के लिए `setEnablePreload` और `preloadAfterShow` हैं; remote `preload.enabled` / `preload.after_show` समर्थित नहीं हैं। Onboarding schedule `lfo1_preload_mode`, `preload_trigger` और `onboarding.preload.*` से चलता है। Per-tier timeout `native.load.tier_timeout_ms` और `interstitial.load.tier_timeout_ms` से तय होता है (default 30000 ms)।
 
-OB interstitial slots tier और wait timeout support करते हैं; exit interstitial के लिए `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
+Splash और question interstitial slots पहले load होते हैं, फिर buffer से show होते हैं, इसलिए उनका `behavior` केवल `load.tier_timeout_ms` लेता है; `load_and_show.*` wait को अनदेखा किया जाता है क्योंकि slot पहले load और बाद में show होता है; वहाँ `load_and_show.*` field ignore होता है। केवल exit interstitial fill का इंतज़ार करता है: `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` तथा content `.native_template` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
 Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। Interval सेट करना timer चालू नहीं करता। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। Onboarding ad पर click अगला app-open छोड़ देता है, जब तक remote `app_open.presentation.skip_after_ad_click` को `false` न करे। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
+
+खाली behavior object व्यापक scope या निचले source की leaf value नहीं रोकता। `presentation.loading_enabled`, `show()` और `loadAndShow()` दोनों में captured screen/placement behavior लेता है, ready cached ad पर भी। Remote refresh के बाद banner placement का `enable_ua_check` दोबारा पढ़ता है; host का explicit `forceUaCheck` setter पहले आता है। Explicit style न होने पर भी native helper `presentation.cta_corner_radius_dp` लागू करता है।
 
 ## Native click actions
 
@@ -149,14 +156,14 @@ Pager page ads कभी reload नहीं होते: उन keys पर `r
 ## Native template, CTA और X/Skip प्रयोग
 
 - `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; हर content-step का `native_template`: `""` यानी inherit; `question.native.template`: `CTA_BOTTOM`।
-- Frame priority: remote template (per-step > screen/group) > backend के `ad_remote_config` से placement का `positionCTA` (`TOP`/`BOTTOM`) > custom app asset template (per-step > screen/group) > app की `ad_config.json` का `positionCTA` > host/SDK template। Unmodified SDK asset पुराने settings override नहीं करता। `positionCTA` स्वयं test करने के लिए संबंधित template override हटाएँ।
+- Frame priority: remote template (per-step > screen/group) > backend के `ad_remote_config` से placement का `positionCTA` (`TOP`/`BOTTOM`) > custom app asset template (per-step > screen/group) > app की `ad_config.json` का `positionCTA` > host/SDK template। SDK-bundled asset अंतिम fallback है; app asset root की copy explicit override है। `positionCTA` स्वयं test करने के लिए संबंधित template override हटाएँ।
 - Content presets `CTA_TOP`, `CTA_BOTTOM`, `COMPACT` हैं; group template fields पहले की तरह `FULL_SCREEN`/`DIALOG` भी लेते हैं। Language popup हमेशा `DIALOG`, ad-only Full1/Full2/OB5 हमेशा `FULL_SCREEN` इस्तेमाल करते हैं। Custom app layout resources local रहते हैं।
 - Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। LFO1 मौजूदा preload mode के अनुसार schedule होता है, remote का इंतज़ार नहीं।
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। एक ही source के भीतर specific scope shared scope से पहले है (किसी भी scope का remote app asset से ऊपर है), फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
 - X/Skip का side हर native full-screen page का अपना है, ऊपर कोई shared scope नहीं: हर full-screen step के लिए `onboarding.steps.<id>.fullscreen.skip.position`, standalone OB5 के लिए `ob5.skip.position`, और splash interstitial से LFO के बीच के native_fs के लिए `splash.native.skip.position`। तीनों में `RIGHT` / `LEFT` मान्य हैं, default `RIGHT` — वही side जहाँ X हमेशा से था; shipped JSON में `full1` और `full2` declare हैं, और app का declare किया कोई भी दूसरा step id उसी path पर स्वीकार होता है। किसी और format में यह control नहीं है: interstitial, app-open, banner और inline native में यह button होता ही नहीं। दोनों sides पूरी तरह mirror हैं: अपने edge से समान inset और समान top margin, इसलिए केवल side बदलता है, size/style/timing नहीं। RTL locale में screen आज की तरह ही mirror होती है: `RIGHT` text end, `LEFT` text start।
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
 - `lfo.confirm_button.image_url` / `tint_color`: `""` XML icon/color रखता है। Image failure पर SDK check icon, invalid color पर मौजूदा color रहता है। यह LFO confirm control है, ad CTA से अलग।
-- `lfo.languages.supported_codes`: `[]` app/SDK catalog रखता है। Unknown codes हटते हैं; filtered result खाली हो तो catalog fallback है। `lfo.languages.default_code`: `""` पुराना चुनाव रखता है; code दिखाई जाने वाली list (filtered `supported_codes`, वरना catalog) में होना चाहिए। Host का `LanguageConfig.defaultCode` अगर `supported_codes` से बाहर रह जाए तो preselect नहीं होता।
+- `lfo.languages.supported_codes`: `[]` app/SDK catalog रखता है। Unknown codes हटते हैं; filtered result खाली हो तो catalog fallback है। `lfo.languages.default_code`: स्पष्ट `""` configured default हटाता है (saved user selection नहीं मिटाता); code दिखाई जाने वाली list (filtered `supported_codes`, वरना catalog) में होना चाहिए। Host का `LanguageConfig.defaultCode` अगर `supported_codes` से बाहर रह जाए तो preselect नहीं होता।
 
 हर native full-screen page के X side का override उदाहरण। Shipped JSON में `full1` और `full2` — standard full-screen pages — declare हैं; app अपना step id declare करे तो उसे भी इसी तरह जोड़ें:
 
@@ -236,7 +243,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `app_open.load.max_background_requests` | `3` |
 | `app_open.load.background_retry_window_ms` | `120000` |
 | `app_open.load.offline_recheck_ms` | `5000` |
-| `app_open.load.failure_backoff_ms` | `[5000,30000,120000]` |
+| `app_open.load.failure_backoff_ms` | `[5000,30000,120000]` — 1–10 positive integers; `[]` या कोई invalid element ignore होता है और app asset/SDK schedule लागू होता है। |
 | `app_open.presentation.loading_timeout_ms` | `3000` |
 | `app_open.presentation.pre_show_delay_ms` | `800` |
 | `app_open.presentation.skip_after_ad_click` | `false` |
@@ -249,6 +256,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | --- | --- |
 | `schema_version` | `1` |
 | `revision` | `0` |
+| `privacy_goals_screen.enabled` | `false` |
 | `flow.skip_ad_only_steps_when_premium` | `true` |
 | `flow.fullscreen_skip_style` | `"CLOSE_ICON"` |
 | `splash.ads.slot_format` | `"BANNER"` |
@@ -259,7 +267,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `splash.timing.ad_budget_ms` | `60000` |
 | `splash.timing.slot_min_visible_ms` | `1000` | Compatibility के लिए स्वीकार; splash इसे इस्तेमाल नहीं करता। |
 | `splash.timing.slot_wait_after_inter_ms` | `10000` | Compatibility के लिए स्वीकार; splash इसे इस्तेमाल नहीं करता। |
-| `splash.timing.notification_settle_ms` | `800` |
+| `splash.timing.notification_settle_ms` | `1000` |
 | `splash.load.ad_strategy` | `"ALTERNATE"` |
 | `splash.load.lfo1_preload_mode` | `"SEQUENTIAL"` |
 | `splash.load.remote_fetch_timeout_ms` | `10000` |
@@ -331,4 +339,8 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 
 `native_fs` मौजूदा splash preload का इंतज़ार करता है और loading के दौरान shimmer दिखाता है; स्क्रीन खोलने पर नया request नहीं होता। डिफ़ॉल्ट रूप से ad bind होने के 3 सेकंड बाद X दिखता है। स्क्रीन अपने आप बंद नहीं होती; पुरानी `splash.native.auto_dismiss_ms` key अनदेखी की जाती है।
 
-`interstitial.auto_buffer` has moved to top-level `interstitial_auto_buffer` (default `enabled: true`). Update remote config and custom host assets to the new key; the old key is no longer read. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.
+`onboarding.preload.ob5_on_last_step` OB5 का इकलौता preload है, और pager exit OB5 तभी खोलता है जब उसका native पहले से load हो चुका हो। इसलिए इसे `false` करने पर OB5 बंद हो जाता है, `ob5.enabled: true` होने पर भी।
+
+`interstitial_auto_buffer` is a top-level group with `enabled: true` by default. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.
+
+Remote या app asset का `interstitial_auto_buffer.rules.<placement>` host list के बाहर placement जोड़ सकता है; host predicate और explicit `enabled: false` उसे रोक सकते हैं। Running buffer में नई managed placement settings बदलने पर अपना पहला cooldown शुरू करती है। `tick_ms: 0`, `interstitial.frequency.interval_ms` लेता है, host `ERainAdConfig.intervalInterstitialAd` fallback है।

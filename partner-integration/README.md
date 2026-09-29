@@ -14,6 +14,8 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 | Your app's events / choosing where analytics go | [Trackkit integration](trackkit-integration.md) | `trackkit` is already exposed by the kits |
 | Ad debugging dashboard | [AdTracer integration](adtracer-integration.md) | `adtracer`, debug only |
 
+Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
+
 ## Order to wire into your app
 
 1. **Pick the main feature:** Ads/OB, BillingKit with your own UI, or PayKit with its ready-made UI. An app can combine ads and purchases; PayKit initializes billing itself, so do not register another catalog with `AppPurchase.initBilling`.

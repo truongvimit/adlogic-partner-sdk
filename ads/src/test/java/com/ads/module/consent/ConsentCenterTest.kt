@@ -3,6 +3,7 @@ package com.ads.module.consent
 import android.app.Activity
 import android.content.Context
 import android.os.Looper
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.AdGate
 import com.google.android.ump.ConsentForm
 import com.google.android.ump.ConsentInformation
@@ -23,6 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -169,6 +171,26 @@ class ConsentCenterTest {
         assertTrue(ConsentCenter.isResolving())
         vendor.information.updates.last().succeed()
         assertEquals(1, vendor.forms.size)
+    }
+
+    @Test
+    fun `remote network timeout sets both the deadline and the timeout log`() {
+        ConsentCenter.configure(ConsentOptions(timeoutMs = 3_000, debug = false))
+        AdBehavior.document.acceptSuccessfulFetch("""{"consent":{"network_timeout_ms":5000}}""")
+        try {
+            val completions = mutableListOf<Boolean>()
+            ShadowLog.clear()
+            ConsentCenter.request(activity, onCompleted = completions::add)
+
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(4_999))
+            assertTrue(completions.isEmpty())
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+
+            assertEquals(listOf(true), completions)
+            assertTrue(ShadowLog.getLogsForTag("ConsentCenter").any { it.msg == "consent update timed out after 5000ms" })
+        } finally {
+            AdBehavior.document.acceptSuccessfulFetch(null)
+        }
     }
 
     @Test

@@ -593,6 +593,24 @@ class NativeOwnershipTest {
         }
     }
 
+    @Test fun `a placement helper styles its skeleton from the ad_config current at request time`() {
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+            mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", false, heightCTA = 40))))
+        try {
+            val container = android.widget.FrameLayout(activity).also(activity::setContentView)
+            val helper = NativeAdHelper.forPlacement(activity, activity, "home", container)
+            assertTrue(requests.isEmpty())
+            com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+                mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", true, heightCTA = 50))))
+            helper.show()
+            assertEquals(1, requests.size)
+            val cta = container.findViewById<android.view.View>(com.ads.module.R.id.ad_call_to_action)
+            assertEquals((50 * activity.resources.displayMetrics.density).toInt(), cta.layoutParams.height)
+        } finally {
+            com.ads.module.config.AdRemoteConfig.reset()
+        }
+    }
+
     @Test fun `a placement helper with preload enabled binds the fill preloaded under its placement`() {
         val helper = NativeAdHelper(activity, activity, config)
             .also { it.placement = "home" }

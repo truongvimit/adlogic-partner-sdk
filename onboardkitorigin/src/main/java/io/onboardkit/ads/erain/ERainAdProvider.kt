@@ -70,6 +70,9 @@ class ERainAdProvider : OnboardingAdProvider() {
         InterstitialAutoBuffer.reserve(*interKeys.toTypedArray())
     }
 
+    /** The `ad_config` key each interstitial was last loaded under; its show reads the same overrides. */
+    private val interConfigKeys = mutableMapOf<String, String?>()
+
     private val nativeKeys = mutableSetOf<String>()
     private val slots = mutableMapOf<String, NativeSlot>()
 
@@ -289,6 +292,7 @@ class ERainAdProvider : OnboardingAdProvider() {
         listener: AdEventListener?,
     ) {
         val key = placement.key
+        interConfigKeys[key] = adConfigKey
         InterstitialAdManager.load(
             activity,
             key,
@@ -338,6 +342,7 @@ class ERainAdProvider : OnboardingAdProvider() {
             interstitialCallback(key, callback),
             reportTelemetry = false,
             nextAction = InterNextAction.UnderAd,
+            behavior = OnboardingSettings.behavior(placement, interConfigKeys[key]),
         )
     }
 
