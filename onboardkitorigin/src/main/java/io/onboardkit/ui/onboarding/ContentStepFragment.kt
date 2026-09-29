@@ -117,13 +117,14 @@ class ContentStepFragment : LazyStepFragment() {
         b.obPrimaryCta.state =
             if (position == totalSteps() - 1) ObPrimaryButton.State.LAST
             else ObPrimaryButton.State.NEXT
+        val sharedColor = OnboardingSettings.onboardingPrimaryColor()
         b.obPrimaryCta.overrideLabels(
             style?.buttonNextText,
             style?.buttonLastText,
-            style?.buttonTextColor,
+            sharedColor,
         )
-        b.obPrimaryCta.overrideNextTextColor(OnboardingSettings.nextButtonTextColor(style?.buttonTextColor))
-        style?.sliderColor?.let { b.obStepIndicator.setColors(it) }
+        // The primary color is the single source of truth for the onboarding color cluster.
+        sharedColor?.let { b.obStepIndicator.setColors(it) }
         // Completion is reported by the host, which sees every page type and both exit paths
         b.obPrimaryCta.setOnClickListener { requireStepHost().next(StepExit.CTA) }
         if (usesDefaultLayout) {

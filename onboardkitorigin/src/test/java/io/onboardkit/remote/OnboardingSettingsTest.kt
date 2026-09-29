@@ -335,14 +335,12 @@ class OnboardingSettingsTest {
     @Test fun `language experiments use the app catalog and missing fields retain its default`() {
         val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en") }.getOrThrow()
         val supported = config.language.languages.last().code
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"default_code":"$supported","supported_codes":["$supported"]},"confirm_button":{"image_url":"https://example.com/confirm.png","tint_color":"#ff0000"}}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"default_code":"$supported","supported_codes":["$supported"]},"confirm_button":{"image_url":"https://example.com/confirm.png"}}}""")
         assertEquals(supported, OnboardingSettings.resolve(config).language.defaultCode)
         assertEquals(supported, OnboardingSettings.resolveFlags(RemoteFlags()).languageSupportedCodes)
-        assertEquals("#ff0000", OnboardingSettings.text("lfo.confirm_button.tint_color"))
         OnboardingSettings.document.acceptSuccessfulFetch("{}")
         assertEquals("en", OnboardingSettings.resolve(config).language.defaultCode)
         assertEquals("", OnboardingSettings.text("lfo.confirm_button.image_url"))
-        assertEquals("", OnboardingSettings.text("lfo.confirm_button.tint_color"))
     }
 
 }

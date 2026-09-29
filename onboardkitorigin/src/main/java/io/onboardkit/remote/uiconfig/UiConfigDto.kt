@@ -64,18 +64,15 @@ data class UiStepDto(
     /** Label for the not-last steps; the original could not tell "Next" from "Get Started". */
     @SerialName("button_next_content") val buttonNextContent: String? = null,
     @SerialName("button_last_content") val buttonLastContent: String? = null,
-    @SerialName("button_content_color") val buttonContentColor: String? = null,
     @SerialName("background_text_color") val backgroundTextColor: String? = null,
     @SerialName("enable_background_text")
     @Serializable(with = LenientBooleanSerializer::class)
     val enableBackgroundText: Boolean? = null,
-    @SerialName("slider_color") val sliderColor: String? = null,
 )
 
 @Serializable
 data class UiLfoDto(
     @SerialName("button_image") val buttonImage: String? = null,
-    @SerialName("button_tint_color") val buttonTintColor: String? = null,
 )
 
 @Serializable

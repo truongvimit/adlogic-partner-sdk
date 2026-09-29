@@ -164,7 +164,7 @@ Pager page ads कभी reload नहीं होते: उन keys पर `r
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। एक ही source के भीतर specific scope shared scope से पहले है (किसी भी scope का remote app asset से ऊपर है), फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
 - X/Skip का side हर native full-screen page का अपना है, ऊपर कोई shared scope नहीं: हर full-screen step के लिए `onboarding.steps.<id>.fullscreen.skip.position`, standalone OB5 के लिए `ob5.skip.position`, और splash interstitial से LFO के बीच के native_fs के लिए `splash.native.skip.position`। तीनों में `RIGHT` / `LEFT` मान्य हैं, default `RIGHT` — वही side जहाँ X हमेशा से था; shipped JSON में `full1` और `full2` declare हैं, और app का declare किया कोई भी दूसरा step id उसी path पर स्वीकार होता है। किसी और format में यह control नहीं है: interstitial, app-open, banner और inline native में यह button होता ही नहीं। दोनों sides पूरी तरह mirror हैं: अपने edge से समान inset और समान top margin, इसलिए केवल side बदलता है, size/style/timing नहीं। RTL locale में screen आज की तरह ही mirror होती है: `RIGHT` text end, `LEFT` text start।
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
-- `lfo.confirm_button.image_url` / `tint_color`: `""` XML icon/color रखता है। Image failure पर SDK check icon, invalid color पर मौजूदा color रहता है। यह LFO confirm control है, ad CTA से अलग।
+- `lfo.confirm_button.image_url`: `""` XML icon रखता है। Image failure पर SDK check icon आता है। Check tint हमेशा `onboarding.primary_color` से आता है; यह ad CTA से अलग है।
 - `lfo.languages.supported_codes`: `[]` app/SDK catalog रखता है। Unknown codes हटते हैं; filtered result खाली हो तो catalog fallback है। `lfo.languages.default_code`: स्पष्ट `""` configured default हटाता है (saved user selection नहीं मिटाता); code दिखाई जाने वाली list (filtered `supported_codes`, वरना catalog) में होना चाहिए। Host का `LanguageConfig.defaultCode` अगर `supported_codes` से बाहर रह जाए तो preselect नहीं होता।
 
 हर native full-screen page के X side का override उदाहरण। Shipped JSON में `full1` और `full2` — standard full-screen pages — declare हैं; app अपना step id declare करे तो उसे भी इसी तरह जोड़ें:
@@ -293,7 +293,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.confirm_button.visible_before_selection` | `true` |
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.image_url` | `""` |
-| `lfo.confirm_button.tint_color` | `""` |
+| `onboarding.primary_color` | `"#FF375E"` | Shared NEXT, final Get Started, active indicator और LFO check color. |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
@@ -340,6 +340,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 
 Remote या app asset का `interstitial_auto_buffer.rules.<placement>` host list के बाहर placement जोड़ सकता है; host predicate और explicit `enabled: false` उसे रोक सकते हैं। Running buffer में नई managed placement settings बदलने पर अपना पहला cooldown शुरू करती है। `tick_ms: 0`, `interstitial.frequency.interval_ms` लेता है, host `ERainAdConfig.intervalInterstitialAd` fallback है।
 
-### Onboarding Next text color
+### Onboarding primary color
 
-Set `onboarding.next_button.text_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It changes the NEXT state only; the final button retains its own style. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
+Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). यह NEXT बटन, final Get Started बटन, active progress indicator और LFO check button का साझा onboarding color है। Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.

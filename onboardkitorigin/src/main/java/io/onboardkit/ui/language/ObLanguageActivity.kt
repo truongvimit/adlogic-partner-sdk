@@ -123,9 +123,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSettings.text("lfo.confirm_button.image_url").takeIf { it.isNotBlank() }?.let {
             com.bumptech.glide.Glide.with(this).load(it).error(io.onboardkit.R.drawable.ob_ic_check).into(binding.obLanguageConfirm)
         }
-        OnboardingSettings.text("lfo.confirm_button.tint_color").takeIf { it.isNotBlank() }
-            ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
-            ?.let { binding.obLanguageConfirm.imageTintList = android.content.res.ColorStateList.valueOf(it) }
+        // `onboarding.primary_color` is the single source of truth for the onboarding color
+        // cluster, including the LFO check control.
+        OnboardingSettings.onboardingPrimaryColor()?.let { tint ->
+            binding.obLanguageConfirm.imageTintList =
+                android.content.res.ColorStateList.valueOf(tint)
+        }
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
         binding.obLanguageSave.setOnClickListener { onConfirm() }

@@ -16,10 +16,8 @@ data class UiStepStyle(
     val subtitleColor: Int?,
     val buttonNextText: String?,
     val buttonLastText: String?,
-    val buttonTextColor: Int?,
     val textBackgroundColor: Int?,
     val textBackgroundEnabled: Boolean,
-    val sliderColor: Int?,
 )
 
 data class UiConfig(
@@ -111,10 +109,8 @@ object UiConfigParser {
             subtitleColor = color(dto.subtitleColor),
             buttonNextText = dto.buttonNextContent,
             buttonLastText = dto.buttonLastContent,
-            buttonTextColor = color(dto.buttonContentColor),
             textBackgroundColor = color(dto.backgroundTextColor),
             textBackgroundEnabled = dto.enableBackgroundText ?: true,
-            sliderColor = color(dto.sliderColor),
         )
     }
 

@@ -33,6 +33,7 @@ object OnboardingSettings {
     }
 
     private fun extraDefault(path: String): Any? {
+        if (path == PRIMARY_COLOR_PATH) return ""
         if (path.startsWith("onboarding.steps.")) {
             val suffix = path.split('.').drop(3).joinToString(".")
             // Position is the one fullscreen field with no shared onboarding scope: each page
@@ -74,15 +75,18 @@ object OnboardingSettings {
     fun number(path: String) = values.long(path)
     fun text(path: String) = values.string(path)
 
-    /** Grouped remote > legacy remote UI > app asset; empty preserves the existing UI color. */
-    internal fun nextButtonTextColor(legacyColor: Int? = null): Int? {
-        val path = "onboarding.next_button.text_color"
+    /** Shared onboarding color: remote > app asset; empty preserves the existing UI color. */
+    internal fun onboardingPrimaryColor(): Int? {
         val snapshot = values
         fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
             ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
-        (snapshot.remoteValue(path) as? String)?.let { return parse(it) ?: legacyColor }
-        return legacyColor ?: (snapshot.assetValue(path) as? String)?.let(::parse)
+
+        (snapshot.remoteValue(PRIMARY_COLOR_PATH) as? String)?.let { return parse(it) }
+        return (snapshot.assetValue(PRIMARY_COLOR_PATH) as? String)?.let(::parse)
+            ?: (document.defaultValue(PRIMARY_COLOR_PATH) as? String)?.let(::parse)
     }
+
+    private const val PRIMARY_COLOR_PATH = "onboarding.primary_color"
 
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"

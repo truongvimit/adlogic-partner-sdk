@@ -69,8 +69,7 @@
     "confirm_button": {
       "visible_before_selection": true,
       "save_on_back": true,
-      "image_url": "",
-      "tint_color": ""
+      "image_url": ""
     },
     "confirm_dialog": {
       "enabled": true,
@@ -87,9 +86,7 @@
     }
   },
   "onboarding": {
-    "next_button": {
-      "text_color": "#FF375E"
-    },
+    "primary_color": "#FF375E",
     "navigation": {
       "lock_pager_swipe": false,
       "swipe_completes_last_step": true,
