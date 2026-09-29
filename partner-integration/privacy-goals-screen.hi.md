@@ -36,7 +36,7 @@ SDK layouts देता है। Customize करने के लिए app �
 
 Privacy consent control का ID `ob_privacy_consent_checkbox`, Goal `RecyclerView` का `ob_goal_options`, और दोनों screens के ad `FrameLayout` का `ob_privacy_goals_ad` रखें। Ad frame का आकार और स्थान समान रखें। इन conventions के साथ अलग view-ID config नहीं चाहिए।
 
-SDK clickable `Button` या `TextView` को action मानता है। कई clickable controls हों तो सही action को optional `ob_privacy_goals_continue` ID दें। Option item root पर click और `isSelected`/`Checkable` state मिलती है। खाली `TextView`/`ImageView` में SDK option content भरता है; पहले से भरे views app के नियंत्रण में रहते हैं।
+SDK clickable `Button` या `TextView` को action मानता है। कई clickable controls हों तो सही action को optional `ob_privacy_goals_continue` ID दें। Option item root पर click और `isSelected`/`Checkable` state मिलती है। SDK हर bind पर पहले `TextView` में option title सेट करता है, recycled ViewHolder में भी। पहला `ImageView` option image प्राप्त करता है। Preview के लिए `tools:text` और selected styling के लिए selector के साथ `duplicateParentState="true"` इस्तेमाल करें।
 
 ## Ads और completion
 

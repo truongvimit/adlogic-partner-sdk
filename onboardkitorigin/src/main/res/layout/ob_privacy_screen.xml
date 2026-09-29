@@ -1,5 +1,130 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
-    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="24dp"><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PDF Reader" android:textSize="28sp" android:textStyle="bold"/><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Read, edit and convert all your documents in one place." android:textSize="16sp"/><CheckBox android:id="@id/ob_privacy_consent_checkbox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="By tapping Get started you agree to our Terms of Use and Privacy Policy."/></LinearLayout></ScrollView>
-    <Button android:id="@id/ob_privacy_goals_continue" android:layout_width="match_parent" android:layout_height="52dp" android:layout_margin="16dp" android:enabled="false" android:text="GET STARTED"/>
-    <FrameLayout android:id="@id/ob_privacy_goals_ad" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="16dp" android:layout_marginBottom="12dp"/>
-</LinearLayout>
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        app:layout_constraintBottom_toTopOf="@id/ob_privacy_goals_ad"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="28dp"
+            android:paddingBottom="24dp">
+
+            <ImageView
+                android:layout_width="200dp"
+                android:layout_height="160dp"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ob_privacy_hero" />
+
+            <ImageView
+                android:layout_width="170dp"
+                android:layout_height="28dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ob_privacy_pdf_reader" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/ob_poppins_medium"
+                android:gravity="center"
+                android:text="All your files in one place"
+                android:textColor="@color/ob_text_secondary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:text="Enjoy useful tools in a PDF"
+                android:textColor="@color/ob_black"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <include layout="@layout/ob_privacy_tool_merge" />
+                <include layout="@layout/ob_privacy_tool_split" />
+                <include layout="@layout/ob_privacy_tool_sign" />
+                <include layout="@layout/ob_privacy_tool_lock" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/ob_privacy_consent_bg"
+                android:gravity="center_vertical"
+                android:minHeight="64dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp">
+
+                <CheckBox
+                    android:id="@id/ob_privacy_consent_checkbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/ob_accent"
+                    android:contentDescription="I agree"
+                    android:scaleX="1.05"
+                    android:scaleY="1.05" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/ob_poppins_regular"
+                    android:text="By tapping Continue, you agree to our Terms of Use and Privacy Policy."
+                    android:textColor="@color/ob_black"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@id/ob_privacy_goals_continue"
+                android:layout_width="match_parent"
+                android:layout_height="55dp"
+                android:layout_marginTop="20dp"
+
+                android:background="@drawable/ob_privacy_continue_bg"
+                android:clickable="true"
+                android:enabled="false"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:text="Continue"
+                android:textColor="@color/ob_white"
+                android:textSize="18sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <FrameLayout
+        android:id="@id/ob_privacy_goals_ad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="10dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

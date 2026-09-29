@@ -32,7 +32,7 @@ data class NativeAdStyle(
     /** Height for `@id/ad_call_to_action` in dp. Null keeps the XML height. */
     val ctaHeightDp: Int? = null,
 
-    /** CTA background color. Applied to the real ad only — a skeleton stays grey. */
+    /** CTA and attribution background color. Applied to both the real ad and its skeleton. */
     @ColorInt val ctaBackgroundColor: Int? = null,
 
     /** Corner radius of the CTA background when [ctaBackgroundColor] is set. */

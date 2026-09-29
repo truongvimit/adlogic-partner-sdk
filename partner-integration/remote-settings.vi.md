@@ -366,3 +366,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 ## Force update
 
 Parameter String riêng `force_update_config` điều khiển ngưỡng versionCode và bắt buộc/gợi ý cập nhật; không nằm trong hai document settings ở trên. Xem [setup, JSON, cache và tích hợp gate](force-update-integration.vi.md).
+
+### Onboarding Next text color
+
+Set `onboarding.next_button.text_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It changes the NEXT state only; the final button retains its own style. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.

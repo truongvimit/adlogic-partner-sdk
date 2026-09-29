@@ -74,6 +74,16 @@ object OnboardingSettings {
     fun number(path: String) = values.long(path)
     fun text(path: String) = values.string(path)
 
+    /** Grouped remote > legacy remote UI > app asset; empty preserves the existing UI color. */
+    internal fun nextButtonTextColor(legacyColor: Int? = null): Int? {
+        val path = "onboarding.next_button.text_color"
+        val snapshot = values
+        fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
+        (snapshot.remoteValue(path) as? String)?.let { return parse(it) ?: legacyColor }
+        return legacyColor ?: (snapshot.assetValue(path) as? String)?.let(::parse)
+    }
+
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"
         // Not "splash.native" — that scope belongs to the full-screen SplashNative and carries the

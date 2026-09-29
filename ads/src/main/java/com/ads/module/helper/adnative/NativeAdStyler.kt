@@ -2,6 +2,7 @@ package com.ads.module.helper.adnative
 
 import android.app.Activity
 import android.graphics.drawable.GradientDrawable
+import androidx.core.graphics.drawable.DrawableCompat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -87,7 +88,7 @@ object NativeAdStyler {
         }
     }
 
-    /** Appearance styling (CTA color). Real ad only — a skeleton must stay grey. */
+    /** Appearance styling (CTA and attribution colors) for a loaded ad or its skeleton. */
     @JvmStatic
     fun applyAppearance(root: View, style: NativeAdStyle) {
         val color = style.ctaBackgroundColor ?: return
@@ -95,6 +96,13 @@ object NativeAdStyler {
             cta.background = GradientDrawable().apply {
                 setColor(color)
                 cornerRadius = root.dp(style.ctaCornerRadiusDp).toFloat()
+            }
+        }
+        // The attribution badge is part of the native's visual CTA language. Layouts expose it
+        // as `ad_icon`; tint the existing drawable so its shape, padding and corner radii survive.
+        root.findViewById<View>(R.id.ad_icon)?.let { badge ->
+            badge.background?.let { background ->
+                badge.background = DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
             }
         }
     }

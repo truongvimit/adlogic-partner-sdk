@@ -20,6 +20,7 @@ import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.databinding.ObFragmentContentStepBinding
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.uiconfig.UiStepStyle
 import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
@@ -116,10 +117,13 @@ class ContentStepFragment : LazyStepFragment() {
         b.obPrimaryCta.state =
             if (position == totalSteps() - 1) ObPrimaryButton.State.LAST
             else ObPrimaryButton.State.NEXT
-        style?.let {
-            b.obPrimaryCta.overrideLabels(it.buttonNextText, it.buttonLastText, it.buttonTextColor)
-            it.sliderColor?.let { color -> b.obStepIndicator.setColors(color) }
-        }
+        b.obPrimaryCta.overrideLabels(
+            style?.buttonNextText,
+            style?.buttonLastText,
+            style?.buttonTextColor,
+        )
+        b.obPrimaryCta.overrideNextTextColor(OnboardingSettings.nextButtonTextColor(style?.buttonTextColor))
+        style?.sliderColor?.let { b.obStepIndicator.setColors(it) }
         // Completion is reported by the host, which sees every page type and both exit paths
         b.obPrimaryCta.setOnClickListener { requireStepHost().next(StepExit.CTA) }
         if (usesDefaultLayout) {

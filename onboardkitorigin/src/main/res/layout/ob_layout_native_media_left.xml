@@ -74,6 +74,7 @@
 
             <!-- Figma "Tag/ads/2" — the same chip the Confirm Language native uses. -->
             <TextView
+                android:id="@+id/ad_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="@dimen/ob_splash_native_badge_height"
                 android:background="@drawable/ob_bg_ad_badge_dialog"

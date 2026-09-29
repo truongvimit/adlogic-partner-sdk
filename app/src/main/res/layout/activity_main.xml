@@ -498,7 +498,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:fontFamily="@font/regular"
-                        android:text="Select a color, then reload native ad to apply"
+                        android:text="Select a color for the CTA and Ad badge, then reload native ad"
                         android:textColor="@color/color_text_secondary"
                         android:textSize="11sp" />
 

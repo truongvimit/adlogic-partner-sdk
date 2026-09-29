@@ -36,7 +36,7 @@ The SDK supplies layouts. To customize them, override these app resource names:
 
 Keep `ob_privacy_consent_checkbox` for the Privacy consent control, `ob_goal_options` as the Goal `RecyclerView`, and `ob_privacy_goals_ad` as a `FrameLayout` on both screens. Use the same ad frame size and position. No per-view config is needed when following these conventions.
 
-The SDK finds a clickable `Button` or `TextView` for the action. If several controls are clickable, mark the intended action with optional ID `ob_privacy_goals_continue`. The option item's root receives clicks and `isSelected`/`Checkable` state. Blank `TextView`/`ImageView` children receive option content; already populated views remain app-owned.
+The SDK finds a clickable `Button` or `TextView` for the action. If several controls are clickable, mark the intended action with optional ID `ob_privacy_goals_continue`. The option item's root receives clicks and `isSelected`/`Checkable` state. The first `TextView` receives the option title on every bind (including recycled holders); the first `ImageView` receives its image when provided. Keep these views for option data, use `tools:text` for preview labels, and use selectors with `duplicateParentState="true"` for child selection styling.
 
 ## Ads and completion
 

@@ -44,8 +44,7 @@ Nút Get Started/Continue không cần ID riêng. SDK tự tìm `Button` hoặc 
 layout. Với một UI có nhiều nút clickable, partner có thể đánh dấu nút đúng bằng ID tùy chọn
 `ob_privacy_goals_continue`; SDK dùng marker này trước khi fallback tự tìm. Item layout chỉ cần
 là một layout hiển thị theo ý partner; không cần khai báo ID title, image hay selected. Nếu có
-TextView/ImageView trống, SDK sẽ bind dữ liệu option vào đó; nếu không có, UI vẫn hoạt động bình
-thường và trạng thái chọn được phát qua root item.
+TextView, SDK luôn gán tiêu đề option vào TextView đầu tiên ở mỗi lần bind, kể cả ViewHolder tái sử dụng; ImageView đầu tiên nhận ảnh option nếu được cung cấp. Dùng `tools:text` để preview, không dùng nhãn XML cố định cho dữ liệu option. Styling chọn dùng selector và `duplicateParentState="true"` trên view con.
 
 Ví dụ config bật flow và cung cấp dữ liệu option:
 

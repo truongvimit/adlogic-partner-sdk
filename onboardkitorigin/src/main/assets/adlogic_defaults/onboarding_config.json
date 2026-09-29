@@ -87,6 +87,9 @@
     }
   },
   "onboarding": {
+    "next_button": {
+      "text_color": "#FF375E"
+    },
     "navigation": {
       "lock_pager_swipe": false,
       "swipe_completes_last_step": true,

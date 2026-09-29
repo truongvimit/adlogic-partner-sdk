@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "onboarding": {
+    "next_button": {
+      "text_color": "#1E88E5"
+    }
+  }
+}
