@@ -71,7 +71,9 @@ class ObQuestionActivity : BaseOnboardActivity() {
         binding.obQuestionTitle.text = question.title
             ?: question.titleRes.takeIf { it != 0 }?.let(::getString)
             ?: getString(R.string.ob_question_title_default)
-        val remoteCta = RemoteQuestionParser.parse(remoteJson)?.ctaText?.takeIf { it.isNotBlank() }
+        // Preserve an explicitly empty CTA; only an omitted field falls through to the compiled
+        // resource. This keeps legacy JSON inputs subject to the same presence contract.
+        val remoteCta = RemoteQuestionParser.parse(remoteJson)?.ctaText
         when {
             remoteCta != null -> binding.obQuestionCta.text = remoteCta
             question.ctaTextRes != 0 -> binding.obQuestionCta.setText(question.ctaTextRes)

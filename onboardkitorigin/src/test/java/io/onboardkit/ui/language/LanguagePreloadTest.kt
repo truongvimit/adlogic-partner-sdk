@@ -8,7 +8,10 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.AdUnitConfig
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
@@ -87,6 +90,12 @@ class LanguagePreloadTest {
         main.idle()
         ConsentCenter.clearHostConsent()
         OnboardingSettings.document.acceptSuccessfulFetch(null)
+        AdRemoteConfig.reset()
+    }
+
+    private fun lfo2ClickAction(action: NativeClickAction) {
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang_alt" to AdUnitConfig("language", true, clickAction = action))))
+        assertEquals(action, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
     }
 
     private fun launch(secondSlot: Boolean = true) {
@@ -119,8 +128,8 @@ class LanguagePreloadTest {
     }
 
     @Test fun `LFO2 auto next confirms selected language once on actual click return`() {
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}""")
         launch()
+        lfo2ClickAction(NativeClickAction.AUTO_NEXT)
         tapLanguage()
         val listener = requireNotNull(listeners[AdPlacement.Language2])
         listener.onClicked()
@@ -138,18 +147,18 @@ class LanguagePreloadTest {
     @Test fun `LFO2 reload and none never confirm after ad return`() {
         launch()
         tapLanguage()
-        for (action in listOf("reload", "none")) {
-            OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"$action"}}}}}""")
+        for (action in listOf(NativeClickAction.RELOAD, NativeClickAction.NONE)) {
+            lfo2ClickAction(action)
             requireNotNull(listeners[AdPlacement.Language2]).onClicked()
             requireNotNull(controller).pause().stop().restart().start().resume()
             main.idle()
-            assertEquals(action, 0, completions.size)
+            assertEquals(action.remoteValue, 0, completions.size)
         }
     }
 
     @Test fun `LFO2 auto next does not confirm on ordinary resume or failed ad launch`() {
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"behavior":{"click":{"action":"auto_next"}}}}}""")
         launch()
+        lfo2ClickAction(NativeClickAction.AUTO_NEXT)
         tapLanguage()
         requireNotNull(controller).pause().stop().restart().start().resume()
         main.idle()

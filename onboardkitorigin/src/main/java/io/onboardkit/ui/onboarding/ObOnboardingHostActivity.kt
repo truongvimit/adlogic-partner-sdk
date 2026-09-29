@@ -1,5 +1,6 @@
 package io.onboardkit.ui.onboarding
 
+import com.ads.module.config.settings.AdBehavior
 import io.onboardkit.remote.OnboardingSettings
 import android.app.Activity
 import android.content.Intent
@@ -31,6 +32,7 @@ import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import io.onboardkit.ui.pager.AdvanceFlingDetector
 import io.onboardkit.ui.pager.StepPage
 import io.onboardkit.ui.pager.StepPagerAdapter
@@ -203,6 +205,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         lastSelectedPosition = position
         _currentIndex.value = position
         updatePagerSwipe()
+        keepVisitedPages(position)
 
         val stepId = enabledStepIds.getOrNull(position) ?: return
         OnboardingSdk.session.recordStepShown(stepId)
@@ -221,6 +224,17 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             ) {
                 pagerAdapter.fragmentAt(position)?.dispatchSelected()
             }
+        }
+    }
+
+    /**
+     * A visited page's view, and the native ad bound in it, must survive until the flow ends:
+     * a fixed limit of 1 destroyed pages two swipes back, and a revisit found its ad gone.
+     * Growing with the furthest page reached keeps them without inflating the whole flow up front.
+     */
+    private fun keepVisitedPages(position: Int) {
+        if (position > binding.obStepPager.offscreenPageLimit) {
+            binding.obStepPager.offscreenPageLimit = position
         }
     }
 
@@ -353,9 +367,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val underAd = timing == NextScreenTiming.UNDER_AD && entry == null
         loadAndShowInterstitial(
             AdPlacement.AfterOnboardingInterstitial,
-            // Only the last fallback: the placement's behavior chain already reads this screen's
-            // wait, ranked above the placement and format waits.
-            timeoutMs = OnboardingSettings.defaultNumber("onboarding.exit_interstitial.wait_timeout_ms"),
+            // The placement behavior chain is the centralized resolver for this field.  Passing
+            // the bundled number here bypassed remote and app-asset overrides before the ads
+            // module had a chance to inspect the snapshot.
+            timeoutMs = OnboardingSettings.behavior(AdPlacement.AfterOnboardingInterstitial)
+                .long("load_and_show.wait_timeout_ms", AdBehavior.defaultNumber("interstitial.load_and_show.wait_timeout_ms")),
             onNext = { if (underAd) continueWhenResumed() },
             onFinished = {
                 adGone.complete(Unit)
@@ -378,6 +394,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     private fun continueAfterOnboardingAd() {
         if (isFinishing || isDestroyed) return
+        if (sdk.privacyGoalsScreenEnabled()) {
+            PrivacyGoalsActivity.start(this)
+            lifecycleScope.launch { finishAfterExitAd() }
+            return
+        }
         val config = sdk.requireConfig()
         val provider = sdk.provider()
         val decision = FlowNavigator.decideExit(

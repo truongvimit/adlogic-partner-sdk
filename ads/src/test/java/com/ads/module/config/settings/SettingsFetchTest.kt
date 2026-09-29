@@ -32,7 +32,7 @@ class SettingsFetchTest {
     }
 
     @Test fun `caller cancellation propagates without replacing the last valid settings`() = runBlocking {
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"on_ad_click":false}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"auto_shimmer":false}}}""")
         AdConfig.install(object : AdConfigSource, SettingsConfigSource {
             override val id = "cancelled"
             override suspend fun fetchSettings(timeoutMs: Long): Map<String, String?>? {
@@ -44,7 +44,7 @@ class SettingsFetchTest {
             AdConfig.refresh(10)
             fail("Cancellation must reach the caller")
         } catch (_: kotlinx.coroutines.CancellationException) {
-            assertFalse(AdBehavior.bool("native.reload.on_ad_click"))
+            assertFalse(AdBehavior.bool("native.presentation.auto_shimmer"))
         }
     }
 
@@ -67,13 +67,13 @@ class SettingsFetchTest {
 
     @Test fun `successful fetch with removed parameter restores defaults`() = runBlocking {
         AdBehavior.initialize(ApplicationProvider.getApplicationContext<Context>())
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"on_ad_click":false}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"auto_shimmer":false}}}""")
         AdConfig.install(object : AdConfigSource, SettingsConfigSource {
             override val id = "test"
             override suspend fun fetchSettings(timeoutMs: Long) = mapOf("ad_behavior_config" to null)
             override suspend fun fetch(timeoutMs: Long): String? = null
         })
         AdConfig.refresh(10)
-        assertTrue(AdBehavior.bool("native.reload.on_ad_click"))
+        assertTrue(AdBehavior.bool("native.presentation.auto_shimmer"))
     }
 }

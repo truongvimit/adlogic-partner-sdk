@@ -30,12 +30,14 @@ class NativeAdConfigForUnitsTest {
     }
 
     @Test fun `a single fill slot never refills, reloads or reloads on click`() {
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"allowed":true},"click":{"action":"reload"}}}""")
-        val config = NativeAdConfig.forUnits(listOf("step"), 1, singleFill = true)
+        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"allowed":true}}}""")
+        val config = NativeAdConfig.forUnits(listOf("step"), 1, adConfigKey = "native_ob1", singleFill = true)
         assertFalse(config.canPreloadReplacement)
         assertFalse(config.canReloadAds)
         assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
-        AdBehavior.document.acceptSuccessfulFetch("""{"native":{"click":{"action":"auto_next"}}}""")
+        clickAction("native_ob1", NativeClickAction.RELOAD)
+        assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
+        clickAction("native_ob1", NativeClickAction.AUTO_NEXT)
         assertEquals(NativeClickAction.AUTO_NEXT, config.resolvedClickAction)
     }
 
@@ -48,14 +50,37 @@ class NativeAdConfigForUnitsTest {
         assertTrue(config.canReloadAds)
     }
 
-    @Test fun `the ad config key supplies the UA gate and placement overrides`() {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "x", isEnable = true, enableUaCheck = true))))
-        AdBehavior.document.acceptSuccessfulFetch(
-            """{"placement_overrides":{"native_lang":{"native":{"click":{"action":"none"}}}}}""")
+    @Test fun `the ad config key supplies the UA gate and the click action`() {
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "x", isEnable = true,
+            enableUaCheck = true, clickAction = NativeClickAction.NONE))))
         val config = NativeAdConfig.forUnits(listOf("lang"), 1, "native_lang")
         assertTrue(config.forceUaCheck)
         assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
         assertFalse(NativeAdConfig.forUnits(listOf("lang"), 1).forceUaCheck)
+        assertEquals(NativeClickAction.RELOAD, NativeAdConfig.forUnits(listOf("lang"), 1).resolvedClickAction)
+    }
+
+    @Test fun `ad_config click action outranks the code default and a silent key keeps it`() {
+        val config = NativeAdConfig.forPlacement("native_home", 1)
+        assertEquals(NativeClickAction.RELOAD, config.resolvedClickAction)
+        config.clickAction = NativeClickAction.NONE
+        assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
+        clickAction("native_home", NativeClickAction.RELOAD)
+        assertEquals(NativeClickAction.RELOAD, config.resolvedClickAction)
+        clickAction("native_home", NativeClickAction.AUTO_NEXT)
+        assertEquals(NativeClickAction.AUTO_NEXT, config.resolvedClickAction)
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_home" to AdUnitConfig(id = "x", isEnable = true))))
+        assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
+    }
+
+    @Test fun `a click action on a floor key never reaches the placement`() {
+        AdRemoteConfig.update(AdRemoteConfig(mapOf(
+            "native_home_high" to AdUnitConfig(id = "high", isEnable = true, clickAction = NativeClickAction.NONE),
+            "native_home" to AdUnitConfig(id = "base", isEnable = true),
+        )))
+        assertEquals(NativeClickAction.RELOAD, NativeAdConfig.forPlacement("native_home", 1).resolvedClickAction)
+        assertEquals(NativeClickAction.RELOAD,
+            NativeAdConfig.forUnits(listOf("high"), 1, "native_home").resolvedClickAction)
     }
 
     @Test fun `placement UA gate follows a remote refresh`() {
@@ -86,4 +111,7 @@ class NativeAdConfigForUnitsTest {
         assertEquals(4, replaceable.layoutId)
         assertEquals(NativeClickAction.AUTO_NEXT, step.resolvedClickAction)
     }
+
+    private fun clickAction(key: String, action: NativeClickAction) = AdRemoteConfig.update(AdRemoteConfig(
+        mapOf(key to AdUnitConfig(id = "x", isEnable = true, clickAction = action))))
 }

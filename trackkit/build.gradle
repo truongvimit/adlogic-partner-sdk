@@ -10,7 +10,11 @@ android {
 
     defaultConfig {
         minSdk min_sdk_version
+        buildConfigField "String", "SDK_VERSION", "\"$adlogic_sdk_version\""
         consumerProguardFiles "consumer-rules.pro"
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

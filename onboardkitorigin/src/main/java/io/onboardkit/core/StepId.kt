@@ -19,6 +19,10 @@ value class StepId(val value: String) {
         val FULL2 = StepId("full2")
         val OB5 = StepId("ob5")
         val QUESTION = StepId("question")
+        val PARTNER_PRIVACY = StepId("partner_privacy")
+        val PARTNER_PRIVACY_ALT = StepId("partner_privacy_alt")
+        val PARTNER_GOAL = StepId("partner_goal")
+        val PARTNER_GOAL_ALT = StepId("partner_goal_alt")
     }
 }
 

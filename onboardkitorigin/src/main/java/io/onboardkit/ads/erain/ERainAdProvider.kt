@@ -43,6 +43,7 @@ import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.awaitNativeRequestWindow
 import io.onboardkit.ads.canStartNativeRequest
+import io.onboardkit.ads.isPrivacyGoalsNative
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeTemplate
@@ -68,6 +69,9 @@ class ERainAdProvider : OnboardingAdProvider() {
     init {
         InterstitialAutoBuffer.reserve(*interKeys.toTypedArray())
     }
+
+    /** The `ad_config` key each interstitial was last loaded under; its show reads the same overrides. */
+    private val interConfigKeys = mutableMapOf<String, String?>()
 
     private val nativeKeys = mutableSetOf<String>()
     private val slots = mutableMapOf<String, NativeSlot>()
@@ -288,6 +292,7 @@ class ERainAdProvider : OnboardingAdProvider() {
         listener: AdEventListener?,
     ) {
         val key = placement.key
+        interConfigKeys[key] = adConfigKey
         InterstitialAdManager.load(
             activity,
             key,
@@ -337,6 +342,7 @@ class ERainAdProvider : OnboardingAdProvider() {
             interstitialCallback(key, callback),
             reportTelemetry = false,
             nextAction = InterNextAction.UnderAd,
+            behavior = OnboardingSettings.behavior(placement, interConfigKeys[key]),
         )
     }
 
@@ -432,13 +438,14 @@ class ERainAdProvider : OnboardingAdProvider() {
         } else {
             null
         }
-        val step = placement is AdPlacement.StepNative || placement is AdPlacement.StepFullScreen
+        val pagerPage = (placement is AdPlacement.StepNative && !placement.isPrivacyGoalsNative) ||
+            placement is AdPlacement.StepFullScreen
         return NativeAdConfig.forUnits(
             request.unit.loadOrder,
             layoutRes,
             adConfigKey = OnboardingSdk.configuredPlacementKey(placement),
             joinOnly = true,
-            singleFill = step,
+            singleFill = pagerPage,
             liveLayoutId = liveSdkFrame,
             liveClickAction = { OnboardingSettings.nativeClickAction(placement) },
         ).also { it.behavior = OnboardingSettings.behavior(placement) }

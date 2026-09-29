@@ -49,6 +49,10 @@ class SettingsDocument(
         if (initialized) return
         initialized = true
         preferences = runCatching { context.applicationContext.getSharedPreferences("adlogic_settings_$name", Context.MODE_PRIVATE) }.getOrNull()
+        // Only the app root is an override. SDK defaults are generated from and
+        // packaged under adlogic_defaults/, so an identical host JSON is still
+        // recognized as an explicit app tier rather than being discarded by a
+        // content-equality heuristic.
         val assetJson = runCatching { context.assets.open("$name.json").bufferedReader().use { it.readText() } }.getOrNull()
         install(assetJson, runCatching { preferences?.getString("remote", null) }.getOrNull())
     }
@@ -80,8 +84,7 @@ class SettingsDocument(
 
     /** A sparse/custom app asset is an explicit assignment, including false/zero SDK values. */
     internal fun localOverrides(json: String?): Map<String, Any> {
-        val parsed = json?.let(::parse) ?: return emptyMap()
-        return if (sameValue(parsed, defaults)) emptyMap() else parsed
+        return json?.let(::parse).orEmpty()
     }
 
     /** Synchronous host/test entry point; production fetches use [acceptFetched] off main. */
@@ -147,7 +150,18 @@ class SettingsDocument(
         val parsed = runCatching {
             val root = JSONObject(json)
             val version = root.opt("schema_version")
-            require(version == null || version is Number && version.toDouble() == 1.0) { "unsupported schema_version=$version" }
+            if (version != null && version != JSONObject.NULL &&
+                (version !is Number || version.toDouble() != 1.0)
+            ) {
+                // Schema metadata is a field of the document. A bad metadata value must not
+                // discard valid sibling fields; the document parser remains strict about malformed
+                // JSON itself, while this field simply falls through to lower tiers.
+                warn("$name.schema_version ignored (value=$version, expected 1)")
+            }
+            // JSONObject.NULL is otherwise erased by [flatten], which would make a remote null
+            // indistinguishable from a missing field. No generated setting currently permits null;
+            // report it explicitly and let the field fall through to lower tiers.
+            nullPaths(root).forEach { warn("$name.$it ignored (null is not allowed)") }
             flatten(root)
         }.onFailure { if (report) warn("$name rejected, keeping the previous values: ${it.message}") }
             .getOrNull() ?: return null
@@ -167,6 +181,19 @@ class SettingsDocument(
         runCatching { Log.w("AdLogicSettings", message) }
     }
 
+    private fun nullPaths(root: JSONObject, prefix: String = ""): List<String> = buildList {
+        root.keys().forEach { key ->
+            val path = if (prefix.isEmpty()) key else "$prefix.$key"
+            when (val value = root.opt(key)) {
+                null, JSONObject.NULL -> add(path)
+                is JSONObject -> addAll(nullPaths(value, path))
+                is JSONArray -> for (index in 0 until value.length()) {
+                    if (value.opt(index) == null || value.opt(index) == JSONObject.NULL) add("$path[$index]")
+                }
+            }
+        }
+    }
+
     fun defaultValue(path: String): Any? = defaults[path]
 
     private fun sameType(a: Any, b: Any): Boolean = when (a) {
@@ -178,16 +205,21 @@ class SettingsDocument(
         else -> false
     }
 
-    // Generated defaults use Long; Android JSONObject uses Integer for small integral literals.
-    // Equivalent bundled values must never become an asset override of explicit host options.
-    private fun sameValue(a: Any?, b: Any?): Boolean = when {
-        a is Number && b is Number -> a.toDouble() == b.toDouble()
-        a is List<*> && b is List<*> -> a.size == b.size && a.zip(b).all { (x, y) -> sameValue(x, y) }
-        a is Map<*, *> && b is Map<*, *> -> a.keys == b.keys && a.all { (key, value) -> sameValue(value, b[key]) }
-        else -> a == b
-    }
-
     private fun valid(path: String, value: Any): Boolean {
+        if (path == "schema_version") return value is Number && value.toDouble() == 1.0
+        if (value is List<*>) {
+            // Collections are fields, not bags of independently valid elements.  A single wrong
+            // element invalidates the whole list so a malformed remote payload falls through as a
+            // unit instead of silently changing ordering or dropping entries.
+            val example = defaults[path] ?: extraDefault(path)
+            val expected = (example as? List<*>)?.firstOrNull()
+            val stringsOnly = path.endsWith("supported_codes") || path.endsWith(".order")
+            val numbersOnly = path.endsWith("failure_backoff_ms")
+            if (stringsOnly && value.any { it !is String }) return false
+            if (numbersOnly && value.any { it !is Number }) return false
+            if (expected is String && value.any { it !is String }) return false
+            if (expected is Number && value.any { it !is Number }) return false
+        }
         if (value is Number) {
             val n = value.toLong()
             if (n < 0 || n > Int.MAX_VALUE.toLong()) return false
@@ -203,7 +235,6 @@ class SettingsDocument(
         }
         if (value is String) {
             val allowed = when {
-                path.endsWith("click.action") -> setOf("auto_next", "none", "reload")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
                 path.endsWith("slot_format") -> setOf("BANNER", "NATIVE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")
@@ -225,17 +256,22 @@ class SettingsDocument(
             if (allowed != null && value !in allowed) return false
         }
         if (value is List<*> && path == "onboarding.order") return value.all { it is String && it.isNotBlank() } && value.distinct().size == value.size
-        if (value is List<*> && path.endsWith("failure_backoff_ms")) return value.isNotEmpty() && value.size <= 10 && value.all { it is Number && it.toLong() in 1..3_600_000 && it.toDouble() == it.toLong().toDouble() }
+        if (value is List<*> && path.endsWith("failure_backoff_ms")) return value.size in 1..10 && value.all { it is Number && it.toLong() in 1..3_600_000 && it.toDouble() == it.toLong().toDouble() }
         if (value is List<*> && (path.endsWith("supported_codes") || path.endsWith("excluded_hosts"))) return value.all { it is String }
         return true
     }
 
     companion object {
+        /** Marker retained long enough for validation/logging; schema fields do not allow null. */
+        private object JsonNull {
+            override fun toString(): String = "null"
+        }
+
         internal fun flatten(root: JSONObject, prefix: String = ""): Map<String, Any> = buildMap {
             root.keys().forEach { key ->
                 val path = if (prefix.isEmpty()) key else "$prefix.$key"
                 when (val value = root.opt(key)) {
-                    null, JSONObject.NULL -> Unit
+                    null, JSONObject.NULL -> put(path, JsonNull)
                     is JSONObject -> if (value.length() == 0) put(path, emptyMap<String, Any>()) else putAll(flatten(value, path))
                     is JSONArray -> put(path, List(value.length()) { i -> unwrap(value.opt(i)) })
                     else -> put(path, value)
@@ -277,21 +313,39 @@ class SettingsSnapshot internal constructor(
 ) {
     private val jsonValues = ConcurrentHashMap<Pair<String, String?>, String>()
 
+    /** Preserve an explicit empty object as a value that masks lower-tier child fields. */
+    private fun value(values: Map<String, Any>, path: String): Any? {
+        values[path]?.let { return it }
+        return values.entries.firstOrNull { (key, item) ->
+            path.startsWith("$key.") && item is Map<*, *> && item.isEmpty()
+        }?.value
+    }
+
     /** What the backend delivered for [path], or null when it said nothing about it. */
-    fun remoteValue(path: String): Any? = remoteValues[path] ?: legacyValues[path]
+    fun remoteValue(path: String): Any? = value(remoteValues, path) ?: value(legacyValues, path)
 
     /** What the app's own asset assigns to [path], or null. */
-    fun assetValue(path: String): Any? = asset[path]
+    fun assetValue(path: String): Any? = value(asset, path)
+
+    /** An empty object declares a scope, not a value, so a scope walk moves on past it. */
+    internal fun remoteLeaf(path: String): Any? = leaf(remoteValues, path) ?: leaf(legacyValues, path)
+    internal fun assetLeaf(path: String): Any? = leaf(asset, path)
+    private fun leaf(values: Map<String, Any>, path: String): Any? = value(values, path).takeUnless { it is Map<*, *> }
 
     fun overrideValue(path: String): Any? = remoteValue(path) ?: assetValue(path)
-    fun hasRemoteOverride(path: String): Boolean = (remoteValues.keys + legacyValues.keys).any { it == path || it.startsWith("$path.") }
-    fun hasOverride(path: String): Boolean = hasRemoteOverride(path) || asset.keys.any { it == path || it.startsWith("$path.") }
+    fun hasRemoteOverride(path: String): Boolean = (remoteValues.keys + legacyValues.keys).any {
+        it == path || it.startsWith("$path.") || (path.startsWith("$it.") &&
+            ((remoteValues[it] ?: legacyValues[it]) as? Map<*, *>)?.isEmpty() == true)
+    }
+    fun hasOverride(path: String): Boolean = hasRemoteOverride(path) || asset.keys.any {
+        it == path || it.startsWith("$path.") || (path.startsWith("$it.") && (asset[it] as? Map<*, *>)?.isEmpty() == true)
+    }
     fun boolean(path: String, fallback: Boolean? = null): Boolean =
-        (overrideValue(path) ?: fallback ?: defaults[path]) as Boolean
+        (overrideValue(path) as? Boolean) ?: fallback ?: (defaults[path] as? Boolean ?: false)
     fun long(path: String, fallback: Long? = null): Long =
-        ((overrideValue(path) ?: fallback ?: defaults[path]) as Number).toLong()
+        (overrideValue(path) as? Number)?.toLong() ?: fallback ?: (defaults[path] as? Number)?.toLong() ?: 0L
     fun string(path: String, fallback: String? = null): String =
-        (overrideValue(path) ?: fallback ?: defaults[path]) as String
+        (overrideValue(path) as? String) ?: fallback ?: (defaults[path] as? String).orEmpty()
     fun strings(path: String, fallback: List<String>? = null): List<String> =
         ((overrideValue(path) ?: fallback ?: defaults[path]) as? List<*>)?.filterIsInstance<String>().orEmpty()
     fun longList(path: String, fallback: List<Long> = emptyList()): List<Long> =
@@ -301,8 +355,13 @@ class SettingsSnapshot internal constructor(
     fun scoped(vararg paths: String): ScopeChain = ScopeChain(this, paths.asList())
 
     /** Already validated flat values relative to [path]; no JSON work at a timer/show call site. */
-    fun objectEntries(path: String): Map<String, Any> = (defaults + asset + legacyValues + remoteValues)
-        .filterKeys { it.startsWith("$path.") }.mapKeys { it.key.removePrefix("$path.") }
+    fun objectEntries(path: String): Map<String, Any> {
+        if (value(remoteValues, path) is Map<*, *> && (value(remoteValues, path) as Map<*, *>).isEmpty()) return emptyMap()
+        if (value(legacyValues, path) is Map<*, *> && (value(legacyValues, path) as Map<*, *>).isEmpty()) return emptyMap()
+        if (value(asset, path) is Map<*, *> && (value(asset, path) as Map<*, *>).isEmpty() && !hasRemoteOverride(path)) return emptyMap()
+        return (defaults + asset + legacyValues + remoteValues)
+            .filterKeys { it.startsWith("$path.") }.mapKeys { it.key.removePrefix("$path.") }
+    }
 
     fun json(path: String, fallback: String? = null): String = jsonValues.computeIfAbsent(path to fallback) {
         resolveJson(path, fallback)
@@ -330,7 +389,7 @@ class ScopeChain internal constructor(
     private val paths: List<String>,
 ) {
     private fun override(): Any? =
-        paths.firstNotNullOfOrNull(values::remoteValue) ?: paths.firstNotNullOfOrNull(values::assetValue)
+        paths.firstNotNullOfOrNull(values::remoteLeaf) ?: paths.firstNotNullOfOrNull(values::assetLeaf)
     fun boolean(fallback: Boolean): Boolean = override() as? Boolean ?: fallback
     fun long(fallback: Long): Long = (override() as? Number)?.toLong() ?: fallback
     fun string(fallback: String): String = override() as? String ?: fallback

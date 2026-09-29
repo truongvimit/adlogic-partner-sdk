@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdEventListener
@@ -60,6 +61,8 @@ class OnboardingAdLifecycleTest {
 
     private companion object {
         val listeners = mutableMapOf<AdPlacement, AdEventListener>()
+        val binds = mutableMapOf<AdPlacement, Int>()
+        val releases = mutableListOf<AdPlacement>()
         val completions = mutableListOf<AnalyticsEvent.StepCompleted>()
         var failOnBind = false
         var pendingOnBind = false
@@ -69,6 +72,8 @@ class OnboardingAdLifecycleTest {
 
     @Before fun setup() {
         listeners.clear()
+        binds.clear()
+        releases.clear()
         completions.clear()
         failOnBind = false
         pendingOnBind = false
@@ -82,8 +87,13 @@ class OnboardingAdLifecycleTest {
                 listener: AdEventListener,
             ): Boolean {
                 listeners[request.placement] = listener
+                binds.merge(request.placement, 1, Int::plus)
                 if (failOnBind) listener.onFailedToLoad()
                 return !failOnBind && !pendingOnBind
+            }
+
+            override fun releaseNative(placement: AdPlacement) {
+                releases += placement
             }
 
             override fun loadAndShowInterstitial(
@@ -119,7 +129,7 @@ class OnboardingAdLifecycleTest {
 
     private fun launch(
         first: StepDefinition = ContentStepDefinition(StepId.OB1, title = "One"),
-        clickReturn: Boolean = true,
+        clickAction: NativeClickAction? = null,
         second: StepDefinition = ContentStepDefinition(StepId.OB2, title = "Two"),
         lastOnly: Boolean = false,
         lockSwipe: Boolean = true,
@@ -132,17 +142,26 @@ class OnboardingAdLifecycleTest {
                 step(second)
                 step(ContentStepDefinition(StepId.OB4, title = "Three"))
             }
-            behavior = BehaviorConfig(adClickReturnCompletesStep = clickReturn,
-                lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
+            behavior = BehaviorConfig(lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
             ads = adsOverride ?: AdsConfig(contentStepNative = NativeAdUnit("test-content"),
                 fullScreenStepNative = NativeAdUnit("test-fullscreen"),
                 afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly })
         }.getOrThrow()).getOrThrow()
+        clickAction?.let(::pagerClickAction)
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
         activity.setTheme(R.style.ob_Theme_OnboardKit)
         requireNotNull(controller).setup().visible()
         main.idle()
         layout()
+    }
+
+    private fun pagerClickAction(action: NativeClickAction) {
+        val pages = listOf(AdPlacement.StepNative(StepId.OB1), AdPlacement.StepFullScreen(StepId.OB1))
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
+            "native_ob1" to com.ads.module.config.AdUnitConfig("test-content", true, clickAction = action),
+            AdPlacement.StepFullScreen(StepId.OB1).key to com.ads.module.config.AdUnitConfig("test-fullscreen", true, clickAction = action),
+        )))
+        pages.forEach { assertEquals(it.key, action, io.onboardkit.remote.OnboardingSettings.nativeClickAction(it)) }
     }
 
     private fun layout() {
@@ -170,7 +189,7 @@ class OnboardingAdLifecycleTest {
         .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
 
     @Test fun `disabled ads start without an ad slot or a provider bind`() {
-        launch(adsOverride = AdsConfig(enabled = false, contentStepNative = NativeAdUnit("test")))
+        launch(adsOverride = AdsConfig(contentStepNative = null))
         assertNoAdFromStart()
     }
 
@@ -226,10 +245,10 @@ class OnboardingAdLifecycleTest {
         assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
     }
 
-    @Test fun `no ad content moves into the lower panel and restores its ad layout on return`() {
+    @Test fun `no ad content moves into the lower panel and restores its ad layout on a late fill`() {
+        pendingOnBind = true
         launch()
-        fun page() = activity.supportFragmentManager.fragments
-            .filterIsInstance<ContentStepFragment>().first { it.isResumed }.requireView()
+        fun page() = contentPage()
         fun geometry() = page().let { view ->
             val image = view.findViewById<View>(R.id.ob_step_image)
             val card = view.findViewById<View>(R.id.ob_step_card)
@@ -238,10 +257,8 @@ class OnboardingAdLifecycleTest {
         val original = geometry()
         val originalBackground = page().findViewById<View>(R.id.ob_step_card).background
         val originalElevation = page().findViewById<View>(R.id.ob_step_card).elevation
-        failOnBind = true
-        pager.setCurrentItem(1, false)
-        layout()
-        pager.setCurrentItem(0, false)
+        listener().onFailedToLoad()
+        settle()
         layout()
         val noAdPage = page()
         val image = noAdPage.findViewById<View>(R.id.ob_step_image)
@@ -254,10 +271,8 @@ class OnboardingAdLifecycleTest {
         assertEquals(originalElevation, card.elevation, 0f)
         assertTrue(noAdPage.findViewById<View>(R.id.ob_primary_cta).isShown)
 
-        failOnBind = false
-        pager.setCurrentItem(1, false)
-        layout()
-        pager.setCurrentItem(0, false)
+        listener().onLoaded()
+        settle()
         layout()
         assertEquals(original, geometry())
         assertEquals(page().height * .59f, page().findViewById<View>(R.id.ob_step_image).height.toFloat(), 1f)
@@ -265,23 +280,23 @@ class OnboardingAdLifecycleTest {
         assertEquals(originalElevation, page().findViewById<View>(R.id.ob_step_card).elevation, 0f)
     }
 
-    @Test fun `reload and none override legacy auto advance on content click return`() {
-        launch(clickReturn = true)
-        for (action in listOf("reload", "none")) {
-            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"$action"}}}}}}""")
+    @Test fun `reload and none on the pager key leave content in place on click return`() {
+        launch()
+        for (action in listOf(NativeClickAction.RELOAD, NativeClickAction.NONE)) {
+            pagerClickAction(action)
             listener().onClicked()
             listener().onAdOpened()
             pause()
             resume()
             settle()
-            assertEquals(action, 0, pager.currentItem)
+            assertEquals(action.remoteValue, 0, pager.currentItem)
             assertTrue(completions.isEmpty())
         }
     }
 
-    @Test fun `explicit auto next overrides disabled legacy navigation and enabled reload`() {
-        launch(clickReturn = false)
-        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"behavior":{"click":{"action":"auto_next"},"reload":{"on_ad_click":true}}}}}}""")
+    @Test fun `an ad_config change to auto next reaches the next click on the pager key`() {
+        launch(clickAction = NativeClickAction.NONE)
+        pagerClickAction(NativeClickAction.AUTO_NEXT)
         listener().onClicked()
         pause()
         resume()
@@ -388,7 +403,7 @@ class OnboardingAdLifecycleTest {
         assertTrue(pager.isUserInputEnabled)
     }
 
-    @Test fun `fullscreen swipe requires successful show on each visit`() {
+    @Test fun `fullscreen swipe waits for the first show and a kept ad unlocks it on return`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false), lockSwipe = false)
         assertFalse(pager.isUserInputEnabled)
         listener(true).onLoaded()
@@ -397,16 +412,67 @@ class OnboardingAdLifecycleTest {
         assertEquals(0, pager.currentItem)
         listener(true).onImpression()
         assertTrue(pager.isUserInputEnabled)
-        val oldAd = listener(true)
-        pager.setCurrentItem(1, false)
+        pager.setCurrentItem(2, false)
         layout()
         pager.setCurrentItem(0, false)
         layout()
-        assertFalse(pager.isUserInputEnabled)
-        oldAd.onImpression()
-        assertFalse(pager.isUserInputEnabled)
-        listener(true).onImpression()
         assertTrue(pager.isUserInputEnabled)
+        assertEquals(1, binds[AdPlacement.StepFullScreen(StepId.OB1)])
+        assertTrue(releases.isEmpty())
+    }
+
+    @Test fun `returning to a kept fullscreen ad restarts its auto next from zero`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), lockSwipe = false)
+        listener(true).onImpression()
+        main.idleFor(2_500, MILLISECONDS)
+        pager.setCurrentItem(1, false)
+        layout()
+        main.idleFor(1_000, MILLISECONDS)
+        pager.setCurrentItem(0, false)
+        layout()
+        main.idleFor(2_900, MILLISECONDS)
+        assertEquals(0, pager.currentItem)
+        assertTrue(completions.isEmpty())
+        main.idleFor(100, MILLISECONDS)
+        settle()
+        assertOneCompletion(StepExit.AUTO_NEXT)
+    }
+
+    @Test fun `returning to a fullscreen whose ad failed stays on it with skip`() {
+        failOnBind = true
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false))
+        settle()
+        assertOneCompletion(StepExit.AD_FAILED)
+        pager.setCurrentItem(0, false)
+        layout()
+        settle()
+        assertEquals(0, pager.currentItem)
+        assertEquals(1, completions.size)
+        val page = activity.supportFragmentManager.fragments
+            .filterIsInstance<AdStepFragment>().single().requireView()
+        assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_fullscreen_fallback).visibility)
+        val skip = page.findViewById<View>(R.id.ob_skip_button)
+        assertEquals(View.VISIBLE, skip.visibility)
+        skip.performClick()
+        settle()
+        assertEquals(1, pager.currentItem)
+        assertEquals(listOf(StepExit.AD_FAILED, StepExit.AD_FAILED), completions.map { it.exitReason })
+    }
+
+    @Test fun `kept natives are released only when the pager is torn down`() {
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false))
+        pager.setCurrentItem(1, false)
+        layout()
+        pager.setCurrentItem(2, false)
+        layout()
+        assertTrue(releases.isEmpty())
+        requireNotNull(controller).pause().stop().destroy()
+        main.idle()
+        controller = null
+        assertTrue(releases.toString(), releases.containsAll(listOf(
+            AdPlacement.StepFullScreen(StepId.OB1), AdPlacement.StepNative(StepId.OB2),
+            AdPlacement.StepNative(StepId.OB4),
+        )))
     }
 
     @Test fun `last fullscreen cannot fling past loading but can exit after show`() {
@@ -524,7 +590,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `disabled click return leaves content in place`() {
-        launch(clickReturn = false)
+        launch(clickAction = NativeClickAction.NONE)
         listener().onClicked()
         pause(); resume(); settle()
         assertEquals(0, pager.currentItem)
@@ -617,7 +683,7 @@ class OnboardingAdLifecycleTest {
     }
 
     @Test fun `disabled click return does not disable fullscreen deadline catchup`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickReturn = false)
+        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickAction = NativeClickAction.NONE)
         listener(true).onClicked()
         pause()
         ShadowSystemClock.advanceBy(Duration.ofSeconds(4))
@@ -708,29 +774,19 @@ class OnboardingAdLifecycleTest {
         assertEquals(1, interstitialLoads)
     }
 
-    @Test fun `old content ad callback cannot arm a new visit`() {
+    @Test fun `content ad kept across a revisit stays visible and still arms click return`() {
         launch()
-        val oldAd = listener()
-        pager.setCurrentItem(1, false)
+        val ad = listener()
+        pager.setCurrentItem(2, false)
         layout()
         pager.setCurrentItem(0, false)
         layout()
-        oldAd.onClicked()
+        assertEquals(1, binds[AdPlacement.StepNative(StepId.OB1)])
+        assertTrue(releases.isEmpty())
+        assertEquals(View.VISIBLE, contentPage().findViewById<View>(R.id.ob_ad_block).visibility)
+        ad.onClicked()
         pause(); resume(); settle()
-        assertEquals(0, pager.currentItem)
-        assertTrue(completions.isEmpty())
+        assertOneCompletion(StepExit.AD_CLICK_RETURN)
     }
 
-    @Test fun `old fullscreen no fill cannot complete a new visit`() {
-        launch(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false))
-        val oldAd = listener(true)
-        pager.setCurrentItem(1, false)
-        layout()
-        pager.setCurrentItem(0, false)
-        layout()
-        oldAd.onFailedToLoad()
-        settle()
-        assertEquals(0, pager.currentItem)
-        assertTrue(completions.isEmpty())
-    }
 }

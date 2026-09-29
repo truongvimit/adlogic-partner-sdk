@@ -28,10 +28,10 @@ object NativeTemplates {
      */
     @LayoutRes
     internal fun layoutForPlacement(placement: AdPlacement): Int =
-        // The splash bottom native ships one fixed frame, so it stays out of [NativeTemplate]
-        // rather than being added to it: a partner can neither ask for this layout elsewhere nor
-        // re-skin the slot, and the public enum keeps its five constants.
-        if (placement == AdPlacement.SplashInlineNative) R.layout.ob_layout_native_media_left
+        // These horizontal slots use the same 4:3 media-left frame at preload and bind time.
+        // A content-template / positionCTA override must not turn one of the ALT ads vertical.
+        if (placement == AdPlacement.SplashInlineNative || placement.isPrivacyGoalsNative)
+            R.layout.ob_layout_native_media_left
         else layoutFor(templateForPlacement(placement))
 
     /**
@@ -55,6 +55,7 @@ object NativeTemplates {
         fun explicit(read: (String) -> Any?): NativeTemplate? = templatePaths.firstNotNullOfOrNull { path ->
             (read(path) as? String)?.takeIf { it.isNotBlank() }
         }?.let(NativeTemplate::valueOf)
+        fun present(read: (String) -> Any?): Boolean = templatePaths.any { read(it) != null }
         fun positionCta(): NativeTemplate? {
             if (placement != AdPlacement.Language1 && placement != AdPlacement.Language2 &&
                 placement !is AdPlacement.StepNative && placement != AdPlacement.QuestionNative) return null
@@ -64,11 +65,29 @@ object NativeTemplates {
                 else -> null
             }
         }
-        val remoteAdConfig = ads?.placementKeyFor(placement)?.let(AdRemoteConfig::remoteDeclares) == true
+        val remotePosition = ads?.placementKeyFor(placement)
+            ?.let { AdRemoteConfig.remoteDeclaresField(it, "positionCTA") } == true
         explicit(values::remoteValue)?.let { return it }
-        if (remoteAdConfig) positionCta()?.let { return it }
+        if (present(values::remoteValue)) {
+            if (remotePosition) positionCta()?.let { return it }
+            // An explicit empty template clears a lower source. The resolved host config is the
+            // code/default tier and may itself contain a broader same-source template.
+            return when (placement) {
+                AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+                is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
+                AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
+                else -> NativeTemplate.CTA_BOTTOM
+            }
+        }
+        if (remotePosition) positionCta()?.let { return it }
         explicit(values::assetValue)?.let { return it }
-        if (!remoteAdConfig) positionCta()?.let { return it }
+        if (present(values::assetValue)) return when (placement) {
+            AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+            is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
+            AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
+            else -> NativeTemplate.CTA_BOTTOM
+        }
+        if (!remotePosition) positionCta()?.let { return it }
         return when (placement) {
             AdPlacement.Language1, AdPlacement.Language2 ->
                 ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM

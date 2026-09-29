@@ -30,7 +30,7 @@ class AdsGuardTest {
     @Test
     fun `premium beats every other reason`() {
         // Remote off as well: entitlement still has to be the reported cause
-        val guard = guard(flags = RemoteFlags(enableAllAds = false))
+        val guard = guard(flags = RemoteFlags())
         Entitlement.install(premium(true))
         try {
             assertEquals(AdSkipReason.PREMIUM, guard.skipReason(context, AdPlacement.Language1))
@@ -50,7 +50,7 @@ class AdsGuardTest {
 
     @Test
     fun `missing provider is reported before config and remote`() {
-        val guard = guard(providerInstalled = false, flags = RemoteFlags(enableAllAds = false))
+        val guard = guard(providerInstalled = false, flags = RemoteFlags())
         assertEquals(AdSkipReason.NO_PROVIDER, guard.skipReason(context, AdPlacement.Language1))
     }
 
@@ -66,22 +66,7 @@ class AdsGuardTest {
     }
 
     @Test
-    fun `ads disabled in config`() {
-        val guard = guard(config = config(AdsConfig(enabled = false, languageNative = NativeAdUnit("n"))))
-        assertEquals(
-            AdSkipReason.ADS_OFF_IN_CONFIG,
-            guard.skipReason(context, AdPlacement.Language1),
-        )
-    }
-
-    @Test
-    fun `master remote switch is reported separately from the placement switch`() {
-        val master = guard(flags = RemoteFlags(enableAllAds = false))
-        assertEquals(
-            AdSkipReason.ADS_OFF_BY_REMOTE,
-            master.skipReason(context, AdPlacement.Language1),
-        )
-
+    fun `placement switch is evaluated independently`() {
         val placement = guard(flags = RemoteFlags(adsLanguageNative = false))
         assertEquals(
             AdSkipReason.PLACEMENT_OFF_BY_REMOTE,

@@ -149,6 +149,19 @@ class AdStepTimingTest {
         assertEquals(listOf("skip"), controller.get().exits)
     }
 
+    @Test fun `returning shows skip at once while auto next starts over`() {
+        launch()
+        val skip = fragment.requireView().findViewById<View>(R.id.ob_skip_button)
+        main.idleFor(1000, MILLISECONDS)
+        fragment.dispatchUnselected()
+        fragment.dispatchSelected()
+        assertEquals(View.VISIBLE, skip.visibility)
+        main.idleFor(14999, MILLISECONDS)
+        assertTrue(controller.get().exits.isEmpty())
+        main.idleFor(1, MILLISECONDS)
+        assertEquals(listOf("auto_next"), controller.get().exits)
+    }
+
     @Test fun `leaving a page cancels its timer and a new visit starts a fresh one`() {
         launch()
         main.idleFor(500, MILLISECONDS)

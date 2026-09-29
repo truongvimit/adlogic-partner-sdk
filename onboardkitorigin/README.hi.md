@@ -9,6 +9,10 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 [Partner integration guides](../partner-integration/README.hi.md) · [Ads + OnboardKit walkthrough](../partner-integration/ads-onboarding-integration.hi.md)
 
+Pager page का view बने रहने तक native bound रहता है; content या Full1/Full2 पर लौटने पर वही ad दिखता है, नया request नहीं होता। Fullscreen auto-next हर visit पर फिर शुरू होता है; लौटने पर enabled Skip तुरंत दिखता है, और exit न होने पर सुरक्षा के लिए भी दिखता है। पहली no-fill पर अगला page आता है; failed page पर वापस आने पर fallback और Skip दिखते हैं। View नष्ट होने पर ad release होता है।
+
+वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](../partner-integration/privacy-goals-screen.hi.md) देखें।
+
 ## शुरू करने से पहले
 
 - minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.hi.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
@@ -121,16 +125,16 @@ class SplashActivity : ObSplashActivity()
 - Default रूप से status/caption bars दिखते हैं और navigation bar छिपता है; बदलने के लिए `SystemBarConfig` इस्तेमाल करें।
 - अधूरा flow अगली बार खुलने पर दोबारा Splash → LFO → OB से शुरू होता है। पूरा हो चुका flow onboarding छोड़ देता है।
 - मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है। दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है; re-select tap भी count होता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
-- Native `behavior.click.action` में `auto_next`, `none` या `reload` में से एक चुना जाता है। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, OB5, splash, popup और प्रश्न के natives का default `reload` है।
+- Native का click action `ad_config` में उसके placement की base key पर `click_action` से आता है: `auto_next`, `none` या `reload`। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, Privacy/Goal, OB5, splash, popup और प्रश्न के natives का default `reload` है।
 - `reload` ad click/open पर तुरंत replacement request शुरू करता है और वापसी पर उसका result दिखाता है; सामान्य app resume click reload नहीं करता। `auto_next` वापसी पर replacement माँगे बिना आगे बढ़ता है; `none` दोनों में से कुछ नहीं करता।
-- Action हर click trip के लिए तय रहता है और legacy `reload.on_ad_click` / `BehaviorConfig.adClickReturnCompletesStep` switches को override करता है। [Remote settings guide](../partner-integration/remote-settings.hi.md) देखें।
+- `native_lang_alt` पर `"click_action": "auto_next"` वापसी पर चुनी हुई भाषा confirm करता है। LFO1 पर `auto_next` user की चुनी हुई भाषा पर tap दोहराता है, जैसे उस row को दोबारा tap करना; कोई row tap न हुई हो तो कुछ नहीं करता। Action हर click trip के लिए तय रहता है। [Remote settings guide](../partner-integration/remote-settings.hi.md#native-click-actions) देखें।
 
 
 - `notificationPermissionEnabled = true`: consent और splash requests के बाद prompt, remote का इंतज़ार नहीं। निर्णय पर मौजूदा flag पढ़ा जाता है; denial पर flow जारी रहता है और दर्ज परिणाम अगली automatic prompt रोकता है।
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
 - `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। ऊपर दिए splash `configChanges` बनाए रखें, ताकि lock, dark mode या font scale बदलने पर Activity दोबारा न बने। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
 - `consentTimeoutMs = 10_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
-- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, और onboarding पूरा होने के बाद launcher से खुली destination (आपकी app या पुराने user का प्रश्न) `UNDER_AD` इस्तेमाल करती है; notification, widget और uninstall entries हमेशा `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। Launcher start पर `AUTO` के अलावा कोई भी remote `splash.navigation.next_screen_timing` आपके override से ऊपर रहती है। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
+- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, और onboarding पूरा होने के बाद launcher से खुली destination (आपकी app या पुराने user का प्रश्न) `UNDER_AD` इस्तेमाल करती है; notification, widget और uninstall entries `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। `AUTO` के अलावा कोई भी `splash.navigation.next_screen_timing` (remote या app asset) हर launch पर, entries समेत, आपके override से ऊपर रहती है। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
 
 Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 

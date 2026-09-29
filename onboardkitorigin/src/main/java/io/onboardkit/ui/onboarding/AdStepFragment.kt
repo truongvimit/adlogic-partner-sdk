@@ -29,6 +29,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * Full-screen native step (Full1/Full2). No app content — the ad IS the page. Guarantees an exit:
  * if remote hides Skip while auto-next is off, Skip is forced visible anyway. App-resume ads
  * are suppressed while this page shows so two ads never stack.
+ *
+ * The ad is requested once per view and kept until the view is destroyed, so swiping back
+ * shows the same ad. Auto-next starts from zero on every visit; Skip waits its delay only on the
+ * first one, and a page whose ad failed stays up with Skip when the user returns to it.
  */
 class AdStepFragment : LazyStepFragment() {
 
@@ -38,6 +42,10 @@ class AdStepFragment : LazyStepFragment() {
     private var selected = false
     private var completed = false
     private var autoNextDeadlineMs: Long? = null
+    private var adRequested = false
+    private var visitedBefore = false
+    private var revisit = false
+    private var adImpressed = false
     private var adFailed = false
     private val impressionHandled = AtomicBoolean(false)
 
@@ -66,6 +74,8 @@ class AdStepFragment : LazyStepFragment() {
         if (selected) return
         selected = true
         completed = false
+        revisit = visitedBefore
+        visitedBefore = true
         impressionHandled.set(false)
         requireStepHost().setAdStepSwipeEnabled(stepId, false)
         // One read per visit: the Skip trap guard must judge the same auto-next this visit runs.
@@ -74,9 +84,15 @@ class AdStepFragment : LazyStepFragment() {
             definition?.skipButtonStyle ?: OnboardingSdk.requireConfig().ads.fullScreenSkipStyle,
             definition?.skipButtonPosition ?: FullScreenSkipPosition.RIGHT,
         )
+        binding?.obSkipButton?.visibility = View.GONE
         scheduleAutoNext(definition)
-        requestAd()
-        if (!completed) scheduleSkipButton(definition)
+        when {
+            !adRequested -> requestAd()
+            adFailed -> onAdFailed()
+            // A kept ad produces no second impression; it is already on screen.
+            adImpressed -> unlockSwipe()
+        }
+        if (!completed) scheduleSkipButton(definition, immediately = revisit)
     }
 
     override fun onStepUnselected(dwellMs: Long) {
@@ -84,9 +100,7 @@ class AdStepFragment : LazyStepFragment() {
         requireStepHost().setAdStepSwipeEnabled(stepId, false)
         skipJob?.cancel()
         autoNextJob?.cancel()
-        OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
         autoNextDeadlineMs = null
-        adFailed = false
         impressionHandled.set(false)
     }
 
@@ -98,11 +112,11 @@ class AdStepFragment : LazyStepFragment() {
     private fun requestAd() {
         val b = binding ?: return
         val activity = activity ?: return
+        adRequested = true
         b.obFullscreenFallback.visibility = View.GONE
         b.obNativeContainer.visibility = View.VISIBLE
-        b.obSkipButton.visibility = View.GONE
         val placement = AdPlacement.StepFullScreen(stepId)
-        val visit = stepVisitVersion
+        val viewVersion = stepViewVersion
         activity.showNativeAd(
             placement = placement,
             // nativeUnitFor, not fullScreenStepNative: a host that gave this page its own entry in
@@ -110,23 +124,31 @@ class AdStepFragment : LazyStepFragment() {
             // shared slot instead reported no_ad_unit for a page that had one.
             unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement),
             container = b.obNativeContainer,
-            onShown = { if (isCurrentStepVisit(visit)) onAdImpression() },
-            onUnavailable = { if (isCurrentStepVisit(visit)) onAdFailed() },
-            onAdEngaged = { action -> if (isCurrentStepVisit(visit)) onStepAdEngaged(action) },
+            onShown = { if (isCurrentStepView(viewVersion)) onAdImpression() },
+            onUnavailable = { if (isCurrentStepView(viewVersion)) onAdFailed() },
+            onAdEngaged = { action -> if (isCurrentStepView(viewVersion)) onStepAdEngaged(action) },
         )
     }
 
     /** Only a display confirmation unlocks swipe; load/bind and shimmer never do. */
     private fun onAdImpression() {
+        adImpressed = true
         if (!selected || completed || !impressionHandled.compareAndSet(false, true)) return
         requireStepHost().setAdStepSwipeEnabled(stepId, true)
         OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
     }
 
+    private fun unlockSwipe() {
+        if (completed || !impressionHandled.compareAndSet(false, true)) return
+        requireStepHost().setAdStepSwipeEnabled(stepId, true)
+    }
+
     private fun onAdFailed() {
-        if (!selected || completed) return
         adFailed = true
+        if (!selected || completed) return
         showFallback()
+        // The user came back on purpose; Skip is their way out.
+        if (revisit) return
         // Not gated on autoNextEnabled any more. That flag decides how long a page waits with an
         // ad on it; a page with no ad has nothing to wait for, and leaving it up meant an empty
         // screen mid-flow until the user found Skip. The host handles the case where this answer
@@ -142,17 +164,21 @@ class AdStepFragment : LazyStepFragment() {
         skipJob?.cancel()
     }
 
-    private fun scheduleSkipButton(definition: AdFullScreenStepDefinition?) {
+    private fun scheduleSkipButton(definition: AdFullScreenStepDefinition?, immediately: Boolean) {
         val b = binding ?: return
         if (definition == null) return
         val skipAllowed = definition.showSkipButton
         // Always keep one exit path: no skip + no auto-next would trap the user
         val mustForceSkip = !skipAllowed && !definition.autoNextEnabled
         if (!skipAllowed && !mustForceSkip) return
+        skipJob?.cancel()
+        if (immediately) {
+            b.obSkipButton.visibility = View.VISIBLE
+            return
+        }
         // Same chain the definition was resolved through; the definition keeps only whole seconds.
         val delayMs = FullScreenSetting.SkipDelayMs.on(definition.id.value)
             .long(definition.skipButtonDelaySec.coerceAtLeast(0) * 1000L)
-        skipJob?.cancel()
         skipJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(delayMs.milliseconds)
             b.obSkipButton.visibility = View.VISIBLE
@@ -196,8 +222,16 @@ class AdStepFragment : LazyStepFragment() {
         requireStepHost().setAdStepSwipeEnabled(stepId, false)
         skipJob?.cancel()
         autoNextJob?.cancel()
+        if (activity?.isChangingConfigurations != true) {
+            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
+        }
         binding = null
         autoNextDeadlineMs = null
+        adRequested = false
+        visitedBefore = false
+        revisit = false
+        adImpressed = false
+        adFailed = false
         impressionHandled.set(false)
         super.onDestroyView()
     }

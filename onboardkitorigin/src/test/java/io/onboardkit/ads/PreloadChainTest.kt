@@ -89,7 +89,7 @@ class PreloadChainTest {
                 AdFullScreenStepDefinition(StepId.FULL2), ContentStepDefinition(StepId.OB4))
             ads = AdsConfig(contentStepNative = NativeAdUnit("content"), fullScreenStepNative = NativeAdUnit("full"))
         }.getOrThrow()
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob1"]}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","ob1"]}}""")
         cfg = OnboardingSettings.resolve(cfg)
         chain.onLanguageSelected(activity)
         assertEquals(listOf(AdPlacement.StepFullScreen(StepId.FULL2), AdPlacement.StepNative(StepId.OB2),
@@ -104,6 +104,67 @@ class PreloadChainTest {
         flags = flags.copy(enableStepOb2 = false)
         chain.onLanguageSelected(activity)
         assertEquals(listOf(AdPlacement.StepNative(StepId.OB1)), requests)
+    }
+
+    @Test fun `privacy goals disabled never preload`() {
+        cfg = onboardKitConfig {
+            defaultSteps()
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(
+                enabled = true,
+                goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+            )
+            ads = AdsConfig(
+                contentStepNative = NativeAdUnit("content"),
+                stepNatives = mapOf(
+                    StepId.PARTNER_PRIVACY to NativeAdUnit("privacy"),
+                    StepId.PARTNER_PRIVACY_ALT to NativeAdUnit("privacy-alt"),
+                    StepId.PARTNER_GOAL to NativeAdUnit("goal"),
+                    StepId.PARTNER_GOAL_ALT to NativeAdUnit("goal-alt"),
+                ),
+            )
+        }.getOrThrow()
+        chain = PreloadChain(provider = object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+        }, guard = AdsGuard(true, { cfg }, { flags }, { allowed }), config = { cfg }, flags = { flags })
+        flags = flags.copy(adsContentNative = false)
+        chain.preloadPrivacy1(activity)
+        chain.preloadPrivacy2(activity)
+        chain.preloadGoal1(activity)
+        chain.preloadGoal2(activity)
+        assertTrue(requests.isEmpty())
+
+        flags = RemoteFlags()
+        cfg = onboardKitConfig {
+            defaultSteps()
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(enabled = false)
+            ads = AdsConfig(stepNatives = mapOf(StepId.PARTNER_PRIVACY to NativeAdUnit("privacy")))
+        }.getOrThrow()
+        chain = PreloadChain(object : FakeAdProvider() {
+            override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+        }, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
+        chain.preloadPrivacy1(activity)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun `a privacy switch with nothing to choose never warms the privacy native`() {
+        fun chainFor(privacy: PrivacyGoalsScreenConfig): PreloadChain {
+            cfg = onboardKitConfig {
+                defaultSteps()
+                privacyGoalsScreen = privacy
+                ads = AdsConfig(stepNatives = mapOf(StepId.PARTNER_PRIVACY to NativeAdUnit("privacy")))
+            }.getOrThrow()
+            return PreloadChain(object : FakeAdProvider() {
+                override fun preloadNative(activity: Activity, request: NativeAdRequest) { requests += request.placement }
+            }, AdsGuard(true, { cfg }, { flags }, { allowed }), { cfg }, { flags })
+        }
+        chainFor(PrivacyGoalsScreenConfig(enabled = true)).onStepSelected(activity, steps, steps.lastIndex)
+        assertTrue(requests.isEmpty())
+
+        chainFor(PrivacyGoalsScreenConfig(
+            enabled = true,
+            goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+        )).onStepSelected(activity, steps, steps.lastIndex)
+        assertEquals(listOf(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)), requests)
     }
 
     @Test fun `premium consent and force update hold prevent every native request`() {

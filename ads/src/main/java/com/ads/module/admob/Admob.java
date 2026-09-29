@@ -132,21 +132,32 @@ public class Admob {
     InterstitialAd mInterstitialSplash;
 
 
+    private volatile int loggedMaxClicks = Integer.MIN_VALUE;
+
+    /** The cap in force; logs it whenever it differs from the last value logged. */
+    private int effectiveMaxClicks() {
+        int cap = (int) AdBehavior.number("interstitial.frequency.max_clicks_per_24h", maxClickAds);
+        if (cap != loggedMaxClicks) {
+            loggedMaxClicks = cap;
+            Log.i(TAG, cap > 0
+                    ? "Interstitial click cap enabled: " + cap + " clicks/ad unit/day"
+                    : "Interstitial click cap disabled");
+        }
+        return cap;
+    }
+
     /**
      * @param maxClickAds clicks per ad unit per 24h before interstitials from that unit stop being
      *                    loaded and shown. {@code 0} or negative disables the cap. Safe to call at
-     *                    any time — remote config typically applies it once the fetch lands.
+     *                    any time. A delivered {@code interstitial.frequency.max_clicks_per_24h}
+     *                    takes precedence over this value.
      */
-    private int effectiveMaxClicks() { return (int) AdBehavior.number("interstitial.frequency.max_clicks_per_24h", maxClickAds); }
-
     public void setMaxClickAdsPerDay(int maxClickAds) {
         if (this.maxClickAds == maxClickAds) {
             return;
         }
         this.maxClickAds = maxClickAds;
-        Log.i(TAG, maxClickAds > 0
-                ? "Interstitial click cap enabled: " + maxClickAds + " clicks/ad unit/day"
-                : "Interstitial click cap disabled");
+        effectiveMaxClicks();
     }
 
     /**
@@ -167,15 +178,16 @@ public class Admob {
      * True when {@code adUnitId} has burned through its daily click allowance.
      */
     private boolean isClickCapReached(Context context, String adUnitId) {
-        if (effectiveMaxClicks() <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
+        int cap = effectiveMaxClicks();
+        if (cap <= 0 || context == null || adUnitId == null || adUnitId.isEmpty()) {
             return false;
         }
         int clicks = AdmobHelper.getNumClickAdsPerDay(context, adUnitId);
-        if (clicks < effectiveMaxClicks()) {
+        if (clicks < cap) {
             return false;
         }
         Log.w(TAG, "Interstitial suppressed: ad unit hit the daily click cap ("
-                + clicks + "/" + maxClickAds + "). Resets 24h after the window opened.");
+                + clicks + "/" + cap + "). Resets 24h after the window opened.");
         return true;
     }
 
@@ -973,7 +985,8 @@ public class Admob {
                 dialog.dismiss();
             dialog = new PrepareLoadingAdsDialog(context);
             dialog.setCancelable(false);
-            if (AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
+            if (callback != null ? callback.showsInterstitialLoadingDialog()
+                    : AdBehavior.bool("interstitial.presentation.loading_enabled")) dialog.show();
             AppOpenManager.getInstance().setInterstitialShowing(true);
         } catch (Exception e) {
             dialog = null;

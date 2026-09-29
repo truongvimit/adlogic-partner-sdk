@@ -202,6 +202,11 @@ public class TrackingAdCallback extends AdCallback {
     }
 
     @Override
+    public boolean showsInterstitialLoadingDialog() {
+        return delegate == null ? super.showsInterstitialLoadingDialog() : delegate.showsInterstitialLoadingDialog();
+    }
+
+    @Override
     public void onAdFailedToShow(@Nullable AdError adError) {
         reportShowFailed(adError);
         if (delegate != null) delegate.onAdFailedToShow(adError);

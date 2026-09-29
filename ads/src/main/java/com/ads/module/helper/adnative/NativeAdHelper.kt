@@ -79,8 +79,12 @@ class NativeAdHelper @JvmOverloads constructor(
     /** Store and telemetry key; set it before the first request, or pass it to the constructor. */
     var placement: String? = placement
 
-    var adVisibility: AdOptionVisibility = AdOptionVisibility.valueOf(AdBehavior.defaultText("native.presentation.empty_visibility"))
-        get() = AdOptionVisibility.valueOf(config.behaviorValues().string("presentation.empty_visibility", field.name))
+    var adVisibility: AdOptionVisibility = runCatching {
+        AdOptionVisibility.valueOf(AdBehavior.defaultText("native.presentation.empty_visibility"))
+    }.getOrDefault(AdOptionVisibility.GONE)
+        get() = runCatching {
+            AdOptionVisibility.valueOf(config.behaviorValues().string("presentation.empty_visibility", field.name))
+        }.getOrDefault(field)
 
     /** Minimum gap after the last bind before a reload may fire. */
     var maxValueDebounceAdLoaded: Long = AdBehavior.defaultNumber("native.reload.min_after_bind_ms")
@@ -107,10 +111,14 @@ class NativeAdHelper @JvmOverloads constructor(
     private var shimmerView: ShimmerFrameLayout? = null
     private var nativeStyle: NativeAdStyle? = null
         get() {
-            if (field == null && !config.behaviorValues().hasOverride("presentation.cta_corner_radius_dp")) return null
-            val local = field ?: NativeAdStyle()
+            val declared = field ?: placementStyle?.invoke()
+            if (declared == null && !config.behaviorValues().hasOverride("presentation.cta_corner_radius_dp")) return null
+            val local = declared ?: NativeAdStyle()
             return local.copy(ctaCornerRadiusDp = config.behaviorValues().long("presentation.cta_corner_radius_dp", local.ctaCornerRadiusDp.toLong()).toInt())
         }
+
+    /** Re-reads the placement's `ad_config` style at each bind and skeleton until [setNativeStyle]. */
+    private var placementStyle: (() -> NativeAdStyle)? = null
 
     /** Skeleton the helper itself created and inserted; app-supplied views never land here. */
     private var generatedShimmer: ShimmerFrameLayout? = null
@@ -245,6 +253,7 @@ class NativeAdHelper @JvmOverloads constructor(
      */
     fun setNativeStyle(style: NativeAdStyle?): NativeAdHelper {
         nativeStyle = style
+        placementStyle = null
         return this
     }
 
@@ -310,9 +319,9 @@ class NativeAdHelper @JvmOverloads constructor(
         listeners.clear()
     }
 
-    /** Enables click-time preload and return-time show for this native slot. Default: true. */
+    /** Code default when `ad_config.<key>.click_action` is absent: RELOAD or NONE. Default: true. */
     fun setReloadOnAdClick(enabled: Boolean): NativeAdHelper = apply {
-        config.reloadOnAdClick = enabled
+        config.clickAction = if (enabled) NativeClickAction.RELOAD else NativeClickAction.NONE
     }
 
     /** Requests another ad after a bind; under [NativeAdConfig.joinOnly] it only polls or joins. */
@@ -771,7 +780,7 @@ class NativeAdHelper @JvmOverloads constructor(
             placement,
         )
             .setNativeContentView(container)
-            .setNativeStyle(AdRemoteConfig.getInstance().unit(placement).toNativeStyle())
+            .also { it.placementStyle = { AdRemoteConfig.getInstance().unit(placement).toNativeStyle() } }
             .also { it.requestAds(NativeAdParam.Request) }
     }
 }

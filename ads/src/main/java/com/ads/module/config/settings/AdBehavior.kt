@@ -21,8 +21,7 @@ object AdBehavior {
     }
     fun supportsPlacementField(format: String, path: String): Boolean = when (format) {
         "banner" -> path.startsWith("reload.") || path.startsWith("presentation.")
-        "native" -> path == "click.action" || path == "load.tier_timeout_ms" ||
-            path.startsWith("reload.") || path.startsWith("presentation.")
+        "native" -> path == "load.tier_timeout_ms" || path.startsWith("reload.") || path.startsWith("presentation.")
         "interstitial" -> path in setOf("load.tier_timeout_ms", "load_and_show.wait_timeout_ms", "load_and_show.buffer_wait_timeout_ms", "presentation.loading_enabled", "cache.max_age_ms")
         "rewarded" -> path in setOf("load.tier_timeout_ms", "cache.max_age_ms")
         else -> false
@@ -58,8 +57,8 @@ class BehaviorValues internal constructor(
         add(values to "$format.$path")
     }
     private fun override(path: String): Any? = scopes(path).let { scopes ->
-        scopes.firstNotNullOfOrNull { (source, key) -> source.remoteValue(key) }
-            ?: scopes.firstNotNullOfOrNull { (source, key) -> source.assetValue(key) }
+        scopes.firstNotNullOfOrNull { (source, key) -> source.remoteLeaf(key) }
+            ?: scopes.firstNotNullOfOrNull { (source, key) -> source.assetLeaf(key) }
     }
     fun hasOverride(path: String): Boolean = override(path) != null
     fun boolean(path: String, fallback: Boolean): Boolean = override(path) as? Boolean ?: fallback

@@ -655,20 +655,22 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun remoteNextScreenTiming(): NextScreenTiming? =
-        (OnboardingSettings.values.remoteValue("splash.navigation.next_screen_timing") as? String)
-            ?.takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+        OnboardingSettings.text("splash.navigation.next_screen_timing")
+            .takeUnless { it == "AUTO" }
+            ?.let { raw -> runCatching { NextScreenTiming.valueOf(raw) }.getOrNull() }
 
     /**
-     * Asked once, with the splash in front, before its ad would show, unless native_fs forces
-     * AFTER_AD: for every [SplashEntry] launch and for a launcher start without an explicit remote
-     * `splash.navigation.next_screen_timing`. Default: AFTER_AD for an entry, else the explicit
-     * setting, else AFTER_AD for the first-open flow and UNDER_AD otherwise.
+     * Asked once per launch, entries included, with the splash in front and before its ad would
+     * show. Not asked when an explicit `splash.navigation.next_screen_timing` (remote or app asset,
+     * not AUTO) decides, nor, under AUTO, when an eligible native_fs makes it AFTER_AD. Default:
+     * AFTER_AD for a [SplashEntry] launch and for the first-open flow, UNDER_AD otherwise.
      */
     protected open fun nextScreenTiming(): NextScreenTiming = defaultNextScreenTiming(
         entry = SplashEntry.from(intent),
         configured = {
             OnboardingSettings.text("splash.navigation.next_screen_timing")
-                .takeUnless { it == "AUTO" }?.let(NextScreenTiming::valueOf)
+                .takeUnless { it == "AUTO" }
+                ?.let { raw -> runCatching { NextScreenTiming.valueOf(raw) }.getOrNull() }
         },
         decision = attempt.startDecision,
     )

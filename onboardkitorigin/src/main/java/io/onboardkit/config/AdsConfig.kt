@@ -110,8 +110,6 @@ enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
  * | [questionInterstitial] | full-screen ad after the survey is submitted |
  */
 data class AdsConfig(
-    /** Master switch. `false` disables every placement below without unsetting them. */
-    val enabled: Boolean = OnboardingSettings.defaultBool("flow.ads_enabled"),
     val splashBanner: BannerAdUnit? = null,
     val splashInterstitial: InterstitialAdUnit? = null,
     /**
@@ -203,6 +201,10 @@ data class AdsConfig(
                 AdPlacement.StepNative(StepId.OB2) to "native_ob2",
                 AdPlacement.StepNative(StepId.OB3) to "native_ob3",
                 AdPlacement.StepNative(StepId.OB4) to "native_ob4",
+                AdPlacement.StepNative(StepId.PARTNER_PRIVACY) to "native_select",
+                AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT) to "native_select_alt",
+                AdPlacement.StepNative(StepId.PARTNER_GOAL) to "native_select",
+                AdPlacement.StepNative(StepId.PARTNER_GOAL_ALT) to "native_select_alt",
                 AdPlacement.StepFullScreen(StepId.FULL1) to "native_full1",
                 AdPlacement.StepFullScreen(StepId.FULL2) to "native_full2",
                 AdPlacement.Ob5 to "native_onboarding_fullscreen_1_4",

@@ -15,6 +15,15 @@ data class AdRemoteConfig @JvmOverloads constructor(
     val ads: Map<String, AdUnitConfig> = emptyMap(),
 ) {
 
+    /** Fields explicitly present in each source document. Programmatic configs are complete. */
+    @Transient
+    internal var declaredFields: Map<String, Set<String>> = emptyMap()
+
+    internal fun fieldsFor(key: String): Set<String> =
+        declaredFields[key] ?: ALL_FIELDS
+
+    internal fun isSparse(): Boolean = declaredFields.isNotEmpty()
+
     /** Extra wait configured inside open_resume; captured once for each background stay. */
     val appResumeLoadDelayMs: Long
         get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
@@ -35,6 +44,63 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         /** How deep the numbered rungs go: `_high1`…`_high9`. */
         private const val MAX_NUMBERED_FLOORS = 9
+
+        internal val ALL_FIELDS: Set<String> = setOf(
+            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA",
+            "heightCTA", "positionCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
+        )
+
+        private fun defaultUnit() = AdUnitConfig(id = "", isEnable = false)
+
+        /** Drop placement objects whose every field was invalid; they must not shadow code/assets. */
+        private fun validPatch(source: AdRemoteConfig): AdRemoteConfig {
+            val kept = source.ads.filterKeys { source.fieldsFor(it).isNotEmpty() }
+            return if (kept.size == source.ads.size) source else AdRemoteConfig(kept).also { result ->
+                result.declaredFields = kept.keys.associateWith { source.fieldsFor(it) }
+            }
+        }
+
+        /** Merge one source over another by field presence, retaining explicit false/0/[] values. */
+        internal fun merge(lower: AdRemoteConfig, upper: AdRemoteConfig): AdRemoteConfig {
+            if (upper.ads.isEmpty()) return lower
+            val keys = LinkedHashSet<String>().apply { addAll(lower.ads.keys); addAll(upper.ads.keys) }
+            val merged = keys.associateWith { key ->
+                val base = lower.ads[key] ?: defaultUnit()
+                val top = upper.ads[key]
+                if (top == null) base else mergeUnit(base, top, upper.fieldsFor(key))
+            }
+            return AdRemoteConfig(merged).also { it.declaredFields = merged.keys.associateWith { ALL_FIELDS } }
+        }
+
+        /** Overlay a sparse app-code patch without turning omitted fields into assignments. */
+        private fun overlayPatch(lower: AdRemoteConfig, upper: AdRemoteConfig): AdRemoteConfig {
+            if (upper.ads.isEmpty()) return lower
+            val keys = LinkedHashSet<String>().apply { addAll(lower.ads.keys); addAll(upper.ads.keys) }
+            val merged = keys.associateWith { key ->
+                val base = lower.ads[key] ?: defaultUnit()
+                val top = upper.ads[key]
+                if (top == null) base else mergeUnit(base, top, upper.fieldsFor(key))
+            }
+            return AdRemoteConfig(merged).also { result ->
+                result.declaredFields = keys.associateWith { key ->
+                    (lower.declaredFields[key].orEmpty() + upper.declaredFields[key].orEmpty()).ifEmpty { ALL_FIELDS }
+                }
+            }
+        }
+
+        private fun mergeUnit(base: AdUnitConfig, top: AdUnitConfig, fields: Set<String>): AdUnitConfig = base.copy(
+            id = if ("id" in fields) top.id else base.id,
+            isEnable = if ("isEnable" in fields) top.isEnable else base.isEnable,
+            enableUaCheck = if ("enable_ua_check" in fields) top.enableUaCheck else base.enableUaCheck,
+            reloadIntervalSeconds = if ("reloadIntervalSeconds" in fields) top.reloadIntervalSeconds else base.reloadIntervalSeconds,
+            colorCTA = if ("colorCTA" in fields) top.colorCTA else base.colorCTA,
+            heightCTA = if ("heightCTA" in fields) top.heightCTA else base.heightCTA,
+            positionCTA = if ("positionCTA" in fields) top.positionCTA else base.positionCTA,
+            components = if ("components" in fields) top.components else base.components,
+            ids = if ("ids" in fields) top.ids else base.ids,
+            appResumeLoadDelayMs = if ("app_resume_load_delay_ms" in fields) top.appResumeLoadDelayMs else base.appResumeLoadDelayMs,
+            clickAction = if ("click_action" in fields) top.clickAction else base.clickAction,
+        )
 
         /**
          * Every floor key a placement may declare, in request order:
@@ -79,6 +145,11 @@ data class AdRemoteConfig @JvmOverloads constructor(
         @Volatile
         private var remoteDocument = false
 
+        /** Lower tiers retained so a sparse remote payload never erases app configuration. */
+        @Volatile private var assetConfig: AdRemoteConfig = AdRemoteConfig()
+        @Volatile private var codeConfig: AdRemoteConfig = AdRemoteConfig()
+        @Volatile private var remotePatch: AdRemoteConfig? = null
+
         @Volatile
         private var remoteKeys: Set<String> = emptySet()
 
@@ -92,6 +163,14 @@ data class AdRemoteConfig @JvmOverloads constructor(
          */
         @JvmStatic
         fun remoteDeclares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { (baseKey + it) in remoteKeys }
+
+        /** True only when the active remote patch supplied this field for [baseKey]. */
+        @JvmStatic
+        fun remoteDeclaresField(baseKey: String, field: String): Boolean =
+            FLOOR_SUFFIXES.any { suffix ->
+                val key = baseKey + suffix
+                key in remoteKeys && remotePatch?.fieldsFor(key)?.contains(field) == true
+            }
 
         /**
          * The active configuration, or an empty one if nothing has loaded yet.
@@ -126,10 +205,11 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 return
             }
             Log.i(TAG, "Loaded $fileName with ${loaded.ads.size} placements (debug=$debug)")
+            assetConfig = loaded
             pinAssets(loaded.takeIf { debug }, fileName)
             // The shipped file never replaces a document the backend already delivered; that
             // document is re-applied so a debuggable build pins its ids from here on.
-            if (isFromRemote()) applyRemote(getInstance()) else update(loaded, fromRemote = false)
+            if (isFromRemote()) applyRemote(remotePatch ?: AdRemoteConfig()) else publishResolved(false)
         }
 
         /**
@@ -152,9 +232,9 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         /**
          * [remote] as it may apply while [isRemoteOverrideBlocked]: a key the pinned assets also
-         * declare keeps their `id`/`ids` and takes every other field from remote, a key only
-         * remote declares is dropped unless it switches the placement off (there is no test unit
-         * to request for it), and a key only the assets declare stays as shipped. Unpinned,
+         * declare keeps their `id`/`ids` and takes every other field from remote. A key only
+         * remote declares keeps its behavior but has no requestable id unless the app shipped a
+         * test id for it; keys only the assets/code declare stay as resolved. Unpinned,
          * [remote] as is.
          */
         internal fun withPinnedIds(remote: AdRemoteConfig): AdRemoteConfig {
@@ -168,14 +248,23 @@ data class AdRemoteConfig @JvmOverloads constructor(
                         "field. setAllowRemoteOverrideInDebug(true) takes the remote ids too.",
                 )
             }
-            val merged = assets.ads.mapValues { (key, unit) ->
-                remote.ads[key]?.copy(id = unit.id, ids = unit.ids) ?: unit
+            val declaredRemote = remotePatch?.ads?.keys.orEmpty()
+            val merged = remote.ads.mapValues { (key, unit) ->
+                val assetUnit = assets.ads[key]
+                when {
+                    assetUnit != null && key in declaredRemote -> unit.copy(id = assetUnit.id, ids = assetUnit.ids)
+                    // Keep every behavior switch from remote even when no local test id exists;
+                    // only the requestable id is unavailable in a debuggable build.
+                    assetUnit == null && key in declaredRemote -> unit.copy(id = "", ids = emptyList())
+                    else -> unit
+                }
             }
-            return AdRemoteConfig(merged + remote.ads.filter { (key, unit) -> key !in assets.ads && !unit.isEnable })
+            return AdRemoteConfig(merged).also { it.declaredFields = remote.declaredFields }
         }
 
         /** [assets] is what a debuggable build loaded, whose ids every remote document keeps; null unpins. */
         internal fun pinAssets(assets: AdRemoteConfig?, fileName: String) {
+            if (assets != null) assetConfig = assets
             debugAssetsPinned = assets != null
             pinnedAssets = assets
             pinnedFile = fileName.takeIf { assets != null }
@@ -183,8 +272,9 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         /** Applies a document the backend delivered, pinning a debuggable build's ids. Main thread. */
         internal fun applyRemote(remote: AdRemoteConfig) {
-            val applied = withPinnedIds(remote)
-            publish(applied, fromRemote = true, keys = applied.ads.keys.filterTo(mutableSetOf()) { it in remote.ads })
+            remotePatch = validPatch(remote)
+            val applied = withPinnedIds(resolveSources())
+            publish(applied, fromRemote = true, keys = remotePatch?.ads?.keys.orEmpty())
         }
 
         /** Replaces the active configuration, e.g. after remote config delivers a new document. */
@@ -205,7 +295,38 @@ data class AdRemoteConfig @JvmOverloads constructor(
         @JvmStatic
         @JvmOverloads
         fun update(newConfig: AdRemoteConfig, fromRemote: Boolean = remoteDocument) =
-            publish(newConfig, fromRemote, if (fromRemote) newConfig.ads.keys else emptySet())
+            if (fromRemote) applyRemote(newConfig) else {
+                codeConfig = newConfig
+                // A code edit is a lower tier. It must never erase an already
+                // accepted remote snapshot; deletion is represented by an empty
+                // remote document instead.
+                publishResolved(remoteDocument)
+            }
+
+        /**
+         * Applies a sparse host-code patch below the app asset and remote document layers.
+         * Integrations use this for live debug/admin controls instead of copying the resolved
+         * remote snapshot back into code (which would resurrect deleted remote fields).
+         */
+        @JvmStatic
+        fun updateCodeFromJson(json: String) {
+            val parsed = fromJson(json)?.let(::validPatch) ?: return
+            codeConfig = overlayPatch(codeConfig, parsed)
+            publishResolved(remoteDocument)
+        }
+
+        /** Resolve SDK defaults < code < app asset < remote, preserving field presence. */
+        private fun resolveSources(): AdRemoteConfig {
+            val sdk = AdRemoteConfig()
+            val code = merge(sdk, codeConfig)
+            val asset = merge(code, assetConfig)
+            return remotePatch?.let { merge(asset, it) } ?: asset
+        }
+
+        private fun publishResolved(fromRemote: Boolean) {
+            val resolved = withPinnedIds(resolveSources())
+            publish(resolved, fromRemote, if (fromRemote) remotePatch?.ads?.keys.orEmpty() else emptySet())
+        }
 
         private fun publish(newConfig: AdRemoteConfig, fromRemote: Boolean, keys: Set<String>) {
             synchronized(this) {
@@ -226,8 +347,12 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 instance = null
                 remoteDocument = false
                 remoteKeys = emptySet()
+                assetConfig = AdRemoteConfig()
+                codeConfig = AdRemoteConfig()
+                remotePatch = null
             }
             debugAssetsPinned = false
+            allowRemoteOverrideInDebug = false
             pinnedAssets = null
             pinnedFile = null
             pinReported = false

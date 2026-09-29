@@ -20,7 +20,9 @@ import com.ads.module.admob.AppOpenManager
 import com.ads.module.ads.ERainAd
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.dialog.PrepareLoadingAdsDialog
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import com.ads.module.helper.interstitial.InterstitialAdManager
@@ -120,6 +122,7 @@ class ERainInterstitialWaitTest {
         ShadowDialog.getLatestDialog()?.dismiss()
         ConsentCenter.setHostConsent(false, false)
         AdRemoteConfig.reset()
+        AdBehavior.document.acceptSuccessfulFetch(null)
         controller.pause().stop().destroy()
         main.idleFor(800, TimeUnit.MILLISECONDS)
         AppOpenManager.getInstance().setInterstitialShowing(false)
@@ -281,6 +284,25 @@ class ERainInterstitialWaitTest {
     }
 
     @Test
+    fun `a splash interstitial shows with the loading dialog setting of the key it loaded under`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"placement_overrides":{"inter_splash_o":{"interstitial":{"presentation":{"loading_enabled":false}}}}}""")
+
+        val ad = showSplashInterstitial("inter_splash_o")
+
+        assertEquals(0, shownLoadingDialogs())
+        main.idleFor(800, TimeUnit.MILLISECONDS)
+        assertEquals(listOf(activity), ad.hosts)
+    }
+
+    @Test
+    fun `a splash interstitial keeps the loading dialog without an override`() {
+        showSplashInterstitial("inter_splash")
+
+        assertEquals(1, shownLoadingDialogs())
+    }
+
+    @Test
     fun `releasing everything drops the flow's unused interstitials and leaves a host key alone`() {
         provider.loadInterstitial(activity, placement, unit)
         requests.single().onAdLoaded(vendor("after-high"))
@@ -298,6 +320,20 @@ class ERainInterstitialWaitTest {
             TimeUnit.MILLISECONDS
         )
     }
+
+    private fun showSplashInterstitial(adConfigKey: String): ProviderWaitVendorAd {
+        val splash = AdPlacement.SplashInterstitial
+        provider.loadInterstitial(activity, splash, unit, adConfigKey)
+        val ad = vendor("after-high")
+        requests.single().onAdLoaded(ad)
+        main.idle()
+        provider.showInterstitial(activity, splash, Outcome())
+        main.idleFor(100, TimeUnit.MILLISECONDS)
+        return ad
+    }
+
+    private fun shownLoadingDialogs(): Int =
+        ShadowDialog.getShownDialogs().count { it is PrepareLoadingAdsDialog && it.isShowing }
 
     private fun vendor(id: String) = ProviderWaitVendorAd(id).also { shown += it }
     private class Outcome : ObInterstitialCallback() {

@@ -15,8 +15,8 @@ class SettingsDocumentTest {
 
     @Test fun `missing null wrong type and invalid enum use concrete defaults`() {
         val d = document()
-        assertTrue(d.acceptSuccessfulFetch("""{"native":{"reload":{"on_ad_click":null,"resume_debounce_ms":"9"}},"banner":{"presentation":{"type":"TYPO"}}}"""))
-        assertTrue(d.snapshot.boolean("native.reload.on_ad_click"))
+        assertTrue(d.acceptSuccessfulFetch("""{"native":{"presentation":{"auto_shimmer":null},"reload":{"resume_debounce_ms":"9"}},"banner":{"presentation":{"type":"TYPO"}}}"""))
+        assertTrue(d.snapshot.boolean("native.presentation.auto_shimmer"))
         assertEquals(500L, d.snapshot.long("native.reload.resume_debounce_ms"))
         assertEquals("NORMAL", d.snapshot.string("banner.presentation.type"))
         assertEquals(8_000L, d.snapshot.long("interstitial.load_and_show.wait_timeout_ms"))
@@ -24,8 +24,8 @@ class SettingsDocumentTest {
 
     @Test fun `false and zero are explicit values and local options remain fallback`() {
         val d = document()
-        assertTrue(d.acceptSuccessfulFetch("""{"native":{"reload":{"on_ad_click":false,"resume_debounce_ms":0}}}"""))
-        assertFalse(d.snapshot.boolean("native.reload.on_ad_click", true))
+        assertTrue(d.acceptSuccessfulFetch("""{"native":{"presentation":{"auto_shimmer":false},"reload":{"resume_debounce_ms":0}}}"""))
+        assertFalse(d.snapshot.boolean("native.presentation.auto_shimmer", true))
         assertEquals(0L, d.snapshot.long("native.reload.resume_debounce_ms", 750L))
         assertEquals(900L, d.snapshot.long("banner.reload.resume_debounce_ms", 900L))
         assertEquals(500L, d.localSnapshot.long("native.reload.resume_debounce_ms"))
@@ -35,8 +35,8 @@ class SettingsDocumentTest {
         val d = document()
         d.acceptSuccessfulFetch("""{"native":{"reload":{"interval_ms":21000}}}""")
         assertFalse(d.acceptSuccessfulFetch("{broken"))
-        assertFalse(d.acceptSuccessfulFetch("""{"schema_version":2}"""))
-        assertEquals(21_000L, d.snapshot.long("native.reload.interval_ms"))
+        assertTrue(d.acceptSuccessfulFetch("""{"schema_version":2,"native":{"presentation":{"auto_shimmer":false}}}"""))
+        assertEquals(15_000L, d.snapshot.long("native.reload.interval_ms"))
         d.acceptSuccessfulFetch("{}")
         assertEquals(15_000L, d.snapshot.long("native.reload.interval_ms"))
         d.acceptSuccessfulFetch(null)
@@ -47,12 +47,12 @@ class SettingsDocumentTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("adlogic_settings_settings_restart", 0).edit().clear().commit()
         val d = document("settings_restart").also { it.initialize(context) }
-        d.acceptSuccessfulFetch("""{"native":{"reload":{"resume_debounce_ms":0,"on_ad_click":false}}}""")
+        d.acceptSuccessfulFetch("""{"native":{"reload":{"resume_debounce_ms":0},"presentation":{"auto_shimmer":false}}}""")
         val restarted = document("settings_restart").also { it.initialize(context) }
         assertEquals(0L, restarted.snapshot.long("native.reload.resume_debounce_ms"))
-        assertFalse(restarted.snapshot.boolean("native.reload.on_ad_click"))
+        assertFalse(restarted.snapshot.boolean("native.presentation.auto_shimmer"))
         restarted.acceptSuccessfulFetch(null)
-        assertTrue(document("settings_restart").also { it.initialize(context) }.snapshot.boolean("native.reload.on_ad_click"))
+        assertTrue(document("settings_restart").also { it.initialize(context) }.snapshot.boolean("native.presentation.auto_shimmer"))
     }
 
     @Test fun `bundled asset numbers do not override custom host defaults`() {
@@ -68,7 +68,7 @@ class SettingsDocumentTest {
 
     @Test fun `identical accepted payload preserves the immutable snapshot`() {
         val d = document()
-        val json = """{"native":{"reload":{"on_ad_click":false}}}"""
+        val json = """{"native":{"presentation":{"auto_shimmer":false}}}"""
         d.acceptSuccessfulFetch(json)
         val previous = d.snapshot
         d.acceptSuccessfulFetch(json)
@@ -77,8 +77,8 @@ class SettingsDocumentTest {
         assertSame(previous, d.snapshot)
         d.acceptSuccessfulFetch(null)
         assertNotSame(previous, d.snapshot)
-        assertFalse(previous.boolean("native.reload.on_ad_click"))
-        assertTrue(d.snapshot.boolean("native.reload.on_ad_click"))
+        assertFalse(previous.boolean("native.presentation.auto_shimmer"))
+        assertTrue(d.snapshot.boolean("native.presentation.auto_shimmer"))
     }
 
     @Test fun `invalid numeric ranges do not reach scheduling or enum constructors`() {

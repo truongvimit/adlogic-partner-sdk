@@ -36,6 +36,7 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/ob_Theme_OnboardKit" />
+        <activity android:name="io.onboardkit.ui.privacygoals.PrivacyGoalsActivity" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="false" android:screenOrientation="portrait" android:theme="@style/ob_Theme_OnboardKit" />
     </application>
 
 </manifest>

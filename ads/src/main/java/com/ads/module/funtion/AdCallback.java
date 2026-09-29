@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.ads.module.ads.wrapper.ApInterstitialAd;
 import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.config.settings.AdBehavior;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
@@ -113,6 +114,11 @@ public class AdCallback {
     /** Rechecked immediately before dispatch, after the cosmetic preparation delay. */
     public boolean canShowInterstitial() {
         return true;
+    }
+
+    /** Whether the loading dialog covers the preparation delay before this interstitial shows. */
+    public boolean showsInterstitialLoadingDialog() {
+        return AdBehavior.bool("interstitial.presentation.loading_enabled");
     }
 
     public void onAdSplashHigh1Ready() {

@@ -148,7 +148,6 @@ class RemoteConfigSyncer internal constructor(
     }
 
     private fun cachedValues(snapshot: RemoteFlags): Map<String, String> = buildMap {
-        put(ObRemoteKeys.ENABLE_ALL_ADS.key, snapshot.enableAllAds.toString())
         put(ObRemoteKeys.ENABLE_UI_CONTENT.key, snapshot.enableUiContent.toString())
         put(ObRemoteKeys.ENABLE_STEP_OB1.key, snapshot.enableStepOb1.toString())
         put(ObRemoteKeys.ENABLE_STEP_OB2.key, snapshot.enableStepOb2.toString())

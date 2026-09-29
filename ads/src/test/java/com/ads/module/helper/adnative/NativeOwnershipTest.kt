@@ -192,28 +192,41 @@ class NativeOwnershipTest {
         assertFalse(shimmer.isShimmerStarted)
     }
 
-    @Test fun `click decision survives remote change before opening and returning`() {
-        val document = com.ads.module.config.settings.AdBehavior.document
+    @Test fun `click decision survives an ad_config change before opening and returning`() {
         try {
-            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"none"}}}""")
-            val helper = helper()
+            clickAction("a", NativeClickAction.NONE)
+            val helper = keyedHelper("a")
             helper.show()
             requests.single().fill(NativeVendorAd())
             requests.single().listener.onAdClicked()
-            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"reload"}}}""")
+            clickAction("a", NativeClickAction.RELOAD)
             requests.single().listener.onAdOpened()
             controller.pause().stop().restart().start().resume()
             assertEquals(1, requests.size)
             // The new policy applies to the next click, not the trip already in progress.
             requests.single().listener.onAdClicked()
             assertEquals(2, requests.size)
-            document.acceptSuccessfulFetch("""{"native":{"click":{"action":"auto_next"}}}""")
+            clickAction("a", NativeClickAction.AUTO_NEXT)
             val replacement = NativeVendorAd()
             requests.last().fill(replacement)
             controller.pause().resume()
             assertSame(replacement, helper.nativeAd?.admobNativeAd)
             assertEquals(2, requests.size)
-        } finally { document.acceptSuccessfulFetch(null) }
+        } finally { com.ads.module.config.AdRemoteConfig.reset() }
+    }
+
+    @Test fun `ad_config click action outranks the code default set on the helper`() {
+        try {
+            val helper = keyedHelper("a").setReloadOnAdClick(false)
+            helper.show()
+            requests.single().fill(NativeVendorAd())
+            requests.single().listener.onAdClicked()
+            controller.pause().resume()
+            assertEquals("A silent ad_config keeps the helper's NONE", 1, requests.size)
+            clickAction("a", NativeClickAction.RELOAD)
+            requests.single().listener.onAdClicked()
+            assertEquals("ad_config RELOAD wins over setReloadOnAdClick(false)", 2, requests.size)
+        } finally { com.ads.module.config.AdRemoteConfig.reset() }
     }
 
     @Test fun `click preload filled before pause stays unused until return then shows immediately`() {
@@ -351,6 +364,16 @@ class NativeOwnershipTest {
             .also { it.placement = key }
             .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
             .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+
+    private fun keyedHelper(key: String): NativeAdHelper =
+        NativeAdHelper(activity, activity, NativeAdConfig.forUnits(config.adUnitIds, config.layoutId, adConfigKey = key))
+            .also { it.placement = key }
+            .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+            .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+
+    private fun clickAction(key: String, action: NativeClickAction) =
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
+            key to com.ads.module.config.AdUnitConfig("native-unit", true, clickAction = action))))
 
     @Test fun `ordinary show and preload share a request and showing consumes the cache`() {
         val helper = helper()
@@ -566,6 +589,24 @@ class NativeOwnershipTest {
             assertSame(ad, helper.nativeAd?.admobNativeAd)
         } finally {
             AdBehavior.document.acceptSuccessfulFetch(null)
+            com.ads.module.config.AdRemoteConfig.reset()
+        }
+    }
+
+    @Test fun `a placement helper styles its skeleton from the ad_config current at request time`() {
+        com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+            mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", false, heightCTA = 40))))
+        try {
+            val container = android.widget.FrameLayout(activity).also(activity::setContentView)
+            val helper = NativeAdHelper.forPlacement(activity, activity, "home", container)
+            assertTrue(requests.isEmpty())
+            com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
+                mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", true, heightCTA = 50))))
+            helper.show()
+            assertEquals(1, requests.size)
+            val cta = container.findViewById<android.view.View>(com.ads.module.R.id.ad_call_to_action)
+            assertEquals((50 * activity.resources.displayMetrics.density).toInt(), cta.layoutParams.height)
+        } finally {
             com.ads.module.config.AdRemoteConfig.reset()
         }
     }

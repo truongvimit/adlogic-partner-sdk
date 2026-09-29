@@ -105,13 +105,13 @@ class ObPreloadEligibilityTest {
         assertEquals(ids, chain.stepDefinitions().map { it.id.value })
     }
 
-    @Test fun `a remote order brings back app disabled screens but not ones the app never declared`() {
+    @Test fun `a valid remote order brings back app disabled screens`() {
         cfg = onboardKitConfig {
             steps(ContentStepDefinition(StepId.OB1), ContentStepDefinition(StepId.OB2, enabled = false),
                 AdFullScreenStepDefinition(StepId.FULL1, enabled = false), ContentStepDefinition(StepId.OB4))
         }.getOrThrow()
         adConfig()
-        order(ids)
+        order(listOf("ob1", "full1", "ob2", "ob4"))
         assertRequested(listOf("ob1", "full1", "ob2", "ob4"))
     }
 
@@ -153,21 +153,13 @@ class ObPreloadEligibilityTest {
         flags = RemoteFlags(adsFullScreenNative = false)
         resetChain()
         assertRequested(listOf("ob1", "ob2", "ob3", "ob4"))
-        flags = RemoteFlags(enableAllAds = false)
+        flags = RemoteFlags(adsContentNative = false, adsFullScreenNative = false)
         resetChain()
         assertRequested(emptyList())
-        flags = RemoteFlags()
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":false}}""")
-        resetChain()
-        assertRequested(emptyList())
-        OnboardingSettings.document.acceptSuccessfulFetch(null)
         AdBehavior.document.acceptSuccessfulFetch("""{"global":{"ads_enabled":false}}""")
         resetChain()
         assertRequested(emptyList())
         AdBehavior.document.acceptSuccessfulFetch(null)
-        cfg = onboardKitConfig { defaultSteps(); ads = AdsConfig.fromAdConfig().copy(enabled = false) }.getOrThrow()
-        resetChain()
-        assertRequested(emptyList())
     }
 
     @Test fun `premium consent and force update hold block real mapped placements`() {

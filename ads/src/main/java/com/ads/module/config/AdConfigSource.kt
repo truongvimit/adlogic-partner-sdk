@@ -50,6 +50,8 @@ interface AdConfigSource {
 object AdConfig {
 
     private const val TAG = "AdConfig"
+    /** Firebase's document registry includes this key so one activation has one snapshot. */
+    private const val AD_REMOTE_CONFIG_KEY = "ad_remote_config"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -77,6 +79,8 @@ object AdConfig {
     suspend fun refresh(timeoutMs: Long = 10_000): Boolean {
         val current = source ?: return false
         var reachable = true
+        var settingsAdPresent = false
+        var settingsAd: String? = null
         if (current is SettingsConfigSource) {
             val settings = try {
                 current.fetchSettings(timeoutMs)
@@ -87,19 +91,33 @@ object AdConfig {
                 null
             }
             if (settings == null) reachable = false
-            else withContext(NonCancellable) { SettingsRegistry.acceptSuccessfulFetch(settings) }
+            else {
+                settingsAdPresent = settings.containsKey(AD_REMOTE_CONFIG_KEY)
+                settingsAd = settings[AD_REMOTE_CONFIG_KEY]
+                withContext(NonCancellable) { SettingsRegistry.acceptSuccessfulFetch(settings - AD_REMOTE_CONFIG_KEY) }
+            }
         }
         // A backend that just failed is not waited on a second time; the document it delivered
         // last still outranks the one the app shipped.
-        val json = read(current) { if (reachable) it.fetch(timeoutMs) else it.cached() }
-        if (json.isNullOrBlank()) return false
+        val json = if (reachable && settingsAdPresent) settingsAd
+        else read(current) { if (reachable) it.fetch(timeoutMs) else it.cached() }
+        // A successful settings fetch plus a missing/blank ad_remote_config is a deletion, not a
+        // network failure. Clear the document so old remote placements cannot live forever. For a
+        // standalone source, null still means unavailable and the last valid snapshot remains.
+        if (json.isNullOrBlank()) {
+            if (reachable && (current is SettingsConfigSource && settingsAdPresent)) {
+                return withContext(NonCancellable) { applyDocument(current.id, json, clear = true) }
+            }
+            return false
+        }
         // Applied whole: a caller's deadline must not leave the session half on the new document.
-        return withContext(NonCancellable) { applyDocument(current.id, json) }
+        return withContext(NonCancellable) { applyDocument(current.id, json, clear = false) }
     }
 
     private suspend fun applyCached(installed: AdConfigSource) {
-        val parsed = read(installed) { it.cached() }?.let { AdRemoteConfig.fromJson(it) }
-            ?.takeIf { it.ads.isNotEmpty() } ?: return
+        val cached = read(installed) { it.cached() } ?: return
+        val parsed = if (cached.isBlank()) AdRemoteConfig() else AdRemoteConfig.fromJson(cached)
+            ?: return
         withContext(Dispatchers.Main.immediate) {
             // A refresh that landed meanwhile, or another source installed since, is newer.
             if (source === installed && !AdRemoteConfig.isFromRemote()) {
@@ -119,15 +137,15 @@ object AdConfig {
             null
         }
 
-    private suspend fun applyDocument(sourceId: String, json: String): Boolean {
-        val parsed = withContext(Dispatchers.Default) { AdRemoteConfig.fromJson(json) } ?: return false
-        if (parsed.ads.isEmpty()) {
-            // An empty document would silently disable every placement; keep what we have.
-            Log.w(TAG, "Ad config from $sourceId has no placements — ignoring")
-            return false
-        }
+    private suspend fun applyDocument(sourceId: String, json: String?, clear: Boolean): Boolean {
+        val parsed = if (clear || json.isNullOrBlank()) AdRemoteConfig() else
+            withContext(Dispatchers.Default) { AdRemoteConfig.fromJson(json) } ?: return false
         withContext(Dispatchers.Main.immediate) { AdRemoteConfig.applyRemote(parsed) }
-        Log.i(TAG, "Ad config refreshed from $sourceId: ${parsed.ads.size} placements")
+        if (parsed.ads.isEmpty()) {
+            Log.i(TAG, "Ad config from $sourceId cleared; resolving app asset/code/default")
+        } else {
+            Log.i(TAG, "Ad config refreshed from $sourceId: ${parsed.ads.size} placements")
+        }
         return true
     }
 }

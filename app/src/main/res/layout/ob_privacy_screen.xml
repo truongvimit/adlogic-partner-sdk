@@ -1,0 +1,194 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFFFF"
+    android:orientation="vertical">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="248dp"
+                android:layout_marginTop="8dp">
+
+                <View
+                    android:layout_width="210dp"
+                    android:layout_height="210dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_privacy_goal_stage" />
+
+                <TextView
+                    android:layout_width="104dp"
+                    android:layout_height="132dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_privacy_goal_pdf"
+                    android:elevation="8dp"
+                    android:gravity="center"
+                    android:text="PDF\n────\n────\n────\n────"
+                    android:textColor="#FFD13538"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="74dp"
+                    android:layout_height="84dp"
+                    android:layout_gravity="center_vertical|start"
+                    android:layout_marginStart="62dp"
+                    android:background="@drawable/bg_privacy_goal_pdf_blue"
+                    android:elevation="4dp"
+                    android:gravity="center"
+                    android:rotation="14"
+                    android:text="────\n───"
+                    android:textColor="#FF676261"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="74dp"
+                    android:layout_height="84dp"
+                    android:layout_gravity="center_vertical|end"
+                    android:layout_marginEnd="62dp"
+                    android:background="@drawable/bg_privacy_goal_pdf_green"
+                    android:elevation="4dp"
+                    android:gravity="center"
+                    android:rotation="-10"
+                    android:text="────\n───"
+                    android:textColor="#FF676261"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginTop="18dp"
+                    android:text="✦"
+                    android:textColor="#FFD13538"
+                    android:textSize="28sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PDF"
+                    android:textColor="#FFD13538"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" Reader"
+                    android:textColor="#FF1D1A19"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="32dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="@string/privacy_goal_subtitle"
+                android:textColor="#FF676261"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center"
+                android:text="@string/privacy_goal_tools"
+                android:textColor="#FF1D1A19"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/PrivacyGoalTool"
+                    android:text="✚\nMerge" />
+
+                <TextView
+                    style="@style/PrivacyGoalTool"
+                    android:text="✂\nSplit" />
+
+                <TextView
+                    style="@style/PrivacyGoalTool"
+                    android:text="✎\nSign" />
+
+                <TextView
+                    style="@style/PrivacyGoalTool"
+                    android:text="▣\nProtect" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/bg_privacy_goal_consent"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:padding="14dp">
+
+                <CheckBox
+                    android:id="@+id/ob_privacy_consent_checkbox"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:buttonTint="#FFD13538" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="@string/privacy_goal_consent"
+                    android:textColor="#FF676261"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <Button
+        android:id="@+id/ob_privacy_goals_continue"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_privacy_goal_button"
+        android:enabled="false"
+        android:text="@string/privacy_goal_get_started"
+        android:textColor="#FFFFFFFF"
+        android:textSize="16sp" />
+
+    <FrameLayout
+        android:id="@+id/ob_privacy_goals_ad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="12dp" />
+</LinearLayout>

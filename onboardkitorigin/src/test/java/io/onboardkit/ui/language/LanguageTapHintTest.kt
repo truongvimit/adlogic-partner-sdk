@@ -50,12 +50,11 @@ class LanguageTapHintTest {
     }
 
     @Test
-    fun `reselect opens popup immediately and still counts toward later threshold`() {
+    fun `first open does not treat configured default as a reselect`() {
         launch(language = LanguageConfig(defaultCode = "en-US"))
         row(0).itemView.performClick()
-        val reselect = org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        assertTrue(reselect?.isShowing == true)
-        reselect.findViewById<View>(R.id.ob_confirm_cancel).performClick()
+        assertEquals("en-US", adapter.selectedCode)
+        assertTrue(org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing != true)
 
         row(1).itemView.performClick()
         assertEquals("es", adapter.selectedCode)
@@ -148,10 +147,20 @@ class LanguageTapHintTest {
     }
 
     @Test
-    fun `preselected language never schedules a hint`() {
+    fun `configured default does not suppress the device language hint`() {
         launch(language = LanguageConfig(defaultCode = "en-US"))
         main.idleFor(Duration.ofSeconds(10))
-        assertNull(adapter.hintCode)
+        assertNotNull(adapter.hintCode)
+    }
+
+    @Test
+    fun `first-open LFO starts with no selected row even when code default exists`() {
+        launch(language = LanguageConfig(defaultCode = "en-US"))
+        assertNull("A configured default is not a user selection on LFO1", adapter.selectedCode)
+        adapter.currentList.forEachIndexed { index, language ->
+            val holder = row(index)
+            assertEquals("row ${language.code}", false, holder.itemView.isSelected)
+        }
     }
 
     @Test
@@ -173,7 +182,7 @@ class LanguageTapHintTest {
                 )
             )
         }.getOrThrow()).getOrThrow()
-        OnboardingSdk.remoteOrNull()!!.applySnapshot(flags.copy(enableAllAds = false))
+        OnboardingSdk.remoteOrNull()!!.applySnapshot(flags)
         controller = Robolectric.buildActivity(
             ObLanguageActivity::class.java,
             ObLanguageActivity.intentFor(app, mode)

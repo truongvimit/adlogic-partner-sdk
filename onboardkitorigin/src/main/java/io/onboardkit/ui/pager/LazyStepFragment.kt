@@ -21,6 +21,7 @@ abstract class LazyStepFragment : Fragment() {
     private var awayInAd = false
     private var selected = false
     private var selectionVersion = 0L
+    private var viewVersion = 0L
 
     protected val stepHost: StepHost?
         get() = activity as? StepHost
@@ -29,11 +30,20 @@ abstract class LazyStepFragment : Fragment() {
     protected fun requireStepHost(): StepHost =
         stepHost ?: error("${activity?.javaClass?.simpleName} must implement StepHost")
 
-    /** Capture when binding an ad; callbacks from a released ad must not affect a new visit. */
     protected val stepVisitVersion: Long get() = selectionVersion
 
     protected fun isCurrentStepVisit(version: Long): Boolean =
         selected && selectionVersion == version && isAdded && view != null
+
+    /**
+     * Capture when binding an ad. The ad lives as long as the view, not the visit: a page
+     * revisited while its view survives shows the same ad, so its callbacks stay live; only a
+     * recreated view drops them.
+     */
+    protected val stepViewVersion: Long get() = viewVersion
+
+    protected fun isCurrentStepView(version: Long): Boolean =
+        viewVersion == version && isAdded && view != null
 
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -121,6 +131,7 @@ abstract class LazyStepFragment : Fragment() {
     override fun onDestroyView() {
         selected = false
         selectionVersion++
+        viewVersion++
         adEngaged = false
         awayInAd = false
         hasInitView.set(false)

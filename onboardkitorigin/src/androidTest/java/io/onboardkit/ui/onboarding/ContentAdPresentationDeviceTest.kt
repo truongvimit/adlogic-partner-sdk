@@ -56,8 +56,8 @@ class ContentAdPresentationDeviceTest {
                         imageRes = app.resources.getIdentifier("ob_qa_art_${i + 1}", "drawable", app.packageName))
                 }.toTypedArray())
                 ads = if (case == "remote_off") AdsConfig.fromAdConfig().copy(afterOnboardingInterstitialEnabled = false)
-                else AdsConfig(enabled = case != "disabled", contentStepNative =
-                    if (case == "no_unit") null else NativeAdUnit("test-native"), afterOnboardingInterstitialEnabled = false)
+                else AdsConfig(contentStepNative =
+                    if (case in setOf("no_unit", "disabled")) null else NativeAdUnit("test-native"), afterOnboardingInterstitialEnabled = false)
                 behavior = BehaviorConfig(lockPagerSwipe = false)
             }.getOrThrow()).getOrThrow()
             if (case == "remote_off") AdRemoteConfig.update(AdRemoteConfig(mapOf(

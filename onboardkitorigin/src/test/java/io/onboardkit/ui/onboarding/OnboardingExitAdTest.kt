@@ -15,7 +15,9 @@ import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.NativeStatus
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
+import io.onboardkit.config.GoalsScreenConfig
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.config.PrivacyGoalsScreenConfig
 import io.onboardkit.config.QuestionConfig
 import io.onboardkit.config.QuestionOption
 import io.onboardkit.config.onboardKitConfig
@@ -25,8 +27,10 @@ import io.onboardkit.core.StepId
 import io.onboardkit.paywall.PaywallGate
 import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.onboardkit.ui.splash.SplashEntry
@@ -144,6 +148,7 @@ class OnboardingExitAdTest {
         presentation?.onAdSkipped(AdSkipReason.NOT_READY)
         controller?.pause()?.stop()?.destroy()
         main.idle()
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
         ConsentCenter.setHostConsent(false, false)
         org.robolectric.util.ReflectionHelpers.setStaticField(OnboardingSdk::class.java, "application", null)
     }
@@ -287,6 +292,48 @@ class OnboardingExitAdTest {
     }
 
     @Test
+    fun `the privacy screen starts under the ad`() {
+        val activity = launch(privacyGoals = PrivacyGoalsScreenConfig(
+            enabled = true,
+            goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+        ))
+        activity.next(null)
+        main.idle()
+        requireNotNull(presentation).onNextAction()
+        assertEquals(
+            PrivacyGoalsActivity::class.java.name,
+            shadowOf(activity).nextStartedActivity?.component?.className,
+        )
+        main.idle()
+        assertTrue(outcomes.isEmpty())
+        assertFalse(activity.isFinishing)
+        requireNotNull(presentation).onAdClosed()
+        main.idle()
+        assertEquals(null, shadowOf(activity).peekNextStartedActivity())
+        assertTrue(outcomes.isEmpty())
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
+    fun `a remote privacy switch without any goal option keeps the regular exit`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"privacy_goals_screen":{"enabled":true}}""")
+        val activity = launch()
+        assertTrue(OnboardingSdk.requireConfig().privacyGoalsScreen.enabled)
+        assertFalse(OnboardingSdk.privacyGoalsScreenEnabled())
+        activity.next(null)
+        requireNotNull(presentation).onNextAction()
+        assertEquals(null, shadowOf(activity).peekNextStartedActivity())
+        main.idle()
+        assertEquals(1, outcomes.size)
+
+        OnboardingSdk.configure(onboardKitConfig {
+            step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
+            question = QuestionConfig(options = listOf(QuestionOption("a", title = "A")))
+        }.getOrThrow()).getOrThrow()
+        assertTrue("Question options stand in for goal options", OnboardingSdk.privacyGoalsScreenEnabled())
+    }
+
+    @Test
     fun `a failed show after the app started completes once`() {
         val activity = launch()
         activity.next(null)
@@ -371,11 +418,13 @@ class OnboardingExitAdTest {
         timing: NextScreenTiming? = null,
         question: QuestionConfig? = null,
         flags: RemoteFlags = RemoteFlags(),
+        privacyGoals: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig(),
     ): ObOnboardingHostActivity {
         OnboardingSdk.remoteOrNull()?.applySnapshot(flags)
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
             this.question = question
+            privacyGoalsScreen = privacyGoals
             ads = AdsConfig(afterOnboardingInterstitial = unit.takeIf { enabled },
                 afterOnboardingInterstitialEnabled = automatic)
                 .let { if (timing == null) it else it.copy(afterOnboardingInterstitialTiming = timing) }

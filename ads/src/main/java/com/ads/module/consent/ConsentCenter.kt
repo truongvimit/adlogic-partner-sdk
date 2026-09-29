@@ -227,13 +227,14 @@ object ConsentCenter {
 
     private fun armTimeout(flow: PendingFlow) {
         cancelTimeout()
+        val timeoutMs = com.ads.module.config.settings.AdBehavior.number("consent.network_timeout_ms", options.timeoutMs)
         val runnable = Runnable {
             if (!ownsFlow(flow)) return@Runnable
-            Log.w(TAG, "consent update timed out after ${options.timeoutMs}ms")
+            Log.w(TAG, "consent update timed out after ${timeoutMs}ms")
             finish(flow, retryable = true, error = true)
         }
         timeoutRunnable = runnable
-        timeoutHandler.postDelayed(runnable, com.ads.module.config.settings.AdBehavior.number("consent.network_timeout_ms", options.timeoutMs))
+        timeoutHandler.postDelayed(runnable, timeoutMs)
     }
 
     private fun cancelTimeout() {

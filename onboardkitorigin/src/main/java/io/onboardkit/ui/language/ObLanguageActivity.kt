@@ -33,6 +33,7 @@ import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.language.ObLanguageActivity.Companion.RESULT_LANGUAGE_CODE
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
+import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.Job
@@ -102,13 +103,17 @@ class ObLanguageActivity : BaseOnboardActivity() {
             ?: LanguageScreenMode.FIRST_OPEN
         reuseLfo1Preload = savedInstanceState?.getBoolean("ob_lfo1_preload_handoff")
             ?: (mode == LanguageScreenMode.FIRST_OPEN && sdk.preload().takeLanguage1Preload())
-        // Resolved: the offered list already follows remote, and the default is always on it.
+        // Resolved: the offered list already follows remote.  A configured default is a
+        // navigation/fallback hint, not a user selection on the first-open picker: selecting a
+        // row before the user taps it makes the device-language hand obvious hint look like a
+        // saved choice.  Settings mode may still show the configured default for compatibility.
         val languageConfig = sdk.requireConfig().language
-        selectedCode = (savedInstanceState?.getString("ob_selected_language") ?: languageConfig.defaultCode)
+        val configuredSelection = languageConfig.defaultCode.takeIf { mode == LanguageScreenMode.SETTINGS }
+        selectedCode = (savedInstanceState?.getString("ob_selected_language") ?: configuredSelection)
             ?.takeIf { code -> languageConfig.languages.any { it.code == code } }
         languageTapCount = savedInstanceState?.getInt("ob_language_tap_count") ?: 0
 
-        languages = languageConfig.languages.ifEmpty { ObLanguages.ALL }
+        languages = languageConfig.languages
         val hintCode = resolveHintCode()
         if (hintCode != null) languages = DeviceLanguageHint.promote(languages)
 
@@ -332,8 +337,11 @@ class ObLanguageActivity : BaseOnboardActivity() {
             when (placement) {
                 AdPlacement.Language2 -> if (secondAdShown) onConfirm()
                 AdPlacement.Language1 -> if (!secondAdShown) {
-                    val code = selectedCode ?: sdk.configOrNull()?.language?.defaultCode
-                    val language = languages.firstOrNull { it.code == code } ?: languages.firstOrNull()
+                    // A configured default and a device hint are navigation hints,
+                    // never a user selection. An ad return may auto-advance only
+                    // after the user actually picked a row.
+                    val code = selectedCode ?: return@post
+                    val language = languages.firstOrNull { it.code == code }
                     language?.let(::onLanguageTapped)
                 }
                 else -> Unit
@@ -379,6 +387,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         ObLog.d(ObLog.Section.NAV, "ob_language enabledSteps=${enabled.map { it.value }}")
         if (enabled.isNotEmpty()) {
             reuseInterstitialThenLeave { ObOnboardingHostActivity.start(this, resumeIndex = 0) }
+            return
+        }
+        // Privacy/Goal is the optional tail of this same first-open flow. It must remain the
+        // destination even when remote disables every pager step.
+        if (sdk.privacyGoalsScreenEnabled()) {
+            reuseInterstitialThenLeave { PrivacyGoalsActivity.start(this) }
             return
         }
         when (FlowNavigator.decideExit(

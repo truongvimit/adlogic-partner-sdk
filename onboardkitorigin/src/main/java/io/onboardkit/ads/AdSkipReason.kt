@@ -21,7 +21,7 @@ enum class AdSkipReason(val key: String) {
      */
     CONSENT_NOT_GRANTED("consent_not_granted"),
 
-    /** `AdsConfig.enabled = false` — the host app compiled ads off. */
+    /** No active onboarding ad configuration is available for the requested policy. */
     ADS_OFF_IN_CONFIG("ads_off_config"),
 
     /** No [OnboardingAdProvider] was installed. */
@@ -30,7 +30,7 @@ enum class AdSkipReason(val key: String) {
     /** The placement has no usable ad unit id. */
     NO_AD_UNIT("no_ad_unit"),
 
-    /** Master remote kill switch is off. */
+    /** The SDK-wide remote kill switch is off. */
     ADS_OFF_BY_REMOTE("ads_off_remote"),
 
     /** This placement's own remote flag is off while ads in general are on. */
@@ -53,11 +53,12 @@ enum class AdSkipReason(val key: String) {
     UA_GATE("ua_gate"),
 
     /**
-     * The `:ads` module declined by one of its own frequency rules.
+     * The `:ads` module declined at show time with `onNextAction` and no other callback.
      *
-     * It answers all of them the same way — `onNextAction` with no other callback — so the exact
-     * one (its interval, its click cap) is not knowable from here. Both are remote-tunable through
-     * `interstitial_interval_sec` and `max_click_ads_per_day`.
+     * In practice that is its daily click cap,
+     * `ad_behavior_config.interstitial.frequency.max_clicks_per_24h`, with
+     * `ERainAd.setMaxClickAdsPerDay` as the host fallback. The interstitial interval never applies
+     * to onboarding placements.
      */
     CAPPED_BY_ADS_MODULE("capped_by_module"),
 

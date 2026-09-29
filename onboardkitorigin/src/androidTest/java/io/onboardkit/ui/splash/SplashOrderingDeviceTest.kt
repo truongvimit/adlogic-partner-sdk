@@ -66,7 +66,7 @@ class SplashOrderingDeviceTest {
         val parallel = args.getString("lfoParallel") == "true"
         f.flags = RemoteFlags(splashLfoParallelPreloadEnabled = parallel, splashMinDisplayMs = 200,
             splashAdBudgetMs = 3_000, splashSlotMinVisibleMs = if (case == "silent_banner") 60_000 else if (case == "banner_budget") 2_200 else 0,
-            adsSplashInter = case != "inter_off", enableAllAds = case != "master_off")
+            adsSplashInter = case != "inter_off" && case != "master_off")
         f.nativeBehavior = case.takeIf { it.startsWith("native_") }
         f.premium = case == "premium"
         f.consentAllowed = case != "consent_denied"

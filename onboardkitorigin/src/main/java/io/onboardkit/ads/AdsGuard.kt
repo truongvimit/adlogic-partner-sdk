@@ -75,11 +75,9 @@ class AdsGuard internal constructor(
         if (isPremium(context)) return AdSkipReason.PREMIUM
         if (!canRequestAds()) return AdSkipReason.CONSENT_NOT_GRANTED
         if (!providerInstalled) return AdSkipReason.NO_PROVIDER
-        // Remote first. cfg.ads.enabled is already resolved (remote > app asset > host), so a
-        // remote "on" has overridden a host "off" there; a remote "off" is reported as remote's.
-        if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled") || !flags().enableAllAds) return AdSkipReason.ADS_OFF_BY_REMOTE
+        // The single global ads gate is evaluated before individual placement checks.
+        if (!com.ads.module.config.settings.AdBehavior.bool("global.ads_enabled")) return AdSkipReason.ADS_OFF_BY_REMOTE
         val cfg = config() ?: return AdSkipReason.ADS_OFF_IN_CONFIG
-        if (!cfg.ads.enabled) return AdSkipReason.ADS_OFF_IN_CONFIG
         return null
     }
 
@@ -95,6 +93,12 @@ class AdsGuard internal constructor(
         if (!flags().isPlacementEnabled(placement)) return AdSkipReason.PLACEMENT_OFF_BY_REMOTE
         if (placement == AdPlacement.AfterOnboardingInterstitial &&
             !cfg.ads.afterOnboardingInterstitialEnabled) return AdSkipReason.ADS_OFF_IN_CONFIG
+
+        if (placement.isPrivacyGoalsNative) {
+            if (!io.onboardkit.OnboardingSdk.offersPrivacyGoals(cfg)) {
+                return AdSkipReason.ADS_OFF_IN_CONFIG
+            }
+        }
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT

@@ -2,21 +2,22 @@ package com.ads.module.config
 
 import android.util.JsonReader
 import android.util.JsonToken
+import android.util.Log
+import android.graphics.Color
+import com.ads.module.helper.adnative.NativeClickAction
 import java.io.Reader
 import java.util.Locale
 
 /**
- * Reads `ad_config.json` into [AdUnitConfig] entries.
+ * Strict, sparse parser for `ad_config.json`.
  *
- * Hand-written on the platform's streaming reader rather than a JSON library: the payload is a flat
- * map of known field names, so a mapper would only add a dependency to every partner APK.
- *
- * Deliberately tolerant. Remote config is edited by hand in a console, and one mistyped field must
- * degrade to a default rather than take the whole ad configuration down with it: unknown keys are
- * skipped, a string where a number belongs is coerced, and null falls back.
+ * A remote document is a patch: an omitted field must remain absent so the resolver can fall back
+ * to the app asset/code/default. Invalid fields are skipped individually and valid siblings keep
+ * applying. The public [AdRemoteConfig] value still contains concrete defaults for compatibility;
+ * [AdRemoteConfig.declaredFields] carries presence information for the layered resolver.
  */
 internal object AdConfigParser {
-
+    private const val TAG = "AdConfigParser"
     private val DEFAULT_COMPONENTS = listOf("icon_headline", "body", "media", "cta")
     private const val DEFAULT_HEIGHT_CTA = 40
     private const val DEFAULT_COLOR_CTA = "default"
@@ -28,24 +29,41 @@ internal object AdConfigParser {
             reader.isLenient = true
             if (reader.peek() == JsonToken.NULL) {
                 reader.nextNull()
-                return AdRemoteConfig()
+                throw IllegalArgumentException("ad_config root must be an object")
+            }
+            if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                reader.skipValue()
+                throw IllegalArgumentException("ad_config root must be an object")
             }
             val units = LinkedHashMap<String, AdUnitConfig>()
+            val fields = LinkedHashMap<String, Set<String>>()
             reader.beginObject()
             while (reader.hasNext()) {
                 val key = reader.nextName()
-                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
-                    units[key] = readAdUnit(reader)
-                } else {
-                    reader.skipValue()
+                if (key == "schema_version") {
+                    val version = readLong(reader)
+                    if (!version.valid) throw IllegalArgumentException("invalid schema_version")
+                    if (version.value != 1L) throw IllegalArgumentException("unsupported schema_version=${version.value}")
+                    continue
                 }
+                if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                    warn("$key ignored (expected an object value=${readValueForLog(reader)})")
+                    continue
+                }
+                val parsed = readAdUnit(key, reader)
+                units[key] = parsed.value
+                fields[key] = parsed.fields
             }
             reader.endObject()
-            return AdRemoteConfig(units)
+            return AdRemoteConfig(units).also { it.declaredFields = fields }
         }
     }
 
-    private fun readAdUnit(reader: JsonReader): AdUnitConfig {
+    private data class ParsedUnit(val value: AdUnitConfig, val fields: Set<String>)
+    private data class Parsed<T>(val value: T?, val valid: Boolean, val raw: String? = null)
+
+    private fun readAdUnit(key: String, reader: JsonReader): ParsedUnit {
+        val fields = linkedSetOf<String>()
         var id = ""
         var isEnable = false
         var enableUaCheck = false
@@ -56,37 +74,61 @@ internal object AdConfigParser {
         var positionCTA: String? = null
         var components: List<String> = DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
+        var clickAction: NativeClickAction? = null
 
         reader.beginObject()
         while (reader.hasNext()) {
-            when (reader.nextName()) {
-                "id" -> id = safeNextString(reader, "")
-                "isEnable" -> isEnable = safeNextBoolean(reader)
-                "enable_ua_check" -> enableUaCheck = safeNextBoolean(reader)
-                "reloadIntervalSeconds" -> reloadIntervalSeconds = safeNextInt(reader)
-                "app_resume_load_delay_ms" -> appResumeLoadDelayMs =
-                    AdRemoteConfig.normalizeAppResumeLoadDelayMs(
-                        safeNextString(reader, "").toLongOrNull()
-                            ?: AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
-                    )
-                "colorCTA" -> colorCTA = safeNextString(reader, DEFAULT_COLOR_CTA)
-                "heightCTA" -> heightCTA = readHeight(reader)
-                // Absent or null: the placement has no opinion, and `components` orders the
-                // blocks instead. A value only means something to a screen that ships one layout
-                // per position.
-                "positionCTA" ->
-                    positionCTA = safeNextString(reader, "").uppercase(Locale.US).ifBlank { null }
-
-                "components" -> components = readComponents(reader)
-                // Waterfall tiers, highest floor first. Absent in single-tier payloads, where
-                // "id" alone remains the only tier.
-                "ids" -> ids = readStringList(reader)
-                else -> reader.skipValue()
+            val field = reader.nextName()
+            when (field) {
+                "id" -> readString(reader).also { parsed ->
+                    if (parsed.valid) { id = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "isEnable", "enable_ua_check" -> readBoolean(reader).also { parsed ->
+                    if (parsed.valid) {
+                        if (field == "isEnable") isEnable = parsed.value!! else enableUaCheck = parsed.value!!
+                        fields += field
+                    } else invalid(key, field, parsed.raw)
+                }
+                "reloadIntervalSeconds" -> readNullableInt(reader, min = 0).also { parsed ->
+                    if (parsed.valid) { reloadIntervalSeconds = parsed.value; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "app_resume_load_delay_ms" -> readLongCompat(reader, min = 0, max = AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS).also { parsed ->
+                    if (parsed.valid) { appResumeLoadDelayMs = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "colorCTA" -> readString(reader).also { parsed ->
+                    if (parsed.valid && parsed.value!!.isValidColorToken()) { colorCTA = parsed.value; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "heightCTA" -> readInt(reader, min = 0).also { parsed ->
+                    if (parsed.valid) { heightCTA = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "positionCTA" -> readNullableString(reader).also { parsed ->
+                    val positionValid = parsed.value?.uppercase(Locale.US).orEmpty() in setOf("", "TOP", "BOTTOM")
+                    if (parsed.valid && positionValid) {
+                        // Empty is a valid clear assignment; preserve it separately from schema
+                        // null so a remote clear cannot resurrect a lower-tier position.
+                        positionCTA = parsed.value?.uppercase(Locale.US)
+                        fields += field
+                    } else invalid(key, field, parsed.raw)
+                }
+                "click_action" -> readString(reader).also { parsed ->
+                    val action = parsed.value?.let(NativeClickAction::fromRemote)
+                    if (action != null) { clickAction = action; fields += field } else invalid(key, field, parsed.raw ?: parsed.value)
+                }
+                "components", "ids" -> readStringList(reader).also { parsed ->
+                    val componentValuesValid = field != "components" ||
+                        parsed.value.orEmpty().all { it in DEFAULT_COMPONENTS }
+                    if (parsed.valid && componentValuesValid) {
+                        if (field == "components") components = parsed.value!! else ids = parsed.value!!
+                        fields += field
+                    } else invalid(key, field, parsed.raw)
+                }
+                else -> {
+                    warn("$key.$field ignored (unknown field value=${readValueForLog(reader)})")
+                }
             }
         }
         reader.endObject()
-
-        return AdUnitConfig(
+        return ParsedUnit(AdUnitConfig(
             id = id,
             isEnable = isEnable,
             enableUaCheck = enableUaCheck,
@@ -97,106 +139,90 @@ internal object AdConfigParser {
             components = components,
             ids = ids,
             appResumeLoadDelayMs = appResumeLoadDelayMs,
-        )
+            clickAction = clickAction,
+        ), fields)
     }
 
-    /** Tolerates a bare string so `"ids": "single-id"` is not silently dropped. */
-    private fun readStringList(reader: JsonReader): List<String> {
-        val list = mutableListOf<String>()
-        when (reader.peek()) {
-            JsonToken.BEGIN_ARRAY -> {
-                reader.beginArray()
-                while (reader.hasNext()) {
-                    if (reader.peek() == JsonToken.STRING) list.add(reader.nextString())
-                    else reader.skipValue()
-                }
-                reader.endArray()
-            }
+    private fun String.isValidColorToken(): Boolean =
+        isEmpty() || equals("default", ignoreCase = true) || runCatching { Color.parseColor(this) }.isSuccess
 
-            JsonToken.STRING -> list.add(reader.nextString())
-            else -> reader.skipValue()
-        }
-        return list.filter { it.isNotBlank() }
+    private fun readString(reader: JsonReader): Parsed<String> = when (reader.peek()) {
+        JsonToken.STRING -> Parsed(reader.nextString(), true)
+        else -> Parsed(null, false, readValueForLog(reader))
     }
 
-    private fun readComponents(reader: JsonReader): List<String> {
-        val list = mutableListOf<String>()
-        if (reader.peek() == JsonToken.BEGIN_ARRAY) {
-            reader.beginArray()
-            while (reader.hasNext()) {
-                if (reader.peek() == JsonToken.STRING) list.add(reader.nextString())
-                else reader.skipValue()
-            }
-            reader.endArray()
-        } else {
-            reader.skipValue()
-        }
-        return list.ifEmpty { DEFAULT_COMPONENTS }
+    private fun readNullableString(reader: JsonReader): Parsed<String?> = when (reader.peek()) {
+        JsonToken.STRING -> Parsed(reader.nextString(), true)
+        JsonToken.NULL -> { reader.nextNull(); Parsed(null, true, "null") }
+        else -> Parsed(null, false, readValueForLog(reader))
     }
 
-    private fun readHeight(reader: JsonReader): Int = when (reader.peek()) {
-        JsonToken.NUMBER -> reader.nextInt()
-        JsonToken.STRING -> {
-            val value = reader.nextString()
-            if (value.equals("default", ignoreCase = true)) {
-                DEFAULT_HEIGHT_CTA
-            } else {
-                value.toIntOrNull() ?: DEFAULT_HEIGHT_CTA
-            }
-        }
+    private fun readBoolean(reader: JsonReader): Parsed<Boolean> = when (reader.peek()) {
+        JsonToken.BOOLEAN -> Parsed(reader.nextBoolean(), true)
+        else -> Parsed(null, false, readValueForLog(reader))
+    }
 
-        JsonToken.NULL -> {
+    private fun readLong(reader: JsonReader, min: Long? = null, max: Long? = null): Parsed<Long> {
+        if (reader.peek() != JsonToken.NUMBER) return Parsed(null, false, readValueForLog(reader))
+        val raw = reader.nextString()
+        val value = raw.toLongOrNull()
+        val valid = value != null && (min == null || value >= min) && (max == null || value <= max)
+        return Parsed(value, valid, raw)
+    }
+
+    /** Existing ad assets used quoted numbers for this legacy field; keep that representation. */
+    private fun readLongCompat(reader: JsonReader, min: Long? = null, max: Long? = null): Parsed<Long> {
+        val token = reader.peek()
+        if (token == JsonToken.STRING) {
+            val raw = reader.nextString()
+            val value = raw.toLongOrNull()
+            return Parsed(value, value != null && (min == null || value >= min) && (max == null || value <= max), raw)
+        }
+        return readLong(reader, min, max)
+    }
+
+    private fun readInt(reader: JsonReader, min: Long? = null, max: Long? = Int.MAX_VALUE.toLong()): Parsed<Int> {
+        val parsed = readLong(reader, min, max)
+        return Parsed(parsed.value?.toInt(), parsed.valid, parsed.raw)
+    }
+
+    /** `reloadIntervalSeconds` is nullable in the public schema; null explicitly clears a lower tier. */
+    private fun readNullableInt(reader: JsonReader, min: Long? = null, max: Long? = Int.MAX_VALUE.toLong()): Parsed<Int?> {
+        if (reader.peek() == JsonToken.NULL) {
             reader.nextNull()
-            DEFAULT_HEIGHT_CTA
+            return Parsed(null, true)
         }
-
-        else -> {
-            reader.skipValue()
-            DEFAULT_HEIGHT_CTA
-        }
+        val parsed = readInt(reader, min, max)
+        return Parsed(parsed.value, parsed.valid, parsed.raw)
     }
 
-    private fun safeNextString(reader: JsonReader, fallback: String): String =
-        when (reader.peek()) {
-            JsonToken.STRING -> reader.nextString()
-            // A console that typed the id without quotes still means the id.
-            JsonToken.NUMBER -> reader.nextString()
-            JsonToken.NULL -> {
-                reader.nextNull()
-                fallback
-            }
-
-            else -> {
+    private fun readStringList(reader: JsonReader): Parsed<List<String>> {
+        if (reader.peek() != JsonToken.BEGIN_ARRAY) return Parsed(null, false, readValueForLog(reader))
+        val result = mutableListOf<String>()
+        var valid = true
+        reader.beginArray()
+        while (reader.hasNext()) {
+            if (reader.peek() == JsonToken.STRING) result += reader.nextString()
+            else {
+                // A malformed element makes the list field invalid. The containing document and
+                // all valid sibling fields still apply, but the bad list falls through as a unit.
+                valid = false
                 reader.skipValue()
-                fallback
             }
         }
-
-    private fun safeNextBoolean(reader: JsonReader): Boolean = when (reader.peek()) {
-        JsonToken.BOOLEAN -> reader.nextBoolean()
-        JsonToken.STRING -> reader.nextString().equals("true", ignoreCase = true)
-        JsonToken.NULL -> {
-            reader.nextNull()
-            false
-        }
-
-        else -> {
-            reader.skipValue()
-            false
-        }
+        reader.endArray()
+        return Parsed(result, valid, if (valid) null else "array element has wrong type")
     }
 
-    private fun safeNextInt(reader: JsonReader): Int? = when (reader.peek()) {
-        JsonToken.NUMBER -> reader.nextInt()
-        JsonToken.STRING -> reader.nextString().toIntOrNull()
-        JsonToken.NULL -> {
-            reader.nextNull()
-            null
-        }
-
-        else -> {
-            reader.skipValue()
-            null
-        }
+    private fun readValueForLog(reader: JsonReader): String = when (reader.peek()) {
+        JsonToken.STRING -> "\"${reader.nextString()}\""
+        JsonToken.NUMBER -> reader.nextString()
+        JsonToken.BOOLEAN -> reader.nextBoolean().toString()
+        JsonToken.NULL -> { reader.nextNull(); "null" }
+        else -> { val token = reader.peek(); reader.skipValue(); token.name }
     }
+
+    private fun invalid(key: String, field: String, raw: String?) =
+        warn("$key.$field ignored (invalid value=${raw ?: "<field>"})")
+    private fun warn(message: String) = runCatching { Log.w(TAG, message) }
 }

@@ -73,7 +73,7 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
 
         binding.obSkipButton.applyFullScreenSkip(
             OnboardingSettings.ob5SkipStyle(sdk.requireConfig().ads.fullScreenSkipStyle),
-            FullScreenSkipPosition.valueOf(OnboardingSettings.text("ob5.skip.position")),
+            OnboardingSettings.skipPosition("ob5.skip.position", FullScreenSkipPosition.RIGHT),
         )
         binding.obSkipButton.setOnClickListener { navigateNext(StepExit.SKIP) }
 

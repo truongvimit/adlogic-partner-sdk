@@ -11,26 +11,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OnboardingSettingsTest {
-    @Test fun `native click defaults and per step actions are exclusive`() {
+    @Test fun `native click defaults auto advance pager pages and reload every other native`() {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.Ob5).forEach {
+            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
             assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
         }
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepFullScreen(StepId.OB3)))
+        listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId("custom_page")).forEach {
+            assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(it)))
+        }
+        listOf(StepId.FULL1, StepId.FULL2, StepId.OB3).forEach {
+            assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepFullScreen(it)))
+        }
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
             {
-              "lfo": {"native2": {"behavior": {"click": {"action": "auto_next"}, "reload": {"on_ad_click": true}}}},
-              "onboarding": {
-                "steps": {"ob1": {"behavior": {"click": {"action": "reload"}}}},
-                "navigation": {"ad_click_return_completes_step": true}
-              }
+              "lfo": {"native2": {"behavior": {"click": {"action": "auto_next"}}}},
+              "onboarding": {"steps": {"ob1": {"behavior": {"click": {"action": "reload"}}}}}
             }
         """.trimIndent()))
-        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
-        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
+        assertEquals("onboarding_config no longer carries a click action",
+            reload, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.OB1)))
+    }
+
+    @Test fun `privacy and goal native slots default to reload on click`() {
+        val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_GOAL)))
+        assertEquals(reload, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(StepId.PARTNER_GOAL_ALT)))
     }
 
     @Test fun `remote order selects from the app catalog, including pages the app disabled`() {
@@ -40,7 +50,7 @@ class OnboardingSettingsTest {
         }.getOrThrow()
         assertEquals(listOf(StepId.OB4, StepId.FULL2, StepId.OB1),
             io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(cfg), RemoteFlags()))
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","unknown","ob4"]}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["full2","ob2","ob4"]}}""")
         assertEquals(listOf(StepId.FULL2, StepId.OB2, StepId.OB4), OnboardingSettings.resolve(cfg).steps.map { it.id })
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
         assertTrue(OnboardingSettings.resolve(cfg).steps.isEmpty())
@@ -52,6 +62,62 @@ class OnboardingSettingsTest {
             OnboardingSettings.document.acceptSuccessfulFetch("{\"onboarding\":{\"order\":$order}}")
             assertEquals(cfg.steps, OnboardingSettings.resolve(cfg).steps)
         }
+    }
+
+    @Test fun `an order naming a page outside the catalog changes neither the pages nor the step flags`() {
+        val cfg = onboardKitConfig { defaultSteps() }.getOrThrow()
+        for (order in listOf("""["OB1","FULL1","OB2","FULL2","OB3","OB4"]""", """["ob1","ob5"]""")) {
+            assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("{\"onboarding\":{\"order\":$order}}"))
+            val resolved = OnboardingSettings.resolve(cfg)
+            assertEquals(order, cfg.steps.map { it.id }, resolved.steps.map { it.id })
+            assertEquals(order, cfg.steps.map { it.id },
+                io.onboardkit.flow.FlowNavigator.enabledSteps(resolved, OnboardingSettings.resolveFlags(RemoteFlags(), cfg.steps)))
+        }
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4","full1"]}}""")
+        val flags = OnboardingSettings.resolveFlags(RemoteFlags(), cfg.steps)
+        assertEquals(listOf(StepId.OB4, StepId.FULL1),
+            io.onboardkit.flow.FlowNavigator.enabledSteps(OnboardingSettings.resolve(cfg), flags))
+        assertFalse(flags.enableStepOb1)
+    }
+
+    @Test fun `an empty supported language list keeps the catalog wherever it comes from`() {
+        val config = onboardKitConfig { }.getOrThrow()
+        val catalog = config.language.languages
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"supported_codes":[]}}}"""))
+        assertEquals(catalog, OnboardingSettings.resolve(config).language.languages)
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        OnboardingSettings.acceptLegacy(RemoteFlags(languageSupportedCodes = "",
+            supplied = setOf(ObRemoteKeys.LANGUAGE_SUPPORTED_CODES.key)))
+        assertEquals(emptyList<Any>(), OnboardingSettings.values.remoteValue("lfo.languages.supported_codes"))
+        assertEquals(catalog, OnboardingSettings.resolve(config).language.languages)
+    }
+
+    @Test fun `unknown supported codes are dropped one by one and none known keeps the catalog`() {
+        val config = onboardKitConfig { language = LanguageConfig(defaultCode = "en-US") }.getOrThrow()
+        val catalog = config.language.languages
+        OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"lfo":{"languages":{"supported_codes":["${catalog[2].code}","vi-unknown","${catalog[1].code}"]}}}""")
+        val narrowed = OnboardingSettings.resolve(config).language
+        assertEquals(listOf(catalog[2].code, catalog[1].code), narrowed.languages.map { it.code })
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"languages":{"supported_codes":["vi-unknown","xx"]}}}""")
+        val unrestricted = OnboardingSettings.resolve(config).language
+        assertEquals(catalog, unrestricted.languages)
+        assertEquals("en-US", unrestricted.defaultCode)
+    }
+
+    @Test fun `buffered splash and question interstitials drop a load-and-show wait the exit ad keeps`() {
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
+            {
+              "splash": {"ads": {"interstitial": {"behavior": {"load": {"tier_timeout_ms": 15000}, "load_and_show": {"wait_timeout_ms": 2000}}}}},
+              "question": {"interstitial": {"behavior": {"load_and_show": {"wait_timeout_ms": 2000}}}},
+              "onboarding": {"exit_interstitial": {"behavior": {"load_and_show": {"wait_timeout_ms": 2000}}}}
+            }
+        """.trimIndent()))
+        val v = OnboardingSettings.values
+        assertNull(v.remoteValue("splash.ads.interstitial.behavior.load_and_show.wait_timeout_ms"))
+        assertNull(v.remoteValue("question.interstitial.behavior.load_and_show.wait_timeout_ms"))
+        assertEquals(15000L, (v.remoteValue("splash.ads.interstitial.behavior.load.tier_timeout_ms") as Number).toLong())
+        assertEquals(2000L, (v.remoteValue("onboarding.exit_interstitial.behavior.load_and_show.wait_timeout_ms") as Number).toLong())
     }
 
     @Test fun `standard placements keep identities across reorder with separate fullscreen pools`() {
@@ -76,12 +142,11 @@ class OnboardingSettingsTest {
         assertEquals(3000L, OnboardingSettings.number("ob5.skip.delay_ms"))
     }
 
-    @Test fun `sparse remote resolves screens, preserves host values it omits and reopens a host ads gate`() {
-        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(enabled = false), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
+    @Test fun `sparse remote resolves screens and preserves the host-only ads gate`() {
+        val c = OnboardKitConfig(splash = SplashConfig(minDisplayTimeMs = 4500), ads = AdsConfig(), language = LanguageConfig(), question = null, system = SystemBarConfig(), behavior = BehaviorConfig(),
             steps = listOf(AdFullScreenStepDefinition(StepId.OB3, autoNextDelayMs = 9000)))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":true},"onboarding":{"navigation":{"lock_pager_swipe":false},"fullscreen":{"auto_next":{"enabled":false}},"steps":{"ob3":{"fullscreen":{"skip":{"delay_ms":0}}}}}}""")
         val effective = OnboardingSettings.resolve(c)
-        assertTrue(effective.ads.enabled)
         assertFalse(effective.behavior.lockPagerSwipe)
         assertEquals(4500L, effective.splash.minDisplayTimeMs)
         val step = effective.steps.single() as AdFullScreenStepDefinition

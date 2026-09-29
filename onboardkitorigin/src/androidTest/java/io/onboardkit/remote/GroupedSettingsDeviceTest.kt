@@ -71,7 +71,7 @@ class GroupedSettingsDeviceTest {
                 adLoadStrategy = AdLoadStrategy.SAME_TIME)
             language = LanguageConfig(tapHintEnabled = false, confirmVisibleBeforeSelect = true)
             behavior = BehaviorConfig(lockPagerSwipe = false, backNavigatesBack = false)
-            ads = AdsConfig(enabled = false, afterOnboardingInterstitialEnabled = false)
+            ads = AdsConfig(afterOnboardingInterstitialEnabled = false)
             step(AdFullScreenStepDefinition(StepId.OB3, skipButtonDelaySec = 4,
                 autoNextEnabled = false, autoNextDelayMs = 9_876))
         }.getOrThrow()
@@ -79,7 +79,6 @@ class GroupedSettingsDeviceTest {
         assertEquals(host.splash, initial.splash)
         assertEquals(host.language, initial.language)
         assertEquals(host.behavior, initial.behavior)
-        assertFalse(initial.ads.enabled)
         assertEquals(9_876L, (initial.steps.single() as AdFullScreenStepDefinition).autoNextDelayMs)
         val legacy = RemoteFlags(splashMinDisplayMs = 4_567, enableLanguageNative2 = false)
         assertEquals(legacy, OnboardingSettings.resolveFlags(legacy))
@@ -105,7 +104,6 @@ class GroupedSettingsDeviceTest {
         assertEquals(AdLoadStrategy.SAME_TIME, updated.splash.adLoadStrategy)
         assertTrue(updated.behavior.lockPagerSwipe)
         assertFalse(updated.behavior.backNavigatesBack)
-        assertTrue("Remote reopens a host ads gate", updated.ads.enabled)
         assertEquals(0L, OnboardingSettings.resolveFlags(legacy).splashMinDisplayMs)
         assertTrue(OnboardingSettings.resolveFlags(legacy).enableLanguageNative2)
     }

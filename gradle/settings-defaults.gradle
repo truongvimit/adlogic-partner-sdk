@@ -1,5 +1,5 @@
 // The editable asset is the single source of truth, including values needed before Application.
-def settingsSource = file("src/main/assets/${settingsName}.json")
+def settingsSource = file(settingsSourcePath ?: "src/main/assets/${settingsName}.json")
 def settingsGenerated = layout.buildDirectory.dir('generated/settingsDefaults')
 tasks.register('generateSettingsDefaults') {
     inputs.file(settingsSource)

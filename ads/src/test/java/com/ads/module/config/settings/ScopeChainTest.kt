@@ -28,8 +28,17 @@ class ScopeChainTest {
     @Test fun `when no scope carries an override, the host value stands over the bundled default`() {
         // Both paths have bundled defaults of 500; a default is not an override and must not displace 7.
         assertEquals(7L, values.scoped("native.reload.resume_debounce_ms", "banner.reload.resume_debounce_ms").long(7L))
-        assertEquals("HOST", values.scoped("native.click.action").string("HOST"))
+        assertEquals("HOST", values.scoped("banner.presentation.type").string("HOST"))
         assertEquals(true, values.scoped("native.reload.allowed").boolean(true))
+    }
+
+    @Test fun `an empty object at a narrower scope lets a broader scope answer`() {
+        AdBehavior.document.acceptSuccessfulFetch(
+            """{"placement_overrides":{},"native":{"reload":{"resume_debounce_ms":222}}}""")
+        assertEquals(222L, values.scoped(
+            "placement_overrides.native_home.native.reload.resume_debounce_ms",
+            "native.reload.resume_debounce_ms",
+        ).long(0L))
     }
 
     @Test fun `an empty chain is just the host value`() {

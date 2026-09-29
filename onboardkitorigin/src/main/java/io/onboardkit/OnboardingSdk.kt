@@ -12,6 +12,7 @@ import io.onboardkit.ads.ObAppResume
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.PreloadChain
 import io.onboardkit.config.OnboardKitConfig
+import io.onboardkit.config.QuestionOption
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -326,6 +327,26 @@ object OnboardingSdk {
     internal fun configuredPlacementKey(placement: AdPlacement): String? =
         configOrNull()?.ads?.placementKeyFor(placement)
 
+    /** Screen availability is independent of ad fill, entitlement and placement switches. */
+    internal fun privacyGoalsScreenEnabled(): Boolean {
+        val config = configOrNull() ?: return false
+        // The SDK always ships a convention-based fallback layout. Partners can override those
+        // resources by name; no layout/id object is required in the app config.
+        if (!config.privacyGoalsScreen.enabled) return false
+        if (!offersPrivacyGoals(config)) {
+            Log.w(TAG, "privacy_goals_screen.enabled ignored: no goal or question options to offer")
+            return false
+        }
+        return true
+    }
+
+    /** [privacyGoalsScreenEnabled] without the warning, for the preload and ad gates of that screen. */
+    internal fun offersPrivacyGoals(config: OnboardKitConfig): Boolean =
+        config.privacyGoalsScreen.enabled && privacyGoalOptions(config).isNotEmpty()
+
+    internal fun privacyGoalOptions(config: OnboardKitConfig): List<QuestionOption> =
+        config.privacyGoalsScreen.goal.options.ifEmpty { config.question?.options.orEmpty() }
+
     private var remoteRefresh: Deferred<Unit>? = null
 
     /** SDK-owned: screens may observe completion, but leaving a screen never cancels the fetch. */
@@ -341,12 +362,26 @@ object OnboardingSdk {
                     launch { com.ads.module.config.AdConfig.refresh(backgroundTimeoutMs) }
                 }
                 Log.d(TAG, "Background remote refresh settled")
+                remoteSilentPlacementKeys().takeIf { it.isNotEmpty() }?.let { keys ->
+                    ObLog.w(ObLog.Section.REMOTE, "ad_config remote omits ${keys.joinToString(",")}; these placements keep the app's values")
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
                 Log.w(TAG, "Background remote refresh failed; keeping current settings", failure)
             }
         }.also { remoteRefresh = it }
+    }
+
+    /**
+     * Placement keys the app declares that the delivered remote ad_config leaves out. An edit made
+     * in the console under any other key name never reaches these placements.
+     */
+    internal fun remoteSilentPlacementKeys(): List<String> {
+        if (!com.ads.module.config.AdRemoteConfig.isFromRemote()) return emptyList()
+        val adConfig = com.ads.module.config.AdRemoteConfig.getInstance()
+        return configOrNull()?.ads?.placementKeys?.values.orEmpty().distinct().sorted()
+            .filter { adConfig.declares(it) && !com.ads.module.config.AdRemoteConfig.remoteDeclares(it) }
     }
 
     internal fun configOrNull(): OnboardKitConfig? = config?.let(io.onboardkit.remote.OnboardingSettings::resolve)
@@ -359,7 +394,7 @@ object OnboardingSdk {
     internal fun remoteOrNull(): ObRemote? = remote
 
     internal fun flags(): io.onboardkit.remote.RemoteFlags =
-        io.onboardkit.remote.OnboardingSettings.resolveFlags(remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags())
+        io.onboardkit.remote.OnboardingSettings.resolveFlags(remote?.flags?.value ?: io.onboardkit.remote.RemoteFlags(), config?.steps)
 
     internal fun provider(): OnboardingAdProvider? = adProvider
 

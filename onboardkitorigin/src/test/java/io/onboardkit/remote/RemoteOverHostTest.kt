@@ -32,14 +32,12 @@ class RemoteOverHostTest {
         AdRemoteConfig.reset()
     }
 
-    @Test fun `remote switches ads on over a host that switched them off`() {
-        val config = onboardKitConfig { ads = AdsConfig.fromAdConfig().copy(enabled = false) }.getOrThrow()
-        assertFalse(OnboardingSettings.resolve(config).ads.enabled)
-        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":true}}""")
-        assertTrue(OnboardingSettings.resolve(config).ads.enabled)
+    @Test fun `removed flow-wide ads field is ignored`() {
+        val config = onboardKitConfig { }.getOrThrow()
+        val before = OnboardingSettings.resolve(config).ads
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"flow":{"ads_enabled":false}}""")
+        assertEquals(before, OnboardingSettings.resolve(config).ads)
         OnboardingSettings.document.acceptSuccessfulFetch(null)
-        OnboardingSettings.acceptLegacy(RemoteFlags(enableAllAds = true, supplied = setOf("ob_enable_all_ads")))
-        assertTrue(OnboardingSettings.resolve(config).ads.enabled)
     }
 
     @Test fun `a delivered legacy key beats the host and an undelivered one does not`() {

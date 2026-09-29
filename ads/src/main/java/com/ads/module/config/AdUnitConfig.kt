@@ -2,6 +2,7 @@ package com.ads.module.config
 
 import androidx.annotation.Keep
 import com.ads.module.ads.AdWaterfall
+import com.ads.module.helper.adnative.NativeClickAction
 
 /**
  * One placement's entry in `ad_config.json`: which ad unit to request, whether it is on, and how
@@ -28,6 +29,11 @@ data class AdUnitConfig(
     val ids: List<String> = emptyList(),
     /** Extra wait after process ON_STOP before loading the app-resume placement. */
     val appResumeLoadDelayMs: Long = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
+    /**
+     * What a click on this native does once the user returns; `null` leaves it to the screen's
+     * default. Read from the base key only, never from its `_high` floors.
+     */
+    val clickAction: NativeClickAction? = null,
 ) {
 
     /**

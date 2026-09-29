@@ -1,4 +1,7 @@
 ext {
+    // Stable SDK release used by every module in this checkout.  The repository also carries
+    // prerelease tags, but generated/runtime metadata must identify the latest stable contract.
+    adlogic_sdk_version = '5.5.5'
     // Kotlin
     kotlin_version = "2.1.0"
     ksp_version = '2.1.0-1.0.29'
@@ -80,4 +83,3 @@ ext {
     // Leak Canary (commented out)
     // leakcanary_version = '2.14'
 }
-

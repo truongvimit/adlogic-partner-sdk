@@ -10,6 +10,10 @@ Do steps 1–6 and replace the **package, app details, content/images and destin
 
 Use the **newest SDK version** from [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) for every module. It includes grouped `ad_behavior_config` / `onboarding_config`, custom local defaults and live `AdsConfig.fromAdConfig()` bindings. Adding Firebase keys alone does not update an older SDK already integrated in the app.
 
+Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
+
+Pager natives stay bound while their page view survives, so revisiting content or Full1/Full2 shows the same ad without another request. Fullscreen auto-next restarts on each visit; revisits show Skip immediately when enabled or required to prevent a trap. A first no-fill advances; revisiting a failed page shows its fallback and Skip. Ads are released when the view is destroyed.
+
 ## 1. Add the dependencies
 
 Requires JDK 17, `minSdk 24+` and `compileSdk 36+`; AGP/Kotlin follow [versions.gradle](../versions.gradle) and the [Gradle wrapper](../gradle/wrapper/gradle-wrapper.properties). Merge the Groovy below into your existing blocks.
@@ -270,7 +274,7 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | Behavior | Default | Change it only when / where to change it |
 | --- | --- | --- |
 | Splash screen | SDK layout; minimum display 3000 ms from the ad-loading phase | `onboarding_config.splash.timing.min_display_ms` (valid `0` explicitly removes this minimum) or a delivered `ob_splash_min_display_ms` (`<= 0` keeps the local value); while remote is silent, your app asset, then `SplashConfig.minDisplayTimeMs`. |
-| Opening the next screen after the splash interstitial | The interstitial shows after the minimum display time. First-open LFO: wait for dismissal. Launcher → app / returning-user question: open underneath the ad. Notification/widget/uninstall: wait for dismissal | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), or `super.nextScreenTiming()` to keep the default. On launcher starts a remote `splash.navigation.next_screen_timing` other than `AUTO` outranks the override |
+| Opening the next screen after the splash interstitial | The interstitial shows after the minimum display time. First-open LFO: wait for dismissal. Launcher → app / returning-user question: open underneath the ad. Notification/widget/uninstall: wait for dismissal | Override `SplashActivity.nextScreenTiming()`: `NextScreenTiming.AFTER_AD`/`UNDER_AD` (`io.onboardkit.ads`), or `super.nextScreenTiming()` to keep the default. A `splash.navigation.next_screen_timing` other than `AUTO`, from remote or your app asset, outranks the override on every launch, notification/widget/uninstall included; `UNDER_AD` also skips the splash native_fs screen for that launch |
 | Waiting for the splash ad | Up to 60 seconds, after the notification step and once splash has focus | Remote `ob_splash_ad_budget_ms`; do not add a timer of your own |
 | Remote / ads | Consent → slot + interstitial; SDK-owned remote runs in parallel and survives splash. | Current asset/cached/remote values apply; see fetch timing below. |
 | LFO1 preload | `SEQUENTIAL`: interstitial result → LFO1. `PARALLEL`: splash requests → LFO1. | `splash.load.lfo1_preload_mode` |
@@ -284,8 +288,8 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | Language popup | Re-selecting the current language opens it immediately. Selecting another language opens it from the fourth total tap onward; re-select taps still count. Its native is first requested when the popup opens | `LanguageConfig.confirmDialogOnReselectEnabled = false` to turn it off; SETTINGS shows no popup |
 | Native template | SDK: LFO/question `CTA_BOTTOM`, content `CTA_TOP`; sample ad_config uses per-slot `positionCTA` | Set the template fields in `onboarding_config`; absent overrides use `ad_config.<key>.positionCTA` then host/default. A `positionCTA` from the backend's `ad_remote_config` also beats a template in your app asset. [Precedence](remote-settings.md). |
 | System bars | Status/caption bars shown, navigation bar hidden | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| Native click and return on OB | Advances the step (`BehaviorConfig.adClickReturnCompletesStep = true`); OB/OB5 disable the replacement preload on click | `adClickReturnCompletesStep = false` to stay on the page |
-| Native click on LFO/popup or an app screen | Preloads as soon as the ad is clicked/opened; on return it binds a ready ad or waits for the in-flight request | `NativeAdConfig.reloadOnAdClick = true` by default, independent of timed refresh; [app-screen native example](#app-screen-native-with-a-placement-constant) |
+| Native click and return on OB | Content and fullscreen pager pages advance on return (`auto_next`) and never load a replacement | `"click_action": "none"` on the page's base key (`native_ob1`…) to stay on the page; [Native click actions](remote-settings.md#native-click-actions) |
+| Native click on LFO/popup, OB5, question or an app screen | Preloads as soon as the ad is clicked/opened (`reload`); on return it binds a ready ad or waits for the in-flight request | `click_action` on the placement's base key in ad_config, independent of timed refresh; [app-screen native example](#app-screen-native-with-a-placement-constant) |
 | Relaunching with the flow unfinished | Runs Splash → LFO → OB again; OB is skipped only once the whole flow completes | No app-side first-open flag or checkpoint is needed |
 | Fullscreen native page | X after 5 seconds, auto-next after 15 seconds from page selection; background time still counts. Its shimmer fills the native host, with media across the viewport and the CTA at the bottom. | The fields of `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` keeps the local delay |
 | End-of-onboarding interstitial | Preloaded on pager entry, waits up to 8 seconds for a fill on completion; the next screen opens underneath the ad. Notification/widget/uninstall: wait for dismissal | `AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.AFTER_AD` to always wait for dismissal; `afterOnboardingInterstitialEnabled = false` if your app owns it. Keep it out of `InterstitialAutoBuffer` |
@@ -309,12 +313,13 @@ Both JSON files keep the example debug fields and values; only the interstitials
 | `id` | A test ad unit of the right format | Replace the IDs in the real file before release; do not change the placement keys. |
 | `isEnable` | As in the example: mostly `true`, welcome `false` | Turns a placement on or off. The base key is the master switch: `false` on the base key turns off the whole waterfall. |
 | `enable_ua_check` | Both `true` and `false` in the example | `true` requires paid/non-organic attribution; until Adjust answers, the default is organic. The standard `AdsConfig.fromAdConfig()` bindings apply this gate to the corresponding OB placements too, including native LFO/OB and exit interstitial. Without Adjust, set it to `false` for the placements you want to show. |
-| `reloadIntervalSeconds` | Banner: `30` | Parsed only; the helpers ignore it and it changes no refresh, splash included. For refresh, see [App-screen banner](#additional-integrations). |
+| `reloadIntervalSeconds` | Banner: `30` | A positive value sets the auto-reload cadence, in seconds, of every placement-bound banner, splash included, while `banner.reload.auto_enabled` is `true` (the default). Absent, `0` or invalid uses the host/SDK value (15000 ms). App-screen setup: [App-screen banner](#additional-integrations). |
 | `colorCTA` | `"default"` | Keeps the template color; set a color when you need a custom native. |
 | `heightCTA` | `45` for ordinary natives, `36` for the popup | CTA height in dp; the SDK uses `40` when the field is absent and clamps the value to 36–52 when applying it. |
 | `positionCTA` | `"BOTTOM"` or `null` | Per-placement LFO/content/question frame when no remote onboarding template overrides it. From this file it also yields to a template in your app asset; from the backend's `ad_remote_config` it does not. `null` keeps the host/SDK fallback; fullscreen/popup use fixed layouts. |
-| `components` | `["icon_headline", "body", "media", "cta"]` | A missing block is hidden; an empty array shows everything. OB changes visibility only; an [app-screen native](#app-screen-native-with-a-placement-constant) also uses the order when `positionCTA: null`. |
+| `components` | `["icon_headline", "body", "media", "cta"]` | A missing block is hidden; an empty array preserves XML visibility and order. OB changes visibility only; an [app-screen native](#app-screen-native-with-a-placement-constant) also uses the order when `positionCTA: null`. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | How long to wait before loading the app-open ad after the app goes to background; it only takes effect once app-resume is enabled. |
+| `click_action` | `"auto_next"` on `native_ob1..4` and `native_full1/2`; `"reload"` on every other native | What a native ad click does on return. Read from the base key only, never from `_high` floors; keep the same value in both files. See [Native click actions](remote-settings.md#native-click-actions). |
 
 The waterfall reads `_high`, `_high1`… and then the base key; you can also use `ids` to declare several floors in one entry. Duplicate IDs are dropped; use separate IDs when you need to verify an individual floor or style.
 
@@ -346,7 +351,7 @@ NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 
 The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check` and CTA style itself. Pass `layoutRes` to change the template; the default is `com.ads.module.R.layout.custom_native_admob_medium` (no media — use `custom_native_admob_free_size` when you need media). A custom layout must keep its `NativeAdView` root, `ad_container`, `block_icon_headline`, the asset IDs and the Ad badge.
 
-Keep one helper per slot/view and call `show()` to show it again. A Fragment passes its Activity plus `viewLifecycleOwner`. `reloadOnAdClick` is on by default; turn it off only when your app navigates away itself on click-return.
+Keep one helper per slot/view and call `show()` to show it again. A Fragment passes its Activity plus `viewLifecycleOwner`. Click reload is on by default; set `"click_action": "none"` on the placement's base key only when your app navigates away itself on click-return.
 
 Preload for Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` in `SplashActivity.onRemoteFetched()`. A helper on the same placement picks that ad up when it shows; an ad older than 60 minutes is reloaded. See [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
 
@@ -463,6 +468,7 @@ Splash, OB5 and the question screen exclude themselves; register only your app's
 
 - [ ] If using grouped settings, verify remote overrides plus first-run offline local fallback and offline reuse of valid remote cache, per the [Firebase checklist](firebase-integration.md#remote-notes).
 - [ ] A debug build opens the splash, Logcat tag `AdRemoteConfig` shows `Loaded ad_config_debug.json with <n> placements (debug=true)`, where `<n>` matches the example you shipped, and `OB_FLOW` reports no config or provider error.
+- [ ] After a remote fetch, `OB_FLOW` has no `ad_config remote omits …` line for a placement you edit in the console. A listed key keeps the app's values whatever the console sets under another name: publish the field under that key, or bind your key with `fromAdConfig(mapOf(...))`.
 - [ ] Walk LFO → OB → MainActivity on test ads; the fullscreen native sits between content 2 and 3, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; re-selecting the current language opens the popup immediately, while another language waits for the configured total tap count.
 - [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. A native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.

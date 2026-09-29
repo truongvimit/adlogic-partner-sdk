@@ -34,7 +34,6 @@
     },
     "reload": {
       "allowed": false,
-      "on_ad_click": true,
       "resume_debounce_ms": 500,
       "min_after_bind_ms": 3000,
       "timer_enabled": false,
@@ -44,9 +43,6 @@
       "auto_shimmer": true,
       "empty_visibility": "GONE",
       "cta_corner_radius_dp": 20
-    },
-    "click": {
-      "action": "reload"
     }
   },
   "interstitial": {
