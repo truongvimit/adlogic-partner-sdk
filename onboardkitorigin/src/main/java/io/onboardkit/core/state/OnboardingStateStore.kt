@@ -47,8 +47,8 @@ class OnboardingStateStore internal constructor(context: Context) {
     suspend fun markFlowCompleted(nowMs: Long = System.currentTimeMillis()) =
         update { if (it.isFlowCompleted) it else it.copy(flowCompletedAtMs = nowMs) }
 
-    suspend fun saveAnswers(answers: List<StoredAnswer>) =
-        update { it.copy(questionAnswers = answers) }
+    suspend fun saveGoals(goals: List<StoredGoal>) =
+        update { it.copy(selectedGoals = goals) }
 
     suspend fun reset() = update { OnboardingState() }
 

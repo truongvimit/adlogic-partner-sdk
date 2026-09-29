@@ -1,5 +1,8 @@
 package com.ads.module.config
 
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import androidx.core.graphics.drawable.DrawableCompat
 import android.content.Context
 import android.view.View
 import android.widget.LinearLayout
@@ -9,6 +12,7 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.adnative.NativeComponent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -40,6 +44,23 @@ class AdUnitConfigStyleTest {
             assertEquals(View.VISIBLE, root.findViewById<View>(blockId).visibility)
             assertEquals(blockId, container.getChildAt(index).id)
         }
+    }
+
+    @Test fun `remote CTA color also fills the Ad badge without replacing its shape`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val badgeShape = GradientDrawable().apply { setColor(Color.YELLOW); cornerRadius = 4f }
+        val badge = View(context).apply { id = R.id.ad_icon; background = badgeShape }
+        val cta = View(context).apply { id = R.id.ad_call_to_action }
+        val root = LinearLayout(context).apply { addView(badge); addView(cta) }
+        assertNotNull(root.findViewById<View>(R.id.ad_icon))
+        val style = parse("\"colorCTA\":\"#1E88E5\"").toNativeStyle()
+        assertEquals(Color.parseColor("#1E88E5"), style.ctaBackgroundColor)
+        NativeAdStyler.applyAppearance(root, style)
+        assertNotNull(badge.background)
+        assertEquals(badgeShape, DrawableCompat.unwrap(badge.background))
+        val ctaBackground = cta.background as GradientDrawable
+        assertEquals(Color.parseColor("#1E88E5"), ctaBackground.color?.defaultColor)
+        assertEquals(4f, (DrawableCompat.unwrap(badge.background) as GradientDrawable).cornerRadius)
     }
 
     @Test fun `a listed subset still decides the blocks`() {

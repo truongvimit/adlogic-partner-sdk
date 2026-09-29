@@ -594,10 +594,10 @@ class NativeProviderOwnershipTest {
         }
     }
 
-    @Test fun `language popup and question preload at click and bind only on return`() {
+    @Test fun `language popup and welcome back preload at click and bind only on return`() {
         val host = controller.get()
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.QuestionNative, AdPlacement.SplashNative, AdPlacement.Ob5).forEach { page ->
+            AdPlacement.WelcomeBack1, AdPlacement.SplashNative, AdPlacement.Ob5).forEach { page ->
             val container = FrameLayout(host).also(host::setContentView)
             provider.preloadNative(host, request.copy(placement = page))
             requests.last().onNativeAdLoaded(mock(NativeAd::class.java))

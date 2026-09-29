@@ -1,6 +1,6 @@
 package io.onboardkit.core.events
 
-import io.onboardkit.core.QuestionAnswer
+import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.StepId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -12,7 +12,8 @@ sealed interface OnboardingEvent {
     data class StepViewed(val stepId: StepId, val index: Int) : OnboardingEvent
     data class StepCompleted(val stepId: StepId, val dwellMs: Long) : OnboardingEvent
     data class LanguageSelected(val code: String) : OnboardingEvent
-    data class QuestionAnswered(val answers: List<QuestionAnswer>) : OnboardingEvent
+    /** Goal or Welcome Back finished with these picks. */
+    data class GoalsSelected(val goals: List<GoalAnswer>) : OnboardingEvent
     data class AdShown(val placementName: String) : OnboardingEvent
     data class PaywallShown(val placementName: String) : OnboardingEvent
     data class FlowCompleted(val stepsShown: List<StepId>) : OnboardingEvent

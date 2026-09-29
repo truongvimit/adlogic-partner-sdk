@@ -2,7 +2,7 @@
 
 [6 OB स्क्रीन का flow, remote order और preload](../partner-integration/onboarding-flow.vi.md).
 
-Splash → भाषा चयन → onboarding → वैकल्पिक प्रश्न/paywall → आपकी app।
+Splash → भाषा चयन → onboarding → वैकल्पिक paywall → आपकी app। Launcher से खोलने वाले पुराने users: Splash → Welcome Back → आपकी app।
 SDK स्क्रीन बदलना, ads preload करना और प्रगति सहेजना संभालता है; आपकी app सामग्री और अंतिम स्क्रीन देती है।
 
 [English](README.md) · [Tiếng Việt](README.vi.md)
@@ -125,7 +125,7 @@ class SplashActivity : ObSplashActivity()
 - Default रूप से status/caption bars दिखते हैं और navigation bar छिपता है; बदलने के लिए `SystemBarConfig` इस्तेमाल करें।
 - अधूरा flow अगली बार खुलने पर दोबारा Splash → LFO → OB से शुरू होता है। पूरा हो चुका flow onboarding छोड़ देता है।
 - मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है। दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है; re-select tap भी count होता है। Popup खुलने पर उसका native load होता है; click/open एक replacement preload करता है जो वापसी पर दिखता है।
-- Native का click action `ad_config` में उसके placement की base key पर `click_action` से आता है: `auto_next`, `none` या `reload`। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, Privacy/Goal, OB5, splash, popup और प्रश्न के natives का default `reload` है।
+- Native का click action `ad_config` में उसके placement की base key पर `click_action` से आता है: `auto_next`, `none` या `reload`। Content/fullscreen pager steps का default `auto_next` है; LFO1/LFO2, Privacy/Goal, Welcome Back, OB5, splash और popup के natives का default `reload` है।
 - `reload` ad click/open पर तुरंत replacement request शुरू करता है और वापसी पर उसका result दिखाता है; सामान्य app resume click reload नहीं करता। `auto_next` वापसी पर replacement माँगे बिना आगे बढ़ता है; `none` दोनों में से कुछ नहीं करता।
 - `native_lang_alt` पर `"click_action": "auto_next"` वापसी पर चुनी हुई भाषा confirm करता है। LFO1 पर `auto_next` user की चुनी हुई भाषा पर tap दोहराता है, जैसे उस row को दोबारा tap करना; कोई row tap न हुई हो तो कुछ नहीं करता। Action हर click trip के लिए तय रहता है। [Remote settings guide](../partner-integration/remote-settings.hi.md#native-click-actions) देखें।
 
@@ -134,7 +134,7 @@ class SplashActivity : ObSplashActivity()
 - `noInternetPromptEnabled = true`: आगे बढ़ने से पहले splash नेटवर्क जोड़ने को कहता है। App को offline खोलने देना हो तो `false` रखें।
 - `lockPortrait = true`: आपकी splash subclass सहित SDK screens portrait में lock होती हैं। ऊपर दिए splash `configChanges` बनाए रखें, ताकि lock, dark mode या font scale बदलने पर Activity दोबारा न बने। Landscape app में इसे `false` करें और merged manifest की orientation settings भी देखें।
 - `consentTimeoutMs = 10_000`: SDK के default UMP flow में **उपयोगकर्ता के जवाब की समय-सीमा नहीं है**। SDK का consent flow resolve नहीं हो रहा हो तो यह budget custom hook को अब भी सीमित करता है।
-- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, और onboarding पूरा होने के बाद launcher से खुली destination (आपकी app या पुराने user का प्रश्न) `UNDER_AD` इस्तेमाल करती है; notification, widget और uninstall entries `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। `AUTO` के अलावा कोई भी `splash.navigation.next_screen_timing` (remote या app asset) हर launch पर, entries समेत, आपके override से ऊपर रहती है। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
+- अनुमति मिलने के बाद splash दिख रहा हो तो notification prompt के पीछे ads लोड हो सकते हैं। Home पर नए requests रुकते हैं। Minimum समय ad phase के साथ शुरू होकर loading/prompt के साथ चलता है। Default रूप से पहली बार का flow (भाषा/onboarding) `AFTER_AD` इस्तेमाल करता है, onboarding पूरा होने के बाद launcher launch Welcome Back को `AFTER_AD` से खोलता है, या `welcome_back.enabled` बंद हो तो सीधे आपकी app को `UNDER_AD` से; notification, widget और uninstall entries `AFTER_AD` इस्तेमाल करती हैं; बदलने के लिए splash में `nextScreenTiming()` override करें और default रखने वाले cases में `super` call करें। `AUTO` के अलावा कोई भी `splash.navigation.next_screen_timing` (remote या app asset) हर launch पर, entries समेत, आपके override से ऊपर रहती है। दोनों timings interstitial दिखाने से पहले बचा हुआ minimum पूरा करती हैं: `UNDER_AD` अगली स्क्रीन खोलकर तुरंत ad दिखाता है, जबकि `AFTER_AD` ad बंद होते ही अगली स्क्रीन खोलता है।
 
 Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 
@@ -228,7 +228,7 @@ page पर forward swipe उसी exit interstitial से गुज़रत�
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
 जोड़ें, ताकि दोनों एक ही `open_resume` placement पढ़ें।
 Language और onboarding content pages वास्तविक background/return पर तैयार resume ad दिखा
-सकते हैं। Splash, standalone fullscreen और survey excluded हैं; fullscreen pager pages,
+सकते हैं। Splash, standalone fullscreen और Welcome Back excluded हैं; fullscreen pager pages,
 page transitions और language confirmation dialog अस्थायी रूप से resume रोकते हैं। Onboarding ad
 पर click के बाद की वापसी भी इसे छोड़ देती है, जब तक remote `app_open.presentation.skip_after_ad_click`
 को `false` न करे।
@@ -240,7 +240,7 @@ SDK loading और screen eligibility संभालता है; नया Ac
 - **Firebase:** Firebase configured हो तो splash `ob_*` flags fetch करता है; `ObSplashActivity` के बिना host उन्हें `AdConfig.refresh()` के बाद पाता है। Fetch आने तक Firebase की पिछली भेजी values लागू रहती हैं, और जो keys उसने कभी नहीं भेजीं उनके लिए आपकी configuration लागू रहती है। Splash deadline के बाद आया fetch भी बाकी session पर लागू होता है। [ObRemoteKeys](src/main/java/io/onboardkit/remote/RemoteKeys.kt) में supported keys हैं। Remote ad JSON या GA4 sink के लिए [suite-firebase](../suite-firebase/README.md) जोड़ें; सिर्फ ad config source install करने से fetch नहीं होता।
 - **Paywall:** पहले [PayKit](../paykit/README.md) install करें, फिर `OnboardingSdk.install` में `paywallGate = OnboardKitPaywallGate()` रखें (`io.paykit.integration`)। Gate unset हो तो paywall skip होता है। App में purchases और ads दोनों हों तो नीचे billing readiness वाला कदम भी पूरा करें।
 - **अपना consent provider:** UMP के लिए default `onConsentRequired()` रखें। Custom override में लौटने से पहले CMP का परिणाम `ConsentCenter.setHostConsent(canRequestAds, personalized)` से publish करें; सिर्फ `true` लौटाना ad request की अनुमति नहीं है। `onDestroy()` override करें तो `super.onDestroy()` जरूर बुलाएँ।
-- **Custom UI / प्रश्न:** [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) और [QuestionConfig](src/main/java/io/onboardkit/config/QuestionConfig.kt) देखें। सिर्फ splash और content-step के `layoutRes` overrides supported हैं; बाकी layout fields validation में fail होते हैं। SDK resources override करते समय IDs बनाए रखें।
+- **Custom UI / Welcome Back:** [screen configuration](src/main/java/io/onboardkit/config/OnboardKitConfig.kt) और [WelcomeBackScreenConfig](src/main/java/io/onboardkit/config/WelcomeBackScreenConfig.kt) देखें। सिर्फ splash और content-step के `layoutRes` overrides supported हैं; बाकी layout fields validation में fail होते हैं। SDK resources override करते समय IDs बनाए रखें।
 
 **Purchases और ads:** `PayKit.install()` / BillingKit initialization purchase verification को asynchronously शुरू करता है; इससे यह तय नहीं होता कि premium restore हो चुका है। Base `onInitBilling()` hook खाली है।
 `onInitBilling()` में consent के साथ `Billing.awaitReady()` का परिणाम देखें। Ads मौजूदा entitlement पढ़ते हैं; यह hook पहली request को नहीं रोकता।

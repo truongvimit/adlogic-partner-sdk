@@ -48,7 +48,6 @@ private fun OnboardPlacement.toPayKit(): PayKitPlacement = when (this) {
     OnboardPlacement.SPLASH_INTER -> PayKitPlacement.SPLASH
     OnboardPlacement.AFTER_ONBOARDING -> PayKitPlacement.AFTER_ONBOARDING
     // OnboardKit's returning-user checkpoint has no dedicated PayKit placement.
-    OnboardPlacement.AFTER_QUESTION_OLD_USER -> PayKitPlacement.OTHER
 }
 
 private fun PaywallResult.toOutcome(): PaywallOutcome = when (this) {

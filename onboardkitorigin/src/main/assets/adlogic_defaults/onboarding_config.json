@@ -87,6 +87,9 @@
     }
   },
   "onboarding": {
+    "next_button": {
+      "text_color": "#FF375E"
+    },
     "navigation": {
       "lock_pager_swipe": false,
       "swipe_completes_last_step": true,
@@ -125,8 +128,7 @@
       }
     },
     "preload": {
-      "ob5_on_last_step": true,
-      "question_on_last_step": true
+      "ob5_on_last_step": true
     },
     "exit_interstitial": {
       "enabled": true,
@@ -157,21 +159,13 @@
     },
     "auto_dismiss_ms": 15000
   },
-  "question": {
+  "welcome_back": {
     "enabled": true,
-    "old_user_enabled": false,
-    "native": {
-      "behavior": {},
-      "template": "CTA_BOTTOM",
-      "refresh_on_select": false,
-      "refresh_throttle_ms": 2000
-    },
-    "interstitial": {
+    "native1": {
       "behavior": {}
     },
-    "selection": {
-      "mode": "MULTIPLE",
-      "min_count": 1
+    "native2": {
+      "behavior": {}
     }
   }
 }

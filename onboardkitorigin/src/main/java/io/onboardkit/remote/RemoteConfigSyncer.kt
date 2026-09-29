@@ -154,8 +154,6 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.ENABLE_STEP_OB3.key, snapshot.enableStepOb3.toString())
         put(ObRemoteKeys.ENABLE_STEP_OB4.key, snapshot.enableStepOb4.toString())
         put(ObRemoteKeys.ENABLE_STEP_OB5.key, snapshot.enableStepOb5.toString())
-        put(ObRemoteKeys.ENABLE_QUESTION.key, snapshot.enableQuestion.toString())
-        put(ObRemoteKeys.ENABLE_QUESTION_OLD_USER.key, snapshot.enableQuestionOldUser.toString())
         put(ObRemoteKeys.ENABLE_LANGUAGE_NATIVE_2.key, snapshot.enableLanguageNative2.toString())
         put(ObRemoteKeys.PASS_LFO_IF_COMPLETED.key, snapshot.passLfoIfCompleted.toString())
         put(ObRemoteKeys.SHOW_LANGUAGE_TAP_HINT.key, snapshot.showLanguageTapHint.toString())
@@ -183,8 +181,6 @@ class RemoteConfigSyncer internal constructor(
         )
         put(ObRemoteKeys.ADS_CONTENT_NATIVE.key, snapshot.adsContentNative.toString())
         put(ObRemoteKeys.ADS_FULLSCREEN_NATIVE.key, snapshot.adsFullScreenNative.toString())
-        put(ObRemoteKeys.ADS_QUESTION_NATIVE.key, snapshot.adsQuestionNative.toString())
-        put(ObRemoteKeys.ADS_QUESTION_INTER.key, snapshot.adsQuestionInter.toString())
         put(ObRemoteKeys.ADS_APP_RESUME.key, snapshot.adsAppResume.toString())
         put(ObRemoteKeys.SPLASH_LFO_PARALLEL_PRELOAD_ENABLED.key, snapshot.splashLfoParallelPreloadEnabled.toString())
         put(ObRemoteKeys.SPLASH_NOTIFICATION_SETTLE_MS.key, snapshot.splashNotificationSettleMs.toString())
@@ -200,7 +196,6 @@ class RemoteConfigSyncer internal constructor(
         put(ObRemoteKeys.SHOW_SKIP_OB5.key, snapshot.showSkipOb5.toString())
         put(ObRemoteKeys.UI_CONTENT_JSON.key, snapshot.uiContentJson)
         put(ObRemoteKeys.UI_DESIGN_TOKENS_JSON.key, snapshot.uiDesignTokensJson)
-        put(ObRemoteKeys.QUESTION_CONFIG_JSON.key, snapshot.questionConfigJson)
         put(ObRemoteKeys.CONFIG_VERSION.key, snapshot.configVersion.toString())
     }
 

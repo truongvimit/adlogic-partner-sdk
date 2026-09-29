@@ -73,15 +73,6 @@ object TrackkitPlugin : AnalyticsPlugin {
                 ),
             )
 
-            is AnalyticsEvent.QuestionViewed ->
-                Tracker.track(TrackkitEvents.Fo.QuestionView(event.source))
-
-            is AnalyticsEvent.QuestionOptionSelected ->
-                Tracker.track(TrackkitEvents.Fo.QuestionAnswer(event.optionId, event.selected))
-
-            is AnalyticsEvent.QuestionCompleted ->
-                Tracker.track(TrackkitEvents.Fo.QuestionComplete(event.count))
-
             is AnalyticsEvent.FlowCompleted ->
                 Tracker.track(TrackkitEvents.Fo.FlowComplete(event.stepsShown, event.dwellMs))
 

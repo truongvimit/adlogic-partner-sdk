@@ -8,7 +8,7 @@ sealed interface OnboardingOutcome {
 
     data class Completed(
         val selectedLanguage: String?,
-        val answers: List<QuestionAnswer>,
+        val goals: List<GoalAnswer>,
         val passthrough: Bundle?,
         val stepsShown: List<StepId>,
     ) : OnboardingOutcome

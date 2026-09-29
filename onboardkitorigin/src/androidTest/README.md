@@ -72,7 +72,6 @@ The notification remains open longer than the test's splash wait budget. This ve
 ## Native and cache
 
 - `io.onboardkit.ui.language.LanguageNativeSwapDeviceTest`: pending/failing/timed-out LFO2, selection, confirm and late callbacks after departure.
-- `io.onboardkit.ui.question.QuestionNativeRefreshDeviceTest`: refresh timing, old-ad retention and failure throttle.
 - `io.onboardkit.ads.NativeOwnershipRealGmaDeviceTest`: Google test native, shared-load dedup, consumption, recreation and Home/return. Run with `-e nativeRefresh false` and `true`.
 - `io.onboardkit.remote.RemoteConfigCacheDeviceTest`: `-e cachePhase write`, then `read` in a new process without clearing data.
 

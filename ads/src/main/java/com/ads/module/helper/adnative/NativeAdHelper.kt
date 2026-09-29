@@ -681,8 +681,7 @@ class NativeAdHelper @JvmOverloads constructor(
         if (shimmerView != null || nativeAd != null || !canShowAds()) return
         val shimmer = shimmerLayoutId?.let { inflateShimmerLayout(it, container) }
             ?: if (config.autoShimmer) {
-                NativeAdShimmer.from(activity, config.layoutId).also { skeleton ->
-                    nativeStyle?.let { runCatching { NativeAdStyler.applyLayout(skeleton, it) } }
+                NativeAdShimmer.from(activity, config.layoutId, nativeStyle).also { skeleton ->
                     autoShimmerDecorator?.let { runCatching { it(skeleton) } }
                 }
             } else {

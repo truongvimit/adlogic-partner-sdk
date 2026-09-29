@@ -657,7 +657,23 @@ class SplashLongPromptTest {
         launch(notification = false)
         drainUntil("Inter must start for the resolved returning route") { LongPromptFixture.provider.interstitialLoads == 1 }
         idleFrames(Duration.ofSeconds(1))
-        assertTrue(LongPromptFixture.provider.order.isEmpty())
+        assertEquals("Parallel mode warms Welcome Back slot 1 instead of LFO1",
+            listOf(AdPlacement.WelcomeBack1), LongPromptFixture.provider.nativeRequests)
+    }
+
+    @Test
+    fun completedFlowWithWelcomeBackOffPreloadsNothing() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":false}}""")
+        try {
+            kotlinx.coroutines.runBlocking { OnboardingSdk.markCompleted() }
+            LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+            launch(notification = false)
+            drainUntil("Inter must start for the resolved returning route") { LongPromptFixture.provider.interstitialLoads == 1 }
+            idleFrames(Duration.ofSeconds(1))
+            assertTrue(LongPromptFixture.provider.order.isEmpty())
+        } finally {
+            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
+        }
     }
 
     @Test
@@ -1229,16 +1245,64 @@ class SplashLongPromptTest {
 
     @Test
     fun defaultTimingOpensTheDestinationUnderTheAdOnceOnboardingIsDone() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":false}}""")
+        try {
+            runBlocking { OnboardingSdk.markCompleted() }
+            LongPromptFixture.useDefaultTiming = true
+            LongPromptFixture.provider.successfulShow = true
+            launch(notification = false)
+            drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+            LongPromptFixture.provider.ready = true
+            requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+            idleFrames(Duration.ofSeconds(4))
+            drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
+            assertEquals("The destination starts inside the vendor callback", 1, LongPromptFixture.provider.handoffsAtVendorShow)
+        } finally {
+            io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
+        }
+    }
+
+    @Test
+    fun returningLauncherLaunchOpensWelcomeBackAfterTheAdWithSlotOnePreloaded() {
         runBlocking { OnboardingSdk.markCompleted() }
         LongPromptFixture.useDefaultTiming = true
         LongPromptFixture.provider.successfulShow = true
         launch(notification = false)
         drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
+        assertTrue("Sequential: slot 1 waits for the inter result",
+            AdPlacement.WelcomeBack1 !in LongPromptFixture.provider.nativeRequests)
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        drainUntil("inter_splash_o loaded warms Welcome Back slot 1") {
+            AdPlacement.WelcomeBack1 in LongPromptFixture.provider.nativeRequests
+        }
+        idleFrames(Duration.ofSeconds(4))
+        drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
+        assertEquals("Welcome Back must not start under the ad", 0, LongPromptFixture.provider.handoffsAtVendorShow)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        drainUntil("Welcome Back opens once the ad is dismissed") { LongPromptFixture.splashHandoffs == 1 }
+        assertEquals(1, LongPromptFixture.provider.nativeRequests.count { it == AdPlacement.WelcomeBack1 })
+        assertTrue("No LFO or native_fs for a returning user",
+            LongPromptFixture.provider.nativeRequests.none { it == AdPlacement.Language1 || it == AdPlacement.SplashNative })
+        val next = shadowOf(requireNotNull(controller).get()).nextStartedActivity
+        assertEquals(io.onboardkit.ui.welcomeback.ObWelcomeBackActivity::class.java.name, next?.component?.className)
+    }
+
+    @Test
+    fun entryLaunchOfAReturningUserNeverOpensWelcomeBack() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false, entry = SplashEntry.NOTIFICATION)
+        drainUntil("Inter must start") { LongPromptFixture.provider.interstitialLoads == 1 }
         LongPromptFixture.provider.ready = true
         requireNotNull(LongPromptFixture.provider.pending).onLoaded()
         idleFrames(Duration.ofSeconds(4))
         drainUntil("The inter shows after the minimum") { "show" in LongPromptFixture.provider.order }
-        assertEquals("The destination starts inside the vendor callback", 1, LongPromptFixture.provider.handoffsAtVendorShow)
+        requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+        drainUntil("The entry reaches its destination") { LongPromptFixture.splashHandoffs == 1 }
+        assertTrue(AdPlacement.WelcomeBack1 !in LongPromptFixture.provider.nativeRequests)
+        val next = shadowOf(requireNotNull(controller).get()).nextStartedActivity
+        assertTrue(next?.component?.className != io.onboardkit.ui.welcomeback.ObWelcomeBackActivity::class.java.name)
     }
 
     @Test
@@ -1722,6 +1786,8 @@ class SplashLongPromptTest {
             ads = AdsConfig(splashBanner = BannerAdUnit("host-banner"),
                 splashInterstitial = InterstitialAdUnit("host-interstitial"),
                 languageNative = NativeAdUnit("host-language"),
+                welcomeBackNative = NativeAdUnit("host-welcome1"),
+                welcomeBackDupNative = NativeAdUnit("host-welcome2"),
                 splashInlineNative = NativeAdUnit("host-splash-inline"),
                 splashNative = NativeAdUnit("host-splash-native").takeIf { LongPromptFixture.nativeConfigured })
         }.getOrThrow()).getOrThrow()

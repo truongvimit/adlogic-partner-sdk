@@ -139,10 +139,9 @@ Results: `Purchased(productId)`, `ContinueWithAds`, `Dismissed`, `Error(code, me
 | OB checkpoint | PayKit `PaywallPlacement` |
 | --- | --- |
 | Before the splash inter | `SPLASH` |
-| After onboarding or the new-user survey | `AFTER_ONBOARDING` |
-| After the returning-user survey | `OTHER` |
+| After onboarding | `AFTER_ONBOARDING` |
 
-The SDK opens it at the checkpoint; do not launch it again from the OB-finished listener. `OTHER` is shared between the returning-user checkpoint and your app's own `OTHER` call site.
+The SDK opens it at the checkpoint; do not launch it again from the OB-finished listener.
 
 ## 7. Checks
 

@@ -27,15 +27,11 @@ import io.onboardkit.core.ObLog
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityLanguageBinding
-import io.onboardkit.flow.ExitDecision
-import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.language.ObLanguageActivity.Companion.RESULT_LANGUAGE_CODE
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
-import io.onboardkit.ui.question.ObQuestionActivity
-import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -382,7 +378,6 @@ class ObLanguageActivity : BaseOnboardActivity() {
     }
 
     private fun leaveLanguage() {
-        val config = sdk.requireConfig()
         val enabled = sdk.preload().stepDefinitions(sdk.guard().isPremium(this)).map { it.id }
         ObLog.d(ObLog.Section.NAV, "ob_language enabledSteps=${enabled.map { it.value }}")
         if (enabled.isNotEmpty()) {
@@ -395,17 +390,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
             reuseInterstitialThenLeave { PrivacyGoalsActivity.start(this) }
             return
         }
-        when (FlowNavigator.decideExit(
-            sdk.flags(),
-            config,
-            hasReusableSplashInterstitial = false,
-            isOb5NativeReady = false,
-        )) {
-            ExitDecision.GoToQuestion ->
-                reuseInterstitialThenLeave { ObQuestionActivity.start(this, QuestionSource.NEW_USER) }
-
-            else -> endFlow()
-        }
+        endFlow()
     }
 
     /**

@@ -3,8 +3,6 @@ package io.onboardkit.flow
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
-import io.onboardkit.config.QuestionConfig
-import io.onboardkit.config.QuestionOption
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
@@ -18,9 +16,6 @@ class FlowNavigatorTest {
 
     private val config = onboardKitConfig {
         defaultSteps()
-        question = QuestionConfig(
-            options = listOf(QuestionOption("a"), QuestionOption("b")),
-        )
     }.getOrThrow()
 
     private val flags = RemoteFlags()
@@ -99,11 +94,18 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `completed user sees question when old-user flag on`() {
+    fun `completed launcher launch opens welcome back on every launch`() {
         val state = OnboardingState(flowCompletedAtMs = 2L)
-        val decision =
-            FlowNavigator.decideStart(state, flags.copy(enableQuestionOldUser = true), config)
-        assertEquals(StartDecision.Start(FlowDestination.QUESTION_OLD_USER, 0), decision)
+        val decision = FlowNavigator.decideStart(state, flags, config, welcomeBack = true)
+        assertEquals(StartDecision.Start(FlowDestination.WELCOME_BACK, 0), decision)
+    }
+
+    @Test
+    fun `welcome back never replaces the first-open flow`() {
+        assertEquals(
+            StartDecision.Start(FlowDestination.LANGUAGE, 0),
+            FlowNavigator.decideStart(OnboardingState(), flags, config, welcomeBack = true),
+        )
     }
 
     @Test
@@ -129,7 +131,6 @@ class FlowNavigatorTest {
             enableStepOb2 = false,
             enableStepOb3 = false,
             enableStepOb4 = false,
-            enableQuestion = false,
         )
         assertEquals(
             StartDecision.Start(FlowDestination.LANGUAGE, 0),
@@ -210,7 +211,7 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `ob5 beats question when its native is ready`() {
+    fun `ob5 opens when its native is ready`() {
         val decision = FlowNavigator.decideExit(
             flags.copy(enableStepOb5 = true),
             config,
@@ -221,22 +222,10 @@ class FlowNavigatorTest {
     }
 
     @Test
-    fun `question branch does not depend on ob3 state`() {
+    fun `nothing after the pager completes`() {
         val decision = FlowNavigator.decideExit(
             flags,
             config,
-            hasReusableSplashInterstitial = false,
-            isOb5NativeReady = false,
-        )
-        assertEquals(ExitDecision.GoToQuestion, decision)
-    }
-
-    @Test
-    fun `no options left completes`() {
-        val noQuestion = onboardKitConfig { defaultSteps() }.getOrThrow()
-        val decision = FlowNavigator.decideExit(
-            flags,
-            noQuestion,
             hasReusableSplashInterstitial = false,
             isOb5NativeReady = false,
         )

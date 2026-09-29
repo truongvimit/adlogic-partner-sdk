@@ -20,12 +20,9 @@ import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityFullscreenAdBinding
-import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.applyFullScreenSkip
-import io.onboardkit.ui.question.ObQuestionActivity
-import io.onboardkit.ui.question.QuestionSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -145,11 +142,6 @@ class ObFullScreenAdActivity : BaseOnboardActivity() {
                     exitReason,
                 ),
             )
-        }
-        if (FlowNavigator.asksQuestion(sdk.flags(), sdk.requireConfig())) {
-            ObQuestionActivity.start(this, QuestionSource.NEW_USER)
-            finish()
-            return
         }
         lifecycleScope.launch {
             // Outcome ignored: the flow completes either way

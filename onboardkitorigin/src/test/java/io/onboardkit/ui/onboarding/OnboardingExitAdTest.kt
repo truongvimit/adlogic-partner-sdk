@@ -18,8 +18,7 @@ import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.GoalsScreenConfig
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.PrivacyGoalsScreenConfig
-import io.onboardkit.config.QuestionConfig
-import io.onboardkit.config.QuestionOption
+import io.onboardkit.config.GoalOption
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -31,7 +30,6 @@ import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
 import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
-import io.onboardkit.ui.question.ObQuestionActivity
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.onboardkit.ui.splash.SplashEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -226,19 +224,6 @@ class OnboardingExitAdTest {
     }
 
     @Test
-    fun `a question without options forwards only once its screen is resumed`() {
-        launch(question = QuestionConfig(options = emptyList()))
-        val question = Robolectric.buildActivity(ObQuestionActivity::class.java).create().start()
-        main.idle()
-        assertTrue("Nothing may open while the screen is behind an ad", outcomes.isEmpty())
-        question.resume()
-        main.idle()
-        assertEquals(1, outcomes.size)
-        assertTrue(question.get().isFinishing)
-        question.pause().stop().destroy()
-    }
-
-    @Test
     fun `AFTER_AD timing presents the paywall only after dismissal`() {
         paywallEnabled = true
         val activity = launch(timing = NextScreenTiming.AFTER_AD)
@@ -295,7 +280,7 @@ class OnboardingExitAdTest {
     fun `the privacy screen starts under the ad`() {
         val activity = launch(privacyGoals = PrivacyGoalsScreenConfig(
             enabled = true,
-            goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+            goal = GoalsScreenConfig(options = listOf(GoalOption("edit", title = "Edit"))),
         ))
         activity.next(null)
         main.idle()
@@ -325,12 +310,6 @@ class OnboardingExitAdTest {
         assertEquals(null, shadowOf(activity).peekNextStartedActivity())
         main.idle()
         assertEquals(1, outcomes.size)
-
-        OnboardingSdk.configure(onboardKitConfig {
-            step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
-            question = QuestionConfig(options = listOf(QuestionOption("a", title = "A")))
-        }.getOrThrow()).getOrThrow()
-        assertTrue("Question options stand in for goal options", OnboardingSdk.privacyGoalsScreenEnabled())
     }
 
     @Test
@@ -341,26 +320,6 @@ class OnboardingExitAdTest {
         requireNotNull(presentation).onAdSkipped(AdSkipReason.FAILED_TO_SHOW)
         main.idle()
         assertEquals(1, outcomes.size)
-        assertTrue(activity.isFinishing)
-    }
-
-    @Test
-    fun `the question screen starts under the ad`() {
-        val activity = launch(question = QuestionConfig(options = listOf(QuestionOption("a", title = "A"))))
-        activity.next(null)
-        main.idle()
-        requireNotNull(presentation).onNextAction()
-        assertEquals(
-            ObQuestionActivity::class.java.name,
-            shadowOf(activity).nextStartedActivity?.component?.className,
-        )
-        main.idle()
-        assertTrue(outcomes.isEmpty())
-        assertFalse(activity.isFinishing)
-        requireNotNull(presentation).onAdClosed()
-        main.idle()
-        assertEquals(null, shadowOf(activity).peekNextStartedActivity())
-        assertTrue(outcomes.isEmpty())
         assertTrue(activity.isFinishing)
     }
 
@@ -416,14 +375,12 @@ class OnboardingExitAdTest {
         enabled: Boolean = true,
         automatic: Boolean = true,
         timing: NextScreenTiming? = null,
-        question: QuestionConfig? = null,
         flags: RemoteFlags = RemoteFlags(),
         privacyGoals: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig(),
     ): ObOnboardingHostActivity {
         OnboardingSdk.remoteOrNull()?.applySnapshot(flags)
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
-            this.question = question
             privacyGoalsScreen = privacyGoals
             ads = AdsConfig(afterOnboardingInterstitial = unit.takeIf { enabled },
                 afterOnboardingInterstitialEnabled = automatic)

@@ -133,11 +133,11 @@ class OnboardKitConfig internal constructor(
     val splash: SplashConfig,
     val language: LanguageConfig,
     val steps: List<StepDefinition>,
-    val question: QuestionConfig?,
     val ads: AdsConfig,
     val system: SystemBarConfig,
     val behavior: BehaviorConfig,
     val privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig(),
+    val welcomeBackScreen: WelcomeBackScreenConfig = WelcomeBackScreenConfig(),
 ) {
     fun stepById(id: StepId): StepDefinition? = steps.firstOrNull { it.id == id }
 
@@ -147,8 +147,8 @@ class OnboardKitConfig internal constructor(
 class OnboardKitConfigBuilder internal constructor() {
     var splash: SplashConfig = SplashConfig()
     var language: LanguageConfig = LanguageConfig()
-    var question: QuestionConfig? = null
     var privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig()
+    var welcomeBackScreen: WelcomeBackScreenConfig = WelcomeBackScreenConfig()
     var ads: AdsConfig = AdsConfig.fromAdConfig()
     var system: SystemBarConfig = SystemBarConfig()
     var behavior: BehaviorConfig = BehaviorConfig()
@@ -182,13 +182,6 @@ class OnboardKitConfigBuilder internal constructor() {
         if (duplicated.isNotEmpty()) {
             errors += "[steps] Duplicated step ids: ${duplicated.joinToString { it.value }}"
         }
-        question?.let { q ->
-            if (q.minSelection < 1) errors += "[question] minSelection must be >= 1"
-            val dupOptions = q.options.groupBy { it.id }.filterValues { it.size > 1 }.keys
-            if (dupOptions.isNotEmpty()) {
-                errors += "[question] Duplicated option ids: ${dupOptions.joinToString()}"
-            }
-        }
         if (language.languages.isEmpty()) {
             errors += "[language] Language list must not be empty"
         }
@@ -202,8 +195,8 @@ class OnboardKitConfigBuilder internal constructor() {
                     splash = splash,
                     language = language,
                     steps = stepList.toList(),
-                    question = question,
                     privacyGoalsScreen = privacyGoalsScreen,
+                    welcomeBackScreen = welcomeBackScreen,
                     ads = ads,
                     system = system,
                     behavior = behavior,
@@ -244,10 +237,6 @@ class OnboardKitConfigBuilder internal constructor() {
         }
         reject("LanguageConfig.layoutRes", language.layoutRes)
         reject("LanguageConfig.itemLayoutRes", language.itemLayoutRes)
-        question?.let {
-            reject("QuestionConfig.layoutRes", it.layoutRes)
-            reject("QuestionConfig.optionLayoutRes", it.optionLayoutRes)
-        }
         stepList.filterIsInstance<AdFullScreenStepDefinition>().forEach { step ->
             reject("AdFullScreenStepDefinition(${step.id.value}).layoutRes", step.layoutRes)
         }
@@ -280,9 +269,9 @@ class OnboardKitConfigBuilder internal constructor() {
         checkTiers("fullScreenStepNative", ads.fullScreenStepNative)
         checkTiers("splashNative", ads.splashNative)
         checkTiers("ob5Native", ads.ob5Native)
-        checkTiers("questionNative", ads.questionNative)
+        checkTiers("welcomeBackNative", ads.welcomeBackNative)
+        checkTiers("welcomeBackDupNative", ads.welcomeBackDupNative)
         checkTiers("splashInterstitial", ads.splashInterstitial)
-        checkTiers("questionInterstitial", ads.questionInterstitial)
         checkTiers("afterOnboardingInterstitial", ads.afterOnboardingInterstitial)
         val banner = ads.splashBanner
         if (banner != null && banner.id.isBlank()) {

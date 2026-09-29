@@ -94,13 +94,13 @@ class RemoteAdConfigSparseDocumentTest {
             AdRemoteConfig(
                 mapOf(
                     "native_lang" to AdUnitConfig(id = "remote", isEnable = true),
-                    "question" to AdUnitConfig(id = "remote-question", isEnable = true),
+                    "native_welcome1" to AdUnitConfig(id = "remote-welcome", isEnable = true),
                 ),
             ),
         )
-        assertEquals("remote-question", AdRemoteConfig.getInstance().unit("question").id)
+        assertEquals("remote-welcome", AdRemoteConfig.getInstance().unit("native_welcome1").id)
         AdRemoteConfig.applyRemote(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "new", isEnable = true))))
-        assertFalse(AdRemoteConfig.getInstance().declares("question"))
-        assertFalse(AdRemoteConfig.getInstance().isPlacementEnabled("question"))
+        assertFalse(AdRemoteConfig.getInstance().declares("native_welcome1"))
+        assertFalse(AdRemoteConfig.getInstance().isPlacementEnabled("native_welcome1"))
     }
 }

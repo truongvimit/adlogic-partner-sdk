@@ -129,18 +129,6 @@ class OnboardKitConfigTest {
     }
 
     @Test
-    fun `question minSelection below one is rejected`() {
-        val result = onboardKitConfig {
-            defaultSteps()
-            question = QuestionConfig(
-                options = listOf(QuestionOption("a")),
-                minSelection = 0,
-            )
-        }
-        assertTrue(result.isFailure)
-    }
-
-    @Test
     fun `native unit reports its tier count`() {
         assertEquals(1, NativeAdUnit("x").tierCount)
         assertEquals(4, NativeAdUnit(tiers = listOf("a", "b", "c", "d")).tierCount)
@@ -195,12 +183,12 @@ class OnboardKitConfigTest {
     fun `blank tier inside the waterfall is reported`() {
         val result = onboardKitConfig {
             defaultSteps()
-            ads = AdsConfig(questionNative = NativeAdUnit(tiers = listOf("high", "  ", "all")))
+            ads = AdsConfig(welcomeBackNative = NativeAdUnit(tiers = listOf("high", "  ", "all")))
         }
         val error = result.exceptionOrNull() as? ObConfigException
         assertTrue(
             error != null &&
-                error.errors.any { it.contains("questionNative") && it.contains("blank id") },
+                error.errors.any { it.contains("welcomeBackNative") && it.contains("blank id") },
         )
     }
 
@@ -232,22 +220,8 @@ class OnboardKitConfigTest {
     }
 
     @Test
-    fun `minSelection is still read by a screen, not just validated`() {
-        // The knob is only meaningful if something consumes it. It lost its last read site once
-        // and nothing failed, because validation alone kept looking like coverage.
-        val source = java.io.File(
-            "src/main/java/io/onboardkit/ui/question/ObQuestionActivity.kt",
-        ).readText()
-        assertTrue(
-            "ObQuestionActivity must gate the CTA on QuestionConfig.minSelection",
-            source.contains("minSelection"),
-        )
-    }
-
-    @Test
     fun `swipeCompletesLastStep is on out of the box and read by the pager host`() {
-        // Ships enabled — a partner opts out, never in. The source check keeps the knob wired
-        // the same way the minSelection test above keeps its knob wired.
+        // Ships enabled — a partner opts out, never in. The source check keeps the knob wired.
         assertTrue(BehaviorConfig().swipeCompletesLastStep)
         val source = java.io.File(
             "src/main/java/io/onboardkit/ui/onboarding/ObOnboardingHostActivity.kt",

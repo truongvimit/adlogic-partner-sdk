@@ -12,11 +12,11 @@ data class OnboardingState(
     val lfoCompletedAtMs: Long? = null,
     val lastCompletedStep: String? = null,
     val flowCompletedAtMs: Long? = null,
-    val questionAnswers: List<StoredAnswer> = emptyList(),
+    val selectedGoals: List<StoredGoal> = emptyList(),
 ) {
     val isLfoCompleted: Boolean get() = lfoCompletedAtMs != null
     val isFlowCompleted: Boolean get() = flowCompletedAtMs != null
 }
 
 @Serializable
-data class StoredAnswer(val optionId: String, val title: String)
+data class StoredGoal(val id: String, val title: String)

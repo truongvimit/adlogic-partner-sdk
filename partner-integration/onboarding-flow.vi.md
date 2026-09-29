@@ -50,7 +50,7 @@ Ví dụ này hiển thị **OB4 → Full2 → OB1 → OB3**, không preload OB2
 - Không có `order`: giữ thứ tự app khai báo.
 - `order: []`: bỏ toàn bộ pager OB; tiếp tục nhánh hoàn tất hiện có.
 - Chỉ các ID app khai báo mới được chọn. `order` remote chọn được cả màn `enabled = false`; `order` trong asset app chỉ chọn màn `enabled = true`.
-- Danh sách sai kiểu, ID rỗng, trùng ID hoặc có ID ngoài catalog app (sai hoa/thường, `ob5`, `question`, gõ nhầm): bỏ cả override `order`, dùng nguồn kế tiếp bên dưới.
+- Danh sách sai kiểu, ID rỗng, trùng ID hoặc có ID ngoài catalog app (sai hoa/thường, `ob5`, gõ nhầm): bỏ cả override `order`, dùng nguồn kế tiếp bên dưới.
 - `order` là danh sách duy nhất chọn và sắp xếp màn trong JSON: bỏ ID để bỏ màn, thêm lại ID để hiện màn. `onboarding.steps.<id>.enabled` đã bỏ và bị bỏ qua kể cả trong remote/cache cũ. Thứ tự ưu tiên: `order` remote > cờ cũ `ob_enable_step_ob1..4` mà backend đã gửi > `order` trong asset app. Cùng phép kiểm tra catalog áp dụng cho danh sách màn và flags/preload. Khi có `order` remote hợp lệ, các cờ cũ không lọc thêm màn; cờ đã gửi bật hoặc tắt màn theo cả hai chiều, kể cả khi asset app có `order`.
 - Không cần khai báo `steps`. Chỉ dùng `steps.<id>` nếu cần ghi đè riêng template, hành vi ads hoặc nút Skip/auto-next; không có công tắc bật/tắt màn hay placement ở đây. Bật/tắt ads từng vị trí bằng `ad_config.<placement>.isEnable`.
 - Quy tắc ưu tiên settings là remote hợp lệ → key `ob_*` backend đã gửi → custom asset → app → default SDK; remote ở bất kỳ scope nào ưu tiên hơn asset ở bất kỳ scope nào. Không khai báo lại ad unit ID trong `onboarding_config`.
@@ -93,7 +93,7 @@ Mỗi placement OB có tối đa một lượt load/waterfall trong một lần 
 
 Khi chuyển sang trang khác mà view còn tồn tại, content và fullscreen giữ native đã bind; swipe/back quay lại hiển thị cùng ad, không tạo request hay impression callback mới để mở swipe. Native chỉ được giải phóng khi view bị hủy. Request đang chạy vẫn có thể hoàn tất khi trang không được chọn; callback điều hướng chỉ tác động đến trang đang active. Fullscreen khởi động lại auto-next mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật (hoặc cần chống kẹt). No-fill ở lượt đầu tự đi tiếp; khi quay lại trang lỗi, trang hiện fallback và cho thoát bằng Skip. Activity recreation giữ trạng thái lượt tải, không đảm bảo giữ view/ad đã bị hủy; splash mới hoặc `OnboardingSdk.reset()` bắt đầu lượt mới.
 
-Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, `next_step_enabled`, `upcoming_fullscreen_enabled` đã bỏ: không còn chia nhỏ preload OB theo màn. Preload LFO, OB5 standalone và question giữ cơ chế riêng.
+Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, `next_step_enabled`, `upcoming_fullscreen_enabled` đã bỏ: không còn chia nhỏ preload OB theo màn. Preload LFO và OB5 standalone giữ cơ chế riêng.
 
 ## Swipe và navigation
 
@@ -103,4 +103,4 @@ Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, 
 - No-fill fullscreen tự đi tiếp. Skip, auto-next, click-return và chống điều hướng trùng vẫn giữ.
 - Màn cuối swipe hoàn tất khi `swipe_completes_last_step = true`; CTA vẫn dùng nhánh exit hiện có.
 
-OB5 standalone/question và native splash không nằm trong sáu màn này; cấu hình riêng vẫn được giữ. Trạng thái đã hoàn tất onboarding không bị reset chỉ vì đổi danh sách.
+OB5 standalone và native splash không nằm trong sáu màn này; cấu hình riêng vẫn được giữ. Trạng thái đã hoàn tất onboarding không bị reset chỉ vì đổi danh sách.

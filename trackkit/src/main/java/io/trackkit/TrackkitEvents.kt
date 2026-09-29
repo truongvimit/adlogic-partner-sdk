@@ -43,16 +43,11 @@ object TrackkitEvents {
     const val PARAM_PRODUCT_ID = "product_id"
     const val PARAM_SCREEN_INDEX = "screen_index"
     const val PARAM_STATUS = "status"
-    const val PARAM_COUNT = "count"
 
-    /**
-     * Steps shown in a completed flow. Deliberately not [PARAM_COUNT]: that key already means
-     * "answers picked" on `fo_question_complete`, and one GA4 custom dimension that means two
-     * different things makes any cross-event aggregation of it meaningless.
-     */
     /** Whether the language confirm prompt opened with an ad already bound. */
     const val PARAM_HAS_AD = "has_ad"
 
+    /** Steps shown in a completed flow. */
     const val PARAM_STEPS_SHOWN = "steps_shown"
     const val PARAM_EXIT_REASON = "exit_reason"
 
@@ -100,9 +95,6 @@ object TrackkitEvents {
     const val FO_LANGUAGE_CONFIRM_RESULT = "fo_language_confirm_result"
     const val FO_STEP_VIEW = "fo_step_view"
     const val FO_STEP_COMPLETE = "fo_step_complete"
-    const val FO_QUESTION_VIEW = "fo_question_view"
-    const val FO_QUESTION_ANSWER = "fo_question_answer"
-    const val FO_QUESTION_COMPLETE = "fo_question_complete"
     const val FO_FLOW_COMPLETE = "fo_flow_complete"
     const val FO_AD_BOUND = "fo_ad_bound"
 
@@ -137,7 +129,7 @@ object TrackkitEvents {
         FO_FLOW_START, FO_SPLASH_VIEW, FO_SPLASH_COMPLETE, FO_LANGUAGE_VIEW, FO_LANGUAGE_SELECT,
         FO_LANGUAGE_COMPLETE, FO_LANGUAGE_FLOW_COMPLETE,
         FO_LANGUAGE_CONFIRM_VIEW, FO_LANGUAGE_CONFIRM_RESULT, FO_STEP_VIEW, FO_STEP_COMPLETE,
-        FO_QUESTION_VIEW, FO_QUESTION_ANSWER, FO_QUESTION_COMPLETE, FO_FLOW_COMPLETE, FO_AD_BOUND,
+        FO_FLOW_COMPLETE, FO_AD_BOUND,
         IAP_PAYWALL_VIEW, IAP_PAYWALL_RESULT, IAP_CLICK, IAP_SUCCESS, IAP_FAIL, IAP_DISMISS,
         CONSENT_REQUEST, CONSENT_SHOWN, CONSENT_RESULT,
         APP_INSTALL_REFERRER,
@@ -301,18 +293,6 @@ object TrackkitEvents {
                 PARAM_EXIT_REASON to exitReason,
             ),
         )
-
-        class QuestionView(source: String? = null) :
-            SimpleEvent(FO_QUESTION_VIEW, mapOf(PARAM_SOURCE to source))
-
-        class QuestionAnswer(optionId: String, selected: Boolean) :
-            SimpleEvent(
-                FO_QUESTION_ANSWER,
-                mapOf("option_id" to optionId, "selected" to selected),
-            )
-
-        class QuestionComplete(answerCount: Int) :
-            SimpleEvent(FO_QUESTION_COMPLETE, mapOf(PARAM_COUNT to answerCount))
 
         class FlowComplete(stepsShown: Int, dwellMs: Long? = null) :
             SimpleEvent(

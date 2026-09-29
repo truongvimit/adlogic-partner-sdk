@@ -65,6 +65,12 @@ class ObPrimaryButton @JvmOverloads constructor(
         applyState()
     }
 
+    /** Overrides only the NEXT label color; LAST keeps its own configured color. */
+    fun overrideNextTextColor(color: Int?) {
+        color?.let { textColorNext = it }
+        applyState()
+    }
+
     private fun applyState() {
         when (state) {
             State.NEXT -> {

@@ -5,6 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.TextView
+import android.graphics.Color
 import com.ads.module.helper.adnative.NativeAdShimmer
 import io.onboardkit.R
 import org.junit.Assert.assertEquals
@@ -97,6 +99,27 @@ class NativeShimmerParityTest {
                 val skeleton = laidOut(host, NativeAdShimmer.from(host, layout), 360)
                 assertTrue("$name: skeleton measured ${skeleton.height}dp — an empty slot", skeleton.height > 0)
                 assertTrue("$name: skeleton measured ${skeleton.height}dp — taller than the screen", skeleton.height <= 2000)
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun `every onboarding badge removes its XML text color in the skeleton`() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            val host = controller.get()
+            for ((name, layout) in frames) {
+                val badge = NativeAdShimmer.from(host, layout).let { root ->
+                    fun find(view: View): TextView? {
+                        if (view is TextView && view.text?.toString()?.trim()?.equals("ad", true) == true) return view
+                        if (view is TextView && view.text?.toString()?.trim()?.equals("ads", true) == true) return view
+                        if (view is ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))?.let { return it }
+                        return null
+                    }
+                    find(root)
+                }
+                assertTrue("$name must expose an attribution badge", badge != null)
+                requireNotNull(badge)
+                assertEquals("$name badge must not leak its XML text color", 0, Color.alpha(badge.currentTextColor))
             }
         } finally { controller.pause().stop().destroy() }
     }

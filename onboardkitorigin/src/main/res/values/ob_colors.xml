@@ -66,4 +66,14 @@
     <color name="ob_splash_native_headline">#121212</color>
     <color name="ob_splash_native_body">#717680</color>
     <color name="ob_splash_native_cta_bg">#007AFF</color>
+
+    <!-- Figma "Welcome Screen / Choose Goal" (node 2103:2807), returning-user launcher screen. -->
+    <color name="ob_welcome_back_bg">#F9F4F3</color>
+    <color name="ob_welcome_back_surface">#FFFFFF</color>
+    <color name="ob_welcome_back_divider">#DBD6D5</color>
+    <color name="ob_welcome_back_brand">#D13538</color>
+    <color name="ob_welcome_back_brand_dark">#6B1B1D</color>
+    <color name="ob_welcome_back_brand_subtle">#FFE9E6</color>
+    <color name="ob_welcome_back_text_primary">#1D1A19</color>
+    <color name="ob_welcome_back_text_secondary">#676261</color>
 </resources>

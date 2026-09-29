@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "goal / Edit PDF" (node 282:2853). The SDK binds the first ImageView and TextView and
+     drives the selected state through the root. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="6dp"
+    android:background="@drawable/ob_welcome_back_option_bg"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <FrameLayout
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@drawable/ob_welcome_back_icon_chip">
+
+        <ImageView
+            android:id="@+id/ob_welcome_back_option_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/ob_welcome_back_option_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:lineSpacingExtra="2sp"
+        android:maxLines="1"
+        android:textColor="@color/ob_welcome_back_text_primary"
+        android:textSize="15sp" />
+</LinearLayout>

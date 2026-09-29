@@ -50,7 +50,7 @@ object OnboardingSettings {
             if (!stepScope && !declaredScope) return null
             val suffix = path.substringAfter("behavior.")
             // Both are loaded, then shown from the buffer: no load-and-show wait ever applies.
-            if (scope in setOf("splash.ads.interstitial.behavior", "question.interstitial.behavior") &&
+            if (scope == "splash.ads.interstitial.behavior" &&
                 suffix.startsWith("load_and_show.")) return null
             val format = when {
                 path.contains("banner") -> "banner"
@@ -74,6 +74,16 @@ object OnboardingSettings {
     fun number(path: String) = values.long(path)
     fun text(path: String) = values.string(path)
 
+    /** Grouped remote > legacy remote UI > app asset; empty preserves the existing UI color. */
+    internal fun nextButtonTextColor(legacyColor: Int? = null): Int? {
+        val path = "onboarding.next_button.text_color"
+        val snapshot = values
+        fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
+        (snapshot.remoteValue(path) as? String)?.let { return parse(it) ?: legacyColor }
+        return legacyColor ?: (snapshot.assetValue(path) as? String)?.let(::parse)
+    }
+
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"
         // Not "splash.native" — that scope belongs to the full-screen SplashNative and carries the
@@ -88,8 +98,8 @@ object OnboardingSettings {
         is io.onboardkit.ads.AdPlacement.StepNative -> "onboarding.steps.${p.stepId.value}"
         is io.onboardkit.ads.AdPlacement.StepFullScreen -> "onboarding.steps.${p.stepId.value}"
         io.onboardkit.ads.AdPlacement.Ob5 -> "ob5.native"
-        io.onboardkit.ads.AdPlacement.QuestionNative -> "question.native"
-        io.onboardkit.ads.AdPlacement.QuestionInterstitial -> "question.interstitial"
+        io.onboardkit.ads.AdPlacement.WelcomeBack1 -> "welcome_back.native1"
+        io.onboardkit.ads.AdPlacement.WelcomeBack2 -> "welcome_back.native2"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
     /** `ad_config.<key>.click_action`; absent, pager pages auto-advance and every other native reloads. */
@@ -106,8 +116,7 @@ object OnboardingSettings {
     internal fun behavior(p: AdPlacement, adConfigKey: String? = null): com.ads.module.config.settings.BehaviorValues {
         val format = when (p) {
             AdPlacement.SplashBanner -> "banner"
-            AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial,
-            AdPlacement.QuestionInterstitial -> "interstitial"
+            AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial -> "interstitial"
             AdPlacement.AppResume -> "app_open"
             else -> "native"
         }
@@ -156,8 +165,6 @@ object OnboardingSettings {
         }
         fun put(key: RemoteKey<*>, raw: Any, path: String) = putMapped(key, raw, raw, path)
         put(k.ENABLE_STEP_OB5, f.enableStepOb5, "ob5.enabled")
-        put(k.ENABLE_QUESTION, f.enableQuestion, "question.enabled")
-        put(k.ENABLE_QUESTION_OLD_USER, f.enableQuestionOldUser, "question.old_user_enabled")
         put(k.ENABLE_LANGUAGE_NATIVE_2, f.enableLanguageNative2, "lfo.native2.enabled")
         put(k.SHOW_LANGUAGE_TAP_HINT, f.showLanguageTapHint, "lfo.tap_hint.enabled")
         putMapped(k.LANGUAGE_TAP_HINT_DELAY_SEC, f.languageTapHintDelaySec, f.languageTapHintDelaySec * 1000, "lfo.tap_hint.delay_ms")
@@ -199,7 +206,7 @@ object OnboardingSettings {
 
     private fun resolveConfig(c: OnboardKitConfig, v: SettingsSnapshot, adConfig: AdRemoteConfig, legacySteps: Map<String, Boolean>): OnboardKitConfig {
         val ads = resolveAds(c.ads, adConfig, v)
-        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "question", "privacy_goals_screen").none(v::hasOverride) &&
+        if (listOf("flow", "splash", "lfo", "onboarding", "ob5", "privacy_goals_screen").none(v::hasOverride) &&
             ads == c.ads && legacySteps.isEmpty()) return c
         val splash = c.splash.copy(
             minDisplayTimeMs = v.long("splash.timing.min_display_ms", c.splash.minDisplayTimeMs),
@@ -295,10 +302,9 @@ object OnboardingSettings {
                 )
             }
         }
-        val question = c.question?.let { resolveQuestion(it, v) }
-        return OnboardKitConfig(splash, language, steps, question, ads, c.system, behavior, c.privacyGoalsScreen.copy(
+        return OnboardKitConfig(splash, language, steps, ads, c.system, behavior, c.privacyGoalsScreen.copy(
             enabled = v.boolean("privacy_goals_screen.enabled", c.privacyGoalsScreen.enabled),
-        ))
+        ), c.welcomeBackScreen)
     }
 
     /** An order naming any id outside [catalog] is invalid as a whole; null [catalog] checks types only. */
@@ -333,33 +339,6 @@ object OnboardingSettings {
     internal fun skipPosition(path: String, fallback: FullScreenSkipPosition): FullScreenSkipPosition =
         values.enumOr(path, fallback)
 
-    /**
-     * The question a run shows: valid remote `ob_question_config` replaces the app's title and
-     * options, and null means neither side has one. Gate and screen both ask this, so they agree.
-     */
-    internal fun questionContent(compiled: QuestionConfig?, remoteJson: String): QuestionConfig? {
-        val remote = io.onboardkit.remote.uiconfig.RemoteQuestionParser.parse(remoteJson)
-        val base = compiled ?: if (remote != null) QuestionConfig() else return null
-        return resolveQuestion(base.copy(
-            // A delivered empty title is an intentional clear. Only an omitted JSON member
-            // (null in the DTO) falls through to the compiled/app title.
-            title = remote?.title ?: base.title,
-            options = remote?.options ?: base.options,
-        ))
-    }
-
-    internal fun resolveQuestion(q: QuestionConfig, v: SettingsSnapshot = values): QuestionConfig {
-        val mode = v.enumOr("question.selection.mode", q.selectionMode)
-        val max = if (mode == SelectionMode.SINGLE) 1 else q.options.size.coerceAtLeast(1)
-        // Clamped even without a selection override: remote options can leave fewer than the
-        // app's minimum, and an unreachable minimum hides the CTA for good.
-        return q.copy(
-            refreshAdOnSelect = v.boolean("question.native.refresh_on_select", q.refreshAdOnSelect),
-            selectionMode = mode,
-            minSelection = v.long("question.selection.min_count", q.minSelection.toLong()).toInt().coerceIn(1, max),
-        )
-    }
-
     private fun resolveAds(a: AdsConfig, adConfig: AdRemoteConfig, v: SettingsSnapshot): AdsConfig =
         a.resolvePlacements(adConfig).copy(
             afterOnboardingInterstitialEnabled = v.boolean("onboarding.exit_interstitial.enabled", a.afterOnboardingInterstitialEnabled),
@@ -367,7 +346,6 @@ object OnboardingSettings {
             fullScreenSkipStyle = v.enumOr("flow.fullscreen_skip_style", a.fullScreenSkipStyle),
             languageTemplate = v.enumOr("lfo.native_template", a.languageTemplate),
             contentStepTemplate = v.enumOr("onboarding.ads.content_template", a.contentStepTemplate),
-            questionTemplate = v.enumOr("question.native.template", a.questionTemplate),
             afterOnboardingInterstitialTiming = v.enumOr("onboarding.exit_interstitial.next_screen_timing", a.afterOnboardingInterstitialTiming),
         )
 
@@ -392,8 +370,6 @@ object OnboardingSettings {
             enableStepOb3 = step("ob3", ObRemoteKeys.ENABLE_STEP_OB3, f.enableStepOb3),
             enableStepOb4 = step("ob4", ObRemoteKeys.ENABLE_STEP_OB4, f.enableStepOb4),
             enableStepOb5 = v.boolean("ob5.enabled", f.enableStepOb5),
-            enableQuestion = v.boolean("question.enabled", f.enableQuestion),
-            enableQuestionOldUser = v.boolean("question.old_user_enabled", f.enableQuestionOldUser),
             enableLanguageNative2 = v.boolean("lfo.native2.enabled", f.enableLanguageNative2),
             showLanguageTapHint = v.boolean("lfo.tap_hint.enabled", f.showLanguageTapHint),
             showLanguageConfirmBeforeSelect = v.boolean("lfo.confirm_button.visible_before_selection", f.showLanguageConfirmBeforeSelect),

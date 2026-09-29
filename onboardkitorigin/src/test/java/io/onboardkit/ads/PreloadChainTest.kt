@@ -40,6 +40,7 @@ class PreloadChainTest {
         cfg = onboardKitConfig {
             defaultSteps()
             ads = AdsConfig(languageNative = NativeAdUnit("language"),
+                welcomeBackNative = NativeAdUnit("welcome1"), welcomeBackDupNative = NativeAdUnit("welcome2"),
                 contentStepNative = NativeAdUnit("content"), fullScreenStepNative = NativeAdUnit("fullscreen"),
                 afterOnboardingInterstitial = InterstitialAdUnit("exit"))
         }.getOrThrow()
@@ -70,6 +71,19 @@ class PreloadChainTest {
         requests.clear()
         chain.onLanguageShown(activity)
         assertEquals(listOf(AdPlacement.Language2), requests)
+    }
+
+    @Test fun `welcome back warms slot 1 at splash with a handoff and slot 2 on entry`() {
+        chain.onSplashRemoteReady(activity, FlowDestination.WELCOME_BACK, 0)
+        assertEquals(listOf(AdPlacement.WelcomeBack1), requests)
+        assertTrue(chain.takeWelcome1Preload())
+        assertFalse("The handoff is consumed once", chain.takeWelcome1Preload())
+        assertFalse(chain.takeLanguage1Preload())
+        requests.clear()
+        chain.onSplashRemoteReady(activity, FlowDestination.WELCOME_BACK, 0, firstNativeAlreadyScheduled = true)
+        assertTrue(requests.isEmpty())
+        chain.preloadWelcome2(activity)
+        assertEquals(listOf(AdPlacement.WelcomeBack2), requests)
     }
 
     @Test fun `language selection warms all six slots once and exit inter only on pager entry`() {
@@ -111,7 +125,7 @@ class PreloadChainTest {
             defaultSteps()
             privacyGoalsScreen = PrivacyGoalsScreenConfig(
                 enabled = true,
-                goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+                goal = GoalsScreenConfig(options = listOf(GoalOption("edit", title = "Edit"))),
             )
             ads = AdsConfig(
                 contentStepNative = NativeAdUnit("content"),
@@ -162,7 +176,7 @@ class PreloadChainTest {
 
         chainFor(PrivacyGoalsScreenConfig(
             enabled = true,
-            goal = GoalsScreenConfig(options = listOf(QuestionOption("edit", title = "Edit"))),
+            goal = GoalsScreenConfig(options = listOf(GoalOption("edit", title = "Edit"))),
         )).onStepSelected(activity, steps, steps.lastIndex)
         assertEquals(listOf(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)), requests)
     }

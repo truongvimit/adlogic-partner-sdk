@@ -9,9 +9,6 @@ import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.NativeAdUnit
-import io.onboardkit.config.QuestionConfig
-import io.onboardkit.config.QuestionOption
-import io.onboardkit.config.SelectionMode
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
 import org.junit.After
@@ -136,21 +133,5 @@ class RemoteOverHostTest {
         OnboardingSettings.document.acceptSuccessfulFetch(
             """{"lfo":{"languages":{"supported_codes":["${base[1].code}","${base[2].code}"],"default_code":"${base[2].code}"}}}""")
         assertEquals(base[2].code, OnboardingSettings.resolve(config).language.defaultCode)
-    }
-
-    @Test fun `remote question options clamp the host minimum and stand on their own`() {
-        val host = QuestionConfig(
-            selectionMode = SelectionMode.MULTIPLE,
-            minSelection = 3,
-            options = listOf("a", "b", "c", "d").map { QuestionOption(it, title = it) },
-        )
-        val remote = """{"title":"Goal","options":[{"id":"x","title":"X"},{"id":"y","title":"Y"}]}"""
-        val question = OnboardingSettings.questionContent(host, remote)!!
-        assertEquals(listOf("x", "y"), question.options.map { it.id })
-        assertEquals(2, question.minSelection)
-        assertEquals("Goal", question.title)
-        assertNotNull(OnboardingSettings.questionContent(null, remote))
-        assertNull(OnboardingSettings.questionContent(null, ""))
-        assertEquals(3, OnboardingSettings.questionContent(host, "")!!.minSelection)
     }
 }

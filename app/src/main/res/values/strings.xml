@@ -64,7 +64,6 @@
     <string name="privacy_goal_tools">Handy tools, built in</string>
     <string name="privacy_goal_consent">By tapping Get started you agree to our Terms of Use and Privacy Policy.</string>
     <string name="privacy_goal_get_started">GET STARTED</string>
-    <string name="privacy_goal_question">What do you want to do with PDFs?</string>
     <string name="privacy_goal_hint">Pick a goal and we’ll put the right tools up front.</string>
     <string name="goal_edit">Edit PDF</string>
     <string name="goal_annotate">Annotate</string>

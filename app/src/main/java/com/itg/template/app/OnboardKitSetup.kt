@@ -8,7 +8,7 @@ import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.PrivacyGoalsScreenConfig
 import io.onboardkit.config.GoalsScreenConfig
-import io.onboardkit.config.QuestionOption
+import io.onboardkit.config.GoalOption
 import io.onboardkit.config.SelectionMode
 import io.onboardkit.config.SplashConfig
 import io.onboardkit.config.onboardKitConfig
@@ -67,14 +67,14 @@ object OnboardKitSetup {
                     selectionMode = SelectionMode.MULTIPLE,
                     minSelection = 1,
                     options = listOf(
-                        QuestionOption("edit", titleRes = R.string.goal_edit, imageRes = R.drawable.ic_goal_edit),
-                        QuestionOption("annotate", titleRes = R.string.goal_annotate, imageRes = R.drawable.ic_goal_annotate),
-                        QuestionOption("text", titleRes = R.string.goal_add_text, imageRes = R.drawable.ic_goal_text),
-                        QuestionOption("sign", titleRes = R.string.goal_sign_fill, imageRes = R.drawable.ic_goal_sign),
-                        QuestionOption("compress", titleRes = R.string.goal_compress, imageRes = R.drawable.ic_goal_compress),
-                        QuestionOption("split_merge", titleRes = R.string.goal_split_merge, imageRes = R.drawable.ic_goal_split),
-                        QuestionOption("organise", titleRes = R.string.goal_organise, imageRes = R.drawable.ic_goal_pages),
-                        QuestionOption("protect", titleRes = R.string.goal_protect, imageRes = R.drawable.ic_goal_protect),
+                        GoalOption("edit", titleRes = R.string.goal_edit, imageRes = R.drawable.ic_goal_edit),
+                        GoalOption("annotate", titleRes = R.string.goal_annotate, imageRes = R.drawable.ic_goal_annotate),
+                        GoalOption("text", titleRes = R.string.goal_add_text, imageRes = R.drawable.ic_goal_text),
+                        GoalOption("sign", titleRes = R.string.goal_sign_fill, imageRes = R.drawable.ic_goal_sign),
+                        GoalOption("compress", titleRes = R.string.goal_compress, imageRes = R.drawable.ic_goal_compress),
+                        GoalOption("split_merge", titleRes = R.string.goal_split_merge, imageRes = R.drawable.ic_goal_split),
+                        GoalOption("organise", titleRes = R.string.goal_organise, imageRes = R.drawable.ic_goal_pages),
+                        GoalOption("protect", titleRes = R.string.goal_protect, imageRes = R.drawable.ic_goal_protect),
                     ),
                 ),
             )

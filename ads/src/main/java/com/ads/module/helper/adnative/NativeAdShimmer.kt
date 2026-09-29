@@ -49,11 +49,20 @@ object NativeAdShimmer {
 
     /** Builds a skeleton from [adLayoutId]. Never throws, never returns an empty view. */
     @JvmStatic
-    fun from(context: Context, @LayoutRes adLayoutId: Int): ShimmerFrameLayout =
+    @JvmOverloads
+    fun from(
+        context: Context,
+        @LayoutRes adLayoutId: Int,
+        style: NativeAdStyle? = null,
+    ): ShimmerFrameLayout =
         runCatching { buildFromAdLayout(context, adLayoutId) }
             .recoverCatching { staticFallback(context) }
             .getOrElse { flatBlock(context) }
             .apply {
+                style?.let {
+                    NativeAdStyler.applyLayout(this, it)
+                    NativeAdStyler.applyAppearance(this, it)
+                }
                 if (background == null) background = rounded(this, CONTAINER_COLOR)
                 // Transparent-text placeholders must not be announced by TalkBack
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -92,9 +101,7 @@ object NativeAdShimmer {
         if (root.layoutParams?.height == ViewGroup.LayoutParams.MATCH_PARENT) {
             shimmer.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
         }
-        val fullBleedMedia = root.findViewById<View>(R.id.ad_media)?.layoutParams?.height ==
-            ViewGroup.LayoutParams.MATCH_PARENT
-        toSkeleton(root, depth = 0, fullBleedMedia = fullBleedMedia)
+        toSkeleton(root, depth = 0)
         shimmer.addView(root)
         return shimmer
     }
@@ -137,7 +144,7 @@ object NativeAdShimmer {
         return content
     }
 
-    private fun toSkeleton(view: View, depth: Int, fullBleedMedia: Boolean) {
+    private fun toSkeleton(view: View, depth: Int) {
         if (depth > MAX_DEPTH || view.tag == TAG_SHIMMER_KEEP) return
         when (view) {
             is StubMediaView -> skeletonizeMedia(view)
@@ -147,28 +154,20 @@ object NativeAdShimmer {
 
             is ViewGroup -> {
                 view.background = rounded(view, CONTAINER_COLOR)
-                for (i in 0 until view.childCount) toSkeleton(view.getChildAt(i), depth + 1, fullBleedMedia)
+                for (i in 0 until view.childCount) toSkeleton(view.getChildAt(i), depth + 1)
             }
 
             // Covers RatingBar: stars/spinners must not draw on the skeleton, space stays
             is ProgressBar -> view.visibility = View.INVISIBLE
 
             is TextView -> { // covers Button
-                // The mandated "Ad" badge stays readable on the skeleton
-                if (view.text?.toString()?.trim().equals("ad", ignoreCase = true)) return
                 view.background = rounded(view, BLOCK_COLOR)
                 view.setTextColor(Color.TRANSPARENT)
                 view.setCompoundDrawables(null, null, null, null)
                 view.setCompoundDrawablesRelative(null, null, null, null)
                 // wrap_content with no placeholder text would collapse to a zero-width bar
                 if (view.text.isNullOrBlank()) {
-                    val widthDp = if (fullBleedMedia) when (view.id) {
-                        R.id.ad_headline -> 160
-                        R.id.ad_body -> 240
-                        R.id.ad_advertiser -> 96
-                        else -> EMPTY_TEXT_MIN_WIDTH_DP
-                    } else EMPTY_TEXT_MIN_WIDTH_DP
-                    view.minimumWidth = view.dp(widthDp)
+                    view.minimumWidth = view.dp(EMPTY_TEXT_MIN_WIDTH_DP)
                 }
             }
 

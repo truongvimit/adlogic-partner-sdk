@@ -6,6 +6,8 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
+import com.ads.module.config.AdRemoteConfig
+import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.adnative.NativeAdShimmer
 import com.ads.module.helper.adnative.NativeClickAction
 import com.facebook.shimmer.ShimmerFrameLayout
@@ -90,7 +92,7 @@ internal fun ComponentActivity.showNativeAd(
         return
     }
     onLoading()
-    skeleton = NativeAdShimmer.from(this, request.layoutRes).also {
+    skeleton = NativeAdShimmer.from(this, request.layoutRes, remoteNativeStyle(placement)).also {
         container.removeAllViews()
         container.addView(it)
         container.visibility = View.VISIBLE
@@ -103,6 +105,11 @@ internal fun ComponentActivity.showNativeAd(
         placement.reportUnavailable(AdSkipReason.NO_FILL, onUnavailable)
     }
 }
+
+private fun remoteNativeStyle(placement: AdPlacement) =
+    OnboardingSdk.configOrNull()?.ads?.placementKeyFor(placement)?.let { key ->
+        AdRemoteConfig.getInstance().unit(key).toNativeStyle()
+    }
 
 private fun AdPlacement.reportUnavailable(
     reason: AdSkipReason,

@@ -17,6 +17,8 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 
 Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
 
+A returning user who opens the app from the launcher lands on the Welcome Back screen after the splash; `welcome_back.enabled` turns it off. See [Welcome Back](welcome-back-screen.md).
+
 ## Order to wire into your app
 
 1. **Pick the main feature:** Ads/OB, BillingKit with your own UI, or PayKit with its ready-made UI. An app can combine ads and purchases; PayKit initializes billing itself, so do not register another catalog with `AppPurchase.initBilling`.

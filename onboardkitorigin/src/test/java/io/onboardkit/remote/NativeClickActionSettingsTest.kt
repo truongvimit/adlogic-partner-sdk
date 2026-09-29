@@ -38,7 +38,7 @@ class NativeClickActionSettingsTest {
         AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
         AdPlacement.StepNative(StepId.PARTNER_PRIVACY), AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT),
         AdPlacement.StepNative(StepId.PARTNER_GOAL), AdPlacement.StepNative(StepId.PARTNER_GOAL_ALT),
-        AdPlacement.QuestionNative, AdPlacement.Ob5, AdPlacement.SplashNative, AdPlacement.SplashInlineNative,
+        AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.Ob5, AdPlacement.SplashNative, AdPlacement.SplashInlineNative,
     )
 
     @Before fun setup() {
@@ -72,7 +72,7 @@ class NativeClickActionSettingsTest {
     @Test fun `the base key click_action overrides the default of every placement kind`() {
         adConfig(
             "native_ob1" to none, "native_full2" to reload, "native_lang" to auto,
-            "native_popup_lang" to none, "native_select" to auto, "native_question" to none,
+            "native_popup_lang" to none, "native_select" to auto, "native_welcome1" to none,
             "native_onboarding_fullscreen_1_4" to auto, "native_fs" to none, "native_splash" to auto,
         )
         assertEquals(none, action(AdPlacement.StepNative(StepId.OB1)))
@@ -83,7 +83,8 @@ class NativeClickActionSettingsTest {
         assertEquals(auto, action(AdPlacement.StepNative(StepId.PARTNER_PRIVACY)))
         assertEquals(auto, action(AdPlacement.StepNative(StepId.PARTNER_GOAL)))
         assertEquals(reload, action(AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT)))
-        assertEquals(none, action(AdPlacement.QuestionNative))
+        assertEquals(none, action(AdPlacement.WelcomeBack1))
+        assertEquals(reload, action(AdPlacement.WelcomeBack2))
         assertEquals(auto, action(AdPlacement.Ob5))
         assertEquals(none, action(AdPlacement.SplashNative))
         assertEquals(auto, action(AdPlacement.SplashInlineNative))
@@ -126,8 +127,7 @@ class NativeClickActionSettingsTest {
                         "fullscreen_native_behavior": {"click": {"action": "none"}}},
                 "steps": {"ob1": {"behavior": {"click": {"action": "none"}}}},
                 "navigation": {"ad_click_return_completes_step": false}
-              },
-              "question": {"native": {"behavior": {"click": {"action": "auto_next"}}}}
+              }
             }
         """.trimIndent())
         pagerPages.forEach { assertEquals(it.key, auto, action(it)) }

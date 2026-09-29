@@ -47,9 +47,9 @@ object NativeTemplates {
         val ads = OnboardingSdk.configOrNull()?.ads
         val values = OnboardingSettings.values
         val templatePaths = when (placement) {
-            AdPlacement.Language1, AdPlacement.Language2 -> listOf("lfo.native_template")
+            AdPlacement.Language1, AdPlacement.Language2,
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> listOf("lfo.native_template")
             is AdPlacement.StepNative -> listOf("onboarding.steps.${placement.stepId.value}.native_template", "onboarding.ads.content_template")
-            AdPlacement.QuestionNative -> listOf("question.native.template")
             else -> emptyList()
         }
         fun explicit(read: (String) -> Any?): NativeTemplate? = templatePaths.firstNotNullOfOrNull { path ->
@@ -58,7 +58,8 @@ object NativeTemplates {
         fun present(read: (String) -> Any?): Boolean = templatePaths.any { read(it) != null }
         fun positionCta(): NativeTemplate? {
             if (placement != AdPlacement.Language1 && placement != AdPlacement.Language2 &&
-                placement !is AdPlacement.StepNative && placement != AdPlacement.QuestionNative) return null
+                placement != AdPlacement.WelcomeBack1 && placement != AdPlacement.WelcomeBack2 &&
+                placement !is AdPlacement.StepNative) return null
             return when (ads?.placementKeyFor(placement)?.let { AdRemoteConfig.getInstance().ads[it]?.positionCTA }) {
                 "TOP" -> NativeTemplate.CTA_TOP
                 "BOTTOM" -> NativeTemplate.CTA_BOTTOM
@@ -73,32 +74,32 @@ object NativeTemplates {
             // An explicit empty template clears a lower source. The resolved host config is the
             // code/default tier and may itself contain a broader same-source template.
             return when (placement) {
-                AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+                AdPlacement.Language1, AdPlacement.Language2,
+                AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
                 is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
-                AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
                 else -> NativeTemplate.CTA_BOTTOM
             }
         }
         if (remotePosition) positionCta()?.let { return it }
         explicit(values::assetValue)?.let { return it }
         if (present(values::assetValue)) return when (placement) {
-            AdPlacement.Language1, AdPlacement.Language2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+            AdPlacement.Language1, AdPlacement.Language2,
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
             is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
-            AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
             else -> NativeTemplate.CTA_BOTTOM
         }
         if (!remotePosition) positionCta()?.let { return it }
         return when (placement) {
-            AdPlacement.Language1, AdPlacement.Language2 ->
-                ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
+            // Welcome Back renders exactly like the LFO slot.
+            AdPlacement.Language1, AdPlacement.Language2,
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2,
+            -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
 
             // Fixed, not configurable: the modal is 328dp wide and sized to a horizontal card.
             // Any other template overflows it, so this is not a slot a partner may re-skin.
             AdPlacement.LanguageConfirm -> NativeTemplate.DIALOG
 
             is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
-
-            AdPlacement.QuestionNative -> ads?.questionTemplate ?: NativeTemplate.CTA_BOTTOM
 
             is AdPlacement.StepFullScreen, AdPlacement.Ob5, AdPlacement.SplashNative -> NativeTemplate.FULL_SCREEN
 
@@ -107,7 +108,6 @@ object NativeTemplates {
             AdPlacement.SplashInlineNative,
             AdPlacement.SplashInterstitial,
             AdPlacement.AfterOnboardingInterstitial,
-            AdPlacement.QuestionInterstitial,
             AdPlacement.AppResume,
             -> NativeTemplate.CTA_BOTTOM
         }

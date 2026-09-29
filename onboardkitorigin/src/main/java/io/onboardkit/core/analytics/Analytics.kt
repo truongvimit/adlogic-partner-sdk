@@ -94,18 +94,6 @@ sealed class AnalyticsEvent(val name: String, val params: Map<String, Any> = emp
         ),
     )
 
-    class QuestionViewed(val source: String) :
-        AnalyticsEvent("ob_question_view", mapOf("source" to source))
-
-    class QuestionOptionSelected(val optionId: String, val selected: Boolean) :
-        AnalyticsEvent(
-            "ob_question_option",
-            mapOf("option_id" to optionId, "selected" to selected),
-        )
-
-    class QuestionCompleted(val count: Int) :
-        AnalyticsEvent("ob_question_completed", mapOf("answer_count" to count))
-
     class FlowCompleted(val stepsShown: Int, val dwellMs: Long? = null) :
         AnalyticsEvent(
             "ob_complete_flow",

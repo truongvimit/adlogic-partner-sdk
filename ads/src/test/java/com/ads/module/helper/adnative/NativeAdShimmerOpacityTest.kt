@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -62,7 +63,7 @@ class NativeAdShimmerOpacityTest {
     }
 
     @Test
-    fun generatedSkeletonRetainsVisibleBlocksAndReadableAdBadge() {
+    fun `generated skeleton hides XML ad colors while retaining badge geometry`() {
         withSkeleton({ NativeAdShimmer.from(it, R.layout.custom_native_admob_medium) }) { host, skeleton ->
             val headline = skeleton.findViewById<TextView>(R.id.ad_headline)
             val cta = skeleton.findViewById<TextView>(R.id.ad_call_to_action)
@@ -72,7 +73,7 @@ class NativeAdShimmerOpacityTest {
             assertTrue("Headline keeps its placeholder geometry", headlineRect.width() > 0 && headlineRect.height() > 0)
             assertTrue("CTA remains below the headline", ctaRect.top >= headlineRect.bottom)
             assertTrue("Ad badge remains readable", badge.text.toString().trim().equals("ad", ignoreCase = true))
-            assertTrue("Ad badge text must not be transparent", Color.alpha(badge.currentTextColor) > 0)
+            assertEquals("Ad badge must use the skeleton text treatment", 0, Color.alpha(badge.currentTextColor))
             assertEquals("Placeholder headline text is hidden", 0, Color.alpha(headline.currentTextColor))
             val frame = render(host, Color.RED)
             try {
@@ -80,6 +81,28 @@ class NativeAdShimmerOpacityTest {
                 val padding = frame.getPixel(headlineRect.centerX(), 3)
                 assertTrue("A loading skeleton must retain block contrast, not become a flat card", block != padding)
             } finally { frame.recycle() }
+        }
+    }
+
+    @Test
+    fun remoteStyleColorsTheGeneratedSkeletonLikeTheLoadedAd() {
+        val remoteColor = Color.parseColor("#1E88E5")
+        withSkeleton({ activity ->
+            NativeAdShimmer.from(
+                activity,
+                R.layout.custom_native_admob_medium,
+                NativeAdStyle(ctaBackgroundColor = remoteColor),
+            )
+        }) { host, skeleton ->
+            val cta = skeleton.findViewById<View>(R.id.ad_call_to_action)
+            val badge = skeleton.findViewById<View>(R.id.ad_icon)
+            assertEquals(remoteColor, (cta.background as GradientDrawable).color?.defaultColor)
+            val badgeBitmap = Bitmap.createBitmap(badge.width, badge.height, Bitmap.Config.ARGB_8888)
+            try {
+                badge.background.setBounds(0, 0, badge.width, badge.height)
+                badge.background.draw(Canvas(badgeBitmap))
+                assertEquals(remoteColor, badgeBitmap.getPixel(1, badge.height / 2))
+            } finally { badgeBitmap.recycle() }
         }
     }
 
