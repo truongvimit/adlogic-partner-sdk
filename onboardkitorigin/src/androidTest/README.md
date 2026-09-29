@@ -78,6 +78,33 @@ The notification remains open longer than the test's splash wait budget. This ve
 
 Real GMA tests require connectivity and an actual fill. A vendor no-fill is reported as a failure to exercise the intended scenario, not silently counted as a pass. These tests do not establish revenue uplift or exhaust every mediation network. Natural one-hour expiry remains covered by virtual-clock unit tests.
 
+## Interstitial preload screen whitelist
+
+`io.onboardkit.ads.InterstitialPreloadScreensDeviceTest` uses the public screen-report API,
+real Android lifecycle/Handler scheduling, Tracker request events and Google's test interstitial.
+Run each method in a fresh instrumentation process on an awake, unlocked, online device:
+
+```sh
+adb shell am instrument -w \
+  -e class 'io.onboardkit.ads.InterstitialPreloadScreensDeviceTest#earlyEntryKeepsTheOriginalPreloadDeadline' \
+  io.onboardkit.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+- `earlyEntryKeepsTheOriginalPreloadDeadline`: entering at 2.5 seconds preserves the original
+  6-second preload deadline for an 8-second interval with a 2-second lead.
+- `lateEntryLoadsImmediatelyAndReadyBackRemainsUsableOnHome`: Home holds elapsed eligibility;
+  function entry starts a request within one second, a real fill stays cached on Home, and the
+  Back placement remains showable there. Repeated screen reports do not replace the cache.
+- `leavingBeforeDeadlineHoldsEligibilityUntilReentry`: leaving before the deadline prevents the
+  request; reentry after it starts immediately. A stale screen registration cannot clear the new one.
+- `completedTapRemainsHeldOnHomeUntilFunctionEntry`: entering a function does not add a tap;
+  a real public zero-wait Back action on Home satisfies the tap gate, then function entry loads.
+
+Polling is deliberately set to one minute, so immediate requests must come from screen updates.
+These tests never present or click an ad. They temporarily normalize the test package's behavior
+document and restore its previous remote value in teardown; they do not clear application data or
+change device settings. Exact boundary and controlled failure/retry cases remain in the JVM suite.
+
 ## Content insets fallback and screenshots
 
 `io.onboardkit.ui.base.ContentInsetsScreenshotDeviceTest` opens the real language screen with
