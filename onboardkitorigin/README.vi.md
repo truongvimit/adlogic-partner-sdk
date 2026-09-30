@@ -173,7 +173,7 @@ Chỉ cấu hình các slot cần dùng; một số slot kế thừa unit dự p
 Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo thứ tự request; banner nhận một ID.
 
 `AdsConfig.fromAdConfig()`, mặc định của `onboardKitConfig`, gắn các tên JSON chuẩn như `inter_splash`, `native_lang` và giữ chúng cập nhật sau mỗi lần fetch; truyền thêm map cho các tên khác trong app.
-`ad_config.json` của app chỉ thay unit viết trong code với các key được gắn theo cách này. Key chuẩn mà `ad_remote_config` trên backend khai báo được áp dụng không cần gắn và được ưu tiên hơn mọi unit viết trong code, kể cả `stepNatives` và `splashInterstitialOldUser`, nên không cần dựng lại config trong `onRemoteFetched()`.
+Key chuẩn mà `ad_config.json` của app hoặc `ad_remote_config` trên backend khai báo được áp dụng không cần gắn và được ưu tiên hơn mọi unit viết trong code, kể cả `stepNatives` và `splashInterstitialOldUser`, nên không cần dựng lại config trong `onRemoteFetched()`.
 Key gốc khai báo `isEnable: false` là công tắc tổng, tắt luôn mọi tầng `_high*`, nên slot không có ad unit và flow bỏ qua.
 [OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
 
@@ -223,8 +223,8 @@ không gửi gì, SDK sẽ tắt cả preload lẫn show tự động. Không đ
 ## App-open khi quay lại app
 
 Hoàn tất [cấu hình app-open](../ads/README.md#app-open-on-return). `AdsConfig.fromAdConfig()`
-đã gắn `appResume` với `open_resume`, và `open_resume` trong `ad_remote_config` trên backend điền slot
-này không cần gắn. Nếu tự dựng `AdsConfig` và remote không có entry này, thêm
+đã gắn `appResume` với `open_resume`, và `open_resume` trong `ad_config.json` hoặc `ad_remote_config` trên backend
+điền slot này không cần gắn. Nếu tự dựng `AdsConfig` và cả hai đều không khai, thêm
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
 để cả hai cùng đọc placement `open_resume`.
 Màn ngôn ngữ và nội dung onboarding cho phép hiện resume ad đã sẵn sàng khi thực sự ra nền/quay lại.

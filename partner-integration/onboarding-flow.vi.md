@@ -76,8 +76,8 @@ Parameter **`ad_remote_config`**, kiểu String chứa document cấu hình ads 
 - Thiếu placement hoặc tất cả tầng bị tắt/ID không hợp lệ: không request. Content vẫn hiện, vùng ads ẩn; fullscreen bị bỏ qua.
 - Consent, premium, cờ từng placement, UA và force-update gate vẫn được kiểm tra.
 - App example khai báo và bật sáu placement OB cùng các tầng trong cả debug/release assets; remote hợp lệ có thể ghi đè từng field. Remote đã activate/cache vẫn được dùng khi fetch thất bại.
-- SDK nói chung vẫn hỗ trợ assets/raw ID của partner; placement nào `ad_remote_config` của backend khai báo thì remote ưu tiên hơn raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải chủ động đặt các entry local thành `isEnable = false`.
-- Debug mặc định giữ ad unit test của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) và không để remote thay ad IDs; các field khác của `ad_remote_config` (ví dụ `isEnable`) và settings `onboarding_config` vẫn thử được qua remote. Key chỉ remote khai báo bị bỏ, trừ khi nó tắt slot. Không dùng ad unit production để test.
+- SDK nói chung vẫn hỗ trợ assets/raw ID của partner; thứ tự ưu tiên là `ad_remote_config` của backend > `ad_config.json` của app > raw ID trong code. Partner tự bật local assets thì đó vẫn là nguồn ads hợp lệ; muốn remote-only phải chủ động đặt các entry local thành `isEnable = false`.
+- Mọi build đọc cấu hình từ `ad_config.json`. Build debuggable đọc thêm `ad_config_debug.json`, file này chỉ có một `"id"` cho mỗi key all-price (`native_reward`, không cần `native_reward_high`): ID test thay mọi ID của vị trí, các floor `_high*` không request, nên debug không chạy waterfall. Field khác trong file debug bị bỏ qua kèm log `WARN`; key đang bật mà thiếu ID test thì không có ad. `ad_remote_config` remote áp mọi field trừ ID; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote khai báo. Settings `onboarding_config` áp như release. Không dùng ad unit production để test.
 
 ## Preload và vòng đời ads
 

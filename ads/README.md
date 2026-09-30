@@ -101,10 +101,11 @@ Create `app/src/main/assets/ad_config.json`, replacing the placeholders with ad 
 }
 ```
 
-Use test ad units in `ad_config_debug.json` for debug builds. If absent, debug falls back to
-`ad_config.json`; the SDK does not replace live IDs with test IDs. Missing placements are disabled.
-A debuggable build keeps the ad unit IDs of the file it loaded: a remote `ad_remote_config` sets
-every other field, and `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes its IDs as well.
+Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds one `"id"` per all-price key and nothing else (`native_reward`, not `native_reward_high`): that test ID replaces every ID of the placement and its `_high*` floors request nothing, so each placement loads one test ID through the usual load path. Other fields in the debug file are ignored with a `WARN`, and an enabled key without a test ID gets no ad. Remote `ad_remote_config` applies every field except IDs; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the IDs remote declares. Without a debug file, debug requests the `ad_config.json` IDs.
+
+Sources rank remote `ad_remote_config` (`ads_remote_config` is read when the Console has no
+`ad_remote_config`) > `ad_config.json` > ad units set in code > SDK defaults.
+
 For waterfall floors, add `<placement>_high`, `_high1`…`_high9`; they are requested highest first
 and the base key last. The base key is the placement's master switch — `"isEnable": false` there
 turns off every floor. See [AdUnitConfig](src/main/java/com/ads/module/config/AdUnitConfig.kt).
@@ -291,7 +292,7 @@ Explicit timer/resume refresh options remain separate and are disabled by defaul
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
 | Rewarded ads | `RewardAdManager.preload(context, placement)` (or `load`) shares one cache/request per placement. `show(activity, placement) { earned -> }` consumes a ready ad; `loadAndShow(activity, placement, onSuccess, onFailed)` uses cache, waits for an active request, or loads. Grant only when earned; the manager does not refill automatically. `show` keeps the placement's config, UA, premium and consent gates. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
-| App-open on return | Set `ERainAdConfig.idAdResume` from the `open_resume` placement before init; an `open_resume` in the backend's `ad_remote_config` needs no seed. Exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`; keep app-open off with `AppOpenManager.getInstance().disableAppResume()`. See [App-open on return](#app-open-on-return). |
+| App-open on return | Declare `open_resume` in `ad_config.json` or the backend's `ad_remote_config`; `ERainAdConfig.idAdResume` is only the fallback when neither declares it. Exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`; keep app-open off with `AppOpenManager.getInstance().disableAppResume()`. See [App-open on return](#app-open-on-return). |
 
 ## Automatic interstitial preload
 
@@ -449,9 +450,8 @@ idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty(
 
 From then on the SDK re-points the unit at `open_resume` on every config update, so a remote
 refresh needs no extra call. `open_resume` must carry an ad unit id; an entry that only tunes the
-load delay leaves the unit as it is. The seed is what lets your shipped `ad_config.json` take over:
-an `open_resume` with an id in the backend's `ad_remote_config` sets the unit without one, so
-app-open runs even when the app seeds nothing. To keep app-open off, call
+load delay leaves the unit as it is. An `open_resume` with an id in `ad_config.json` or the backend's
+`ad_remote_config` outranks the seed, so app-open runs even when the app seeds nothing. To keep app-open off, call
 `AppOpenManager.getInstance().disableAppResume()`; no config document turns it back on. Ship
 `open_resume` enabled with a real id — `isEnable: false` empties the unit, and app-resume stays
 off until the config turns it back on.
@@ -469,13 +469,13 @@ AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.
 
 OnboardKit handles its splash/fullscreen/survey exclusions. With OnboardKit, its placement gate
 also needs `AdsConfig.appResume`: `AdsConfig.fromAdConfig()` binds it to `open_resume`, and an
-`open_resume` in the backend's `ad_remote_config` fills it without a binding; see the
+`open_resume` in `ad_config.json` or the backend's `ad_remote_config` fills it without a binding; see the
 [onboarding guide](../onboardkitorigin/README.md#app-open-on-return).
 
 The SDK loads on a genuine background transition and shows only an already-ready ad on an
 eligible return. It does not wait for a load on foreground entry. To tune background delay,
 add `"app_resume_load_delay_ms": 2000` inside the `open_resume` placement in
-`ad_config.json`, `ad_config_debug.json`, or remote `ad_remote_config`:
+`ad_config.json` or remote `ad_remote_config`:
 
 ```json
 {
@@ -511,8 +511,8 @@ users on `inter_splash_o`.
 add validated remote overrides with bundled/custom local defaults and last-good remote cache.
 A remote value, live or cached, outranks your app-asset JSON at any scope, which outranks options
 set in code. OnboardKit resolves standard ad_config placements after fetch through
-`AdsConfig.fromAdConfig()`, and applies a standard key the backend's `ad_remote_config` declares
-even when your `AdsConfig` does not bind it; native template, CTA radius and Skip/X presentation
+`AdsConfig.fromAdConfig()`, and applies a standard key that `ad_config.json` or the backend's
+`ad_remote_config` declares even when your `AdsConfig` does not bind it; native template, CTA radius and Skip/X presentation
 remain configurable for experiments.
 See the [Firebase setup](../partner-integration/firebase-integration.md#remote-json) and
 [all fields/defaults](../partner-integration/remote-settings.md).
@@ -548,8 +548,8 @@ placement-driven entry points have these behaviors:
 |---|---|
 | Init crashes | AdMob app ID placeholder, both Meta metadata entries/resources, and your Application registration. |
 | No ads | Consent result, premium state, exact placement key, usable IDs and `isEnable`. `showSkipReason` explains an interstitial rejection. |
-| Debug uses unexpected IDs | Supply `ad_config_debug.json`; debug does not substitute test IDs automatically. |
-| Remote config stays unchanged | Install a source and refresh it. A debuggable build keeps its asset's ad unit IDs and applies every other remote field; call `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` only when you intend to spend the remote IDs. |
+| Debug uses unexpected IDs | Supply `ad_config_debug.json` with one `id` per all-price key; the `WARN` from `AdRemoteConfig` lists enabled keys that have none. |
+| Remote config stays unchanged | Install a source and refresh it. `AdConfig` logging `cleared` means the Console has neither `ad_remote_config` nor `ads_remote_config`; pass another name to `FirebaseAdConfigSource(key)`. A debuggable build keeps its `ad_config_debug.json` test IDs and applies every other remote field; call `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` only when you intend to spend the remote IDs. |
 | Native/banner stays empty | Use the right container/lifecycle, wait for consent, and confirm the placement matches your JSON. |
 
 Consumer ProGuard rules ship with the library. Bundled adapters are listed in [build.gradle](build.gradle).

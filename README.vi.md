@@ -80,7 +80,7 @@ AdLogic cho phép thử request ads khi UMP báo lỗi hoặc hết timeout mạ
 
 | Phần | Cần làm |
 | --- | --- |
-| Ads | AdMob app ID, Meta app ID/client token, placement ID trong `assets/ad_config.json` và ID test trong `ad_config_debug.json`. Nếu thiếu file debug, SDK dùng file thường. |
+| Ads | AdMob app ID, Meta app ID/client token, placement trong `assets/ad_config.json`; `ad_config_debug.json` chỉ chứa một `id` test cho mỗi key all-price, build debug dùng ID đó cùng mọi field khác của `ad_config.json`. |
 | Onboarding | Activity đích, ngôn ngữ/nội dung và các placement quảng cáo. |
 | Mua hàng | Product ID trên Play và cách xác định premium. PayKit cần thêm URL điều khoản/quyền riêng tư và JSON catalog của app. |
 | Firebase · tùy chọn | Cấu hình Firebase của app và các tham số Remote Config đã publish cho source cần dùng. |

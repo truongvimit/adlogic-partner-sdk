@@ -80,7 +80,7 @@ AdLogic allows ad requests to be attempted when UMP reports an error or the netw
 
 | Area | What to do |
 | --- | --- |
-| Ads | AdMob app ID, Meta app ID/client token, placement IDs in `assets/ad_config.json` and test IDs in `ad_config_debug.json`. Debug falls back to the normal file if its file is absent. |
+| Ads | AdMob app ID, Meta app ID/client token, placements in `assets/ad_config.json`; `ad_config_debug.json` holds only one test `id` per all-price key, used by debug builds with every other field from `ad_config.json`. |
 | Onboarding | Destination Activity, language/content configuration and ad placements. |
 | Purchases | Play product IDs and entitlement mapping. PayKit also needs terms/privacy URLs and your catalog JSON. |
 | Firebase · optional | Firebase app configuration and published Remote Config parameters for the sources you use. |

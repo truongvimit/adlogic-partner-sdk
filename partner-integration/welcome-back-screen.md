@@ -36,7 +36,7 @@ Keep `ob_welcome_back_options` as the `RecyclerView`, `ob_welcome_back_continue`
 
 ## Ads and completion
 
-Declare these in both `ad_config.json` (production IDs) and `ad_config_debug.json` (test IDs), in the same shape as the other native placements:
+Declare these in `ad_config.json` (production IDs), in the same shape as the other native placements; `ad_config_debug.json` needs only `native_welcome1` and `native_welcome2`, each with one test `id`:
 
 ```json
 {

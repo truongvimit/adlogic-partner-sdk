@@ -36,7 +36,7 @@ Restyle करने के लिए app में ये resource names overri
 
 ## Ads और completion
 
-इन्हें `ad_config.json` (production IDs) और `ad_config_debug.json` (test IDs) दोनों में, बाकी native placements जैसे shape में declare करें:
+इन्हें `ad_config.json` (production IDs) में, बाकी native placements जैसे shape में declare करें; `ad_config_debug.json` में सिर्फ `native_welcome1` और `native_welcome2`, हर एक की एक test `id` चाहिए:
 
 ```json
 {

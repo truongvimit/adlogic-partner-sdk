@@ -187,8 +187,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public void init(Application application, String appOpenAdId) {
         setAppResumeAdId(appOpenAdId);
-        // The seed is only a fallback: a backend document that already names the unit keeps it.
-        if (AdRemoteConfig.remoteDeclares(RESUME_PLACEMENT)) applyRemoteConfig();
+        // The seed is only a fallback: a remote or asset ad_config that already names the unit keeps it.
+        if (AdRemoteConfig.declaredAboveCode(RESUME_PLACEMENT)) applyRemoteConfig();
         // Register unconditionally, even with a blank id: the id usually only arrives later, from
         // remote config via setAppResumeAdId. Gating registration on it left the hooks unattached
         // for the whole process, so app-resume never fired. Requests stay gated in fetchAd.
@@ -466,10 +466,9 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Two no-ops keep this from taking over a decision it was not given: unless
      * {@code open_resume} actually carries an ad unit id, because an entry that only tunes
      * {@code app_resume_load_delay_ms} is not a statement about which unit to request; and, while
-     * the document is the app's own asset, until a resume unit exists, because opting into
-     * app-resume from shipped config stays the partner's own explicit call. A document from the
-     * backend needs no such unit: it outranks whatever the partner seeded. Switching app-resume
-     * off stays {@link #disableAppResume()}, which no document overrides.
+     * neither the backend nor the app's {@code ad_config.json} declares {@code open_resume}, until
+     * a resume unit exists. A declared {@code open_resume} outranks whatever the partner seeded in
+     * code. Switching app-resume off stays {@link #disableAppResume()}, which no document overrides.
      *
      * Once it has set the unit it keeps setting it, empty id included. Without that, switching
      * {@code isEnable} off would empty the id and then re-tripping the second no-op forever, so
@@ -483,7 +482,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         }
         AdUnitConfig unit = AdRemoteConfig.getInstance().getAds().get(RESUME_PLACEMENT);
         if (unit == null || unit.getWaterfallIds().isEmpty()) return;
-        if (!resumeUnitFromConfig && !AdRemoteConfig.remoteDeclares(RESUME_PLACEMENT)
+        if (!resumeUnitFromConfig && !AdRemoteConfig.declaredAboveCode(RESUME_PLACEMENT)
                 && (appResumeAdId == null || appResumeAdId.isEmpty())) return;
         List<String> ids = AdGate.adUnitIds(RESUME_PLACEMENT);
         resumeUnitFromConfig = true;

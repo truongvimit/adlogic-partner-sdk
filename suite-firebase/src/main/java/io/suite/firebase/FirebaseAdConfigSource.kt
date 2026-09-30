@@ -15,14 +15,32 @@ import org.json.JSONObject
  * remotely.
  *
  * @param key the Remote Config parameter holding the ad config JSON
+ * @param aliases parameters read, in order, when the console has no [key]. A console that spells
+ *   the document `ads_remote_config` otherwise reads as "no remote ad config" and the app silently
+ *   runs on its shipped assets.
  */
 class FirebaseAdConfigSource @JvmOverloads constructor(
     private val key: String = "ad_remote_config",
+    private val aliases: List<String> = listOf("ads_remote_config"),
 ) : AdConfigSource, com.ads.module.config.settings.SettingsConfigSource {
 
     private companion object {
         const val CACHE_NAME = "adlogic_remote_ad_config"
         const val CACHE_VALUE = "last_valid"
+    }
+
+    @Volatile
+    private var reportedKey: String? = null
+
+    private fun deliveredRaw(): String? {
+        val (name, raw) = (listOf(key) + aliases).distinct().firstNotNullOfOrNull { name ->
+            RemoteConfigClient.remoteRawString(name)?.let { name to it }
+        } ?: return null
+        if (name != key && reportedKey != name) {
+            reportedKey = name
+            Log.w("FirebaseAdConfig", "Remote ad config read from '$name'; '$key' is the canonical parameter name")
+        }
+        return raw
     }
 
     private fun prefs(): SharedPreferences? = runCatching {
@@ -32,7 +50,7 @@ class FirebaseAdConfigSource @JvmOverloads constructor(
 
     /** Accept only a document the SDK parser can resolve; malformed payloads never replace disk. */
     private fun activeRaw(usePersistedOnMissing: Boolean): String? {
-        val raw = RemoteConfigClient.remoteRawString(key)
+        val raw = deliveredRaw()
         if (raw == null) {
             // A missing remote parameter after a successful activation is a deletion. The
             // cached() path is the failure/restart path and deliberately restores the last valid

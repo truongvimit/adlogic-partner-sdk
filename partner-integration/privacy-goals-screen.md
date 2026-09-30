@@ -40,7 +40,7 @@ The SDK finds a clickable `Button` or `TextView` for the action. If several cont
 
 ## Ads and completion
 
-Use these entries in both `ad_config.json` and `ad_config_debug.json`, with production IDs in release and test IDs in debug:
+Use these entries in `ad_config.json` with production IDs; `ad_config_debug.json` needs only `native_select` and `native_select_alt`, each with one test `id`:
 
 ```json
 {

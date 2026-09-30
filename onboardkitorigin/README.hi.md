@@ -173,7 +173,7 @@ Onboarding के बाहर native slots के लिए [Ads गाइड](
 Native/interstitial waterfall में `tiers = listOf(highId, fallbackId)` request के क्रम में दें; banner एक ID लेता है।
 
 `AdsConfig.fromAdConfig()`, जो `onboardKitConfig` का default है, `inter_splash` या `native_lang` जैसे standard JSON नाम जोड़ता है और हर fetch के बाद उन्हें live रखता है; आपकी app में अलग नामों के लिए उसे map दें।
-आपकी अपनी `ad_config.json` code में लिखी unit को सिर्फ इसी तरह जुड़ी keys के लिए बदलती है। Backend के `ad_remote_config` में घोषित standard key बिना binding के लागू होती है और code में लिखी हर unit से ऊपर रहती है, `stepNatives` और `splashInterstitialOldUser` सहित, इसलिए `onRemoteFetched()` में config दोबारा बनाने की ज़रूरत नहीं है।
+आपकी `ad_config.json` या backend के `ad_remote_config` में घोषित standard key बिना binding के लागू होती है और code में लिखी हर unit से ऊपर रहती है, `stepNatives` और `splashInterstitialOldUser` सहित, इसलिए `onRemoteFetched()` में config दोबारा बनाने की ज़रूरत नहीं है।
 `isEnable: false` घोषित base key placement का master switch है और हर `_high*` floor को साथ बंद करती है, इसलिए slot को कोई ad unit नहीं मिलता और flow उसे छोड़ देता है।
 Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) पूरी mapping और native templates दिखाता है।
 
@@ -223,8 +223,8 @@ page पर forward swipe उसी exit interstitial से गुज़रत�
 ## App-open on return
 
 [Ads app-open setup](../ads/README.md#app-open-on-return) पूरा करें। `AdsConfig.fromAdConfig()`
-पहले से `appResume` को `open_resume` से जोड़ता है, और backend के `ad_remote_config` में `open_resume`
-उसे बिना binding के भरता है। हाथ से बनाए `AdsConfig` में remote entry न हो तो
+पहले से `appResume` को `open_resume` से जोड़ता है, और `ad_config.json` या backend के `ad_remote_config` में
+`open_resume` उसे बिना binding के भरता है। हाथ से बनाए `AdsConfig` में दोनों में से कोई इसे declare न करे तो
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
 जोड़ें, ताकि दोनों एक ही `open_resume` placement पढ़ें।
 Language और onboarding content pages वास्तविक background/return पर तैयार resume ad दिखा

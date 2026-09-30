@@ -86,11 +86,11 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Content to paste | Purpose |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | Existing unit IDs, floors, switches and CTA fields. A key declared here outranks ad unit IDs written in code, and an `open_resume` with an ID turns app-open on. Keep the existing parameter name. |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | Existing unit IDs, floors, switches and CTA fields. A key declared here outranks your `ad_config.json`, which outranks ad unit IDs written in code; an `open_resume` with an ID turns app-open on. Keep the existing parameter name. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Ad-format behavior, timeouts, reload/cache and native CTA radius. |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, X/Skip, swipe and preload. |
 
-`ad_config.json` and `ad_config_debug.json` are local asset filenames; the default Firebase source reads **one** ad-unit key, `ad_remote_config`. Do not create new `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` or `onboarding_config_debug` parameters for this setup. Debug keeps the ad unit IDs of `ad_config_debug.json` (or `ad_config.json` when there is no debug file) pinned by default **but applies every other `ad_remote_config` field and both new settings parameters**; keys only remote declares are dropped unless they switch a slot off, and a `WARN` log from `AdRemoteConfig` names the pinned file. `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs as well. Use your test project/conditions for experiments. Existing `ob_*` keys remain compatible; do not nest them in these JSON objects. A delivered `ob_*` key ranks below these documents and above your app assets and Kotlin config. [Firebase parameter types and conditions](https://firebase.google.com/docs/remote-config/parameters).
+`ad_config.json` and `ad_config_debug.json` are local asset filenames; the default Firebase source reads **one** ad-unit key, `ad_remote_config` (or `ads_remote_config` when the console has no `ad_remote_config`). Do not create new `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` or `onboarding_config_debug` parameters for this setup. Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds one `"id"` per all-price key and nothing else (`native_reward`, not `native_reward_high`): that test id replaces every id of the placement and its `_high*` floors request nothing, so debug runs no waterfall. Other fields in the debug file are ignored with a `WARN`, and an enabled key without a test id gets no ad. Remote `ad_remote_config` applies every field except ids; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the ids remote declares. Both settings parameters apply as in release. Use your test project/conditions for experiments. Existing `ob_*` keys remain compatible; do not nest them in these JSON objects. A delivered `ob_*` key ranks below these documents and above your app assets and Kotlin config. [Firebase parameter types and conditions](https://firebase.google.com/docs/remote-config/parameters).
 
 `ObSplashActivity` already calls `AdConfig.refresh()`. With the sample's `AdsConfig.fromAdConfig()`, IDs and settings resolve after fetch without calling `OnboardKitSetup.configure()` again in `onRemoteFetched`. Keep that hook only for app-specific work. Without SDK splash, await `AdConfig.refresh()` from your coroutine before the relevant screen/request, after initializing the kits; that refresh also re-reads the legacy `ob_*` keys.
 
@@ -194,12 +194,12 @@ Open the paywall as the [PayKit guide](paywall-integration.md) shows; do not syn
 | `FirebaseSink(collectionFollowsConsent)` | `true`: once consent is decided, collection is on when analytics is granted and off otherwise. `false`: the app manages collection itself; the sink still updates Consent Mode. While both axes are still `UNKNOWN`, your Firebase settings are left as they are. |
 | Consent mapping | Analytics → `ANALYTICS_STORAGE`; ads → `AD_STORAGE`, `AD_USER_DATA`, `AD_PERSONALIZATION`. Once one axis is decided, an axis still `UNKNOWN` is sent as denied. |
 | `FirebaseSink.setDefaultEventParameters(...)` | No extra defaults. Use it when you need params on the events Firebase collects itself too; `Tracker.setDefaults` applies only to events that go through Tracker. |
-| `FirebaseAdConfigSource(key)` | `ad_remote_config`; change it when your Console uses a different key. |
+| `FirebaseAdConfigSource(key, aliases)` | `ad_remote_config`, then `ads_remote_config` when the Console has no `ad_remote_config`; pass `key` when your Console uses another name. |
 | `FirebaseConfigSource(key)` | `paywall_config`; change it when your Console uses a different key. |
 | Ads/PayKit fetch | Installing a source does not fetch; `AdConfig.install` applies the `ad_remote_config` value Firebase last activated. The two sources share one fetch and keep a successful result for the process; a failure permits a retry, still subject to Firebase's minimum fetch interval (12 hours unless your app sets `minimumFetchIntervalInSeconds`). |
 | Blank / Firebase in-app defaults | Both sources ignore them; do not use `setDefaultsAsync` in place of the kit's local JSON. |
 | Offline / invalid JSON | The kit keeps its current config; PayKit's remote cache takes priority over the bundled fallback. No separate fallback code is needed. |
-| Debug ads / paywall | Debug ad-unit IDs stay pinned by default, but every other `ad_remote_config` field and both grouped settings documents still apply. PayKit has no equivalent pinning. Use suitable test projects/conditions. |
+| Debug ads / paywall | Debug requests the test IDs of `ad_config_debug.json`, but every other `ad_remote_config` field and both grouped settings documents still apply. PayKit has no debug-only IDs. Use suitable test projects/conditions. |
 
 Call only `AdConfig.refresh()`/`PayKit.sync()`; no extra `fetchAndActivate` is needed. The `ob_*` remote flags have their own OnboardKit adapter; the two new JSON documents are applied by the ads source.
 
@@ -208,7 +208,7 @@ Call only `AdConfig.refresh()`/`PayKit.sync()`; no extra `fetchAndActivate` is n
 - [ ] The build resolves Google Services and the application ID matches the Firebase JSON.
 - [ ] `Tracker.sinkIds()` contains `firebase`; app and SDK events appear once, according to the chosen consent.
 - [ ] Remote is published; test online, offline and invalid JSON against the local fallback.
-- [ ] Debug ads still use the pinned asset's ad unit IDs; the paywall opens from local/cache even before remote finishes.
+- [ ] Debug ads request the test IDs of `ad_config_debug.json`; the paywall opens from local/cache even before remote finishes.
 
 To watch Firebase DebugView, run `adb shell setprop debug.firebase.analytics.app <applicationId>` and open the app; turn it off with `adb shell setprop debug.firebase.analytics.app .none.`. [Firebase DebugView](https://firebase.google.com/docs/analytics/debugview).
 

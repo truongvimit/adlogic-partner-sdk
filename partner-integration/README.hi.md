@@ -31,7 +31,7 @@ Launcher से app खोलने वाला लौटता user splash क
 - **बुनियादी code:** सिर्फ app का data और SDK wiring घोषित करता है; SDK defaults बनाए रखता है; नमूना JSON example का configuration रखता है।
 - **वैकल्पिक tables:** default, कब बदलना है और कहाँ configure करना है यह बताते हैं। पूरी table अपने code या Firebase में copy करना जरूरी नहीं।
 - **App placements:** [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) OB keys और आपकी app screens को एक जगह रखता है। Placement key ही किसी ad slot की एकमात्र पहचान है — ad unit ID कई placements में साझा होता है इसलिए उनमें फर्क नहीं कर सकता; ad unit IDs JSON में रहते हैं।
-- **नमूना files:** [ad_config.json](examples/ads-onboarding/ad_config.json) और [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) दोनों test ad IDs इस्तेमाल करते हैं। इन्हें `app/src/main/assets/` में copy करें; release से पहले असली file के IDs बदलें।
+- **नमूना files:** [ad_config.json](examples/ads-onboarding/ad_config.json) में हर placement की settings होती हैं (नमूने में test IDs); [ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json) में debug builds के लिए हर all-price key की सिर्फ एक test `id` होती है। दोनों को `app/src/main/assets/` में copy करें; release से पहले `ad_config.json` की IDs बदलें।
 - **Grouped settings:** [remote setup](firebase-integration.hi.md#remote-json), [custom local defaults](firebase-integration.hi.md#local-defaults), [सभी fields/defaults](remote-settings.hi.md)। दो String parameters जोड़ें; SDK defaults पहले से bundled हैं। Remote, live हो या cached, आपकी asset JSON और Kotlin config से ऊपर है; offline में local fallback से पहले valid remote cache बना रहता है।
 - **Module READMEs:** जरूरत पड़ने पर और APIs, lifecycle और customization यहाँ देखें।
 

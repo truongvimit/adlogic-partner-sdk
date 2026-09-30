@@ -63,7 +63,7 @@ privacyGoalsScreen = PrivacyGoalsScreenConfig(
 )
 ```
 
-Trong `ad_config_debug.json` và `ad_config.json`, thêm bốn placement (mặc định bật):
+Trong `ad_config.json`, thêm bốn placement (mặc định bật); `ad_config_debug.json` chỉ cần `native_select` và `native_select_alt`, mỗi key một `id` test:
 
 ```json
 "native_select_high": { "id": "...", "isEnable": true },

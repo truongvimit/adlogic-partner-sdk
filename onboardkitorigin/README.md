@@ -182,7 +182,7 @@ Leave optional slots unset unless you need them; some slots inherit fallback uni
 Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in request order; banners take one ID.
 
 `AdsConfig.fromAdConfig()`, the `onboardKitConfig` default, binds the standard JSON names such as `inter_splash` or `native_lang` and keeps them live after each fetch; pass it a map for names that differ in your app.
-Your own `ad_config.json` replaces a unit written in code only for keys bound this way. A standard key the backend's `ad_remote_config` declares applies without a binding and outranks any unit written in code, including `stepNatives` and `splashInterstitialOldUser`, so there is no need to rebuild the config in `onRemoteFetched()`.
+A standard key that your `ad_config.json` or the backend's `ad_remote_config` declares applies without a binding and outranks any unit written in code, including `stepNatives` and `splashInterstitialOldUser`, so there is no need to rebuild the config in `onRemoteFetched()`.
 A base key declared `isEnable: false` is the placement's master switch and turns off every `_high*` floor with it, so the slot gets no ad unit and the flow skips it.
 The sample's [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
 
@@ -234,8 +234,8 @@ AutoBuffer group.
 ## App-open on return
 
 Complete the [Ads app-open setup](../ads/README.md#app-open-on-return). `AdsConfig.fromAdConfig()`
-already binds `appResume` to `open_resume`, and an `open_resume` in the backend's `ad_remote_config`
-fills it without a binding. With a hand-built `AdsConfig` and no remote entry, add
+already binds `appResume` to `open_resume`, and an `open_resume` in `ad_config.json` or the backend's
+`ad_remote_config` fills it without a binding. With a hand-built `AdsConfig` and neither declaring it, add
 `appResume = AdRemoteConfig.getInstance().tiersFor("open_resume").takeIf { it.isNotEmpty() }?.let { InterstitialAdUnit(tiers = it) }`
 so both read the same `open_resume` placement.
 Language and onboarding content pages allow a ready resume ad on a genuine background/return.

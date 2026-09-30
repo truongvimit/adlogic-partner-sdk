@@ -101,7 +101,7 @@ Publish these **String** parameters on Firebase Console → Remote Config:
 
 | Parameter | Content |
 |---|---|
-| `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. With OnboardKit, a key declared here also outranks ad unit IDs written in code. |
+| `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. It outranks the app's `ad_config.json`, which outranks ad unit IDs written in code. `ads_remote_config` is read when this parameter is absent. |
 | `paywall_config` | Your paywall JSON, including product IDs and optional placements. |
 
 Both sources accept a custom name through `key = "your_key"`. Blank values and in-app Firebase
@@ -117,5 +117,5 @@ on your asset.
 |---|---|
 | Firebase is unavailable | Matching `app/google-services.json`, app plugin and a rebuilt APK. |
 | Remote values are ignored | Publish the parameter; check its name, nonblank JSON and the module's parser requirements. |
-| Debug ads keep local ad unit IDs | A debuggable build keeps the ad unit IDs of the asset it loaded and applies every other `ad_remote_config` field; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs too. See [ads debug setup](../ads/README.md#2-add-placements). |
+| Debug ads use test IDs | A debuggable build requests the test IDs of `ad_config_debug.json` and applies every other `ad_remote_config` field; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` takes the remote IDs too. See [ads debug setup](../ads/README.md#2-add-placements). |
 | Analytics stops after a consent update | `Tracker.currentConsent` and your selected collection policy. |

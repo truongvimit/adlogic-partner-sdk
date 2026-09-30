@@ -37,12 +37,12 @@ internal class SplashInterCase(
         val entryKey = entry?.interKey
         val entryUnit = entryKey?.takeIf(config::declares)
             ?.let(config::tiersFor)?.takeIf { it.isNotEmpty() }?.let(::InterstitialAdUnit)
-        if (entryUnit != null && AdRemoteConfig.remoteDeclares(checkNotNull(entryKey))) return Resolved(entryKey, entryUnit)
-        // The host's unit is a fallback: remote declaring the key this launch spends outranks it.
+        if (entryUnit != null && AdRemoteConfig.declaredAboveCode(checkNotNull(entryKey))) return Resolved(entryKey, entryUnit)
+        // The host's unit is a fallback: remote or asset declaring the key this launch spends outranks it.
         if (hostUnit != null) {
-            val remoteSpeaks = entryKey?.let(AdRemoteConfig::remoteDeclares) == true ||
-                segmentKey?.let(AdRemoteConfig::remoteDeclares) == true
-            if (!remoteSpeaks) return Resolved(entryKey?.takeIf { entryUnit != null } ?: segmentKey, hostUnit)
+            val configSpeaks = entryKey?.let(AdRemoteConfig::declaredAboveCode) == true ||
+                segmentKey?.let(AdRemoteConfig::declaredAboveCode) == true
+            if (!configSpeaks) return Resolved(entryKey?.takeIf { entryUnit != null } ?: segmentKey, hostUnit)
         }
         if (entryUnit != null) return Resolved(entryKey, entryUnit)
         return Resolved(segmentKey, segmentUnit)

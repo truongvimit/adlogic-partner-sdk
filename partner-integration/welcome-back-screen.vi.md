@@ -36,7 +36,7 @@ Giữ `ob_welcome_back_options` là `RecyclerView`, `ob_welcome_back_continue` l
 
 ## Ads và kết thúc
 
-Khai trong cả `ad_config.json` (id production) và `ad_config_debug.json` (id test), cùng dạng với các vị trí native khác:
+Khai trong `ad_config.json` (id production), cùng dạng với các vị trí native khác; `ad_config_debug.json` chỉ cần `native_welcome1` và `native_welcome2`, mỗi key một `id` test:
 
 ```json
 {

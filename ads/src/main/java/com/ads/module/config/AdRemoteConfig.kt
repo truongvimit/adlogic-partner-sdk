@@ -3,6 +3,7 @@ package com.ads.module.config
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import androidx.annotation.RestrictTo
 import java.io.InputStream
 
 /**
@@ -120,24 +121,18 @@ data class AdRemoteConfig @JvmOverloads constructor(
         private var instance: AdRemoteConfig? = null
 
         /**
-         * Set by [initializeFromAssets] on a debuggable build.
+         * The test id of each all-price key, from `ad_config_debug.json`, while a debuggable build
+         * runs on it; null otherwise.
          *
-         * While it stands, a remote document keeps the ad unit ids the assets shipped and sets
-         * everything else. A debug run that took the live document's ids would spend the real
-         * units, which is invalid traffic on the app's own account.
+         * While it stands every resolved key requests its test id and every `_high*` floor is
+         * empty, whatever ad_config or the backend say about ids. A debug run that took the real
+         * ids would spend them, which is invalid traffic on the app's own account.
          */
         @Volatile
-        private var debugAssetsPinned = false
-
-        /** What [initializeFromAssets] loaded on a debuggable build, and from which file. */
-        @Volatile
-        private var pinnedAssets: AdRemoteConfig? = null
+        private var debugTestIds: Map<String, String>? = null
 
         @Volatile
-        private var pinnedFile: String? = null
-
-        @Volatile
-        private var pinReported = false
+        private var reportedMissingTestIds: Set<String>? = null
 
         @Volatile
         private var allowRemoteOverrideInDebug = false
@@ -157,12 +152,23 @@ data class AdRemoteConfig @JvmOverloads constructor(
         @JvmStatic
         fun isFromRemote(): Boolean = remoteDocument
 
-        /**
-         * True when the backend's document, not the app's assets, declares [baseKey] or one of its
-         * floors. Only then does ad_config outrank a value the app set in code.
-         */
+        /** True when the backend's document, not the app's assets, declares [baseKey] or one of its floors. */
         @JvmStatic
         fun remoteDeclares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { (baseKey + it) in remoteKeys }
+
+        /**
+         * True when the backend or the app's `ad_config.json` declares [baseKey] or one of its
+         * floors. Either outranks an ad unit the app set in code, which is then only the fallback.
+         */
+        @JvmStatic
+        fun declaredAboveCode(baseKey: String): Boolean =
+            remoteDeclares(baseKey) || FLOOR_SUFFIXES.any { (baseKey + it) in assetConfig.ads }
+
+        /** [key] without its `_high`/`_highN` floor suffix; the all-price key is its own base. */
+        @JvmStatic
+        fun baseKeyOf(key: String): String =
+            FLOOR_SUFFIXES.firstOrNull { it.isNotEmpty() && key.length > it.length && key.endsWith(it) }
+                ?.let(key::removeSuffix) ?: key
 
         /** True only when the active remote patch supplied this field for [baseKey]. */
         @JvmStatic
@@ -185,18 +191,17 @@ data class AdRemoteConfig @JvmOverloads constructor(
         fun isInitialized(): Boolean = instance != null
 
         /**
-         * Loads `assets/ad_config.json`, or `assets/ad_config_debug.json` on a debuggable build so
-         * a debug run never spends real ad units.
+         * Loads `assets/ad_config.json` for every build type. A debuggable build also loads
+         * `assets/ad_config_debug.json`, whose one test id per all-price key replaces every
+         * requestable id, so a debug run never spends real ad units.
          */
         @JvmStatic
         fun initializeFromAssets(context: Context) {
             com.ads.module.config.settings.AdBehavior.initialize(context)
             val debug = isDebuggable(context)
-            // A debug build with no debug config falls back rather than starting up empty.
-            val candidates = if (debug) listOf(DEBUG_FILE_NAME, RELEASE_FILE_NAME) else listOf(RELEASE_FILE_NAME)
-            val (fileName, loaded) = candidates.firstNotNullOfOrNull { name ->
-                fromAssets(context, name)?.let { name to it }
-            } ?: run {
+            val release = fromAssets(context, RELEASE_FILE_NAME)
+            val debugFile = if (debug) fromAssets(context, DEBUG_FILE_NAME) else null
+            if (release == null && debugFile == null) {
                 Log.e(
                     TAG,
                     "No ad config found. Ship assets/$RELEASE_FILE_NAME in your app, " +
@@ -204,26 +209,39 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 )
                 return
             }
-            Log.i(TAG, "Loaded $fileName with ${loaded.ads.size} placements (debug=$debug)")
-            assetConfig = loaded
-            pinAssets(loaded.takeIf { debug }, fileName)
-            // The shipped file never replaces a document the backend already delivered; that
-            // document is re-applied so a debuggable build pins its ids from here on.
-            if (isFromRemote()) applyRemote(remotePatch ?: AdRemoteConfig()) else publishResolved(false)
+            if (debug && debugFile == null) {
+                Log.w(TAG, "Debuggable build without assets/$DEBUG_FILE_NAME requests the release ad unit ids")
+            }
+            installAssets(release, debugFile)
         }
 
         /**
-         * True when a remote document must keep the ad unit ids the assets loaded.
-         *
-         * Read by [com.ads.module.config.AdConfig]; a host that deliberately injects a document
-         * through [initializeFromJson] is not gated by it.
+         * [release] is the app's settings tier; [debugFile], loaded only on a debuggable build,
+         * supplies the test ids. A debug-only app runs on its debug file for both.
          */
         @JvmStatic
-        fun isRemoteOverrideBlocked(): Boolean = debugAssetsPinned && !allowRemoteOverrideInDebug
+        @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+        fun installAssets(release: AdRemoteConfig?, debugFile: AdRemoteConfig?) {
+            val loaded = release ?: debugFile ?: return
+            Log.i(
+                TAG,
+                "Loaded ${if (release != null) RELEASE_FILE_NAME else DEBUG_FILE_NAME} with " +
+                    "${loaded.ads.size} placements (test ids=${debugFile != null})",
+            )
+            assetConfig = loaded
+            pinTestIds(debugFile)
+            // The shipped file never replaces a document the backend already delivered; that
+            // document is re-applied so a debuggable build takes its test ids from here on.
+            if (isFromRemote()) applyRemote(remotePatch ?: AdRemoteConfig()) else publishResolved(false)
+        }
+
+        /** True when a debuggable build requests `ad_config_debug.json` test ids, not remote ones. */
+        @JvmStatic
+        fun isRemoteOverrideBlocked(): Boolean = debugTestIds != null && !allowRemoteOverrideInDebug
 
         /**
-         * Lets a debuggable build take remote ad unit ids after all, for testing a live
-         * configuration. Off by default, so a debug run keeps spending test ids.
+         * Lets a debuggable build take the ad unit ids the backend declares, for testing a live
+         * configuration. Keys the backend gives no id keep their test id. Off by default.
          */
         @JvmStatic
         fun setAllowRemoteOverrideInDebug(allow: Boolean) {
@@ -231,49 +249,62 @@ data class AdRemoteConfig @JvmOverloads constructor(
         }
 
         /**
-         * [remote] as it may apply while [isRemoteOverrideBlocked]: a key the pinned assets also
-         * declare keeps their `id`/`ids` and takes every other field from remote. A key only
-         * remote declares keeps its behavior but has no requestable id unless the app shipped a
-         * test id for it; keys only the assets/code declare stay as resolved. Unpinned,
-         * [remote] as is.
+         * [resolved] with the debug test ids in place of every requestable id: an all-price key
+         * takes its test id (none when `ad_config_debug.json` lists none) and a `_high*` floor
+         * none, so no waterfall runs. Every other field stays as resolved. Outside a debuggable
+         * build with a debug file, [resolved] as is.
          */
-        internal fun withPinnedIds(remote: AdRemoteConfig): AdRemoteConfig {
-            val assets = pinnedAssets
-            if (!isRemoteOverrideBlocked() || assets == null) return remote
-            if (!pinReported) {
-                pinReported = true
-                Log.w(
-                    TAG,
-                    "Debuggable build: ad unit ids stay on assets/$pinnedFile, remote sets every other " +
-                        "field. setAllowRemoteOverrideInDebug(true) takes the remote ids too.",
-                )
-            }
-            val declaredRemote = remotePatch?.ads?.keys.orEmpty()
-            val merged = remote.ads.mapValues { (key, unit) ->
-                val assetUnit = assets.ads[key]
+        internal fun withTestIds(resolved: AdRemoteConfig): AdRemoteConfig {
+            val testIds = debugTestIds ?: return resolved
+            val remote = remotePatch.takeIf { allowRemoteOverrideInDebug }
+            val merged = resolved.ads.mapValues { (key, unit) ->
+                val remoteFields = remote?.takeIf { key in it.ads }?.fieldsFor(key).orEmpty()
                 when {
-                    assetUnit != null && key in declaredRemote -> unit.copy(id = assetUnit.id, ids = assetUnit.ids)
-                    // Keep every behavior switch from remote even when no local test id exists;
-                    // only the requestable id is unavailable in a debuggable build.
-                    assetUnit == null && key in declaredRemote -> unit.copy(id = "", ids = emptyList())
-                    else -> unit
+                    "id" in remoteFields || "ids" in remoteFields -> unit
+                    baseKeyOf(key) != key -> unit.copy(id = "", ids = emptyList())
+                    else -> unit.copy(id = testIds[key].orEmpty(), ids = emptyList())
                 }
             }
-            return AdRemoteConfig(merged).also { it.declaredFields = remote.declaredFields }
+            val missing = merged.filter { (key, unit) -> baseKeyOf(key) == key && unit.isEnable && unit.id.isEmpty() }
+                .keys.toSortedSet()
+            if (missing != reportedMissingTestIds) {
+                reportedMissingTestIds = missing
+                Log.w(
+                    TAG,
+                    "Debuggable build: settings from $RELEASE_FILE_NAME/remote, ids from $DEBUG_FILE_NAME, " +
+                        "no waterfall." + if (missing.isEmpty()) "" else " No test id, so no ad, for: $missing",
+                )
+            }
+            return AdRemoteConfig(merged).also { it.declaredFields = resolved.declaredFields }
         }
 
-        /** [assets] is what a debuggable build loaded, whose ids every remote document keeps; null unpins. */
-        internal fun pinAssets(assets: AdRemoteConfig?, fileName: String) {
-            if (assets != null) assetConfig = assets
-            debugAssetsPinned = assets != null
-            pinnedAssets = assets
-            pinnedFile = fileName.takeIf { assets != null }
+        /** [debugFile] is the `ad_config_debug.json` a debuggable build loaded; null unpins. */
+        internal fun pinTestIds(debugFile: AdRemoteConfig?) {
+            reportedMissingTestIds = null
+            debugTestIds = debugFile?.let { file ->
+                val ignored = file.ads.keys.filter { key ->
+                    baseKeyOf(key) != key || file.fieldsFor(key).any { it != "id" && it != "ids" }
+                }
+                if (ignored.isNotEmpty()) {
+                    Log.w(
+                        TAG,
+                        "$DEBUG_FILE_NAME only supplies one \"id\" per all-price key; floors and other " +
+                            "fields come from $RELEASE_FILE_NAME. Ignored in: $ignored",
+                    )
+                }
+                // A floor's id only stands in for an all-price key the file leaves out.
+                file.ads.entries.sortedBy { (key, _) -> if (baseKeyOf(key) == key) 0 else 1 }
+                    .fold(LinkedHashMap<String, String>()) { ids, (key, unit) ->
+                        unit.waterfallIds.lastOrNull()?.let { ids.putIfAbsent(baseKeyOf(key), it) }
+                        ids
+                    }
+            }
         }
 
         /** Applies a document the backend delivered, pinning a debuggable build's ids. Main thread. */
         internal fun applyRemote(remote: AdRemoteConfig) {
             remotePatch = validPatch(remote)
-            val applied = withPinnedIds(resolveSources())
+            val applied = withTestIds(resolveSources())
             publish(applied, fromRemote = true, keys = remotePatch?.ads?.keys.orEmpty())
         }
 
@@ -315,7 +346,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             publishResolved(remoteDocument)
         }
 
-        /** Resolve SDK defaults < code < app asset < remote, preserving field presence. */
+        /** Resolve remote > app asset > app code > SDK defaults, preserving field presence. */
         private fun resolveSources(): AdRemoteConfig {
             val sdk = AdRemoteConfig()
             val code = merge(sdk, codeConfig)
@@ -324,7 +355,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
         }
 
         private fun publishResolved(fromRemote: Boolean) {
-            val resolved = withPinnedIds(resolveSources())
+            val resolved = withTestIds(resolveSources())
             publish(resolved, fromRemote, if (fromRemote) remotePatch?.ads?.keys.orEmpty() else emptySet())
         }
 
@@ -351,11 +382,9 @@ data class AdRemoteConfig @JvmOverloads constructor(
                 codeConfig = AdRemoteConfig()
                 remotePatch = null
             }
-            debugAssetsPinned = false
+            debugTestIds = null
+            reportedMissingTestIds = null
             allowRemoteOverrideInDebug = false
-            pinnedAssets = null
-            pinnedFile = null
-            pinReported = false
         }
 
         @JvmStatic

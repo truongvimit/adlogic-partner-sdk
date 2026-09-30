@@ -86,11 +86,11 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Nội dung cần dán | Dùng cho |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), thay ID production của app | ID, tầng, bật/tắt và các field CTA hiện có. Key khai báo ở đây ưu tiên hơn ad unit ID ghi trong code, và `open_resume` kèm ID sẽ bật app-open. Giữ nguyên tên parameter. |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), thay ID production của app | ID, tầng, bật/tắt và các field CTA hiện có. Key khai báo ở đây ưu tiên hơn `ad_config.json` của app, và file này ưu tiên hơn ad unit ID ghi trong code; `open_resume` kèm ID sẽ bật app-open. Giữ nguyên tên parameter. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Hành vi theo dạng ads, timeout, reload/cache và bo góc CTA native. |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB, X/Skip, swipe và preload. |
 
-`ad_config.json` và `ad_config_debug.json` là tên asset local; source Firebase mặc định đọc **một** key ad unit là `ad_remote_config`. Không tạo thêm parameter `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` hoặc `onboarding_config_debug` cho cách tích hợp này. Debug mặc định pin ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) **nhưng vẫn áp mọi field khác của `ad_remote_config` và cả hai parameter settings mới**; key chỉ remote khai báo bị bỏ trừ khi nó tắt slot, và log `WARN` từ `AdRemoteConfig` nêu tên file đang pin. `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Dùng project/condition kiểm thử khi thử nghiệm. Các key `ob_*` cũ vẫn tương thích, không lồng vào các object JSON này. Key `ob_*` đã gửi xếp dưới các document này và trên asset cùng cấu hình Kotlin của app. [Kiểu parameter và condition của Firebase](https://firebase.google.com/docs/remote-config/parameters).
+`ad_config.json` và `ad_config_debug.json` là tên asset local; source Firebase mặc định đọc **một** key ad unit là `ad_remote_config` (hoặc `ads_remote_config` khi console không có `ad_remote_config`). Không tạo thêm parameter `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` hoặc `onboarding_config_debug` cho cách tích hợp này. Mọi build đọc cấu hình từ `ad_config.json`. Build debuggable đọc thêm `ad_config_debug.json`, file này chỉ có một `"id"` cho mỗi key all-price (`native_reward`, không cần `native_reward_high`): ID test thay mọi ID của vị trí, các floor `_high*` không request, nên debug không chạy waterfall. Field khác trong file debug bị bỏ qua kèm log `WARN`; key đang bật mà thiếu ID test thì không có ad. `ad_remote_config` remote áp mọi field trừ ID; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote khai báo. Hai parameter settings áp như release. Dùng project/condition kiểm thử khi thử nghiệm. Các key `ob_*` cũ vẫn tương thích, không lồng vào các object JSON này. Key `ob_*` đã gửi xếp dưới các document này và trên asset cùng cấu hình Kotlin của app. [Kiểu parameter và condition của Firebase](https://firebase.google.com/docs/remote-config/parameters).
 
 `ObSplashActivity` đã gọi `AdConfig.refresh()`. Với `AdsConfig.fromAdConfig()` trong mẫu, SDK resolve ID/settings sau fetch mà không cần gọi lại `OnboardKitSetup.configure()` trong `onRemoteFetched`. Chỉ giữ hook đó nếu app có công việc riêng. App không dùng splash SDK thì await `AdConfig.refresh()` trong coroutine trước màn/request cần config, sau khi đã khởi tạo các kit; lần refresh đó cũng đọc lại các key `ob_*` cũ.
 
@@ -194,12 +194,12 @@ Mở paywall như [guide PayKit](paywall-integration.vi.md), không sync lại m
 | `FirebaseSink(collectionFollowsConsent)` | `true`: khi consent đã có quyết định, analytics granted thì bật collection, còn lại tắt. `false`: app tự quản lý collection; sink vẫn cập nhật Consent Mode. Cả hai trục còn `UNKNOWN` thì giữ thiết lập Firebase. |
 | Mapping consent | Analytics → `ANALYTICS_STORAGE`; ads → `AD_STORAGE`, `AD_USER_DATA`, `AD_PERSONALIZATION`. Khi một trục đã có quyết định, trục còn `UNKNOWN` được gửi là denied. |
 | `FirebaseSink.setDefaultEventParameters(...)` | Không có extra defaults. Dùng khi cần params cho cả event Firebase tự thu thập; `Tracker.setDefaults` chỉ áp dụng event đi qua Tracker. |
-| `FirebaseAdConfigSource(key)` | `ad_remote_config`; đổi khi Console app dùng key khác. |
+| `FirebaseAdConfigSource(key, aliases)` | `ad_remote_config`, rồi `ads_remote_config` khi Console không có `ad_remote_config`; truyền `key` khi Console dùng tên khác. |
 | `FirebaseConfigSource(key)` | `paywall_config`; đổi khi Console app dùng key khác. |
 | Ads/PayKit fetch | Cài source chưa fetch; `AdConfig.install` áp giá trị `ad_remote_config` mà Firebase activate gần nhất. Hai source dùng chung lượt fetch và giữ kết quả thành công trong process; lỗi cho phép retry, vẫn theo minimum fetch interval của Firebase (12 giờ nếu app không đặt `minimumFetchIntervalInSeconds`). |
 | Blank / Firebase in-app defaults | Hai source bỏ qua; không dùng `setDefaultsAsync` thay cho JSON local của kit. |
 | Offline / JSON sai | Kit giữ config đang có; PayKit có cache remote ưu tiên hơn fallback bundled. Không cần code fallback riêng. |
-| Debug ads / paywall | ID ad unit debug mặc định được pin, nhưng mọi field khác của `ad_remote_config` và hai document settings vẫn áp dụng. PayKit không pin tương tự. Dùng project/condition kiểm thử phù hợp. |
+| Debug ads / paywall | Debug dùng ID test của `ad_config_debug.json`, nhưng mọi field khác của `ad_remote_config` và hai document settings vẫn áp dụng. PayKit không có ID riêng cho debug. Dùng project/condition kiểm thử phù hợp. |
 
 Chỉ gọi `AdConfig.refresh()`/`PayKit.sync()`, không cần thêm `fetchAndActivate`. Remote flags `ob_*` có luồng fetch riêng do OnboardKit quản lý.
 
@@ -208,7 +208,7 @@ Chỉ gọi `AdConfig.refresh()`/`PayKit.sync()`, không cần thêm `fetchAndAc
 - [ ] Build xử lý được Google Services, application ID khớp JSON Firebase.
 - [ ] `Tracker.sinkIds()` có `firebase`; event app và SDK xuất hiện một lần theo consent đã chọn.
 - [ ] Remote đã Publish; thử online, offline và JSON lỗi với fallback local.
-- [ ] Ads debug vẫn dùng ad unit ID của asset đang pin; paywall mở được bằng local/cache cả khi remote chưa xong.
+- [ ] Ads debug dùng ID test của `ad_config_debug.json`; paywall mở được bằng local/cache cả khi remote chưa xong.
 
 Để xem Firebase DebugView, chạy `adb shell setprop debug.firebase.analytics.app <applicationId>` rồi mở app; tắt bằng `adb shell setprop debug.firebase.analytics.app .none.`. [Firebase DebugView](https://firebase.google.com/docs/analytics/debugview).
 

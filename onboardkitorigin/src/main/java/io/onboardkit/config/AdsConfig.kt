@@ -169,8 +169,8 @@ data class AdsConfig(
     val fullScreenSkipStyle: FullScreenSkipStyle = FullScreenSkipStyle.valueOf(OnboardingSettings.defaultText("flow.fullscreen_skip_style")),
     /**
      * App-owned association with ad_config keys; never duplicated in behavior JSON. A standard key
-     * the backend's ad_config declares applies even when absent here, so a unit written in code is
-     * only the fallback for a placement remote says nothing about.
+     * the backend's or the app's ad_config declares applies even when absent here, so a unit
+     * written in code is only the fallback for a placement neither says anything about.
      */
     val placementKeys: Map<AdPlacement, String> = emptyMap(),
     /** Optional full-screen native between the splash interstitial and LFO; absent means off. */
@@ -217,11 +217,11 @@ data class AdsConfig(
     /** The standard ad_config key of [placement], whether or not anything declares it. */
     internal fun standardKeyFor(placement: AdPlacement): String? = STANDARD_PLACEMENT_KEYS[placement]
 
-    // The splash key also joins when remote declares only its returning-user `_o`.
+    // The splash key also joins when ad_config declares only its returning-user `_o`.
     private val keys: Map<AdPlacement, String>
         get() = STANDARD_PLACEMENT_KEYS.filter { (placement, key) ->
-            AdRemoteConfig.remoteDeclares(key) ||
-                placement == AdPlacement.SplashInterstitial && AdRemoteConfig.remoteDeclares(key + "_o")
+            AdRemoteConfig.declaredAboveCode(key) ||
+                placement == AdPlacement.SplashInterstitial && AdRemoteConfig.declaredAboveCode(key + "_o")
         } + placementKeys
 
     /**
@@ -246,11 +246,11 @@ data class AdsConfig(
             splashInterstitial = inter(AdPlacement.SplashInterstitial, splashInterstitial),
             splashNative = native(AdPlacement.SplashNative, splashNative),
             splashInlineNative = native(AdPlacement.SplashInlineNative, splashInlineNative),
-            // A remote inter_splash speaks for returning users too unless _o is declared: the app's
-            // own old-user unit is the fallback only while remote is silent on both.
+            // An ad_config inter_splash speaks for returning users too unless _o is declared: the
+            // app's own old-user unit is the fallback only while remote and asset are silent on both.
             splashInterstitialOldUser = when {
                 oldSplashKey != null && config.declares(oldSplashKey) -> InterstitialAdUnit(config.tiersFor(oldSplashKey))
-                splashKey != null && AdRemoteConfig.remoteDeclares(splashKey) -> null
+                splashKey != null && AdRemoteConfig.declaredAboveCode(splashKey) -> null
                 else -> splashInterstitialOldUser
             },
             languageNative = native(AdPlacement.Language1, languageNative),

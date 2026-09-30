@@ -80,7 +80,7 @@ UMP error देने पर या network timeout पूरा होने �
 
 | हिस्सा | क्या करें |
 | --- | --- |
-| Ads | AdMob app ID, Meta app ID/client token, `assets/ad_config.json` में placement IDs और `ad_config_debug.json` में test IDs। Debug file न होने पर सामान्य file इस्तेमाल होती है। |
+| Ads | AdMob app ID, Meta app ID/client token, placements `assets/ad_config.json` में; `ad_config_debug.json` में हर all-price key के लिए सिर्फ एक test `id`, जिसे debug build `ad_config.json` के बाकी fields के साथ इस्तेमाल करता है। |
 | Onboarding | Destination Activity, भाषा/पेज content और ad placements। |
 | खरीदारी | Play product IDs और premium entitlement mapping। PayKit को terms/privacy URLs और अपना catalog JSON भी दें। |
 | Firebase · वैकल्पिक | ऐप का Firebase configuration और इस्तेमाल होने वाले sources के published Remote Config parameters। |

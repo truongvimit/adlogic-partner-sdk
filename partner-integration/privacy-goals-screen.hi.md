@@ -40,7 +40,7 @@ SDK clickable `Button` या `TextView` को action मानता है।
 
 ## Ads और completion
 
-दोनों ad files में ये keys रखें; release में production और debug में test IDs दें:
+ये keys production IDs के साथ `ad_config.json` में रखें; `ad_config_debug.json` में सिर्फ `native_select` और `native_select_alt`, हर एक की एक test `id` चाहिए:
 
 ```json
 {
