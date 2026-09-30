@@ -23,6 +23,7 @@ import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.config.ObLanguages
+import io.onboardkit.config.LanguageConfirmButtonStyle
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
@@ -120,14 +121,28 @@ class ObLanguageActivity : BaseOnboardActivity() {
         adapter.submitList(languages)
         scheduleTapHint(hintCode)
 
-        OnboardingSettings.text("lfo.confirm_button.image_url").takeIf { it.isNotBlank() }?.let {
-            com.bumptech.glide.Glide.with(this).load(it).error(io.onboardkit.R.drawable.ob_ic_check).into(binding.obLanguageConfirm)
+        val confirmStyle = sdk.requireConfig().language.confirmButtonStyle
+        binding.obLanguageConfirm.contentDescription = getString(
+            if (confirmStyle == LanguageConfirmButtonStyle.TEXT) io.onboardkit.R.string.ob_language_done
+            else io.onboardkit.R.string.ob_next,
+        )
+        binding.obLanguageConfirmIcon.visibility =
+            if (confirmStyle == LanguageConfirmButtonStyle.CHECK_ICON) View.VISIBLE else View.GONE
+        binding.obLanguageConfirmText.visibility =
+            if (confirmStyle == LanguageConfirmButtonStyle.TEXT) View.VISIBLE else View.GONE
+        OnboardingSettings.text("lfo.confirm_button.image_url").takeIf {
+            it.isNotBlank() && confirmStyle == LanguageConfirmButtonStyle.CHECK_ICON
+        }?.let {
+            com.bumptech.glide.Glide.with(this).load(it)
+                .error(io.onboardkit.R.drawable.ob_ic_check)
+                .into(binding.obLanguageConfirmIcon)
         }
         // `onboarding.primary_color` is the single source of truth for the onboarding color
-        // cluster, including the LFO check control.
+        // cluster, including both presentations of the LFO confirm control.
         OnboardingSettings.onboardingPrimaryColor()?.let { tint ->
-            binding.obLanguageConfirm.imageTintList =
+            binding.obLanguageConfirmIcon.imageTintList =
                 android.content.res.ColorStateList.valueOf(tint)
+            binding.obLanguageConfirmText.setTextColor(tint)
         }
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }

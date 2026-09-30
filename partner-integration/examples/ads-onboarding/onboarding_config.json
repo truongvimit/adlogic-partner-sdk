@@ -69,6 +69,7 @@
     "confirm_button": {
       "visible_before_selection": true,
       "save_on_back": true,
+      "style": "CHECK_ICON",
       "image_url": ""
     },
     "confirm_dialog": {

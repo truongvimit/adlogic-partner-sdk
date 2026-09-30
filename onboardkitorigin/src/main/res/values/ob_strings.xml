@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="ob_choose_language">Choose Language</string>
+    <string name="ob_language_done">Done</string>
     <string name="ob_next">Next</string>
     <string name="ob_get_started">Get Started</string>
     <string name="ob_skip">Skip</string>

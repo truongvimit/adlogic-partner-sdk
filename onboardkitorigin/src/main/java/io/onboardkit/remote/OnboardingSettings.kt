@@ -268,6 +268,7 @@ object OnboardingSettings {
             secondNativeOnSelectEnabled = v.boolean("lfo.native2.enabled", c.language.secondNativeOnSelectEnabled),
             tapHintEnabled = v.boolean("lfo.tap_hint.enabled", c.language.tapHintEnabled),
             confirmVisibleBeforeSelect = v.boolean("lfo.confirm_button.visible_before_selection", c.language.confirmVisibleBeforeSelect),
+            confirmButtonStyle = v.enumOr("lfo.confirm_button.style", c.language.confirmButtonStyle),
             saveButtonOnBackEnabled = v.boolean("lfo.confirm_button.save_on_back", c.language.saveButtonOnBackEnabled),
             confirmDialogOnReselectEnabled = v.boolean("lfo.confirm_dialog.enabled", c.language.confirmDialogOnReselectEnabled),
             defaultCode = resolvedDefault,

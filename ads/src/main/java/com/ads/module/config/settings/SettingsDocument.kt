@@ -243,6 +243,7 @@ class SettingsDocument(
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")
                 path.endsWith("next_screen_timing") -> if (path == "splash.navigation.next_screen_timing") setOf("AUTO", "AFTER_AD", "UNDER_AD") else setOf("AFTER_AD", "UNDER_AD")
                 path.endsWith("skip.style") || path.endsWith("fullscreen_skip_style") -> setOf("TEXT", "CLOSE_ICON")
+                path == "lfo.confirm_button.style" -> setOf("TEXT", "CHECK_ICON")
                 path.endsWith("skip.position") -> setOf("RIGHT", "LEFT")
                 path.endsWith("empty_visibility") -> setOf("GONE", "INVISIBLE")
                 path.endsWith("presentation.type") -> setOf("NORMAL", "LARGE_ANCHORED", "COLLAPSIBLE", "INLINE", "INLINE_MAX_HEIGHT", "FIXED")

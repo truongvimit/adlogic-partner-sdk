@@ -11,6 +11,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OnboardingSettingsTest {
+    @Test fun `language confirm style accepts icon and text and rejects malformed remote values`() {
+        val config = onboardKitConfig {
+            language = LanguageConfig(confirmButtonStyle = LanguageConfirmButtonStyle.TEXT)
+        }.getOrThrow()
+        assertEquals(LanguageConfirmButtonStyle.CHECK_ICON, LanguageConfig().confirmButtonStyle)
+        for (style in listOf("CHECK_ICON", "TEXT")) {
+            OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"confirm_button":{"style":"$style"}}}""")
+            assertEquals(LanguageConfirmButtonStyle.valueOf(style), OnboardingSettings.resolve(config).language.confirmButtonStyle)
+        }
+        for (raw in listOf("\"CLOSE_ICON\"", "true", "null")) {
+            OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"confirm_button":{"style":$raw}}}""")
+            assertNull(OnboardingSettings.values.remoteValue("lfo.confirm_button.style"))
+            assertEquals(LanguageConfirmButtonStyle.TEXT, OnboardingSettings.resolve(config).language.confirmButtonStyle)
+        }
+        OnboardingSettings.document.acceptSuccessfulFetch("{}")
+        assertEquals(LanguageConfirmButtonStyle.TEXT, OnboardingSettings.resolve(config).language.confirmButtonStyle)
+    }
+
     @Test fun `native click defaults auto advance pager pages and reload every other native`() {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD

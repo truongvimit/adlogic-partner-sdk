@@ -3,6 +3,8 @@ package io.onboardkit.ui.language
 import android.app.Application
 import android.os.Looper
 import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import io.onboardkit.OnboardingSdk
@@ -11,6 +13,7 @@ import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.ObLanguages
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.remote.RemoteFlags
+import io.onboardkit.remote.OnboardingSettings
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -47,6 +50,49 @@ class LanguageTapHintTest {
     fun destroy() {
         controller?.pause()?.stop()?.destroy()
         main.idle()
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+    }
+
+    @Test
+    fun `remote Done action uses primary color and stays dim until language selection`() {
+        launch(settings = """{"lfo":{"confirm_button":{"style":"TEXT"}},"onboarding":{"primary_color":"#1E88E5"}}""")
+        val activity = controller!!.get()
+        val action = activity.findViewById<View>(R.id.ob_language_confirm)
+        val text = activity.findViewById<TextView>(R.id.ob_language_confirm_text)
+        assertEquals(View.VISIBLE, text.visibility)
+        assertEquals("Done", text.text.toString())
+        assertEquals(android.graphics.Color.parseColor("#1E88E5"), text.currentTextColor)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.ob_language_confirm_icon).visibility)
+        assertEquals(View.VISIBLE, action.visibility)
+        assertEquals(0.5f, action.alpha)
+        action.performClick()
+        assertNull(shadowOf(activity).nextStartedActivity)
+        row(0).itemView.performClick()
+        assertEquals(1f, action.alpha)
+        action.performClick()
+        main.idle()
+        assertTrue(activity.isFinishing)
+    }
+
+    @Test
+    fun `Done respects hidden before selection and becomes visible after selection`() {
+        launch(settings = """{"lfo":{"confirm_button":{"style":"TEXT","visible_before_selection":false}}}""")
+        val action = controller!!.get().findViewById<View>(R.id.ob_language_confirm)
+        assertEquals(View.GONE, action.visibility)
+        row(0).itemView.performClick()
+        assertEquals(View.VISIBLE, action.visibility)
+        assertEquals(1f, action.alpha)
+    }
+
+    @Test
+    fun `default action remains a dim check icon with primary color`() {
+        launch(settings = """{"onboarding":{"primary_color":"#1E88E5"}}""")
+        val activity = controller!!.get()
+        val icon = activity.findViewById<ImageView>(R.id.ob_language_confirm_icon)
+        assertEquals(View.VISIBLE, icon.visibility)
+        assertEquals(android.graphics.Color.parseColor("#1E88E5"), icon.imageTintList!!.defaultColor)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.ob_language_confirm_text).visibility)
+        assertEquals(0.5f, activity.findViewById<View>(R.id.ob_language_confirm).alpha)
     }
 
     @Test
@@ -174,7 +220,9 @@ class LanguageTapHintTest {
         language: LanguageConfig = LanguageConfig(),
         flags: RemoteFlags = RemoteFlags(),
         mode: LanguageScreenMode = LanguageScreenMode.FIRST_OPEN,
+        settings: String? = null,
     ) {
+        OnboardingSettings.document.acceptSuccessfulFetch(settings)
         OnboardingSdk.configure(onboardKitConfig {
             this.language = language.copy(
                 languages = listOf(

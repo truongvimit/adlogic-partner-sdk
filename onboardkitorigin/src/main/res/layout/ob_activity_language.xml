@@ -23,15 +23,36 @@
             android:textColor="@color/ob_text_header"
             android:textSize="@dimen/ob_text_header" />
 
-        <ImageView
+        <FrameLayout
             android:id="@+id/ob_language_confirm"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
             android:layout_gravity="end|center_vertical"
-            android:layout_marginEnd="32dp"
-            android:alpha="0.5"
-            android:contentDescription="@string/ob_next"
-            android:src="@drawable/ob_ic_check" />
+            android:layout_marginEnd="20dp"
+            android:contentDescription="@string/ob_next">
+
+            <ImageView
+                android:id="@+id/ob_language_confirm_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ob_ic_check" />
+
+            <TextView
+                android:id="@+id/ob_language_confirm_text"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:text="@string/ob_language_done"
+                android:textColor="@color/ob_accent"
+                android:textSize="16sp"
+                android:visibility="gone" />
+        </FrameLayout>
     </FrameLayout>
 
     <androidx.recyclerview.widget.RecyclerView

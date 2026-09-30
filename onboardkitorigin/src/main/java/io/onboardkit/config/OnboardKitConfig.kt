@@ -15,6 +15,9 @@ enum class AdLoadStrategy {
     ALTERNATE,
 }
 
+/** Presentation of the LFO language confirmation action. */
+enum class LanguageConfirmButtonStyle { CHECK_ICON, TEXT }
+
 /**
  * Which ad format fills the splash screen's bottom slot, from `splash.ads.slot_format`.
  *
@@ -97,6 +100,10 @@ data class LanguageConfig(
     val confirmDialogOnReselectEnabled: Boolean = OnboardingSettings.defaultBool("lfo.confirm_dialog.enabled"),
     @LayoutRes val layoutRes: Int = 0,
     @LayoutRes val itemLayoutRes: Int = 0,
+    /** Remote `lfo.confirm_button.style` selects the check icon or the `Done` text action. */
+    val confirmButtonStyle: LanguageConfirmButtonStyle = LanguageConfirmButtonStyle.valueOf(
+        OnboardingSettings.defaultText("lfo.confirm_button.style"),
+    ),
 )
 
 data class SystemBarConfig @JvmOverloads constructor(

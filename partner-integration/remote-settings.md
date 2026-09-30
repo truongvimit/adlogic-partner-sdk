@@ -164,6 +164,7 @@ Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confir
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. Within one source a specific scope overrides a shared scope (remote at any scope outranks the app asset), then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
 - The X/Skip side is per native full-screen page, with no shared scope above it: `onboarding.steps.<id>.fullscreen.skip.position` for each full-screen step, `ob5.skip.position` for standalone OB5 and `splash.native.skip.position` for the native_fs between the splash interstitial and LFO. All three accept `RIGHT` / `LEFT` and default to `RIGHT`, the side the X has always taken; the shipped JSON declares `full1` and `full2`, and any other step id the app declares is accepted at the same path. No other format has this control: interstitial, app-open, banner and inline native carry no such button. Both sides are exact mirrors — same inset from their edge and the same top margin — so only the side changes, never the size, the style or the timing. In an RTL locale the screen keeps mirroring as it does today: `RIGHT` follows the text end, `LEFT` its start.
 - `native.presentation.cta_corner_radius_dp`: `20` dp, overridable by placement/screen. It applies when an explicit CTA background color is supplied through `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; `default` color preserves the XML drawable.
+- `lfo.confirm_button.style`: `CHECK_ICON` (default) shows the check icon; `TEXT` shows “Done”. Both use `onboarding.primary_color`, with 50% opacity before selection and full opacity after selection. `visible_before_selection=false` hides either style until selection. `image_url` applies only to `CHECK_ICON`.
 - `lfo.confirm_button.image_url`: `""` keeps the XML icon. Image-load failure uses the SDK check icon. The check tint is always `onboarding.primary_color`, separately from ad CTA fields.
 - `lfo.languages.supported_codes`: `[]` keeps the app/SDK catalog. Unknown codes are dropped and an empty filtered result falls back to that catalog. `lfo.languages.default_code`: an explicitly supplied `""` clears the configured default (without erasing a saved user selection); a code must be on the offered list (the filtered `supported_codes`, else the catalog). A host `LanguageConfig.defaultCode` that `supported_codes` leaves out is not preselected.
 
@@ -292,8 +293,9 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.tap_hint.delay_ms` | `3000` |
 | `lfo.confirm_button.visible_before_selection` | `true` |
 | `lfo.confirm_button.save_on_back` | `true` |
+| `lfo.confirm_button.style` | `"CHECK_ICON"` — `CHECK_ICON` / `TEXT` (Done); uses `onboarding.primary_color` |
 | `lfo.confirm_button.image_url` | `""` |
-| `onboarding.primary_color` | `"#FF375E"` — shared NEXT, Get Started, active indicator and LFO check color |
+| `onboarding.primary_color` | `"#FF375E"` — shared NEXT, Get Started, active indicator and LFO check/Done color |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
@@ -342,4 +344,4 @@ Remote or app-asset `interstitial_auto_buffer.rules.<placement>` can add a manag
 
 ### Onboarding primary color
 
-Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It is the shared onboarding color for the NEXT button, the final Get Started button, the active progress indicator and the LFO check button. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
+Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It is the shared onboarding color for the NEXT button, the final Get Started button, the active progress indicator and the LFO check/Done button. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
