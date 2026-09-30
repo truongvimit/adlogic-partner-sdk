@@ -88,7 +88,7 @@ AdConfig.install(FirebaseAdConfigSource())
 | --- | --- | --- |
 | `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), app की production IDs के साथ | मौजूदा IDs, floors, switches और CTA fields। यहाँ declare की गई key code में लिखी ad unit IDs से ऊपर है, और ID वाला `open_resume` app-open चालू करता है। Parameter का नाम न बदलें। |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Ad format behavior, timeout, reload/cache और native CTA radius। |
-| `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, native templates, X/Skip, swipe और preload। |
+| `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, X/Skip, swipe और preload। |
 
 `ad_config.json` और `ad_config_debug.json` local asset filenames हैं; default Firebase source ad units के लिए **एक** key `ad_remote_config` पढ़ता है। इस setup में अलग `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` या `onboarding_config_debug` parameters न बनाएँ। Debug में `ad_config_debug.json` (debug file न हो तो `ad_config.json`) के ad unit IDs default रूप से pinned हैं, **लेकिन `ad_remote_config` का बाकी हर field और दोनों नए settings parameters फिर भी लागू होते हैं**; जो keys केवल remote declare करता है वे हटा दी जाती हैं, जब तक वे किसी slot को बंद न करें, और `AdRemoteConfig` का एक `WARN` log pinned file का नाम बताता है। `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` remote IDs भी ले लेता है। प्रयोग के लिए test project/conditions इस्तेमाल करें। पुराने `ob_*` keys compatible रहते हैं; उन्हें इन JSON objects के अंदर न डालें। Backend द्वारा भेजी गई `ob_*` key इन documents से नीचे और आपके app assets व Kotlin config से ऊपर रहती है। [Firebase parameter types और conditions](https://firebase.google.com/docs/remote-config/parameters)।
 
@@ -122,7 +122,6 @@ SDK में दोनों JSON defaults पहले से bundled है�
 {
   "schema_version": 1,
   "splash": { "permissions": { "no_internet_prompt_enabled": false } },
-  "lfo": { "native_template": "COMPACT" },
   "onboarding": {
     "navigation": { "lock_pager_swipe": false },
     "fullscreen": { "skip": { "delay_ms": 1500 } }
@@ -154,7 +153,7 @@ Custom/partial app asset में मौजूद हर valid field explicit a
 
 - ऐसा SDK build इस्तेमाल करें जिसमें grouped settings और `AdsConfig.fromAdConfig()` हों; सभी modules की versions समान रखें। Firebase keys जोड़ने भर से पुराने SDK में यह सुविधा नहीं आती।
 - Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
-- Remote template override native frame को `positionCTA` से पहले चुनता है, और `ad_remote_config` का `positionCTA` आपके app asset के template से ऊपर है; CTA color/height/components `ad_remote_config` में रहते हैं। `R.layout`, resource references, system bars, orientation और progress indicators app code में रखें। Consent और premium लागू रहते हैं। एकमात्र global gate `ad_behavior_config.global.ads_enabled` है। हर LFO/onboarding placement को उसके `isEnable` और placement flag से बंद करें; duplicate flow-wide controls हटाए गए हैं।
+- LFO/OB native frame केवल `ad_remote_config` के base-key `positionCTA` से आते हैं; remote app asset को override करता है। `colorCTA` CTA और Ad badge दोनों को रंग देता है। JSON `native_template`/`content_template` overrides हटा दिए गए हैं। `R.layout`, resource references, system bars, orientation और progress indicators app code में रखें। Consent और premium लागू रहते हैं। एकमात्र global gate `ad_behavior_config.global.ads_enabled` है। हर LFO/onboarding placement को उसके `isEnable` और placement flag से बंद करें; duplicate flow-wide controls हटाए गए हैं।
 - Firebase fetch साझा है; successful result process में reuse होता है। Firebase का default minimum fetch interval 12 घंटे है और SDK उसे नहीं बदलता, इसलिए Console edit पहुँचने में इतना समय लग सकता है। Edits अगले launch तक पहुँचें, इसके लिए पहले fetch से पहले अपनी Application में इसे set करें, उदाहरण: `FirebaseRemoteConfig.getInstance().setConfigSettingsAsync(remoteConfigSettings { minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) 0 else 3600 })`। Console QA में process restart करें; केवल Activity दोबारा खोलना fresh network fetch की गारंटी नहीं।
 - `AdConfig.refresh()` बताता है कि कोई `ad_remote_config` document लागू हुआ या नहीं। इस Boolean को नए documents की success flag न मानें।
 - Valid remote override, missing/invalid fields, पहली-run offline local fallback और पुराने valid remote का offline cache reuse जाँचें। Local JSON को app में rebuild करना ज़रूरी है।

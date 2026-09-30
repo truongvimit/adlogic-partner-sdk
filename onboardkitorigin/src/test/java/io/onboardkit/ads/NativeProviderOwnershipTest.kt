@@ -137,10 +137,10 @@ class NativeProviderOwnershipTest {
             provider.preloadNative(host, request.copy(layoutRes = template))
             if (fillBeforeFetch) requests.single().onNativeAdLoaded(ad)
             else assertFalse(bind(container, layoutRes = template))
-            settings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_TOP","native1":{"behavior":{"presentation":{"cta_corner_radius_dp":7}}}}}""")
+            settings.document.acceptSuccessfulFetch("""{"lfo":{"native1":{"behavior":{"presentation":{"cta_corner_radius_dp":7}}}}}""")
             behavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"cta_corner_radius_dp":3}}}""")
             adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_lang" to
-                com.ads.module.config.AdUnitConfig("native-test", true, colorCTA = "#ff0000"))))
+                com.ads.module.config.AdUnitConfig("native-test", true, colorCTA = "#ff0000", positionCTA = "TOP"))))
             if (fillBeforeFetch) assertTrue(bind(container, layoutRes = template))
             else requests.single().onNativeAdLoaded(ad)
             assertEquals("Keep the already requested ad", 1, requests.size)
@@ -156,7 +156,7 @@ class NativeProviderOwnershipTest {
                 val replacement = mock(NativeAd::class.java)
                 doReturn("Install").`when`(replacement).callToAction
                 requests.last().onNativeAdLoaded(replacement)
-                settings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"COMPACT","native1":{"behavior":{"presentation":{"cta_corner_radius_dp":9}}}}}""")
+                settings.document.acceptSuccessfulFetch("""{"lfo":{"native1":{"behavior":{"presentation":{"cta_corner_radius_dp":9}}}}}""")
                 assertTrue(bind(container, layoutRes = template))
                 val cta = container.findViewById<android.view.View>(io.onboardkit.R.id.ad_call_to_action)
                 val ctaBackground = cta.background as android.graphics.drawable.GradientDrawable
@@ -171,6 +171,78 @@ class NativeProviderOwnershipTest {
             behavior.document.acceptSuccessfulFetch(null)
             adConfig.reset()
         }
+    }
+
+    @Test fun `remote CTA fields reach automatic click replacement without rebinding the provider`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val adConfig = com.ads.module.config.AdRemoteConfig
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig {
+            ads = io.onboardkit.config.AdsConfig.fromAdConfig()
+        }.getOrThrow())
+        adConfig.reset()
+        val template = io.onboardkit.R.layout.ob_layout_native_cta_bottom
+        val container = FrameLayout(host).also(host::setContentView)
+        try {
+            adConfig.updateCodeFromJson("""{"native_lang":{"id":"native-test","isEnable":true,"colorCTA":"#112233","positionCTA":"BOTTOM"}}""")
+            provider.preloadNative(host, request.copy(layoutRes = template))
+            requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+            assertTrue(bind(container, layoutRes = template))
+            vendorEvents.single().onAdClicked()
+            controller.pause().stop()
+            adConfig.initializeFromJson("""{"native_lang":{"colorCTA":"#00ff00","positionCTA":"TOP","heightCTA":51,"components":["icon_headline","cta"]}}""")
+            val replacement = mock(NativeAd::class.java)
+            doReturn("Install").`when`(replacement).callToAction
+            requests.last().onNativeAdLoaded(replacement)
+            controller.restart().start().resume()
+            val cta = container.findViewById<View>(io.onboardkit.R.id.ad_call_to_action)
+            assertEquals("Automatic replacement must read current remote color", 0xFF00FF00.toInt(),
+                (cta.background as android.graphics.drawable.GradientDrawable).color?.defaultColor)
+            assertEquals((51 * host.resources.displayMetrics.density).toInt(), cta.layoutParams.height)
+            assertEquals(View.GONE, container.findViewById<View>(io.onboardkit.R.id.ad_media).visibility)
+            val column = (container.getChildAt(0) as android.view.ViewGroup).getChildAt(0) as android.view.ViewGroup
+            assertEquals(cta, column.getChildAt(0))
+            assertEquals(2, requests.size)
+        } finally {
+            adConfig.reset()
+        }
+    }
+
+    @Test fun `remote JSON colors CTA and Ad badge for every onboarding native placement`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val adConfig = com.ads.module.config.AdRemoteConfig
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig { defaultSteps() }.getOrThrow())
+        adConfig.reset()
+        val pages = listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashNative,
+            AdPlacement.SplashInlineNative, AdPlacement.Ob5,
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL1),
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL2)) +
+            listOf("ob1", "ob2", "ob3", "ob4", "partner_privacy").map {
+                AdPlacement.StepNative(io.onboardkit.core.StepId(it))
+            }
+        try {
+            pages.filter { sdk.requireConfig().ads.standardKeyFor(it) != null }.forEach { page ->
+                val key = checkNotNull(sdk.requireConfig().ads.standardKeyFor(page))
+                adConfig.updateCodeFromJson("""{"$key":{"id":"native-test","isEnable":true,"colorCTA":"#112233","positionCTA":"BOTTOM"}}""")
+                val container = FrameLayout(host).also(host::setContentView)
+                val layout = NativeTemplates.layoutForPlacement(page)
+                provider.preloadNative(host, request.copy(placement = page, layoutRes = layout))
+                val ad = mock(NativeAd::class.java)
+                doReturn("Install").`when`(ad).callToAction
+                requests.last().onNativeAdLoaded(ad)
+                adConfig.initializeFromJson("""{"$key":{"colorCTA":"#00ff00","heightCTA":51,"positionCTA":"TOP"}}""")
+                assertTrue(page.key, bind(container, page, layoutRes = layout))
+                val cta = container.findViewById<View>(io.onboardkit.R.id.ad_call_to_action)
+                assertEquals(page.key, 0xFF00FF00.toInt(),
+                    (cta.background as android.graphics.drawable.GradientDrawable).color?.defaultColor)
+                assertNotNull("${page.key} Ad badge", container.findViewById<View>(io.onboardkit.R.id.ad_icon).background)
+                provider.releaseNative(page)
+            }
+        } finally { adConfig.reset() }
     }
 
     @Test fun `remote CTA colour reaches a native whose placement has no configured key`() {

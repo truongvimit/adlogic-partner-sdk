@@ -167,7 +167,7 @@ Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) cùng pack
 
 Placement đã khai báo nhưng bị tắt giữ unit rỗng, không lấy quảng cáo của slot khác. Chỉ khi LFO2 không có unit mới fallback LFO1; tắt hành động thay native bằng `onboarding_config.lfo.native2.enabled = false`.
 
-Template native điều khiển qua `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template`; Welcome Back theo `lfo.native_template`. Template override từ remote ưu tiên trước, rồi `positionCTA` từ `ad_remote_config` của backend, rồi template trong asset app, rồi `positionCTA` từ `ad_config.json` của app, rồi template host/SDK. Fullscreen/popup giữ layout cố định. Màu, chiều cao CTA và components vẫn ở ad_config; reference resource/layout của app vẫn trong code.
+Native LFO/Welcome Back/content OB chọn frame theo `positionCTA` (`TOP`/`BOTTOM`) của base key trong `ad_remote_config`, ưu tiên hơn asset app và host fallback. Các cờ `native_template`/`content_template` trong `onboarding_config` đã bỏ, kể cả per-step. Fullscreen/popup giữ frame cố định. `colorCTA` áp dụng cả nền CTA và badge Ad; màu/chiều cao/components được đọc lại tại mỗi lần bind, gồm ad thay thế sau click/resume.
 
 ## 5. Khởi tạo trong Application
 

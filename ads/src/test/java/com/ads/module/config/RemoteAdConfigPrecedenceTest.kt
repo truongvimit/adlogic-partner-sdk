@@ -35,13 +35,15 @@ class RemoteAdConfigPrecedenceTest {
             "inter_splash" to AdUnitConfig("test_inter", true),
         )), AdRemoteConfig.DEBUG_FILE_NAME)
         AdRemoteConfig.applyRemote(AdRemoteConfig(mapOf(
-            "native_lang" to AdUnitConfig("live_lang", false),
+            "native_lang" to AdUnitConfig("live_lang", false, colorCTA = "#00ff00", positionCTA = "TOP"),
             "native_ob1" to AdUnitConfig("live_ob1", true),
             "native_ob2" to AdUnitConfig("live_ob2", false),
         )))
         val active = AdRemoteConfig.getInstance()
         assertEquals("test_lang", active.ads.getValue("native_lang").id)
         assertFalse("Remote switched the slot off", active.isPlacementEnabled("native_lang"))
+        assertEquals("#00ff00", active.ads.getValue("native_lang").colorCTA)
+        assertEquals("TOP", active.ads.getValue("native_lang").positionCTA)
         assertTrue("A unit remote never mentioned keeps the shipped test id", active.isPlacementEnabled("inter_splash"))
         assertTrue("Remote behavior remains declared even without a debug id", active.declares("native_ob1"))
         assertFalse("No test id exists for a remote-only slot", active.isPlacementEnabled("native_ob1"))

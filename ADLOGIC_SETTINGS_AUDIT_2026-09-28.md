@@ -8,7 +8,7 @@ Tài liệu mô tả source hiện tại của nhánh. Hướng dẫn tích hợ
 | --- | --- | --- |
 | `ad_remote_config` | `ad_config.json`; debug ưu tiên `ad_config_debug.json` | IDs/waterfall, `isEnable`, UA, CTA/components, `click_action`, banner cadence và `open_resume.app_resume_load_delay_ms` |
 | `ad_behavior_config` | `ad_behavior_config.json` tùy chọn | Global ads gate, consent timeout, timeout/cache/reload/presentation theo format, placement behavior, AutoBuffer và telemetry |
-| `onboarding_config` | `onboarding_config.json` tùy chọn | Splash/LFO/OB behavior, order, template, Skip/auto-next, exit interstitial, OB5/question và `privacy_goals_screen.enabled` |
+| `onboarding_config` | `onboarding_config.json` tùy chọn | Splash/LFO/OB behavior, order, Skip/auto-next, exit interstitial, OB5/question và `privacy_goals_screen.enabled` |
 
 SDK đóng gói hai grouped defaults dưới `adlogic_defaults/` và sinh typed defaults lúc build. File cùng tên ở asset root thuộc app tier, kể cả khi giống hoàn toàn bundled defaults. Nội dung UI, resource IDs, catalog ngôn ngữ và lựa chọn Goal thuộc code/resources của app. Firebase adapter nằm ở [suite-firebase](suite-firebase/README.md); PayKit dùng document riêng.
 
@@ -26,7 +26,7 @@ SDK đóng gói hai grouped defaults dưới `adlogic_defaults/` và sinh typed 
 | Consumer | Hành vi hiện tại |
 | --- | --- |
 | Native click | Chỉ lấy `click_action` từ base key của `ad_config`: `auto_next`, `none`, `reload`; floor `_high` không sở hữu action. Pager mặc định `auto_next` và không reload; `reload` trong pager xử lý như `none`. Native khác mặc định `reload`. |
-| Native style | Remote template → remote `positionCTA` → app template → app `positionCTA` → host/default. Frame cố định của popup/fullscreen/splash inline/Privacy/Goal giữ loại layout riêng. CTA corner radius theo behavior vẫn áp dụng khi helper không có style tường minh. |
+| Native style | Remote `positionCTA` → app `positionCTA` → host/default. JSON `native_template`/`content_template` đã bỏ. Mỗi bind đọc lại màu/chiều cao/components, kể cả click/resume replacement. Frame cố định của popup/fullscreen/splash inline/Privacy/Goal giữ loại layout riêng. CTA corner radius theo behavior vẫn áp dụng khi helper không có style tường minh. |
 | Banner | `enable_ua_check` của placement được đọc lại sau refresh; setter host tường minh ưu tiên hơn. Chỉ `reloadIntervalSeconds > 0` đổi cadence; thiếu/sai/0 dùng host/default. |
 | Interstitial | Screen/placement `presentation.loading_enabled` theo behavior đã chốt cho cả ready-cache và load-and-show. Splash/question behavior nhận tier timeout, loading dialog, cache age; không nhận `load_and_show.*`. Exit OB có wait riêng. |
 | AutoBuffer | Host phải configure/start. Rules remote/asset có thể thêm placement ngoài list host; host predicate/explicit false vẫn chặn. Placement mới được quản lý bắt đầu cooldown khi settings đổi. `tick_ms = 0` theo resolved interstitial interval. |

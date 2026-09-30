@@ -154,8 +154,9 @@ data class AdsConfig(
     val welcomeBackDupNative: NativeAdUnit? = null,
     /** App-resume / app-open ad, shown when the app returns to the foreground. */
     val appResume: InterstitialAdUnit? = null,
-    val contentStepTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("onboarding.ads.content_template")),
-    val languageTemplate: NativeTemplate = NativeTemplate.valueOf(OnboardingSettings.defaultText("lfo.native_template")),
+    /** Host fallback frames; onboarding JSON no longer owns native frame selection. */
+    val contentStepTemplate: NativeTemplate = NativeTemplate.CTA_TOP,
+    val languageTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
     val skipAdOnlyStepsWhenPremium: Boolean = OnboardingSettings.defaultBool("flow.skip_ad_only_steps_when_premium"),
     /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */

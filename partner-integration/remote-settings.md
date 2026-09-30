@@ -2,7 +2,7 @@
 
 **OB catalog:** `ob1..ob4` → `native_ob1..4`; `full1/full2` → `native_full1/2`. Default: `ob1, full1, ob2, full2, ob3, ob4`. All eligible OB natives preload on language selection. Remote `onboarding.order` selects/reorders app-declared steps. [Configuration / Hướng dẫn chi tiết](onboarding-flow.vi.md). `native_fs` remains the separate splash native.
 
-`onboarding.order` alone selects and orders pages in JSON; omit an ID to remove a page. Omit `steps` unless a page needs a template, behavior or fullscreen override. `steps.<id>.enabled` is removed and ignored. A remote `order` takes precedence over legacy `ob_enable_step_ob1..4` flags the backend delivered, and those take precedence over an `order` in the app asset. A page the app declares with `enabled = false` stays hidden until a remote `order` lists it or a delivered `ob_enable_step_obN = true` turns it on; an app-asset `order` keeps it hidden. Remote cannot add a page the app never declared. Control each ad placement with `ad_config.<placement>.isEnable`: content pages remain when ads are off, while fullscreen ad pages are skipped.
+`onboarding.order` alone selects and orders pages in JSON; omit an ID to remove a page. Omit `steps` unless a page needs a behavior or fullscreen override. `steps.<id>.enabled` is removed and ignored. A remote `order` takes precedence over legacy `ob_enable_step_ob1..4` flags the backend delivered, and those take precedence over an `order` in the app asset. A page the app declares with `enabled = false` stays hidden until a remote `order` lists it or a delivered `ob_enable_step_obN = true` turns it on; an app-asset `order` keeps it hidden. Remote cannot add a page the app never declared. Control each ad placement with `ad_config.<placement>.isEnable`: content pages remain when ads are off, while fullscreen ad pages are skipped.
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
@@ -25,7 +25,7 @@ The existing Firebase parameter remains `ad_remote_config`; `ad_config.json` / `
 
 - **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`. The new documents do not duplicate these fields, ad-unit mappings or individual unit switches.
 - **ad_behavior_config:** ad-format timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA corner radius and app-open behavior. Banner type/size uses SDK presets.
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, native templates, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation and Activity exclusions. SDK ad-presentation presets remain remotely configurable.
 
 The removed aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches and grouped app-content payload `ui` are ignored, including in old cached JSON. Existing remote UI APIs still work through `ob_ui_content`, `ob_ui_design_tokens` and `ob_enable_ui_content`; these are not new fields in the two grouped documents.
@@ -119,7 +119,7 @@ Screen slot override > shared content/fullscreen OB override > placement overrid
 
 Native preloads are initiated by app/SDK code. Replacement preloads use `setEnablePreload` and `preloadAfterShow`; remote `preload.enabled` / `preload.after_show` fields are unsupported. Onboarding scheduling uses `lfo1_preload_mode`, `preload_trigger` and `onboarding.preload.*`. Per-tier timeouts use `native.load.tier_timeout_ms` and `interstitial.load.tier_timeout_ms` (30000 ms by default).
 
-The splash interstitial slot is loaded, then shown from the buffer, so its `behavior` accepts `load.tier_timeout_ms`; `load_and_show.*` wait is ignored because this slot loads before it shows. Only the exit interstitial waits for a fill: `onboarding.exit_interstitial.wait_timeout_ms` outranks `placement_overrides` and format `interstitial.load_and_show.wait_timeout_ms`. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` and content `.native_template`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
+The splash interstitial slot is loaded, then shown from the buffer, so its `behavior` accepts `load.tier_timeout_ms`; `load_and_show.*` wait is ignored because this slot loads before it shows. Only the exit interstitial waits for a fill: `onboarding.exit_interstitial.wait_timeout_ms` outranks `placement_overrides` and format `interstitial.load_and_show.wait_timeout_ms`. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
 
 Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). Setting an interval does not enable the timer. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). A click on an onboarding ad skips the next app-open unless remote sets `app_open.presentation.skip_after_ad_click` to `false`. Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
 
@@ -157,9 +157,9 @@ Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confir
 
 ## Native templates, CTA and X/Skip experiments
 
-- `lfo.native_template`: `CTA_BOTTOM`; `onboarding.ads.content_template`: `CTA_TOP`; per-content-step `native_template`: `""` to inherit; Welcome Back follows `lfo.native_template`.
-- Frame priority: remote template (per-step > screen/group) > per-placement `positionCTA` (`TOP`/`BOTTOM`) from the backend's `ad_remote_config` > custom app asset template (per-step > screen/group) > `positionCTA` from the app's `ad_config.json` > host/SDK template. The SDK-bundled asset is the last fallback; a copy at the app asset root is an explicit override. Remove the corresponding template override when testing `positionCTA` itself.
-- Content presets are `CTA_TOP`, `CTA_BOTTOM`, `COMPACT`; group template fields also accept `FULL_SCREEN`/`DIALOG` as before. The language popup always uses `DIALOG`; ad-only Full1/Full2/OB5 always use `FULL_SCREEN`. App-provided custom layout resources remain local.
+- LFO, Welcome Back and content OB use `ad_remote_config.<placement>.positionCTA` (`TOP`/`BOTTOM`). `lfo.native_template`, `onboarding.ads.content_template` and `onboarding.steps.<id>.native_template` are removed; old payloads containing them are ignored.
+- `positionCTA`: remote > app asset > code/default. Omitted fields keep local values; `null`/`""` clears the position and uses the host/SDK fallback frame.
+- The LFO popup keeps `DIALOG`; Full1/Full2/OB5/native_fs keep `FULL_SCREEN`; splash inline/Privacy/Goal keep media-left frames. `colorCTA` applies to the CTA and Ad badge in every frame.
 - Preload and show share template resolution. If a host preloads early, or remote is refreshed after a preload, bind uses the current SDK frame without discarding the loaded ad. Already visible views remain until a subsequent bind. LFO1 scheduling follows the configured preload mode without waiting for remote.
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` and `ob5.skip.style` accept `CLOSE_ICON` / `TEXT`. Within one source a specific scope overrides a shared scope (remote at any scope outranks the app asset), then falls back to host configuration. Declared style defaults are `CLOSE_ICON`; changing style does not change Skip/auto-next timing.
 - The X/Skip side is per native full-screen page, with no shared scope above it: `onboarding.steps.<id>.fullscreen.skip.position` for each full-screen step, `ob5.skip.position` for standalone OB5 and `splash.native.skip.position` for the native_fs between the splash interstitial and LFO. All three accept `RIGHT` / `LEFT` and default to `RIGHT`, the side the X has always taken; the shipped JSON declares `full1` and `full2`, and any other step id the app declares is accepted at the same path. No other format has this control: interstitial, app-open, banner and inline native carry no such button. Both sides are exact mirrors — same inset from their edge and the same top margin — so only the side changes, never the size, the style or the timing. In an RTL locale the screen keeps mirroring as it does today: `RIGHT` follows the text end, `LEFT` its start.
@@ -193,7 +193,7 @@ Firebase shares in-flight fetches; one caller's timeout does not cancel others. 
 
 ## Complete default fields
 
-Times below are milliseconds except explicitly named seconds in ad_config/legacy APIs. `schema_version=1`; `revision` is metadata. Empty objects add no scope-specific overrides, and empty template strings mean inheritance. These tables and the copy/paste files use the same defaults as the SDK assets; JSON names/enums are not translated.
+Times below are milliseconds except explicitly named seconds in ad_config/legacy APIs. `schema_version=1`; `revision` is metadata. Empty objects add no scope-specific overrides. These tables and the copy/paste files use the same defaults as the SDK assets; JSON names/enums are not translated.
 
 ### ad_behavior_config
 
@@ -283,7 +283,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `splash.native.skip.style` | `"CLOSE_ICON"` |
 | `splash.native.skip.position` | `"RIGHT"` |
 | `splash.native.behavior` | `{}` |
-| `lfo.native_template` | `"CTA_BOTTOM"` |
 | `lfo.native1.behavior` | `{}` |
 | `lfo.native2.enabled` | `true` |
 | `lfo.native2.behavior` | `{}` |
@@ -306,7 +305,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
-| `onboarding.ads.content_template` | `"CTA_TOP"` |
 | `onboarding.ads.content_native_behavior` | `{}` |
 | `onboarding.ads.fullscreen_native_behavior` | `{}` |
 | `onboarding.fullscreen.skip.enabled` | `true` |

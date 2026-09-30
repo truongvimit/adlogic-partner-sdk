@@ -190,6 +190,7 @@ class ERainAdProvider : OnboardingAdProvider() {
         private val layoutRes = request.layoutRes
         private val config = nativeConfig(request)
         val helper = NativeAdHelper(activity, owner, config, key)
+            .setNativeStyleProvider { currentNativeStyle() }
             .setNativeContentView(container)
             .also {
                 it.reportTelemetry = false
@@ -213,11 +214,12 @@ class ERainAdProvider : OnboardingAdProvider() {
 
         fun refresh() {
             config.behavior = OnboardingSettings.behavior(placement)
-            val ads = AdRemoteConfig.getInstance()
-            val unit = OnboardingSdk.configuredPlacementKey(placement)?.let { ads.ads[it] }
-                ?: config.adUnitIds.firstNotNullOfOrNull(ads::unitForAdId)
-            helper.setNativeStyle(unit?.toNativeStyle())
         }
+
+        private fun currentNativeStyle() = AdRemoteConfig.getInstance().let { ads ->
+            OnboardingSdk.configuredPlacementKey(placement)?.let { ads.ads[it] }
+                ?: config.adUnitIds.firstNotNullOfOrNull(ads::unitForAdId)
+        }?.toNativeStyle()
 
         fun bind(listener: AdEventListener): Boolean {
             this.listener?.onDetached()

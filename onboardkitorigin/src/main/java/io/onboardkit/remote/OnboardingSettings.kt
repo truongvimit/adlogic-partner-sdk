@@ -40,7 +40,6 @@ object OnboardingSettings {
             // owns its own side, so there is no "onboarding.fullscreen.*" default to borrow.
             if (suffix == "fullscreen.skip.position") return FullScreenSkipPosition.RIGHT.name
             if (suffix.startsWith("fullscreen.")) return document.defaultValue("onboarding.$suffix")
-            if (suffix == "native_template") return ""
             if (suffix == "behavior") return emptyMap<String, Any>()
             if (!suffix.startsWith("behavior.")) return null
         }
@@ -349,8 +348,6 @@ object OnboardingSettings {
             afterOnboardingInterstitialEnabled = v.boolean("onboarding.exit_interstitial.enabled", a.afterOnboardingInterstitialEnabled),
             skipAdOnlyStepsWhenPremium = v.boolean("flow.skip_ad_only_steps_when_premium", a.skipAdOnlyStepsWhenPremium),
             fullScreenSkipStyle = v.enumOr("flow.fullscreen_skip_style", a.fullScreenSkipStyle),
-            languageTemplate = v.enumOr("lfo.native_template", a.languageTemplate),
-            contentStepTemplate = v.enumOr("onboarding.ads.content_template", a.contentStepTemplate),
             afterOnboardingInterstitialTiming = v.enumOr("onboarding.exit_interstitial.next_screen_timing", a.afterOnboardingInterstitialTiming),
         )
 

@@ -252,7 +252,7 @@ class OnboardingSettingsTest {
         OnboardingSettings.document.acceptSuccessfulFetch("""{"ob5":{"native":{"placement":"remote_ob5","enabled":false}},"lfo":{"native_template":"CTA_TOP"},"flow":{"system_bars":{"show_status":true}},"ui":{"content":{"steps":[{"id":"ob1","title":"ignored"}]}}}""")
         val resolved = OnboardingSettings.resolve(config)
         assertEquals(listOf("local_ob5"), resolved.ads.ob5Native!!.loadOrder)
-        assertEquals(NativeTemplate.CTA_TOP, resolved.ads.languageTemplate)
+        assertEquals(NativeTemplate.COMPACT, resolved.ads.languageTemplate)
         assertFalse(resolved.system.showStatusBar)
         assertEquals(RemoteFlags(), OnboardingSettings.resolveFlags(RemoteFlags()))
     }

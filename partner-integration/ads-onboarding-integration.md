@@ -167,7 +167,7 @@ Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) into the s
 
 A declared disabled placement keeps an empty unit, so it cannot borrow a different slot's ad. Only an absent LFO2 unit falls back to LFO1; turn the replacement action off with `onboarding_config.lfo.native2.enabled = false`.
 
-Native templates can be controlled by `lfo.native_template`, `onboarding.ads.content_template` and `onboarding.steps.<id>.native_template`; Welcome Back follows `lfo.native_template`. A remote template override comes first, then `positionCTA` from the backend's `ad_remote_config`, then a template in your app asset, then `positionCTA` from your `ad_config.json`, then the host/SDK template. Fullscreen/popup retain their fixed layouts. Colors, CTA height and components stay in ad_config; app resource/layout references stay in code.
+LFO/Welcome Back/content OB native frames use the base placement key’s `positionCTA` (`TOP`/`BOTTOM`) in `ad_remote_config`, ahead of app assets and the host fallback. `native_template`/`content_template` in `onboarding_config` are removed, including per-step overrides. Fullscreen/popup frames remain fixed. `colorCTA` colors both the CTA and Ad badge; color/height/components are re-read at every bind, including click/resume replacements.
 
 ## 5. Initialize in your Application
 

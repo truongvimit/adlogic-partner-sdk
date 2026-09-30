@@ -88,20 +88,31 @@ class GroupedSettingsOwnershipTest {
         assertEquals(0, OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.tierCount)
     }
 
-    @Test fun `remote template overrides the frame and removal restores ad config then host`() {
+    @Test fun `positionCTA overrides the frame and removal restores host fallback`() {
         OnboardingSdk.configure(onboardKitConfig { ads = AdsConfig.fromAdConfig().copy(languageTemplate = NativeTemplate.COMPACT) }.getOrThrow())
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.Language1))
         AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig("lang", true, positionCTA = "TOP"))))
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language1))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_BOTTOM"}}""")
-        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.Language1))
-        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.Language2))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language1))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language2))
         assertFalse(OnboardingSettings.document.acceptSuccessfulFetch("{broken"))
-        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.Language1))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language1))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"invalid"}}""")
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language1))
         AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig("lang", true))))
         assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.Language1))
+    }
+
+    @Test fun `removed JSON templates cannot override placement positionCTA`() {
+        OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_BOTTOM"},"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_BOTTOM"}}}}""")
+        AdRemoteConfig.initializeFromJson("""{"native_lang":{"id":"lang","isEnable":true,"positionCTA":"TOP"},"native_ob1":{"id":"ob1","isEnable":true,"positionCTA":"TOP"}}""")
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.Language1))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
+        assertFalse(OnboardingSettings.values.hasOverride("lfo.native_template"))
+        assertFalse(OnboardingSettings.values.hasOverride("onboarding.ads.content_template"))
+        assertFalse(OnboardingSettings.values.hasOverride("onboarding.steps.ob1.native_template"))
     }
 
     @Test fun `a remote key that omits positionCTA keeps the lower tier position`() {
@@ -115,19 +126,20 @@ class GroupedSettingsOwnershipTest {
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(ob1))
     }
 
-    @Test fun `per step templates inherit group defaults and fixed ad hosts keep their geometry`() {
+    @Test fun `placement positions override obsolete templates and fixed ad hosts keep their geometry`() {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_BOTTOM"},"custom":{"native_template":"CTA_TOP"},"ob3":{"native_template":"COMPACT"}}},"lfo":{"native_template":"CTA_TOP"}}""")
+        AdRemoteConfig.initializeFromJson("""{"native_ob1":{"id":"ob1","isEnable":true,"positionCTA":"BOTTOM"},"native_ob2":{"id":"ob2","isEnable":true,"positionCTA":"TOP"},"native_welcome1":{"id":"welcome","isEnable":true,"positionCTA":"BOTTOM"}}""")
         assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
-        assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
         assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId("custom"))))
-        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.WelcomeBack1))
+        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.WelcomeBack1))
         assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.StepFullScreen(StepId.OB3)))
         assertEquals(NativeTemplate.DIALOG, NativeTemplates.templateForPlacement(AdPlacement.LanguageConfirm))
         assertEquals(NativeTemplate.FULL_SCREEN, NativeTemplates.templateForPlacement(AdPlacement.SplashNative))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":""},"ob2":{"native_template":"INVALID"}}}}""")
-        assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
-        assertEquals(NativeTemplate.COMPACT, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
+        assertEquals(NativeTemplate.CTA_BOTTOM, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB1)))
+        assertEquals(NativeTemplate.CTA_TOP, NativeTemplates.templateForPlacement(AdPlacement.StepNative(StepId.OB2)))
     }
 
     @Test fun `grouped fetch changes navigation but cannot publish app UI payloads`() = runTest {

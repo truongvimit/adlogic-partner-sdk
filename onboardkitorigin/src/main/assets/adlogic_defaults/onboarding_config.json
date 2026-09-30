@@ -52,7 +52,6 @@
     }
   },
   "lfo": {
-    "native_template": "CTA_BOTTOM",
     "native1": {
       "behavior": {}
     },
@@ -94,7 +93,6 @@
       "back_navigates_back": true
     },
     "ads": {
-      "content_template": "CTA_TOP",
       "content_native_behavior": {},
       "fullscreen_native_behavior": {}
     },

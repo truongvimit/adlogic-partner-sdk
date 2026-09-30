@@ -167,7 +167,7 @@ LFO, popup, OB और native ads के layouts/Activities SDK पहले स�
 
 Declared लेकिन disabled placement खाली unit रखता है, इसलिए दूसरे slot का ad नहीं लेता। केवल LFO2 unit absent होने पर LFO1 fallback है; replacement action बंद करने के लिए `onboarding_config.lfo.native2.enabled = false` रखें।
 
-Native templates के लिए `lfo.native_template`, `onboarding.ads.content_template` और `onboarding.steps.<id>.native_template` इस्तेमाल करें; Welcome Back `lfo.native_template` का पालन करता है। Remote template override पहले लागू होता है, फिर backend के `ad_remote_config` का `positionCTA`, फिर आपके app asset का template, फिर आपकी `ad_config.json` का `positionCTA`, फिर host/SDK template। Fullscreen/popup अपने तय layouts रखते हैं। Color, CTA height और components ad_config में, जबकि app resource/layout references code में रहते हैं।
+LFO/Welcome Back/content OB native frame `ad_remote_config` के base placement key के `positionCTA` (`TOP`/`BOTTOM`) से चुना जाता है, फिर app asset और host fallback आते हैं। `onboarding_config` के `native_template`/`content_template`, per-step overrides समेत, हटा दिए गए हैं। Fullscreen/popup frame स्थिर रहते हैं। `colorCTA` CTA और Ad badge दोनों को रंग देता है; color/height/components हर bind पर फिर पढ़े जाते हैं, click/resume replacement पर भी।
 
 ## 5. अपनी Application में initialize करें
 

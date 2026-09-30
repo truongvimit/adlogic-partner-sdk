@@ -47,6 +47,6 @@ Declare these in both `ad_config.json` (production IDs) and `ad_config_debug.jso
 }
 ```
 
-`native_welcome1` is preloaded by the splash at the same moment and in the same mode as LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` is preloaded when Welcome Back opens and replaces the first ad on the first tap; the first ad stays if the second has no fill. Both render with the LFO native template (`lfo.native_template`, `positionCTA` of the key). The base `isEnable` switches off its whole waterfall; the screen still shows.
+`native_welcome1` is preloaded by the splash at the same moment and in the same mode as LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` is preloaded when Welcome Back opens and replaces the first ad on the first tap; the first ad stays if the second has no fill. Both use their base key’s `positionCTA` in `ad_remote_config`. The base `isEnable` switches off its whole waterfall; the screen still shows.
 
 With the default timing the screen opens after the splash interstitial is dismissed. Continue records the pick as a `GoalAnswer` (emitted as `OnboardingEvent.GoalsSelected`, readable later through `OnboardingSdk.selectedGoals()`) and delivers `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` with the launch passthrough. Nothing is marked complete and no `FlowCompleted` / `fo_flow_complete` fires, so the screen shows again on the next launcher launch. Back closes the app.

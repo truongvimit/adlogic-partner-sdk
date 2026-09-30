@@ -88,7 +88,7 @@ AdConfig.install(FirebaseAdConfigSource())
 | --- | --- | --- |
 | `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), thay ID production của app | ID, tầng, bật/tắt và các field CTA hiện có. Key khai báo ở đây ưu tiên hơn ad unit ID ghi trong code, và `open_resume` kèm ID sẽ bật app-open. Giữ nguyên tên parameter. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Hành vi theo dạng ads, timeout, reload/cache và bo góc CTA native. |
-| `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB, template native, X/Skip, swipe và preload. |
+| `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB, X/Skip, swipe và preload. |
 
 `ad_config.json` và `ad_config_debug.json` là tên asset local; source Firebase mặc định đọc **một** key ad unit là `ad_remote_config`. Không tạo thêm parameter `ad_config`, `ad_config_debug`, `ad_behavior_config_debug` hoặc `onboarding_config_debug` cho cách tích hợp này. Debug mặc định pin ad unit ID của `ad_config_debug.json` (hoặc `ad_config.json` khi không có file debug) **nhưng vẫn áp mọi field khác của `ad_remote_config` và cả hai parameter settings mới**; key chỉ remote khai báo bị bỏ trừ khi nó tắt slot, và log `WARN` từ `AdRemoteConfig` nêu tên file đang pin. `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` nhận cả ID remote. Dùng project/condition kiểm thử khi thử nghiệm. Các key `ob_*` cũ vẫn tương thích, không lồng vào các object JSON này. Key `ob_*` đã gửi xếp dưới các document này và trên asset cùng cấu hình Kotlin của app. [Kiểu parameter và condition của Firebase](https://firebase.google.com/docs/remote-config/parameters).
 
@@ -122,7 +122,6 @@ SDK đã đóng gói default của hai JSON. **Nếu dùng đúng default SDK th
 {
   "schema_version": 1,
   "splash": { "permissions": { "no_internet_prompt_enabled": false } },
-  "lfo": { "native_template": "COMPACT" },
   "onboarding": {
     "navigation": { "lock_pager_swipe": false },
     "fullscreen": { "skip": { "delay_ms": 1500 } }
@@ -154,7 +153,7 @@ Asset app custom/khai báo một phần gán tường minh mọi field hợp l�
 
 - Dùng bản SDK đã có grouped settings và `AdsConfig.fromAdConfig()`, đồng bộ version các module. Chỉ thêm key trên Firebase không bổ sung tính năng này cho SDK cũ.
 - Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
-- Template override từ remote chọn khung native trước `positionCTA`, và `positionCTA` từ `ad_remote_config` ưu tiên hơn template trong asset app; màu/chiều cao/components CTA vẫn ở `ad_remote_config`. Giữ `R.layout`, reference resource, system bars, orientation và progress indicator trong app. Consent và premium vẫn có hiệu lực. Cờ global duy nhất là `ad_behavior_config.global.ads_enabled`; hãy tắt từng placement LFO/onboarding bằng `isEnable` và placement flag riêng. Các cờ bật/tắt toàn flow đã bỏ.
+- Frame native LFO/OB chỉ lấy `positionCTA` ở base key trong `ad_remote_config`; remote ưu tiên asset app. `colorCTA` điều khiển nền CTA và badge Ad. Hai cờ JSON `native_template`/`content_template` đã bỏ. Giữ `R.layout`, reference resource, system bars, orientation và progress indicator trong app. Consent và premium vẫn có hiệu lực. Cờ global duy nhất là `ad_behavior_config.global.ads_enabled`; hãy tắt từng placement LFO/onboarding bằng `isEnable` và placement flag riêng. Các cờ bật/tắt toàn flow đã bỏ.
 - Firebase dùng chung fetch; kết quả thành công được dùng lại trong process. Minimum fetch interval mặc định của Firebase là 12 giờ và SDK không đổi giá trị này, nên thay đổi trên Console có thể mất ngần ấy thời gian mới tới máy. Muốn thay đổi tới được lần mở sau, đặt interval trong Application trước lượt fetch đầu, ví dụ `FirebaseRemoteConfig.getInstance().setConfigSettingsAsync(remoteConfigSettings { minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) 0 else 3600 })`. Khi QA thay đổi trên Console, khởi động lại process; mở lại Activity không bảo đảm có lượt network fetch mới.
 - `AdConfig.refresh()` trả về việc có áp dụng một document `ad_remote_config` hay không. Không dùng Boolean này làm cờ thành công của hai document mới.
 - Kiểm tra remote hợp lệ, field thiếu/sai, offline lần đầu dùng local và offline sau một lần remote thành công dùng cache. JSON local phải được build vào app.
