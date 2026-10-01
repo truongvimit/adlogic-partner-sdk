@@ -19,4 +19,12 @@
 
         <include layout="@layout/load_fb_banner_size_medium" />
     </FrameLayout>
+
+    <View
+        android:id="@+id/banner_separator"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_alignParentTop="true"
+        android:background="@color/stockeCard"
+        android:visibility="gone" />
 </RelativeLayout>

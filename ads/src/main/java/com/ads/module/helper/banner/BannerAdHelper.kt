@@ -138,6 +138,7 @@ class BannerAdHelper(
             } else {
                 // The placeholder shimmer auto-starts; a skip must stop it or it runs forever
                 hideShimmer()
+                setSeparatorVisible(false)
                 setState(AdBannerState.Fail)
             }
             // A transient block (offline, momentary gate) must not end the interval chain
@@ -150,6 +151,9 @@ class BannerAdHelper(
         } else {
             config.bannerType
         }
+        // Keep the ad/content boundary visible while the shimmer is loading. The separator is
+        // outside the shimmer because the shimmer's white child covers the card drawable stroke.
+        setSeparatorVisible(true)
         load(effectiveType)
     }
 
@@ -191,6 +195,7 @@ class BannerAdHelper(
         if (config.adUnitIds.isEmpty()) {
             // Failing fast beats a Loading state nothing can ever resolve
             hideShimmer()
+            setSeparatorVisible(false)
             setState(AdBannerState.Fail)
             listeners.forEach { it.onAdFailedToLoad(null) }
             return
@@ -226,6 +231,7 @@ class BannerAdHelper(
                         (view.parent as? ViewGroup)?.removeView(view)
                     }
                 }
+                setSeparatorVisible(true)
                 setState(AdBannerState.Loaded)
                 // Collapsible loaders never forward onAdImpression; arm the timer here
                 if (config.bannerType is BannerType.Collapsible) armAutoReload()
@@ -238,6 +244,7 @@ class BannerAdHelper(
                 if (_bannerAdState.value !is AdBannerState.Loading) {
                     if (_bannerAdState.value is AdBannerState.Loaded) {
                         bannerContainer()?.visibility = View.VISIBLE
+                        setSeparatorVisible(true)
                     }
                     listeners.forEach { it.onAdFailedToLoad(adError) }
                     return
@@ -257,6 +264,9 @@ class BannerAdHelper(
                 // message so a surviving banner never renders a hidden frame — no flicker
                 if (oldViews.isNotEmpty()) {
                     bannerContainer()?.visibility = View.VISIBLE
+                    setSeparatorVisible(true)
+                } else {
+                    setSeparatorVisible(false)
                 }
                 // Waterfall: a lower floor gets its turn before anything is surfaced
                 if (index + 1 < config.adUnitIds.size) {
@@ -358,9 +368,20 @@ class BannerAdHelper(
         }
     }
 
+    private fun setSeparatorVisible(visible: Boolean) {
+        val root = rootView
+        val separator = if (root != null) {
+            root.findViewById<View>(R.id.banner_separator)
+        } else {
+            activity.findViewById(R.id.banner_separator)
+        }
+        separator?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
     private fun detachAdView() {
         val container = bannerContainer() ?: return
         destroyAdViews(container)
+        setSeparatorVisible(false)
     }
 
     private fun reportSkip(passesUaGate: Boolean) {

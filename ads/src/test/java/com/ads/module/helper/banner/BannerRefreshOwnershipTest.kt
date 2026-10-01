@@ -124,6 +124,34 @@ class BannerRefreshOwnershipTest {
     }
 
     @Test
+    fun `fixed and collapsible banners keep a separator after the shimmer is hidden`() {
+        val types = listOf(
+            BannerType.Fixed(FixedBannerSize.BANNER),
+            BannerType.Fixed(FixedBannerSize.LARGE_BANNER),
+            BannerType.Fixed(FixedBannerSize.MEDIUM_RECTANGLE),
+            BannerType.Collapsible(),
+        )
+
+        types.forEach { type ->
+            helper?.cancel()
+            requests.clear()
+            val current = createHelper(canReload = false, type = type)
+            current.requestAds(BannerAdParam.Request)
+            assertEquals(
+                "separator must be visible while the ${type::class.simpleName} shimmer loads",
+                View.VISIBLE,
+                host.findViewById<View>(R.id.banner_separator).visibility,
+            )
+            fill(requests.single())
+            assertEquals(
+                "separator must survive the ${type::class.simpleName} loaded state",
+                View.VISIBLE,
+                host.findViewById<View>(R.id.banner_separator).visibility,
+            )
+        }
+    }
+
+    @Test
     fun `every initial tier is collapsible but every Reload tier is ordinary and survivor remains until fill`() {
         val helper = createHelper(canReload = true, tiers = listOf("high", "normal"))
         helper.requestAds(BannerAdParam.Request)
