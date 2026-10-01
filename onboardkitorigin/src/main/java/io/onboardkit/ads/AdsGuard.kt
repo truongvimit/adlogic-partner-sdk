@@ -99,6 +99,10 @@ class AdsGuard internal constructor(
                 return AdSkipReason.ADS_OFF_IN_CONFIG
             }
         }
+        if ((placement == AdPlacement.WelcomeBack1 || placement == AdPlacement.WelcomeBack2) &&
+            !io.onboardkit.OnboardingSdk.offersWelcomeBack(cfg)) {
+            return AdSkipReason.ADS_OFF_IN_CONFIG
+        }
 
         val slot = unit ?: cfg.ads.unitFor(placement)
         if (slot == null || slot.tierCount == 0) return AdSkipReason.NO_AD_UNIT

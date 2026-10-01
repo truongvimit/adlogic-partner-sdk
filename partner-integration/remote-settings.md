@@ -12,7 +12,7 @@ Use the **newest SDK version** from [JitPack](https://jitpack.io/#truongvimit/ad
 
 Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
 
-A returning user who opens the app from the launcher lands on the Welcome Back screen after the splash; `welcome_back.enabled` turns it off. See [Welcome Back](welcome-back-screen.md).
+A returning user who opens the app from the launcher skips Welcome Back by default and goes to the app after the splash. Enable `welcome_back.enabled=true` to show it. See [Welcome Back](welcome-back-screen.md).
 
 ## Documents and ownership
 
@@ -328,7 +328,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `ob5.skip.style` | `"CLOSE_ICON"` |
 | `ob5.skip.position` | `"RIGHT"` |
 | `ob5.auto_dismiss_ms` | `15000` |
-| `welcome_back.enabled` | `true` |
+| `welcome_back.enabled` | `false` |
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
 

@@ -4,13 +4,13 @@
 
 Welcome Back là màn user cũ thấy sau splash mỗi lần mở app từ launcher: Splash (`inter_splash_o`) → Welcome Back → app. User chọn 1 trong 4 mục tiêu rồi Continue để vào app. Màn không bao giờ mở cho user mới hay cho lần vào từ notification, widget, uninstall; các đường đó giữ nguyên.
 
-Mặc định bật. Tắt trong asset app hoặc remote `onboarding_config`:
+SDK mặc định ẩn. Bật trong asset app hoặc remote `onboarding_config`:
 
 ```json
-{ "welcome_back": { "enabled": false } }
+{ "welcome_back": { "enabled": true } }
 ```
 
-Khi tắt, lần mở từ launcher của user cũ vào thẳng app, mở dưới ad splash, với `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
+Khi tắt, cả hai native Welcome Back không được preload. Lần mở từ launcher của user cũ vào thẳng app, mở dưới ad splash, với `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
 
 SDK có sẵn 4 mục tiêu PDF (Edit PDF, Add text, Sign & fill, Split & merge). Thay bằng của app:
 

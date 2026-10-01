@@ -12,7 +12,7 @@
 
 वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
 
-Launcher से app खोलने वाला लौटता user splash के बाद Welcome Back स्क्रीन पर आता है; `welcome_back.enabled` इसे बंद करता है। [Welcome Back](welcome-back-screen.hi.md) देखें।
+Launcher से app खोलने वाला लौटता user splash के बाद डिफ़ॉल्ट रूप से Welcome Back छोड़कर app में जाता है। इसे दिखाने के लिए `welcome_back.enabled=true` करें। [Welcome Back](welcome-back-screen.hi.md) देखें।
 
 Pager page का view बने रहने तक native bound रहता है; content या Full1/Full2 पर लौटने पर वही ad दिखता है, नया request नहीं होता। Fullscreen auto-next हर visit पर फिर शुरू होता है; लौटने पर enabled Skip तुरंत दिखता है, और exit न होने पर सुरक्षा के लिए भी दिखता है। पहली no-fill पर अगला page आता है; failed page पर वापस आने पर fallback और Skip दिखते हैं। View नष्ट होने पर ad release होता है।
 

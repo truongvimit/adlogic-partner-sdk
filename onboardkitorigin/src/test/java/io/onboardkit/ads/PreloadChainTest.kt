@@ -74,6 +74,7 @@ class PreloadChainTest {
     }
 
     @Test fun `welcome back warms slot 1 at splash with a handoff and slot 2 on entry`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
         chain.onSplashRemoteReady(activity, FlowDestination.WELCOME_BACK, 0)
         assertEquals(listOf(AdPlacement.WelcomeBack1), requests)
         assertTrue(chain.takeWelcome1Preload())
@@ -84,6 +85,45 @@ class PreloadChainTest {
         assertTrue(requests.isEmpty())
         chain.preloadWelcome2(activity)
         assertEquals(listOf(AdPlacement.WelcomeBack2), requests)
+    }
+
+    @Test fun `disabled welcome back never preloads or leaves a handoff`() {
+        chain.onSplashRemoteReady(activity, FlowDestination.WELCOME_BACK, 0)
+        chain.preloadWelcome2(activity)
+        assertTrue(requests.isEmpty())
+        assertFalse(chain.takeWelcome1Preload())
+    }
+
+    @Test fun `disabling welcome clears an earlier handoff and stops further requests`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
+        chain.preloadWelcome1(activity)
+        assertEquals(listOf(AdPlacement.WelcomeBack1), requests)
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":false}}""")
+        chain.preloadWelcome1(activity)
+        chain.preloadWelcome2(activity)
+        assertEquals(listOf(AdPlacement.WelcomeBack1), requests)
+        assertFalse(chain.takeWelcome1Preload())
+    }
+
+    @Test fun `default privacy group with configured goals and units never preloads any of its four slots`() {
+        cfg = onboardKitConfig {
+            defaultSteps()
+            privacyGoalsScreen = PrivacyGoalsScreenConfig(
+                goal = GoalsScreenConfig(options = listOf(GoalOption("edit", title = "Edit"))),
+            )
+            ads = AdsConfig(contentStepNative = NativeAdUnit("content"), stepNatives = listOf(
+                StepId.PARTNER_PRIVACY, StepId.PARTNER_PRIVACY_ALT, StepId.PARTNER_GOAL, StepId.PARTNER_GOAL_ALT,
+            ).associateWith { NativeAdUnit(it.value) })
+        }.getOrThrow()
+        chain.onStepSelected(activity, steps, steps.lastIndex)
+        chain.preloadPrivacy1(activity)
+        chain.preloadPrivacy2(activity)
+        chain.preloadGoal1(activity)
+        chain.preloadGoal2(activity)
+        assertTrue(requests.isEmpty())
+        chain.onLanguageSelected(activity)
+        assertEquals("Ordinary content still preloads", steps.filterNot { it == StepId.FULL1 || it == StepId.FULL2 }
+            .map { AdPlacement.StepNative(it) }, requests)
     }
 
     @Test fun `language selection warms all six slots once and exit inter only on pager entry`() {

@@ -1,5 +1,11 @@
 {
   "schema_version": 1,
+  "privacy_goals_screen": {
+    "enabled": true
+  },
+  "welcome_back": {
+    "enabled": true
+  },
   "onboarding": {
     "primary_color": "#1E88E5"
   }

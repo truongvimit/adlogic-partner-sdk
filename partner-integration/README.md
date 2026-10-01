@@ -17,7 +17,7 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 
 Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
 
-A returning user who opens the app from the launcher lands on the Welcome Back screen after the splash; `welcome_back.enabled` turns it off. See [Welcome Back](welcome-back-screen.md).
+A returning user who opens the app from the launcher skips Welcome Back by default and goes to the app after the splash. Enable `welcome_back.enabled=true` to show it. See [Welcome Back](welcome-back-screen.md).
 
 ## Order to wire into your app
 

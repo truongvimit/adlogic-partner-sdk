@@ -107,12 +107,17 @@ class PreloadChain internal constructor(
     /** Same splash trigger and mode as [preloadLanguage1], for a returning launcher launch. */
     @JvmOverloads
     fun preloadWelcome1(activity: Activity, allowWhileVisible: Boolean = false) {
+        if (!welcomeBackEnabled()) {
+            welcome1HandoffPending = false
+            return
+        }
         welcome1HandoffPending = true
         preloadNative(activity, AdPlacement.WelcomeBack1, allowWhileVisible)
     }
 
     /** Welcome Back is on screen; slot 2 is buffered before the first tap swaps it in. */
     fun preloadWelcome2(activity: Activity) {
+        if (!welcomeBackEnabled()) return
         preloadNative(activity, AdPlacement.WelcomeBack2)
     }
 
@@ -176,6 +181,10 @@ class PreloadChain internal constructor(
         if (!io.onboardkit.OnboardingSdk.offersPrivacyGoals(cfg)) return
         preloadNative(activity, AdPlacement.StepNative(id))
     }
+
+    /** The screen switch owns both welcome-back preloads, including direct callers. */
+    private fun welcomeBackEnabled(): Boolean =
+        config()?.let(io.onboardkit.OnboardingSdk::offersWelcomeBack) == true
 
     private fun preloadOb5(activity: Activity) {
         preloadNative(activity, AdPlacement.Ob5)

@@ -329,8 +329,12 @@ object OnboardingSdk {
 
     /** Read live; like the other screen switches it ignores ad fill and entitlement. */
     internal fun welcomeBackEnabled(): Boolean =
+        configOrNull()?.let(::offersWelcomeBack) == true
+
+    /** Shared by routing, preload and ad gates so disabled screens cannot spend on natives. */
+    internal fun offersWelcomeBack(config: OnboardKitConfig): Boolean =
         io.onboardkit.remote.OnboardingSettings.bool("welcome_back.enabled") &&
-            configOrNull()?.welcomeBackScreen?.options?.isNotEmpty() == true
+            config.welcomeBackScreen.options.isNotEmpty()
 
     /** Screen availability is independent of ad fill, entitlement and placement switches. */
     internal fun privacyGoalsScreenEnabled(): Boolean {

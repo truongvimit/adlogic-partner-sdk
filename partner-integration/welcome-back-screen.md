@@ -4,13 +4,13 @@
 
 Welcome Back is the screen a returning user sees after the splash every time they open the app from the launcher: Splash (`inter_splash_o`) → Welcome Back → app. The user picks one of four goals, then Continue hands over to the app. It never opens for a first-open user or for a notification, widget or uninstall entry; those keep their current route.
 
-It is on by default. Turn it off in the app asset or remote `onboarding_config`:
+It is hidden by default. Enable it in the app asset or remote `onboarding_config`:
 
 ```json
-{ "welcome_back": { "enabled": false } }
+{ "welcome_back": { "enabled": true } }
 ```
 
-Off, a returning launcher launch goes straight to the app, opened underneath the splash ad, with `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
+When disabled, neither Welcome Back native slot is preloaded. A returning launcher launch goes straight to the app, opened underneath the splash ad, with `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
 
 The SDK ships four PDF goals (Edit PDF, Add text, Sign & fill, Split & merge). Replace them with your own:
 

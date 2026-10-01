@@ -12,7 +12,7 @@ Console setup के लिए [तीन String parameters publish करने
 
 वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
 
-Launcher से app खोलने वाला लौटता user splash के बाद Welcome Back स्क्रीन पर आता है; `welcome_back.enabled` इसे बंद करता है। [Welcome Back](welcome-back-screen.hi.md) देखें।
+Launcher से app खोलने वाला लौटता user splash के बाद डिफ़ॉल्ट रूप से Welcome Back छोड़कर app में जाता है। इसे दिखाने के लिए `welcome_back.enabled=true` करें। [Welcome Back](welcome-back-screen.hi.md) देखें।
 
 ## Documents और field ownership
 
@@ -328,7 +328,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `ob5.skip.style` | `"CLOSE_ICON"` |
 | `ob5.skip.position` | `"RIGHT"` |
 | `ob5.auto_dismiss_ms` | `15000` |
-| `welcome_back.enabled` | `true` |
+| `welcome_back.enabled` | `false` |
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
 

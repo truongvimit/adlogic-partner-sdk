@@ -12,7 +12,7 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
-User cũ mở app từ launcher sẽ vào màn Welcome Back sau splash; tắt bằng `welcome_back.enabled`. Xem [Welcome Back](welcome-back-screen.vi.md).
+User cũ mở app từ launcher mặc định bỏ qua Welcome Back và vào app sau splash. Bật `welcome_back.enabled=true` để hiện màn này. Xem [Welcome Back](welcome-back-screen.vi.md).
 
 Native trong pager được giữ khi view của trang còn tồn tại; quay lại content hoặc Full1/Full2 hiển thị cùng ad, không xin request mới. Auto-next fullscreen bắt đầu lại mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật hoặc cần chống kẹt. No-fill lần đầu tự đi tiếp; quay lại trang lỗi hiện fallback và Skip. Ad được giải phóng khi view bị hủy.
 

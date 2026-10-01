@@ -412,6 +412,29 @@ class NativeProviderOwnershipTest {
         }
     }
 
+    @Test fun `queued welcome natives do not dispatch after the screen is disabled`() {
+        val sdk = io.onboardkit.OnboardingSdk
+        val settings = io.onboardkit.remote.OnboardingSettings.document
+        val host = controller.get()
+        sdk.install(host.application) { adProvider = provider; trackkitAutoTracking(false) }
+        sdk.configure(io.onboardkit.config.onboardKitConfig {
+            ads = io.onboardkit.config.AdsConfig(welcomeBackNative = request.unit, welcomeBackDupNative = request.unit)
+        }.getOrThrow()).getOrThrow()
+        settings.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
+        controller.pause().stop().windowFocusChanged(false)
+        val pages = listOf(AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2)
+        pages.forEach { page ->
+            provider.preloadNative(host, request.copy(placement = page))
+            assertEquals(NativeStatus.LOADING, provider.nativeStatus(page))
+        }
+        assertTrue(requests.isEmpty())
+        settings.acceptSuccessfulFetch("""{"welcome_back":{"enabled":false}}""")
+        controller.restart().start().resume().visible().windowFocusChanged(true)
+        main.idle()
+        assertTrue("The disabled screen must not spend even a queued request", requests.isEmpty())
+        pages.forEach { assertEquals(NativeStatus.IDLE, provider.nativeStatus(it)) }
+    }
+
     @Test fun `a slot whose queued request is refused at dispatch ends unavailable once without a request`() {
         configureLanguageNative(controller.get())
         val unfocused = Robolectric.buildActivity(NativeProviderHost::class.java).setup()

@@ -12,7 +12,7 @@ Use the **newest SDK version** from [JitPack](https://jitpack.io/#truongvimit/ad
 
 Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
 
-A returning user who opens the app from the launcher lands on the Welcome Back screen after the splash; `welcome_back.enabled` turns it off. See [Welcome Back](welcome-back-screen.md).
+A returning user who opens the app from the launcher skips Welcome Back by default and goes to the app after the splash. Enable `welcome_back.enabled=true` to show it. See [Welcome Back](welcome-back-screen.md).
 
 Pager natives stay bound while their page view survives, so revisiting content or Full1/Full2 shows the same ad without another request. Fullscreen auto-next restarts on each visit; revisits show Skip immediately when enabled or required to prevent a trap. A first no-fill advances; revisiting a failed page shows its fallback and Skip. Ads are released when the view is destroyed.
 

@@ -16,7 +16,7 @@ Chọn hướng dẫn theo tính năng app cần. Làm lần lượt phần tíc
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
-User cũ mở app từ launcher sẽ vào màn Welcome Back sau splash; tắt bằng `welcome_back.enabled`. Xem [Welcome Back](welcome-back-screen.vi.md).
+User cũ mở app từ launcher mặc định bỏ qua Welcome Back và vào app sau splash. Bật `welcome_back.enabled=true` để hiện màn này. Xem [Welcome Back](welcome-back-screen.vi.md).
 
 ## Thứ tự ghép vào app
 

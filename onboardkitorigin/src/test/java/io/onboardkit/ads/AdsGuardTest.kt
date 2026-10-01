@@ -112,8 +112,27 @@ class AdsGuardTest {
     fun `placement without an ad unit`() {
         assertEquals(
             AdSkipReason.NO_AD_UNIT,
-            guard().skipReason(context, AdPlacement.WelcomeBack1),
+            guard().skipReason(context, AdPlacement.Ob5),
         )
+    }
+
+    @Test
+    fun `disabled welcome screen blocks configured natives including queued requests`() {
+        val guard = guard(config = config(AdsConfig(
+            welcomeBackNative = NativeAdUnit("welcome1"),
+            welcomeBackDupNative = NativeAdUnit("welcome2"),
+        )))
+        val settings = io.onboardkit.remote.OnboardingSettings.document
+        try {
+            settings.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
+            assertNull(guard.skipReason(context, AdPlacement.WelcomeBack1))
+            settings.acceptSuccessfulFetch("""{"welcome_back":{"enabled":false}}""")
+            for (placement in listOf(AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2)) {
+                assertEquals(AdSkipReason.ADS_OFF_IN_CONFIG, guard.skipReason(context, placement))
+            }
+        } finally {
+            settings.acceptSuccessfulFetch(null)
+        }
     }
 
     @Test

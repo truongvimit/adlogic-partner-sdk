@@ -1,6 +1,6 @@
 # OnboardKit
 
-Splash → language → onboarding → optional paywall → your app. Returning users opening from the launcher get Splash → Welcome Back → your app.
+Splash → language → onboarding → optional paywall → your app. Returning users opening from the launcher go from Splash to your app. Opt in with `welcome_back.enabled=true` to insert Welcome Back; disabled Welcome Back slots are not preloaded.
 The SDK owns screen transitions, ad preloading and saved progress; your app supplies content and the final destination.
 
 Default order: **OB1 → Full1 → OB2 → Full2 → OB3 → OB4**. Step IDs are stable identities:

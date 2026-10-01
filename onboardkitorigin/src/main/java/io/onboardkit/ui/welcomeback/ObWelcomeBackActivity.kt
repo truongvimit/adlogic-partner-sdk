@@ -48,7 +48,7 @@ class ObWelcomeBackActivity : BaseOnboardActivity() {
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         val cfg = sdk.requireConfig().welcomeBackScreen
         options = cfg.options
-        if (options.isEmpty()) {
+        if (!sdk.welcomeBackEnabled()) {
             lifecycleScope.launch { lifecycle.withResumed { continueFlow() } }
             return
         }

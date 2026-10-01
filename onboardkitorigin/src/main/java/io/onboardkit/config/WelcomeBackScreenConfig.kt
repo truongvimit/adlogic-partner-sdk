@@ -6,7 +6,7 @@ import io.onboardkit.R
 /**
  * The screen a returning user lands on after a launcher-tap splash (the `inter_splash_o` launch).
  * Entry launches (notification, widget, uninstall) never show it. `welcome_back.enabled` in the
- * onboarding settings turns it off.
+ * onboarding settings opts in to this screen; it is hidden by default.
  *
  * One answer is picked, then Continue ends the flow with it as the run's answer. Partners restyle it
  * by overriding [layoutRes] / [optionLayoutRes] by resource name, keeping the ids the default

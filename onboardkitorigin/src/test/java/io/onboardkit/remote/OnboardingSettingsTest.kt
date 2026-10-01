@@ -11,6 +11,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OnboardingSettingsTest {
+    @Test fun `privacy goals and welcome back are hidden by the bundled SDK defaults`() {
+        assertFalse(PrivacyGoalsScreenConfig().enabled)
+        assertFalse(OnboardingSettings.defaultBool("privacy_goals_screen.enabled"))
+        assertFalse(OnboardingSettings.defaultBool("welcome_back.enabled"))
+    }
+
     @Test fun `language confirm style accepts icon and text and rejects malformed remote values`() {
         val config = onboardKitConfig {
             language = LanguageConfig(confirmButtonStyle = LanguageConfirmButtonStyle.TEXT)

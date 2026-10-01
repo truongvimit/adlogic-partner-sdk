@@ -4,10 +4,10 @@
 
 Welcome Back वह स्क्रीन है जो लौटने वाला user हर बार launcher से app खोलने पर splash के बाद देखता है: Splash (`inter_splash_o`) → Welcome Back → app। User चार goals में से एक चुनता है, फिर Continue app को सौंप देता है। यह first-open user के लिए या notification, widget, uninstall entry के लिए कभी नहीं खुलती; उनका route वही रहता है।
 
-यह default रूप से चालू है। App asset या remote `onboarding_config` में बंद करें:
+यह default रूप से बंद है। App asset या remote `onboarding_config` में चालू करें:
 
 ```json
-{ "welcome_back": { "enabled": false } }
+{ "welcome_back": { "enabled": true } }
 ```
 
 बंद होने पर लौटने वाले user का launcher launch सीधे app में जाता है, जो splash ad के नीचे खुलता है, `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` के साथ।

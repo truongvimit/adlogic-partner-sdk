@@ -17,7 +17,7 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
-User cũ mở app từ launcher sẽ vào màn Welcome Back sau splash; tắt bằng `welcome_back.enabled`. Xem [Welcome Back](welcome-back-screen.vi.md).
+Welcome Back mặc định ẩn; bật `welcome_back.enabled` để user cũ mở từ launcher vào màn này sau splash. Xem [Welcome Back](welcome-back-screen.vi.md).
 
 ## Mỗi giá trị có một nơi quản lý
 
@@ -348,7 +348,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `ob5.skip.style` | `"CLOSE_ICON"` | Kiểu X/Skip của màn OB5 standalone. |
 | `ob5.skip.position` | `"RIGHT"` | Phía đặt X/Skip của màn OB5 standalone. |
 | `ob5.auto_dismiss_ms` | `15000` | Thời gian đóng OB5; tối thiểu 5000ms. |
-| `welcome_back.enabled` | `true` | Màn Welcome Back cho user cũ mở từ launcher; xem [Welcome Back](welcome-back-screen.vi.md). |
+| `welcome_back.enabled` | `false` | Màn Welcome Back cho user cũ mở từ launcher; xem [Welcome Back](welcome-back-screen.vi.md). |
 | `welcome_back.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `welcome_back.native2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 

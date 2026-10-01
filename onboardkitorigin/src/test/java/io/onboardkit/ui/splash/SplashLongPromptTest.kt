@@ -106,6 +106,7 @@ class SplashLongPromptTest {
         LongPromptFixture.provider.presentation?.onAdClosed()
         controller?.pause()?.stop()?.destroy()
         ConsentCenter.reset(app)
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
         org.robolectric.util.ReflectionHelpers.getField<kotlinx.coroutines.Deferred<Unit>?>(OnboardingSdk, "remoteRefresh")?.cancel()
         org.robolectric.util.ReflectionHelpers.setField(com.ads.module.config.AdConfig, "source", null)
         com.ads.module.config.AdRemoteConfig.reset()
@@ -652,6 +653,7 @@ class SplashLongPromptTest {
 
     @Test
     fun completedFlowDoesNotPreloadLanguageInParallelMode() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
         kotlinx.coroutines.runBlocking { OnboardingSdk.markCompleted() }
         LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
         launch(notification = false)
@@ -674,6 +676,24 @@ class SplashLongPromptTest {
         } finally {
             io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(null)
         }
+    }
+
+    @Test
+    fun defaultCompletedLauncherSkipsWelcomeWithoutPreloadingItsAds() {
+        runBlocking { OnboardingSdk.markCompleted() }
+        LongPromptFixture.useDefaultTiming = true
+        LongPromptFixture.flags = io.onboardkit.remote.RemoteFlags(splashLfoParallelPreloadEnabled = true)
+        LongPromptFixture.provider.successfulShow = true
+        launch(notification = false)
+        drainUntil("The returning splash inter still loads") { LongPromptFixture.provider.interstitialLoads == 1 }
+        LongPromptFixture.provider.ready = true
+        requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+        idleFrames(Duration.ofSeconds(4))
+        drainUntil("The app handoff still runs") { LongPromptFixture.splashHandoffs == 1 }
+        assertEquals(1, LongPromptFixture.provider.handoffsAtVendorShow)
+        assertTrue("No welcome, language or native_fs requests", LongPromptFixture.provider.nativeRequests.isEmpty())
+        assertTrue(shadowOf(requireNotNull(controller).get()).nextStartedActivity?.component?.className !=
+            io.onboardkit.ui.welcomeback.ObWelcomeBackActivity::class.java.name)
     }
 
     @Test
@@ -1264,6 +1284,7 @@ class SplashLongPromptTest {
 
     @Test
     fun returningLauncherLaunchOpensWelcomeBackAfterTheAdWithSlotOnePreloaded() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
         runBlocking { OnboardingSdk.markCompleted() }
         LongPromptFixture.useDefaultTiming = true
         LongPromptFixture.provider.successfulShow = true
@@ -1290,6 +1311,7 @@ class SplashLongPromptTest {
 
     @Test
     fun entryLaunchOfAReturningUserNeverOpensWelcomeBack() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"welcome_back":{"enabled":true}}""")
         runBlocking { OnboardingSdk.markCompleted() }
         LongPromptFixture.provider.successfulShow = true
         launch(notification = false, entry = SplashEntry.NOTIFICATION)
