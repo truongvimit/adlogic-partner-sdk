@@ -579,12 +579,12 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "native_fs": {
     "id": "ca-app-pub-7208941695689653/8727507290",
     "isEnable": true,
-    "click_action": "reload",
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",
@@ -594,7 +594,7 @@
       "media",
       "cta"
     ],
-    "enable_ua_check": true
+    "enable_ua_check": false
   },
   "inter_splash_high1": {
     "id": "ca-app-pub-7208941695689653/1200371069",

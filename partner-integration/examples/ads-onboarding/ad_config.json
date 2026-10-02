@@ -517,7 +517,7 @@
   "native_fs": {
     "id": "ca-app-pub-3940256099942544/2247696110",
     "isEnable": false,
-    "click_action": "reload",
+    "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
     "positionCTA": "BOTTOM",

@@ -38,7 +38,7 @@ class NativeClickActionSettingsTest {
         AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
         AdPlacement.StepNative(StepId.PARTNER_PRIVACY), AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT),
         AdPlacement.StepNative(StepId.PARTNER_GOAL), AdPlacement.StepNative(StepId.PARTNER_GOAL_ALT),
-        AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.Ob5, AdPlacement.SplashNative, AdPlacement.SplashInlineNative,
+        AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.Ob5, AdPlacement.SplashInlineNative,
     )
 
     @Before fun setup() {
@@ -67,6 +67,7 @@ class NativeClickActionSettingsTest {
         adConfig("native_ob1" to null, "native_full1" to null, "native_lang" to null, "native_select" to null)
         pagerPages.forEach { assertEquals(it.key, auto, action(it)) }
         reloadingNatives.forEach { assertEquals(it.key, reload, action(it)) }
+        assertEquals(auto, action(AdPlacement.SplashNative))
     }
 
     @Test fun `the base key click_action overrides the default of every placement kind`() {

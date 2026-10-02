@@ -6,6 +6,7 @@ import androidx.fragment.app.Fragment
 import io.onboardkit.core.StepHost
 import io.onboardkit.core.analytics.StepExit
 import com.ads.module.helper.adnative.NativeClickAction
+import io.onboardkit.ui.AdClickReturnTracker
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -17,8 +18,7 @@ abstract class LazyStepFragment : Fragment() {
     private val hasInitView = AtomicBoolean(false)
     private val businessLogicRan = AtomicBoolean(false)
     private var selectedAtMs: Long = 0L
-    private var adEngaged = false
-    private var awayInAd = false
+    private val adClickReturn = AdClickReturnTracker()
     private var selected = false
     private var selectionVersion = 0L
     private var viewVersion = 0L
@@ -58,8 +58,7 @@ abstract class LazyStepFragment : Fragment() {
         selectionVersion++
         selectedAtMs = System.currentTimeMillis()
         // Being selected again is the pager's doing, not a return from this page's ad.
-        adEngaged = false
-        awayInAd = false
+        adClickReturn.reset()
         if (businessLogicRan.compareAndSet(false, true)) {
             onStepFirstSelected()
         }
@@ -72,8 +71,7 @@ abstract class LazyStepFragment : Fragment() {
         selectionVersion++
         // The pager moved on without waiting for the user; whatever they do in the ad now, it
         // is no longer this page's turn to end.
-        adEngaged = false
-        awayInAd = false
+        adClickReturn.reset()
         onStepUnselected(dwellMs())
     }
 
@@ -86,15 +84,13 @@ abstract class LazyStepFragment : Fragment() {
     protected fun onStepAdEngaged(action: NativeClickAction) {
         if (!selected) return
         if (action != NativeClickAction.AUTO_NEXT) return
-        adEngaged = true
+        adClickReturn.onEngaged(action)
     }
 
     /** The ad's destination taking the screen is what pauses this page. */
     override fun onPause() {
         super.onPause()
-        if (!adEngaged) return
-        adEngaged = false
-        awayInAd = true
+        adClickReturn.onPause()
     }
 
     /**
@@ -105,9 +101,7 @@ abstract class LazyStepFragment : Fragment() {
         super.onResume()
         // The page did pause, but the vendor callback landed behind it. Disarming makes that
         // trip a no-op instead of arming the user's next one.
-        adEngaged = false
-        if (!awayInAd) return
-        awayInAd = false
+        if (!adClickReturn.onResume()) return
         onAdClickReturn()
     }
 
@@ -132,8 +126,7 @@ abstract class LazyStepFragment : Fragment() {
         selected = false
         selectionVersion++
         viewVersion++
-        adEngaged = false
-        awayInAd = false
+        adClickReturn.reset()
         hasInitView.set(false)
         super.onDestroyView()
     }
@@ -145,7 +138,7 @@ abstract class LazyStepFragment : Fragment() {
      * rest of its life and turn the user's next trip out of the app into a completion.
      */
     internal fun onWindowTouched() {
-        adEngaged = false
+        adClickReturn.onTouch()
     }
 
     /** Internal, not protected: the pager host reads it to report step completion in one place. */

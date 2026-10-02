@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
@@ -38,20 +39,32 @@ class SplashNativeActivityTest {
     private var controller: ActivityController<ObSplashNativeActivity>? = null
     private var ready = true
     private var binds = true
+    private var loading = false
     private var loads = 0
+    private var clickAction: NativeClickAction? = null
+    private var boundListener: AdEventListener? = null
     private val released = mutableListOf<AdPlacement>()
     private val main get() = shadowOf(Looper.getMainLooper())
 
     @Before fun setup() {
         org.robolectric.util.ReflectionHelpers.setField(OnboardingSdk, "application", null)
         val provider = object : FakeAdProvider() {
-            override fun nativeStatus(placement: AdPlacement) = if (ready) NativeStatus.READY else NativeStatus.IDLE
+            override fun pendingClickAction(placement: AdPlacement) = clickAction
+
+            override fun nativeStatus(placement: AdPlacement) = when {
+                loading -> NativeStatus.LOADING
+                ready -> NativeStatus.READY
+                else -> NativeStatus.IDLE
+            }
             override fun bindNative(
                 activity: ComponentActivity,
                 request: NativeAdRequest,
                 container: FrameLayout,
                 listener: AdEventListener,
-            ) = ready && binds
+            ): Boolean {
+                boundListener = listener
+                return ready && binds
+            }
             override fun preloadNative(activity: Activity, request: NativeAdRequest) { loads++ }
             override fun releaseNative(placement: AdPlacement) { released += placement }
         }
@@ -120,6 +133,49 @@ class SplashNativeActivityTest {
         main.idleFor(Duration.ofSeconds(60))
         assertFalse(host.isFinishing)
         host.findViewById<View>(R.id.ob_skip_button).performClick()
+        assertTrue(host.isFinishing)
+    }
+
+    @Test fun `auto next click waits for the ad destination to return`() {
+        clickAction = NativeClickAction.AUTO_NEXT
+        val host = launch()
+        requireNotNull(boundListener).onClicked()
+        main.idle()
+        assertFalse(host.isFinishing)
+
+        requireNotNull(controller).pause().stop()
+        requireNotNull(controller).start().resume()
+        main.idle()
+        assertTrue(host.isFinishing)
+        assertEquals(Activity.RESULT_OK, shadowOf(host).resultCode)
+    }
+
+    @Test fun `click and background return unlock the close button immediately`() {
+        clickAction = NativeClickAction.NONE
+        val host = launch()
+        val skip = host.findViewById<View>(R.id.ob_skip_button)
+        assertEquals(View.GONE, skip.visibility)
+
+        requireNotNull(boundListener).onClicked()
+        main.idle()
+        assertEquals(View.VISIBLE, skip.visibility)
+
+        // A background return must retain the unlocked state and must not start a new delay.
+        skip.visibility = View.GONE
+        requireNotNull(controller).pause().stop()
+        assertEquals(View.VISIBLE, skip.visibility)
+        requireNotNull(controller).start().resume()
+        assertEquals(View.VISIBLE, skip.visibility)
+        assertFalse(host.isFinishing)
+    }
+
+    @Test fun `waterfall failure closes the optional native screen`() {
+        loading = true
+        binds = false
+        val host = launch()
+        assertFalse(host.isFinishing)
+        requireNotNull(boundListener).onFailedToLoad()
+        main.idle()
         assertTrue(host.isFinishing)
     }
 }

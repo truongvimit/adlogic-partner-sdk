@@ -105,11 +105,12 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.WelcomeBack2 -> "welcome_back.native2"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
-    /** `ad_config.<key>.click_action`; absent, pager pages auto-advance and every other native reloads. */
+    /** `ad_config.<key>.click_action`; absent, splash native and pager pages auto-advance. */
     internal fun nativeClickAction(p: AdPlacement): NativeClickAction {
         AdRemoteConfig.getInstance().ads[placementKeyOf(p)]?.clickAction?.let { return it }
-        val pagerPage = p is AdPlacement.StepFullScreen || p is AdPlacement.StepNative && !p.isPrivacyGoalsNative
-        return if (pagerPage) NativeClickAction.AUTO_NEXT else NativeClickAction.RELOAD
+        val autoNext = p == AdPlacement.SplashNative ||
+            p is AdPlacement.StepFullScreen || p is AdPlacement.StepNative && !p.isPrivacyGoalsNative
+        return if (autoNext) NativeClickAction.AUTO_NEXT else NativeClickAction.RELOAD
     }
 
     private fun placementKeyOf(p: AdPlacement): String = io.onboardkit.OnboardingSdk.configuredPlacementKey(p)
