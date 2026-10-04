@@ -294,7 +294,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` — `CHECK_ICON` / `TEXT` (Done); uses `onboarding.primary_color` |
 | `lfo.confirm_button.image_url` | `""` |
-| `onboarding.primary_color` | `"#FF375E"` — shared NEXT, Get Started, active indicator and LFO check/Done color |
+| `onboarding.primary_color` | `"#FF375E"` — shared NEXT, Get Started, active indicator, LFO check/Done and selected language radio color |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
@@ -342,4 +342,4 @@ Remote or app-asset `interstitial_auto_buffer.rules.<placement>` can add a manag
 
 ### Onboarding primary color
 
-Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It is the shared onboarding color for the NEXT button, the final Get Started button, the active progress indicator and the LFO check/Done button. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
+Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). It is the shared onboarding color for the NEXT button, the final Get Started button, the active progress indicator, the LFO check/Done button and the selected LFO language radio. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.

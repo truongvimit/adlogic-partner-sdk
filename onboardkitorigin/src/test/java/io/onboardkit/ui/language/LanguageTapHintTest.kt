@@ -177,6 +177,7 @@ class LanguageTapHintTest {
         holder.itemView.performClick()
         adapter.onBindViewHolder(holder, index)
         assertTrue(holder.itemView.isSelected)
+        assertTrue(holder.itemView.findViewById<View>(R.id.ob_language_radio).isSelected)
         assertEquals(
             View.GONE,
             holder.itemView.findViewById<View>(R.id.ob_language_hint).visibility
@@ -206,6 +207,11 @@ class LanguageTapHintTest {
         adapter.currentList.forEachIndexed { index, language ->
             val holder = row(index)
             assertEquals("row ${language.code}", false, holder.itemView.isSelected)
+            assertEquals(
+                "radio ${language.code}",
+                false,
+                holder.itemView.findViewById<View>(R.id.ob_language_radio).isSelected,
+            )
         }
     }
 

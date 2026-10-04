@@ -294,7 +294,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` — `CHECK_ICON` / `TEXT` (Done); uses `onboarding.primary_color` |
 | `lfo.confirm_button.image_url` | `""` |
-| `onboarding.primary_color` | `"#FF375E"` | Shared NEXT, final Get Started, active indicator और LFO check/Done color. |
+| `onboarding.primary_color` | `"#FF375E"` | Shared NEXT, final Get Started, active indicator, LFO check/Done और selected language radio color. |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` |
@@ -342,4 +342,4 @@ Remote या app asset का `interstitial_auto_buffer.rules.<placement>` host
 
 ### Onboarding primary color
 
-Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). यह NEXT बटन, final Get Started बटन, active progress indicator और LFO check/Done button का साझा onboarding color है। Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
+Set `onboarding.primary_color` in `onboarding_config` to `"#RRGGBB"` or `"#AARRGGBB"` (for example `"#1E88E5"`). यह NEXT बटन, final Get Started बटन, active progress indicator, LFO check/Done button और selected LFO language radio का साझा onboarding color है। Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.

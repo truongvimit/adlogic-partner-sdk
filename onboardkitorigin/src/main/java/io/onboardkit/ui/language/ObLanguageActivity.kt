@@ -114,7 +114,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         val hintCode = resolveHintCode()
         if (hintCode != null) languages = DeviceLanguageHint.promote(languages)
 
-        adapter = LanguageAdapter(::onLanguageTapped)
+        adapter = LanguageAdapter(::onLanguageTapped, OnboardingSettings.onboardingPrimaryColor())
         adapter.selectedCode = selectedCode
         binding.obLanguageList.layoutManager = LinearLayoutManager(this)
         binding.obLanguageList.adapter = adapter

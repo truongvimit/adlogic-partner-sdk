@@ -17,7 +17,6 @@ import io.trackkit.PlacementRegistry
 import io.trackkit.Tracker
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -74,7 +73,7 @@ class PaidImpressionAdjustTest {
         adjust.close()
     }
 
-    @Test fun `each format sends money once and a count-only impression event`() {
+    @Test fun `each format sends ad revenue and the impression event with its value`() {
         for (format in AdType.values()) {
             adRevenues.clear()
             events.clear()
@@ -88,8 +87,8 @@ class PaidImpressionAdjustTest {
             assertEquals("paid-test-placement", revenue.adRevenuePlacement)
             val event = events.single()
             assertEquals("imp123", event.eventToken)
-            assertNull("$format must not also book event revenue", event.revenue)
-            assertNull(event.currency)
+            assertEquals("$format event revenue", 1.5, event.revenue!!, 0.0)
+            assertEquals("EUR", event.currency)
         }
     }
 
@@ -114,11 +113,12 @@ class PaidImpressionAdjustTest {
         assertTrue(events.isEmpty())
     }
 
-    @Test fun `legacy token helper only counts the impression`() {
+    @Test fun `legacy token helper sends the impression value`() {
         ERainLogEventManager.logPaidAdjustWithToken(paidValue(), "paid-test-unit")
         assertTrue(adRevenues.isEmpty())
         assertEquals("imp123", events.single().eventToken)
-        assertNull(events.single().revenue)
+        assertEquals(1.5, events.single().revenue!!, 0.0)
+        assertEquals("EUR", events.single().currency)
     }
 
     @Test fun `purchase and explicit revenue events retain their money`() {

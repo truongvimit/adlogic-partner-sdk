@@ -314,7 +314,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.confirm_button.save_on_back` | `true` | Back trước chọn vẫn inert. |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` | `CHECK_ICON` / `TEXT` (Done); màu từ `onboarding.primary_color`. |
 | `lfo.confirm_button.image_url` | `""` | Rỗng giữ drawable check hiện tại; URL lỗi giữ icon dự phòng. |
-| `onboarding.primary_color` | `"#FF375E"` | Màu dùng chung cho NEXT, Get Started cuối, indicator đang chọn và nút tick/Done LFO. |
+| `onboarding.primary_color` | `"#FF375E"` | Màu dùng chung cho NEXT, Get Started cuối, indicator đang chọn, nút tick/Done LFO và radio ngôn ngữ đang chọn. |
 | `lfo.confirm_dialog.enabled` | `true` | Thay ob_show_language_confirm_dialog. |
 | `lfo.confirm_dialog.show_from_tap` | `4` | Số nguyên >=1; chỉ gate khi chọn ngôn ngữ khác. Chọn lại ngôn ngữ hiện tại mở popup ngay nhưng vẫn cộng count. |
 | `lfo.confirm_dialog.native_preload_trigger` | `"DIALOG_OPEN"` | DIALOG_OPEN/LFO_SHOWN/FIRST_SELECTION; mặc định on-demand. |
@@ -364,4 +364,4 @@ Parameter String riêng `force_update_config` điều khiển ngưỡng versionC
 
 ### Onboarding primary color
 
-Đặt `onboarding.primary_color` trong `onboarding_config` thành `"#RRGGBB"` hoặc `"#AARRGGBB"` (ví dụ `"#1E88E5"`). Đây là màu dùng chung cho nút NEXT, nút Get Started cuối, indicator tiến độ đang chọn và nút tick/Done ở LFO. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.
+Đặt `onboarding.primary_color` trong `onboarding_config` thành `"#RRGGBB"` hoặc `"#AARRGGBB"` (ví dụ `"#1E88E5"`). Đây là màu dùng chung cho nút NEXT, nút Get Started cuối, indicator tiến độ đang chọn, nút tick/Done ở LFO và radio ngôn ngữ đang chọn ở LFO. Remote overrides the app asset; an empty value keeps the existing UI color. Native `ad_config.<placement>.colorCTA` colors both the CTA background and the Ad badge background.

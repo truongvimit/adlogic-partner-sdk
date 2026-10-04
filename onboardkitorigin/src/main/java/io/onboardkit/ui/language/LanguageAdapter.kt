@@ -1,5 +1,6 @@
 package io.onboardkit.ui.language
 
+import android.content.res.ColorStateList
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
@@ -7,6 +8,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
@@ -20,11 +22,12 @@ import io.onboardkit.databinding.ObItemLanguageBinding
 import java.util.Locale
 
 /**
- * Flat language list per Figma 7316:8712 / 7316:8769: flag, name and native label.
- * Selection changes the full-width background and label colors.
+ * Flat language list per Figma 18:57855: flag, name with native label, and a radio that
+ * carries the selection.
  */
 internal class LanguageAdapter(
     private val onLanguageTapped: (ObLanguage) -> Unit,
+    @ColorInt private val selectedRadioColor: Int? = null,
 ) : ListAdapter<ObLanguage, LanguageAdapter.RowHolder>(Diff) {
 
     var selectedCode: String? = null
@@ -74,19 +77,16 @@ internal class LanguageAdapter(
             obLanguageFlag.setImageResource(language.flagRes)
             val selected = language.code == selectedCode
             root.isSelected = selected
-            obLanguageName.setTextColor(
-                ContextCompat.getColor(
-                    root.context,
-                    if (selected) R.color.ob_language_selected_text else R.color.ob_language_text
-                ),
-            )
-            obLanguageName.text = rowLabel(language, selected)
+            obLanguageRadio.isSelected = selected
+            obLanguageRadio.imageTintList =
+                selectedRadioColor?.takeIf { selected }?.let(ColorStateList::valueOf)
+            obLanguageName.text = rowLabel(language)
             root.setOnClickListener { onLanguageTapped(language) }
             bindHint(language)
         }
 
         /** Keep catalog/partner data intact; the bilingual label belongs only to this list. */
-        private fun rowLabel(language: ObLanguage, selected: Boolean): CharSequence {
+        private fun rowLabel(language: ObLanguage): CharSequence {
             // A partner's custom display name is already presentation-ready.
             if (ObLanguages.find(language.code)?.displayName != language.displayName) {
                 return language.displayName
@@ -102,10 +102,8 @@ internal class LanguageAdapter(
                 append(" ($nativeName)")
                 val size =
                     binding.root.resources.getDimensionPixelSize(R.dimen.ob_text_language_native)
-                val color = ContextCompat.getColor(
-                    binding.root.context,
-                    if (selected) R.color.ob_language_native_selected_text else R.color.ob_language_native_text
-                )
+                val color =
+                    ContextCompat.getColor(binding.root.context, R.color.ob_language_native_text)
                 setSpan(AbsoluteSizeSpan(size), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 setSpan(ForegroundColorSpan(color), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }

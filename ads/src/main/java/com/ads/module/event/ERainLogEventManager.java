@@ -40,8 +40,8 @@ public class ERainLogEventManager {
 
     /**
      * AdMob paid impression. Currency and precision come from the SDK — never hardcoded — and the
-     * placement is resolved from the ad unit id registered by {@code TrackingAdCallback}. Adjust
-     * receives the money only through trackAdRevenue; the optional token event only counts it.
+     * placement is resolved from the ad unit id registered by {@code TrackingAdCallback}. Sends both
+     * Adjust signals, so no format can report ad revenue without the impression token event.
      */
     public static void logPaidAdImpression(Context context, AdValue adValue, String adUnitId,
                                            String mediationAdapterClassName, AdType adType) {
@@ -123,8 +123,8 @@ public class ERainLogEventManager {
     }
 
     /**
-     * Optional count-only impression event, on top of {@code Adjust.trackAdRevenue}. Never attach
-     * revenue here: Adjust adds event revenue to ad revenue in All Revenue, counting the money twice.
+     * Optional token-keyed impression event, on top of {@code Adjust.trackAdRevenue}. Networks that
+     * cannot consume Adjust's ad-revenue API (TikTok, Meta) read this token instead.
      * {@link #logPaidAdImpression} already sends it; call this only for an impression reported
      * some other way.
      *
@@ -139,7 +139,8 @@ public class ERainLogEventManager {
         }
         // No isEnabled() pre-gate: MmpTracking exists so a partner can swap Adjust out, and the
         // Adjust relay re-checks the switch itself, so nothing leaks when it is off.
-        MmpTracking.trackEvent(ERainAdjust.adImpressionToken());
+        MmpTracking.trackRevenue(ERainAdjust.adImpressionToken(),
+                adValue.getValueMicros() / 1_000_000d, adValue.getCurrencyCode());
     }
 
     /**

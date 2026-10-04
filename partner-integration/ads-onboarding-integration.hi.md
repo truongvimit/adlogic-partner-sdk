@@ -214,7 +214,7 @@ override fun attachBaseContext(newBase: Context) {
 | `event_token` | `eventAdImpression` | Paid impressions के लिए 6 अक्षरों का event token; जरूरत हो तभी भरें। |
 | `adjust_event_token_purchase` | `eventNamePurchase` | 6 अक्षरों का purchase event **token**, event का नाम नहीं; IAP आने तक खाली छोड़ें। |
 
-SDK विज्ञापन revenue केवल एक बार Adjust ad-revenue API से भेजता है। `event_token` अतिरिक्त paid impression event केवल count के लिए भेजता है, revenue के बिना, ताकि All Revenue, ROAS और gross profit में रकम दोबारा न जुड़े। खाली token पर अतिरिक्त event नहीं भेजा जाता; app callback से इसे दोबारा न भेजें। पुराने संस्करण से upgrade करते समय, इस event की value इस्तेमाल करने वाले campaigns को उपयुक्त ad-revenue sharing configuration पर ले जाने के लिए UA से समन्वय करें। बदलाव केवल updated apps के नए events पर लागू होता है; historical data और Firebase reporting नहीं बदलते।
+SDK Adjust ad-revenue API पहले से बुलाता है। `event_token` उसी revenue को Meta/TikTok… के लिए event के रूप में अतिरिक्त भेजता है; reporting में दोनों स्रोत साथ न जोड़ें। खाली token छोड़ दिया जाता है, और app callback से revenue दोबारा नहीं भेजा जाता।
 
 Debug Adjust **sandbox** इस्तेमाल करता है, release **production**। `ERainAdjust` log में `Adjust initialised (sandbox)` या token error देखें, फिर Adjust में sessions/events मिलाएँ। Purchases टेस्ट करने के लिए billing और एक test transaction चाहिए, सिर्फ event token नहीं।
 
