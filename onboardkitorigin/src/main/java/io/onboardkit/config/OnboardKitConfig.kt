@@ -113,7 +113,10 @@ data class SystemBarConfig @JvmOverloads constructor(
 )
 
 data class BehaviorConfig(
-    /** Locks all swipe navigation. When false, every content step except OB1 and impressed fullscreen steps allow swipe. */
+    /**
+     * Locks all swipe navigation. When false, every step except content OB1 allows swipe once its
+     * ad has shown; a content step with no ad to show allows it at once.
+     */
     val lockPagerSwipe: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.lock_pager_swipe"),
     /** Back returns to the previous step; on the first step it exits the app. */
     val backNavigatesBack: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.back_navigates_back"),
@@ -122,7 +125,7 @@ data class BehaviorConfig(
     val reloadAdOnStepReturn: Boolean = false,
     /**
      * A forward swipe on an eligible last step completes it exactly like its CTA, including
-     * the exit interstitial. Requires [lockPagerSwipe] to be false; fullscreen also needs a shown ad.
+     * the exit interstitial. Requires [lockPagerSwipe] to be false and the step's swipe to be open.
      */
     val swipeCompletesLastStep: Boolean = OnboardingSettings.defaultBool("onboarding.navigation.swipe_completes_last_step"),
     /** Also locks the app splash; configChanges orientation|screenSize stops that recreating it. */

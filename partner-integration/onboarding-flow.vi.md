@@ -98,8 +98,9 @@ Các key `onboarding.preload.initial_content_trigger`, `initial_content_count`, 
 ## Swipe và navigation
 
 - `lock_pager_swipe = true`: khóa toàn bộ swipe.
-- `false`: OB1 khóa theo ID dù nằm ở vị trí nào; các content khác được swipe.
-- Full1/Full2 chỉ được swipe khi có callback impression; load/bind chưa mở swipe.
+- `false`: OB1 khóa theo ID dù nằm ở vị trí nào.
+- OB2/OB3/OB4 và Full1/Full2 chỉ được swipe khi có callback impression; load/bind chưa mở swipe. Mỗi lượt vào trang bắt đầu ở trạng thái khóa; quay lại trang có ad đã hiện thì mở ngay.
+- Content không có ad để hiện (không unit, premium, no-fill) được swipe ngay.
 - No-fill fullscreen tự đi tiếp. Skip, auto-next, click-return và chống điều hướng trùng vẫn giữ.
 - Màn cuối swipe hoàn tất khi `swipe_completes_last_step = true`; CTA vẫn dùng nhánh exit hiện có.
 

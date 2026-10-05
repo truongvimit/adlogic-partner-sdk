@@ -47,7 +47,8 @@ import kotlinx.coroutines.launch
 /**
  * Pager host. Steps follow the resolved onboarding order and ad eligibility; an empty result
  * completes the flow instead of stranding the user on an empty pager. Swipe is locked by
- * default (buttons navigate); back goes one step backwards and exits only from the first step.
+ * default (buttons navigate); when enabled, every page but OB1 unlocks once its ad settles.
+ * Back goes one step backwards and exits only from the first step.
  */
 class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
@@ -71,7 +72,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private var pageSelectionVersion = 0L
     private var advanceFlingDetector: AdvanceFlingDetector? = null
     private var gestureBeganOnRestingLastStep = false
-    private var swipeEnabledAdStep: StepId? = null
+    private var swipeUnlockedStep: StepId? = null
     private var exitResolved = false
     private var exitAdGone: CompletableDeferred<Unit>? = null
 
@@ -196,7 +197,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     private fun dispatchPageChange(position: Int) {
         val visit = ++pageSelectionVersion
-        swipeEnabledAdStep = null
+        swipeUnlockedStep = null
         if (lastSelectedPosition >= 0 && lastSelectedPosition != position) {
             pagerAdapter.fragmentAt(lastSelectedPosition)?.dispatchUnselected()
         }
@@ -243,11 +244,9 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         if (config.behavior.lockPagerSwipe || exitResolved) return false
         val position = binding.obStepPager.currentItem
         val stepId = enabledStepIds.getOrNull(position) ?: return false
-        return when (stepDefinition(stepId)?.type) {
-            StepType.AD_FULL_SCREEN -> swipeEnabledAdStep == stepId
-            StepType.CONTENT -> stepId != StepId.OB1
-            null -> false
-        }
+        val type = stepDefinition(stepId)?.type ?: return false
+        if (type == StepType.CONTENT && stepId == StepId.OB1) return false
+        return swipeUnlockedStep == stepId
     }
 
     private fun updatePagerSwipe() {
@@ -256,7 +255,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     override fun setAdStepSwipeEnabled(stepId: StepId, enabled: Boolean) {
         if (enabledStepIds.getOrNull(binding.obStepPager.currentItem) != stepId) return
-        swipeEnabledAdStep = stepId.takeIf { enabled }
+        swipeUnlockedStep = stepId.takeIf { enabled }
         updatePagerSwipe()
     }
 

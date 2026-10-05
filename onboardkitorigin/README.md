@@ -214,9 +214,10 @@ the step by default, so these placements do not preload/show a replacement on cl
 `AdsConfig.fullScreenSkipStyle` sets the shared appearance for Full1/Full2/OB5. Standalone OB5 uses
 its own 3-second skip and 15-second auto-dismiss defaults.
 
-With `BehaviorConfig.lockPagerSwipe = false`, OB1 stays locked, OB2/OB3/OB4 permit swipe, and fullscreen
-permits swipe only after its ad is shown for the current visit. Loading or failure keeps fullscreen
-swipe locked; X, timeout and automatic no-fill completion still work. Forward swipe on the last
+With `BehaviorConfig.lockPagerSwipe = false`, OB1 stays locked; OB2/OB3/OB4 and fullscreen permit swipe
+only after the page's ad is shown, and every visit starts locked. A content page with no ad to show
+(no unit, premium, no fill) permits swipe at once. Loading or failure keeps fullscreen swipe locked;
+X, timeout and automatic no-fill completion still work. Forward swipe on the last
 content page uses the same exit interstitial as its CTA when `swipeCompletesLastStep = true`.
 `lockPagerSwipe = true` disables this last-page gesture as well.
 

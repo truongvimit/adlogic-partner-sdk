@@ -22,6 +22,7 @@ import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.databinding.ObFragmentContentStepBinding
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.uiconfig.UiStepStyle
+import io.onboardkit.ui.pager.AdSwipeGate
 import io.onboardkit.ui.pager.LazyStepFragment
 import io.onboardkit.ui.widget.ObPrimaryButton
 import kotlinx.coroutines.flow.first
@@ -32,7 +33,8 @@ import kotlinx.coroutines.launch
  * remote UI → SDK default. Remote text, colors and labels apply at bind; the remote image or
  * video replaces the host art only once its asset is cached. The ExoPlayer used for remote
  * video is released on unselect and on view destroy; the native ad is kept until view destroy
- * so swiping back shows the same ad.
+ * so swiping back shows the same ad. Swipe waits for the ad's impression, or for the answer that
+ * there is none: a page with nothing to show must not stay locked.
  */
 class ContentStepFragment : LazyStepFragment() {
 
@@ -44,6 +46,7 @@ class ContentStepFragment : LazyStepFragment() {
     private var remoteMediaShown = false
     private var usesDefaultLayout = false
     private var adPresentation: ContentStepAdPresentation? = null
+    private val swipeGate by lazy { AdSwipeGate(stepId) }
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
@@ -207,11 +210,13 @@ class ContentStepFragment : LazyStepFragment() {
     }
 
     override fun onStepSelected() {
+        swipeGate.enter(requireStepHost())
         startVideoIfAny()
         if (!adRequested) requestNativeAd()
     }
 
     override fun onStepUnselected(dwellMs: Long) {
+        swipeGate.leave()
         releasePlayer()
         adPresentation?.finishTransition()
     }
@@ -237,9 +242,11 @@ class ContentStepFragment : LazyStepFragment() {
                     showAdSlot(true)
                 }
             },
+            onShown = { if (isCurrentStepView(viewVersion)) swipeGate.settle() },
             onUnavailable = {
-                if (isCurrentStepView(viewVersion) && !adBound) {
-                    showAdSlot(false)
+                if (isCurrentStepView(viewVersion)) {
+                    if (!adBound) showAdSlot(false)
+                    swipeGate.settle()
                 }
             },
             onAdEngaged = { action -> if (isCurrentStepView(viewVersion)) onStepAdEngaged(action) },
@@ -290,6 +297,7 @@ class ContentStepFragment : LazyStepFragment() {
         (activity as? ObOnboardingHostActivity)?.totalSteps?.value ?: 0
 
     override fun onDestroyView() {
+        swipeGate.reset()
         releasePlayer()
         adPresentation?.finishTransition()
         adPresentation = null

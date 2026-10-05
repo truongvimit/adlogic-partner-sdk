@@ -18,11 +18,11 @@ import io.onboardkit.core.analytics.StepExit
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObFragmentAdStepBinding
 import io.onboardkit.ui.applyFullScreenSkip
+import io.onboardkit.ui.pager.AdSwipeGate
 import io.onboardkit.ui.pager.LazyStepFragment
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -45,9 +45,8 @@ class AdStepFragment : LazyStepFragment() {
     private var adRequested = false
     private var visitedBefore = false
     private var revisit = false
-    private var adImpressed = false
     private var adFailed = false
-    private val impressionHandled = AtomicBoolean(false)
+    private val swipeGate by lazy { AdSwipeGate(stepId) }
 
     private val stepId: StepId
         get() = StepId(requireArguments().getString(ARG_STEP_ID).orEmpty())
@@ -76,8 +75,7 @@ class AdStepFragment : LazyStepFragment() {
         completed = false
         revisit = visitedBefore
         visitedBefore = true
-        impressionHandled.set(false)
-        requireStepHost().setAdStepSwipeEnabled(stepId, false)
+        swipeGate.enter(requireStepHost())
         // One read per visit: the Skip trap guard must judge the same auto-next this visit runs.
         val definition = definition()
         binding?.obSkipButton?.applyFullScreenSkip(
@@ -89,19 +87,16 @@ class AdStepFragment : LazyStepFragment() {
         when {
             !adRequested -> requestAd()
             adFailed -> onAdFailed()
-            // A kept ad produces no second impression; it is already on screen.
-            adImpressed -> unlockSwipe()
         }
         if (!completed) scheduleSkipButton(definition, immediately = revisit)
     }
 
     override fun onStepUnselected(dwellMs: Long) {
         selected = false
-        requireStepHost().setAdStepSwipeEnabled(stepId, false)
+        swipeGate.leave()
         skipJob?.cancel()
         autoNextJob?.cancel()
         autoNextDeadlineMs = null
-        impressionHandled.set(false)
     }
 
     /** The pager keeps the page list it was built with; a page's own settings are read as they stand now. */
@@ -132,15 +127,11 @@ class AdStepFragment : LazyStepFragment() {
 
     /** Only a display confirmation unlocks swipe; load/bind and shimmer never do. */
     private fun onAdImpression() {
-        adImpressed = true
-        if (!selected || completed || !impressionHandled.compareAndSet(false, true)) return
-        requireStepHost().setAdStepSwipeEnabled(stepId, true)
-        OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
-    }
-
-    private fun unlockSwipe() {
-        if (completed || !impressionHandled.compareAndSet(false, true)) return
-        requireStepHost().setAdStepSwipeEnabled(stepId, true)
+        if (swipeGate.settled) return
+        swipeGate.settle()
+        if (selected && !completed) {
+            OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
+        }
     }
 
     private fun onAdFailed() {
@@ -211,7 +202,7 @@ class AdStepFragment : LazyStepFragment() {
     private fun completeStep(reason: String) {
         if (!selected || completed) return
         completed = true
-        requireStepHost().setAdStepSwipeEnabled(stepId, false)
+        swipeGate.leave()
         skipJob?.cancel()
         autoNextJob?.cancel()
         requireStepHost().completeAdStep(stepId, reason)
@@ -219,7 +210,7 @@ class AdStepFragment : LazyStepFragment() {
 
     override fun onDestroyView() {
         selected = false
-        requireStepHost().setAdStepSwipeEnabled(stepId, false)
+        swipeGate.reset()
         skipJob?.cancel()
         autoNextJob?.cancel()
         if (activity?.isChangingConfigurations != true) {
@@ -230,9 +221,7 @@ class AdStepFragment : LazyStepFragment() {
         adRequested = false
         visitedBefore = false
         revisit = false
-        adImpressed = false
         adFailed = false
-        impressionHandled.set(false)
         super.onDestroyView()
     }
 

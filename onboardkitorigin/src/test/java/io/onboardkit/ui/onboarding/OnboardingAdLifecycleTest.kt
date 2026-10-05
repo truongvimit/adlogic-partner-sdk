@@ -176,6 +176,8 @@ class OnboardingAdLifecycleTest {
         if (fullscreen) AdPlacement.StepFullScreen(StepId.OB1) else AdPlacement.StepNative(StepId.OB1)
     ])
 
+    private fun impress(step: StepId) = requireNotNull(listeners[AdPlacement.StepNative(step)]).onImpression()
+
     private fun pause() { requireNotNull(controller).pause().stop() }
     private fun resume() { requireNotNull(controller).restart().start().resume() }
     private fun settle() { main.idleFor(2_000, MILLISECONDS) }
@@ -345,14 +347,58 @@ class OnboardingAdLifecycleTest {
             .findViewById<View>(R.id.ob_ad_block).visibility)
     }
 
-    @Test fun `swipe enabled keeps OB1 locked and unlocks OB2`() {
+    @Test fun `swipe enabled keeps OB1 locked even after its ad shows`() {
         launch(lockSwipe = false)
+        impress(StepId.OB1)
         assertFalse(pager.isUserInputEnabled)
         flingForward()
         assertEquals(0, pager.currentItem)
         pager.setCurrentItem(1, false)
         layout()
+        impress(StepId.OB2)
         assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `content swipe waits for the first show and a kept ad unlocks it on return`() {
+        launch(lockSwipe = false)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertFalse("Load and bind must leave content swipe locked", pager.isUserInputEnabled)
+        impress(StepId.OB2)
+        assertTrue(pager.isUserInputEnabled)
+        pager.setCurrentItem(2, false)
+        layout()
+        assertFalse("Each visit starts locked", pager.isUserInputEnabled)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertTrue(pager.isUserInputEnabled)
+        assertEquals(1, binds[AdPlacement.StepNative(StepId.OB2)])
+    }
+
+    @Test fun `content without an ad to show allows swipe at once`() {
+        launch(lockSwipe = false, adsOverride = AdsConfig(contentStepNative = null))
+        pager.setCurrentItem(1, false)
+        layout()
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `content no fill allows swipe`() {
+        pendingOnBind = true
+        launch(lockSwipe = false)
+        pager.setCurrentItem(1, false)
+        layout()
+        assertFalse(pager.isUserInputEnabled)
+        requireNotNull(listeners[AdPlacement.StepNative(StepId.OB2)]).onFailedToLoad()
+        settle()
+        assertTrue(pager.isUserInputEnabled)
+    }
+
+    @Test fun `content impression cannot override the global swipe lock`() {
+        launch()
+        pager.setCurrentItem(1, false)
+        layout()
+        impress(StepId.OB2)
+        assertFalse(pager.isUserInputEnabled)
     }
 
     @Test fun `late remote order does not remove or reorder pages in a running pager`() {
@@ -365,6 +411,7 @@ class OnboardingAdLifecycleTest {
         pager.setCurrentItem(1, false)
         layout()
         assertEquals(StepId.OB2, activity.stepDefinition(StepId.OB2)?.id)
+        impress(StepId.OB2)
         assertTrue(pager.isUserInputEnabled)
     }
 
@@ -392,14 +439,17 @@ class OnboardingAdLifecycleTest {
         assertTrue(listeners.containsKey(AdPlacement.StepNative(StepId.OB2)))
     }
 
-    @Test fun `all middle content except OB1 allows swipe regardless of position`() {
+    @Test fun `all shown content except OB1 allows swipe regardless of position`() {
         launch(first = ContentStepDefinition(StepId.OB3), second = ContentStepDefinition(StepId.OB1), lockSwipe = false)
+        impress(StepId.OB3)
         assertTrue(pager.isUserInputEnabled)
         pager.setCurrentItem(1, false)
         layout()
+        impress(StepId.OB1)
         assertFalse(pager.isUserInputEnabled)
         pager.setCurrentItem(2, false)
         layout()
+        impress(StepId.OB4)
         assertTrue(pager.isUserInputEnabled)
     }
 
@@ -489,8 +539,16 @@ class OnboardingAdLifecycleTest {
         assertEquals(listOf(StepExit.SWIPE), completions.map { it.exitReason })
     }
 
+    @Test fun `last content cannot fling past loading but can exit after show`() {
+        launch(ContentStepDefinition(StepId.OB4), lastOnly = true, lockSwipe = false)
+        flingForward()
+        assertEquals(0, interstitialLoads)
+        assertTrue(completions.isEmpty())
+    }
+
     @Test fun `last content fling uses the CTA exit interstitial once`() {
         launch(ContentStepDefinition(StepId.OB4), lastOnly = true, lockSwipe = false)
+        impress(StepId.OB4)
         flingForward()
         flingForward()
         assertEquals(1, interstitialLoads)
@@ -532,6 +590,8 @@ class OnboardingAdLifecycleTest {
     @Test fun `last page completion flag can disable the exit fling`() {
         launch(ContentStepDefinition(StepId.OB4), lastOnly = true,
             lockSwipe = false, swipeCompletesLastStep = false)
+        impress(StepId.OB4)
+        assertTrue(pager.isUserInputEnabled)
         flingForward()
         assertEquals(0, interstitialLoads)
         assertTrue(completions.isEmpty())

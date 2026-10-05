@@ -90,11 +90,19 @@ class FlexibleOnboardingDeviceTest {
                     scenario.onActivity { host ->
                         val pager = host.findViewById<ViewPager2>(R.id.ob_step_pager)
                         assertEquals(expectedPages.size, pager.adapter!!.itemCount)
-                        if (id.value.startsWith("full")) {
-                            assertFalse("Fullscreen bind is not an impression", pager.isUserInputEnabled)
-                            requireNotNull(provider.listeners[placement(id)]).onImpression()
-                            assertTrue("Impression unlocks fullscreen", pager.isUserInputEnabled)
-                        } else assertEquals("Swipe eligibility $id", id != StepId.OB1, pager.isUserInputEnabled)
+                        val listener = provider.listeners[placement(id)]
+                        when {
+                            id == StepId.OB1 -> {
+                                listener?.onImpression()
+                                assertFalse("OB1 stays locked after its impression", pager.isUserInputEnabled)
+                            }
+                            listener == null -> assertTrue("No ad to wait for unlocks $id", pager.isUserInputEnabled)
+                            else -> {
+                                assertFalse("Bind is not an impression $id", pager.isUserInputEnabled)
+                                listener.onImpression()
+                                assertTrue("Impression unlocks $id", pager.isUserInputEnabled)
+                            }
+                        }
                     }
                 }
                 scenario.onActivity { it.findViewById<ViewPager2>(R.id.ob_step_pager).setCurrentItem(0, false) }

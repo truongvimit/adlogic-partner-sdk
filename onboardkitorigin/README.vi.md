@@ -205,8 +205,9 @@ từ ad của step sẽ hoàn thành bước, nên các placement này không pr
 `AdsConfig.fullScreenSkipStyle` đặt kiểu nút chung cho Full1/Full2/OB5. OB5 độc lập có mặc định riêng:
 hiện nút sau 3 giây và tự đóng sau 15 giây.
 
-Với `BehaviorConfig.lockPagerSwipe = false`, OB1 vẫn khóa, OB2/OB3/OB4 cho vuốt, còn trang fullscreen
-chỉ cho vuốt sau khi ad đã hiện trong lượt xem đó. Khi đang tải hoặc lỗi, trang fullscreen vẫn khóa vuốt;
+Với `BehaviorConfig.lockPagerSwipe = false`, OB1 vẫn khóa; OB2/OB3/OB4 và trang fullscreen chỉ cho vuốt
+sau khi ad của trang đã hiện, mỗi lượt vào trang đều bắt đầu ở trạng thái khóa. Trang content không có ad
+để hiện (không có unit, premium, no-fill) cho vuốt ngay. Khi đang tải hoặc lỗi, trang fullscreen vẫn khóa vuốt;
 X, timeout và tự hoàn thành khi no-fill vẫn hoạt động. Với `swipeCompletesLastStep = true`, vuốt tới ở trang
 content cuối đi qua đúng inter thoát như CTA của nó. `lockPagerSwipe = true` tắt luôn cử chỉ này.
 
