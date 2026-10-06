@@ -12,6 +12,7 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.adnative.NativeComponent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,10 +64,99 @@ class AdUnitConfigStyleTest {
         assertEquals(4f, (DrawableCompat.unwrap(badge.background) as GradientDrawable).cornerRadius)
     }
 
+    @Test fun `block_media stands in for ad_media when the media sits in a ratio well`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val media = View(context).apply { id = R.id.ad_media }
+        val well = android.widget.FrameLayout(context).apply { id = R.id.block_media; addView(media) }
+        val container = LinearLayout(context).apply {
+            id = R.id.ad_container
+            orientation = LinearLayout.VERTICAL
+            addView(View(context).apply { id = R.id.block_icon_headline })
+            addView(well)
+            addView(View(context).apply { id = R.id.ad_call_to_action })
+        }
+        val root = LinearLayout(context).apply { addView(container) }
+
+        NativeAdStyler.applyLayout(root, parse(""""components":["media","icon_headline","cta"]""").toNativeStyle())
+        assertEquals(listOf(R.id.block_media, R.id.block_icon_headline, R.id.ad_call_to_action),
+            (0 until container.childCount).map { container.getChildAt(it).id })
+
+        NativeAdStyler.applyLayout(root, parse(""""components":["icon_headline","cta"]""").toNativeStyle())
+        assertEquals(View.GONE, well.visibility)
+    }
+
+    @Test fun `colorBackground recolors the card and keeps its shape`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val shape = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = 12f; setStroke(2, Color.GRAY) }
+        val card = LinearLayout(context).apply { id = R.id.ad_container; background = shape }
+        val root = android.widget.FrameLayout(context).apply { addView(card) }
+
+        NativeAdStyler.applyAppearance(root, parse(""""colorBackground":"#102030"""").toNativeStyle())
+        val painted = card.background as GradientDrawable
+        assertEquals(Color.parseColor("#102030"), painted.color?.defaultColor)
+        assertEquals(12f, painted.cornerRadius)
+    }
+
+    @Test fun `ad_background is the card when the layout names one`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val inner = LinearLayout(context).apply { id = R.id.ad_container; setBackgroundColor(Color.WHITE) }
+        val card = android.widget.FrameLayout(context).apply { id = R.id.ad_background; addView(inner) }
+        val root = android.widget.FrameLayout(context).apply { addView(card) }
+
+        NativeAdStyler.applyAppearance(root, parse(""""colorBackground":"#102030"""").toNativeStyle())
+        assertEquals(Color.parseColor("#102030"), (card.background as android.graphics.drawable.ColorDrawable).color)
+        assertEquals(Color.WHITE, (inner.background as android.graphics.drawable.ColorDrawable).color)
+    }
+
+    @Test fun `without colorBackground the XML background is untouched`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val shape = GradientDrawable().apply { setColor(Color.WHITE) }
+        val card = LinearLayout(context).apply { id = R.id.ad_container; background = shape }
+        NativeAdStyler.applyAppearance(android.widget.FrameLayout(context).apply { addView(card) }, parse(""""colorCTA":"#1E88E5"""").toNativeStyle())
+        assertEquals(shape, card.background)
+    }
+
     @Test fun `a listed subset still decides the blocks`() {
         assertEquals(
             listOf(NativeComponent.CTA, NativeComponent.BODY),
             parse(""""components":["cta","body"]""").toNativeStyle().components,
         )
     }
+
+    private fun badgeRoot(): Pair<android.widget.FrameLayout, android.widget.TextView> {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val badge = android.widget.TextView(context).apply {
+            id = R.id.ad_icon
+            background = GradientDrawable().apply { setColor(Color.YELLOW) }
+            setTextColor(Color.BLACK)
+        }
+        return android.widget.FrameLayout(context).apply { addView(badge) } to badge
+    }
+
+    @Test fun `the Ad badge colors win over colorCTA on the badge, colorCTA alone still fills it`() {
+        val (ctaOnly, plain) = badgeRoot()
+        NativeAdStyler.applyAppearance(ctaOnly, parse(""""colorCTA":"#1E88E5"""").toNativeStyle())
+        assertEquals(Color.BLACK, plain.currentTextColor)
+        assertEquals(Color.parseColor("#1E88E5"), plain.background.pixel())
+
+        val (both, badge) = badgeRoot()
+        val unit = parse(""""colorCTA":"#1E88E5","colorAdBadge":"#102030","colorAdBadgeText":"#FFFFFF"""")
+        NativeAdStyler.applyAppearance(both, unit.toNativeStyle())
+        assertEquals(Color.WHITE, badge.currentTextColor)
+        assertEquals(Color.parseColor("#102030"), badge.background.pixel())
+    }
+
+    @Test fun `without the Ad badge fields the badge keeps its XML colors`() {
+        val (root, badge) = badgeRoot()
+        val before = badge.background
+        NativeAdStyler.applyAppearance(root, parse(""""heightCTA":44""").toNativeStyle())
+        assertEquals(Color.BLACK, badge.currentTextColor)
+        assertTrue(before === badge.background)
+    }
+
+    // GradientDrawable keeps setTint in its constant state; Robolectric does not rasterize it
+    private fun android.graphics.drawable.Drawable.pixel(): Int? =
+        org.robolectric.util.ReflectionHelpers.getField<android.content.res.ColorStateList?>(
+            DrawableCompat.unwrap<android.graphics.drawable.Drawable>(this).constantState, "mTint",
+        )?.defaultColor
 }

@@ -3,7 +3,9 @@
      though app layouts are what actually carry them. Resource merging unifies by name. -->
 <resources>
     <item name="ad_container" type="id" />
+    <item name="ad_background" type="id" />
     <item name="block_icon_headline" type="id" />
+    <item name="block_media" type="id" />
     <item name="ad_media" type="id" />
     <item name="ad_body" type="id" />
     <item name="ad_headline" type="id" />

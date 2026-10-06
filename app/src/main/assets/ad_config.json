@@ -30,7 +30,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -45,7 +44,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -60,7 +58,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -75,7 +72,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -90,7 +86,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -105,7 +100,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -120,7 +114,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -135,7 +128,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -150,7 +142,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -165,7 +156,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -180,7 +170,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -195,7 +184,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -210,7 +198,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -225,7 +212,6 @@
     "click_action": "reload",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -267,7 +253,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -282,7 +267,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -297,7 +281,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -331,7 +314,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -346,7 +328,6 @@
     "click_action": "reload",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -360,7 +341,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -375,7 +355,6 @@
     "click_action": "reload",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -389,7 +368,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": ["icon_headline", "body", "media", "cta"],
     "enable_ua_check": false
   },
@@ -399,7 +377,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": ["icon_headline", "body", "media", "cta"],
     "enable_ua_check": false
   },
@@ -408,7 +385,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": ["icon_headline", "body", "media", "cta"],
     "enable_ua_check": false
   },
@@ -418,7 +394,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": ["icon_headline", "body", "media", "cta"],
     "enable_ua_check": false
   },
@@ -427,7 +402,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 36,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -442,7 +416,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 36,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -456,7 +429,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -471,7 +443,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -485,7 +456,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -500,7 +470,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -514,7 +483,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "TOP",
     "components": [
       "icon_headline",
       "body",
@@ -529,7 +497,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "TOP",
     "components": [
       "icon_headline",
       "body",
@@ -543,7 +510,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -558,7 +524,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -572,7 +537,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -587,7 +551,6 @@
     "click_action": "auto_next",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -607,7 +570,6 @@
     "click_action": "reload",
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": null,
     "components": [
       "icon_headline",
       "body",
@@ -621,7 +583,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "TOP",
     "components": [
       "icon_headline",
       "body",
@@ -636,7 +597,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "TOP",
     "components": [
       "icon_headline",
       "body",
@@ -650,7 +610,6 @@
     "isEnable": false,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -665,7 +624,6 @@
     "click_action": "auto_next",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -679,7 +637,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -694,7 +651,6 @@
     "click_action": "reload",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -708,7 +664,6 @@
     "isEnable": true,
     "colorCTA": "default",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",
@@ -723,7 +678,6 @@
     "click_action": "reload",
     "colorCTA": "#1E88E5",
     "heightCTA": 45,
-    "positionCTA": "BOTTOM",
     "components": [
       "icon_headline",
       "body",

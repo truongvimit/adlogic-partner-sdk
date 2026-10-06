@@ -1,13 +1,17 @@
 package com.ads.module.helper.adnative
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import androidx.annotation.ColorInt
 import androidx.core.graphics.drawable.DrawableCompat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.ads.module.R
 import com.ads.module.admob.Admob
 import com.ads.module.ads.wrapper.ApNativeAd
@@ -26,6 +30,9 @@ object NativeAdStyler {
     /**
      * Geometry-affecting styling: CTA height and component order/visibility. Safe for both
      * the real ad view and a skeleton — never touches colors or content.
+     *
+     * `components` needs the vertical `ad_container`; a layout without one is a fixed design
+     * and keeps its XML blocks as they are.
      */
     @JvmStatic
     fun applyLayout(root: View, style: NativeAdStyle) {
@@ -35,76 +42,64 @@ object NativeAdStyler {
             }
         }
         val order = style.components ?: return
+        val container = root.findViewById<View>(R.id.ad_container) as? LinearLayout ?: return
         val blocks = linkedMapOf<NativeComponent, View>()
         root.findViewById<View>(R.id.block_icon_headline)
             ?.let { blocks[NativeComponent.ICON_HEADLINE] = it }
         root.findViewById<View>(R.id.ad_body)?.let { blocks[NativeComponent.BODY] = it }
-        root.findViewById<View>(R.id.ad_media)?.let { blocks[NativeComponent.MEDIA] = it }
+        // A ratio-locked media sits in a well, and the well is what the stack holds
+        (root.findViewById(R.id.block_media) ?: root.findViewById<View>(R.id.ad_media))
+            ?.let { blocks[NativeComponent.MEDIA] = it }
         root.findViewById<View>(R.id.ad_call_to_action)?.let { blocks[NativeComponent.CTA] = it }
 
-        // A placement that names a CTA position has already had its order decided: the screen
-        // picks one layout per position rather than moving blocks about. Reordering on top of that
-        // would fight the layout it just chose, so `components` is read for visibility only.
-        val container = root.findViewById<View>(R.id.ad_container)
-            .takeIf { style.ctaPosition == null } as? LinearLayout
-        if (container != null) {
-            // Only blocks the container already holds may be reordered. A layout is free to keep
-            // one somewhere else — a full-bleed media sitting behind an overlay column is still
-            // `ad_media` — and pulling that into the stack would tear the design apart. Those stay
-            // where the layout put them and answer to visibility alone.
-            val ordered = blocks.filterValues { it.parent === container }
-            val anchored = blocks.filterKeys { it !in ordered.keys }
+        // Only blocks the container already holds may be reordered. A layout is free to keep
+        // one somewhere else — a body nested in the header is still `ad_body` — and pulling that
+        // into the stack would tear the design apart. Those stay put and answer to visibility alone.
+        val ordered = blocks.filterValues { it.parent === container }
+        val anchored = blocks.filterKeys { it !in ordered.keys }
 
-            // Physical reorder: LinearLayout draws children in add order. removeView keeps
-            // each block's LayoutParams, so margins and heights survive the move
-            ordered.values.forEach { block ->
-                container.removeView(block)
-                block.visibility = View.GONE
+        // Physical reorder: LinearLayout draws children in add order. removeView keeps
+        // each block's LayoutParams, so margins, heights and weights survive the move
+        ordered.values.forEach { block ->
+            container.removeView(block)
+            block.visibility = View.GONE
+        }
+        // distinct: a malformed remote list ("cta","cta") must not crash the re-add
+        order.distinct().forEach { component ->
+            ordered[component]?.let { block ->
+                container.addView(block)
+                block.visibility = View.VISIBLE
             }
-            // distinct: a malformed remote list ("cta","cta") must not crash the re-add
-            order.distinct().forEach { component ->
-                ordered[component]?.let { block ->
-                    container.addView(block)
-                    block.visibility = View.VISIBLE
-                }
-            }
-            anchored.forEach { (component, block) ->
-                block.visibility = if (component in order) View.VISIBLE else View.GONE
-            }
-        } else {
-            // No reorderable container — fall back to visibility toggles in place
-            blocks.forEach { (component, block) ->
-                block.visibility = if (component in order) View.VISIBLE else View.GONE
-            }
-            // Flat layouts carry the icon/headline group as loose views instead of a block.
-            // The "Ad" attribution badge (ad_icon) deliberately stays visible.
-            if (NativeComponent.ICON_HEADLINE !in blocks) {
-                val visibility =
-                    if (NativeComponent.ICON_HEADLINE in order) View.VISIBLE else View.GONE
-                listOf(R.id.ad_app_icon, R.id.ad_headline, R.id.ad_advertiser).forEach { id ->
-                    root.findViewById<View>(id)?.visibility = visibility
-                }
-            }
+        }
+        anchored.forEach { (component, block) ->
+            block.visibility = if (component in order) View.VISIBLE else View.GONE
         }
     }
 
-    /** Appearance styling (CTA and attribution colors) for a loaded ad or its skeleton. */
+    /** Appearance styling (card, CTA and attribution colors) for a loaded ad or its skeleton. */
     @JvmStatic
     fun applyAppearance(root: View, style: NativeAdStyle) {
-        val color = style.ctaBackgroundColor ?: return
-        root.findViewById<View>(R.id.ad_call_to_action)?.let { cta ->
-            cta.background = GradientDrawable().apply {
-                setColor(color)
-                cornerRadius = root.dp(style.ctaCornerRadiusDp).toFloat()
+        style.backgroundColor?.let { color ->
+            (root.findViewById(R.id.ad_background) ?: root.findViewById<View>(R.id.ad_container))
+                ?.let { card -> card.background = recolored(card.background, color) }
+        }
+        style.ctaBackgroundColor?.let { color ->
+            root.findViewById<View>(R.id.ad_call_to_action)?.let { cta ->
+                cta.background = GradientDrawable().apply {
+                    setColor(color)
+                    cornerRadius = root.dp(style.ctaCornerRadiusDp).toFloat()
+                }
             }
         }
         // The attribution badge is part of the native's visual CTA language. Layouts expose it
         // as `ad_icon`; tint the existing drawable so its shape, padding and corner radii survive.
-        root.findViewById<View>(R.id.ad_icon)?.let { badge ->
+        val badge = root.findViewById<View>(R.id.ad_icon) ?: return
+        (style.adBadgeColor ?: style.ctaBackgroundColor)?.let { color ->
             badge.background?.let { background ->
                 badge.background = DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
             }
         }
+        style.adBadgeTextColor?.let { badge.setBadgeTextColor(it) }
     }
 
     /**
@@ -141,6 +136,21 @@ object NativeAdStyler {
         container.removeAllViews()
         container.addView(adView)
         previous.forEach { it.destroy() }
+    }
+
+    // A shape keeps its corners and stroke; anything else that is not a plain fill is tinted whole
+    private fun recolored(background: Drawable?, @ColorInt color: Int): Drawable = when (background) {
+        is GradientDrawable -> (background.mutate() as GradientDrawable).apply { setColor(color) }
+        null, is ColorDrawable -> ColorDrawable(color)
+        else -> DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
+    }
+
+    // A badge may be a lone label or a row holding one (label + chevron)
+    private fun View.setBadgeTextColor(@ColorInt color: Int) {
+        when (this) {
+            is TextView -> setTextColor(color)
+            is ViewGroup -> for (i in 0 until childCount) (getChildAt(i) as? TextView)?.setTextColor(color)
+        }
     }
 
     private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

@@ -23,7 +23,7 @@ Launcher से app खोलने वाला लौटता user splash क
 | `ad_behavior_config` | [Copy/paste sample](examples/ads-onboarding/ad_behavior_config.json) | [SDK source asset](../ads/src/main/assets/adlogic_defaults/ad_behavior_config.json) |
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
-- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
+- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `colorBackground`, `colorAdBadge`, `colorAdBadgeText`, `heightCTA`, `templateId`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
 - **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
 - **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation और Activity exclusions। SDK ad-presentation presets remote से बदले जा सकते हैं।
@@ -72,8 +72,8 @@ entry। इनमें से कोई एक भी न हो तो slot �
 
 हर launch एक format request करता है। Slot स्वतंत्र रूप से load और render होता है: ready interstitial slot के load, impression या minimum visibility का इंतज़ार नहीं करता। `slot_min_visible_ms` और `slot_wait_after_inter_ms` presentation नहीं रोकते। Consent, premium, focus, notification dismissal, splash minimum display और update/paywall gates लागू रहते हैं। `ob_ads_splash_banner_enabled` दोनों formats नियंत्रित करता है।
 
-Native एक तय media-left frame से render होता है, इसलिए `positionCTA` और `components` का क्रम बेअसर
-हैं — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
+Native media-left frame से render होता है जब तक `native_splash.templateId` कोई और template न चुने; media-left हमेशा वैसा ही दिखता है जैसा बनाया गया है, इसलिए `components` बेअसर
+है — `colorCTA` और `heightCTA` फिर भी लागू होते हैं। `AdPlacement.SplashInlineNative` और
 `AdPlacement.SplashNative` अलग हैं; दूसरा splash interstitial के बाद दिखने वाला optional full-screen
 native (`native_fs`) है। Code में यह flag `io.onboardkit.config.SplashAdSlotFormat` है और ad units
 `AdsConfig.splashInlineNative` में resolve होते हैं।
@@ -157,9 +157,11 @@ Pager page ads कभी reload नहीं होते: उन keys पर `r
 
 ## Native template, CTA और X/Skip प्रयोग
 
-- LFO, Welcome Back और content OB `ad_remote_config.<placement>.positionCTA` (`TOP`/`BOTTOM`) का उपयोग करते हैं। `lfo.native_template`, `onboarding.ads.content_template` और `onboarding.steps.<id>.native_template` हटा दिए गए हैं; पुराने payload में ये fields अनदेखे होते हैं।
-- `positionCTA`: remote > app asset > code/default. Omitted fields keep local values; `null`/`""` clears the position and uses the host/SDK fallback frame.
-- The LFO popup keeps `DIALOG`; Full1/Full2/OB5/native_fs keep `FULL_SCREEN`; splash inline/Privacy/Goal keep media-left frames. `colorCTA` applies to the CTA and Ad badge in every frame.
+- `ad_remote_config.<placement>.templateId` (number) frame चुनता है: `1` LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card। न हो, `null` हो या अनजान number हो तो slot का default रहता है — LFO1/2, Welcome Back और OB content पर `1`, Privacy/Goal और splash inline पर `2`। हर field की तरह remote > app asset > code।
+- `components` ही अकेली चीज़ है जो native का क्रम तय करती है। Templates `1` और `3` इसका पालन करते हैं; न हो तो default क्रम CTA को नीचे रखता है। Template `1`: `["icon_headline","media","cta"]` (default) या CTA ऊपर रखने के लिए `["cta","media","icon_headline"]`।
+- `positionCTA` हटा दिया गया है; जो payload अब भी इसे भेजता है, उसे अनदेखा किया जाता है। `lfo.native_template`, `onboarding.ads.content_template` और `onboarding.steps.<id>.native_template` भी हटा दिए गए हैं; पुराने payload में ये fields अनदेखे होते हैं।
+- Template 3 एक layout है; design की चार arrangements `components` के क्रम से आती हैं: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (default क्रम), D `["cta","media","icon_headline","body"]`। Body header के अंदर है, इसलिए `body` हटाने से वह सिर्फ़ छिपता है।
+- Template `2`, LFO popup (`DIALOG`) और Full1/Full2/OB5/native_fs (`FULL_SCREEN`) हमेशा वैसे ही दिखते हैं जैसे बनाए गए हैं और `components` को अनदेखा करते हैं; popup और fullscreen natives `templateId` को भी अनदेखा करते हैं। `colorCTA` हर frame में CTA और Ad badge पर लागू होता है; `colorBackground` हर frame के card का रंग बदलता है, shape वही रहता है, और default में नहीं होता। `colorAdBadge` और `colorAdBadgeText` हर frame में Ad badge का background और text रंग बदलते हैं।
 - Preload और show एक template resolver इस्तेमाल करते हैं। Host जल्दी preload करे या preload के बाद remote refresh हो तो bind वर्तमान SDK frame इस्तेमाल करता है, loaded ad हटाए बिना। दिखता हुआ view अगले bind तक बना रहता है। LFO1 मौजूदा preload mode के अनुसार schedule होता है, remote का इंतज़ार नहीं।
 - Shared `flow.fullscreen_skip_style`, OB `onboarding.fullscreen.skip.style`, per-step `.fullscreen.skip.style` और `ob5.skip.style` में `CLOSE_ICON` / `TEXT` मान्य हैं। एक ही source के भीतर specific scope shared scope से पहले है (किसी भी scope का remote app asset से ऊपर है), फिर host fallback है। घोषित styles के defaults `CLOSE_ICON` हैं; style बदलने से Skip/auto-next timing नहीं बदलती।
 - X/Skip का side हर native full-screen page का अपना है, ऊपर कोई shared scope नहीं: हर full-screen step के लिए `onboarding.steps.<id>.fullscreen.skip.position`, standalone OB5 के लिए `ob5.skip.position`, और splash interstitial से LFO के बीच के native_fs के लिए `splash.native.skip.position`। तीनों में `RIGHT` / `LEFT` मान्य हैं, default `RIGHT` — वही side जहाँ X हमेशा से था; shipped JSON में `full1` और `full2` declare हैं, और app का declare किया कोई भी दूसरा step id उसी path पर स्वीकार होता है। किसी और format में यह control नहीं है: interstitial, app-open, banner और inline native में यह button होता ही नहीं। दोनों sides पूरी तरह mirror हैं: अपने edge से समान inset और समान top margin, इसलिए केवल side बदलता है, size/style/timing नहीं। RTL locale में screen आज की तरह ही mirror होती है: `RIGHT` text end, `LEFT` text start।

@@ -86,9 +86,6 @@ data class InterstitialAdUnit(override val tiers: List<String>) : AdUnitTiers {
 /** Banners refresh in place rather than falling through floors, so they take a single id. */
 data class BannerAdUnit(val id: String)
 
-/** Which of the SDK native templates a placement renders with by default. */
-enum class NativeTemplate { CTA_BOTTOM, CTA_TOP, COMPACT, FULL_SCREEN, DIALOG }
-
 /**
  * Every ad slot the onboarding flow can fill. Leave a field `null` and that slot simply shows
  * no ad — nothing else in the flow changes.
@@ -154,9 +151,6 @@ data class AdsConfig(
     val welcomeBackDupNative: NativeAdUnit? = null,
     /** App-resume / app-open ad, shown when the app returns to the foreground. */
     val appResume: InterstitialAdUnit? = null,
-    /** Host fallback frames; onboarding JSON no longer owns native frame selection. */
-    val contentStepTemplate: NativeTemplate = NativeTemplate.CTA_TOP,
-    val languageTemplate: NativeTemplate = NativeTemplate.CTA_BOTTOM,
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
     val skipAdOnlyStepsWhenPremium: Boolean = OnboardingSettings.defaultBool("flow.skip_ad_only_steps_when_premium"),
     /** Preloaded on pager entry; load-and-show on completion with an eight-second fill wait. */

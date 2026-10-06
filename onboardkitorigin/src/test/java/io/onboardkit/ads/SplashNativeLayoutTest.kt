@@ -49,14 +49,11 @@ class SplashNativeLayoutTest {
     }
 
     @Test
-    fun `ad_media carries the rounded box, so hiding it hides the box`() {
+    fun `ad_media carries the rounded box`() {
         val media = elementsById()["ad_media"]!!
         // The MediaView's image is added as a child at bind time and would otherwise paint square
         // corners straight over the 4dp radius the background draws.
         assertEquals("true", media.getAttributeNS(android, "clipToOutline"))
-        // With no `ad_container`, NativeAdStyler toggles `ad_media`'s own visibility for a remote
-        // `components` list that drops "media". The background must ride on the view that gets
-        // hidden — on the well it would leave an empty grey block holding half the card.
         assertEquals("@drawable/ob_bg_splash_native_media", media.getAttributeNS(android, "background"))
     }
 
@@ -79,10 +76,8 @@ class SplashNativeLayoutTest {
 
     @Test
     fun `the layout is not a reorderable stack`() {
-        // No ad_container: NativeAdStyler reorders only inside one, and this card is a horizontal
-        // split where reordering would put the CTA beside the media. `components` stays a
-        // visibility switch here, and `positionCTA` has nothing to move — which is why neither is
-        // declared on the native_splash entry in ad_config.
+        // No ad_container: NativeAdStyler applies `components` only inside one, and this card is
+        // a horizontal split where reordering would put the CTA beside the media.
         assertTrue(
             "an ad_container would make `components` reorder this horizontal card",
             "ad_container" !in elementsById().keys,

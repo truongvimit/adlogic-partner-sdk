@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "image 20" of native_med_1_91: the 1.91:1 media, 8dp corners. Paired with
+     clipToOutline so the MediaView's own child is rounded with it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ob_placeholder_bg" />
+    <corners android:radius="@dimen/ob_native_med_1_91_media_radius" />
+</shape>

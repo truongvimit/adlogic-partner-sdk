@@ -254,7 +254,6 @@ class SettingsDocument(
                 path.endsWith("initial_content_trigger") -> setOf("SPLASH_HANDOFF", "LFO_SHOWN", "FIRST_LANGUAGE_SELECTION")
                 path == "lfo.native2.preload_trigger" -> setOf("LFO_SHOWN", "FIRST_SELECTION")
                 path.endsWith("preload_trigger") -> setOf("LFO_SHOWN", "FIRST_SELECTION", "DIALOG_OPEN")
-                path.endsWith("template") -> if (path.startsWith("onboarding.steps.")) setOf("", "CTA_TOP", "CTA_BOTTOM", "COMPACT") else setOf("CTA_TOP", "CTA_BOTTOM", "COMPACT", "FULL_SCREEN", "DIALOG")
                 else -> null
             }
             if (allowed != null && value !in allowed) return false

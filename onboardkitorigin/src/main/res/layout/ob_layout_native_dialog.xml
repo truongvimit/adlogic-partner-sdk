@@ -4,7 +4,7 @@
 
   A horizontal split — media on the left, headline/body/rating/CTA stacked on the right — so it is
   deliberately absent from NativeLayoutContractTest's reorderable list: there is no `ad_container`
-  vertical stack here, which makes `components` a visibility switch and never a reorder.
+  vertical stack here, so `components` does not apply.
 -->
 <com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -12,6 +12,7 @@
     android:layout_height="wrap_content">
 
     <LinearLayout
+        android:id="@+id/ad_background"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/ob_bg_confirm_native"

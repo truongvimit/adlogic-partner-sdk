@@ -47,8 +47,10 @@ data class AdRemoteConfig @JvmOverloads constructor(
         private const val MAX_NUMBERED_FLOORS = 9
 
         internal val ALL_FIELDS: Set<String> = setOf(
-            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA",
-            "heightCTA", "positionCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
+            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA", "colorBackground",
+            "colorAdBadge", "colorAdBadgeText",
+            "heightCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
+            "templateId",
         )
 
         private fun defaultUnit() = AdUnitConfig(id = "", isEnable = false)
@@ -95,12 +97,15 @@ data class AdRemoteConfig @JvmOverloads constructor(
             enableUaCheck = if ("enable_ua_check" in fields) top.enableUaCheck else base.enableUaCheck,
             reloadIntervalSeconds = if ("reloadIntervalSeconds" in fields) top.reloadIntervalSeconds else base.reloadIntervalSeconds,
             colorCTA = if ("colorCTA" in fields) top.colorCTA else base.colorCTA,
+            colorBackground = if ("colorBackground" in fields) top.colorBackground else base.colorBackground,
+            colorAdBadge = if ("colorAdBadge" in fields) top.colorAdBadge else base.colorAdBadge,
+            colorAdBadgeText = if ("colorAdBadgeText" in fields) top.colorAdBadgeText else base.colorAdBadgeText,
             heightCTA = if ("heightCTA" in fields) top.heightCTA else base.heightCTA,
-            positionCTA = if ("positionCTA" in fields) top.positionCTA else base.positionCTA,
             components = if ("components" in fields) top.components else base.components,
             ids = if ("ids" in fields) top.ids else base.ids,
             appResumeLoadDelayMs = if ("app_resume_load_delay_ms" in fields) top.appResumeLoadDelayMs else base.appResumeLoadDelayMs,
             clickAction = if ("click_action" in fields) top.clickAction else base.clickAction,
+            templateId = if ("templateId" in fields) top.templateId else base.templateId,
         )
 
         /**

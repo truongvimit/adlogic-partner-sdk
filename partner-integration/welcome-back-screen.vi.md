@@ -47,6 +47,6 @@ Khai trong `ad_config.json` (id production), cùng dạng với các vị trí n
 }
 ```
 
-`native_welcome1` được splash preload cùng thời điểm và cùng mode với LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` preload khi Welcome Back mở và thay ad đầu ở lần tap đầu tiên; ad thứ hai không fill thì giữ ad đầu. Cả hai dùng `positionCTA` của base key tương ứng trong `ad_remote_config`. `isEnable` của key gốc tắt cả waterfall; màn vẫn hiện.
+`native_welcome1` được splash preload cùng thời điểm và cùng mode với LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` preload khi Welcome Back mở và thay ad đầu ở lần tap đầu tiên; ad thứ hai không fill thì giữ ad đầu. Cả hai dùng `templateId` và `components` của base key tương ứng trong `ad_remote_config`, giống LFO. `isEnable` của key gốc tắt cả waterfall; màn vẫn hiện.
 
 Với timing mặc định, màn mở sau khi inter splash đóng. Continue ghi lựa chọn thành `GoalAnswer` (phát qua `OnboardingEvent.GoalsSelected`, đọc lại sau bằng `OnboardingSdk.selectedGoals()`) và trả `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` kèm passthrough của lần mở. Không đánh dấu hoàn tất gì và không bắn `FlowCompleted` / `fo_flow_complete`, nên màn hiện lại ở lần mở từ launcher kế tiếp. Back đóng app.

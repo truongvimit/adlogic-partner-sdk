@@ -15,13 +15,18 @@ data class AdUnitConfig(
     val enableUaCheck: Boolean = false,
     val reloadIntervalSeconds: Int? = null,
     val colorCTA: String = "default",
-    val heightCTA: Int = 40,
+    /** The native card's background color; `"default"` keeps the layout's own background. */
+    val colorBackground: String = "default",
+    /** The Ad badge's background color; `"default"` falls back to [colorCTA], then the layout. */
+    val colorAdBadge: String = "default",
+    /** The Ad badge's text color; `"default"` keeps the layout's text color. */
+    val colorAdBadgeText: String = "default",
+    val heightCTA: Int = DEFAULT_HEIGHT_CTA,
     /**
-     * Where the CTA sits, for the screens that pick a dedicated layout per position — the
-     * onboarding flow does. `null` means no opinion, and then [components] decides the order.
+     * Blocks to show, top to bottom; the only thing that orders a native. Templates that cannot
+     * reorder ignore it.
      */
-    val positionCTA: String? = null,
-    val components: List<String> = listOf("icon_headline", "body", "media", "cta"),
+    val components: List<String> = DEFAULT_COMPONENTS,
     /**
      * Optional waterfall tiers, ordered highest floor first. Empty means "single tier", i.e.
      * exactly the behaviour of [id] alone, so a payload that declares no tiers keeps working.
@@ -34,6 +39,12 @@ data class AdUnitConfig(
      * default. Read from the base key only, never from its `_high` floors.
      */
     val clickAction: NativeClickAction? = null,
+    /**
+     * The SDK native template this placement renders with; `null` keeps the placement's default
+     * layout. Which number means which layout is decided by the module that owns the layouts —
+     * an unknown number falls back to that default too.
+     */
+    val templateId: Int? = null,
 ) {
 
     /**
@@ -48,4 +59,13 @@ data class AdUnitConfig(
 
     /** True when this unit is switched on and has at least one usable id. */
     val isUsable: Boolean get() = isEnable && waterfallIds.isNotEmpty()
+
+    companion object {
+        /** CTA height in dp when a placement declares none: the button height of the SDK templates. */
+        const val DEFAULT_HEIGHT_CTA: Int = 44
+
+        /** Every block, CTA last: a placement that declares no order shows its button at the bottom. */
+        @JvmField
+        val DEFAULT_COMPONENTS: List<String> = listOf("icon_headline", "body", "media", "cta")
+    }
 }

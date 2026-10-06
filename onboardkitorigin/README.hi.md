@@ -205,8 +205,9 @@ default रूप से step पूरा करती है, इसलिए 
 `AdsConfig.fullScreenSkipStyle` Full1/Full2/OB5 का साझा button style है। Standalone OB5 में अलग defaults
 हैं: 3 सेकंड का skip delay और 15 सेकंड का auto-dismiss।
 
-`BehaviorConfig.lockPagerSwipe = false` होने पर OB1 locked रहता है, OB2/OB3/OB4 swipe की अनुमति देते हैं, और fullscreen
-page सिर्फ उस visit में ad दिखने के बाद swipe होने देता है। Loading या failure में fullscreen swipe locked रहता है;
+`BehaviorConfig.lockPagerSwipe = false` होने पर OB1 locked रहता है; OB2/OB3/OB4 और fullscreen page सिर्फ page का ad
+दिखने के बाद swipe होने देते हैं, और हर visit locked से शुरू होता है। जिस content page पर दिखाने को कोई ad नहीं है
+(unit नहीं, premium, no fill) वहाँ swipe तुरंत मिलता है। Loading या failure में fullscreen swipe locked रहता है;
 X, timeout और no-fill पर automatic completion फिर भी काम करते हैं। `swipeCompletesLastStep = true` होने पर आखिरी content
 page पर forward swipe उसी exit interstitial से गुज़रता है जो उसका CTA इस्तेमाल करता है। `lockPagerSwipe = true` यह gesture भी बंद करता है।
 

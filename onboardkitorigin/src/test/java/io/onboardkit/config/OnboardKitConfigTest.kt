@@ -123,8 +123,8 @@ class OnboardKitConfigTest {
     @Test
     fun `the confirm modal is fixed to the dialog template`() {
         assertEquals(
-            NativeTemplate.DIALOG,
-            NativeTemplates.templateForPlacement(AdPlacement.LanguageConfirm),
+            io.onboardkit.R.layout.ob_layout_native_dialog,
+            NativeTemplates.layoutForPlacement(AdPlacement.LanguageConfirm),
         )
     }
 

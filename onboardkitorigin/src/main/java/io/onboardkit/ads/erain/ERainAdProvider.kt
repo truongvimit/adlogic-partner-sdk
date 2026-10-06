@@ -46,7 +46,6 @@ import io.onboardkit.ads.canStartNativeRequest
 import io.onboardkit.ads.isPrivacyGoalsNative
 import io.onboardkit.config.BannerAdUnit
 import io.onboardkit.config.InterstitialAdUnit
-import io.onboardkit.config.NativeTemplate
 import io.onboardkit.core.ObLog
 import io.onboardkit.remote.OnboardingSettings
 import io.trackkit.PlacementRegistry
@@ -428,10 +427,7 @@ class ERainAdProvider : OnboardingAdProvider() {
     private fun nativeConfig(request: NativeAdRequest): NativeAdConfig {
         val placement = request.placement
         val layoutRes = request.layoutRes
-        val sdkTemplate = NativeTemplate.entries.any {
-            NativeTemplates.layoutFor(it) == layoutRes
-        }
-        val liveSdkFrame: (() -> Int)? = if (sdkTemplate) {
+        val liveSdkFrame: (() -> Int)? = if (NativeTemplates.isSdkLayout(layoutRes)) {
             {
                 if (OnboardingSdk.configOrNull() != null)
                     NativeTemplates.layoutForPlacement(placement) else layoutRes

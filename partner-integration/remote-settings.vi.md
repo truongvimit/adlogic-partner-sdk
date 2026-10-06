@@ -21,9 +21,9 @@ Welcome Back mặc định ẩn; bật `welcome_back.enabled` để user cũ m�
 
 ## Mỗi giá trị có một nơi quản lý
 
-- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `heightCTA`, `positionCTA`, `components`, `click_action` của native, `open_resume.app_resume_load_delay_ms`. Hai JSON mới không khai báo lại các field này, mapping ad unit hoặc công tắc từng ad unit.
+- **ad_config:** `id`, `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `colorBackground`, `colorAdBadge`, `colorAdBadgeText`, `heightCTA`, `templateId`, `components`, `click_action` của native, `open_resume.app_resume_load_delay_ms`. Hai JSON mới không khai báo lại các field này, mapping ad unit hoặc công tắc từng ad unit.
 - **ad_behavior_config:** timeout/cache, policy reload, frequency/AutoBuffer, consent timeout, telemetry, bo góc CTA native và hành vi app-open. Banner type/size là preset định dạng quảng cáo của SDK; không chứa resource/layout của app.
-- **onboarding_config:** bật/tắt bước của luồng, skip/X delay, auto-next, swipe/back, chiến lược splash, thời điểm preload LFO/OB và hành vi exit; template native, kiểu nút X/Skip, hình/màu nút xác nhận LFO và lựa chọn ngôn ngữ trong catalog của app. Bật bước không bật lại placement đang `isEnable=false` trong ad_config.
+- **onboarding_config:** bật/tắt bước của luồng, skip/X delay, auto-next, swipe/back, chiến lược splash, thời điểm preload LFO/OB và hành vi exit; kiểu nút X/Skip, hình/màu nút xác nhận LFO và lựa chọn ngôn ngữ trong catalog của app. Bật bước không bật lại placement đang `isEnable=false` trong ad_config.
 - **Code/resource của app:** reference `R.layout`, `R.drawable`, `R.string`, layout custom của trang, catalog/resource ngôn ngữ, progress indicator, system bars/orientation và Activity exclusions. Các preset trình bày quảng cáo có sẵn trong SDK vẫn được remote điều khiển; không cần truyền resource ID qua JSON.
 
 `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, mọi `placement`/`native_placement`, các switch ad unit và nhóm payload nội dung app `ui` đã được bỏ khỏi schema mới. Payload/cached payload còn các field này được bỏ qua; không ghi đè nơi quản lý chính.
@@ -81,8 +81,8 @@ trong ad_config. Thiếu một trong hai thì slot chỉ đơn giản là rỗng
 
 Mỗi lượt mở chỉ request một format. Slot tự load và render độc lập: interstitial ready không chờ slot load, impression hoặc thời gian hiển thị tối thiểu. `slot_min_visible_ms` và `slot_wait_after_inter_ms` không giữ interstitial. Consent, premium, focus, đóng notification, minimum display của splash và gate update/paywall vẫn có hiệu lực. `ob_ads_splash_banner_enabled` điều khiển cả hai format.
 
-Native dùng khung media-left cố định nên `positionCTA` và thứ tự `components` không có gì để tác
-động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
+Native dùng khung media-left trừ khi `native_splash.templateId` chọn template khác; media-left
+luôn hiện đúng như layout vẽ sẵn nên `components` không có gì để tác động — `colorCTA` và `heightCTA` vẫn áp dụng. `AdPlacement.SplashInlineNative` khác
 `AdPlacement.SplashNative` — cái sau vẫn là native full-screen tuỳ chọn (`native_fs`) hiện sau
 inter splash. Trong code cờ này là `io.onboardkit.config.SplashAdSlotFormat`, còn ad unit resolve
 vào `AdsConfig.splashInlineNative`.
@@ -177,9 +177,11 @@ Ví dụ trong `ad_config`: OB1 giữ nguyên trang sau khi click ad, LFO2 tự 
 
 ## Template và CTA để UA/MO thử nghiệm
 
-- LFO, Welcome Back và content OB dùng `ad_remote_config.<placement>.positionCTA` (`TOP`/`BOTTOM`). Các field `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template` đã bỏ; payload cũ chứa chúng sẽ bị bỏ qua.
-- `positionCTA`: remote > asset app > code/default. Thiếu field giữ giá trị local; `null`/`""` xóa position và dùng frame fallback của host/SDK.
-- Popup LFO giữ `DIALOG`; Full1/Full2/OB5/native_fs giữ `FULL_SCREEN`; splash inline/Privacy/Goal giữ khung media-left. `colorCTA` áp dụng cho CTA và badge Ad ở mọi khung.
+- `ad_remote_config.<placement>.templateId` (số) chọn khung: `1` khung LFO, `2` card media-left 4:3, `3` card 1.91:1. Không có, `null` hoặc số lạ thì giữ mặc định của slot — `1` cho LFO1/2, Welcome Back và OB content, `2` cho Privacy/Goal và splash inline. Remote > asset app > code như mọi field.
+- `components` là thứ duy nhất sắp thứ tự native. Template `1` và `3` theo nó; không có thì thứ tự mặc định đặt CTA ở dưới. Template `1`: `["icon_headline","media","cta"]` (mặc định) hoặc `["cta","media","icon_headline"]` để đưa CTA lên trên.
+- `positionCTA` đã bỏ; payload vẫn gửi field này sẽ bị bỏ qua. Các field `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template` cũng đã bỏ; payload cũ chứa chúng sẽ bị bỏ qua.
+- Template 3 là một layout, bốn cách sắp xếp của thiết kế lấy từ thứ tự `components`: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (thứ tự mặc định), D `["cta","media","icon_headline","body"]`. Body nằm trong header nên bỏ `body` chỉ làm ẩn nó.
+- Template `2`, popup LFO (`DIALOG`) và Full1/Full2/OB5/native_fs (`FULL_SCREEN`) luôn hiện đúng như layout vẽ sẵn và bỏ qua `components`; popup và native fullscreen còn bỏ qua cả `templateId`. `colorCTA` áp dụng cho CTA và badge Ad ở mọi khung; `colorBackground` đổi màu nền card ở mọi khung, giữ nguyên hình dạng, và mặc định không khai. `colorAdBadge` và `colorAdBadgeText` đổi màu nền và màu chữ badge Ad ở mọi khung.
 - Preload và show dùng chung bộ chọn template. Nếu host chủ động preload sớm hoặc remote được refresh sau preload, native được inflate theo template hiện hành tại bind, tái sử dụng ad đã tải. LFO1 được lên lịch theo preload mode hiện có, không chờ remote. Một ad đang hiển thị giữ view hiện tại đến lần bind tiếp theo.
 - `flow.fullscreen_skip_style`, `onboarding.fullscreen.skip.style`, `onboarding.steps.<id>.fullscreen.skip.style`, `ob5.skip.style` nhận `CLOSE_ICON`/`TEXT`. Trong cùng một nguồn, scope cụ thể ưu tiên scope chung (remote ở bất kỳ scope nào ưu tiên hơn asset app), rồi tới cấu hình host; thời gian X/Skip và auto-next không đổi khi chỉ đổi style. Default các style khai báo sẵn là `CLOSE_ICON`.
 - Phía đặt X/Skip khai theo từng trang native fullscreen, không có scope chung ở trên: `onboarding.steps.<id>.fullscreen.skip.position` cho mỗi trang fullscreen trong OB, `ob5.skip.position` cho OB5 standalone, `splash.native.skip.position` cho native_fs giữa inter splash và LFO. Cả ba nhận `RIGHT`/`LEFT`, default `RIGHT` — đúng phía X vẫn nằm từ trước; JSON gốc khai sẵn `full1` và `full2`, id step khác do app khai vẫn nhận ở cùng path đó. Các format khác không có cờ này: interstitial, app-open, banner và native inline đều không có nút X này. Hai phía đối xứng tuyệt đối: cùng khoảng cách tới mép và cùng margin trên, chỉ đổi phía chứ không đổi kích thước, style hay thời gian. Locale RTL vẫn lật như hiện tại: `RIGHT` theo mép cuối dòng chữ, `LEFT` theo mép đầu.

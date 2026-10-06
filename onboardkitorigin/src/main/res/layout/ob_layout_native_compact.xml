@@ -6,6 +6,7 @@
     android:layout_height="wrap_content">
 
     <LinearLayout
+        android:id="@+id/ad_background"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/ob_bg_ad_compact"
