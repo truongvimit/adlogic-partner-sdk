@@ -15,6 +15,8 @@ data class AdUnitConfig(
     val enableUaCheck: Boolean = false,
     val reloadIntervalSeconds: Int? = null,
     val colorCTA: String = "default",
+    /** The native card's background color; `"default"` keeps the layout's own background. */
+    val colorBackground: String = "default",
     val heightCTA: Int = DEFAULT_HEIGHT_CTA,
     /**
      * Blocks to show, top to bottom; the only thing that orders a native. Templates that cannot

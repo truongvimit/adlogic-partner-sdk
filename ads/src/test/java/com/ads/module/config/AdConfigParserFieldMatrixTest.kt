@@ -60,6 +60,40 @@ class AdConfigParserFieldMatrixTest {
     }
 
     @Test
+    fun `colorBackground takes a color, null or blank keep the XML background, anything else is ignored alone`() {
+        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","colorBackground":$raw}}""")!!
+
+        assertEquals("#102030", parse("\"#102030\"").unit("matrix").colorBackground)
+        for (raw in listOf("null", "\"\"", "\"default\"")) {
+            val config = parse(raw)
+            assertEquals(raw, null, config.unit("matrix").toNativeStyle().backgroundColor)
+            assertTrue(raw, config.fieldsFor("matrix").contains("colorBackground"))
+        }
+        for (raw in listOf("\"not-a-color\"", "3", "true")) {
+            val config = parse(raw)
+            assertEquals(raw, "default", config.unit("matrix").colorBackground)
+            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertFalse(raw, config.fieldsFor("matrix").contains("colorBackground"))
+        }
+        assertEquals("default", AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!.unit("matrix").colorBackground)
+    }
+
+    @Test
+    fun `remote colorBackground outranks the app's, an omitted one keeps it and null clears it`() {
+        try {
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"colorBackground":"#111111"}}""")
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorBackground":"#222222"}}""")!!)
+            assertEquals("#222222", AdRemoteConfig.getInstance().unit("native_lang").colorBackground)
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorCTA":"#000000"}}""")!!)
+            assertEquals("#111111", AdRemoteConfig.getInstance().unit("native_lang").colorBackground)
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorBackground":null}}""")!!)
+            assertEquals(null, AdRemoteConfig.getInstance().unit("native_lang").toNativeStyle().backgroundColor)
+        } finally {
+            AdRemoteConfig.reset()
+        }
+    }
+
+    @Test
     fun `the default components put the CTA last`() {
         assertEquals("cta", AdUnitConfig.DEFAULT_COMPONENTS.last())
     }

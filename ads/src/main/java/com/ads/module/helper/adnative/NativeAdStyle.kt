@@ -28,6 +28,12 @@ data class NativeAdStyle(
     /** CTA and attribution background color. Applied to both the real ad and its skeleton. */
     @ColorInt val ctaBackgroundColor: Int? = null,
 
+    /**
+     * The card's background color, painted on `@id/ad_background`, else `@id/ad_container`;
+     * the drawable's shape and stroke stay. Null keeps the XML background.
+     */
+    @ColorInt val backgroundColor: Int? = null,
+
     /** Corner radius of the CTA background when [ctaBackgroundColor] is set. */
     val ctaCornerRadiusDp: Int = AdBehavior.defaultNumber("native.presentation.cta_corner_radius_dp").toInt(),
 ) {

@@ -84,6 +84,37 @@ class AdUnitConfigStyleTest {
         assertEquals(View.GONE, well.visibility)
     }
 
+    @Test fun `colorBackground recolors the card and keeps its shape`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val shape = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = 12f; setStroke(2, Color.GRAY) }
+        val card = LinearLayout(context).apply { id = R.id.ad_container; background = shape }
+        val root = android.widget.FrameLayout(context).apply { addView(card) }
+
+        NativeAdStyler.applyAppearance(root, parse(""""colorBackground":"#102030"""").toNativeStyle())
+        val painted = card.background as GradientDrawable
+        assertEquals(Color.parseColor("#102030"), painted.color?.defaultColor)
+        assertEquals(12f, painted.cornerRadius)
+    }
+
+    @Test fun `ad_background is the card when the layout names one`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val inner = LinearLayout(context).apply { id = R.id.ad_container; setBackgroundColor(Color.WHITE) }
+        val card = android.widget.FrameLayout(context).apply { id = R.id.ad_background; addView(inner) }
+        val root = android.widget.FrameLayout(context).apply { addView(card) }
+
+        NativeAdStyler.applyAppearance(root, parse(""""colorBackground":"#102030"""").toNativeStyle())
+        assertEquals(Color.parseColor("#102030"), (card.background as android.graphics.drawable.ColorDrawable).color)
+        assertEquals(Color.WHITE, (inner.background as android.graphics.drawable.ColorDrawable).color)
+    }
+
+    @Test fun `without colorBackground the XML background is untouched`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val shape = GradientDrawable().apply { setColor(Color.WHITE) }
+        val card = LinearLayout(context).apply { id = R.id.ad_container; background = shape }
+        NativeAdStyler.applyAppearance(android.widget.FrameLayout(context).apply { addView(card) }, parse(""""colorCTA":"#1E88E5"""").toNativeStyle())
+        assertEquals(shape, card.background)
+    }
+
     @Test fun `a listed subset still decides the blocks`() {
         assertEquals(
             listOf(NativeComponent.CTA, NativeComponent.BODY),

@@ -47,7 +47,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
         private const val MAX_NUMBERED_FLOORS = 9
 
         internal val ALL_FIELDS: Set<String> = setOf(
-            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA",
+            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA", "colorBackground",
             "heightCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
             "templateId",
         )
@@ -96,6 +96,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             enableUaCheck = if ("enable_ua_check" in fields) top.enableUaCheck else base.enableUaCheck,
             reloadIntervalSeconds = if ("reloadIntervalSeconds" in fields) top.reloadIntervalSeconds else base.reloadIntervalSeconds,
             colorCTA = if ("colorCTA" in fields) top.colorCTA else base.colorCTA,
+            colorBackground = if ("colorBackground" in fields) top.colorBackground else base.colorBackground,
             heightCTA = if ("heightCTA" in fields) top.heightCTA else base.heightCTA,
             components = if ("components" in fields) top.components else base.components,
             ids = if ("ids" in fields) top.ids else base.ids,

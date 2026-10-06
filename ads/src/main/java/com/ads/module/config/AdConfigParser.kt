@@ -17,7 +17,7 @@ import java.io.Reader
  */
 internal object AdConfigParser {
     private const val TAG = "AdConfigParser"
-    private const val DEFAULT_COLOR_CTA = "default"
+    private const val DEFAULT_COLOR = "default"
 
     fun parse(source: Reader): Map<String, AdUnitConfig> = parseConfig(source).ads
 
@@ -66,7 +66,8 @@ internal object AdConfigParser {
         var enableUaCheck = false
         var reloadIntervalSeconds: Int? = null
         var appResumeLoadDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
-        var colorCTA = DEFAULT_COLOR_CTA
+        var colorCTA = DEFAULT_COLOR
+        var colorBackground = DEFAULT_COLOR
         var heightCTA = AdUnitConfig.DEFAULT_HEIGHT_CTA
         var components: List<String> = AdUnitConfig.DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
@@ -94,6 +95,13 @@ internal object AdConfigParser {
                 }
                 "colorCTA" -> readString(reader).also { parsed ->
                     if (parsed.valid && parsed.value!!.isValidColorToken()) { colorCTA = parsed.value; fields += field } else invalid(key, field, parsed.raw)
+                }
+                "colorBackground" -> when (reader.peek()) {
+                    // null is a clear, like "": back to the layout's background over any lower tier
+                    JsonToken.NULL -> { reader.nextNull(); colorBackground = DEFAULT_COLOR; fields += field }
+                    else -> readString(reader).also { parsed ->
+                        if (parsed.valid && parsed.value!!.isValidColorToken()) { colorBackground = parsed.value; fields += field } else invalid(key, field, parsed.raw)
+                    }
                 }
                 "heightCTA" -> readInt(reader, min = 0).also { parsed ->
                     if (parsed.valid) { heightCTA = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
@@ -125,6 +133,7 @@ internal object AdConfigParser {
             enableUaCheck = enableUaCheck,
             reloadIntervalSeconds = reloadIntervalSeconds,
             colorCTA = colorCTA,
+            colorBackground = colorBackground,
             heightCTA = heightCTA,
             components = components,
             ids = ids,

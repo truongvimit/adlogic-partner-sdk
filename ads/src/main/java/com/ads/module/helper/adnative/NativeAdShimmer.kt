@@ -153,7 +153,9 @@ object NativeAdShimmer {
             is MediaView -> skeletonizeMedia(view)
 
             is ViewGroup -> {
-                view.background = rounded(view, CONTAINER_COLOR)
+                // Only the outermost group paints the card; nested groups stay clear so a card
+                // recolored by `colorBackground` shows through instead of white panels
+                view.background = rounded(view, if (depth == 0) CONTAINER_COLOR else Color.TRANSPARENT)
                 for (i in 0 until view.childCount) toSkeleton(view.getChildAt(i), depth + 1)
             }
 

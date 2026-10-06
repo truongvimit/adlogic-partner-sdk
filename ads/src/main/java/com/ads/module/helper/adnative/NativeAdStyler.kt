@@ -1,7 +1,10 @@
 package com.ads.module.helper.adnative
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import androidx.annotation.ColorInt
 import androidx.core.graphics.drawable.DrawableCompat
 import android.view.LayoutInflater
 import android.view.View
@@ -72,9 +75,13 @@ object NativeAdStyler {
         }
     }
 
-    /** Appearance styling (CTA and attribution colors) for a loaded ad or its skeleton. */
+    /** Appearance styling (card, CTA and attribution colors) for a loaded ad or its skeleton. */
     @JvmStatic
     fun applyAppearance(root: View, style: NativeAdStyle) {
+        style.backgroundColor?.let { color ->
+            (root.findViewById(R.id.ad_background) ?: root.findViewById<View>(R.id.ad_container))
+                ?.let { card -> card.background = recolored(card.background, color) }
+        }
         val color = style.ctaBackgroundColor ?: return
         root.findViewById<View>(R.id.ad_call_to_action)?.let { cta ->
             cta.background = GradientDrawable().apply {
@@ -125,6 +132,13 @@ object NativeAdStyler {
         container.removeAllViews()
         container.addView(adView)
         previous.forEach { it.destroy() }
+    }
+
+    // A shape keeps its corners and stroke; anything else that is not a plain fill is tinted whole
+    private fun recolored(background: Drawable?, @ColorInt color: Int): Drawable = when (background) {
+        is GradientDrawable -> (background.mutate() as GradientDrawable).apply { setColor(color) }
+        null, is ColorDrawable -> ColorDrawable(color)
+        else -> DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
     }
 
     private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

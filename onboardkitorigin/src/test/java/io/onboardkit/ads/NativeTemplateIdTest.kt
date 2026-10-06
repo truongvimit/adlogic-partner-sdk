@@ -181,6 +181,46 @@ class NativeTemplateIdTest {
         }
     }
 
+    @Test fun `colorBackground paints the card of every SDK frame and of its skeleton`() {
+        declare(mapOf(AdPlacement.Language1 to "native_lang"), ""","colorBackground":"#102030"""")
+        val style = AdRemoteConfig.getInstance().unit("native_lang").toNativeStyle()
+        val color = android.graphics.Color.parseColor("#102030")
+        listOf(
+            R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_media_left,
+            R.layout.ob_layout_native_med_1_91, R.layout.ob_layout_native_dialog,
+            R.layout.ob_layout_native_fullscreen, R.layout.ob_layout_native_compact,
+        ).forEach { layout ->
+            val name = app.resources.getResourceEntryName(layout)
+            val root = inflate(layout)
+            val card = root.getChildAt(0)
+            NativeAdStyler.applyAppearance(root, style)
+            assertEquals(name, color, card.background.fillColor())
+
+            val skeleton = com.ads.module.helper.adnative.NativeAdShimmer.from(app, layout, style)
+            val skeletonCard = skeleton.findViewById<View>(com.ads.module.R.id.ad_background)
+                ?: skeleton.findViewById(com.ads.module.R.id.ad_container)
+            assertEquals("$name skeleton", color, skeletonCard.background.fillColor())
+        }
+    }
+
+    @Test fun `without colorBackground every SDK frame keeps its XML background`() {
+        declare(mapOf(AdPlacement.Language1 to "native_lang"), "")
+        val style = AdRemoteConfig.getInstance().unit("native_lang").toNativeStyle()
+        listOf(R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_media_left, R.layout.ob_layout_native_med_1_91)
+            .forEach { layout ->
+                val root = inflate(layout)
+                val before = root.getChildAt(0).background
+                NativeAdStyler.applyAppearance(root, style)
+                assertTrue(before === root.getChildAt(0).background)
+            }
+    }
+
+    private fun android.graphics.drawable.Drawable.fillColor(): Int? = when (this) {
+        is android.graphics.drawable.GradientDrawable -> color?.defaultColor
+        is android.graphics.drawable.ColorDrawable -> color
+        else -> null
+    }
+
     @Test fun `template 3 media keeps the 1·91 to 1 ratio of the design`() {
         val root = inflate(R.layout.ob_layout_native_med_1_91)
         val width = (328 * app.resources.displayMetrics.density).toInt()
