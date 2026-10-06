@@ -136,13 +136,10 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private fun buildPages(): List<StepPage> {
         val definitions = pagerAdapter.currentPages().map { it.definition }
             .ifEmpty { sdk.preload().stepDefinitions() }
-        val contentVariant = NativeTemplates.templateForPlacement(
-            AdPlacement.StepNative(enabledStepIds.first()),
-        ).name
         return enabledStepIds.mapNotNull { id ->
             definitions.firstOrNull { it.id == id }?.let { def ->
                 val variant = when (def.type) {
-                    StepType.CONTENT -> contentVariant
+                    StepType.CONTENT -> NativeTemplates.variantFor(AdPlacement.StepNative(def.id))
                     StepType.AD_FULL_SCREEN -> "fullscreen"
                 }
                 StepPage(def, variant)

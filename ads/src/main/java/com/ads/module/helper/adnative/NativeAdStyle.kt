@@ -16,18 +16,11 @@ data class NativeAdStyle(
     /**
      * Blocks to show, in top-to-bottom order. Requires the layout convention: a vertical
      * LinearLayout `@id/ad_container` holding `@id/block_icon_headline`, `@id/ad_body`,
-     * `@id/ad_media`, `@id/ad_call_to_action`. Blocks not listed are removed. Null keeps
-     * the XML order untouched.
+     * `@id/ad_media`, `@id/ad_call_to_action`. A media wrapped in a ratio well puts
+     * `@id/block_media` on the well instead. Blocks not listed are removed. Null keeps
+     * the XML order untouched, and so does a layout without that container.
      */
     val components: List<NativeComponent>? = null,
-
-    /**
-     * Where the CTA sits, when the screen ships one layout per position instead of reordering.
-     *
-     * Non-null pins the order to whatever the chosen layout declares, so [components] is read for
-     * visibility only. Null hands the order to [components].
-     */
-    val ctaPosition: String? = null,
 
     /** Height for `@id/ad_call_to_action` in dp. Null keeps the XML height. */
     val ctaHeightDp: Int? = null,

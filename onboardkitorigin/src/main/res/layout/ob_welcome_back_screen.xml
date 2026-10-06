@@ -72,7 +72,7 @@
         android:visibility="invisible"
         app:layout_constraintBottom_toTopOf="@id/ob_welcome_back_ad_block" />
 
-    <!-- Native frame selected by the placement key's positionCTA, as in LFO. -->
+    <!-- Native frame selected by the placement key's templateId, as in LFO. -->
     <FrameLayout
         android:id="@+id/ob_welcome_back_ad_block"
         android:layout_width="match_parent"

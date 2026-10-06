@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent divider of template 1's block stack; height is the inter-block gap. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <size
+        android:width="1dp"
+        android:height="@dimen/ob_block_gap" />
+    <solid android:color="@android:color/transparent" />
+</shape>

@@ -99,4 +99,23 @@
     <dimen name="ob_text_splash_native_headline">14sp</dimen>
     <dimen name="ob_text_splash_native_body">12sp</dimen>
     <dimen name="ob_text_splash_native_cta">16sp</dimen>
+
+    <!-- Figma "native_med_1_91" (node 465:1360): native template 3. -->
+    <dimen name="ob_native_med_1_91_radius">12dp</dimen>
+    <dimen name="ob_native_med_1_91_padding">8dp</dimen>
+    <dimen name="ob_native_med_1_91_gap">8dp</dimen>
+    <dimen name="ob_native_med_1_91_media_radius">8dp</dimen>
+    <dimen name="ob_native_med_1_91_icon_size">40dp</dimen>
+    <dimen name="ob_native_med_1_91_icon_gap">8dp</dimen>
+    <dimen name="ob_native_med_1_91_badge_gap">4dp</dimen>
+    <dimen name="ob_native_med_1_91_title_row_height">26dp</dimen>
+    <dimen name="ob_native_med_1_91_body_height">16dp</dimen>
+    <dimen name="ob_native_med_1_91_badge_height">16dp</dimen>
+    <dimen name="ob_native_med_1_91_badge_padding_h">4dp</dimen>
+    <dimen name="ob_native_med_1_91_cta_height">44dp</dimen>
+    <dimen name="ob_native_med_1_91_cta_radius">8dp</dimen>
+    <dimen name="ob_text_native_med_1_91_badge">12sp</dimen>
+    <dimen name="ob_text_native_med_1_91_headline">14sp</dimen>
+    <dimen name="ob_text_native_med_1_91_body">12sp</dimen>
+    <dimen name="ob_text_native_med_1_91_cta">16sp</dimen>
 </resources>

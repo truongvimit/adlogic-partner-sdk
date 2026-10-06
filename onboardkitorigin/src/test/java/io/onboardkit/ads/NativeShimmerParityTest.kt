@@ -37,10 +37,10 @@ class NativeShimmerParityTest {
 
     private val frames = mapOf(
         "media_left" to R.layout.ob_layout_native_media_left,
+        "med_1_91" to R.layout.ob_layout_native_med_1_91,
         "dialog" to R.layout.ob_layout_native_dialog,
         "compact" to R.layout.ob_layout_native_compact,
-        "cta_bottom" to R.layout.ob_layout_native_cta_bottom,
-        "cta_top" to R.layout.ob_layout_native_cta_top,
+        "lfo" to R.layout.ob_layout_native_lfo,
         "fullscreen" to R.layout.ob_layout_native_fullscreen,
     )
 

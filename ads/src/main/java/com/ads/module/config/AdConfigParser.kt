@@ -6,7 +6,6 @@ import android.util.Log
 import android.graphics.Color
 import com.ads.module.helper.adnative.NativeClickAction
 import java.io.Reader
-import java.util.Locale
 
 /**
  * Strict, sparse parser for `ad_config.json`.
@@ -18,8 +17,6 @@ import java.util.Locale
  */
 internal object AdConfigParser {
     private const val TAG = "AdConfigParser"
-    private val DEFAULT_COMPONENTS = listOf("icon_headline", "body", "media", "cta")
-    private const val DEFAULT_HEIGHT_CTA = 40
     private const val DEFAULT_COLOR_CTA = "default"
 
     fun parse(source: Reader): Map<String, AdUnitConfig> = parseConfig(source).ads
@@ -70,11 +67,11 @@ internal object AdConfigParser {
         var reloadIntervalSeconds: Int? = null
         var appResumeLoadDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
         var colorCTA = DEFAULT_COLOR_CTA
-        var heightCTA = DEFAULT_HEIGHT_CTA
-        var positionCTA: String? = null
-        var components: List<String> = DEFAULT_COMPONENTS
+        var heightCTA = AdUnitConfig.DEFAULT_HEIGHT_CTA
+        var components: List<String> = AdUnitConfig.DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
         var clickAction: NativeClickAction? = null
+        var templateId: Int? = null
 
         reader.beginObject()
         while (reader.hasNext()) {
@@ -101,22 +98,16 @@ internal object AdConfigParser {
                 "heightCTA" -> readInt(reader, min = 0).also { parsed ->
                     if (parsed.valid) { heightCTA = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
                 }
-                "positionCTA" -> readNullableString(reader).also { parsed ->
-                    val positionValid = parsed.value?.uppercase(Locale.US).orEmpty() in setOf("", "TOP", "BOTTOM")
-                    if (parsed.valid && positionValid) {
-                        // Empty is a valid clear assignment; preserve it separately from schema
-                        // null so a remote clear cannot resurrect a lower-tier position.
-                        positionCTA = parsed.value?.uppercase(Locale.US)
-                        fields += field
-                    } else invalid(key, field, parsed.raw)
-                }
                 "click_action" -> readString(reader).also { parsed ->
                     val action = parsed.value?.let(NativeClickAction::fromRemote)
                     if (action != null) { clickAction = action; fields += field } else invalid(key, field, parsed.raw ?: parsed.value)
                 }
+                "templateId" -> readNullableInt(reader, min = 1).also { parsed ->
+                    if (parsed.valid) { templateId = parsed.value; fields += field } else invalid(key, field, parsed.raw)
+                }
                 "components", "ids" -> readStringList(reader).also { parsed ->
                     val componentValuesValid = field != "components" ||
-                        parsed.value.orEmpty().all { it in DEFAULT_COMPONENTS }
+                        parsed.value.orEmpty().all { it in AdUnitConfig.DEFAULT_COMPONENTS }
                     if (parsed.valid && componentValuesValid) {
                         if (field == "components") components = parsed.value!! else ids = parsed.value!!
                         fields += field
@@ -135,11 +126,11 @@ internal object AdConfigParser {
             reloadIntervalSeconds = reloadIntervalSeconds,
             colorCTA = colorCTA,
             heightCTA = heightCTA,
-            positionCTA = positionCTA,
             components = components,
             ids = ids,
             appResumeLoadDelayMs = appResumeLoadDelayMs,
             clickAction = clickAction,
+            templateId = templateId,
         ), fields)
     }
 
@@ -148,12 +139,6 @@ internal object AdConfigParser {
 
     private fun readString(reader: JsonReader): Parsed<String> = when (reader.peek()) {
         JsonToken.STRING -> Parsed(reader.nextString(), true)
-        else -> Parsed(null, false, readValueForLog(reader))
-    }
-
-    private fun readNullableString(reader: JsonReader): Parsed<String?> = when (reader.peek()) {
-        JsonToken.STRING -> Parsed(reader.nextString(), true)
-        JsonToken.NULL -> { reader.nextNull(); Parsed(null, true, "null") }
         else -> Parsed(null, false, readValueForLog(reader))
     }
 
@@ -186,7 +171,7 @@ internal object AdConfigParser {
         return Parsed(parsed.value?.toInt(), parsed.valid, parsed.raw)
     }
 
-    /** `reloadIntervalSeconds` is nullable in the public schema; null explicitly clears a lower tier. */
+    /** `reloadIntervalSeconds` and `templateId` are nullable in the public schema; null explicitly clears a lower tier. */
     private fun readNullableInt(reader: JsonReader, min: Long? = null, max: Long? = Int.MAX_VALUE.toLong()): Parsed<Int?> {
         if (reader.peek() == JsonToken.NULL) {
             reader.nextNull()

@@ -4,19 +4,35 @@ import com.ads.module.config.AdRemoteConfig
 import androidx.annotation.LayoutRes
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
-import io.onboardkit.config.NativeTemplate
 
-/** Maps host fallback frames and ad_config CTA positions to SDK layouts. */
+/**
+ * Which SDK layout each native placement inflates: the `ad_config.<key>.templateId` catalog for
+ * card slots, a fixed frame for the confirm modal and the full-screen format.
+ *
+ * Only the frame is chosen here. Block order is the placement's `components`, applied at bind
+ * time by the templates that can reorder.
+ */
 object NativeTemplates {
 
+    private const val TEMPLATE_LFO = 1
+    private const val TEMPLATE_MEDIA_LEFT = 2
+
+    /** The catalog behind `ad_config.<key>.templateId`: the one place a number becomes a layout. */
+    private val templateLayouts: Map<Int, Int> = mapOf(
+        TEMPLATE_LFO to R.layout.ob_layout_native_lfo,
+        TEMPLATE_MEDIA_LEFT to R.layout.ob_layout_native_media_left,
+        3 to R.layout.ob_layout_native_med_1_91,
+    )
+
+    /** Null for a number the catalog does not know, which leaves the placement on its default. */
     @LayoutRes
-    fun layoutFor(template: NativeTemplate): Int = when (template) {
-        NativeTemplate.CTA_BOTTOM -> R.layout.ob_layout_native_cta_bottom
-        NativeTemplate.CTA_TOP -> R.layout.ob_layout_native_cta_top
-        NativeTemplate.COMPACT -> R.layout.ob_layout_native_compact
-        NativeTemplate.FULL_SCREEN -> R.layout.ob_layout_native_fullscreen
-        NativeTemplate.DIALOG -> R.layout.ob_layout_native_dialog
-    }
+    internal fun layoutForTemplateId(templateId: Int): Int? = templateLayouts[templateId]
+
+    /** True for a layout the SDK owns, as opposed to one a host supplied. */
+    internal fun isSdkLayout(@LayoutRes layoutRes: Int): Boolean =
+        layoutRes in templateLayouts.values ||
+            layoutRes == R.layout.ob_layout_native_dialog ||
+            layoutRes == R.layout.ob_layout_native_fullscreen
 
     /**
      * The layout a placement's native is inflated with — the single answer for both the preload
@@ -27,55 +43,37 @@ object NativeTemplates {
      */
     @LayoutRes
     internal fun layoutForPlacement(placement: AdPlacement): Int =
-        // These horizontal slots use the same 4:3 media-left frame at preload and bind time.
-        // A positionCTA override must not turn one of the ALT ads vertical.
-        if (placement == AdPlacement.SplashInlineNative || placement.isPrivacyGoalsNative)
-            R.layout.ob_layout_native_media_left
-        else layoutFor(templateForPlacement(placement))
+        templateIdFor(placement)?.let(templateLayouts::getValue) ?: when (placement) {
+            // The modal is 328dp wide and sized to a horizontal card; any other frame overflows it.
+            AdPlacement.LanguageConfirm -> R.layout.ob_layout_native_dialog
+            else -> R.layout.ob_layout_native_fullscreen
+        }
+
+    /** The analytics variant: the template a card slot renders, else the fixed frame's name. */
+    internal fun variantFor(placement: AdPlacement): String =
+        templateIdFor(placement)?.let { "TEMPLATE_$it" } ?: when (placement) {
+            AdPlacement.LanguageConfirm -> "DIALOG"
+            else -> "FULL_SCREEN"
+        }
 
     /**
-     * The template a placement renders with, from its ad_config positionCTA.
-     *
-     * The template only picks the layout frame. Which blocks show and in what order is `components`
-     * in the ad config, applied at bind time — so one edit there moves every slot, onboarding
-     * included. LFO and content onboarding frames are selected only by positionCTA. Colors, height
-     * and components stay in ad_config and are resolved independently.
+     * The template a card slot renders: its catalogued `templateId`, else the slot's default.
+     * Null for the confirm modal and the full-screen format, which keep their fixed frame.
      */
-    internal fun templateForPlacement(placement: AdPlacement): NativeTemplate {
-        val ads = OnboardingSdk.configOrNull()?.ads
-        fun positionCta(): NativeTemplate? {
-            if (placement != AdPlacement.Language1 && placement != AdPlacement.Language2 &&
-                placement != AdPlacement.WelcomeBack1 && placement != AdPlacement.WelcomeBack2 &&
-                placement !is AdPlacement.StepNative) return null
-            return when (ads?.placementKeyFor(placement)?.let { AdRemoteConfig.getInstance().ads[it]?.positionCTA }) {
-                "TOP" -> NativeTemplate.CTA_TOP
-                "BOTTOM" -> NativeTemplate.CTA_BOTTOM
-                else -> null
-            }
+    private fun templateIdFor(placement: AdPlacement): Int? {
+        val default = when (placement) {
+            AdPlacement.LanguageConfirm,
+            AdPlacement.SplashNative,
+            AdPlacement.Ob5,
+            is AdPlacement.StepFullScreen,
+            -> return null
+            // Horizontal slots: a splash bottom bar and the Privacy/Goal card.
+            AdPlacement.SplashInlineNative -> TEMPLATE_MEDIA_LEFT
+            is AdPlacement.StepNative -> if (placement.isPrivacyGoalsNative) TEMPLATE_MEDIA_LEFT else TEMPLATE_LFO
+            else -> TEMPLATE_LFO
         }
-        // AdRemoteConfig already merges remote > asset > code per field, including explicit clears.
-        positionCta()?.let { return it }
-        return when (placement) {
-            // Welcome Back renders exactly like the LFO slot.
-            AdPlacement.Language1, AdPlacement.Language2,
-            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2,
-            -> ads?.languageTemplate ?: NativeTemplate.CTA_BOTTOM
-
-            // Fixed, not configurable: the modal is 328dp wide and sized to a horizontal card.
-            // Any other template overflows it, so this is not a slot a partner may re-skin.
-            AdPlacement.LanguageConfirm -> NativeTemplate.DIALOG
-
-            is AdPlacement.StepNative -> ads?.contentStepTemplate ?: NativeTemplate.CTA_BOTTOM
-
-            is AdPlacement.StepFullScreen, AdPlacement.Ob5, AdPlacement.SplashNative -> NativeTemplate.FULL_SCREEN
-
-            // SplashInlineNative never reaches here — layoutForPlacement answers it directly.
-            AdPlacement.SplashBanner,
-            AdPlacement.SplashInlineNative,
-            AdPlacement.SplashInterstitial,
-            AdPlacement.AfterOnboardingInterstitial,
-            AdPlacement.AppResume,
-            -> NativeTemplate.CTA_BOTTOM
-        }
+        val key = OnboardingSdk.configOrNull()?.ads?.placementKeyFor(placement)
+        val declared = key?.let { AdRemoteConfig.getInstance().ads[it]?.templateId }
+        return declared?.takeIf { it in templateLayouts } ?: default
     }
 }

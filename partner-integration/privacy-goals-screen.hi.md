@@ -51,7 +51,7 @@ SDK clickable `Button` या `TextView` को action मानता है।
 }
 ```
 
-Privacy और Goal अलग SDK placements हैं, जो ये configured keys साझा करते हैं। `native_select` पहला ad है। पहली consent acceptance/goal selection पर ALT replacement शुरू होता है। ALT सफलतापूर्वक bind होने तक पहला ad दिखता रहता है; no-fill पर भी बना रहता है। Preload और show दोनों fixed 4:3 media-left frame (`ob_layout_native_media_left.xml`) इस्तेमाल करते हैं। CTA color/height लागू हैं; `positionCTA` frame नहीं बदलता। `click_action` केवल base key से पढ़ा जाता है; default `reload` है।
+Privacy और Goal अलग SDK placements हैं, जो ये configured keys साझा करते हैं। `native_select` पहला ad है। पहली consent acceptance/goal selection पर ALT replacement शुरू होता है। ALT सफलतापूर्वक bind होने तक पहला ad दिखता रहता है; no-fill पर भी बना रहता है। Preload और show दोनों 4:3 media-left frame (`ob_layout_native_media_left.xml`, template `2`) इस्तेमाल करते हैं, जब तक key का `templateId` कोई और template न चुने। CTA color/height लागू हैं; `components` यह frame नहीं बदलता। `click_action` केवल base key से पढ़ा जाता है; default `reload` है।
 
 Base `isEnable` पूरे waterfall को नियंत्रित करता है, `_high` समेत। किसी base को बंद करना उसका ad बंद करता है, screen नहीं। Consent, premium, UA और global ad gate लागू रहते हैं; अलग `privacyAd.enabled`/`goalAd.enabled` switches नहीं हैं।
 

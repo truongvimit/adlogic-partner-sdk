@@ -26,6 +26,9 @@ object NativeAdStyler {
     /**
      * Geometry-affecting styling: CTA height and component order/visibility. Safe for both
      * the real ad view and a skeleton — never touches colors or content.
+     *
+     * `components` needs the vertical `ad_container`; a layout without one is a fixed design
+     * and keeps its XML blocks as they are.
      */
     @JvmStatic
     fun applyLayout(root: View, style: NativeAdStyle) {
@@ -35,56 +38,37 @@ object NativeAdStyler {
             }
         }
         val order = style.components ?: return
+        val container = root.findViewById<View>(R.id.ad_container) as? LinearLayout ?: return
         val blocks = linkedMapOf<NativeComponent, View>()
         root.findViewById<View>(R.id.block_icon_headline)
             ?.let { blocks[NativeComponent.ICON_HEADLINE] = it }
         root.findViewById<View>(R.id.ad_body)?.let { blocks[NativeComponent.BODY] = it }
-        root.findViewById<View>(R.id.ad_media)?.let { blocks[NativeComponent.MEDIA] = it }
+        // A ratio-locked media sits in a well, and the well is what the stack holds
+        (root.findViewById(R.id.block_media) ?: root.findViewById<View>(R.id.ad_media))
+            ?.let { blocks[NativeComponent.MEDIA] = it }
         root.findViewById<View>(R.id.ad_call_to_action)?.let { blocks[NativeComponent.CTA] = it }
 
-        // A placement that names a CTA position has already had its order decided: the screen
-        // picks one layout per position rather than moving blocks about. Reordering on top of that
-        // would fight the layout it just chose, so `components` is read for visibility only.
-        val container = root.findViewById<View>(R.id.ad_container)
-            .takeIf { style.ctaPosition == null } as? LinearLayout
-        if (container != null) {
-            // Only blocks the container already holds may be reordered. A layout is free to keep
-            // one somewhere else — a full-bleed media sitting behind an overlay column is still
-            // `ad_media` — and pulling that into the stack would tear the design apart. Those stay
-            // where the layout put them and answer to visibility alone.
-            val ordered = blocks.filterValues { it.parent === container }
-            val anchored = blocks.filterKeys { it !in ordered.keys }
+        // Only blocks the container already holds may be reordered. A layout is free to keep
+        // one somewhere else — a body nested in the header is still `ad_body` — and pulling that
+        // into the stack would tear the design apart. Those stay put and answer to visibility alone.
+        val ordered = blocks.filterValues { it.parent === container }
+        val anchored = blocks.filterKeys { it !in ordered.keys }
 
-            // Physical reorder: LinearLayout draws children in add order. removeView keeps
-            // each block's LayoutParams, so margins and heights survive the move
-            ordered.values.forEach { block ->
-                container.removeView(block)
-                block.visibility = View.GONE
+        // Physical reorder: LinearLayout draws children in add order. removeView keeps
+        // each block's LayoutParams, so margins, heights and weights survive the move
+        ordered.values.forEach { block ->
+            container.removeView(block)
+            block.visibility = View.GONE
+        }
+        // distinct: a malformed remote list ("cta","cta") must not crash the re-add
+        order.distinct().forEach { component ->
+            ordered[component]?.let { block ->
+                container.addView(block)
+                block.visibility = View.VISIBLE
             }
-            // distinct: a malformed remote list ("cta","cta") must not crash the re-add
-            order.distinct().forEach { component ->
-                ordered[component]?.let { block ->
-                    container.addView(block)
-                    block.visibility = View.VISIBLE
-                }
-            }
-            anchored.forEach { (component, block) ->
-                block.visibility = if (component in order) View.VISIBLE else View.GONE
-            }
-        } else {
-            // No reorderable container — fall back to visibility toggles in place
-            blocks.forEach { (component, block) ->
-                block.visibility = if (component in order) View.VISIBLE else View.GONE
-            }
-            // Flat layouts carry the icon/headline group as loose views instead of a block.
-            // The "Ad" attribution badge (ad_icon) deliberately stays visible.
-            if (NativeComponent.ICON_HEADLINE !in blocks) {
-                val visibility =
-                    if (NativeComponent.ICON_HEADLINE in order) View.VISIBLE else View.GONE
-                listOf(R.id.ad_app_icon, R.id.ad_headline, R.id.ad_advertiser).forEach { id ->
-                    root.findViewById<View>(id)?.visibility = visibility
-                }
-            }
+        }
+        anchored.forEach { (component, block) ->
+            block.visibility = if (component in order) View.VISIBLE else View.GONE
         }
     }
 

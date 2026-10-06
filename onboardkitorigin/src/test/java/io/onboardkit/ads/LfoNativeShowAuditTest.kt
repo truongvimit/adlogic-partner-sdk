@@ -116,7 +116,7 @@ class LfoNativeShowAuditTest {
 
     private fun preload() {
         provider.preloadNative(host.get(), NativeAdRequest(AdPlacement.Language1,
-            NativeAdUnit("audit-lfo1"), R.layout.ob_layout_native_cta_bottom))
+            NativeAdUnit("audit-lfo1"), R.layout.ob_layout_native_lfo))
         assertEquals(1, requests.count { it.first == "audit-lfo1" })
     }
 

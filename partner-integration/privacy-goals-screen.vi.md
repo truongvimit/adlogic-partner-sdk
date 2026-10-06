@@ -74,7 +74,8 @@ Trong `ad_config.json`, thêm bốn placement (mặc định bật); `ad_config_
 
 `native_select` và `native_select_high` là ad đầu tiên. Khi consent hoặc lựa chọn đầu tiên xảy
 ra, `native_select_alt`/`native_select_alt_high` thay thế nó. Bốn placement này dùng layout native
-4:3 media-left của SDK (`ob_layout_native_media_left.xml`), cùng frame cho preload và show. Ad đầu
+4:3 media-left của SDK (`ob_layout_native_media_left.xml`, template `2`), cùng frame cho preload và
+show, trừ khi `templateId` của key chọn template khác; `components` không đổi khung này. Ad đầu
 tiên được giữ nguyên đến khi ad ALT bind thành công; ALT không fill thì ad đầu tiên vẫn giữ.
 Click ad dùng action `reload` mặc định; đổi bằng `click_action` trên `native_select`/`native_select_alt` (không đọc ở key `_high`).
 

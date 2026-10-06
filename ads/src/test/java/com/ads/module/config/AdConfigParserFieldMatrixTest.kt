@@ -25,7 +25,6 @@ class AdConfigParserFieldMatrixTest {
                 "app_resume_load_delay_ms":0,
                 "colorCTA":"",
                 "heightCTA":0,
-                "positionCTA":"",
                 "components":[],
                 "ids":[],
                 "click_action":"none"
@@ -40,7 +39,6 @@ class AdConfigParserFieldMatrixTest {
         assertEquals(0L, unit.appResumeLoadDelayMs)
         assertEquals("", unit.colorCTA)
         assertEquals(0, unit.heightCTA)
-        assertEquals("", unit.positionCTA)
         assertEquals(emptyList<String>(), unit.components)
         assertEquals(emptyList<String>(), unit.ids)
         assertEquals(NativeClickAction.NONE, unit.clickAction)
@@ -55,11 +53,32 @@ class AdConfigParserFieldMatrixTest {
         assertEquals(null, unit.reloadIntervalSeconds)
         assertEquals(AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS, unit.appResumeLoadDelayMs)
         assertEquals("default", unit.colorCTA)
-        assertEquals(40, unit.heightCTA)
-        assertEquals(null, unit.positionCTA)
-        assertEquals(listOf("icon_headline", "body", "media", "cta"), unit.components)
+        assertEquals(AdUnitConfig.DEFAULT_HEIGHT_CTA, unit.heightCTA)
+        assertEquals(AdUnitConfig.DEFAULT_COMPONENTS, unit.components)
         assertEquals(emptyList<String>(), unit.ids)
         assertEquals(null, unit.clickAction)
+    }
+
+    @Test
+    fun `the default components put the CTA last`() {
+        assertEquals("cta", AdUnitConfig.DEFAULT_COMPONENTS.last())
+    }
+
+    @Test
+    fun `an absent heightCTA is the design's 44dp`() {
+        assertEquals(44, AdUnitConfig.DEFAULT_HEIGHT_CTA)
+        assertEquals(44, AdUnitConfig("x", true).heightCTA)
+        assertEquals(44, AdRemoteConfig.fromJson("""{"matrix":{"id":"x"}}""")!!.unit("matrix").heightCTA)
+    }
+
+    @Test
+    fun `a removed positionCTA is an unknown field and leaves its siblings applied`() {
+        for (raw in listOf("\"TOP\"", "\"BOTTOM\"", "null")) {
+            val config = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","positionCTA":$raw,"components":["cta","media"]}}""")!!
+            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertEquals(raw, listOf("cta", "media"), config.unit("matrix").components)
+            assertFalse(raw, config.fieldsFor("matrix").contains("positionCTA"))
+        }
     }
 
     @Test
@@ -74,7 +93,6 @@ class AdConfigParserFieldMatrixTest {
                 "app_resume_load_delay_ms":"bad",
                 "colorCTA":false,
                 "heightCTA":{},
-                "positionCTA":123,
                 "components":["media",3,false],
                 "ids":["high",3,null],
                 "click_action":3,
@@ -88,8 +106,7 @@ class AdConfigParserFieldMatrixTest {
         assertEquals(null, unit.reloadIntervalSeconds)
         assertEquals(AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS, unit.appResumeLoadDelayMs)
         assertEquals("default", unit.colorCTA)
-        assertEquals(40, unit.heightCTA)
-        assertEquals(null, unit.positionCTA)
+        assertEquals(AdUnitConfig.DEFAULT_HEIGHT_CTA, unit.heightCTA)
         // A list containing a wrong element is one invalid field; the whole field falls through
         // to its lower-tier default instead of silently filtering the payload.
         assertEquals(listOf("icon_headline", "body", "media", "cta"), unit.components)
@@ -113,6 +130,41 @@ class AdConfigParserFieldMatrixTest {
         val absent = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!
         assertEquals(null, absent.unit("matrix").clickAction)
         assertFalse(absent.fieldsFor("matrix").contains("click_action"))
+    }
+
+    @Test
+    fun `templateId takes a positive number, null clears it and anything else is ignored alone`() {
+        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","templateId":$raw}}""")!!
+
+        assertEquals(3, parse("3").unit("matrix").templateId)
+        assertTrue(parse("3").fieldsFor("matrix").contains("templateId"))
+        assertEquals(null, parse("null").unit("matrix").templateId)
+        assertTrue(parse("null").fieldsFor("matrix").contains("templateId"))
+        for (raw in listOf("0", "-1", "\"3\"", "true", "2.5", "{}")) {
+            val config = parse(raw)
+            assertEquals(raw, null, config.unit("matrix").templateId)
+            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertFalse(raw, config.fieldsFor("matrix").contains("templateId"))
+        }
+        val absent = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!
+        assertEquals(null, absent.unit("matrix").templateId)
+        assertFalse(absent.fieldsFor("matrix").contains("templateId"))
+    }
+
+    @Test
+    fun `remote templateId outranks the app's and an omitted one keeps it`() {
+        try {
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"templateId":2}}""")
+            assertEquals(2, AdRemoteConfig.getInstance().unit("native_lang").templateId)
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"templateId":3}}""")!!)
+            assertEquals(3, AdRemoteConfig.getInstance().unit("native_lang").templateId)
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorCTA":"#000000"}}""")!!)
+            assertEquals(2, AdRemoteConfig.getInstance().unit("native_lang").templateId)
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"templateId":null}}""")!!)
+            assertEquals(null, AdRemoteConfig.getInstance().unit("native_lang").templateId)
+        } finally {
+            AdRemoteConfig.reset()
+        }
     }
 
     @Test

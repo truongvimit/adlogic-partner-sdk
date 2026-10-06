@@ -159,13 +159,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
         // SETTINGS is a re-entry, not a first open — counting it would inflate the LFO funnel
         if (mode == LanguageScreenMode.FIRST_OPEN) {
-            OnboardingSdk.track(AnalyticsEvent.LanguageViewed(1, variant = adVariant()))
+            OnboardingSdk.track(AnalyticsEvent.LanguageViewed(1, variant = adVariant(AdPlacement.Language1)))
         }
     }
 
     /** The template this screen's native was built with — reported so a funnel can slice by it. */
-    private fun adVariant(): String =
-        NativeTemplates.templateForPlacement(AdPlacement.Language1).name
+    private fun adVariant(placement: AdPlacement): String = NativeTemplates.variantFor(placement)
 
     /**
      * Row that gets the animated tap hint, or null for no hint at all. A non-null result also
@@ -280,7 +279,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
         binding.obAdBlock2.visibility = View.VISIBLE
         sdk.provider()?.releaseNative(AdPlacement.Language1)
         OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(1, code))
-        OnboardingSdk.track(AnalyticsEvent.LanguageViewed(2, variant = adVariant()))
+        OnboardingSdk.track(AnalyticsEvent.LanguageViewed(2, variant = adVariant(AdPlacement.Language2)))
     }
 
     private fun keepFirstNativeSlot() {

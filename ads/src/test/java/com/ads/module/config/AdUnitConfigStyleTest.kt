@@ -63,6 +63,27 @@ class AdUnitConfigStyleTest {
         assertEquals(4f, (DrawableCompat.unwrap(badge.background) as GradientDrawable).cornerRadius)
     }
 
+    @Test fun `block_media stands in for ad_media when the media sits in a ratio well`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val media = View(context).apply { id = R.id.ad_media }
+        val well = android.widget.FrameLayout(context).apply { id = R.id.block_media; addView(media) }
+        val container = LinearLayout(context).apply {
+            id = R.id.ad_container
+            orientation = LinearLayout.VERTICAL
+            addView(View(context).apply { id = R.id.block_icon_headline })
+            addView(well)
+            addView(View(context).apply { id = R.id.ad_call_to_action })
+        }
+        val root = LinearLayout(context).apply { addView(container) }
+
+        NativeAdStyler.applyLayout(root, parse(""""components":["media","icon_headline","cta"]""").toNativeStyle())
+        assertEquals(listOf(R.id.block_media, R.id.block_icon_headline, R.id.ad_call_to_action),
+            (0 until container.childCount).map { container.getChildAt(it).id })
+
+        NativeAdStyler.applyLayout(root, parse(""""components":["icon_headline","cta"]""").toNativeStyle())
+        assertEquals(View.GONE, well.visibility)
+    }
+
     @Test fun `a listed subset still decides the blocks`() {
         assertEquals(
             listOf(NativeComponent.CTA, NativeComponent.BODY),

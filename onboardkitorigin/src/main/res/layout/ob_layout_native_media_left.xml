@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the native that can take the splash
-  bottom slot in place of the banner. `splash.ads.slot_format` picks which of the two is requested.
+  Native template 2 — Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the default of the
+  splash bottom slot and the Privacy/Goal card; `ad_config.<key>.templateId = 2` elsewhere.
 
   A horizontal split — 4:3 media on the left, badge/headline/body over a CTA on the right — so,
-  like ob_layout_native_dialog, there is no vertical `ad_container` here: `components` is a
-  visibility switch and never a reorder, and `positionCTA` has nothing to move.
+  like ob_layout_native_dialog, there is no vertical `ad_container` here and `components` does
+  not apply: the card always shows as drawn.
 
   The design draws a Play-store glyph in the top-right corner. It is not reproduced: the loader
   never calls setAdChoicesPlacement, so GMA drops its own AdChoices badge there, and a second mark
@@ -47,12 +47,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
-            <!--
-              The rounded background stays on `ad_media` rather than on the well: with no
-              `ad_container` here, NativeAdStyler falls to its visibility-only branch, and a remote
-              `components` list that drops "media" hides `ad_media` alone. On the well it would
-              leave a grey box behind. clipToOutline rounds the image child GMA adds at bind time.
-            -->
+            <!-- clipToOutline rounds the image child GMA adds at bind time. -->
             <com.google.android.gms.ads.nativead.MediaView
                 android:id="@+id/ad_media"
                 android:layout_width="match_parent"

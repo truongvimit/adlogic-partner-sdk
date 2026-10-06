@@ -51,7 +51,7 @@ Use these entries in `ad_config.json` with production IDs; `ad_config_debug.json
 }
 ```
 
-Privacy and Goal have separate SDK placements sharing these configured keys. `native_select` is the initial ad; the first consent acceptance/goal selection starts the ALT replacement. The initial ad stays visible until ALT binds successfully; no-fill keeps it. Both use the fixed 4:3 media-left frame (`ob_layout_native_media_left.xml`), including preload. CTA color/height apply; `positionCTA` does not change this frame. Read `click_action` only from the base key; its default is `reload`.
+Privacy and Goal have separate SDK placements sharing these configured keys. `native_select` is the initial ad; the first consent acceptance/goal selection starts the ALT replacement. The initial ad stays visible until ALT binds successfully; no-fill keeps it. Both use the 4:3 media-left frame (`ob_layout_native_media_left.xml`, template `2`), including preload, unless the key's `templateId` picks another. CTA color/height apply; `components` does not change this frame. Read `click_action` only from the base key; its default is `reload`.
 
 The base `isEnable` controls its entire waterfall, including `_high`. Turning off either base disables that ad slot, not the screens. Consent, premium, UA and the global ad gate still apply. There are no separate `privacyAd.enabled`/`goalAd.enabled` switches.
 

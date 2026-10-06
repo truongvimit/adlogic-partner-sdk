@@ -25,7 +25,6 @@ class RemoteAdConfigSparseDocumentTest {
                     reloadIntervalSeconds = 11,
                     colorCTA = "#101010",
                     heightCTA = 31,
-                    positionCTA = "TOP",
                     components = listOf("body"),
                     ids = listOf("code-high"),
                     appResumeLoadDelayMs = 700L,
@@ -45,7 +44,6 @@ class RemoteAdConfigSparseDocumentTest {
                     reloadIntervalSeconds = 0,
                     colorCTA = "",
                     heightCTA = 0,
-                    positionCTA = "",
                     components = emptyList(),
                     ids = emptyList(),
                     appResumeLoadDelayMs = 0L,
@@ -61,7 +59,6 @@ class RemoteAdConfigSparseDocumentTest {
         assertEquals(0, active.reloadIntervalSeconds)
         assertEquals("", active.colorCTA)
         assertEquals(0, active.heightCTA)
-        assertEquals("", active.positionCTA)
         assertEquals(emptyList<String>(), active.components)
         assertEquals(emptyList<String>(), active.ids)
         assertEquals(0L, active.appResumeLoadDelayMs)
@@ -77,7 +74,6 @@ class RemoteAdConfigSparseDocumentTest {
         assertEquals(11, restored.reloadIntervalSeconds)
         assertEquals("#101010", restored.colorCTA)
         assertEquals(31, restored.heightCTA)
-        assertEquals("TOP", restored.positionCTA)
         assertEquals(listOf("body"), restored.components)
         assertEquals(listOf("code-high"), restored.ids)
         assertEquals(700L, restored.appResumeLoadDelayMs)

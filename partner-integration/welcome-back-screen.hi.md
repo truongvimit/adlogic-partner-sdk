@@ -47,6 +47,6 @@ Restyle करने के लिए app में ये resource names overri
 }
 ```
 
-`native_welcome1` को splash, LFO1 वाले समय और mode (`splash.load.lfo1_preload_mode`) पर preload करता है। `native_welcome2` Welcome Back खुलने पर preload होता है और पहले tap पर पहले ad की जगह लेता है; दूसरे का fill न हो तो पहला ad रहता है। दोनों अपने base key के `positionCTA` से render होते हैं। Base `isEnable` पूरा waterfall बंद करता है; स्क्रीन फिर भी दिखती है।
+`native_welcome1` को splash, LFO1 वाले समय और mode (`splash.load.lfo1_preload_mode`) पर preload करता है। `native_welcome2` Welcome Back खुलने पर preload होता है और पहले tap पर पहले ad की जगह लेता है; दूसरे का fill न हो तो पहला ad रहता है। दोनों LFO की तरह `ad_remote_config` में अपने base key के `templateId` और `components` इस्तेमाल करते हैं। Base `isEnable` पूरा waterfall बंद करता है; स्क्रीन फिर भी दिखती है।
 
 Default timing में स्क्रीन splash interstitial बंद होने के बाद खुलती है। Continue चुनाव को `GoalAnswer` के रूप में दर्ज करता है (`OnboardingEvent.GoalsSelected` से भेजा जाता है, बाद में `OnboardingSdk.selectedGoals()` से पढ़ा जा सकता है) और launch passthrough के साथ `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` देता है। कुछ भी complete mark नहीं होता और `FlowCompleted` / `fo_flow_complete` नहीं भेजा जाता, इसलिए अगले launcher launch पर स्क्रीन फिर दिखती है। Back app बंद करता है।

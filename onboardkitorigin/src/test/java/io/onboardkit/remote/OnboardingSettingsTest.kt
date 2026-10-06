@@ -179,8 +179,7 @@ class OnboardingSettingsTest {
 
     @Test fun `unknown nested field and bad enum cannot crash config access`() {
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"unknown":true}},"exit_interstitial":{"next_screen_timing":"AUTO"},"ads":{"content_template":""}}}"""))
-        val resolved = OnboardingSettings.resolve(onboardKitConfig { }.getOrThrow())
-        assertEquals(NativeTemplate.CTA_TOP, resolved.ads.contentStepTemplate)
+        OnboardingSettings.resolve(onboardKitConfig { }.getOrThrow())
     }
 
     @Test fun `new JSON takes precedence over old remote flags including zero`() {
@@ -251,14 +250,13 @@ class OnboardingSettingsTest {
 
     @Test fun `removed mapping and UI aliases cannot override ad units or local UI`() {
         val config = onboardKitConfig {
-            ads = AdsConfig(ob5Native = NativeAdUnit("local_ob5"), languageTemplate = NativeTemplate.COMPACT)
+            ads = AdsConfig(ob5Native = NativeAdUnit("local_ob5"))
             system = SystemBarConfig(showStatusBar = false)
         }.getOrThrow()
         AdRemoteConfig.update(AdRemoteConfig(mapOf("remote_ob5" to AdUnitConfig("remote_ob5_id", true))))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"ob5":{"native":{"placement":"remote_ob5","enabled":false}},"lfo":{"native_template":"CTA_TOP"},"flow":{"system_bars":{"show_status":true}},"ui":{"content":{"steps":[{"id":"ob1","title":"ignored"}]}}}""")
         val resolved = OnboardingSettings.resolve(config)
         assertEquals(listOf("local_ob5"), resolved.ads.ob5Native!!.loadOrder)
-        assertEquals(NativeTemplate.COMPACT, resolved.ads.languageTemplate)
         assertFalse(resolved.system.showStatusBar)
         assertEquals(RemoteFlags(), OnboardingSettings.resolveFlags(RemoteFlags()))
     }

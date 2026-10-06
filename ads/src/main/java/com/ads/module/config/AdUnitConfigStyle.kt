@@ -20,9 +20,6 @@ private const val MAX_CTA_HEIGHT_DP = 52
 fun AdUnitConfig.toNativeStyle(): NativeAdStyle = NativeAdStyle(
     // Empty keeps the XML layout instead of hiding every block.
     components = components.mapNotNull { NativeComponent.fromKey(it) }.distinct().ifEmpty { null },
-    // An explicit empty position clears a lower-tier TOP/BOTTOM choice; the renderer's nullable
-    // style value represents that cleared state.
-    ctaPosition = positionCTA?.takeIf { it.isNotBlank() },
     ctaHeightDp = heightCTA.coerceIn(MIN_CTA_HEIGHT_DP, MAX_CTA_HEIGHT_DP),
     ctaBackgroundColor = colorCTA
         .takeUnless { it == "default" || it.isBlank() }
