@@ -34,6 +34,12 @@ data class NativeAdStyle(
      */
     @ColorInt val backgroundColor: Int? = null,
 
+    /** Background of the `@id/ad_icon` badge; wins over [ctaBackgroundColor] there. Null keeps it. */
+    @ColorInt val adBadgeColor: Int? = null,
+
+    /** Text color of the `@id/ad_icon` badge, on the real ad only. Null keeps the XML color. */
+    @ColorInt val adBadgeTextColor: Int? = null,
+
     /** Corner radius of the CTA background when [ctaBackgroundColor] is set. */
     val ctaCornerRadiusDp: Int = AdBehavior.defaultNumber("native.presentation.cta_corner_radius_dp").toInt(),
 ) {

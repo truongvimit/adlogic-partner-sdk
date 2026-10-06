@@ -70,6 +70,7 @@
     <color name="ob_native_med_1_91_headline">#121212</color>
     <color name="ob_native_med_1_91_body">#717680</color>
     <color name="ob_native_med_1_91_cta_bg">#007AFF</color>
+    <color name="ob_native_med_1_91_badge_text">@color/ob_white</color>
 
     <!-- Figma "Welcome Screen / Choose Goal" (node 2103:2807), returning-user launcher screen. -->
     <color name="ob_welcome_back_bg">#F9F4F3</color>

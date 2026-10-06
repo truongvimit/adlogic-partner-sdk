@@ -68,6 +68,8 @@ internal object AdConfigParser {
         var appResumeLoadDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
         var colorCTA = DEFAULT_COLOR
         var colorBackground = DEFAULT_COLOR
+        var colorAdBadge = DEFAULT_COLOR
+        var colorAdBadgeText = DEFAULT_COLOR
         var heightCTA = AdUnitConfig.DEFAULT_HEIGHT_CTA
         var components: List<String> = AdUnitConfig.DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
@@ -96,12 +98,15 @@ internal object AdConfigParser {
                 "colorCTA" -> readString(reader).also { parsed ->
                     if (parsed.valid && parsed.value!!.isValidColorToken()) { colorCTA = parsed.value; fields += field } else invalid(key, field, parsed.raw)
                 }
-                "colorBackground" -> when (reader.peek()) {
-                    // null is a clear, like "": back to the layout's background over any lower tier
-                    JsonToken.NULL -> { reader.nextNull(); colorBackground = DEFAULT_COLOR; fields += field }
-                    else -> readString(reader).also { parsed ->
-                        if (parsed.valid && parsed.value!!.isValidColorToken()) { colorBackground = parsed.value; fields += field } else invalid(key, field, parsed.raw)
-                    }
+                "colorBackground", "colorAdBadge", "colorAdBadgeText" -> readClearableColor(reader).also { parsed ->
+                    if (parsed.valid) {
+                        when (field) {
+                            "colorBackground" -> colorBackground = parsed.value!!
+                            "colorAdBadge" -> colorAdBadge = parsed.value!!
+                            else -> colorAdBadgeText = parsed.value!!
+                        }
+                        fields += field
+                    } else invalid(key, field, parsed.raw)
                 }
                 "heightCTA" -> readInt(reader, min = 0).also { parsed ->
                     if (parsed.valid) { heightCTA = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
@@ -134,6 +139,8 @@ internal object AdConfigParser {
             reloadIntervalSeconds = reloadIntervalSeconds,
             colorCTA = colorCTA,
             colorBackground = colorBackground,
+            colorAdBadge = colorAdBadge,
+            colorAdBadgeText = colorAdBadgeText,
             heightCTA = heightCTA,
             components = components,
             ids = ids,
@@ -145,6 +152,17 @@ internal object AdConfigParser {
 
     private fun String.isValidColorToken(): Boolean =
         isEmpty() || equals("default", ignoreCase = true) || runCatching { Color.parseColor(this) }.isSuccess
+
+    // null is a clear, like "": back to what the layout draws over any lower tier
+    private fun readClearableColor(reader: JsonReader): Parsed<String> =
+        if (reader.peek() == JsonToken.NULL) {
+            reader.nextNull()
+            Parsed(DEFAULT_COLOR, valid = true)
+        } else {
+            readString(reader).let { parsed ->
+                if (parsed.valid && parsed.value!!.isValidColorToken()) parsed else parsed.copy(valid = false)
+            }
+        }
 
     private fun readString(reader: JsonReader): Parsed<String> = when (reader.peek()) {
         JsonToken.STRING -> Parsed(reader.nextString(), true)

@@ -12,6 +12,7 @@ import com.ads.module.helper.adnative.NativeAdStyler
 import com.ads.module.helper.adnative.NativeComponent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -121,4 +122,41 @@ class AdUnitConfigStyleTest {
             parse(""""components":["cta","body"]""").toNativeStyle().components,
         )
     }
+
+    private fun badgeRoot(): Pair<android.widget.FrameLayout, android.widget.TextView> {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val badge = android.widget.TextView(context).apply {
+            id = R.id.ad_icon
+            background = GradientDrawable().apply { setColor(Color.YELLOW) }
+            setTextColor(Color.BLACK)
+        }
+        return android.widget.FrameLayout(context).apply { addView(badge) } to badge
+    }
+
+    @Test fun `the Ad badge colors win over colorCTA on the badge, colorCTA alone still fills it`() {
+        val (ctaOnly, plain) = badgeRoot()
+        NativeAdStyler.applyAppearance(ctaOnly, parse(""""colorCTA":"#1E88E5"""").toNativeStyle())
+        assertEquals(Color.BLACK, plain.currentTextColor)
+        assertEquals(Color.parseColor("#1E88E5"), plain.background.pixel())
+
+        val (both, badge) = badgeRoot()
+        val unit = parse(""""colorCTA":"#1E88E5","colorAdBadge":"#102030","colorAdBadgeText":"#FFFFFF"""")
+        NativeAdStyler.applyAppearance(both, unit.toNativeStyle())
+        assertEquals(Color.WHITE, badge.currentTextColor)
+        assertEquals(Color.parseColor("#102030"), badge.background.pixel())
+    }
+
+    @Test fun `without the Ad badge fields the badge keeps its XML colors`() {
+        val (root, badge) = badgeRoot()
+        val before = badge.background
+        NativeAdStyler.applyAppearance(root, parse(""""heightCTA":44""").toNativeStyle())
+        assertEquals(Color.BLACK, badge.currentTextColor)
+        assertTrue(before === badge.background)
+    }
+
+    // GradientDrawable keeps setTint in its constant state; Robolectric does not rasterize it
+    private fun android.graphics.drawable.Drawable.pixel(): Int? =
+        org.robolectric.util.ReflectionHelpers.getField<android.content.res.ColorStateList?>(
+            DrawableCompat.unwrap<android.graphics.drawable.Drawable>(this).constantState, "mTint",
+        )?.defaultColor
 }

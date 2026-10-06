@@ -94,6 +94,32 @@ class AdConfigParserFieldMatrixTest {
     }
 
     @Test
+    fun `colorAdBadge and colorAdBadgeText parse like colorBackground and merge per field`() {
+        for (field in listOf("colorAdBadge", "colorAdBadgeText")) {
+            fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","$field":$raw}}""")!!
+            fun AdUnitConfig.value() = if (field == "colorAdBadge") colorAdBadge else colorAdBadgeText
+
+            assertEquals(field, "#102030", parse("\"#102030\"").unit("matrix").value())
+            for (raw in listOf("null", "\"\"", "\"default\"")) {
+                val style = parse(raw).unit("matrix").toNativeStyle()
+                assertEquals("$field=$raw", null, if (field == "colorAdBadge") style.adBadgeColor else style.adBadgeTextColor)
+            }
+            val invalid = parse("\"not-a-color\"")
+            assertEquals(field, "default", invalid.unit("matrix").value())
+            assertFalse(field, invalid.fieldsFor("matrix").contains(field))
+        }
+        try {
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"colorAdBadge":"#111111","colorAdBadgeText":"#FFFFFF"}}""")
+            AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorAdBadge":"#222222"}}""")!!)
+            val unit = AdRemoteConfig.getInstance().unit("native_lang")
+            assertEquals("#222222", unit.colorAdBadge)
+            assertEquals("#FFFFFF", unit.colorAdBadgeText)
+        } finally {
+            AdRemoteConfig.reset()
+        }
+    }
+
+    @Test
     fun `the default components put the CTA last`() {
         assertEquals("cta", AdUnitConfig.DEFAULT_COMPONENTS.last())
     }

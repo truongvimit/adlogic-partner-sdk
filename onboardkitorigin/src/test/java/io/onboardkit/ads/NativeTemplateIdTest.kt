@@ -215,6 +215,33 @@ class NativeTemplateIdTest {
             }
     }
 
+    @Test fun `the Ad badge colors paint the badge of every SDK frame, the skeleton text stays hidden`() {
+        declare(mapOf(AdPlacement.Language1 to "native_lang"), ""","colorAdBadge":"#102030","colorAdBadgeText":"#00FF00"""")
+        val style = AdRemoteConfig.getInstance().unit("native_lang").toNativeStyle()
+        listOf(
+            R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_media_left,
+            R.layout.ob_layout_native_med_1_91, R.layout.ob_layout_native_dialog,
+            R.layout.ob_layout_native_fullscreen, R.layout.ob_layout_native_compact,
+        ).forEach { layout ->
+            val name = app.resources.getResourceEntryName(layout)
+            val root = inflate(layout)
+            NativeAdStyler.applyAppearance(root, style)
+            assertEquals(name, android.graphics.Color.GREEN, root.badgeLabel().currentTextColor)
+
+            val skeleton = com.ads.module.helper.adnative.NativeAdShimmer.from(app, layout, style)
+            assertEquals("$name skeleton", android.graphics.Color.TRANSPARENT, skeleton.badgeLabel().currentTextColor)
+        }
+    }
+
+    @Test fun `template 3 Ad badge text is white by default`() {
+        val badge = inflate(R.layout.ob_layout_native_med_1_91).findViewById<TextView>(com.ads.module.R.id.ad_icon)
+        assertEquals(android.graphics.Color.WHITE, badge.currentTextColor)
+    }
+
+    private fun ViewGroup.badgeLabel(): TextView = findViewById<View>(com.ads.module.R.id.ad_icon).let { badge ->
+        badge as? TextView ?: (badge as ViewGroup).getChildAt(0) as TextView
+    }
+
     private fun android.graphics.drawable.Drawable.fillColor(): Int? = when (this) {
         is android.graphics.drawable.GradientDrawable -> color?.defaultColor
         is android.graphics.drawable.ColorDrawable -> color

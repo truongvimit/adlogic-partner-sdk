@@ -61,7 +61,8 @@ object NativeAdShimmer {
             .apply {
                 style?.let {
                     NativeAdStyler.applyLayout(this, it)
-                    NativeAdStyler.applyAppearance(this, it)
+                    // Placeholder text stays invisible, the badge's included
+                    NativeAdStyler.applyAppearance(this, it.copy(adBadgeTextColor = null))
                 }
                 if (background == null) background = rounded(this, CONTAINER_COLOR)
                 // Transparent-text placeholders must not be announced by TalkBack

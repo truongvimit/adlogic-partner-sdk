@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.ads.module.R
 import com.ads.module.admob.Admob
 import com.ads.module.ads.wrapper.ApNativeAd
@@ -82,20 +83,23 @@ object NativeAdStyler {
             (root.findViewById(R.id.ad_background) ?: root.findViewById<View>(R.id.ad_container))
                 ?.let { card -> card.background = recolored(card.background, color) }
         }
-        val color = style.ctaBackgroundColor ?: return
-        root.findViewById<View>(R.id.ad_call_to_action)?.let { cta ->
-            cta.background = GradientDrawable().apply {
-                setColor(color)
-                cornerRadius = root.dp(style.ctaCornerRadiusDp).toFloat()
+        style.ctaBackgroundColor?.let { color ->
+            root.findViewById<View>(R.id.ad_call_to_action)?.let { cta ->
+                cta.background = GradientDrawable().apply {
+                    setColor(color)
+                    cornerRadius = root.dp(style.ctaCornerRadiusDp).toFloat()
+                }
             }
         }
         // The attribution badge is part of the native's visual CTA language. Layouts expose it
         // as `ad_icon`; tint the existing drawable so its shape, padding and corner radii survive.
-        root.findViewById<View>(R.id.ad_icon)?.let { badge ->
+        val badge = root.findViewById<View>(R.id.ad_icon) ?: return
+        (style.adBadgeColor ?: style.ctaBackgroundColor)?.let { color ->
             badge.background?.let { background ->
                 badge.background = DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
             }
         }
+        style.adBadgeTextColor?.let { badge.setBadgeTextColor(it) }
     }
 
     /**
@@ -139,6 +143,14 @@ object NativeAdStyler {
         is GradientDrawable -> (background.mutate() as GradientDrawable).apply { setColor(color) }
         null, is ColorDrawable -> ColorDrawable(color)
         else -> DrawableCompat.wrap(background.mutate()).also { it.setTint(color) }
+    }
+
+    // A badge may be a lone label or a row holding one (label + chevron)
+    private fun View.setBadgeTextColor(@ColorInt color: Int) {
+        when (this) {
+            is TextView -> setTextColor(color)
+            is ViewGroup -> for (i in 0 until childCount) (getChildAt(i) as? TextView)?.setTextColor(color)
+        }
     }
 
     private fun View.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

@@ -17,6 +17,10 @@ data class AdUnitConfig(
     val colorCTA: String = "default",
     /** The native card's background color; `"default"` keeps the layout's own background. */
     val colorBackground: String = "default",
+    /** The Ad badge's background color; `"default"` falls back to [colorCTA], then the layout. */
+    val colorAdBadge: String = "default",
+    /** The Ad badge's text color; `"default"` keeps the layout's text color. */
+    val colorAdBadgeText: String = "default",
     val heightCTA: Int = DEFAULT_HEIGHT_CTA,
     /**
      * Blocks to show, top to bottom; the only thing that orders a native. Templates that cannot

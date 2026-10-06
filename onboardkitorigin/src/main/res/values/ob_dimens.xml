@@ -12,6 +12,8 @@
 
     <dimen name="ob_language_row_height">64dp</dimen>
     <dimen name="ob_language_row_gap">8dp</dimen>
+    <!-- LFO native slot inset on start, end and bottom; matches the row side inset and gap. -->
+    <dimen name="ob_language_ad_margin">8dp</dimen>
     <!-- Figma LFO: header ends y=100, first row starts y=116. -->
     <dimen name="ob_language_list_top">16dp</dimen>
     <dimen name="ob_flag_size">28dp</dimen>
@@ -20,8 +22,6 @@
     <dimen name="ob_language_hint_size">44dp</dimen>
     <dimen name="ob_header_height">62dp</dimen>
     <dimen name="ob_ratio_anim_area">55dp</dimen>
-
-    <!-- Native ad container: outer frame on all four sides, and the gap between visible blocks. -->
 
     <dimen name="ob_ad_attribution_height">20dp</dimen>
     <dimen name="ob_ad_badge_width">19dp</dimen>

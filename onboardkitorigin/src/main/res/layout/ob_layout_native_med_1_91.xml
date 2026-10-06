@@ -68,7 +68,7 @@
                         android:includeFontPadding="false"
                         android:paddingHorizontal="@dimen/ob_native_med_1_91_badge_padding_h"
                         android:text="@string/ob_ad_badge_plural"
-                        android:textColor="@color/ob_native_med_1_91_headline"
+                        android:textColor="@color/ob_native_med_1_91_badge_text"
                         android:textSize="@dimen/ob_text_native_med_1_91_badge" />
 
                     <!-- Two lines, like the splash card: AdMob's native validator flags a

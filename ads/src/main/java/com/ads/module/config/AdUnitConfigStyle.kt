@@ -23,6 +23,8 @@ fun AdUnitConfig.toNativeStyle(): NativeAdStyle = NativeAdStyle(
     ctaHeightDp = heightCTA.coerceIn(MIN_CTA_HEIGHT_DP, MAX_CTA_HEIGHT_DP),
     ctaBackgroundColor = colorCTA.toColorOrNull(),
     backgroundColor = colorBackground.toColorOrNull(),
+    adBadgeColor = colorAdBadge.toColorOrNull(),
+    adBadgeTextColor = colorAdBadgeText.toColorOrNull(),
 )
 
 /** `"default"`, blank and unparsable all mean "keep what the layout draws". */
