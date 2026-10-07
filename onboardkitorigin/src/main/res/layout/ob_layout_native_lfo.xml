@@ -6,17 +6,20 @@
   Three blocks are direct children of the vertical `ad_container`, so the placement's `components`
   orders them: the default puts the CTA last, `["cta","media","icon_headline"]` puts it on top.
   Vertical spacing is the container's padding and divider, never a block's margin, so it holds in
-  every order. The media takes the remaining height wherever it lands: the slot sizes the frame.
+  every order. The media spans the full width at 1.68:1, so the card has its own height and the
+  slot wraps it. The ratio sits on the well inside `block_media`, never on `ad_media`:
+  NativeAdShimmer rewrites an unresolved `ad_media` height to a flat 160dp.
 -->
 <com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="wrap_content">
 
     <LinearLayout
         android:id="@+id/ad_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:background="@drawable/ob_bg_ad_block"
         android:divider="@drawable/ob_native_block_gap"
         android:orientation="vertical"
@@ -63,11 +66,26 @@
                 android:src="@drawable/ob_ic_info" />
         </LinearLayout>
 
-        <com.google.android.gms.ads.nativead.MediaView
-            android:id="@+id/ad_media"
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/block_media"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_height="wrap_content">
+
+            <FrameLayout
+                android:id="@+id/ob_native_lfo_media_well"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                app:layout_constraintDimensionRatio="H,1.68:1"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <com.google.android.gms.ads.nativead.MediaView
+                    android:id="@+id/ad_media"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Height is overridden at bind time by `heightCTA`; the XML value is the design's. -->
         <TextView

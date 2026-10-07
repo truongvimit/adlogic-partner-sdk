@@ -241,7 +241,7 @@ class OnboardingAdLifecycleTest {
         org.junit.Assert.assertSame(image, contentPage().findViewById(R.id.ob_step_image))
         org.junit.Assert.assertSame(card, contentPage().findViewById(R.id.ob_step_card))
         assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
-        assertEquals(page.height * .59f, image.height.toFloat(), 1f)
+        assertEquals("The image runs down to the ad", page.findViewById<View>(R.id.ob_ad_block).top, image.bottom)
         listener().onFailedToLoad()
         settle()
         assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
@@ -277,7 +277,8 @@ class OnboardingAdLifecycleTest {
         settle()
         layout()
         assertEquals(original, geometry())
-        assertEquals(page().height * .59f, page().findViewById<View>(R.id.ob_step_image).height.toFloat(), 1f)
+        assertEquals("The image runs down to the ad", page().findViewById<View>(R.id.ob_ad_block).top,
+            page().findViewById<View>(R.id.ob_step_image).bottom)
         org.junit.Assert.assertNotNull(page().findViewById<View>(R.id.ob_step_card).background)
         assertEquals(originalElevation, page().findViewById<View>(R.id.ob_step_card).elevation, 0f)
     }

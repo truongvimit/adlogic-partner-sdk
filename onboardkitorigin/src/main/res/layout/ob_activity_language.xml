@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma "LFO": header + language rows + native ad block anchored bottom (~41% height). -->
+<!-- Figma "LFO": header + language rows + native ad block anchored bottom, as tall as its card. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -83,20 +83,28 @@
         android:textSize="16sp"
         android:textStyle="bold"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/ob_ad_block" />
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_blocks_top" />
+
+    <!-- Slot 1 stays INVISIBLE after the swap and empties once released, so the rows follow
+         whichever block is taller instead of slot 1 alone. -->
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/ob_ad_blocks_top"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="top"
+        app:constraint_referenced_ids="ob_ad_block,ob_ad_block_2" />
 
     <!-- Slot 1: native preloaded from Splash, visible until the first language tap. -->
     <FrameLayout
         android:id="@+id/ob_ad_block"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintHeight_percent="0.41">
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <FrameLayout
             android:id="@+id/ob_native_container"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_margin="@dimen/ob_language_ad_margin"
             android:visibility="gone" />
     </FrameLayout>
@@ -105,17 +113,15 @@
     <FrameLayout
         android:id="@+id/ob_ad_block_2"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginHorizontal="@dimen/ob_language_ad_margin"
-        android:layout_marginBottom="@dimen/ob_language_ad_margin"
+        android:layout_height="wrap_content"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintHeight_percent="0.41">
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <FrameLayout
             android:id="@+id/ob_native_container_2"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/ob_language_ad_margin"
             android:visibility="gone" />
     </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
