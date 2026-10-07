@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?><!--
   No permissions on purpose: the paywall itself never opens a socket. Fetching is delegated to a
-  PaywallConfigSource, and billing permissions are merged in by :ads.
+  PaywallConfigSource, and billing permissions are merged in by the Play Billing library.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 

@@ -40,20 +40,26 @@ SDK clickable `Button` या `TextView` को action मानता है।
 
 ## Ads और completion
 
-ये keys production IDs के साथ `ad_config.json` में रखें; `ad_config_debug.json` में सिर्फ `native_select` और `native_select_alt`, हर एक की एक test `id` चाहिए:
+ये keys production IDs के साथ `ad_config.json` में रखें; `ad_config_debug.json` में सिर्फ `native_select` और `native_select_alt`, हर एक के `ids` में एक test floor चाहिए:
 
 ```json
 {
-  "native_select_high": { "id": "HIGH_NATIVE_UNIT", "isEnable": true },
-  "native_select": { "id": "BASE_NATIVE_UNIT", "isEnable": true, "click_action": "reload" },
-  "native_select_alt_high": { "id": "ALT_HIGH_NATIVE_UNIT", "isEnable": true },
-  "native_select_alt": { "id": "ALT_BASE_NATIVE_UNIT", "isEnable": true, "click_action": "reload" }
+  "native_select": {
+    "ids": [{ "id": "HIGH_NATIVE_UNIT", "isEnable": true }, { "id": "BASE_NATIVE_UNIT", "isEnable": true }],
+    "isEnable": true,
+    "click_action": "reload"
+  },
+  "native_select_alt": {
+    "ids": [{ "id": "ALT_HIGH_NATIVE_UNIT", "isEnable": true }, { "id": "ALT_BASE_NATIVE_UNIT", "isEnable": true }],
+    "isEnable": true,
+    "click_action": "reload"
+  }
 }
 ```
 
-Privacy और Goal अलग SDK placements हैं, जो ये configured keys साझा करते हैं। `native_select` पहला ad है। पहली consent acceptance/goal selection पर ALT replacement शुरू होता है। ALT सफलतापूर्वक bind होने तक पहला ad दिखता रहता है; no-fill पर भी बना रहता है। Preload और show दोनों 4:3 media-left frame (`ob_layout_native_media_left.xml`, template `2`) इस्तेमाल करते हैं, जब तक key का `templateId` कोई और template न चुने। CTA color/height लागू हैं; `components` यह frame नहीं बदलता। `click_action` केवल base key से पढ़ा जाता है; default `reload` है।
+Privacy और Goal अलग SDK placements हैं, जो ये configured keys साझा करते हैं। `native_select` पहला ad है। पहली consent acceptance/goal selection पर ALT replacement शुरू होता है। ALT सफलतापूर्वक bind होने तक पहला ad दिखता रहता है; no-fill पर भी बना रहता है। Preload और show दोनों 4:3 media-left frame (`ob_layout_native_media_left.xml`, template `2`) इस्तेमाल करते हैं, जब तक key का `templateId` कोई और template न चुने। CTA color/height लागू हैं; `components` यह frame नहीं बदलता। `click_action` key के `ids` के हर floor पर लागू होता है; default `reload` है।
 
-Base `isEnable` पूरे waterfall को नियंत्रित करता है, `_high` समेत। किसी base को बंद करना उसका ad बंद करता है, screen नहीं। Consent, premium, UA और global ad gate लागू रहते हैं; अलग `privacyAd.enabled`/`goalAd.enabled` switches नहीं हैं।
+हर key का `isEnable` उसके पूरे `ids` waterfall को नियंत्रित करता है; floor का अपना `isEnable` सिर्फ उसी floor को रोकता है। किसी key को बंद करना उसका ad बंद करता है, screen नहीं। Consent, premium, UA और global ad gate लागू रहते हैं; अलग `privacyAd.enabled`/`goalAd.enabled` switches नहीं हैं।
 
 Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
 

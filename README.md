@@ -42,7 +42,7 @@ dependencyResolutionManagement {
 }
 ```
 
-Check the [newest version on JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk), then set it once in your app project's root `gradle.properties`; every SDK module reads this property:
+Check the [newest version on JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk), then set it once in your app project's root `gradle.properties`; reference it from every SDK dependency you declare:
 
 ```properties
 adlogicSdkVersion=NEWEST_VERSION
@@ -80,7 +80,7 @@ AdLogic allows ad requests to be attempted when UMP reports an error or the netw
 
 | Area | What to do |
 | --- | --- |
-| Ads | AdMob app ID, Meta app ID/client token, placements in `assets/ad_config.json`; `ad_config_debug.json` holds only one test `id` per all-price key, used by debug builds with every other field from `ad_config.json`. |
+| Ads | AdMob app ID, Meta app ID/client token, placements in `assets/ad_config.json`; `ad_config_debug.json` holds only test `ids` (normally one floor) per placement key, used by debug builds with every other field from `ad_config.json`. |
 | Onboarding | Destination Activity, language/content configuration and ad placements. |
 | Purchases | Play product IDs and entitlement mapping. PayKit also needs terms/privacy URLs and your catalog JSON. |
 | Firebase · optional | Firebase app configuration and published Remote Config parameters for the sources you use. |

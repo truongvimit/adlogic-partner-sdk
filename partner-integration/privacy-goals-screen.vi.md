@@ -22,7 +22,7 @@ Chỉ khi user bấm hoàn tất ở Goal SDK mới ghi nhận onboarding comple
 `native_select.isEnable = false` chỉ ẩn ad đầu; `native_select_alt.isEnable = false` chỉ tắt ad ALT.
 Đây là nguồn bật/tắt duy nhất cho từng placement; không có `privacyAd.enabled` hay
 `goalAd.enabled` riêng. Các gate consent, premium, UA và master ads vẫn áp dụng qua cùng AdsGuard
-như LFO. Base key tắt sẽ tắt cả waterfall dù `_high` vẫn bật.
+như LFO. `isEnable` của key bật/tắt cả waterfall `ids`; `isEnable` của một tầng chỉ dừng tầng đó.
 
 SDK có layout mặc định. Partner không cần truyền `layoutRes` hay từng view ID trong `Config`. Android resource
 merge sẽ cho resource của app override resource cùng tên trong SDK. Chỉ cần tạo các file sau trong
@@ -63,21 +63,27 @@ privacyGoalsScreen = PrivacyGoalsScreenConfig(
 )
 ```
 
-Trong `ad_config.json`, thêm bốn placement (mặc định bật); `ad_config_debug.json` chỉ cần `native_select` và `native_select_alt`, mỗi key một `id` test:
+Trong `ad_config.json`, thêm hai placement; `ad_config_debug.json` chỉ cần `native_select` và `native_select_alt`, mỗi key một tầng test trong `ids`:
 
 ```json
-"native_select_high": { "id": "...", "isEnable": true },
-"native_select": { "id": "...", "isEnable": true, "click_action": "reload" },
-"native_select_alt_high": { "id": "...", "isEnable": true },
-"native_select_alt": { "id": "...", "isEnable": true, "click_action": "reload" }
+"native_select": {
+  "ids": [{ "id": "...high", "isEnable": true }, { "id": "...all-price", "isEnable": true }],
+  "isEnable": true,
+  "click_action": "reload"
+},
+"native_select_alt": {
+  "ids": [{ "id": "...high", "isEnable": true }, { "id": "...all-price", "isEnable": true }],
+  "isEnable": true,
+  "click_action": "reload"
+}
 ```
 
-`native_select` và `native_select_high` là ad đầu tiên. Khi consent hoặc lựa chọn đầu tiên xảy
-ra, `native_select_alt`/`native_select_alt_high` thay thế nó. Bốn placement này dùng layout native
+`native_select` là ad đầu tiên. Khi consent hoặc lựa chọn đầu tiên xảy
+ra, `native_select_alt` thay thế nó. Hai placement này dùng layout native
 4:3 media-left của SDK (`ob_layout_native_media_left.xml`, template `2`), cùng frame cho preload và
 show, trừ khi `templateId` của key chọn template khác; `components` không đổi khung này. Ad đầu
 tiên được giữ nguyên đến khi ad ALT bind thành công; ALT không fill thì ad đầu tiên vẫn giữ.
-Click ad dùng action `reload` mặc định; đổi bằng `click_action` trên `native_select`/`native_select_alt` (không đọc ở key `_high`).
+Click ad dùng action `reload` mặc định; đổi bằng `click_action` trên `native_select`/`native_select_alt` (áp cho mọi tầng trong `ids`).
 
 Nếu `enabled = false`, SDK không inflate các layout nên partner không cần khai báo chúng. Logic
 consent, chọn/bỏ chọn, preload, swap ad, reload khi click và hoàn tất flow vẫn do SDK xử lý.

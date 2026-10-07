@@ -93,15 +93,16 @@ The test AdMob App ID contains **`~`**. Replace `YOUR_META_*` with the credentia
 Copy both files into `assets` under exactly these names (create the folder if it is missing):
 
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** the release configuration; every ID is currently a test ID.
-- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** one test `id` per all-price key, nothing else; every other field comes from `ad_config.json`.
+- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** test `ids` per placement key (normally one floor), nothing else; every other field comes from `ad_config.json`.
 
-Ad unit IDs contain **`/`**. `ad_config.json` carries style, UA, app-resume delay and waterfalls for every build; the [debug example](../app/src/main/assets/ad_config_debug.json) only maps each all-price key to a test ID (interstitials `1033173712`). The OB slots are listed below; the remaining keys are for your app screens and do not create a display position by themselves. Sample values may differ from the parser defaults; see the [JSON field table](#fields-in-the-sample-json).
+Ad unit IDs contain **`/`**. `ad_config.json` carries style, UA, app-resume delay and waterfalls for every build; the [debug example](examples/ads-onboarding/ad_config_debug.json) only maps each placement key to a test floor (interstitials `1033173712`). The OB slots are listed below; `fromAdConfig()` in step 4 also binds `open_resume` (app-open), `native_welcome1/2` (Welcome Back) and `native_onboarding_fullscreen_1_4` (OB5). The remaining keys are for your app screens and do not create a display position by themselves. Sample values may differ from the parser defaults; see the [JSON field table](#fields-in-the-sample-json).
 
 | JSON key | Position | Maps into `AdsConfig` in step 4 |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
 | `native_splash` | Splash native, same slot as the banner | `splashInlineNative` |
 | `inter_splash` | Interstitial when leaving splash | `splashInterstitial` |
+| `native_fs` | Optional full-screen native after the splash interstitial, before LFO | `splashNative` |
 | `native_lang` | First language native | `languageNative` |
 | `native_lang_alt` | Replacement native after the first language selection | `languageDupNative` |
 | `native_popup_lang` | Native in the language confirmation popup | `languageConfirmNative` |
@@ -115,19 +116,19 @@ Ad unit IDs contain **`/`**. `ad_config.json` carries style, UA, app-resume dela
 
 `inter_after_ob3` shows after the entire configured OB list. See [the current step catalog](onboarding-flow.vi.md).
 
-Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds one `"id"` per all-price key and nothing else (`native_reward`, not `native_reward_high`): that test ID replaces every ID of the placement and its `_high*` floors request nothing, so each placement loads one test ID through the usual load path. Other fields in the debug file are ignored with a `WARN`, and an enabled key without a test ID gets no ad. Remote `ad_remote_config` applies every field except IDs; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the IDs remote declares. Without a debug file, debug requests the `ad_config.json` IDs.
+Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds only `ids` per placement key, normally one test floor: those floors replace the placement's whole waterfall, so each placement loads its test ID through the usual load path. Any other field in the debug file is ignored with a `WARN`, and a placement enabled in `ad_config.json` without a debug entry gets no ad (also a `WARN`). Remote `ad_remote_config` applies every field except IDs; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the IDs remote declares. Without a debug file, debug requests the `ad_config.json` IDs.
 
 The sample IDs come from [Google demo ad units](https://developers.google.com/admob/android/test-ads#demo_ad_units) and [AdMob App ID](https://developers.google.com/admob/android/quick-start). The fullscreen page uses a **native ID**. The sample shares one test ID per format; production needs separate IDs to split configuration, style and reporting per placement.
 
 ### Optional: grouped remote settings and custom local defaults
 
-Two additional documents are already bundled in the SDK: [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) and [onboarding_config.json](examples/ads-onboarding/onboarding_config.json). To tune them remotely, follow [Firebase: publish the three String parameters](firebase-integration.md#remote-json). Keep `ad_remote_config` for unit configuration; add `ad_behavior_config` and `onboarding_config` as separate String values containing the respective JSON objects.
+Two additional documents are already bundled in the SDK: [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) and [onboarding_config.json](examples/ads-onboarding/onboarding_config.json). To tune them remotely, follow [Firebase: publish the three String parameters](firebase-integration.md#remote-json). Keep `ad_remote_config` for unit configuration; add `ad_behavior_config` and `onboarding_config` as separate String values containing the respective JSON objects. Both examples match the bundled defaults except `onboarding.primary_color`: the example leaves it `""` so the app keeps its existing UI color, while the SDK default is `"#FF375E"`.
 
 To customize fallback values, create same-named files in `app/src/main/assets/`, copy the full defaults or include only the fields you want to change, then rebuild. If SDK defaults suit the app, neither extra file is required. Valid remote/cache fields, then legacy `ob_*` keys the backend delivered, take priority over these files at any scope and over your Kotlin config; an offline fetch preserves a previous valid remote cache instead of forcing local values. See the [two local JSON examples and fallback rules](firebase-integration.md#local-defaults), and the [field/default reference](remote-settings.md).
 
 ## 3. Prepare the onboarding content
 
-Use your existing `app_name` and launcher icon. Add these six strings to `app/src/main/res/values/strings.xml` and replace the copy with your product's:
+Use your existing `app_name` and launcher icon. Add these eight strings to `app/src/main/res/values/strings.xml` and replace the copy with your product's:
 
 ```xml
 <resources>
@@ -137,10 +138,12 @@ Use your existing `app_name` and launcher icon. Add these six strings to `app/sr
     <string name="onboarding_des_2">Show the action the user needs to know.</string>
     <string name="onboarding_title_3">Ready to go</string>
     <string name="onboarding_des_3">Invite the user to get started.</string>
+    <string name="onboarding_title_4">One more thing</string>
+    <string name="onboarding_des_4">Highlight another feature worth knowing.</string>
 </resources>
 ```
 
-Add translations in `values-<language>/strings.xml`, including the `ob_*` keys from [ob_strings.xml](../onboardkitorigin/src/main/res/values/ob_strings.xml), because the SDK ships English only. In step 4, replace the three `imageRes` values with your app's images, or copy images [1](../app/src/main/res/drawable-nodpi/img_onboard_sample_1.png), [2](../app/src/main/res/drawable-nodpi/img_onboard_sample_2.png), [3](../app/src/main/res/drawable-nodpi/img_onboard_sample_4.png) from the example into `app/src/main/res/drawable-nodpi/` to try it out.
+Add translations in `values-<language>/strings.xml`, including the `ob_*` keys from [ob_strings.xml](../onboardkitorigin/src/main/res/values/ob_strings.xml), because the SDK ships English only. In step 4, replace the four `imageRes` values with your app's images (OB3 and OB4 share one in the sample), or copy images [1](../app/src/main/res/drawable-nodpi/img_onboard_sample_1.png), [2](../app/src/main/res/drawable-nodpi/img_onboard_sample_2.png), [3](../app/src/main/res/drawable-nodpi/img_onboard_sample_4.png) from the example into `app/src/main/res/drawable-nodpi/` to try it out.
 
 The SDK already supplies the layouts/Activities for LFO, the popup, OB and the native ads.
 
@@ -155,19 +158,19 @@ Only `SplashConfig.layoutRes` and `ContentStepDefinition.layoutRes` accept custo
 
 ### `AppAdPlacement.kt` — your app's placement catalog
 
-Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) into your app package, for example `app/src/main/java/com/example/app/`. The file holds one base key per placement: the OB slots and your app slots. The SDK finds the `_high`, `_high1`… floors itself; floors need no constants.
+Copy [AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) into your app package, for example `app/src/main/java/com/example/app/`. The file holds one key per placement: the OB slots and your app slots. Floors live in that key's `ids`; they need no constants.
 
-`AppAdPlacement.NATIVE_HOME` is the key `native_home`; both JSON files contain its ad unit IDs and configuration. Add a constant and the matching JSON key for each new placement.
+`AppAdPlacement.NATIVE_HOME` is the key `native_home`; `ad_config.json` holds its ad unit IDs and configuration, `ad_config_debug.json` only its test `ids`. Add a constant and the matching JSON key for each new placement.
 
 Declare native/banner slots in the screen XML and call the SDK directly from that screen. The SDK owns loading, cache and the ad lifecycle. `AdsAppManager`, if used, only groups configuration, initialization and app-specific policy.
 
 ### `OnboardKitSetup.kt` — wire the OB keys into the SDK
 
-Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) into the same package. Change `com.example.app` in the Kotlin files and keep your app's resources. The sample declares three content pages plus the fullscreen page, and uses **`AdsConfig.fromAdConfig()`** for standard placement bindings. Step 5 configures it once after `OnboardingSdk.install`; ID, gate and template changes are resolved from current settings without repeating setup after fetch. Apps with different keys pass only those associations to `fromAdConfig(mapOf(...))`; the [mapping table](remote-settings.md) lists the defaults.
+Copy [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) into the same package. Change `com.example.app` in the Kotlin files and keep your app's resources. The sample declares four content pages plus the two fullscreen pages (FULL1, FULL2), and uses **`AdsConfig.fromAdConfig()`** for standard placement bindings. Step 5 configures it once after `OnboardingSdk.install`; ID, gate and template changes are resolved from current settings without repeating setup after fetch. Apps with different keys pass only those associations to `fromAdConfig(mapOf(...))`; the [mapping table](remote-settings.md) lists the defaults.
 
 A declared disabled placement keeps an empty unit, so it cannot borrow a different slot's ad. Only an absent LFO2 unit falls back to LFO1; turn the replacement action off with `onboarding_config.lfo.native2.enabled = false`.
 
-LFO/Welcome Back/content OB natives take their frame from the base placement key’s `templateId` (default `1`, the LFO frame) and their block order from its `components`; the default order puts the CTA at the bottom, `["cta","media","icon_headline"]` puts it on top. `positionCTA` has been removed: a payload that still sends it is ignored. The host fallbacks `AdsConfig.languageTemplate`/`contentStepTemplate` and the `NativeTemplate` enum are removed with it; delete them from your `AdsConfig`. `native_template`/`content_template` in `onboarding_config` are removed, including per-step overrides. Fullscreen/popup frames remain fixed. `colorCTA` colors both the CTA and Ad badge; color/height/components are re-read at every bind, including click/resume replacements.
+LFO/Welcome Back/content OB natives take their frame from the placement key’s `templateId` (default `1`, the LFO frame) and their block order from its `components`; the default order puts the CTA at the bottom, `["cta","media","icon_headline"]` puts it on top. `positionCTA` has been removed: a payload that still sends it is ignored. The host fallbacks `AdsConfig.languageTemplate`/`contentStepTemplate` and the `NativeTemplate` enum are removed with it; delete them from your `AdsConfig`. `native_template`/`content_template` in `onboarding_config` are removed, including per-step overrides. Fullscreen/popup frames remain fixed. `colorCTA` colors both the CTA and Ad badge; color/height/components are re-read at every bind, including click/resume replacements.
 
 ## 5. Initialize in your Application
 
@@ -290,15 +293,15 @@ Add only the options you need to change to the `onboardKitConfig { ... }` block 
 | Language popup | Re-selecting the current language opens it immediately. Selecting another language opens it from the fourth total tap onward; re-select taps still count. Its native is first requested when the popup opens | `LanguageConfig.confirmDialogOnReselectEnabled = false` to turn it off; SETTINGS shows no popup |
 | Native template | SDK: template `1` on LFO/Welcome Back/content OB, `2` on splash inline and Privacy/Goal; CTA at the bottom | Set `ad_config.<key>.templateId` for the frame and `components` for the order. The backend's `ad_remote_config` beats your app asset field by field. [Precedence](remote-settings.md). |
 | System bars | Status/caption bars shown, navigation bar hidden | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| Native click and return on OB | Content and fullscreen pager pages advance on return (`auto_next`) and never load a replacement | `"click_action": "none"` on the page's base key (`native_ob1`…) to stay on the page; [Native click actions](remote-settings.md#native-click-actions) |
-| Native click on LFO/popup, Welcome Back, OB5 or an app screen | Preloads as soon as the ad is clicked/opened; on return it binds a ready ad or waits for the in-flight request. The replacement requests the all-price floor only (`reload`); `reload_waterfall` walks every floor | `click_action` on the placement's base key in ad_config, independent of timed refresh; [app-screen native example](#app-screen-native-with-a-placement-constant) |
+| Native click and return on OB | Content and fullscreen pager pages advance on return (`auto_next`) and never load a replacement | `"click_action": "none"` on the page's key (`native_ob1`…) to stay on the page; [Native click actions](remote-settings.md#native-click-actions) |
+| Native click on LFO/popup, Welcome Back, OB5 or an app screen | Preloads as soon as the ad is clicked/opened; on return it binds a ready ad or waits for the in-flight request. The replacement requests the all-price floor only (`reload`); `reload_waterfall` walks every floor | `click_action` on the placement's key in ad_config, independent of timed refresh; [app-screen native example](#app-screen-native-with-a-placement-constant) |
 | Relaunching with the flow unfinished | Runs Splash → LFO → OB again; OB is skipped only once the whole flow completes | No app-side first-open flag or checkpoint is needed |
 | Fullscreen native page | X after 5 seconds, auto-next after 15 seconds from page selection; background time still counts. Its shimmer fills the native host, with media across the viewport and the CTA at the bottom. | The fields of `AdFullScreenStepDefinition`; remote `ob_skip_button_delay_sec = -1` keeps the local delay |
 | End-of-onboarding interstitial | Preloaded on pager entry, waits up to 8 seconds for a fill on completion; the next screen opens underneath the ad. Notification/widget/uninstall: wait for dismissal | `AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.AFTER_AD` to always wait for dismissal; `afterOnboardingInterstitialEnabled = false` if your app owns it. Keep it out of `InterstitialAutoBuffer` |
 | OB navigation | With swipe enabled: OB1 stays locked. OB2/OB3/OB4 and fullscreen pages remain locked while loading/binding and unlock only after an ad impression; a content page with no ad to show (no unit, premium, no fill) unlocks at once. Each new visit starts locked. The global swipe lock still wins. | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back always exits the app), `lockPortrait`; a landscape app must change the manifest too |
 | Interstitial interval | `ERainAdConfig.intervalInterstitialAd = 0` (no limit); it applies to the `InterstitialAutoBuffer` group only, not to splash/OB or interstitials you load yourself | Set it before init, or use `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` |
 | Interstitial click cap | Off (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: at most `n` clicks per ad unit per 24 hours, then loading/showing stops. Call it when needed, usually after the remote fetch |
-| OB5, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. A null `ob5Native` uses `fullScreenStepNative` (host setup). The paywall is not wired. An `open_resume` with an ID in `ad_config.json` or the backend's `ad_remote_config` turns [app-open](#app-open-on-return) on; `disableAppResume()` keeps it off | `AdsConfig.ob5Native` to give it its own ID; wire the paywall/app-open only when you need them |
+| OB5, paywall, app-open | `ob_enable_step_ob5 = false`. With OB5 on: it opens underneath the final interstitial if its native is loaded, and is skipped otherwise. With `fromAdConfig()`, OB5 binds `native_onboarding_fullscreen_1_4`; that key, once declared in `ad_config.json` or remote, beats a unit set in code. While it is undeclared, `ob5Native`, then `fullScreenStepNative` (host setup), applies. The paywall is not wired. An `open_resume` with an ID in `ad_config.json` or the backend's `ad_remote_config` turns [app-open](#app-open-on-return) on; `disableAppResume()` keeps it off | Set its ID under `native_onboarding_fullscreen_1_4` (`AdsConfig.ob5Native` applies only while that key is undeclared); wire the paywall/app-open only when you need them |
 
 A UMP error or timeout can allow an **attempted request** in-process through the [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt); it grants no consent and guarantees no fill. A host that turns requests off with `ConsentCenter.setHostConsent(false, false)` from its own CMP still wins; do not infer request permission from a timer or from personalization.
 
@@ -308,25 +311,50 @@ Install `adProvider = ERainAdProvider()`, or leave it unset for an onboarding wi
 
 ### Fields in the sample JSON
 
-Both JSON files keep the example debug fields and values; only the interstitials were normalized to the test ID.
+`ad_config.json` uses test IDs in every placement and keeps `native_ob1..4`, `native_full1/2` and `native_fs` off (enable them to test those slots); `ad_config_debug.json` holds only the test `ids`.
 
 | Field | Value in the sample | How it is used / where it applies |
 | --- | --- | --- |
-| `id` | A test ad unit of the right format | Replace the IDs in the real file before release; do not change the placement keys. |
-| `isEnable` | As in the example: mostly `true`, welcome `false` | Turns a placement on or off. The base key is the master switch: `false` on the base key turns off the whole waterfall. |
+| `ids` | A test ad unit of the right format | The waterfall of `{"id", "isEnable"}` floors, highest first, all-price last; a single-unit placement is a one-floor array. A placement-level `"id"` is not read. Replace the IDs in the real file before release; do not change the placement keys. See [Waterfall](#waterfall-one-key-per-placement). |
+| `isEnable` | `true`, except `false` on `native_welcome`, `inter_welcome`, `native_ob1..4`, `native_full1/2` and `native_fs` | Turns a placement on or off: `false` turns off its whole waterfall. A floor in `ids` has its own `isEnable` to pause only that floor. |
 | `enable_ua_check` | Both `true` and `false` in the example | `true` requires paid/non-organic attribution; until Adjust answers, the default is organic. The standard `AdsConfig.fromAdConfig()` bindings apply this gate to the corresponding OB placements too, including native LFO/OB and exit interstitial. Without Adjust, set it to `false` for the placements you want to show. |
 | `reloadIntervalSeconds` | Banner: `30` | A positive value sets the auto-reload cadence, in seconds, of every placement-bound banner, splash included, while `banner.reload.auto_enabled` is `true` (the default). Absent, `0` or invalid uses the host/SDK value (15000 ms). App-screen setup: [App-screen banner](#additional-integrations). |
 | `colorCTA` | `"default"` | Keeps the template color; set a color when you need a custom native. |
 | `colorBackground` | absent | Optional native card background, e.g. `"#FFF4E5"`. Absent, `null`, `""` or `"default"` keeps the layout's own background; the card keeps its corners and border. Applies to every native frame and its loading skeleton. |
-| `colorAdBadge` | LFO: `"default"` | Optional Ad badge background, e.g. `"#007AFF"`; wins over `colorCTA` on the badge. Absent, `null`, `""` or `"default"` falls back to `colorCTA`, then the layout. Applies to every native frame and its loading skeleton. |
-| `colorAdBadgeText` | LFO: `"default"` | Optional Ad badge text color, e.g. `"#FFFFFF"`. Absent, `null`, `""` or `"default"` keeps the layout's text color. Applies to every native frame; the loading skeleton keeps its text hidden. |
-| `heightCTA` | `45` for ordinary natives, `36` for the popup | CTA height in dp; the SDK uses `44` (the templates' button height) when the field is absent and clamps the value to 36–52 when applying it. |
-| `templateId` | absent | Optional SDK native template for the placement: `1` = LFO card (full-width 1.68:1 media), `2` = 4:3 media-left card, `3` = 1.91:1 card. The slot is as tall as the card. Absent, `null` or an unknown number keeps the slot's default: `1` on LFO, Welcome Back and OB content, `2` on Privacy/Goal and the splash bottom slot. The language popup and the fullscreen natives keep their fixed frames. Base key only. See [Native templates](remote-settings.md#native-templates-cta-and-xskip-experiments). |
+| `colorAdBadge` | absent | Optional Ad badge background, e.g. `"#007AFF"`; wins over `colorCTA` on the badge. Absent, `null`, `""` or `"default"` falls back to `colorCTA`, then the layout. Applies to every native frame and its loading skeleton. |
+| `colorAdBadgeText` | absent | Optional Ad badge text color, e.g. `"#FFFFFF"`. Absent, `null`, `""` or `"default"` keeps the layout's text color. Applies to every native frame; the loading skeleton keeps its text hidden. |
+| `heightCTA` | `45` for most natives, `44` on `native_splash`, `36` for the popup | CTA height in dp; the SDK uses `44` (the templates' button height) when the field is absent and clamps the value to 36–52 when applying it. |
+| `templateId` | absent | Optional SDK native template for the placement: `1` = LFO card (full-width 1.68:1 media), `2` = 4:3 media-left card, `3` = 1.91:1 card. The slot is as tall as the card. Absent, `null` or an unknown number keeps the slot's default: `1` on LFO, Welcome Back and OB content, `2` on Privacy/Goal and the splash bottom slot. The language popup and the fullscreen natives keep their fixed frames. See [Native templates](remote-settings.md#native-templates-cta-and-xskip-experiments). |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Block order, top to bottom; a missing block is hidden and an empty array keeps the XML. Absent, the default order puts the CTA at the bottom. Templates `1` and `3` and [app-screen natives](#app-screen-native-with-a-placement-constant) follow it; template `2`, the language popup and the fullscreen natives always show as drawn. |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | How long to wait before loading the app-open ad after the app goes to background; it only takes effect once app-resume is enabled. |
-| `click_action` | `"auto_next"` on `native_ob1..4`, `native_full1/2` and `native_fs`; `"reload"` on every other native | What a native ad click does on return. Read from the base key only, never from `_high` floors; keep the same value in both files. See [Native click actions](remote-settings.md#native-click-actions). |
+| `click_action` | `"auto_next"` on `native_ob1..4`, `native_full1/2` and `native_fs`; `"reload"` on every other native | What a native ad click does on return. Covers every floor in `ids`; set it in `ad_config.json` or remote only (`ad_config_debug.json` ignores it). See [Native click actions](remote-settings.md#native-click-actions). |
 
-The waterfall reads `_high`, `_high1`… and then the base key; you can also use `ids` to declare several floors in one entry. Duplicate IDs are dropped; use separate IDs when you need to verify an individual floor or style.
+### Waterfall: one key per placement
+
+Each placement is one key, and it lists its floors in `"ids"`, highest floor first and the all-price floor last; each floor is `{"id": "...", "isEnable": true|false}`, and a floor without `isEnable` is on. The placement's `isEnable` is the master switch. To pause one floor, set that floor's `isEnable: false`: its ID stays in place, so turning it back on needs nothing else. A single-unit placement (banner, `inter_back`, `open_resume`…) is a one-floor array without a floor `isEnable`, `"ids": [{ "id": "..." }]`, since the placement's `isEnable` already switches it. A placement-level `"id"` is an unknown field, ignored with a warning, so that placement has no ad unit. Every other field applies to all floors. In `ad_config.json`, a placement that omits `isEnable` is off (unlike a floor, whose `isEnable` defaults to on) and a missing `enable_ua_check` is `false`; in a remote document, an omitted field keeps the lower layer's value.
+
+```json
+"native_ob1": {
+  "ids": [
+    { "id": "ca-app-pub-xxx/2222222222", "isEnable": false },
+    { "id": "ca-app-pub-xxx/1111111111", "isEnable": true }
+  ],
+  "isEnable": true,
+  "click_action": "auto_next"
+},
+"banner_home": {
+  "ids": [{ "id": "ca-app-pub-xxx/3333333333" }],
+  "isEnable": true
+}
+```
+
+`ids` accepts only floor objects: a bare string is skipped with a warning, and a non-empty `ids` with no valid floor is ignored, so the layer below applies; an explicit `"ids": []` is a valid empty waterfall, so the placement requests nothing. A malformed floor is skipped alone. With every floor off the placement requests nothing. Across layers (remote > `ad_config.json` > code), a higher layer's `ids` replaces the lower layer's whole array, so Firebase must hold the full array with each floor's `isEnable`. Duplicate IDs are dropped; use separate IDs when you need to verify an individual floor.
+
+**Breaking change — upgrading from `_high` keys.** Earlier SDK versions read floors from separate `<key>_high`, `<key>_high1`…`<key>_high9` keys. Those keys are no longer read: the parser logs a warning ending in `not read as floors; move their ids into the base key's "ids"`, and the placement requests only its own key. A placement-level `"id"` is no longer read either. Every floor now reports under that one key, so load and revenue events no longer split between `<key>` and `<key>_high`.
+
+1. In `ad_config.json` and in the Firebase `ad_remote_config` value, move each `<key>_high*` ID into `<key>.ids` as `{"id", "isEnable"}` in the old order (`_high`, `_high1`…`_high9`), keeping that floor's old `isEnable`; the old `<key>.id` becomes the last floor. A key that used the old string form `"ids": ["a", "b"]`, which old SDKs accepted, contributes each string as a floor object in the same order, before that key's own `id`: the old SDK requested `<key>_high`, `<key>_high1`…`<key>_high9`, then `<key>`, and within each key its `ids` then its `id`, skipping repeated IDs. Delete the `_high*` entries. Every remaining `"id": "X"`, single-unit placements and every key of `ad_config_debug.json` included, becomes `"ids": [{"id": "X"}]`.
+2. In Firebase, publish the new-format `ad_remote_config` under a condition on app version ≥ the first version that ships this SDK; older versions keep the old value. This condition is mandatory. An app on SDK 5.5.6 or newer that receives the new format does not crash: it ignores `ids` and keeps the waterfall built into its APK, but no longer picks up remote ID changes. An app on SDK 5.5.5 or older replaces its whole configuration with the remote document and loses every ad unit.
+3. On the first launch after the update, a cached old-format value may still be active for one session. Its `id` and `_high*` entries are not read, so each placement keeps the waterfall from your `ad_config.json` until the next fetch; the value's other fields still apply.
 
 ### App-screen native with a placement constant
 
@@ -344,7 +372,7 @@ Declare a slot in the screen XML (use a separate slot for each native/banner). O
 
 Call the SDK from the screen after consent, with the `AppCompatActivity` resumed:
 
-**Without Adjust:** set `enable_ua_check` on `native_home` to `false` in **both JSON files** so the sample slot can show; keep the test IDs during QA.
+**Without Adjust:** keep `enable_ua_check` on `native_home` at `false` in `ad_config.json` (the sample already does) so the sample slot can show; `ad_config_debug.json` holds only test `ids`. Keep the test IDs during QA.
 
 ```kotlin
 import android.widget.FrameLayout
@@ -354,15 +382,15 @@ val container = findViewById<FrameLayout>(R.id.ad_slot)
 NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
-The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check` and CTA style itself. Pass `layoutRes` to change the template; the default is `com.ads.module.R.layout.custom_native_admob_medium` (no media — use `custom_native_admob_free_size` when you need media). A custom layout must keep its `NativeAdView` root, `ad_container`, `block_icon_headline`, the asset IDs and the Ad badge.
+The SDK resolves the placement's waterfall, `isEnable`, `enable_ua_check` and CTA style itself. Pass `layoutId` to change the template; the default is `com.ads.module.R.layout.custom_native_admob_medium` (no media — use `custom_native_admob_free_size` when you need media). A custom layout must keep its `NativeAdView` root, `ad_container`, `block_icon_headline`, the asset IDs and the Ad badge.
 
-Keep one helper per slot/view and call `show()` to show it again. A Fragment passes its Activity plus `viewLifecycleOwner`. Click reload is on by default; set `"click_action": "none"` on the placement's base key only when your app navigates away itself on click-return.
+Keep one helper per slot/view and call `show()` to request and bind a new ad. A Fragment passes its Activity plus `viewLifecycleOwner`. Click reload is on by default; set `"click_action": "none"` on the placement's key only when your app navigates away itself on click-return.
 
 Preload for Main: `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))` in `SplashActivity.onRemoteFetched()`. A helper on the same placement picks that ad up when it shows; an ad older than 60 minutes is reloaded. See [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh).
 
 Native helper behavior:
 
-- A helper with a placement (`forPlacement`, or the `placement` argument of the `NativeAdHelper` constructor) binds and refills from that placement's store, so preload with the same placement key as above. An ad preloaded under the joined unit IDs (`NativeAdPreload.preload(activity, config)`) is left unused and the helper requests its own, unless you pass that key as below. A key you pass to `setEnablePreload(enabled, key)` names the store ahead of the placement, the joined unit IDs key (`NativeAdPreload.getInstance().keyOf(config)`) included.
+- A helper with a placement (`forPlacement`, or the `placement` argument of the `NativeAdHelper` constructor) binds and refills from that placement's store, so preload with the same placement key as above. An ad preloaded under the joined unit IDs (`NativeAdPreload.getInstance().preload(activity, config)`) is left unused and the helper requests its own, unless you pass that key as below. A key you pass to `setEnablePreload(enabled, key)` names the store ahead of the placement, the joined unit IDs key (`NativeAdPreload.getInstance().keyOf(config)`) included.
 - `bindAvailable()` returns `false` and cancels the helper when the user has purchased, consent is withdrawn or the UA gate refuses; an ad already on screen is removed. The unused preloaded ad stays stored.
 - On return from an ad click, the helper binds the replacement loaded at click time or waits for it; if that replacement failed, the current ad stays and no second request is made. After a configuration change such as rotation, the helper restores its ad, or joins the load it was waiting for, without a new request; a slot that ended with no fill stays empty.
 
@@ -429,10 +457,10 @@ Defaults: 30 seconds per load tier, one cached ad/request per placement, no auto
 
 | Need | Default / how to configure |
 | --- | --- |
-| Turn off a slot | `isEnable: false` on the **base key** turns off the whole waterfall, for every format; testing an asset change needs a restart. The second LFO native has a fallback from step 4. |
-| Add waterfall floors | `<key>_high`, `<key>_high1`…`<key>_high9`, then the base key. The splash banner uses only the first ID of `banner_splash` and reads no separate floors. |
+| Turn off a slot | `isEnable: false` on the placement key turns off its whole waterfall, for every format; testing an asset change needs a restart. The second LFO native has a fallback from step 4. |
+| Add waterfall floors | `{"id", "isEnable"}` floors in the key's `ids`, highest first, all-price last ([format](#waterfall-one-key-per-placement)). The splash banner walks every floor of `banner_splash` like any other placement. |
 | CTA / native style | Keep every field as in the example; the [JSON field table](#fields-in-the-sample-json) explains the values and where they apply. Step 4 already wires `templateId` and `components` into the native templates. |
-| App-screen banner | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; add a `bannerType` argument, for example `BannerType.Collapsible()` ([the types](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt)). To change the type: `flagUserEnableReload = false`, `cancel()` the old helper, then create a new one. SDK refresh requires disabling AdMob refresh on every floor, then building `BannerAdConfig.forPlacement("banner_home", bannerType, canReloadAds = true)` and passing it to the `BannerAdHelper` constructor. |
+| App-screen banner | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; add a `bannerType` argument, for example `BannerType.Collapsible()` ([the types](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt)). To change the type: `flagUserEnableReload = false`, `cancel()` the old helper, then create a new one. SDK refresh is on by default and `reloadIntervalSeconds` sets its interval, so turn AdMob console refresh off on every floor's ad unit to avoid a double refresh; to turn SDK refresh off, see [`banner.reload.*`](remote-settings.md#behavior-scopes). |
 | UA / Adjust | Fill in the resources and use the wiring from [step 5](#adjust-tokens-and-verification). `enable_ua_check` keeps the example values; see the JSON field table for where it applies. |
 | JSON from Firebase | [Publish the three String parameters](firebase-integration.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Install `FirebaseAdConfigSource()` once after assets; SDK splash refreshes them. A key declared in the backend's `ad_remote_config` or your `ad_config.json` outranks ad unit IDs written in code. [Custom local fallback](firebase-integration.md#local-defaults) is optional. |
 | Firebase Analytics | Add `suite-firebase` and register `Tracker.addSink(FirebaseSink())` right after `Tracker.install`; choose the consent policy from the [Firebase guide](firebase-integration.md#initial-consent). |
@@ -461,7 +489,7 @@ Splash starts consent, remote refresh and billing together. Its banner/native sl
 Do this only if your product uses app-open. `AppOpenManager` is in `com.ads.module.admob`.
 
 1. **Step 4:** `AdsConfig.fromAdConfig()` already binds `open_resume`. With a manually built `AdsConfig(...)`, supply `appResume = InterstitialAdUnit(...)` yourself unless `ad_config.json` or the backend's `ad_remote_config` declares `open_resume`; with neither, OnboardKit blocks app-open on all screens.
-2. **Step 5**, in the `ERainAdConfig` `apply` block: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`.
+2. **Step 5**, in the `ERainAdConfig` `apply` block: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` is `com.ads.module.helper.AdGate`).
 3. **Remote JSON:** nothing to add — the SDK re-points the app-resume unit at `open_resume` on every config change, including on/off through `isEnable`, as long as `open_resume` carries an ad unit ID. An `open_resume` declared in `ad_config.json` or the backend's `ad_remote_config` needs no seed from step 2. Ship it **enabled with a real ID**; `isEnable: false` keeps app-resume off until the config turns it back on.
 4. **Outbound intents** (browser/share/review): call `AppOpenManager.getInstance().disableAdResumeByClickAction()` right after `startActivity(...)` to skip that return. `disableAppResume()`/`enableAppResume()` are process-wide switches.
 
@@ -472,12 +500,12 @@ Splash, OB5 and Welcome Back exclude themselves; register only your app's own se
 ## 8. Final checks
 
 - [ ] If using grouped settings, verify remote overrides plus first-run offline local fallback and offline reuse of valid remote cache, per the [Firebase checklist](firebase-integration.md#remote-notes).
-- [ ] A debug build opens the splash, Logcat tag `AdRemoteConfig` shows `Loaded ad_config.json with <n> placements (debug=true, test ids=true)`, where `<n>` matches the example you shipped, and `OB_FLOW` reports no config or provider error.
+- [ ] A debug build opens the splash, Logcat tag `AdRemoteConfig` shows `Loaded ad_config.json with <n> placements (test ids=true)`, where `<n>` matches the example you shipped, and `OB_FLOW` reports no config or provider error.
 - [ ] After a remote fetch, `OB_FLOW` has no `ad_config remote omits …` line for a placement you edit in the console. A listed key keeps the app's values whatever the console sets under another name: publish the field under that key, or bind your key with `fromAdConfig(mapOf(...))`.
-- [ ] Walk LFO → OB → MainActivity on test ads; the fullscreen native sits between content 2 and 3, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
+- [ ] Walk LFO → OB → MainActivity on test ads; after enabling `native_full1/2`, FULL1 sits after OB1 and FULL2 after OB2, and the final interstitial is owned by the SDK alone. LFO opens only after the splash interstitial is dismissed; MainActivity is already there when the final interstitial closes.
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; re-selecting the current language opens the popup immediately, while another language waits for the configured total tap count.
-- [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. A native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.
-- [ ] Disable both `native_ob2` and `native_ob2_high`: content page 2 still shows and does not borrow page 1's native. Disable both `native_full1` and `native_full1_high`: the ad-only page is skipped. Disable `inter_splash`, `inter_after_ob3` and all their `_high*` floors: the destination screen is still reached.
+- [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. After enabling `native_ob1..4`, a native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.
+- [ ] Enable `native_ob1`, `native_ob2` and `native_full1`, then disable `native_ob2`: content page 2 still shows and does not borrow page 1's native. Disable `native_full1` again: the ad-only page is skipped. Disable `inter_splash` and `inter_after_ob3`: the destination screen is still reached.
 - [ ] Test with no network: by default the connection prompt appears; if you opted into offline support the flow still continues on the SDK timeout and does not hang on an app callback.
 - [ ] Relaunch after completion: through the splash into your app, with no OB rerun; your screen is already there when the splash interstitial closes. Clear app data to test first-open; closing the app mid-OB and reopening must start at LFO after the splash.
 - [ ] Your app screens use the selected language; check both the translations and the language split configuration when shipping an AAB.
@@ -488,7 +516,7 @@ Splash, OB5 and Welcome Back exclude themselves; register only your app's own se
 | Crash on launch | The AdMob/Meta metadata, real Meta credentials and your Application in the merged manifest |
 | OB is empty or skipped | `install` before `configure`; use `steps(...)` in step 4 for your app's content, and check whether the remote cache has disabled the flow or a step |
 | No ads | The file loaded, the key mapping, `isEnable`, consent/premium state, the remote flags; do not add a timer to show one anyway |
-| Debug uses the wrong IDs | `ad_config_debug.json` has a test `id` for every all-price key (the `AdRemoteConfig` `WARN` lists enabled keys without one); `setAllowRemoteOverrideInDebug(true)` is not enabled in the standard setup |
+| Debug uses the wrong IDs | `ad_config_debug.json` has test `ids` for every enabled placement key (the `AdRemoteConfig` `WARN` lists enabled keys without one); `setAllowRemoteOverrideInDebug(true)` is not enabled in the standard setup |
 | Remote `ad_remote_config` never applies (`AdConfig` logs `cleared`) | The Console parameter name: the SDK reads `ad_remote_config`, then `ads_remote_config`; any other name needs `FirebaseAdConfigSource("<name>")` |
 | Remote changed the IDs but OB still uses the old ones | Install `FirebaseAdConfigSource`, use `AdsConfig.fromAdConfig()` with the correct keys and let splash refresh. Firebase's minimum fetch interval is 12 hours unless your app lowers it. Debug requests the test IDs of `ad_config_debug.json`; every other `ad_remote_config` field and the grouped settings still apply. |
 | Native style/reporting does not separate per slot in testing | The demo IDs of one format are shared; the provider looks style/placement back up by ID in places. Use separate IDs when verifying the real configuration |
@@ -502,7 +530,7 @@ Splash, OB5 and Welcome Back exclude themselves; register only your app's own se
 | `app/src/main/res/values/id_ads.xml` | AdMob App ID, Meta credentials and the Adjust token/event tokens |
 | `app/src/main/assets/ad_config.json`, `ad_config_debug.json` | Copy both sample JSON files |
 | `app/src/main/assets/ad_behavior_config.json`, `onboarding_config.json` (optional) | Create/copy only to customize local defaults; see [fallback rules](firebase-integration.md#local-defaults). |
-| Your app's `strings.xml` and drawables | Copy, translations and images for the three pages |
+| Your app's `strings.xml` and drawables | Copy, translations and images for the four content pages |
 | `AppAdPlacement.kt` | The catalog of OB keys and your app's own keys; no ad unit IDs |
 | [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) | App content/resources and live standard ad_config placement bindings |
 | Your existing Application or [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | Initializes the SDK once and picks the destination screen |

@@ -79,8 +79,11 @@ Không cần `adtracer_config.json`, manifest Activity riêng hoặc sao chép c
 | `native_popup_lang` | `language_confirm` |
 | `native_ob1` / `native_ob2` / `native_ob3` / `native_ob4` | `step_ob1` / `step_ob2` / `step_ob3` / `step_ob4` |
 | `native_full1` / `native_full2` | `fullscreen_full1` / `fullscreen_full2` |
-| `native_fs` | `fullscreen_ob3` |
-| `inter_after_ob3` / `open_resume` | Giữ nguyên key. |
+| `native_select` | `step_partner_privacy` / `step_partner_goal` |
+| `native_select_alt` | `step_partner_privacy_alt` / `step_partner_goal_alt` |
+| `native_welcome1` / `native_welcome2` | `welcome_back1` / `welcome_back2` |
+| `native_onboarding_fullscreen_1_4` | `ob5` |
+| `native_fs` / `inter_after_ob3` / `open_resume` | Giữ nguyên key. |
 
 </details>
 

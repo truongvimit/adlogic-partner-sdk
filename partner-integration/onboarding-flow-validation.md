@@ -5,7 +5,7 @@
 After release 5.3.15, tightened two timing cases: share the planned screen catalog from first OB preload through language exit/pager entry, and refresh mapped placement IDs/enabled state before dispatching a request queued for foreground focus.
 
 - 90 unique JVM tests passed across two focused runs: preload eligibility (9), preload chain (6), provider ownership (30), language preload (5), pager lifecycle (40). The initial run passed 88; two additional regression tests passed with their complete affected classes afterward.
-- The eligibility tests exercise all 64 subsets of six screens against a complete enabled ad document, app/remote disabled screens, absent/blank/disabled IDs for each of six slots, base-off with high-on, high-only IDs, master/group switches, consent, premium, UA and force-update holds.
+- The eligibility tests exercise all 64 subsets of six screens against a complete enabled ad document, app/remote disabled screens, absent/blank/disabled IDs for each of six slots, base-off with high-on, high-only IDs, master/group switches, consent, premium, UA and force-update holds. (Superseded: `<key>_high` entries are no longer read. A slot's floors come only from its own `ids` list, and the current test asserts that a standalone `_high` key enables nothing.)
 - Real provider tests intercept GMA requests: zero requests when queued placements become disabled/removed/blank; all six valid preloads bind without a second vendor request.
 - Real pager transactions verify a remote order/step-enable change between language preload and pager creation cannot remove planned pages. A new splash attempt picks up the new list. Live ad kill switches still block presentation.
 - `:app:assembleDebug` passed with JDK 21. This follow-up used JVM/Robolectric validation; the Pixel/Artemis results below describe the earlier release, not a rerun of this patch.
@@ -36,6 +36,8 @@ Device: Pixel 5, Android 14, ADB serial `14161FDD400111`.
 | empty | empty | PASS; zero requests |
 
 Every nonempty device case also checks OB1 swipe lock by identity, other content swipe eligibility, fullscreen locked at bind then unlocked at impression, and no new requests when returning to the first page.
+
+Since 2026-10-05 the test asserts the current swipe rule instead: OB1 stays locked even after its impression; every other page with an ad (content OB2–OB4 as well as fullscreen) is locked at bind and unlocks at impression; a page with no ad to wait for is unlocked at once. The PASS results above predate this change.
 
 Reproduce each case in a fresh instrumentation process:
 

@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * ```
  * PayKit.install(app, config)                  // config from payKitConfig { … }
- * PayKit.configSource(FirebaseConfigSource())  // optional, from :paykit-firebase
+ * PayKit.configSource(FirebaseConfigSource())  // optional, from :suite-firebase
  * PayKit.sync()                                // from splash, inside a coroutine
  * PayKit.launch(activity, PaywallPlacement.AFTER_ONBOARDING)
  * ```
@@ -89,7 +89,7 @@ object PayKit {
         PayKitLog.i("PayKit ${BuildConfig.SDK_VERSION} installed from ${store.origin}")
     }
 
-    /** Vendor-neutral; `:paykit-firebase` ships the only adapter this repo has. */
+    /** Vendor-neutral; `:suite-firebase` ships the only adapter this repo has. */
     @JvmStatic
     fun configSource(source: PaywallConfigSource) {
         installedSource = source

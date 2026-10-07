@@ -94,21 +94,23 @@ Create `app/src/main/assets/ad_config.json`, replacing the placeholders with ad 
 
 ```json
 {
-  "inter_back":  { "id": "YOUR_INTERSTITIAL_UNIT_ID", "isEnable": true },
-  "native_home": { "id": "YOUR_NATIVE_UNIT_ID",       "isEnable": true },
-  "banner_home": { "id": "YOUR_BANNER_UNIT_ID",       "isEnable": true },
-  "reward_example": { "id": "YOUR_REWARDED_UNIT_ID",  "isEnable": true }
+  "inter_back":     { "ids": [{ "id": "YOUR_INTERSTITIAL_UNIT_ID" }], "isEnable": true },
+  "native_home":    { "ids": [{ "id": "YOUR_NATIVE_UNIT_ID" }], "isEnable": true },
+  "banner_home":    { "ids": [{ "id": "YOUR_BANNER_UNIT_ID" }], "isEnable": true },
+  "reward_example": { "ids": [{ "id": "YOUR_REWARDED_UNIT_ID" }], "isEnable": true }
 }
 ```
 
-Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds one `"id"` per all-price key and nothing else (`native_reward`, not `native_reward_high`): that test ID replaces every ID of the placement and its `_high*` floors request nothing, so each placement loads one test ID through the usual load path. Other fields in the debug file are ignored with a `WARN`, and an enabled key without a test ID gets no ad. Remote `ad_remote_config` applies every field except IDs; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the IDs remote declares. Without a debug file, debug requests the `ad_config.json` IDs.
+Every build reads its settings from `ad_config.json`. A debuggable build also reads `ad_config_debug.json`, which holds only `ids` per placement key, normally one test floor: those floors replace the placement's whole waterfall, so each placement loads its test ID through the usual load path. Any other field in the debug file is ignored with a `WARN`, and a placement enabled in `ad_config.json` without a debug entry gets no ad (also a `WARN`). Remote `ad_remote_config` applies every field except IDs; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` also takes the IDs remote declares. Without a debug file, debug requests the `ad_config.json` IDs.
 
 Sources rank remote `ad_remote_config` (`ads_remote_config` is read when the Console has no
 `ad_remote_config`) > `ad_config.json` > ad units set in code > SDK defaults.
 
-For waterfall floors, add `<placement>_high`, `_high1`…`_high9`; they are requested highest first
-and the base key last. The base key is the placement's master switch — `"isEnable": false` there
-turns off every floor. See [AdUnitConfig](src/main/java/com/ads/module/config/AdUnitConfig.kt).
+Every placement lists its units in `"ids"` as floors `{"id": "...", "isEnable": true}`, highest
+first and all-price last, requested in that order; a single unit is a one-floor array without a
+floor `isEnable`, `"ids": [{ "id": "..." }]`. The
+placement's `isEnable` is the master switch; a floor's own `isEnable: false` pauses only that floor
+and keeps its ID in place. A placement-level `"id"` and separate `<placement>_high*` keys are not read. See [AdUnitConfig](src/main/java/com/ads/module/config/AdUnitConfig.kt).
 
 Then name those keys once, in your app:
 
@@ -125,10 +127,11 @@ object AppAdPlacement {
 
 The key is the ad position's identity everywhere the SDK looks: the interstitial cache, the
 frequency clock, the auto-buffer group, native preload, and every `ad_request` / `ad_impression` /
-`ad_skipped` your dashboard slices by. Ad unit ids cannot stand in for it — Google's test units give
+`ad_skipped` your dashboard slices by; every floor in a key's `ids` reports under that key. Ad unit ids cannot stand in for it — Google's test units give
 one id per format, and production payloads reuse a unit across screens, so several placements share
-one id routinely. A raw string that drifts from the JSON does not fail either: `AdRemoteConfig.unit`
-logs a warning, returns a disabled placeholder, and the slot silently never fills. A constant turns
+one id routinely. A raw string that drifts from the JSON does not fail either: the placement resolves
+to no ad units, the slot silently never fills, and the only trace is `ad_skipped` with
+`disabled_config` (native also logs "Ad unit '<key>' not found"). A constant turns
 that into a compile error. The samples below use this object.
 
 ## 3. Resolve consent before requesting ads
@@ -196,7 +199,7 @@ BannerAdHelper.forPlacement(this, this, AppAdPlacement.BANNER_HOME, binding.frBa
 ```
 
 Both resolve the placement from your ad JSON — waterfall, on/off switch, `enable_ua_check`, CTA
-style — and the request is under way when they return. Pass `layoutRes` or a
+style — and the request is under way when they return. Pass `layoutId` or a
 [`BannerType`](src/main/java/com/ads/module/helper/banner/BannerType.kt) to change the template;
 build [NativeAdConfig](src/main/java/com/ads/module/helper/adnative/NativeAdConfig.kt) or
 [BannerAdConfig](src/main/java/com/ads/module/helper/banner/BannerAdConfig.kt) yourself when the
@@ -214,8 +217,11 @@ to resize SDK shimmer children or set a permanent minimum height.
 
 Native includes a generated loading skeleton. To customize it, copy the
 [supplied native layout](src/main/res/layout/custom_native_admob_medium.xml), keeping its
-`NativeAdView` root, asset IDs and ad badge. Both examples leave refresh to AdMob; SDK refresh
-requires disabling console refresh for every tier.
+`NativeAdView` root, asset IDs and ad badge. The banner example refreshes through the SDK by
+default (`banner.reload.allowed` and `banner.reload.auto_enabled` are `true`; `reloadIntervalSeconds`
+sets the interval), so turn AdMob console refresh off for every tier of that banner or it refreshes
+twice; to leave refresh to AdMob instead, set `banner.reload.allowed` to `false`. The native example
+has no timer refresh (`native.reload.timer_enabled` is `false`).
 
 ## Native preload, repeated show, and refresh
 
@@ -225,7 +231,7 @@ placement, so a singleton helper holding an Activity is unnecessary.
 
 ```kotlin
 // Optional: preload earlier, after consent.
-val nativeConfig = NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, R.layout.custom_native_admob_medium)
+val nativeConfig = NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, com.ads.module.R.layout.custom_native_admob_medium)
 NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, nativeConfig)
 
 // Destination Activity; use viewLifecycleOwner for a Fragment.
@@ -234,9 +240,10 @@ val nativeHelper = NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE
 
 - `show()` uses a ready ad, joins a pending request, or loads one. Repeated calls while loading
   share that request. Calling it again after a successful bind requests a replacement.
-- For timed refresh, build the config with `NativeAdConfig.forPlacement(placement, layoutRes,
-  canReloadAds = true)` — it is a constructor value, not a settable property — and call
-  `applyReloadByTime(intervalMs)` before `show()`. The current ad stays visible while loading;
+- For timed refresh, pass `canReloadAds = true` to `NativeAdHelper.forPlacement(...)` — it is a
+  constructor value, not a settable property; building `NativeAdConfig` and the `NativeAdHelper`
+  constructor yourself drops the placement's `ad_config` style — and call
+  `applyReloadByTime(intervalMs)` on the returned helper. The current ad stays visible while loading;
   refresh pauses when the slot is hidden/stopped.
 - Pause/stop retain the current native view and pending load, with or without refresh enabled.
   A fill received in background waits for resume and binds once; returning does not restart
@@ -257,7 +264,7 @@ logical waterfalls, but do not impose a global limit on vendor requests across p
 
 ### Native click return
 
-Each native takes exactly one click action from `click_action` on its placement's base key in
+Each native takes exactly one click action from `click_action` on its placement's key in
 `ad_config`; values, defaults and precedence are in the
 [remote settings guide](../partner-integration/remote-settings.md#native-click-actions).
 
@@ -267,7 +274,7 @@ Each native takes exactly one click action from `click_action` on its placement'
   loading. The current ad stays visible while waiting, without shimmer. Only a successful
   replacement bind removes the old ad; a failed reload keeps it. Shimmer is for initial loading
   without an ad.
-- `reload_waterfall`: as `reload`, but the replacement walks every floor, highest first.
+- `reload_waterfall`: as `reload`, but the replacement walks every enabled floor in `ids`, highest first.
 - `none`: keep the current ad, with no click replacement or automatic navigation.
 - `auto_next`: no click replacement; the onboarding host advances on ad return.
 
@@ -431,13 +438,16 @@ interval with separate clocks and a tap threshold of `0`. `true` preserves the s
 `independentIntervalPlacements` / `independent_interval` overrides. The flag does not start
 the buffer or enable disabled placements; keep the content-entry `start()` call above.
 
-The opt-in budget is clamped to 0–5,000ms from entry. Zero budget uses a ready ad or skips without
+The content wait is on by default (bundled `interstitial.load_and_show.allow_wait_for_auto_buffer`
+is `true`); set it `false`, or pass `allowWaitForAutoBuffer = false`, to keep a buffer placement
+cache-only. Its budget runs from entry and is only floored at 0, with no upper clamp (bundled
+`buffer_wait_timeout_ms` is 8,000ms). Zero budget uses a ready ad or skips without
 starting a request for that invocation. Timeout/background detaches the UI wait; late fills stay
 cached and need a new action. The existing ~800ms show preparation is additional to the fill wait.
 Call `onGateChanged()` when a custom flag changes; SDK remote-config and consent changes already
 notify it. Preload, waiting and delayed show read the same current placement authority.
 
-Opted-in clicks emit `ad_interstitial_wait` with `placement`, `source` (`ready/join/cold`), `status`
+Clicks with the content wait on (the default) emit `ad_interstitial_wait` with `placement`, `source` (`ready/join/cold`), `status`
 and `wait_ms`; `dispatch` means handing off to show, not an impression. Use existing actual
 `ad_impression` / `ad_skipped` events for presentation outcomes. Joining does not add `ad_request`.
 
@@ -482,7 +492,7 @@ add `"app_resume_load_delay_ms": 2000` inside the `open_resume` placement in
 ```json
 {
   "open_resume": {
-    "id": "your-app-open-ad-unit-id",
+    "ids": [{ "id": "your-app-open-ad-unit-id" }],
     "isEnable": true,
     "app_resume_load_delay_ms": 2000
   }
@@ -492,15 +502,16 @@ add `"app_resume_load_delay_ms": 2000` inside the `open_resume` placement in
 Use `open_resume` as the placement key in both asset files and remote config.
 Place `app_resume_load_delay_ms` inside that entry.
 
-Values are milliseconds, from 0 to 86,400,000; default 2000. Missing or invalid values
-use the default.
+Values are milliseconds, from 0 to 86,400,000; default 2000. A missing or invalid value
+falls back to the next lower config source (e.g. remote to app asset), and to 2000 only when
+no source has a valid value.
 Returning before the delay cancels the scheduled load. No app-side lifecycle timer is required.
 
 ## Important behavior
 
-**Fullscreen placement correction.** OB fullscreen uses `native_fsob`;
+**Fullscreen placement correction.** OB fullscreen uses `native_full1`/`native_full2`;
 `native_fs` is an independent optional screen after the splash interstitial and before LFO,
-disabled in the example JSON defaults. It preloads after the interstitial loads and only
+disabled in the partner sample's JSON (`partner-integration/examples/ads-onboarding/ad_config.json`). It preloads after the interstitial loads and only
 opens if ready after dismissal. The last content page uses `native_ob3`, with UA checks off
 in the example. OB defaults now show X after 5 seconds and auto-advance after 15 seconds.
 
@@ -538,10 +549,10 @@ placement-driven entry points have these behaviors:
 
 | Change | What to do |
 |---|---|
-| `isEnable: false` on a **base key** now disables every `_high*` floor with it. Previously a floor stayed live. | Re-enable the base key if a payload meant to keep one floor. |
-| `show` applies the placement's config gate — `isEnable`, `enable_ua_check`, consent, premium — for any key your JSON **declares**, `InterstitialAdManager.show` and `RewardAdManager.show` alike, even with a fill already buffered. A key your JSON does not declare is unaffected. | Expect `DISABLED_CONFIG` / `UA_GATE` / `CONSENT_NOT_GRANTED` / `PURCHASED` on those paths. |
+| A placement's waterfall is its own key's `"ids"` of `{"id", "isEnable"}` floors (highest first, all-price last); bare-string entries are skipped with a warning. A single unit is a one-floor array: a placement-level `"id"` is now an unknown field, ignored with a warning, in `ad_config.json` and `ad_config_debug.json` alike. `<key>_high` / `<key>_highN` keys are no longer read as floors (logged as a warning), so load and revenue events no longer split between `<key>` and `<key>_high`. `AdRemoteConfig.baseKeyOf()` is removed; `tiersFor`, `declares`, `remoteDeclares`, `declaredAboveCode` and `remoteDeclaresField` look at that one key only. `AdUnitConfig.id` is removed: the constructor's first parameter is now `ids: List<String>`. | Move each `_high*` ID into `<key>.ids` as `{"id", "isEnable"}` (keep its old `isEnable`; the old `id` becomes the last floor) in `ad_config.json` and Firebase `ad_remote_config`. Every other `"id": "X"`, `ad_config_debug.json` included, becomes `"ids": [{"id": "X"}]`. In Kotlin, pass `ids = listOf(...)` to `AdUnitConfig`. Rollout: [partner migration steps](../partner-integration/ads-onboarding-integration.md#waterfall-one-key-per-placement). |
+| `show` applies the placement's config gate — `isEnable`, `enable_ua_check`, consent, premium — for any key your JSON **declares**, `InterstitialAdManager.show` and `RewardAdManager.show` alike, even with a fill already buffered. A key your JSON does not declare is unaffected. | Expect `DISABLED_CONFIG` / `UA_GATE` / `CONSENT_NOT_GRANTED` / `PURCHASED` on those paths: interstitial passes the reason to `onSkipped`; rewarded only calls `onFailedToShow(0)`, with the reason in `ad_skipped`. |
 | App-resume load honours `open_resume.enable_ua_check`; it used to ignore it. | Set it `false` to keep the old behaviour. |
-| The onboarding flow's `inter_after_ob3` is the one flow placement whose key is also a JSON key, so its `enable_ua_check` now gates that interstitial on both load and show. | Set it `false` to keep showing the end-of-onboarding interstitial on organic installs. |
+| The onboarding flow's `inter_after_ob3` is the interstitial flow placement whose key is also a JSON key, so its `enable_ua_check` now gates that interstitial on both load and show. | Set it `false` to keep showing the end-of-onboarding interstitial on organic installs. |
 | `show` through a context that is not an `AppCompatActivity` reports `SHOW_IN_BACKGROUND` and keeps the fill, instead of `FAILED_TO_SHOW` and losing it. | Nothing; the fill survives for the next trigger. |
 
 ## Troubleshooting
@@ -550,7 +561,7 @@ placement-driven entry points have these behaviors:
 |---|---|
 | Init crashes | AdMob app ID placeholder, both Meta metadata entries/resources, and your Application registration. |
 | No ads | Consent result, premium state, exact placement key, usable IDs and `isEnable`. `showSkipReason` explains an interstitial rejection. |
-| Debug uses unexpected IDs | Supply `ad_config_debug.json` with one `id` per all-price key; the `WARN` from `AdRemoteConfig` lists enabled keys that have none. |
+| Debug uses unexpected IDs | Supply `ad_config_debug.json` with test `ids` for every enabled placement key; the `WARN` from `AdRemoteConfig` lists enabled keys that have none. |
 | Remote config stays unchanged | Install a source and refresh it. `AdConfig` logging `cleared` means the Console has neither `ad_remote_config` nor `ads_remote_config`; pass another name to `FirebaseAdConfigSource(key)`. A debuggable build keeps its `ad_config_debug.json` test IDs and applies every other remote field; call `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` only when you intend to spend the remote IDs. |
 | Native/banner stays empty | Use the right container/lifecycle, wait for consent, and confirm the placement matches your JSON. |
 
@@ -596,7 +607,7 @@ for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone exam
 Settings resolve as remote > delivered legacy settings > app root asset > host configuration > bundled SDK defaults. Within one source, screen/group overrides precede placement and format overrides. Empty behavior objects add no leaf values and allow fallback. A full default JSON copied into the app asset root is still an explicit override of host values. See [remote settings](../partner-integration/remote-settings.md) for the complete schema.
 
 - `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through ERainAd and tracking wrappers.
-- An AutoBuffer rule in remote or the app asset can add a placement to the host's managed list. The host predicate and explicit `enabled: false` can still block it. The host must configure and start the buffer. A placement added while running starts its first cooldown when settings change; `tickMs = 0` follows the resolved interstitial interval.
+- An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; only its tap threshold applies until its first show or failure. `tickMs = 0` follows the resolved interstitial interval.
 - `BannerAdConfig.forPlacement` reads the placement's current `enable_ua_check` after refresh unless the host explicitly sets `forceUaCheck`. A non-positive `reloadIntervalSeconds` falls back to host cadence; it does not cause immediate reload.
 - Native `components: []` preserves the XML layout. A scoped `presentation.cta_corner_radius_dp` applies even without an explicit native style; a CTA color is needed to replace the XML background.
 - App-open `failure_backoff_ms` accepts 1–10 integers in 1–3,600,000 ms. Empty/invalid arrays fall back to the app/SDK schedule. Consent timeout and interstitial daily click-cap logs report the effective resolved values.

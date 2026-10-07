@@ -36,17 +36,23 @@ Keep `ob_welcome_back_options` as the `RecyclerView`, `ob_welcome_back_continue`
 
 ## Ads and completion
 
-Declare these in `ad_config.json` (production IDs), in the same shape as the other native placements; `ad_config_debug.json` needs only `native_welcome1` and `native_welcome2`, each with one test `id`:
+Declare these in `ad_config.json` (production IDs), in the same shape as the other native placements; `ad_config_debug.json` needs only `native_welcome1` and `native_welcome2`, each with one test floor in `ids`:
 
 ```json
 {
-  "native_welcome1_high": { "id": "HIGH_NATIVE_UNIT", "isEnable": true },
-  "native_welcome1": { "id": "BASE_NATIVE_UNIT", "isEnable": true, "click_action": "reload" },
-  "native_welcome2_high": { "id": "ALT_HIGH_NATIVE_UNIT", "isEnable": true },
-  "native_welcome2": { "id": "ALT_BASE_NATIVE_UNIT", "isEnable": true, "click_action": "reload" }
+  "native_welcome1": {
+    "ids": [{ "id": "HIGH_NATIVE_UNIT", "isEnable": true }, { "id": "BASE_NATIVE_UNIT", "isEnable": true }],
+    "isEnable": true,
+    "click_action": "reload"
+  },
+  "native_welcome2": {
+    "ids": [{ "id": "ALT_HIGH_NATIVE_UNIT", "isEnable": true }, { "id": "ALT_BASE_NATIVE_UNIT", "isEnable": true }],
+    "isEnable": true,
+    "click_action": "reload"
+  }
 }
 ```
 
-`native_welcome1` is preloaded by the splash at the same moment and in the same mode as LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` is preloaded when Welcome Back opens and replaces the first ad on the first tap; the first ad stays if the second has no fill. Both use their base key’s `templateId` and `components` in `ad_remote_config`, like LFO. The base `isEnable` switches off its whole waterfall; the screen still shows.
+`native_welcome1` is preloaded by the splash at the same moment and in the same mode as LFO1 (`splash.load.lfo1_preload_mode`). `native_welcome2` is preloaded when Welcome Back opens and replaces the first ad on the first tap; the first ad stays if the second has no fill. Both use their key’s `templateId` and `components` in `ad_remote_config`, like LFO. Each key's `isEnable` switches its whole `ids` waterfall; the screen still shows.
 
 With the default timing the screen opens after the splash interstitial is dismissed. Continue records the pick as a `GoalAnswer` (emitted as `OnboardingEvent.GoalsSelected`, readable later through `OnboardingSdk.selectedGoals()`) and delivers `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` with the launch passthrough. Nothing is marked complete and no `FlowCompleted` / `fo_flow_complete` fires, so the screen shows again on the next launcher launch. Back closes the app.

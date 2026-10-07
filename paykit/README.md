@@ -1,6 +1,6 @@
 # PayKit
 
-**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/paywall-integration.vi.md)** — required files, defaults, optional configuration and verification.
+**Partner integration: [Step-by-step guide](../partner-integration/paywall-integration.md)** — required files, defaults, optional configuration and verification.
 
 PayKit provides a purchase screen backed by Google Play Billing. You supply your product
 catalogue, legal links and the places where it may appear. Firebase, ads and onboarding are optional.
