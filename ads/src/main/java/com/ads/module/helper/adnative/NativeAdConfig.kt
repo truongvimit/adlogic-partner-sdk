@@ -65,9 +65,9 @@ open class NativeAdConfig(
         get() = behaviorValues().boolean("presentation.auto_shimmer", field)
 
     /**
-     * Code default for a click; `ad_config.<key>.click_action` outranks it. RELOAD preloads an
-     * unused replacement on click/open and shows it on return, independent of [canReloadAds].
-     * AUTO_NEXT navigation belongs to the host.
+     * Code default for a click; `ad_config.<key>.click_action` outranks it. RELOAD and
+     * RELOAD_WATERFALL preload an unused replacement on click/open and show it on return,
+     * independent of [canReloadAds]. AUTO_NEXT navigation belongs to the host.
      */
     var clickAction: NativeClickAction = NativeClickAction.RELOAD
     open val resolvedClickAction: NativeClickAction
@@ -148,7 +148,7 @@ open class NativeAdConfig(
         override val canReloadAds: Boolean get() = !singleFill && super.canReloadAds
         override val resolvedClickAction: NativeClickAction
             get() = (liveClickAction?.invoke() ?: super.resolvedClickAction).let {
-                if (singleFill && it == NativeClickAction.RELOAD) NativeClickAction.NONE else it
+                if (singleFill && it.reloads) NativeClickAction.NONE else it
             }
     }
 }

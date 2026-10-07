@@ -127,10 +127,11 @@ Empty behavior objects do not suppress broader or lower-source leaf values. `pre
 
 ## Native click actions
 
-A native's click action has one source: `click_action` on its `ad_config` key, set to `auto_next`, `none` or `reload`. Like `enable_ua_check` and the CTA fields, it is read only from the placement's base key (`native_ob1`, `native_lang`, `native_home`…); a value on a `_high`, `_high1`…`_high9` floor key is ignored. `ad_behavior_config` and `onboarding_config` have no click action field. Exactly one action is captured on the first click/open callback and retained until return, even if remote changes during the trip.
+A native's click action has one source: `click_action` on its `ad_config` key, set to `auto_next`, `none`, `reload` or `reload_waterfall`. Like `enable_ua_check` and the CTA fields, it is read only from the placement's base key (`native_ob1`, `native_lang`, `native_home`…); a value on a `_high`, `_high1`…`_high9` floor key is ignored. `ad_behavior_config` and `onboarding_config` have no click action field. Exactly one action is captured on the first click/open callback and retained until return, even if remote changes during the trip.
 
-- `reload`: request the replacement immediately on click/open; consume it, or wait for that same request, on return. No fixed click delay. Ordinary app resume does not trigger click reload.
-  Keep the old ad visible without shimmer until a replacement binds successfully. Failure keeps the old ad and slot visible. Shimmer is only for initial loading without an ad.
+- `reload`: request the replacement immediately on click/open, from the all-price floor only (the base key, or the lowest usable floor when the base key has no unit); consume it, or wait for that same request, on return. A user who returns quickly then does not wait behind `_high` floors. No fixed click delay. Ordinary app resume does not trigger click reload.
+- `reload_waterfall`: as `reload`, but the replacement walks the whole waterfall, `_high` floors first.
+  Both reloads keep the old ad visible without shimmer until a replacement binds successfully. Failure keeps the old ad and slot visible. Shimmer is only for initial loading without an ad.
 - `auto_next`: advance the active onboarding page on return, without loading a replacement. On LFO2, confirm the selected language; on LFO1, repeat the user's tap on the language they already picked, as tapping that row again would; before any row is tapped it does nothing. On any other native it only skips the replacement, as `none` does; navigation stays with your app.
 - `none`: keep the current ad and page; no click replacement or automatic navigation.
 
@@ -141,7 +142,7 @@ Defaults when the key has no `click_action`:
 | Onboarding pager pages: content `ob1..ob4` and app-declared content steps, fullscreen `full1/full2` | `auto_next` |
 | LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash natives (`native_splash`, `native_fs`) and app-screen natives | `reload` |
 
-Pager page ads never reload: `reload` on those keys acts as `none`. LFO2 without a unit of its own uses LFO1's key, and with it LFO1's action, once that key is bound: `AdsConfig.fromAdConfig` (the builder default) binds it, and so does the backend declaring it. A hand-built `AdsConfig(...)` with neither reads `native_lang_alt` for LFO2. The [sample ad_config](examples/ads-onboarding/ad_config.json) declares these same values explicitly on every native base key.
+Pager page ads never reload: `reload` and `reload_waterfall` on those keys act as `none`. If a load for the placement is already running when the ad is clicked, the click joins it whatever its floors. LFO2 without a unit of its own uses LFO1's key, and with it LFO1's action, once that key is bound: `AdsConfig.fromAdConfig` (the builder default) binds it, and so does the backend declaring it. A hand-built `AdsConfig(...)` with neither reads `native_lang_alt` for LFO2. The [sample ad_config](examples/ads-onboarding/ad_config.json) declares these same values explicitly on every native base key.
 
 `click_action` follows ad_config precedence field by field: the backend's `ad_remote_config` > the app's `ad_config.json` > code default. A remote key that omits `click_action` keeps the asset value; an invalid value is logged and ignored. `ad_config_debug.json` carries only IDs, so every build takes `click_action` from `ad_config.json` and remote. For an app-screen native the code default is `reload`; `NativeAdHelper.setReloadOnAdClick(false)` changes it to `none`, and `click_action` still wins. Timer/resume refresh and fullscreen page timeout are separate settings.
 

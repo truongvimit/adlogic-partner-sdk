@@ -127,10 +127,11 @@ Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नह�
 
 ## Native click actions
 
-Native के click action का एक ही source है: `ad_config` में उसकी key पर `click_action`, जिसकी value `auto_next`, `none` या `reload` होती है। `enable_ua_check` और CTA fields की तरह यह केवल placement की base key (`native_ob1`, `native_lang`, `native_home`…) से पढ़ा जाता है; `_high`, `_high1`…`_high9` floor key पर दी गई value ignore होती है। `ad_behavior_config` और `onboarding_config` में click action field नहीं है। पहले click/open callback पर केवल एक action तय होता है; वापस आने तक remote बदलने पर भी वही action रहता है।
+Native के click action का एक ही source है: `ad_config` में उसकी key पर `click_action`, जिसकी value `auto_next`, `none`, `reload` या `reload_waterfall` होती है। `enable_ua_check` और CTA fields की तरह यह केवल placement की base key (`native_ob1`, `native_lang`, `native_home`…) से पढ़ा जाता है; `_high`, `_high1`…`_high9` floor key पर दी गई value ignore होती है। `ad_behavior_config` और `onboarding_config` में click action field नहीं है। पहले click/open callback पर केवल एक action तय होता है; वापस आने तक remote बदलने पर भी वही action रहता है।
 
-- `reload`: click/open पर तुरंत replacement request शुरू होती है। वापस आने पर तैयार ad या उसी pending request का उपयोग होता है। कोई fixed delay नहीं; सामान्य app resume click reload नहीं है।
-  नया ad सफलतापूर्वक bind होने तक पुराना ad बिना shimmer दिखता रहता है। Load fail होने पर पुराना ad और slot बने रहते हैं। Shimmer केवल पहली loading में, जब कोई ad नहीं है, दिखता है।
+- `reload`: click/open पर तुरंत replacement request शुरू होती है, केवल all-price floor से (base key, या base key में unit न हो तो सबसे नीचे का usable floor)। वापस आने पर तैयार ad या उसी pending request का उपयोग होता है। इसलिए जल्दी लौटने वाला user `_high` floors के पीछे इंतज़ार नहीं करता। कोई fixed delay नहीं; सामान्य app resume click reload नहीं है।
+- `reload_waterfall`: `reload` जैसा, लेकिन replacement पूरा waterfall चलता है, पहले `_high` floors।
+  दोनों reload में नया ad सफलतापूर्वक bind होने तक पुराना ad बिना shimmer दिखता रहता है। Load fail होने पर पुराना ad और slot बने रहते हैं। Shimmer केवल पहली loading में, जब कोई ad नहीं है, दिखता है।
 - `auto_next`: वापस आने पर onboarding page आगे जाता है; replacement request नहीं होती। LFO2 में चुनी हुई भाषा confirm होती है; LFO1 में user की पहले से चुनी हुई भाषा पर tap दोहराया जाता है, जैसे उस row को दोबारा tap करना; कोई row tap न हुई हो तो कुछ नहीं होता। किसी दूसरे native पर यह `none` की तरह केवल replacement छोड़ता है; navigation आपकी app के हाथ में रहता है।
 - `none`: मौजूदा ad/page रखें; click reload या automatic navigation नहीं।
 
@@ -141,7 +142,7 @@ Key पर `click_action` न हो तो defaults:
 | Onboarding pager pages: content `ob1..ob4` और app के declared content steps, fullscreen `full1/full2` | `auto_next` |
 | LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash natives (`native_splash`, `native_fs`) और app-screen natives | `reload` |
 
-Pager page ads कभी reload नहीं होते: उन keys पर `reload` `none` की तरह चलता है। जिस LFO2 का अपना unit नहीं है वह LFO1 की key इस्तेमाल करता है, और उसके साथ LFO1 का action भी, बशर्ते वह key bound हो: `AdsConfig.fromAdConfig` (builder default) उसे bind करता है, और backend का उस key को declare करना भी। दोनों के बिना hand-built `AdsConfig(...)` में LFO2 `native_lang_alt` पढ़ता है। [Sample ad_config](examples/ads-onboarding/ad_config.json) हर native base key पर यही values explicit रूप से declare करता है।
+Pager page ads कभी reload नहीं होते: उन keys पर `reload` और `reload_waterfall` `none` की तरह चलते हैं। Click के समय placement का कोई load पहले से चल रहा हो तो click उसी में join करता है, चाहे वह किसी भी floor पर हो। जिस LFO2 का अपना unit नहीं है वह LFO1 की key इस्तेमाल करता है, और उसके साथ LFO1 का action भी, बशर्ते वह key bound हो: `AdsConfig.fromAdConfig` (builder default) उसे bind करता है, और backend का उस key को declare करना भी। दोनों के बिना hand-built `AdsConfig(...)` में LFO2 `native_lang_alt` पढ़ता है। [Sample ad_config](examples/ads-onboarding/ad_config.json) हर native base key पर यही values explicit रूप से declare करता है।
 
 `click_action` field-दर-field ad_config precedence मानता है: backend का `ad_remote_config` > app का `ad_config.json` > code default। जो remote key `click_action` छोड़ देती है वह asset की value रखती है; invalid value log होकर ignore होती है। `ad_config_debug.json` में सिर्फ IDs होती हैं, इसलिए हर build `click_action` `ad_config.json` और remote से लेता है। App-screen native का code default `reload` है; `NativeAdHelper.setReloadOnAdClick(false)` इसे `none` कर देता है, फिर भी `click_action` ऊपर रहता है। Timer/resume refresh और fullscreen timeout अलग settings हैं।
 

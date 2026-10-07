@@ -26,6 +26,7 @@ import org.robolectric.util.ReflectionHelpers
 class NativeClickActionSettingsTest {
     private val auto = NativeClickAction.AUTO_NEXT
     private val reload = NativeClickAction.RELOAD
+    private val waterfall = NativeClickAction.RELOAD_WATERFALL
     private val none = NativeClickAction.NONE
 
     private val pagerPages = listOf(
@@ -74,6 +75,7 @@ class NativeClickActionSettingsTest {
         adConfig(
             "native_ob1" to none, "native_full2" to reload, "native_lang" to auto,
             "native_popup_lang" to none, "native_select" to auto, "native_welcome1" to none,
+            "native_welcome2" to waterfall,
             "native_onboarding_fullscreen_1_4" to auto, "native_fs" to none, "native_splash" to auto,
         )
         assertEquals(none, action(AdPlacement.StepNative(StepId.OB1)))
@@ -85,7 +87,7 @@ class NativeClickActionSettingsTest {
         assertEquals(auto, action(AdPlacement.StepNative(StepId.PARTNER_GOAL)))
         assertEquals(reload, action(AdPlacement.StepNative(StepId.PARTNER_PRIVACY_ALT)))
         assertEquals(none, action(AdPlacement.WelcomeBack1))
-        assertEquals(reload, action(AdPlacement.WelcomeBack2))
+        assertEquals(waterfall, action(AdPlacement.WelcomeBack2))
         assertEquals(auto, action(AdPlacement.Ob5))
         assertEquals(none, action(AdPlacement.SplashNative))
         assertEquals(auto, action(AdPlacement.SplashInlineNative))

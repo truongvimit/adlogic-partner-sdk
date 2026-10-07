@@ -106,6 +106,9 @@ class NativeAdConfigForUnitsTest {
         assertEquals(3, replaceable.layoutId)
         assertEquals(NativeClickAction.RELOAD, replaceable.resolvedClickAction)
         assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
+        action = NativeClickAction.RELOAD_WATERFALL
+        assertEquals(NativeClickAction.RELOAD_WATERFALL, replaceable.resolvedClickAction)
+        assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
         layout = 4
         action = NativeClickAction.AUTO_NEXT
         assertEquals(4, replaceable.layoutId)
