@@ -105,7 +105,7 @@
     <dimen name="ob_native_med_1_91_padding">8dp</dimen>
     <dimen name="ob_native_med_1_91_gap">8dp</dimen>
     <dimen name="ob_native_med_1_91_media_radius">8dp</dimen>
-    <dimen name="ob_native_med_1_91_icon_size">40dp</dimen>
+    <dimen name="ob_native_med_1_91_icon_size">44dp</dimen>
     <dimen name="ob_native_med_1_91_icon_gap">8dp</dimen>
     <dimen name="ob_native_med_1_91_badge_gap">4dp</dimen>
     <dimen name="ob_native_med_1_91_title_row_height">26dp</dimen>
