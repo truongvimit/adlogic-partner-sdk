@@ -139,8 +139,8 @@ Key पर `click_action` न हो तो defaults:
 
 | Natives | Default |
 | --- | --- |
-| Onboarding pager pages: content `ob1..ob4` और app के declared content steps, fullscreen `full1/full2` | `auto_next` |
-| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash natives (`native_splash`, `native_fs`) और app-screen natives | `reload` |
+| Onboarding pager pages: content `ob1..ob4` और app के declared content steps, fullscreen `full1/full2`; splash full-screen native `native_fs` | `auto_next` |
+| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash bottom-slot native `native_splash` और app-screen natives | `reload` |
 
 Pager page ads कभी reload नहीं होते: उन keys पर `reload` और `reload_waterfall` `none` की तरह चलते हैं। Click के समय placement का कोई load पहले से चल रहा हो तो click उसी में join करता है, चाहे वह किसी भी floor पर हो। जिस LFO2 का अपना unit नहीं है वह LFO1 की key इस्तेमाल करता है, और उसके साथ LFO1 का action भी, बशर्ते वह key bound हो: `AdsConfig.fromAdConfig` (builder default) उसे bind करता है, और backend का उस key को declare करना भी। दोनों के बिना hand-built `AdsConfig(...)` में LFO2 `native_lang_alt` पढ़ता है। [Sample ad_config](examples/ads-onboarding/ad_config.json) हर native base key पर यही values explicit रूप से declare करता है।
 
@@ -341,7 +341,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 
 `interstitial_auto_buffer` is a top-level group with `enabled: true` by default. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.
 
-Remote या app asset का `interstitial_auto_buffer.rules.<placement>` host list के बाहर placement जोड़ सकता है; host predicate और explicit `enabled: false` उसे रोक सकते हैं। Running buffer में नई managed placement settings बदलने पर अपना पहला cooldown शुरू करती है। `tick_ms: 0`, `interstitial.frequency.interval_ms` लेता है, host `ERainAdConfig.intervalInterstitialAd` fallback है।
+Remote या app asset का `interstitial_auto_buffer.rules.<placement>` उस placement को tune या बंद (`enabled: false`) करता है जिसे host ने `configure()` में list किया है; rule नई placement नहीं जोड़ सकता, इसलिए host की list से बाहर की placement कभी अपने आप preload नहीं होती। `tick_ms: 0`, `interstitial.frequency.interval_ms` लेता है, host `ERainAdConfig.intervalInterstitialAd` fallback है।
 
 ### Onboarding primary color
 
