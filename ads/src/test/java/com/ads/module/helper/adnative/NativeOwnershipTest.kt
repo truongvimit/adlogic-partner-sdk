@@ -402,7 +402,7 @@ class NativeOwnershipTest {
 
     private fun clickAction(key: String, action: NativeClickAction) =
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
-            key to com.ads.module.config.AdUnitConfig("native-unit", true, clickAction = action))))
+            key to com.ads.module.config.AdUnitConfig(listOf("native-unit"), true, clickAction = action))))
 
     @Test fun `ordinary show and preload share a request and showing consumes the cache`() {
         val helper = helper()
@@ -601,7 +601,7 @@ class NativeOwnershipTest {
     @Test fun `remote preload switches neither parse nor move a placement helper off its store`() {
         assertFalse(AdBehavior.supportsPlacementField("native", "preload.enabled"))
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-            mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", true))))
+            mapOf("home" to com.ads.module.config.AdUnitConfig(listOf("native-unit"), true))))
         AdBehavior.document.acceptSuccessfulFetch("""{"native":{"preload":{"enabled":true}},""" +
             """"placement_overrides":{"home":{"native":{"preload":{"enabled":true}}}}}""")
         try {
@@ -624,13 +624,13 @@ class NativeOwnershipTest {
 
     @Test fun `a placement helper styles its skeleton from the ad_config current at request time`() {
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-            mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", false, heightCTA = 40))))
+            mapOf("home" to com.ads.module.config.AdUnitConfig(listOf("native-unit"), false, heightCTA = 40))))
         try {
             val container = android.widget.FrameLayout(activity).also(activity::setContentView)
             val helper = NativeAdHelper.forPlacement(activity, activity, "home", container)
             assertTrue(requests.isEmpty())
             com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-                mapOf("home" to com.ads.module.config.AdUnitConfig("native-unit", true, heightCTA = 50))))
+                mapOf("home" to com.ads.module.config.AdUnitConfig(listOf("native-unit"), true, heightCTA = 50))))
             helper.show()
             assertEquals(1, requests.size)
             val cta = container.findViewById<android.view.View>(com.ads.module.R.id.ad_call_to_action)
@@ -720,14 +720,14 @@ class NativeOwnershipTest {
 
     @Test fun `enabling preload after the unit ids change keeps the placement as store`() {
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-            mapOf("home" to com.ads.module.config.AdUnitConfig("unit-old", true))))
+            mapOf("home" to com.ads.module.config.AdUnitConfig(listOf("unit-old"), true))))
         try {
             val placementConfig = NativeAdConfig.forPlacement("home", config.layoutId)
             val helper = NativeAdHelper(activity, activity, placementConfig, "home")
                 .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
                 .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
             com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-                mapOf("home" to com.ads.module.config.AdUnitConfig("unit-new", true))))
+                mapOf("home" to com.ads.module.config.AdUnitConfig(listOf("unit-new"), true))))
             helper.setEnablePreload(true)
             NativeAdManager.preload(activity, "home", placementConfig)
             val ad = NativeVendorAd()

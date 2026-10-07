@@ -61,8 +61,8 @@ class InterstitialBufferLifecycleTest {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAdManager.releaseAll()
         AdRemoteConfig.initializeFromJson("""{
-            "inter_all": {"id":"buffer-all-unit", "isEnable":true},
-            "inter_back": {"id":"buffer-back-unit", "isEnable":true}
+            "inter_all": {"ids":[{"id":"buffer-all-unit"}], "isEnable":true},
+            "inter_back": {"ids":[{"id":"buffer-back-unit"}], "isEnable":true}
         }""")
         ConsentCenter.setHostConsent(true, false)
         Entitlement.install(object : EntitlementSource {
@@ -209,17 +209,15 @@ class InterstitialBufferLifecycleTest {
     fun `remote disabling all tiers still prevents buffering with UMP authority`() {
         umpAuthorityWithUnknownChoice(allowed = true)
         AdRemoteConfig.initializeFromJson("""{
-            "inter_all": {"id":"buffer-all-unit", "isEnable":false},
-            "inter_all_high": {"id":"all-high", "isEnable":false},
-            "inter_back": {"id":"buffer-back-unit", "isEnable":false},
-            "inter_back_high": {"id":"back-high", "isEnable":false}
+            "inter_all": {"ids":[{"id":"all-high"}, {"id":"buffer-all-unit"}], "isEnable":false},
+            "inter_back": {"ids":[{"id":"back-high"}, {"id":"buffer-back-unit"}], "isEnable":false}
         }""")
         arm()
         advance(30_000)
         assertEquals("Disabled remote tiers must never reach GMA", 0, requests.size)
         AdRemoteConfig.initializeFromJson("""{
-            "inter_all": {"id":"buffer-all-unit", "isEnable":true},
-            "inter_back": {"id":"buffer-back-unit", "isEnable":false}
+            "inter_all": {"ids":[{"id":"buffer-all-unit"}], "isEnable":true},
+            "inter_back": {"ids":[{"id":"buffer-back-unit"}], "isEnable":false}
         }""")
         InterstitialAutoBuffer.topUpNow()
         main.idle()

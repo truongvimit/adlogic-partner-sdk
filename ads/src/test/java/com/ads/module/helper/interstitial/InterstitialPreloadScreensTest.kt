@@ -73,8 +73,8 @@ class InterstitialPreloadScreensTest {
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         AdRemoteConfig.initializeFromJson("""{
-            "inter_all":{"id":"content-unit","isEnable":true},
-            "inter_back":{"id":"back-unit","isEnable":true}
+            "inter_all":{"ids":[{"id":"content-unit"}],"isEnable":true},
+            "inter_back":{"ids":[{"id":"back-unit"}],"isEnable":true}
         }""")
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
         host = controller.get()

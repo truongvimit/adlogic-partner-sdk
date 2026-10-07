@@ -1625,7 +1625,7 @@ class SplashLongPromptTest {
     }
 
     private fun remoteAds(vararg units: Pair<String, Boolean>) = com.ads.module.config.AdRemoteConfig.update(
-        com.ads.module.config.AdRemoteConfig(units.associate { (key, on) -> key to com.ads.module.config.AdUnitConfig(key, on) }),
+        com.ads.module.config.AdRemoteConfig(units.associate { (key, on) -> key to com.ads.module.config.AdUnitConfig(listOf(key), on) }),
         fromRemote = true,
     )
 

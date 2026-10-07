@@ -4,7 +4,7 @@ import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 
 /**
- * Typed reads of a placement's configured *flags* — `isEnable`, `enableUaCheck`, `id` — for the
+ * Typed reads of a placement's configured *flags* — `isEnable`, `enableUaCheck`, `ids` — for the
  * debug dashboard and the resume-entry rule.
  *
  * Not needed to load or show an ad: every entry point takes an [AppAdPlacement] key and resolves
@@ -14,14 +14,11 @@ private fun unit(key: String): AdUnitConfig = AdRemoteConfig.getInstance().unit(
 
 val AdRemoteConfig.Companion.open_resume: AdUnitConfig get() = unit(AppAdPlacement.OPEN_RESUME)
 
-val AdRemoteConfig.Companion.native_onboarding_1_4: AdUnitConfig
-    get() = unit(AppAdPlacement.NATIVE_ONBOARDING_1_4)
+val AdRemoteConfig.Companion.native_ob2: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_OB2)
 
-val AdRemoteConfig.Companion.native_onboarding_fullscreen_1_3: AdUnitConfig
-    get() = unit(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3)
+val AdRemoteConfig.Companion.native_full1: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_FULL1)
 
-val AdRemoteConfig.Companion.native_onboarding_fullscreen_1_4: AdUnitConfig
-    get() = unit(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_4)
+val AdRemoteConfig.Companion.native_full2: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_FULL2)
 
 val AdRemoteConfig.Companion.native_home: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_HOME)
 

@@ -136,7 +136,7 @@ class ERainInterstitialWaitTest {
     @Test
     fun `a UA-gated after-onboarding placement is not loaded on an organic install`() {
         AdRemoteConfig.initializeFromJson(
-            """{"${placement.key}":{"id":"after-base","isEnable":true,"enable_ua_check":true}}""",
+            """{"${placement.key}":{"ids":[{"id":"after-base"}],"isEnable":true,"enable_ua_check":true}}""",
         )
 
         provider.loadInterstitial(activity, placement, unit)
@@ -147,7 +147,7 @@ class ERainInterstitialWaitTest {
     @Test
     fun `an after-onboarding placement without the UA flag still preloads`() {
         AdRemoteConfig.initializeFromJson(
-            """{"${placement.key}":{"id":"after-base","isEnable":true,"enable_ua_check":false}}""",
+            """{"${placement.key}":{"ids":[{"id":"after-base"}],"isEnable":true,"enable_ua_check":false}}""",
         )
 
         provider.loadInterstitial(activity, placement, unit)

@@ -5,12 +5,18 @@ import com.ads.module.ads.AdWaterfall
 import com.ads.module.helper.adnative.NativeClickAction
 
 /**
- * One placement's entry in `ad_config.json`: which ad unit to request, whether it is on, and how
- * its native template should look.
+ * One placement's entry in `ad_config.json`: which ad units to request, whether it is on, and how
+ * its native template should look. A placement is one key whatever its number of floors; every
+ * other field applies to the whole waterfall.
  */
 @Keep
 data class AdUnitConfig(
-    val id: String,
+    /**
+     * The enabled floors of the waterfall, highest first and all-price last; a single-unit
+     * placement is a one-floor list. JSON spells each floor `{"id": …, "isEnable": …}` so a floor
+     * is switched off without losing its id; only the enabled ones land here.
+     */
+    val ids: List<String>,
     val isEnable: Boolean,
     val enableUaCheck: Boolean = false,
     val reloadIntervalSeconds: Int? = null,
@@ -27,16 +33,11 @@ data class AdUnitConfig(
      * reorder ignore it.
      */
     val components: List<String> = DEFAULT_COMPONENTS,
-    /**
-     * Optional waterfall tiers, ordered highest floor first. Empty means "single tier", i.e.
-     * exactly the behaviour of [id] alone, so a payload that declares no tiers keeps working.
-     */
-    val ids: List<String> = emptyList(),
     /** Extra wait after process ON_STOP before loading the app-resume placement. */
     val appResumeLoadDelayMs: Long = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
     /**
      * What a click on this native does once the user returns; `null` leaves it to the screen's
-     * default. Read from the base key only, never from its `_high` floors.
+     * default.
      */
     val clickAction: NativeClickAction? = null,
     /**
@@ -48,14 +49,11 @@ data class AdUnitConfig(
 ) {
 
     /**
-     * The ad unit ids to request, ordered highest floor first.
-     *
-     * [id] stays the all-price/last-chance tier: when [ids] carries the high floors, [id] is
-     * appended below them unless it is already listed. Blanks and repeats are dropped by
-     * [AdWaterfall.usableIds] — the same rule the loader applies, rather than a second copy of it.
+     * [ids] as requested: blanks and repeats are dropped by [AdWaterfall.usableIds] — the same
+     * rule the loader applies, rather than a second copy of it.
      */
     val waterfallIds: List<String>
-        get() = AdWaterfall.usableIds(ids + id)
+        get() = AdWaterfall.usableIds(ids)
 
     /** True when this unit is switched on and has at least one usable id. */
     val isUsable: Boolean get() = isEnable && waterfallIds.isNotEmpty()

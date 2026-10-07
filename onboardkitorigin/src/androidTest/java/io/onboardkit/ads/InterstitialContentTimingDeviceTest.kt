@@ -55,7 +55,7 @@ class InterstitialContentTimingDeviceTest {
             ERainAd.getInstance().setCountClickToShowAds(1, 0)
             ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
             AppOpenManager.getInstance().disableAppResume()
-            AdRemoteConfig.initializeFromJson("""{"inter_all":{"id":"$UNIT","isEnable":true}}""")
+            AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"$UNIT"}],"isEnable":true}}""")
             MobileAds.initialize(app) { initialized.countDown() }
         }
         assertTrue(initialized.await(45, TimeUnit.SECONDS))

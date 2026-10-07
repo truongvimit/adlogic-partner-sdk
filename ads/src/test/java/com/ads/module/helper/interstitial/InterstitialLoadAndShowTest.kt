@@ -492,7 +492,7 @@ class InterstitialLoadAndShowTest {
         io.trackkit.Tracker.setConsent(true, true)
         io.trackkit.Tracker.addSink(sink)
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(
-            mapOf(PLACEMENT to com.ads.module.config.AdUnitConfig(UNIT, true))))
+            mapOf(PLACEMENT to com.ads.module.config.AdUnitConfig(listOf(UNIT), true))))
         try {
             ConsentCenter.setHostConsent(false, false)
             InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT))

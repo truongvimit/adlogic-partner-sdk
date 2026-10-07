@@ -18,7 +18,6 @@ class AdConfigParserFieldMatrixTest {
         val config = AdRemoteConfig.fromJson("""
             {
               "matrix": {
-                "id":"",
                 "isEnable":false,
                 "enable_ua_check":true,
                 "reloadIntervalSeconds":0,
@@ -32,7 +31,6 @@ class AdConfigParserFieldMatrixTest {
             }
         """.trimIndent())!!
         val unit = config.unit("matrix")
-        assertEquals("", unit.id)
         assertFalse(unit.isEnable)
         assertTrue(unit.enableUaCheck)
         assertEquals(0, unit.reloadIntervalSeconds)
@@ -46,8 +44,8 @@ class AdConfigParserFieldMatrixTest {
 
     @Test
     fun `missing fields use parser defaults without affecting sibling values`() {
-        val unit = AdRemoteConfig.fromJson("""{"matrix":{"id":"asset","isEnable":true}}""")!!.unit("matrix")
-        assertEquals("asset", unit.id)
+        val unit = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"asset"}],"isEnable":true}}""")!!.unit("matrix")
+        assertEquals(listOf("asset"), unit.ids)
         assertTrue(unit.isEnable)
         assertFalse(unit.enableUaCheck)
         assertEquals(null, unit.reloadIntervalSeconds)
@@ -55,13 +53,12 @@ class AdConfigParserFieldMatrixTest {
         assertEquals("default", unit.colorCTA)
         assertEquals(AdUnitConfig.DEFAULT_HEIGHT_CTA, unit.heightCTA)
         assertEquals(AdUnitConfig.DEFAULT_COMPONENTS, unit.components)
-        assertEquals(emptyList<String>(), unit.ids)
         assertEquals(null, unit.clickAction)
     }
 
     @Test
     fun `colorBackground takes a color, null or blank keep the XML background, anything else is ignored alone`() {
-        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","colorBackground":$raw}}""")!!
+        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}],"colorBackground":$raw}}""")!!
 
         assertEquals("#102030", parse("\"#102030\"").unit("matrix").colorBackground)
         for (raw in listOf("null", "\"\"", "\"default\"")) {
@@ -72,16 +69,16 @@ class AdConfigParserFieldMatrixTest {
         for (raw in listOf("\"not-a-color\"", "3", "true")) {
             val config = parse(raw)
             assertEquals(raw, "default", config.unit("matrix").colorBackground)
-            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertEquals(raw, listOf("kept"), config.unit("matrix").ids)
             assertFalse(raw, config.fieldsFor("matrix").contains("colorBackground"))
         }
-        assertEquals("default", AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!.unit("matrix").colorBackground)
+        assertEquals("default", AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}]}}""")!!.unit("matrix").colorBackground)
     }
 
     @Test
     fun `remote colorBackground outranks the app's, an omitted one keeps it and null clears it`() {
         try {
-            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"colorBackground":"#111111"}}""")
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"ids":[{"id":"a"}],"isEnable":true,"colorBackground":"#111111"}}""")
             AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorBackground":"#222222"}}""")!!)
             assertEquals("#222222", AdRemoteConfig.getInstance().unit("native_lang").colorBackground)
             AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorCTA":"#000000"}}""")!!)
@@ -96,7 +93,7 @@ class AdConfigParserFieldMatrixTest {
     @Test
     fun `colorAdBadge and colorAdBadgeText parse like colorBackground and merge per field`() {
         for (field in listOf("colorAdBadge", "colorAdBadgeText")) {
-            fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","$field":$raw}}""")!!
+            fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}],"$field":$raw}}""")!!
             fun AdUnitConfig.value() = if (field == "colorAdBadge") colorAdBadge else colorAdBadgeText
 
             assertEquals(field, "#102030", parse("\"#102030\"").unit("matrix").value())
@@ -109,7 +106,7 @@ class AdConfigParserFieldMatrixTest {
             assertFalse(field, invalid.fieldsFor("matrix").contains(field))
         }
         try {
-            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"colorAdBadge":"#111111","colorAdBadgeText":"#FFFFFF"}}""")
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"ids":[{"id":"a"}],"isEnable":true,"colorAdBadge":"#111111","colorAdBadgeText":"#FFFFFF"}}""")
             AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"colorAdBadge":"#222222"}}""")!!)
             val unit = AdRemoteConfig.getInstance().unit("native_lang")
             assertEquals("#222222", unit.colorAdBadge)
@@ -127,15 +124,15 @@ class AdConfigParserFieldMatrixTest {
     @Test
     fun `an absent heightCTA is the design's 44dp`() {
         assertEquals(44, AdUnitConfig.DEFAULT_HEIGHT_CTA)
-        assertEquals(44, AdUnitConfig("x", true).heightCTA)
-        assertEquals(44, AdRemoteConfig.fromJson("""{"matrix":{"id":"x"}}""")!!.unit("matrix").heightCTA)
+        assertEquals(44, AdUnitConfig(listOf("x"), true).heightCTA)
+        assertEquals(44, AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"x"}]}}""")!!.unit("matrix").heightCTA)
     }
 
     @Test
     fun `a removed positionCTA is an unknown field and leaves its siblings applied`() {
         for (raw in listOf("\"TOP\"", "\"BOTTOM\"", "null")) {
-            val config = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","positionCTA":$raw,"components":["cta","media"]}}""")!!
-            assertEquals(raw, "kept", config.unit("matrix").id)
+            val config = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}],"positionCTA":$raw,"components":["cta","media"]}}""")!!
+            assertEquals(raw, listOf("kept"), config.unit("matrix").ids)
             assertEquals(raw, listOf("cta", "media"), config.unit("matrix").components)
             assertFalse(raw, config.fieldsFor("matrix").contains("positionCTA"))
         }
@@ -146,7 +143,6 @@ class AdConfigParserFieldMatrixTest {
         val unit = AdRemoteConfig.fromJson("""
             {
               "matrix": {
-                "id":"valid",
                 "isEnable":true,
                 "enable_ua_check":"not-a-boolean",
                 "reloadIntervalSeconds":"not-a-number",
@@ -160,7 +156,6 @@ class AdConfigParserFieldMatrixTest {
               }
             }
         """.trimIndent())!!.unit("matrix")
-        assertEquals("valid", unit.id)
         assertTrue(unit.isEnable)
         assertFalse(unit.enableUaCheck)
         assertEquals(null, unit.reloadIntervalSeconds)
@@ -182,19 +177,19 @@ class AdConfigParserFieldMatrixTest {
             assertTrue(config.fieldsFor("matrix").contains("click_action"))
         }
         for (raw in listOf("\"typo\"", "\"RELOAD\"", "\"\"", "null", "true")) {
-            val config = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","click_action":$raw}}""")!!
+            val config = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}],"click_action":$raw}}""")!!
             assertEquals(raw, null, config.unit("matrix").clickAction)
-            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertEquals(raw, listOf("kept"), config.unit("matrix").ids)
             assertFalse(raw, config.fieldsFor("matrix").contains("click_action"))
         }
-        val absent = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!
+        val absent = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}]}}""")!!
         assertEquals(null, absent.unit("matrix").clickAction)
         assertFalse(absent.fieldsFor("matrix").contains("click_action"))
     }
 
     @Test
     fun `templateId takes a positive number, null clears it and anything else is ignored alone`() {
-        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept","templateId":$raw}}""")!!
+        fun parse(raw: String) = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}],"templateId":$raw}}""")!!
 
         assertEquals(3, parse("3").unit("matrix").templateId)
         assertTrue(parse("3").fieldsFor("matrix").contains("templateId"))
@@ -203,10 +198,10 @@ class AdConfigParserFieldMatrixTest {
         for (raw in listOf("0", "-1", "\"3\"", "true", "2.5", "{}")) {
             val config = parse(raw)
             assertEquals(raw, null, config.unit("matrix").templateId)
-            assertEquals(raw, "kept", config.unit("matrix").id)
+            assertEquals(raw, listOf("kept"), config.unit("matrix").ids)
             assertFalse(raw, config.fieldsFor("matrix").contains("templateId"))
         }
-        val absent = AdRemoteConfig.fromJson("""{"matrix":{"id":"kept"}}""")!!
+        val absent = AdRemoteConfig.fromJson("""{"matrix":{"ids":[{"id":"kept"}]}}""")!!
         assertEquals(null, absent.unit("matrix").templateId)
         assertFalse(absent.fieldsFor("matrix").contains("templateId"))
     }
@@ -214,7 +209,7 @@ class AdConfigParserFieldMatrixTest {
     @Test
     fun `remote templateId outranks the app's and an omitted one keeps it`() {
         try {
-            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"id":"a","isEnable":true,"templateId":2}}""")
+            AdRemoteConfig.updateCodeFromJson("""{"native_lang":{"ids":[{"id":"a"}],"isEnable":true,"templateId":2}}""")
             assertEquals(2, AdRemoteConfig.getInstance().unit("native_lang").templateId)
             AdRemoteConfig.applyRemote(AdRemoteConfig.fromJson("""{"native_lang":{"templateId":3}}""")!!)
             assertEquals(3, AdRemoteConfig.getInstance().unit("native_lang").templateId)
@@ -236,9 +231,46 @@ class AdConfigParserFieldMatrixTest {
     @Test
     fun `nullable reload interval keeps presence so it can clear a lower tier`() {
         val config = AdRemoteConfig.fromJson(
-            """{"matrix":{"id":"remote","isEnable":true,"reloadIntervalSeconds":null}}""",
+            """{"matrix":{"ids":[{"id":"remote"}],"isEnable":true,"reloadIntervalSeconds":null}}""",
         )!!
         assertEquals(null, config.unit("matrix").reloadIntervalSeconds)
         assertTrue(config.fieldsFor("matrix").contains("reloadIntervalSeconds"))
+    }
+
+    @Test
+    fun `a malformed floor is skipped alone and the rest of ids applies`() {
+        val config = AdRemoteConfig.fromJson("""
+            {"matrix": {"ids": [
+              {"id": "high", "isEnable": "yes"},
+              "bare-string",
+              {"isEnable": true},
+              {"id": "", "isEnable": true},
+              {"id": "mid", "isEnable": false, "floor": 2},
+              {"id": "all"}
+            ]}}
+        """.trimIndent())!!
+        assertEquals(listOf("all"), config.unit("matrix").ids)
+        assertTrue(config.fieldsFor("matrix").contains("ids"))
+    }
+
+    @Test
+    fun `ids of bare strings has no valid floor and falls through as a field`() {
+        val config = AdRemoteConfig.fromJson("""{"matrix": {"ids": ["high", "all"], "isEnable": true}}""")!!
+        assertEquals(emptyList<String>(), config.unit("matrix").ids)
+        assertFalse(config.fieldsFor("matrix").contains("ids"))
+    }
+
+    @Test
+    fun `a placement-level id is an unknown field`() {
+        val config = AdRemoteConfig.fromJson("""{"matrix": {"id": "single", "isEnable": true}}""")!!
+        assertEquals(emptyList<String>(), config.unit("matrix").ids)
+        assertFalse(config.isPlacementEnabled("matrix"))
+    }
+
+    @Test
+    fun `an empty ids is a declared empty waterfall`() {
+        val config = AdRemoteConfig.fromJson("""{"matrix": {"ids": [], "isEnable": true}}""")!!
+        assertTrue(config.fieldsFor("matrix").contains("ids"))
+        assertFalse(config.isPlacementEnabled("matrix"))
     }
 }

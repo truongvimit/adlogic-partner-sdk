@@ -65,8 +65,8 @@ class InterstitialAutoBufferDeviceTest {
             ERainAd.getInstance().setCountClickToShowAds(1, 0)
             ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
             AdRemoteConfig.initializeFromJson("""{
-                "inter_all":{"id":"$UNIT","isEnable":true},
-                "inter_back":{"id":"$UNIT","isEnable":true}
+                "inter_all":{"ids":[{"id":"$UNIT"}],"isEnable":true},
+                "inter_back":{"ids":[{"id":"$UNIT"}],"isEnable":true}
             }""")
             InterstitialAutoBuffer.configure(InterstitialBufferOptions(placements = listOf(ALL, BACK)))
             MobileAds.initialize(app) { initialized.countDown() }

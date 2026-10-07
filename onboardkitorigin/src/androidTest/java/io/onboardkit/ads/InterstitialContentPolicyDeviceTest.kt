@@ -99,7 +99,7 @@ class InterstitialContentPolicyDeviceTest {
                 val triggerAt = AtomicLong()
                 instrumentation.runOnMainSync {
                     assertFalse("New placement starts without a fill", InterstitialAdManager.isReady(PLACEMENT))
-                    AdRemoteConfig.initializeFromJson("""{"inter_all":{"id":"$TEST_UNIT","isEnable":true}}""")
+                    AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"$TEST_UNIT"}],"isEnable":true}}""")
                     InterstitialAutoBuffer.configure(InterstitialBufferOptions(
                         independentIntervalPlacements = setOf(PLACEMENT),
                         placements = listOf(PLACEMENT),

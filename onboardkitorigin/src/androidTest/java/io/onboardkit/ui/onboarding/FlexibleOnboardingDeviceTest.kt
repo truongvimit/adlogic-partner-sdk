@@ -54,7 +54,7 @@ class FlexibleOnboardingDeviceTest {
                 ads = AdsConfig.fromAdConfig().copy(afterOnboardingInterstitialEnabled = false)
             }.getOrThrow()).getOrThrow()
             AdRemoteConfig.update(AdRemoteConfig(ids.filterNot { case == "missing" && it in listOf(StepId.FULL2, StepId.OB3) }
-                .associate { id -> "native_${id.value}" to AdUnitConfig("test-${id.value}", true, enableUaCheck = false) }))
+                .associate { id -> "native_${id.value}" to AdUnitConfig(listOf("test-${id.value}"), true, enableUaCheck = false) }))
             if (case == "reorder") OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":["ob4","full2","ob1","ob3"]}}""")
             if (case == "empty") OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"order":[]}}""")
             ConsentCenter.setHostConsent(true, false)

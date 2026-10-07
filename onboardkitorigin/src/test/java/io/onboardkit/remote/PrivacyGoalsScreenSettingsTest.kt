@@ -35,12 +35,10 @@ class PrivacyGoalsScreenSettingsTest {
         assertEquals(PrivacyGoalsScreenConfig().enabled, OnboardingSettings.defaultBool("privacy_goals_screen.enabled"))
     }
 
-    @Test fun `disabled base suppresses high floor without disabling screen group or alternate`() {
+    @Test fun `disabled placement suppresses its high floor without disabling screen group or alternate`() {
         val document = AdRemoteConfig(ads = mapOf(
-            "native_select" to AdUnitConfig(id = "base", isEnable = false),
-            "native_select_high" to AdUnitConfig(id = "high", isEnable = true),
-            "native_select_alt" to AdUnitConfig(id = "alt", isEnable = true),
-            "native_select_alt_high" to AdUnitConfig(id = "alt-high", isEnable = true),
+            "native_select" to AdUnitConfig(ids = listOf("high", "base"), isEnable = false),
+            "native_select_alt" to AdUnitConfig(ids = listOf("alt-high", "alt"), isEnable = true),
         ))
         val config = config()
         val ads = config.ads.resolvePlacements(document)
