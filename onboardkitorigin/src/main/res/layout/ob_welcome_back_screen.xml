@@ -76,15 +76,14 @@
     <FrameLayout
         android:id="@+id/ob_welcome_back_ad_block"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintHeight_percent="0.33">
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <FrameLayout
             android:id="@+id/ob_welcome_back_ad"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:visibility="gone" />
     </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

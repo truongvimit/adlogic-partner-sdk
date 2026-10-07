@@ -52,6 +52,16 @@ object NativeAdManager {
         config: NativeAdConfig,
         reportTelemetry: Boolean = true,
         onResult: ((AdSkipReason?) -> Unit)? = null,
+    ): Boolean = preload(context, placement, config, config.adUnitIds, reportTelemetry, onResult)
+
+    /** [preload] restricted to [tiers]; a load already running for [placement] is joined as is. */
+    internal fun preload(
+        context: Context,
+        placement: String,
+        config: NativeAdConfig,
+        tiers: List<String>,
+        reportTelemetry: Boolean,
+        onResult: ((AdSkipReason?) -> Unit)? = null,
     ): Boolean {
         if (isReady(placement)) {
             onResult?.let { runCatching { it(null) } }
@@ -62,7 +72,7 @@ object NativeAdManager {
             return false
         }
         val app = context.applicationContext
-        val reason = AdGate.skipReason(app, config.canShowAds && config.adUnitIds.isNotEmpty(),
+        val reason = AdGate.skipReason(app, config.canShowAds && tiers.isNotEmpty(),
             AdGate.passesUaGate(config.shouldForceUaCheck()))
         if (reason != null) {
             if (reportTelemetry) AdTracking.skipped(placement, AdFormat.NATIVE, reason.key)
@@ -74,10 +84,10 @@ object NativeAdManager {
         entry.failed = false
         entry.discardResult = false
         onResult?.let { entry.outcomeListeners += it }
-        config.adUnitIds.forEach { AdTracking.registerPlacement(it, placement) }
-        if (reportTelemetry) AdTracking.request(placement, AdFormat.NATIVE, config.idAds)
+        tiers.forEach { AdTracking.registerPlacement(it, placement) }
+        if (reportTelemetry) AdTracking.request(placement, AdFormat.NATIVE, tiers.first())
         var filled: ApNativeAd? = null
-        AdWaterfall.loadNative(app, config.adUnitIds, config.layoutId, config.tierTimeoutMs,
+        AdWaterfall.loadNative(app, tiers, config.layoutId, config.tierTimeoutMs,
             object : AdCallback() {
                 override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
                     filled = nativeAd

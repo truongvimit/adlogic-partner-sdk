@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class AdUnitConfigStyleTest {
     private fun parse(fields: String) = AdConfigParser.parse(
-        """{"native_home":{"id":"x","isEnable":true,$fields}}""".reader(),
+        """{"native_home":{"ids":[{"id":"x"}],"isEnable":true,$fields}}""".reader(),
     ).getValue("native_home")
 
     @Test fun `an empty components array keeps every block of the layout`() {

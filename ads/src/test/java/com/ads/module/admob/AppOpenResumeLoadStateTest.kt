@@ -97,19 +97,19 @@ class AppOpenResumeLoadStateTest {
 
     @Test
     fun `disabling open_resume then re-enabling it restores the unit in the same process`() {
-        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":true}}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"ids":[{"id":"$UNIT"}],"isEnable":true}}""")
         enable()
         nextBackground()
         assertEquals(1, requests.size)
 
         // isEnable:false empties the unit — the id is the only switch app-resume reads.
-        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":false}}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"ids":[{"id":"$UNIT"}],"isEnable":false}}""")
         main.idle()
         manager.onResume()
         nextBackground()
         assertEquals("A disabled placement must not request", 1, requests.size)
 
-        AdRemoteConfig.initializeFromJson("""{"open_resume":{"id":"$UNIT","isEnable":true}}""")
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"ids":[{"id":"$UNIT"}],"isEnable":true}}""")
         main.idle()
         manager.onResume()
         nextBackground()
@@ -121,7 +121,7 @@ class AppOpenResumeLoadStateTest {
     fun `open_resume enable_ua_check keeps the request from an organic install`() {
         // No Adjust attribution has landed in this process, so the module reports it organic.
         AdRemoteConfig.initializeFromJson(
-            """{"open_resume":{"id":"$UNIT","isEnable":true,"enable_ua_check":true}}""",
+            """{"open_resume":{"ids":[{"id":"$UNIT"}],"isEnable":true,"enable_ua_check":true}}""",
         )
         enable()
         nextBackground()
@@ -132,7 +132,7 @@ class AppOpenResumeLoadStateTest {
     @Test
     fun `open_resume without the UA flag still requests on an organic install`() {
         AdRemoteConfig.initializeFromJson(
-            """{"open_resume":{"id":"$UNIT","isEnable":true,"enable_ua_check":false}}""",
+            """{"open_resume":{"ids":[{"id":"$UNIT"}],"isEnable":true,"enable_ua_check":false}}""",
         )
         enable()
         nextBackground()
@@ -571,7 +571,7 @@ class AppOpenResumeLoadStateTest {
     @Test
     fun `remote zero starts on process stop and invalid values fall back without dropping placements`() {
         for (value in listOf("-1", "null", "true", "{}", "[]", "1.5", "\"oops\"", "9223372036854775808", "86400001")) {
-            val config = AdRemoteConfig.fromJson("""{"open_resume":{"app_resume_load_delay_ms":$value,"id":"qa","isEnable":true}}""")!!
+            val config = AdRemoteConfig.fromJson("""{"open_resume":{"app_resume_load_delay_ms":$value,"ids":[{"id":"qa"}],"isEnable":true}}""")!!
             assertEquals(2000L, config.appResumeLoadDelayMs)
             assertEquals(2000L, config.unit("open_resume").appResumeLoadDelayMs)
             assertEquals(listOf("qa"), config.tiersFor("open_resume"))
@@ -588,8 +588,8 @@ class AppOpenResumeLoadStateTest {
         val config = AdRemoteConfig.fromJson(
             """{
                 "app_resume_load_delay_ms": 60000,
-                "open_resume": {"id":"qa","isEnable":true,"app_resume_load_delay_ms":"500"},
-                "banner_all": {"id":"banner","isEnable":true,"reloadIntervalSeconds":30,"app_resume_load_delay_ms":9000}
+                "open_resume": {"ids":[{"id":"qa"}],"isEnable":true,"app_resume_load_delay_ms":"500"},
+                "banner_all": {"ids":[{"id":"banner"}],"isEnable":true,"reloadIntervalSeconds":30,"app_resume_load_delay_ms":9000}
             }""",
         )!!
         assertEquals(500L, config.unit("open_resume").appResumeLoadDelayMs)
@@ -597,7 +597,7 @@ class AppOpenResumeLoadStateTest {
         assertEquals(30, config.unit("banner_all").reloadIntervalSeconds)
         assertEquals(listOf("qa"), config.tiersFor("open_resume"))
         assertEquals(2000L, AdRemoteConfig.fromJson("""{"app_resume_load_delay_ms":60000}""")!!.appResumeLoadDelayMs)
-        assertEquals(2000L, AdRemoteConfig.fromJson("""{"open_resume":{"id":"qa","isEnable":true}}""")!!.appResumeLoadDelayMs)
+        assertEquals(2000L, AdRemoteConfig.fromJson("""{"open_resume":{"ids":[{"id":"qa"}],"isEnable":true}}""")!!.appResumeLoadDelayMs)
         val updated = config.copy(ads = config.ads + ("open_resume" to config.unit("open_resume").copy(appResumeLoadDelayMs = 7000)))
         assertEquals(7000L, updated.appResumeLoadDelayMs)
     }

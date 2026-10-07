@@ -81,8 +81,8 @@ class InterstitialBufferOptions @JvmOverloads constructor(
  * Process background pauses scheduling but preserves both the gate and cached ads.
  * All placement-based loads share the manager's cache and in-flight request guard.
  *
- * Ad unit ids come from [AdRemoteConfig.tiersFor], so a placement that grows a `_high` floor in
- * remote config starts using it without a code change.
+ * Ad unit ids come from [AdRemoteConfig.tiersFor], so a floor enabled in the placement's remote
+ * `ids` starts serving without a code change.
  *
  * Off by default. Never started from `AdsMultiDexApplication` — a partner who upgrades and changes
  * nothing gets no new requests.

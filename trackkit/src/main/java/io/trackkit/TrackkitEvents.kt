@@ -272,8 +272,9 @@ object TrackkitEvents {
             )
 
         /**
-         * One event for every onboarding step. [variant] records which ad tier actually won the
-         * race for that step, so an A/B-looking difference in the funnel can be attributed.
+         * One event for every onboarding step. [variant] is the native template the page was built
+         * with, so a funnel difference between layouts can be attributed; it says nothing about
+         * which waterfall floor filled.
          */
         class StepView(step: String, index: Int, variant: String? = null) :
             SimpleEvent(

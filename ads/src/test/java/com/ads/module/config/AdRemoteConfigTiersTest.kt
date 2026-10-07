@@ -1,98 +1,118 @@
 package com.ads.module.config
 
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * The floor ladder: which remote keys form a placement's waterfall, and in what order.
+ * The waterfall: one key per placement, its floors in `ids`, highest first.
  *
  * This is the rule the whole app monetises through, and it is data-driven — a wrong order here
  * spends the all-price floor before the high one on every request.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [34])
 class AdRemoteConfigTiersTest {
 
+    @After
+    fun reset() {
+        AdRemoteConfig.reset()
+    }
+
     @Test
-    fun `high then numbered rungs then all-price`() {
-        val config = configOf(
-            "inter_splash_high" to "high",
-            "inter_splash_high1" to "high1",
-            "inter_splash" to "allprice",
-        )
+    fun `ids is the waterfall in declared order`() {
+        val config = parse(placement("inter_splash", floor("high"), floor("high1"), floor("allprice")))
         assertEquals(listOf("high", "high1", "allprice"), config.tiersFor("inter_splash"))
     }
 
     @Test
-    fun `numbered rungs extend the ladder without a code change`() {
-        val config = configOf(
-            "native_lang_high" to "h",
-            "native_lang_high1" to "h1",
-            "native_lang_high2" to "h2",
-            "native_lang_high3" to "h3",
-            "native_lang" to "all",
-        )
-        assertEquals(listOf("h", "h1", "h2", "h3", "all"), config.tiersFor("native_lang"))
-    }
-
-    @Test
-    fun `numbered rungs sort by number, not by string`() {
-        // "_high10" sorts before "_high2" alphabetically; the ladder must not
-        val config = configOf(
-            "native_fs_high2" to "h2",
-            "native_fs_high9" to "h9",
-            "native_fs_high" to "h",
-        )
-        assertEquals(listOf("h", "h2", "h9"), config.tiersFor("native_fs"))
-    }
-
-    @Test
-    fun `a single key is a valid one-floor placement`() {
-        assertEquals(listOf("only"), configOf("banner_home" to "only").tiersFor("banner_home"))
-    }
-
-    @Test
-    fun `missing floors are skipped, order of the rest is kept`() {
-        val config = configOf("native_fs_high" to "h", "native_fs" to "all")
-        assertEquals(listOf("h", "all"), config.tiersFor("native_fs"))
-    }
-
-    @Test
-    fun `disabled floor is dropped`() {
-        val config = AdRemoteConfig(
-            mapOf(
-                "native_ob1_high" to AdUnitConfig(id = "h", isEnable = false),
-                "native_ob1" to AdUnitConfig(id = "all", isEnable = true),
-            ),
-        )
+    fun `a floor switched off keeps its place and is not requested`() {
+        val config = parse(placement("native_ob1", floor("high", false), floor("all")))
         assertEquals(listOf("all"), config.tiersFor("native_ob1"))
     }
 
     @Test
-    fun `repeated id across floors is requested once`() {
-        val config = configOf("inter_splash_high" to "same", "inter_splash" to "same")
+    fun `a floor without isEnable is on`() {
+        val config = parse("""{"native_lang": {"ids": [{"id": "high"}, {"id": "all"}], "isEnable": true}}""")
+        assertEquals(listOf("high", "all"), config.tiersFor("native_lang"))
+    }
+
+    @Test
+    fun `a one-floor ids is a valid single-unit placement`() {
+        val config = parse("""{"banner_home": {"ids": [{"id": "only"}], "isEnable": true}}""")
+        assertEquals(listOf("only"), config.tiersFor("banner_home"))
+    }
+
+    @Test
+    fun `the placement isEnable turns every floor off`() {
+        val config = parse(placement("native_ob1", floor("h"), floor("all"), enabled = false))
+        assertEquals(emptyList<String>(), config.tiersFor("native_ob1"))
+        assertFalse(config.isPlacementEnabled("native_ob1"))
+    }
+
+    @Test
+    fun `every floor off leaves the placement nothing to request`() {
+        val config = parse(placement("native_ob1", floor("h", false), floor("all", false)))
+        assertEquals(emptyList<String>(), config.tiersFor("native_ob1"))
+    }
+
+    @Test
+    fun `repeated ids are requested once`() {
+        val config = parse(placement("inter_splash", floor("same"), floor("same")))
         assertEquals(listOf("same"), config.tiersFor("inter_splash"))
     }
 
     @Test
-    fun `ids array inside one key is the waterfall verbatim`() {
-        // The escape hatch for a placement with more floors than the suffix ladder offers
-        val config = AdRemoteConfig(
-            mapOf(
-                "inter_splash" to AdUnitConfig(
-                    id = "allprice",
-                    isEnable = true,
-                    ids = listOf("a", "b", "c"),
-                ),
-            ),
+    fun `a _high key is not a floor of its base key`() {
+        val config = parse(
+            """{"native_lang_high": {"ids": [{"id": "h"}], "isEnable": true}, "native_lang": {"ids": [{"id": "all"}], "isEnable": true}}""",
         )
-        assertEquals(listOf("a", "b", "c", "allprice"), config.tiersFor("inter_splash"))
+        assertEquals(listOf("all"), config.tiersFor("native_lang"))
+        assertTrue(config.declares("native_lang_high"))
+    }
+
+    @Test
+    fun `remote ids replaces the asset's whole array`() {
+        AdRemoteConfig.installAssets(parse(placement("native_lang", floor("high"), floor("all"))), null)
+        AdRemoteConfig.applyRemote(parse("""{"native_lang": {"ids": [{"id": "remote"}]}}"""))
+        assertEquals(listOf("remote"), AdRemoteConfig.getInstance().tiersFor("native_lang"))
+    }
+
+    @Test
+    fun `remote switching a floor off keeps the asset's other fields`() {
+        AdRemoteConfig.installAssets(
+            parse("""{"native_lang": {"ids": [{"id": "high"}, {"id": "all"}], "isEnable": true, "heightCTA": 50}}"""),
+            null,
+        )
+        AdRemoteConfig.applyRemote(parse(placement("native_lang", floor("high", false), floor("all"))))
+        val active = AdRemoteConfig.getInstance()
+        assertEquals(listOf("all"), active.tiersFor("native_lang"))
+        assertEquals(50, active.unit("native_lang").heightCTA)
+    }
+
+    @Test
+    fun `the debug file's ids replace the whole waterfall`() {
+        AdRemoteConfig.installAssets(
+            parse(placement("native_lang", floor("high"), floor("all"))),
+            parse("""{"native_lang": {"ids": [{"id": "test"}]}}"""),
+        )
+        assertEquals(listOf("test"), AdRemoteConfig.getInstance().tiersFor("native_lang"))
     }
 
     @Test
     fun `unknown placement has no floors`() {
-        assertEquals(emptyList<String>(), configOf().tiersFor("does_not_exist"))
+        assertEquals(emptyList<String>(), AdRemoteConfig().tiersFor("does_not_exist"))
     }
 
-    private fun configOf(vararg entries: Pair<String, String>) = AdRemoteConfig(
-        entries.associate { (key, id) -> key to AdUnitConfig(id = id, isEnable = true) },
-    )
+    private fun parse(json: String) = AdRemoteConfig.fromJson(json)!!
+
+    private fun floor(id: String, enabled: Boolean = true) = """{"id": "$id", "isEnable": $enabled}"""
+
+    private fun placement(key: String, vararg floors: String, enabled: Boolean = true) =
+        """{"$key": {"ids": [${floors.joinToString()}], "isEnable": $enabled}}"""
 }

@@ -78,7 +78,7 @@ class NativeTemplateIdTest {
 
     private fun declare(slots: Map<AdPlacement, String>, fields: String) {
         AdRemoteConfig.initializeFromJson(slots.values.joinToString(prefix = "{", postfix = "}") {
-            """"$it":{"id":"$it","isEnable":true$fields}"""
+            """"$it":{"ids":[{"id":"$it"}],"isEnable":true$fields}"""
         })
     }
 
@@ -144,7 +144,7 @@ class NativeTemplateIdTest {
 
     @Test fun `components arranges template 1 with the CTA on top or at the bottom`() {
         val head = com.ads.module.R.id.block_icon_headline
-        val media = com.ads.module.R.id.ad_media
+        val media = com.ads.module.R.id.block_media
         val cta = com.ads.module.R.id.ad_call_to_action
         mapOf(
             """["icon_headline","media","cta"]""" to listOf(head, media, cta),
@@ -257,6 +257,18 @@ class NativeTemplateIdTest {
         )
         val media = root.findViewById<View>(com.ads.module.R.id.ad_media)
         assertEquals(1.91f, media.measuredWidth.toFloat() / media.measuredHeight, 0.02f)
+    }
+
+    @Test fun `template 1 media spans the full width at 1·68 to 1`() {
+        val root = inflate(R.layout.ob_layout_native_lfo)
+        val width = (360 * app.resources.displayMetrics.density).toInt()
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val media = root.findViewById<View>(com.ads.module.R.id.ad_media)
+        assertEquals(width, media.measuredWidth)
+        assertEquals(1.68f, media.measuredWidth.toFloat() / media.measuredHeight, 0.02f)
     }
 
     private fun visibleOrder(layout: Int): List<Int> {

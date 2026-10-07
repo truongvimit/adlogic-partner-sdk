@@ -158,8 +158,8 @@ class OnboardingAdLifecycleTest {
     private fun pagerClickAction(action: NativeClickAction) {
         val pages = listOf(AdPlacement.StepNative(StepId.OB1), AdPlacement.StepFullScreen(StepId.OB1))
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
-            "native_ob1" to com.ads.module.config.AdUnitConfig("test-content", true, clickAction = action),
-            AdPlacement.StepFullScreen(StepId.OB1).key to com.ads.module.config.AdUnitConfig("test-fullscreen", true, clickAction = action),
+            "native_ob1" to com.ads.module.config.AdUnitConfig(listOf("test-content"), true, clickAction = action),
+            AdPlacement.StepFullScreen(StepId.OB1).key to com.ads.module.config.AdUnitConfig(listOf("test-fullscreen"), true, clickAction = action),
         )))
         pages.forEach { assertEquals(it.key, action, io.onboardkit.remote.OnboardingSettings.nativeClickAction(it)) }
     }
@@ -202,7 +202,7 @@ class OnboardingAdLifecycleTest {
 
     @Test fun `disabled remote native placement starts without an ad slot or a provider bind`() {
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
-            "native_ob1" to com.ads.module.config.AdUnitConfig("test", false),
+            "native_ob1" to com.ads.module.config.AdUnitConfig(listOf("test"), false),
         )))
         launch(adsOverride = AdsConfig.fromAdConfig())
         assertNoAdFromStart()
@@ -241,7 +241,7 @@ class OnboardingAdLifecycleTest {
         org.junit.Assert.assertSame(image, contentPage().findViewById(R.id.ob_step_image))
         org.junit.Assert.assertSame(card, contentPage().findViewById(R.id.ob_step_card))
         assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
-        assertEquals(page.height * .59f, image.height.toFloat(), 1f)
+        assertEquals("The image runs down to the ad", page.findViewById<View>(R.id.ob_ad_block).top, image.bottom)
         listener().onFailedToLoad()
         settle()
         assertEquals(View.VISIBLE, page.findViewById<View>(R.id.ob_ad_block).visibility)
@@ -277,7 +277,8 @@ class OnboardingAdLifecycleTest {
         settle()
         layout()
         assertEquals(original, geometry())
-        assertEquals(page().height * .59f, page().findViewById<View>(R.id.ob_step_image).height.toFloat(), 1f)
+        assertEquals("The image runs down to the ad", page().findViewById<View>(R.id.ob_ad_block).top,
+            page().findViewById<View>(R.id.ob_step_image).bottom)
         org.junit.Assert.assertNotNull(page().findViewById<View>(R.id.ob_step_card).background)
         assertEquals(originalElevation, page().findViewById<View>(R.id.ob_step_card).elevation, 0f)
     }
@@ -323,11 +324,11 @@ class OnboardingAdLifecycleTest {
 
     @Test fun `full1 binds fullscreen then OB3 content binds its own native with splash native off`() {
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(
-            "native_fs" to com.ads.module.config.AdUnitConfig("unused_splash_native", false),
-            "native_full1" to com.ads.module.config.AdUnitConfig("ob_fullscreen", true),
-            "native_ob1" to com.ads.module.config.AdUnitConfig("content1", true),
-            "native_ob2" to com.ads.module.config.AdUnitConfig("content2", true),
-            "native_ob3" to com.ads.module.config.AdUnitConfig("content3", true, enableUaCheck = false),
+            "native_fs" to com.ads.module.config.AdUnitConfig(listOf("unused_splash_native"), false),
+            "native_full1" to com.ads.module.config.AdUnitConfig(listOf("ob_fullscreen"), true),
+            "native_ob1" to com.ads.module.config.AdUnitConfig(listOf("content1"), true),
+            "native_ob2" to com.ads.module.config.AdUnitConfig(listOf("content2"), true),
+            "native_ob3" to com.ads.module.config.AdUnitConfig(listOf("content3"), true, enableUaCheck = false),
         )))
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow()).getOrThrow()
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)

@@ -78,12 +78,12 @@ class GroupedSettingsOwnershipTest {
         fun pages() = FlowNavigator.enabledSteps(OnboardingSdk.requireConfig(), OnboardingSdk.flags(),
             canShowAdStep = OnboardingSdk::canFillAdOnlyStep)
         assertFalse(StepId.FULL1 in pages())
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", false), "native_full1" to AdUnitConfig("remote_fs", true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig(listOf("splash_fs"), false), "native_full1" to AdUnitConfig(listOf("remote_fs"), true))))
         assertTrue(StepId.FULL1 in pages())
         assertEquals(listOf("remote_fs"), OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder)
         // Behavior JSON cannot re-enable or remap the unit declared off in ad_config.
         OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"full1":{"enabled":true,"native_enabled":true,"native_placement":"another"}}}}""")
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig("splash_fs", true), "native_full1" to AdUnitConfig("remote_fs", false))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_fs" to AdUnitConfig(listOf("splash_fs"), true), "native_full1" to AdUnitConfig(listOf("remote_fs"), false))))
         assertFalse(StepId.FULL1 in pages())
         assertEquals(0, OnboardingSdk.requireConfig().ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.tierCount)
     }
@@ -91,7 +91,7 @@ class GroupedSettingsOwnershipTest {
     @Test fun `neither removed JSON templates nor a removed positionCTA pick the frame`() {
         OnboardingSdk.configure(onboardKitConfig { defaultSteps() }.getOrThrow())
         OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native_template":"CTA_TOP"},"onboarding":{"ads":{"content_template":"COMPACT"},"steps":{"ob1":{"native_template":"CTA_TOP"}}}}""")
-        AdRemoteConfig.initializeFromJson("""{"native_lang":{"id":"lang","isEnable":true,"positionCTA":"TOP"},"native_ob1":{"id":"ob1","isEnable":true,"positionCTA":"TOP"},"native_welcome1":{"id":"welcome","isEnable":true,"positionCTA":"TOP"}}""")
+        AdRemoteConfig.initializeFromJson("""{"native_lang":{"ids":[{"id":"lang"}],"isEnable":true,"positionCTA":"TOP"},"native_ob1":{"ids":[{"id":"ob1"}],"isEnable":true,"positionCTA":"TOP"},"native_welcome1":{"ids":[{"id":"welcome"}],"isEnable":true,"positionCTA":"TOP"}}""")
         val lfo = io.onboardkit.R.layout.ob_layout_native_lfo
         assertEquals(lfo, NativeTemplates.layoutForPlacement(AdPlacement.Language1))
         assertEquals(lfo, NativeTemplates.layoutForPlacement(AdPlacement.StepNative(StepId.OB1)))

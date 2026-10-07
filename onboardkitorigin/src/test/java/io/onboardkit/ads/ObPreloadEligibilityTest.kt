@@ -69,7 +69,7 @@ class ObPreloadEligibilityTest {
         }
     }
 
-    private fun adConfig(entries: Map<String, AdUnitConfig> = ids.associate { "native_$it" to AdUnitConfig("unit_$it", true) }) {
+    private fun adConfig(entries: Map<String, AdUnitConfig> = ids.associate { "native_$it" to AdUnitConfig(listOf("unit_$it"), true) }) {
         AdRemoteConfig.update(AdRemoteConfig(entries))
     }
 
@@ -124,23 +124,23 @@ class ObPreloadEligibilityTest {
         }
     }
 
-    @Test fun `every slot requires a usable enabled ID and base off disables even enabled high floors`() {
+    @Test fun `every slot requires a usable enabled ID and isEnable off disables its high floors`() {
         ids.forEach { target ->
             val key = "native_$target"
             val blocked = listOf(
                 emptyMap(),
-                mapOf(key to AdUnitConfig("unit_$target", false)),
-                mapOf(key to AdUnitConfig("   ", true)),
-                mapOf(key to AdUnitConfig("unit_$target", false), "${key}_high" to AdUnitConfig("high", true)),
-                mapOf("${key}_high" to AdUnitConfig("high", false)),
+                mapOf(key to AdUnitConfig(listOf("unit_$target"), false)),
+                mapOf(key to AdUnitConfig(listOf("   "), true)),
+                mapOf(key to AdUnitConfig(listOf("high", "unit_$target"), false)),
+                mapOf("${key}_high" to AdUnitConfig(listOf("high"), true)),
             )
             blocked.forEach { replacement ->
-                adConfig(ids.filter { it != target }.associate { "native_$it" to AdUnitConfig("unit_$it", true) } + replacement)
+                adConfig(ids.filter { it != target }.associate { "native_$it" to AdUnitConfig(listOf("unit_$it"), true) } + replacement)
                 resetChain()
                 assertRequested(ids - target)
             }
             // A usable high tier is a valid ID even if the all-price tier is absent.
-            adConfig(mapOf("${key}_high" to AdUnitConfig("unit_$target", true)))
+            adConfig(mapOf(key to AdUnitConfig(listOf("unit_$target"), true)))
             resetChain()
             assertRequested(listOf(target))
         }
@@ -177,7 +177,7 @@ class ObPreloadEligibilityTest {
     }
 
     @Test fun `UA gate blocks all mapped slots even with enabled screens and IDs`() {
-        adConfig(ids.associate { "native_$it" to AdUnitConfig("unit_$it", true, enableUaCheck = true) })
+        adConfig(ids.associate { "native_$it" to AdUnitConfig(listOf("unit_$it"), true, enableUaCheck = true) })
         val erain = Mockito.mock(com.ads.module.ads.ERainAd::class.java)
         Mockito.mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
             singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(erain)
@@ -204,7 +204,7 @@ class ObPreloadEligibilityTest {
     @Test fun `snapshot does not override a live ad placement kill switch`() {
         adConfig()
         assertRequested(ids)
-        adConfig(ids.associate { "native_$it" to AdUnitConfig("unit_$it", false) })
+        adConfig(ids.associate { "native_$it" to AdUnitConfig(listOf("unit_$it"), false) })
         ids.forEach { id ->
             val placement = if (id.startsWith("full")) AdPlacement.StepFullScreen(StepId(id)) else AdPlacement.StepNative(StepId(id))
             assertEquals(AdSkipReason.NO_AD_UNIT, guard.skipReason(activity, placement))

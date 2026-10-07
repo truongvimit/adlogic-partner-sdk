@@ -94,7 +94,7 @@ class LanguagePreloadTest {
     }
 
     private fun lfo2ClickAction(action: NativeClickAction) {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang_alt" to AdUnitConfig("language", true, clickAction = action))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang_alt" to AdUnitConfig(listOf("language"), true, clickAction = action))))
         assertEquals(action, OnboardingSettings.nativeClickAction(AdPlacement.Language2))
     }
 

@@ -22,7 +22,7 @@ class NativeAdConfigForUnitsTest {
     }
 
     @Test fun `explicit tiers are requested in order without reading ad_config ids`() {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "from-config", isEnable = true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("from-config"), isEnable = true))))
         val config = NativeAdConfig.forUnits(listOf("high", "", "low", "high"), 7, "native_lang")
         assertEquals(listOf("high", "low"), config.adUnitIds)
         assertEquals(7, config.layoutId)
@@ -51,7 +51,7 @@ class NativeAdConfigForUnitsTest {
     }
 
     @Test fun `the ad config key supplies the UA gate and the click action`() {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "x", isEnable = true,
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("x"), isEnable = true,
             enableUaCheck = true, clickAction = NativeClickAction.NONE))))
         val config = NativeAdConfig.forUnits(listOf("lang"), 1, "native_lang")
         assertTrue(config.forceUaCheck)
@@ -69,25 +69,26 @@ class NativeAdConfigForUnitsTest {
         assertEquals(NativeClickAction.RELOAD, config.resolvedClickAction)
         clickAction("native_home", NativeClickAction.AUTO_NEXT)
         assertEquals(NativeClickAction.AUTO_NEXT, config.resolvedClickAction)
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_home" to AdUnitConfig(id = "x", isEnable = true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_home" to AdUnitConfig(ids = listOf("x"), isEnable = true))))
         assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
     }
 
-    @Test fun `a click action on a floor key never reaches the placement`() {
+    @Test fun `a placement's click action covers every floor in its ids`() {
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
-            "native_home_high" to AdUnitConfig(id = "high", isEnable = true, clickAction = NativeClickAction.NONE),
-            "native_home" to AdUnitConfig(id = "base", isEnable = true),
+            "native_home" to AdUnitConfig(
+                ids = listOf("high", "base"), isEnable = true, clickAction = NativeClickAction.NONE,
+            ),
         )))
-        assertEquals(NativeClickAction.RELOAD, NativeAdConfig.forPlacement("native_home", 1).resolvedClickAction)
-        assertEquals(NativeClickAction.RELOAD,
+        assertEquals(NativeClickAction.NONE, NativeAdConfig.forPlacement("native_home", 1).resolvedClickAction)
+        assertEquals(NativeClickAction.NONE,
             NativeAdConfig.forUnits(listOf("high"), 1, "native_home").resolvedClickAction)
     }
 
     @Test fun `placement UA gate follows a remote refresh`() {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "x", isEnable = true, enableUaCheck = true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("x"), isEnable = true, enableUaCheck = true))))
         val config = NativeAdConfig.forPlacement("native_lang", 1)
         assertTrue(config.shouldForceUaCheck())
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "x", isEnable = true, enableUaCheck = false))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("x"), isEnable = true, enableUaCheck = false))))
         assertFalse(config.shouldForceUaCheck())
     }
 
@@ -106,6 +107,9 @@ class NativeAdConfigForUnitsTest {
         assertEquals(3, replaceable.layoutId)
         assertEquals(NativeClickAction.RELOAD, replaceable.resolvedClickAction)
         assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
+        action = NativeClickAction.RELOAD_WATERFALL
+        assertEquals(NativeClickAction.RELOAD_WATERFALL, replaceable.resolvedClickAction)
+        assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
         layout = 4
         action = NativeClickAction.AUTO_NEXT
         assertEquals(4, replaceable.layoutId)
@@ -113,5 +117,5 @@ class NativeAdConfigForUnitsTest {
     }
 
     private fun clickAction(key: String, action: NativeClickAction) = AdRemoteConfig.update(AdRemoteConfig(
-        mapOf(key to AdUnitConfig(id = "x", isEnable = true, clickAction = action))))
+        mapOf(key to AdUnitConfig(ids = listOf("x"), isEnable = true, clickAction = action))))
 }

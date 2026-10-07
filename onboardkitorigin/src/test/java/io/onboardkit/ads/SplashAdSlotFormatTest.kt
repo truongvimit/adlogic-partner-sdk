@@ -79,8 +79,8 @@ class SplashAdSlotFormatTest {
         AdRemoteConfig.update(
             AdRemoteConfig(
                 mapOf(
-                    "native_splash" to AdUnitConfig("splash_native_unit", true),
-                    "native_fs" to AdUnitConfig("splash_fs_unit", true),
+                    "native_splash" to AdUnitConfig(listOf("splash_native_unit"), true),
+                    "native_fs" to AdUnitConfig(listOf("splash_fs_unit"), true),
                 ),
             ),
         )
@@ -94,7 +94,7 @@ class SplashAdSlotFormatTest {
     }
 
     @Test fun `an absent native_splash entry leaves the slot empty rather than borrowing one`() {
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("banner_splash" to AdUnitConfig("banner_unit", true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("banner_splash" to AdUnitConfig(listOf("banner_unit"), true))))
         assertNull(OnboardingSdk.requireConfig().ads.unitFor(AdPlacement.SplashInlineNative))
     }
 

@@ -93,15 +93,16 @@ Test AdMob App ID में **`~`** होता है। चलाने स�
 दोनों files को ठीक इन्हीं नामों से `assets` में copy करें (folder न हो तो बनाएँ):
 
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** release का configuration; अभी हर ID test ID है।
-- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** हर all-price key के लिए सिर्फ एक test `id`; बाकी हर field `ad_config.json` से आता है।
+- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** हर placement key के लिए सिर्फ test `ids` (आम तौर पर एक floor); बाकी हर field `ad_config.json` से आता है।
 
-Ad unit IDs में **`/`** होता है। `ad_config.json` हर build के लिए style, UA, app-resume delay और waterfalls रखती है; [debug example](../app/src/main/assets/ad_config_debug.json) हर all-price key को सिर्फ एक test ID से map करता है (interstitials `1033173712`)। नीचे OB slots दिए हैं; बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
+Ad unit IDs में **`/`** होता है। `ad_config.json` हर build के लिए style, UA, app-resume delay और waterfalls रखती है; [debug example](examples/ads-onboarding/ad_config_debug.json) हर placement key को सिर्फ एक test floor से map करता है (interstitials `1033173712`)। नीचे OB slots दिए हैं; कदम 4 का `fromAdConfig()` `open_resume` (app-open), `native_welcome1/2` (Welcome Back) और `native_onboarding_fullscreen_1_4` (OB5) भी bind करता है। बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
 
 | JSON key | जगह | कदम 4 में `AdsConfig` में mapping |
 | --- | --- | --- |
 | `banner_splash` | Splash banner | `splashBanner` |
 | `native_splash` | Splash native, banner वाला ही slot | `splashInlineNative` |
 | `inter_splash` | Splash छोड़ते समय का interstitial | `splashInterstitial` |
+| `native_fs` | Splash interstitial के बाद, LFO से पहले का वैकल्पिक full-screen native | `splashNative` |
 | `native_lang` | भाषा का पहला native | `languageNative` |
 | `native_lang_alt` | पहली बार भाषा चुनने के बाद का replacement native | `languageDupNative` |
 | `native_popup_lang` | भाषा confirmation popup का native | `languageConfirmNative` |
@@ -115,19 +116,19 @@ Ad unit IDs में **`/`** होता है। `ad_config.json` हर bui
 
 `native_ob3` → **OB3**, `native_ob4` → **OB4**; `native_full1/2` → **Full1/Full2**. `inter_after_ob3` पूरे onboarding के बाद दिखता है।
 
-हर build अपनी settings `ad_config.json` से पढ़ता है। Debuggable build `ad_config_debug.json` भी पढ़ता है, जिसमें हर all-price key के लिए सिर्फ एक `"id"` होता है (`native_reward`, `native_reward_high` नहीं): यह test ID placement की हर ID की जगह लेती है और `_high*` floors कुछ request नहीं करते, इसलिए हर placement सामान्य load path से एक test ID load करता है। Debug file के बाकी fields `WARN` के साथ ignore होते हैं, और जिस चालू key की test ID नहीं है उसे ad नहीं मिलता। Remote `ad_remote_config` IDs को छोड़कर हर field लागू करता है; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` remote की declare की गई IDs भी ले लेता है। Debug file न हो तो debug `ad_config.json` की IDs इस्तेमाल करता है।
+हर build अपनी settings `ad_config.json` से पढ़ता है। Debuggable build `ad_config_debug.json` भी पढ़ता है, जिसमें हर placement key के लिए सिर्फ `ids` होता है, आम तौर पर एक test floor: ये floors placement के पूरे waterfall की जगह लेते हैं, इसलिए हर placement सामान्य load path से अपनी test ID load करता है। Debug file का कोई भी दूसरा field `WARN` के साथ ignore होता है, और `ad_config.json` में चालू जिस placement की debug entry नहीं है उसे ad नहीं मिलता (यह भी `WARN`)। Remote `ad_remote_config` IDs को छोड़कर हर field लागू करता है; `AdRemoteConfig.setAllowRemoteOverrideInDebug(true)` remote की declare की गई IDs भी ले लेता है। Debug file न हो तो debug `ad_config.json` की IDs इस्तेमाल करता है।
 
 नमूने के IDs [Google demo ad units](https://developers.google.com/admob/android/test-ads#demo_ad_units) और [AdMob App ID](https://developers.google.com/admob/android/quick-start) से हैं। Fullscreen page **native ID** इस्तेमाल करता है। नमूना हर format के लिए एक ही test ID साझा करता है; production में placement के अनुसार configuration, style और reporting अलग करने के लिए अलग IDs चाहिए।
 
 ### वैकल्पिक: grouped remote settings और custom local defaults
 
-SDK में [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) और [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) भी bundled हैं। Remote control के लिए [Firebase: तीन String parameters publish करें](firebase-integration.hi.md#remote-json)। Ad units के लिए `ad_remote_config` रखें; `ad_behavior_config` और `onboarding_config` अलग String values हों, जिनमें संबंधित JSON objects हों।
+SDK में [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) और [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) भी bundled हैं। Remote control के लिए [Firebase: तीन String parameters publish करें](firebase-integration.hi.md#remote-json)। Ad units के लिए `ad_remote_config` रखें; `ad_behavior_config` और `onboarding_config` अलग String values हों, जिनमें संबंधित JSON objects हों। दोनों examples bundled defaults जैसे ही हैं, सिवाय `onboarding.primary_color` के: example इसे `""` रखता है ताकि app का मौजूदा UI रंग बना रहे, जबकि SDK default `"#FF375E"` है।
 
 Fallback बदलने के लिए `app/src/main/assets/` में इन्हीं नामों की files बनाएँ, पूरा default copy करें या सिर्फ बदलने वाले fields रखें, फिर rebuild करें। SDK defaults सही हों तो app में अतिरिक्त files आवश्यक नहीं। Valid remote/cache fields, फिर backend द्वारा भेजी गई legacy `ob_*` keys, इन files से किसी भी scope पर और आपके Kotlin config से पहले लागू होते हैं; offline fetch पुराने valid remote cache को रखता है, local को उस पर लागू नहीं करता। [दो local JSON उदाहरण और fallback नियम](firebase-integration.hi.md#local-defaults), तथा [field/default reference](remote-settings.hi.md) देखें।
 
 ## 3. Onboarding की सामग्री तैयार करें
 
-अपना मौजूदा `app_name` और launcher icon इस्तेमाल करें। ये छह strings `app/src/main/res/values/strings.xml` में जोड़ें और content अपने product के अनुसार बदलें:
+अपना मौजूदा `app_name` और launcher icon इस्तेमाल करें। ये आठ strings `app/src/main/res/values/strings.xml` में जोड़ें और content अपने product के अनुसार बदलें:
 
 ```xml
 <resources>
@@ -137,10 +138,12 @@ Fallback बदलने के लिए `app/src/main/assets/` में इ�
     <string name="onboarding_des_2">User को जो क्रिया जाननी है वह दिखाएँ.</string>
     <string name="onboarding_title_3">शुरू करने के लिए तैयार</string>
     <string name="onboarding_des_3">User को शुरू करने का न्योता दें.</string>
+    <string name="onboarding_title_4">एक और बात</string>
+    <string name="onboarding_des_4">जानने लायक एक और feature दिखाएँ.</string>
 </resources>
 ```
 
-`values-<language>/strings.xml` में अनुवाद जोड़ें, [ob_strings.xml](../onboardkitorigin/src/main/res/values/ob_strings.xml) की `ob_*` keys समेत, क्योंकि SDK सिर्फ अंग्रेजी देता है। कदम 4 में तीनों `imageRes` values अपनी app की images से बदलें, या आजमाने के लिए example से images [1](../app/src/main/res/drawable-nodpi/img_onboard_sample_1.png), [2](../app/src/main/res/drawable-nodpi/img_onboard_sample_2.png), [3](../app/src/main/res/drawable-nodpi/img_onboard_sample_4.png) को `app/src/main/res/drawable-nodpi/` में copy करें।
+`values-<language>/strings.xml` में अनुवाद जोड़ें, [ob_strings.xml](../onboardkitorigin/src/main/res/values/ob_strings.xml) की `ob_*` keys समेत, क्योंकि SDK सिर्फ अंग्रेजी देता है। कदम 4 में चारों `imageRes` values अपनी app की images से बदलें (sample में OB3 और OB4 एक ही image साझा करते हैं), या आजमाने के लिए example से images [1](../app/src/main/res/drawable-nodpi/img_onboard_sample_1.png), [2](../app/src/main/res/drawable-nodpi/img_onboard_sample_2.png), [3](../app/src/main/res/drawable-nodpi/img_onboard_sample_4.png) को `app/src/main/res/drawable-nodpi/` में copy करें।
 
 LFO, popup, OB और native ads के layouts/Activities SDK पहले से देता है।
 
@@ -155,19 +158,19 @@ LFO, popup, OB और native ads के layouts/Activities SDK पहले स�
 
 ### `AppAdPlacement.kt` — आपकी app का placement catalog
 
-[AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) को अपने app package में copy करें, उदाहरण के लिए `app/src/main/java/com/example/app/`। File में हर placement के लिए एक base key है: OB slots और आपकी app के slots। `_high`, `_high1`… floors SDK खुद ढूँढता है; floors के लिए constants नहीं चाहिए।
+[AppAdPlacement.kt](examples/ads-onboarding/AppAdPlacement.kt) को अपने app package में copy करें, उदाहरण के लिए `app/src/main/java/com/example/app/`। File में हर placement के लिए एक key है: OB slots और आपकी app के slots। Floors उसी key के `ids` में रहते हैं; उनके लिए constants नहीं चाहिए।
 
-`AppAdPlacement.NATIVE_HOME` की key `native_home` है; दोनों JSON files में उसके ad unit IDs और configuration रहते हैं। हर नए placement के लिए constant और वही JSON key जोड़ें।
+`AppAdPlacement.NATIVE_HOME` की key `native_home` है; `ad_config.json` में उसके ad unit IDs और configuration रहते हैं, `ad_config_debug.json` में सिर्फ उसके test `ids`। हर नए placement के लिए constant और वही JSON key जोड़ें।
 
 स्क्रीन के XML में native/banner slot घोषित करें और उसी स्क्रीन से SDK API सीधे बुलाएँ। Loading, cache और ad lifecycle SDK संभालता है। `AdsAppManager` इस्तेमाल करें तो उसमें सिर्फ configuration, initialization और app की अपनी policy रखें।
 
 ### `OnboardKitSetup.kt` — OB keys को SDK से जोड़ें
 
-[OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) उसी package में copy करें, `com.example.app` बदलें और app के अपने resources रखें। Sample तीन content pages और fullscreen page घोषित करता है और standard placement bindings के लिए **`AdsConfig.fromAdConfig()`** इस्तेमाल करता है। कदम 5 में `OnboardingSdk.install` के बाद एक बार configure करें; ID, gate और template current settings से resolve होते हैं, fetch के बाद setup दोहराना नहीं पड़ता। अलग keys वाली app सिर्फ बदली associations `fromAdConfig(mapOf(...))` को दे; [mapping table](remote-settings.hi.md) में defaults हैं।
+[OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) उसी package में copy करें, `com.example.app` बदलें और app के अपने resources रखें। Sample चार content pages और दो fullscreen pages (FULL1, FULL2) घोषित करता है और standard placement bindings के लिए **`AdsConfig.fromAdConfig()`** इस्तेमाल करता है। कदम 5 में `OnboardingSdk.install` के बाद एक बार configure करें; ID, gate और template current settings से resolve होते हैं, fetch के बाद setup दोहराना नहीं पड़ता। अलग keys वाली app सिर्फ बदली associations `fromAdConfig(mapOf(...))` को दे; [mapping table](remote-settings.hi.md) में defaults हैं।
 
 Declared लेकिन disabled placement खाली unit रखता है, इसलिए दूसरे slot का ad नहीं लेता। केवल LFO2 unit absent होने पर LFO1 fallback है; replacement action बंद करने के लिए `onboarding_config.lfo.native2.enabled = false` रखें।
 
-LFO/Welcome Back/content OB natives अपना frame base placement key के `templateId` (default `1`, LFO frame) से और blocks का क्रम उसी key के `components` से लेते हैं; default क्रम CTA को नीचे रखता है, `["cta","media","icon_headline"]` उसे ऊपर रखता है। `positionCTA` हटा दिया गया है: जो payload अब भी इसे भेजता है, उसे अनदेखा किया जाता है। Host fallbacks `AdsConfig.languageTemplate`/`contentStepTemplate` और `NativeTemplate` enum भी इसके साथ हटा दिए गए हैं; इन्हें अपने `AdsConfig` से हटा दें। `onboarding_config` के `native_template`/`content_template`, per-step overrides समेत, हटा दिए गए हैं। Fullscreen/popup frame स्थिर रहते हैं। `colorCTA` CTA और Ad badge दोनों को रंग देता है; color/height/components हर bind पर फिर पढ़े जाते हैं, click/resume replacement पर भी।
+LFO/Welcome Back/content OB natives अपना frame placement key के `templateId` (default `1`, LFO frame) से और blocks का क्रम उसी key के `components` से लेते हैं; default क्रम CTA को नीचे रखता है, `["cta","media","icon_headline"]` उसे ऊपर रखता है। `positionCTA` हटा दिया गया है: जो payload अब भी इसे भेजता है, उसे अनदेखा किया जाता है। Host fallbacks `AdsConfig.languageTemplate`/`contentStepTemplate` और `NativeTemplate` enum भी इसके साथ हटा दिए गए हैं; इन्हें अपने `AdsConfig` से हटा दें। `onboarding_config` के `native_template`/`content_template`, per-step overrides समेत, हटा दिए गए हैं। Fullscreen/popup frame स्थिर रहते हैं। `colorCTA` CTA और Ad badge दोनों को रंग देता है; color/height/components हर bind पर फिर पढ़े जाते हैं, click/resume replacement पर भी।
 
 ## 5. अपनी Application में initialize करें
 
@@ -290,15 +293,15 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 | भाषा popup | मौजूदा भाषा दोबारा चुनने पर तुरंत खुलता है। दूसरी भाषा चुनने पर कुल चौथे tap से खुलता है; re-select tap भी count होता है। इसका native पहली बार popup खुलने पर request होता है | बंद करने के लिए `LanguageConfig.confirmDialogOnReselectEnabled = false`; SETTINGS में popup नहीं दिखता |
 | Native template | SDK: LFO/Welcome Back/content OB पर template `1`, splash inline और Privacy/Goal पर `2`; CTA नीचे | Frame के लिए `ad_config.<key>.templateId` और क्रम के लिए `components` सेट करें। Backend का `ad_remote_config` आपके app asset से field-दर-field ऊपर है। [Priority](remote-settings.hi.md)। |
 | System bars | Status/caption bars दिखते हैं, navigation bar छिपा | `SystemBarConfig(showStatusBar, showNavigationBar, showCaptionBar)` |
-| OB पर native click और वापसी | pager के content और fullscreen pages वापसी पर आगे बढ़ते हैं (`auto_next`) और कभी replacement load नहीं करते | page पर बने रहने के लिए page की base key (`native_ob1`…) पर `"click_action": "none"`; [Native click actions](remote-settings.hi.md#native-click-actions) |
-| LFO/popup, Welcome Back, OB5 या app स्क्रीन पर native click | ad click/open होते ही preload करता है (`reload`); वापस आने पर तैयार ad bind करता है या चल रही request का इंतज़ार करता है | ad_config में placement की base key पर `click_action`, समय-आधारित refresh से स्वतंत्र; [app screen के native का उदाहरण](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) |
+| OB पर native click और वापसी | pager के content और fullscreen pages वापसी पर आगे बढ़ते हैं (`auto_next`) और कभी replacement load नहीं करते | page पर बने रहने के लिए page की key (`native_ob1`…) पर `"click_action": "none"`; [Native click actions](remote-settings.hi.md#native-click-actions) |
+| LFO/popup, Welcome Back, OB5 या app स्क्रीन पर native click | ad click/open होते ही preload करता है; वापस आने पर तैयार ad bind करता है या चल रही request का इंतज़ार करता है। Replacement केवल all-price floor request करता है (`reload`); `reload_waterfall` हर floor चलता है | ad_config में placement की key पर `click_action`, समय-आधारित refresh से स्वतंत्र; [app screen के native का उदाहरण](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) |
 | flow अधूरा रहते दोबारा खोलना | Splash → LFO → OB फिर से चलता है; पूरा flow पूरा होने पर ही OB छूटता है | app की ओर से first-open flag या checkpoint नहीं चाहिए |
 | Fullscreen native page | Page select होने के 5 सेकंड बाद X और 15 सेकंड बाद auto-next; background time भी गिना जाता है। Shimmer पूरे native host को भरता है, media पूरे viewport में और CTA नीचे रहता है. | `AdFullScreenStepDefinition` के fields; remote `ob_skip_button_delay_sec = -1` local delay बनाए रखता है |
 | Onboarding के अंत का interstitial | pager में आते ही preload, पूरा होने पर fill के लिए अधिकतम 8 सेकंड इंतज़ार; अगली स्क्रीन ad के नीचे खुलती है। Notification/widget/uninstall: बंद होने का इंतज़ार | हमेशा बंद होने का इंतज़ार करने के लिए `AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.AFTER_AD`; आपकी app खुद संभालती हो तो `afterOnboardingInterstitialEnabled = false`। इसे `InterstitialAutoBuffer` से बाहर रखें |
 | OB navigation | Swipe चालू होने पर OB1 locked रहता है। OB2/OB3/OB4 और fullscreen पर load/bind के दौरान swipe बंद रहता है और ad impression के बाद खुलता है; जिस content page पर कोई ad नहीं है (unit नहीं, premium, no fill) वहाँ तुरंत खुलता है। हर नए visit पर फिर lock लगता है; global swipe lock हमेशा लागू रहता है. | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back हमेशा app से बाहर निकालता है), `lockPortrait`; landscape app को manifest भी बदलना होगा |
 | Interstitial का अंतराल | `ERainAdConfig.intervalInterstitialAd = 0` (कोई सीमा नहीं); यह सिर्फ `InterstitialAutoBuffer` group पर लागू होता है, splash/OB या खुद load किए interstitials पर नहीं | init से पहले सेट करें, या `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` इस्तेमाल करें |
 | Interstitial click cap | बंद (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: हर ad unit पर 24 घंटे में ज्यादा से ज्यादा `n` clicks, उसके बाद load/show रुक जाता है। जरूरत पर बुलाएँ, आम तौर पर remote fetch के बाद |
-| OB5, paywall, app-open | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `ob5Native` null हो तो `fullScreenStepNative` (host setup) इस्तेमाल होता है। Paywall जुड़ा नहीं है। `ad_config.json` या backend के `ad_remote_config` में ID वाला `open_resume` [app-open](#app-open-on-return) चालू करता है; `disableAppResume()` इसे बंद रखता है | अपनी अलग ID देने के लिए `AdsConfig.ob5Native`; paywall/app-open तभी जोड़ें जब जरूरत हो |
+| OB5, paywall, app-open | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `fromAdConfig()` के साथ OB5 `native_onboarding_fullscreen_1_4` bind करता है; `ad_config.json` या remote में declare होने पर यह key code में दिए unit से ऊपर रहती है। Key declare न हो तो `ob5Native`, फिर `fullScreenStepNative` (host setup) लागू होता है। Paywall जुड़ा नहीं है। `ad_config.json` या backend के `ad_remote_config` में ID वाला `open_resume` [app-open](#app-open-on-return) चालू करता है; `disableAppResume()` इसे बंद रखता है | इसकी ID `native_onboarding_fullscreen_1_4` के नीचे रखें (`AdsConfig.ob5Native` तभी लागू होता है जब वह key declare न हो); paywall/app-open तभी जोड़ें जब जरूरत हो |
 
 UMP की error या timeout [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt) के जरिए process में **request की कोशिश** की अनुमति दे सकती है; यह न consent देता है, न fill की गारंटी। अपने CMP से `ConsentCenter.setHostConsent(false, false)` देकर requests बंद करने वाला host फिर भी जीतता है; request की अनुमति timer या personalization से न मानें।
 
@@ -308,25 +311,50 @@ Consent request की authority है। Custom CMP का परिणाम 
 
 ### नमूना JSON के fields
 
-दोनों JSON files example के debug fields और values रखती हैं; सिर्फ interstitials को test ID पर सामान्य किया गया है।
+`ad_config.json` हर placement में test IDs इस्तेमाल करती है और `native_ob1..4`, `native_full1/2` और `native_fs` को बंद रखती है (उन slots को test करने के लिए इन्हें चालू करें); `ad_config_debug.json` में सिर्फ test `ids` हैं।
 
 | Field | नमूने में value | कैसे इस्तेमाल होता है / कहाँ लागू होता है |
 | --- | --- | --- |
-| `id` | सही format का test ad unit | Release से पहले असली file के IDs बदलें; placement keys न बदलें। |
-| `isEnable` | Example जैसा: ज्यादातर `true`, welcome `false` | Placement चालू या बंद करता है। Base key master switch है: base key पर `false` पूरा waterfall बंद कर देता है। |
+| `ids` | सही format का test ad unit | `{"id", "isEnable"}` floors का waterfall, सबसे ऊँचा पहले, all-price आख़िर में; एक unit वाला placement एक-floor array है। Placement-level `"id"` नहीं पढ़ा जाता। Release से पहले असली file के IDs बदलें; placement keys न बदलें। देखें [Waterfall](#waterfall-हर-placement-की-एक-key)। |
+| `isEnable` | `true`, सिवाय `native_welcome`, `inter_welcome`, `native_ob1..4`, `native_full1/2` और `native_fs` के, जो `false` हैं | Placement चालू या बंद करता है: `false` पूरा waterfall बंद करता है। `ids` के हर floor का अपना `isEnable` है, जो सिर्फ उसी floor को रोकता है। |
 | `enable_ua_check` | उदाहरण में `true` और `false` दोनों | `true` के लिए paid/non-organic attribution चाहिए; Adjust उत्तर आने तक default organic है। Standard `AdsConfig.fromAdConfig()` bindings संबंधित OB placements, native LFO/OB और exit interstitial पर भी यह gate लागू करती हैं। Adjust न हो तो दिखाने वाले placements पर इसे `false` रखें। |
 | `reloadIntervalSeconds` | Banner: `30` | Positive value हर placement-bound banner (splash समेत) की auto-reload cadence सेकंड में तय करती है, जब तक `banner.reload.auto_enabled` `true` है (default)। Absent, `0` या invalid होने पर host/SDK value (15000 ms) लगती है। App स्क्रीन setup: [App स्क्रीन का banner](#अतिरिक्त-integrations)। |
 | `colorCTA` | `"default"` | Template का रंग बनाए रखता है; custom native चाहिए तो रंग सेट करें। |
 | `colorBackground` | नहीं | Optional: native card का background रंग, जैसे `"#FFF4E5"`। न हो, `null`, `""` या `"default"` हो तो layout का अपना background रहता है; card के corners और border वैसे ही रहते हैं। हर native frame और उसके loading skeleton पर लागू होता है। |
-| `colorAdBadge` | LFO: `"default"` | Optional: Ad badge का background रंग, जैसे `"#007AFF"`; badge पर यह `colorCTA` से ऊपर है। न हो, `null`, `""` या `"default"` हो तो `colorCTA`, फिर layout का रंग लगता है। हर native frame और उसके loading skeleton पर लागू होता है। |
-| `colorAdBadgeText` | LFO: `"default"` | Optional: Ad badge के text का रंग, जैसे `"#FFFFFF"`। न हो, `null`, `""` या `"default"` हो तो layout का text रंग रहता है। हर native frame पर लागू होता है; loading skeleton में text छिपा रहता है। |
-| `heightCTA` | सामान्य natives के लिए `45`, popup के लिए `36` | dp में CTA height; field न हो तो SDK `44` (templates की button height) इस्तेमाल करता है और लागू करते समय value को 36–52 के बीच सीमित करता है। |
-| `templateId` | नहीं | Optional: placement का SDK native template चुनता है — `1` = LFO frame (media slot भरता है), `2` = 4:3 media-left card, `3` = 1.91:1 card। न हो, `null` हो या अनजान number हो तो slot का default रहता है: LFO, Welcome Back और OB content पर `1`, Privacy/Goal और splash bottom slot पर `2`। Language popup और fullscreen natives अपने तय frame रखते हैं। सिर्फ़ base key। देखें [Native templates](remote-settings.hi.md)। |
+| `colorAdBadge` | मौजूद नहीं | Optional: Ad badge का background रंग, जैसे `"#007AFF"`; badge पर यह `colorCTA` से ऊपर है। न हो, `null`, `""` या `"default"` हो तो `colorCTA`, फिर layout का रंग लगता है। हर native frame और उसके loading skeleton पर लागू होता है। |
+| `colorAdBadgeText` | मौजूद नहीं | Optional: Ad badge के text का रंग, जैसे `"#FFFFFF"`। न हो, `null`, `""` या `"default"` हो तो layout का text रंग रहता है। हर native frame पर लागू होता है; loading skeleton में text छिपा रहता है। |
+| `heightCTA` | ज्यादातर natives के लिए `45`, `native_splash` पर `44`, popup के लिए `36` | dp में CTA height; field न हो तो SDK `44` (templates की button height) इस्तेमाल करता है और लागू करते समय value को 36–52 के बीच सीमित करता है। |
+| `templateId` | नहीं | Optional: placement का SDK native template चुनता है — `1` = LFO card (पूरी चौड़ाई में 1.68:1 media), `2` = 4:3 media-left card, `3` = 1.91:1 card। Slot की ऊँचाई card के बराबर होती है। न हो, `null` हो या अनजान number हो तो slot का default रहता है: LFO, Welcome Back और OB content पर `1`, Privacy/Goal और splash bottom slot पर `2`। Language popup और fullscreen natives अपने तय frame रखते हैं। देखें [Native templates](remote-settings.hi.md)। |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Blocks का क्रम, ऊपर से नीचे; गायब block छिपा रहता है और खाली array XML रखता है। न हो तो default क्रम CTA को नीचे रखता है। Templates `1` और `3` तथा [app स्क्रीन के natives](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) इस क्रम का पालन करते हैं; template `2`, language popup और fullscreen natives हमेशा वैसे ही दिखते हैं जैसे बनाए गए हैं। |
 | `app_resume_load_delay_ms` | `open_resume`: `2000` | app के background जाने के बाद app-open ad लोड करने से पहले कितना इंतज़ार; यह तभी असर करता है जब app-resume चालू हो। |
-| `click_action` | `native_ob1..4` और `native_full1/2` पर `"auto_next"`; बाकी हर native पर `"reload"` | native ad click के बाद वापसी पर क्या हो। केवल base key से पढ़ा जाता है, `_high` floors से कभी नहीं; दोनों files में एक ही value रखें। [Native click actions](remote-settings.hi.md#native-click-actions) देखें। |
+| `click_action` | `native_ob1..4`, `native_full1/2` और `native_fs` पर `"auto_next"`; बाकी हर native पर `"reload"` | native ad click के बाद वापसी पर क्या हो। `ids` के हर floor पर लागू होता है; इसे सिर्फ `ad_config.json` या remote में रखें (`ad_config_debug.json` इसे ignore करती है)। [Native click actions](remote-settings.hi.md#native-click-actions) देखें। |
 
-Waterfall `_high`, `_high1`… और फिर base key पढ़ता है; एक ही entry में कई floors घोषित करने के लिए `ids` भी इस्तेमाल कर सकते हैं। दोहराए गए IDs हटा दिए जाते हैं; किसी एक floor या style की जाँच करनी हो तो अलग IDs इस्तेमाल करें।
+### Waterfall: हर placement की एक key
+
+हर placement एक key है और अपने floors `"ids"` में लिखता है, सबसे ऊँचा floor पहले और all-price floor आख़िर में; हर floor `{"id": "...", "isEnable": true|false}` है, और जिस floor में `isEnable` न हो वह चालू है। Placement का `isEnable` master switch है। किसी एक floor को रोकना हो तो उसी floor पर `isEnable: false` रखें: उसकी ID अपनी जगह रहती है, इसलिए दोबारा चालू करने के लिए और कुछ नहीं चाहिए। एक ही unit वाला placement (banner, `inter_back`, `open_resume`…) एक-floor array है, floor में `isEnable` के बिना, `"ids": [{ "id": "..." }]`, क्योंकि placement का `isEnable` ही उसे चालू/बंद करता है। Placement-level `"id"` अनजान field है, warning के साथ ignore होता है, इसलिए उस placement का कोई ad unit नहीं रहता। बाकी हर field सभी floors पर लागू होता है। `ad_config.json` में जो placement `isEnable` छोड़ देता है वह बंद रहता है (floor से अलग, जिसका `isEnable` default में चालू है), और न दिया गया `enable_ua_check` `false` माना जाता है; remote document में छोड़ा गया field नीचे की layer की value रखता है।
+
+```json
+"native_ob1": {
+  "ids": [
+    { "id": "ca-app-pub-xxx/2222222222", "isEnable": false },
+    { "id": "ca-app-pub-xxx/1111111111", "isEnable": true }
+  ],
+  "isEnable": true,
+  "click_action": "auto_next"
+},
+"banner_home": {
+  "ids": [{ "id": "ca-app-pub-xxx/3333333333" }],
+  "isEnable": true
+}
+```
+
+`ids` सिर्फ floor objects स्वीकार करता है: bare string warning के साथ skip होती है, और जिस non-empty `ids` में कोई valid floor न हो उसे ignore किया जाता है, तब नीचे की layer लागू होती है; पर साफ़ लिखा `"ids": []` एक valid खाली waterfall है, इसलिए placement कुछ request नहीं करता। गलत format वाला floor अकेले skip होता है। सभी floors बंद हों तो placement कुछ request नहीं करता। Layers के बीच (remote > `ad_config.json` > code) ऊपर की layer का `ids` नीचे की layer का पूरा array replace करता है, इसलिए Firebase में हर floor के `isEnable` के साथ पूरा array रखें। दोहराए गए IDs हटा दिए जाते हैं; किसी एक floor की जाँच करनी हो तो अलग IDs इस्तेमाल करें।
+
+**Breaking change — `_high` keys से upgrade करना।** पुराने SDK versions floors को अलग `<key>_high`, `<key>_high1`…`<key>_high9` keys से पढ़ते थे। अब वे keys नहीं पढ़ी जातीं: parser एक warning log करता है जो `not read as floors; move their ids into the base key's "ids"` पर ख़त्म होती है, और placement सिर्फ अपनी key request करता है। Placement-level `"id"` भी अब नहीं पढ़ा जाता। हर floor अब उसी एक key के तहत report होता है, इसलिए load और revenue events `<key>` और `<key>_high` में नहीं बँटते।
+
+1. `ad_config.json` और Firebase की `ad_remote_config` value में हर `<key>_high*` ID को पुराने क्रम (`_high`, `_high1`…`_high9`) में `{"id", "isEnable"}` के रूप में `<key>.ids` में ले जाएँ, उस floor का पुराना `isEnable` रखते हुए; पुरानी `<key>.id` आख़िरी floor बनती है। जिस key में पुराना string form `"ids": ["a", "b"]` था (पुराने SDK इसे स्वीकार करते थे), उसकी हर string उसी क्रम में floor object बनती है और उस key की अपनी `id` से पहले आती है: पुराना SDK `<key>_high`, `<key>_high1`…`<key>_high9`, फिर `<key>` request करता था, और हर key के भीतर पहले उसका `ids` फिर उसकी `id`, दोहराई गई IDs छोड़ते हुए। `_high*` entries हटा दें। बाकी हर `"id": "X"`, एक unit वाले placements और `ad_config_debug.json` की हर key समेत, `"ids": [{"id": "X"}]` बनता है।
+2. Firebase में नए format वाली `ad_remote_config` को app version ≥ इस SDK वाले पहले version की condition के तहत publish करें; पुराने versions पुरानी value रखते हैं। यह condition अनिवार्य है। SDK 5.5.6 या नए version वाली app को नया format मिले तो वह crash नहीं होती: वह `ids` ignore करके अपने APK में बना waterfall रखती है, लेकिन remote ID बदलाव नहीं लेती। SDK 5.5.5 या पुराने version वाली app अपनी पूरी configuration को remote document से बदल देती है और हर ad unit खो देती है।
+3. Update के बाद पहले launch पर cache की हुई पुराने format वाली value एक session तक active रह सकती है। उसका `id` और `_high*` entries नहीं पढ़ी जातीं, इसलिए अगले fetch तक हर placement आपकी `ad_config.json` का waterfall रखता है; value के बाकी fields लागू रहते हैं।
 
 ### App की अपनी screens में native, placement constant के साथ
 
@@ -344,7 +372,7 @@ Waterfall `_high`, `_high1`… और फिर base key पढ़ता है;
 
 consent के बाद, `AppCompatActivity` resumed होने पर स्क्रीन से SDK बुलाएँ:
 
-**Adjust के बिना:** नमूना slot दिख सके इसके लिए **दोनों JSON files** में `native_home` का `enable_ua_check` `false` करें; QA के दौरान test IDs रखें।
+**Adjust के बिना:** नमूना slot दिख सके इसके लिए `ad_config.json` में `native_home` का `enable_ua_check` `false` ही रखें (sample में पहले से है); `ad_config_debug.json` में सिर्फ test `ids` होते हैं। QA के दौरान test IDs रखें।
 
 ```kotlin
 import android.widget.FrameLayout
@@ -354,15 +382,15 @@ val container = findViewById<FrameLayout>(R.id.ad_slot)
 NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container)
 ```
 
-placement का waterfall, `isEnable`, `enable_ua_check` और CTA style SDK खुद तय करता है। Template बदलने के लिए `layoutRes` दें; default `com.ads.module.R.layout.custom_native_admob_medium` है (media नहीं — media चाहिए तो `custom_native_admob_free_size` इस्तेमाल करें)। Custom layout में `NativeAdView` root, `ad_container`, `block_icon_headline`, asset IDs और Ad badge बने रहने चाहिए।
+placement का waterfall, `isEnable`, `enable_ua_check` और CTA style SDK खुद तय करता है। Template बदलने के लिए `layoutId` दें; default `com.ads.module.R.layout.custom_native_admob_medium` है (media नहीं — media चाहिए तो `custom_native_admob_free_size` इस्तेमाल करें)। Custom layout में `NativeAdView` root, `ad_container`, `block_icon_headline`, asset IDs और Ad badge बने रहने चाहिए।
 
-हर slot/view के लिए एक helper रखें और दोबारा दिखाने के लिए `show()` बुलाएँ। Fragment अपनी Activity के साथ `viewLifecycleOwner` देता है। Click reload default रूप से चालू है; placement की base key पर `"click_action": "none"` तभी रखें जब click-return पर आपकी app खुद कहीं और navigate करती हो।
+हर slot/view के लिए एक helper रखें और नया ad request व bind करने के लिए `show()` बुलाएँ। Fragment अपनी Activity के साथ `viewLifecycleOwner` देता है। Click reload default रूप से चालू है; placement की key पर `"click_action": "none"` तभी रखें जब click-return पर आपकी app खुद कहीं और navigate करती हो।
 
 Main के लिए preload: `SplashActivity.onRemoteFetched()` में `NativeAdManager.preload(applicationContext, AppAdPlacement.NATIVE_HOME, NativeAdConfig.forPlacement(AppAdPlacement.NATIVE_HOME, layoutRes))`। उसी placement का helper दिखाते समय वह ad उठा लेता है; 60 मिनट से पुराना ad दोबारा लोड होता है। [Native preload](../ads/README.md#native-preload-repeated-show-and-refresh) देखें।
 
 Native helper व्यवहार:
 
-- Placement वाला helper (`forPlacement`, या `NativeAdHelper` constructor का `placement` argument) उसी placement के store से bind और refill करता है, इसलिए ऊपर की तरह उसी placement key से preload करें। जोड़े गए unit IDs के तहत preload किया गया ad (`NativeAdPreload.preload(activity, config)`) इस्तेमाल नहीं होता और helper अपना request करता है, जब तक आप नीचे बताए अनुसार वह key न दें। `setEnablePreload(enabled, key)` में दी गई key placement से पहले store तय करती है, जोड़े गए unit IDs की key (`NativeAdPreload.getInstance().keyOf(config)`) भी।
+- Placement वाला helper (`forPlacement`, या `NativeAdHelper` constructor का `placement` argument) उसी placement के store से bind और refill करता है, इसलिए ऊपर की तरह उसी placement key से preload करें। जोड़े गए unit IDs के तहत preload किया गया ad (`NativeAdPreload.getInstance().preload(activity, config)`) इस्तेमाल नहीं होता और helper अपना request करता है, जब तक आप नीचे बताए अनुसार वह key न दें। `setEnablePreload(enabled, key)` में दी गई key placement से पहले store तय करती है, जोड़े गए unit IDs की key (`NativeAdPreload.getInstance().keyOf(config)`) भी।
 - User के खरीदने, consent वापस लेने या UA gate के मना करने पर `bindAvailable()` `false` लौटाता है और helper को cancel करता है; screen पर दिख रहा ad हटा दिया जाता है। बिना इस्तेमाल हुआ preloaded ad store में रहता है।
 - Ad click से लौटने पर helper click के समय लोड हुआ replacement bind करता है या उसका इंतज़ार करता है; अगर वह replacement fail हुआ तो मौजूदा ad रहता है और दूसरा request नहीं होता। Rotation जैसे configuration change के बाद helper नया request किए बिना अपना ad वापस लाता है, या जिस load का इंतज़ार कर रहा था उसमें join करता है; no fill पर खत्म हुआ slot खाली ही रहता है।
 
@@ -429,10 +457,10 @@ Defaults: हर load tier के लिए 30 सेकंड, हर placement
 
 | जरूरत | Default / कैसे configure करें |
 | --- | --- |
-| कोई slot बंद करना | **base key** पर `isEnable: false` हर format के लिए पूरा waterfall बंद करता है; asset बदलकर टेस्ट करने के लिए restart चाहिए। दूसरे LFO native का fallback कदम 4 से आता है। |
-| Waterfall floors जोड़ना | `<key>_high`, `<key>_high1`…`<key>_high9`, फिर base key। Splash banner सिर्फ `banner_splash` की पहली ID इस्तेमाल करता है और अलग floors नहीं पढ़ता। |
+| कोई slot बंद करना | placement key पर `isEnable: false` हर format के लिए उसका पूरा waterfall बंद करता है; asset बदलकर टेस्ट करने के लिए restart चाहिए। दूसरे LFO native का fallback कदम 4 से आता है। |
+| Waterfall floors जोड़ना | Key के `ids` में `{"id", "isEnable"}` floors, सबसे ऊँचा पहले, all-price आख़िर में ([format](#waterfall-हर-placement-की-एक-key))। Splash banner बाकी placements की तरह `banner_splash` के हर floor से गुज़रता है। |
 | CTA / native style | हर field example जैसी रखें; [JSON field तालिका](#नमूना-json-के-fields) values और उनके लागू होने की जगह बताती है। कदम 4 `templateId` और `components` को native templates से पहले ही जोड़ चुका है। |
-| App स्क्रीन का banner | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; `bannerType` argument जोड़ें, उदाहरण के लिए `BannerType.Collapsible()` ([types](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt))। Type बदलने के लिए: `flagUserEnableReload = false`, पुराना helper `cancel()` करें, फिर नया बनाएँ। SDK refresh के लिए हर floor पर AdMob refresh बंद करना होगा, फिर `BannerAdConfig.forPlacement("banner_home", bannerType, canReloadAds = true)` बनाकर `BannerAdHelper` constructor को देना होगा। |
+| App स्क्रीन का banner | `BannerAdHelper.forPlacement(this, this, "banner_home", container)`; `bannerType` argument जोड़ें, उदाहरण के लिए `BannerType.Collapsible()` ([types](../ads/src/main/java/com/ads/module/helper/banner/BannerType.kt))। Type बदलने के लिए: `flagUserEnableReload = false`, पुराना helper `cancel()` करें, फिर नया बनाएँ। SDK refresh default में चालू है और `reloadIntervalSeconds` उसका interval तय करता है, इसलिए double refresh से बचने के लिए हर floor के ad unit पर AdMob console refresh बंद करें; SDK refresh बंद करने के लिए [`banner.reload.*`](remote-settings.hi.md#behavior-scopes) देखें। |
 | UA / Adjust | resources भरें और [कदम 5](#adjust-token-और-verification) वाली wiring इस्तेमाल करें। `enable_ua_check` example की values रखता है; कहाँ लागू होता है यह JSON field तालिका में देखें। |
 | Firebase से JSON | [तीन String parameters publish करें](firebase-integration.hi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`। Assets के बाद एक बार `FirebaseAdConfigSource()` install करें; SDK splash refresh करता है। Backend के `ad_remote_config` या आपकी `ad_config.json` में declare हुई key code में लिखी ad unit IDs से ऊपर है। [Custom local fallback](firebase-integration.hi.md#local-defaults) वैकल्पिक है। |
 | Firebase Analytics | `suite-firebase` जोड़ें और `Tracker.install` के तुरंत बाद `Tracker.addSink(FirebaseSink())` register करें; consent policy [Firebase गाइड](firebase-integration.hi.md#शुरुआती-consent) से चुनें। |
@@ -461,7 +489,7 @@ Splash consent, remote refresh और billing साथ शुरू करत�
 यह तभी करें जब आपका product app-open इस्तेमाल करता हो। `AppOpenManager` `com.ads.module.admob` में है।
 
 1. **कदम 4:** `AdsConfig.fromAdConfig()` पहले ही `open_resume` bind करता है। Manual `AdsConfig(...)` में `appResume = InterstitialAdUnit(...)` खुद दें, जब तक `ad_config.json` या backend का `ad_remote_config` `open_resume` declare न करे; दोनों न हों तो OnboardKit हर screen पर app-open रोक देता है।
-2. **कदम 5**, `ERainAdConfig` के `apply` block में: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()`।
+2. **कदम 5**, `ERainAdConfig` के `apply` block में: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` है `com.ads.module.helper.AdGate`)।
 3. **Remote JSON:** कुछ जोड़ना नहीं — हर config बदलाव पर SDK app-resume unit को `open_resume` पर दोबारा point करता है, `isEnable` से चालू/बंद करना भी इसमें शामिल है, बशर्ते `open_resume` में ad unit ID हो। `ad_config.json` या backend के `ad_remote_config` में declare हुए `open_resume` को कदम 2 का seed नहीं चाहिए। इसे **असली ID के साथ चालू** ship करें; `isEnable: false` app-resume को तब तक बंद रखता है जब तक config उसे फिर चालू न करे।
 4. **बाहर जाने वाले intents** (browser/share/review): उस वापसी को छोड़ने के लिए `startActivity(...)` के तुरंत बाद `AppOpenManager.getInstance().disableAdResumeByClickAction()` बुलाएँ। `disableAppResume()`/`enableAppResume()` पूरे process के switches हैं।
 
@@ -472,12 +500,12 @@ Splash, OB5 और Welcome Back खुद को बाहर रखते ह�
 ## 8. आखिरी जाँच
 
 - [ ] Grouped settings के लिए remote override, पहली-run offline local fallback और valid remote cache का offline reuse [Firebase checklist](firebase-integration.hi.md#remote-notes) के अनुसार जाँचें।
-- [ ] Debug build splash खोलता है, Logcat tag `AdRemoteConfig` में `Loaded ad_config.json with <n> placements (debug=true, test ids=true)` दिखता है, जहाँ `<n>` आपके ship किए example से मेल खाता है, और `OB_FLOW` कोई config या provider error नहीं बताता।
+- [ ] Debug build splash खोलता है, Logcat tag `AdRemoteConfig` में `Loaded ad_config.json with <n> placements (test ids=true)` दिखता है, जहाँ `<n>` आपके ship किए example से मेल खाता है, और `OB_FLOW` कोई config या provider error नहीं बताता।
 - [ ] Remote fetch के बाद, console में edit किए गए placement के लिए `OB_FLOW` में `ad_config remote omits …` line नहीं होती। Listed key app की values रखता है, console किसी दूसरे key नाम के नीचे कुछ भी set करे: field को उसी key के नीचे publish करें, या अपना key `fromAdConfig(mapOf(...))` से bind करें।
-- [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; fullscreen native सामग्री 2 और 3 के बीच रहता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
+- [ ] Test ads पर LFO → OB → MainActivity तक पूरा चलें; `native_full1/2` चालू करने के बाद FULL1, OB1 के बाद और FULL2, OB2 के बाद आता है, और आखिरी interstitial सिर्फ SDK संभालता है। LFO splash interstitial बंद होने के बाद ही खुलता है; आखिरी interstitial बंद होने पर MainActivity पहले से मौजूद होती है।
 - [ ] LFO: भाषा चुनकर Back दबाने पर Save दिखता है और स्क्रीन बनी रहती है; मौजूदा भाषा दोबारा चुनने पर popup तुरंत खुलता है, दूसरी भाषा configured कुल tap count पूरा होने पर खुलती है।
-- [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।
-- [ ] `native_ob2` और `native_ob2_high` दोनों बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_full1` और `native_full1_high` दोनों बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash`, `inter_after_ob3` और उनके सभी `_high*` floors बंद करें: destination स्क्रीन फिर भी मिलती है।
+- [ ] Notifications मना करने पर भी flow चलता है; splash, LFO, popup और OB से Home जाकर लौटने पर दो बार navigation नहीं होता। `native_ob1..4` चालू करने के बाद, OB page पर native click करने से लौटते समय step आगे बढ़ता है; LFO/popup पर स्क्रीन बनी रहती है और तैयार होते ही replacement ad bind होता है।
+- [ ] `native_ob1`, `native_ob2` और `native_full1` चालू करें, फिर `native_ob2` बंद करें: सामग्री page 2 फिर भी दिखता है और page 1 का native उधार नहीं लेता। `native_full1` फिर से बंद करें: सिर्फ ad वाला page छूट जाता है। `inter_splash` और `inter_after_ob3` बंद करें: destination स्क्रीन फिर भी मिलती है।
 - [ ] बिना नेटवर्क टेस्ट करें: default रूप से connection prompt दिखता है; offline support चुना हो तो flow SDK के timeout पर फिर भी आगे बढ़ता है और किसी app callback पर अटकता नहीं।
 - [ ] पूरा होने के बाद दोबारा खोलें: splash से होते हुए आपकी app में, OB दोबारा नहीं चलता; splash interstitial बंद होने पर आपकी स्क्रीन पहले से मौजूद होती है। First-open टेस्ट करने के लिए app data clear करें; OB के बीच app बंद करके दोबारा खोलने पर splash के बाद LFO से शुरू होना चाहिए।
 - [ ] आपकी app की screens चुनी हुई भाषा इस्तेमाल करती हैं; AAB भेजते समय अनुवाद और language split configuration दोनों जाँचें।
@@ -488,7 +516,7 @@ Splash, OB5 और Welcome Back खुद को बाहर रखते ह�
 | खुलते ही crash | merged manifest में AdMob/Meta metadata, असली Meta credentials और आपकी Application |
 | OB खाली है या छूट जाता है | `configure` से पहले `install`; अपनी app की सामग्री के लिए कदम 4 में `steps(...)` इस्तेमाल करें, और देखें कि remote cache ने flow या कोई step बंद तो नहीं किया |
 | ads नहीं आते | file load हुई, key mapping, `isEnable`, consent/premium की स्थिति, remote flags; फिर भी दिखाने के लिए timer न जोड़ें |
-| Debug गलत IDs इस्तेमाल करता है | `ad_config_debug.json` में हर all-price key की test `id` है (`AdRemoteConfig` का `WARN` बिना ID वाली चालू keys बताता है); मानक setup में `setAllowRemoteOverrideInDebug(true)` चालू नहीं है |
+| Debug गलत IDs इस्तेमाल करता है | `ad_config_debug.json` में हर चालू placement key के test `ids` हैं (`AdRemoteConfig` का `WARN` बिना ID वाली चालू keys बताता है); मानक setup में `setAllowRemoteOverrideInDebug(true)` चालू नहीं है |
 | Remote `ad_remote_config` कभी लागू नहीं होता (`AdConfig` log में `cleared`) | Console parameter का नाम: SDK `ad_remote_config`, फिर `ads_remote_config` पढ़ता है; कोई और नाम हो तो `FirebaseAdConfigSource("<name>")` दें |
 | Remote IDs बदलीं लेकिन OB पुरानी इस्तेमाल करता है | `FirebaseAdConfigSource` install करें, सही keys के साथ `AdsConfig.fromAdConfig()` इस्तेमाल करें और splash को refresh करने दें। Firebase का minimum fetch interval 12 घंटे है, जब तक आपकी app उसे कम न करे। Debug `ad_config_debug.json` की test IDs इस्तेमाल करता है; `ad_remote_config` के बाकी सभी fields और दोनों settings JSON फिर भी लागू होते हैं। |
 | टेस्ट में native style/reporting हर slot के लिए अलग नहीं होती | एक ही format के demo IDs साझा हैं; provider कहीं-कहीं ID से style/placement वापस ढूँढता है। असली configuration जाँचते समय अलग IDs इस्तेमाल करें |
@@ -502,7 +530,7 @@ Splash, OB5 और Welcome Back खुद को बाहर रखते ह�
 | `app/src/main/res/values/id_ads.xml` | AdMob App ID, Meta credentials और Adjust token/event tokens |
 | `app/src/main/assets/ad_config.json`, `ad_config_debug.json` | दोनों नमूना JSON files copy करें |
 | `app/src/main/assets/ad_behavior_config.json`, `onboarding_config.json` (वैकल्पिक) | Local defaults बदलने के लिए बनाएँ/copy करें; [fallback नियम](firebase-integration.hi.md#local-defaults) देखें। |
-| आपकी app की `strings.xml` और drawables | तीनों pages के लिए content, अनुवाद और images |
+| आपकी app की `strings.xml` और drawables | चारों content pages के लिए content, अनुवाद और images |
 | `AppAdPlacement.kt` | OB keys और आपकी app की अपनी keys का catalog; ad unit IDs नहीं |
 | [OnboardKitSetup.kt](examples/ads-onboarding/OnboardKitSetup.kt) | App content/resources और standard ad_config placements की live bindings |
 | आपकी मौजूदा Application या [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | SDK को एक बार initialize करती है और destination स्क्रीन चुनती है |

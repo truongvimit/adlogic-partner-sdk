@@ -42,7 +42,7 @@ dependencyResolutionManagement {
 }
 ```
 
-[JitPack पर newest version](https://jitpack.io/#truongvimit/adlogic-partner-sdk) जाँचें, फिर app project की root `gradle.properties` में उसे एक बार सेट करें; सभी SDK modules यही property पढ़ते हैं:
+[JitPack पर newest version](https://jitpack.io/#truongvimit/adlogic-partner-sdk) जाँचें, फिर app project की root `gradle.properties` में उसे एक बार सेट करें; आप जो भी SDK dependency declare करें, उसमें यही property इस्तेमाल करें:
 
 ```properties
 adlogicSdkVersion=NEWEST_VERSION
@@ -80,7 +80,7 @@ UMP error देने पर या network timeout पूरा होने �
 
 | हिस्सा | क्या करें |
 | --- | --- |
-| Ads | AdMob app ID, Meta app ID/client token, placements `assets/ad_config.json` में; `ad_config_debug.json` में हर all-price key के लिए सिर्फ एक test `id`, जिसे debug build `ad_config.json` के बाकी fields के साथ इस्तेमाल करता है। |
+| Ads | AdMob app ID, Meta app ID/client token, placements `assets/ad_config.json` में; `ad_config_debug.json` में हर placement key के लिए सिर्फ test `ids` (आम तौर पर एक floor), जिन्हें debug build `ad_config.json` के बाकी fields के साथ इस्तेमाल करता है। |
 | Onboarding | Destination Activity, भाषा/पेज content और ad placements। |
 | खरीदारी | Play product IDs और premium entitlement mapping। PayKit को terms/privacy URLs और अपना catalog JSON भी दें। |
 | Firebase · वैकल्पिक | ऐप का Firebase configuration और इस्तेमाल होने वाले sources के published Remote Config parameters। |

@@ -466,7 +466,7 @@ class RewardCacheFlowTest {
     @Test
     fun `declared purchased show clears cache while explicit undeclared show retains premium shortcut`() {
         loadAndFill()
-        AdRemoteConfig.update(AdRemoteConfig(mapOf(PLACEMENT to AdUnitConfig(id = UNIT, isEnable = true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf(PLACEMENT to AdUnitConfig(ids = listOf(UNIT), isEnable = true))))
         premium = true
         val declared = RecordingShow()
         RewardAdManager.show(activity, PLACEMENT, declared)

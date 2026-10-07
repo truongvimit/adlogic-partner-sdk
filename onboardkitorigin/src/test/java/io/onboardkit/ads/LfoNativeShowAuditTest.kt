@@ -409,6 +409,56 @@ class LfoNativeShowAuditTest {
         assertEquals(View.VISIBLE, block(R.id.ob_ad_block_2).visibility)
     }
 
+    private fun layOut() {
+        val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+        root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1080, 1920)
+    }
+
+    private fun assertBlockWrapsCard(well: Int) {
+        preload()
+        fill()
+        create()
+        resume()
+        layOut()
+        assertFirstBound()
+        val card = container().getChildAt(0)
+        assertNotNull("Bound with the expected template", card.findViewById<View>(well))
+        assertEquals("The slot is as tall as its card", card.height, container().height)
+        val margin = activity.resources.getDimensionPixelSize(R.dimen.ob_language_ad_margin)
+        assertEquals(container().height + 2 * margin, block().height)
+        assertTrue("Rows end above the ad", activity.findViewById<View>(R.id.ob_language_list).bottom <= block().top)
+    }
+
+    @Test fun `the ad block wraps the default template 1 card`() =
+        assertBlockWrapsCard(R.id.ob_native_lfo_media_well)
+
+    @Test fun `the ad block wraps a 4·3 template 2 card instead of a fixed share of the screen`() {
+        com.ads.module.config.AdRemoteConfig.initializeFromJson(
+            """{"native_lang":{"ids":[{"id":"audit-lfo1"}],"isEnable":true,"templateId":2}}""")
+        try {
+            assertBlockWrapsCard(R.id.ob_splash_native_media_well)
+        } finally { com.ads.module.config.AdRemoteConfig.reset() }
+    }
+
+    @Test fun `after the swap the rows end above the second block even once slot 1 is released`() {
+        preload()
+        val first = fill()
+        create()
+        resume()
+        requireNotNull(language).windowFocusChanged(true)
+        main.idle()
+        tapLanguage()
+        fill("audit-lfo2")
+        verify(first).destroy()
+        layOut()
+        val second = block(R.id.ob_ad_block_2)
+        assertEquals(View.VISIBLE, second.visibility)
+        assertTrue(second.height > 0)
+        assertTrue("Rows end above the visible ad", activity.findViewById<View>(R.id.ob_language_list).bottom <= second.top)
+    }
+
     @Test fun `native and media receive visible area in the default portrait layout`() {
         preload()
         fill()

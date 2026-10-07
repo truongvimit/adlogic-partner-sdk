@@ -39,9 +39,10 @@ class OnboardingSettingsTest {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
             assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
         }
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.SplashNative))
         listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId("custom_page")).forEach {
             assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(it)))
         }
@@ -206,13 +207,13 @@ class OnboardingSettingsTest {
         val config = onboardKitConfig { defaultSteps() }.getOrThrow()
         assertNull(OnboardingSettings.resolve(config).ads.languageNative)
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
-            "native_lang" to AdUnitConfig("remote_n", true),
-            "native_full1" to AdUnitConfig("remote_fs", true),
+            "native_lang" to AdUnitConfig(listOf("remote_n"), true),
+            "native_full1" to AdUnitConfig(listOf("remote_fs"), true),
         )))
         val available = OnboardingSettings.resolve(config)
         assertEquals(listOf("remote_n"), available.ads.languageNative!!.loadOrder)
         assertEquals(listOf("remote_fs"), available.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder)
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_full1" to AdUnitConfig("remote_fs", false))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("native_full1" to AdUnitConfig(listOf("remote_fs"), false))))
         val disabled = OnboardingSettings.resolve(config)
         assertTrue(disabled.ads.nativeUnitFor(AdPlacement.StepFullScreen(StepId.FULL1))!!.loadOrder.isEmpty())
         assertNull(disabled.ads.languageNative)
@@ -221,22 +222,20 @@ class OnboardingSettingsTest {
     @Test fun `returning splash uses original o key with full waterfall and live updates`() {
         val config = onboardKitConfig { }.getOrThrow()
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
-            "inter_splash" to AdUnitConfig("new_user", true),
-            "inter_splash_o" to AdUnitConfig("returning_base", true),
-            "inter_splash_o_high" to AdUnitConfig("returning_high", true),
-            "inter_splash_o_high1" to AdUnitConfig("returning_high1", true),
+            "inter_splash" to AdUnitConfig(listOf("new_user"), true),
+            "inter_splash_o" to AdUnitConfig(listOf("returning_high", "returning_high1", "returning_base"), true),
         )))
         val resolved = OnboardingSettings.resolve(config).ads
         assertEquals(listOf("new_user"), resolved.splashInterstitial!!.loadOrder)
         assertEquals(listOf("returning_high", "returning_high1", "returning_base"), resolved.splashInterstitialOldUser!!.loadOrder)
 
         AdRemoteConfig.update(AdRemoteConfig(mapOf(
-            "inter_splash" to AdUnitConfig("new_user", true),
-            "inter_splash_o" to AdUnitConfig("returning_base", false),
+            "inter_splash" to AdUnitConfig(listOf("new_user"), true),
+            "inter_splash_o" to AdUnitConfig(listOf("returning_base"), false),
         )))
         assertTrue(OnboardingSettings.resolve(config).ads.splashInterstitialOldUser!!.loadOrder.isEmpty())
 
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("inter_splash" to AdUnitConfig("new_user", true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("inter_splash" to AdUnitConfig(listOf("new_user"), true))))
         val missing = OnboardingSettings.resolve(config).ads
         assertNull(missing.splashInterstitialOldUser)
         assertEquals(listOf("new_user"), (missing.splashInterstitialOldUser ?: missing.splashInterstitial)!!.loadOrder)
@@ -253,7 +252,7 @@ class OnboardingSettingsTest {
             ads = AdsConfig(ob5Native = NativeAdUnit("local_ob5"))
             system = SystemBarConfig(showStatusBar = false)
         }.getOrThrow()
-        AdRemoteConfig.update(AdRemoteConfig(mapOf("remote_ob5" to AdUnitConfig("remote_ob5_id", true))))
+        AdRemoteConfig.update(AdRemoteConfig(mapOf("remote_ob5" to AdUnitConfig(listOf("remote_ob5_id"), true))))
         OnboardingSettings.document.acceptSuccessfulFetch("""{"ob5":{"native":{"placement":"remote_ob5","enabled":false}},"lfo":{"native_template":"CTA_TOP"},"flow":{"system_bars":{"show_status":true}},"ui":{"content":{"steps":[{"id":"ob1","title":"ignored"}]}}}""")
         val resolved = OnboardingSettings.resolve(config)
         assertEquals(listOf("local_ob5"), resolved.ads.ob5Native!!.loadOrder)

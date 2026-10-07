@@ -46,9 +46,9 @@ import com.itg.template.ads.open_resume
 import com.itg.template.ads.native_welcome
 import com.itg.template.ads.inter_welcome
 import com.itg.template.ads.native_home
-import com.itg.template.ads.native_onboarding_1_4
-import com.itg.template.ads.native_onboarding_fullscreen_1_3
-import com.itg.template.ads.native_onboarding_fullscreen_1_4
+import com.itg.template.ads.native_full1
+import com.itg.template.ads.native_full2
+import com.itg.template.ads.native_ob2
 import com.itg.template.ads.native_permission
 import com.itg.template.data.model.ForceUpdateConfig
 import com.itg.template.databinding.ActivityMainBinding
@@ -320,7 +320,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     private fun adConfig(key: String): AdUnitConfig =
         runCatching { AdRemoteConfig.getInstance().ads[key] }.getOrNull()
-            ?: AdUnitConfig(id = "", isEnable = false)
+            ?: AdUnitConfig(ids = emptyList(), isEnable = false)
 
     // Dashboard previews keep the sample's UA bypass and do not register a real placement.
     private fun nativePreviewConfig(config: AdUnitConfig, @LayoutRes layoutRes: Int) =
@@ -332,10 +332,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = nativeSmallHelper ?: NativeAdHelper(
-            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANG),
                 R.layout.layout_native_ad_small),
         ).setNativeContentView(mBinding.flNativeSmall).also { nativeSmallHelper = it }
-        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANG).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -343,10 +343,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = nativeFullHelper ?: NativeAdHelper(
-            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3),
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_FULL1),
                 R.layout.layout_native_ad_full),
         ).setNativeContentView(mBinding.flNativeFull).also { nativeFullHelper = it }
-        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_ONBOARDING_FULLSCREEN_1_3).toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_FULL1).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -354,10 +354,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         ensureAdRemoteConfig()
         overrideAdConfig()
         val helper = customizationHelper ?: NativeAdHelper(
-            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1),
+            this, this, nativePreviewConfig(adConfig(AppAdPlacement.NATIVE_LANG),
                 R.layout.layout_native_ad_small),
         ).setNativeContentView(mBinding.flCustomizationPreview).also { customizationHelper = it }
-        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANGUAGE_1).toNativeStyle())
+        helper.setNativeStyle(adConfig(AppAdPlacement.NATIVE_LANG).toNativeStyle())
         helper.requestAds(NativeAdParam.Request)
     }
 
@@ -426,9 +426,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     // One UA gate for every placement; each row is the same check under that placement's flag
     private val flags = listOf(
-        FlagInfo("shouldDisplayNativeOnboardingFull1") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_fullscreen_1_3.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeOnboardingFull2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_fullscreen_1_4.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeOnboardingNormal2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_onboarding_1_4.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeFull1") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_full1.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeFull2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_full2.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeOb2") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_ob2.enableUaCheck) },
         FlagInfo("shouldDisplayNativeHome") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_home.enableUaCheck) },
         FlagInfo("shouldDisplayNativePermission") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_permission.enableUaCheck) },
         FlagInfo("shouldDisplayInterOnboarding") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.inter_onboarding.enableUaCheck) },
@@ -482,7 +482,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
             // Dynamically enable/disable AppOpenManager based on mode
             if (mode == ResumeAdsEntryMode.APP_RESUME) {
-                val appResumeId = AdRemoteConfig.open_resume.id
+                val appResumeId = AdRemoteConfig.open_resume.waterfallIds.firstOrNull().orEmpty()
                 AppOpenManager.getInstance().setAppResumeAdId(appResumeId)
                 AppOpenManager.getInstance().enableAppResume()
             } else {
