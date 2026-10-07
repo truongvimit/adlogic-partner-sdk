@@ -62,7 +62,7 @@ class NativeClickActionSettingsTest {
     private fun action(p: AdPlacement) = OnboardingSettings.nativeClickAction(p)
 
     private fun adConfig(vararg units: Pair<String, NativeClickAction?>) = AdRemoteConfig.update(AdRemoteConfig(
-        units.associate { (key, action) -> key to AdUnitConfig("unit-$key", true, clickAction = action) }))
+        units.associate { (key, action) -> key to AdUnitConfig(listOf("unit-$key"), true, clickAction = action) }))
 
     @Test fun `without click_action pager pages auto advance and every other native reloads`() {
         adConfig("native_ob1" to null, "native_full1" to null, "native_lang" to null, "native_select" to null)
@@ -93,7 +93,7 @@ class NativeClickActionSettingsTest {
         assertEquals(auto, action(AdPlacement.SplashInlineNative))
     }
 
-    @Test fun `a click_action on a floor key is ignored`() {
+    @Test fun `a click_action on a retired _high key is ignored`() {
         adConfig(
             "native_ob1_high" to none, "native_ob1" to null,
             "native_lang_high1" to auto, "native_lang" to null,

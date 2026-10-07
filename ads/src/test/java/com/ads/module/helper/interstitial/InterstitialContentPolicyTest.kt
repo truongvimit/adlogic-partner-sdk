@@ -72,8 +72,8 @@ class InterstitialContentPolicyTest {
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         AdRemoteConfig.initializeFromJson("""{
-            "inter_all":{"id":"content-unit","isEnable":true},
-            "inter_back":{"id":"back-unit","isEnable":true}
+            "inter_all":{"ids":[{"id":"content-unit"}],"isEnable":true},
+            "inter_back":{"ids":[{"id":"back-unit"}],"isEnable":true}
         }""")
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
         host = controller.get()
@@ -177,7 +177,7 @@ class InterstitialContentPolicyTest {
         click()
         val outcome = click()
         val ad = fill()
-        AdRemoteConfig.initializeFromJson("""{"inter_all":{"id":"content-unit","isEnable":false}}""")
+        AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"content-unit"}],"isEnable":false}}""")
         advance(800)
         assertTrue("Permission must be rechecked after the prepare delay", ad.hosts.isEmpty())
         assertEquals(listOf(AdSkipReason.DISABLED_CONFIG), outcome.skipped)
@@ -189,11 +189,11 @@ class InterstitialContentPolicyTest {
         arm(0)
         click()
         val outcome = click()
-        AdRemoteConfig.initializeFromJson("""{"inter_all":{"id":"content-unit","isEnable":false}}""")
+        AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"content-unit"}],"isEnable":false}}""")
         main.idle()
         assertEquals(listOf(AdSkipReason.DISABLED_CONFIG), outcome.skipped)
         assertEquals(1, outcome.completed)
-        AdRemoteConfig.initializeFromJson("""{"inter_all":{"id":"content-unit","isEnable":true}}""")
+        AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"content-unit"}],"isEnable":true}}""")
         val ad = fill()
         advance(800)
         assertTrue(ad.hosts.isEmpty())

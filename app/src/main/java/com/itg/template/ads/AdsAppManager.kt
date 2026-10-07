@@ -71,7 +71,7 @@ object AdsAppManager : RemoteConfigUtils.Listener {
         ERainAd.getInstance().setIntervalInterstitialAd(RemoteConfigUtils.getInterstitialIntervalSec())
         // Seed the bundled app-open placement; subsequent remote documents own its live switch/ID.
         if (com.itg.template.app.ResumeAdsEntryRule.shouldEnableAppResume()) {
-            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.id)
+            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.waterfallIds.firstOrNull().orEmpty())
             AppOpenManager.getInstance().enableAppResume()
         }
     }

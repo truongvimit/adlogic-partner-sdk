@@ -93,7 +93,7 @@ class InterstitialPreloadScreensDeviceTest {
             ERainAd.getInstance().setCountClickToShowAds(1, 0)
             ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
             AppOpenManager.getInstance().disableAppResume()
-            AdRemoteConfig.initializeFromJson("""{"inter_back":{"id":"$UNIT","isEnable":true}}""")
+            AdRemoteConfig.initializeFromJson("""{"inter_back":{"ids":[{"id":"$UNIT"}],"isEnable":true}}""")
             // Normalize test-package remote state, preserving/restoring the original document.
             // Host options below provide the per-case clock and tap count.
             assertTrue(AdBehavior.document.acceptSuccessfulFetch("""{

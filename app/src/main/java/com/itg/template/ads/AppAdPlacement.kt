@@ -15,7 +15,7 @@ package com.itg.template.ads
  * placeholder, and the slot silently never fills. A constant makes the same mistake a
  * compile error.
  *
- * Tiers are not listed: the SDK resolves `<key>_high`, `_high1`… from the base key itself.
+ * Tiers are not listed: a placement's floors live in its own key's `ids`.
  */
 object AppAdPlacement {
     const val BANNER_HOME = "banner_home"
@@ -37,22 +37,11 @@ object AppAdPlacement {
     const val NATIVE_HOME = "native_home"
     const val NATIVE_LANG = "native_lang"
     const val NATIVE_LANG_ALT = "native_lang_alt"
-    const val NATIVE_LANGUAGE_1 = "native_language_1"
-    const val NATIVE_LANGUAGE_1_CLICK = "native_language_1_click"
-    const val NATIVE_LANGUAGE_2 = "native_language_2"
-    const val NATIVE_LANGUAGE_2_CLICK = "native_language_2_click"
     const val NATIVE_OB1 = "native_ob1"
     const val NATIVE_OB2 = "native_ob2"
     const val NATIVE_OB3 = "native_ob3"
     const val NATIVE_OB4 = "native_ob4"
-    const val NATIVE_ONBOARDING_1_1 = "native_onboarding_1_1"
-    const val NATIVE_ONBOARDING_1_4 = "native_onboarding_1_4"
-    const val NATIVE_ONBOARDING_2_1 = "native_onboarding_2_1"
-    const val NATIVE_ONBOARDING_2_4 = "native_onboarding_2_4"
-    const val NATIVE_ONBOARDING_FULLSCREEN_1_3 = "native_onboarding_fullscreen_1_3"
     const val NATIVE_ONBOARDING_FULLSCREEN_1_4 = "native_onboarding_fullscreen_1_4"
-    const val NATIVE_ONBOARDING_FULLSCREEN_2_3 = "native_onboarding_fullscreen_2_3"
-    const val NATIVE_ONBOARDING_FULLSCREEN_2_4 = "native_onboarding_fullscreen_2_4"
     const val NATIVE_PERMISSION = "native_permission"
     const val NATIVE_POPUP_LANG = "native_popup_lang"
     /** Alternative occupant of the splash bottom slot; `splash.ads.slot_format` picks it or the banner. */

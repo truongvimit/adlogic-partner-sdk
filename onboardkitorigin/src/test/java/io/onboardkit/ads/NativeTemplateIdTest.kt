@@ -78,7 +78,7 @@ class NativeTemplateIdTest {
 
     private fun declare(slots: Map<AdPlacement, String>, fields: String) {
         AdRemoteConfig.initializeFromJson(slots.values.joinToString(prefix = "{", postfix = "}") {
-            """"$it":{"id":"$it","isEnable":true$fields}"""
+            """"$it":{"ids":[{"id":"$it"}],"isEnable":true$fields}"""
         })
     }
 

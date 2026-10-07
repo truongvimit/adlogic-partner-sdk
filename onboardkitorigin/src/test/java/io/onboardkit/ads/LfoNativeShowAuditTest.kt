@@ -436,7 +436,7 @@ class LfoNativeShowAuditTest {
 
     @Test fun `the ad block wraps a 4·3 template 2 card instead of a fixed share of the screen`() {
         com.ads.module.config.AdRemoteConfig.initializeFromJson(
-            """{"native_lang":{"id":"audit-lfo1","isEnable":true,"templateId":2}}""")
+            """{"native_lang":{"ids":[{"id":"audit-lfo1"}],"isEnable":true,"templateId":2}}""")
         try {
             assertBlockWrapsCard(R.id.ob_splash_native_media_well)
         } finally { com.ads.module.config.AdRemoteConfig.reset() }

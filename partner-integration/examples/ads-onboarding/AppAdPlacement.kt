@@ -22,18 +22,7 @@ object AppAdPlacement {
 
     // Other placements from the example catalog; keep the ones your app uses.
     const val OPEN_RESUME = "open_resume"
-    const val NATIVE_LANGUAGE_1 = "native_language_1"
-    const val NATIVE_LANGUAGE_1_CLICK = "native_language_1_click"
-    const val NATIVE_LANGUAGE_2 = "native_language_2"
-    const val NATIVE_LANGUAGE_2_CLICK = "native_language_2_click"
-    const val NATIVE_ONBOARDING_1_1 = "native_onboarding_1_1"
-    const val NATIVE_ONBOARDING_2_1 = "native_onboarding_2_1"
-    const val NATIVE_ONBOARDING_1_4 = "native_onboarding_1_4"
-    const val NATIVE_ONBOARDING_2_4 = "native_onboarding_2_4"
-    const val NATIVE_ONBOARDING_FULLSCREEN_1_3 = "native_onboarding_fullscreen_1_3"
-    const val NATIVE_ONBOARDING_FULLSCREEN_2_3 = "native_onboarding_fullscreen_2_3"
     const val NATIVE_ONBOARDING_FULLSCREEN_1_4 = "native_onboarding_fullscreen_1_4"
-    const val NATIVE_ONBOARDING_FULLSCREEN_2_4 = "native_onboarding_fullscreen_2_4"
     const val NATIVE_PERMISSION = "native_permission"
     const val NATIVE_HOME = "native_home"
     const val INTER_ONBOARDING = "inter_onboarding"

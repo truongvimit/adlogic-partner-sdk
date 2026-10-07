@@ -18,6 +18,7 @@ import java.io.Reader
 internal object AdConfigParser {
     private const val TAG = "AdConfigParser"
     private const val DEFAULT_COLOR = "default"
+    private val RETIRED_FLOOR_SUFFIX = Regex("_high\\d?$")
 
     fun parse(source: Reader): Map<String, AdUnitConfig> = parseConfig(source).ads
 
@@ -52,6 +53,7 @@ internal object AdConfigParser {
                 fields[key] = parsed.fields
             }
             reader.endObject()
+            warnRetiredFloorKeys(units.keys)
             return AdRemoteConfig(units).also { it.declaredFields = fields }
         }
     }
@@ -61,7 +63,6 @@ internal object AdConfigParser {
 
     private fun readAdUnit(key: String, reader: JsonReader): ParsedUnit {
         val fields = linkedSetOf<String>()
-        var id = ""
         var isEnable = false
         var enableUaCheck = false
         var reloadIntervalSeconds: Int? = null
@@ -80,9 +81,6 @@ internal object AdConfigParser {
         while (reader.hasNext()) {
             val field = reader.nextName()
             when (field) {
-                "id" -> readString(reader).also { parsed ->
-                    if (parsed.valid) { id = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
-                }
                 "isEnable", "enable_ua_check" -> readBoolean(reader).also { parsed ->
                     if (parsed.valid) {
                         if (field == "isEnable") isEnable = parsed.value!! else enableUaCheck = parsed.value!!
@@ -118,13 +116,14 @@ internal object AdConfigParser {
                 "templateId" -> readNullableInt(reader, min = 1).also { parsed ->
                     if (parsed.valid) { templateId = parsed.value; fields += field } else invalid(key, field, parsed.raw)
                 }
-                "components", "ids" -> readStringList(reader).also { parsed ->
-                    val componentValuesValid = field != "components" ||
-                        parsed.value.orEmpty().all { it in AdUnitConfig.DEFAULT_COMPONENTS }
-                    if (parsed.valid && componentValuesValid) {
-                        if (field == "components") components = parsed.value!! else ids = parsed.value!!
+                "components" -> readStringList(reader).also { parsed ->
+                    if (parsed.valid && parsed.value!!.all { it in AdUnitConfig.DEFAULT_COMPONENTS }) {
+                        components = parsed.value
                         fields += field
                     } else invalid(key, field, parsed.raw)
+                }
+                "ids" -> readFloors(key, reader).also { parsed ->
+                    if (parsed.valid) { ids = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
                 }
                 else -> {
                     warn("$key.$field ignored (unknown field value=${readValueForLog(reader)})")
@@ -133,7 +132,7 @@ internal object AdConfigParser {
         }
         reader.endObject()
         return ParsedUnit(AdUnitConfig(
-            id = id,
+            ids = ids,
             isEnable = isEnable,
             enableUaCheck = enableUaCheck,
             reloadIntervalSeconds = reloadIntervalSeconds,
@@ -143,7 +142,6 @@ internal object AdConfigParser {
             colorAdBadgeText = colorAdBadgeText,
             heightCTA = heightCTA,
             components = components,
-            ids = ids,
             appResumeLoadDelayMs = appResumeLoadDelayMs,
             clickAction = clickAction,
             templateId = templateId,
@@ -226,12 +224,67 @@ internal object AdConfigParser {
         return Parsed(result, valid, if (valid) null else "array element has wrong type")
     }
 
+    /**
+     * `ids`: the waterfall as `[{"id": …, "isEnable": …}, …]`, highest floor first, reduced to the
+     * ids of its enabled floors. `isEnable` defaults to true, since the placement's own `isEnable`
+     * is the master switch. A malformed floor is skipped alone; a non-empty list with no valid
+     * floor is invalid as a whole, so a broken patch falls back to the lower tier, not to no ad.
+     */
+    private fun readFloors(key: String, reader: JsonReader): Parsed<List<String>> {
+        if (reader.peek() != JsonToken.BEGIN_ARRAY) return Parsed(null, false, readValueForLog(reader))
+        val enabled = mutableListOf<String>()
+        var floors = 0
+        var valid = 0
+        reader.beginArray()
+        while (reader.hasNext()) {
+            val at = "$key.ids[${floors++}]"
+            if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                warn("$at ignored (a floor is {\"id\": …, \"isEnable\": …}, got ${readValueForLog(reader)})")
+                continue
+            }
+            var id: String? = null
+            var isEnable = true
+            var broken = false
+            reader.beginObject()
+            while (reader.hasNext()) {
+                when (val field = reader.nextName()) {
+                    "id" -> readString(reader).also { parsed ->
+                        if (parsed.valid && parsed.value!!.isNotBlank()) id = parsed.value
+                        else { broken = true; invalid(at, field, parsed.raw ?: "\"${parsed.value}\"") }
+                    }
+                    "isEnable" -> readBoolean(reader).also { parsed ->
+                        if (parsed.valid) isEnable = parsed.value!! else { broken = true; invalid(at, field, parsed.raw) }
+                    }
+                    else -> warn("$at.$field ignored (unknown field value=${readValueForLog(reader)})")
+                }
+            }
+            reader.endObject()
+            if (id == null && !broken) warn("$at ignored (no \"id\")")
+            if (id == null || broken) continue
+            valid++
+            if (isEnable) enabled += id!!
+        }
+        reader.endArray()
+        if (floors > 0 && valid == 0) return Parsed(null, false, "no valid floor")
+        if (valid > 0 && enabled.isEmpty()) warn("$key.ids has every floor off; the placement requests nothing")
+        return Parsed(enabled, true)
+    }
+
     private fun readValueForLog(reader: JsonReader): String = when (reader.peek()) {
         JsonToken.STRING -> "\"${reader.nextString()}\""
         JsonToken.NUMBER -> reader.nextString()
         JsonToken.BOOLEAN -> reader.nextBoolean().toString()
         JsonToken.NULL -> { reader.nextNull(); "null" }
         else -> { val token = reader.peek(); reader.skipValue(); token.name }
+    }
+
+    /**
+     * A `<key>_high`/`<key>_highN` entry is no longer a floor of `<key>`; read as a placement of
+     * its own nobody requests, it would drop the high floor without a sound.
+     */
+    private fun warnRetiredFloorKeys(keys: Set<String>) {
+        val retired = keys.filter(RETIRED_FLOOR_SUFFIX::containsMatchIn)
+        if (retired.isNotEmpty()) warn("$retired not read as floors; move their ids into the base key's \"ids\"")
     }
 
     private fun invalid(key: String, field: String, raw: String?) =

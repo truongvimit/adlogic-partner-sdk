@@ -43,17 +43,14 @@ data class AdRemoteConfig @JvmOverloads constructor(
         const val RELEASE_FILE_NAME = "ad_config.json"
         const val DEBUG_FILE_NAME = "ad_config_debug.json"
 
-        /** How deep the numbered rungs go: `_high1`…`_high9`. */
-        private const val MAX_NUMBERED_FLOORS = 9
-
         internal val ALL_FIELDS: Set<String> = setOf(
-            "id", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA", "colorBackground",
+            "ids", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA", "colorBackground",
             "colorAdBadge", "colorAdBadgeText",
-            "heightCTA", "components", "ids", "app_resume_load_delay_ms", "click_action",
+            "heightCTA", "components", "app_resume_load_delay_ms", "click_action",
             "templateId",
         )
 
-        private fun defaultUnit() = AdUnitConfig(id = "", isEnable = false)
+        private fun defaultUnit() = AdUnitConfig(ids = emptyList(), isEnable = false)
 
         /** Drop placement objects whose every field was invalid; they must not shadow code/assets. */
         private fun validPatch(source: AdRemoteConfig): AdRemoteConfig {
@@ -92,7 +89,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
         }
 
         private fun mergeUnit(base: AdUnitConfig, top: AdUnitConfig, fields: Set<String>): AdUnitConfig = base.copy(
-            id = if ("id" in fields) top.id else base.id,
+            ids = if ("ids" in fields) top.ids else base.ids,
             isEnable = if ("isEnable" in fields) top.isEnable else base.isEnable,
             enableUaCheck = if ("enable_ua_check" in fields) top.enableUaCheck else base.enableUaCheck,
             reloadIntervalSeconds = if ("reloadIntervalSeconds" in fields) top.reloadIntervalSeconds else base.reloadIntervalSeconds,
@@ -102,39 +99,24 @@ data class AdRemoteConfig @JvmOverloads constructor(
             colorAdBadgeText = if ("colorAdBadgeText" in fields) top.colorAdBadgeText else base.colorAdBadgeText,
             heightCTA = if ("heightCTA" in fields) top.heightCTA else base.heightCTA,
             components = if ("components" in fields) top.components else base.components,
-            ids = if ("ids" in fields) top.ids else base.ids,
             appResumeLoadDelayMs = if ("app_resume_load_delay_ms" in fields) top.appResumeLoadDelayMs else base.appResumeLoadDelayMs,
             clickAction = if ("click_action" in fields) top.clickAction else base.clickAction,
             templateId = if ("templateId" in fields) top.templateId else base.templateId,
         )
 
-        /**
-         * Every floor key a placement may declare, in request order:
-         * `_high`, `_high1`…`_high9`, then the bare key.
-         *
-         * One named rung and a number is the whole vocabulary — a separate `_medium` would only
-         * be `_high1` under another name, and two ways to spell the same floor is how a payload
-         * ends up declaring both. The bare key is always the all-price floor and always last.
-         *
-         * Need more than ten floors, or an order that is not high→low? Put the ids straight into
-         * one key's `ids` array — that list is taken as the waterfall, verbatim and unlimited.
-         */
-        private val FLOOR_SUFFIXES: List<String> =
-            listOf("_high") + (1..MAX_NUMBERED_FLOORS).map { "_high$it" } + ""
-
         @Volatile
         private var instance: AdRemoteConfig? = null
 
         /**
-         * The test id of each all-price key, from `ad_config_debug.json`, while a debuggable build
+         * The test `ids` of each placement, from `ad_config_debug.json`, while a debuggable build
          * runs on it; null otherwise.
          *
-         * While it stands every resolved key requests its test id and every `_high*` floor is
-         * empty, whatever ad_config or the backend say about ids. A debug run that took the real
-         * ids would spend them, which is invalid traffic on the app's own account.
+         * While it stands every resolved key requests its test ids, whatever ad_config or the
+         * backend say about ids. A debug run that took the real ids would spend them, which is
+         * invalid traffic on the app's own account.
          */
         @Volatile
-        private var debugTestIds: Map<String, String>? = null
+        private var debugTestIds: Map<String, List<String>>? = null
 
         @Volatile
         private var reportedMissingTestIds: Set<String>? = null
@@ -157,31 +139,21 @@ data class AdRemoteConfig @JvmOverloads constructor(
         @JvmStatic
         fun isFromRemote(): Boolean = remoteDocument
 
-        /** True when the backend's document, not the app's assets, declares [baseKey] or one of its floors. */
+        /** True when the backend's document, not the app's assets, declares [key]. */
         @JvmStatic
-        fun remoteDeclares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { (baseKey + it) in remoteKeys }
+        fun remoteDeclares(key: String): Boolean = key in remoteKeys
 
         /**
-         * True when the backend or the app's `ad_config.json` declares [baseKey] or one of its
-         * floors. Either outranks an ad unit the app set in code, which is then only the fallback.
+         * True when the backend or the app's `ad_config.json` declares [key]. Either outranks an
+         * ad unit the app set in code, which is then only the fallback.
          */
         @JvmStatic
-        fun declaredAboveCode(baseKey: String): Boolean =
-            remoteDeclares(baseKey) || FLOOR_SUFFIXES.any { (baseKey + it) in assetConfig.ads }
+        fun declaredAboveCode(key: String): Boolean = remoteDeclares(key) || key in assetConfig.ads
 
-        /** [key] without its `_high`/`_highN` floor suffix; the all-price key is its own base. */
+        /** True only when the active remote patch supplied this field for [key]. */
         @JvmStatic
-        fun baseKeyOf(key: String): String =
-            FLOOR_SUFFIXES.firstOrNull { it.isNotEmpty() && key.length > it.length && key.endsWith(it) }
-                ?.let(key::removeSuffix) ?: key
-
-        /** True only when the active remote patch supplied this field for [baseKey]. */
-        @JvmStatic
-        fun remoteDeclaresField(baseKey: String, field: String): Boolean =
-            FLOOR_SUFFIXES.any { suffix ->
-                val key = baseKey + suffix
-                key in remoteKeys && remotePatch?.fieldsFor(key)?.contains(field) == true
-            }
+        fun remoteDeclaresField(key: String, field: String): Boolean =
+            key in remoteKeys && remotePatch?.fieldsFor(key)?.contains(field) == true
 
         /**
          * The active configuration, or an empty one if nothing has loaded yet.
@@ -197,8 +169,8 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         /**
          * Loads `assets/ad_config.json` for every build type. A debuggable build also loads
-         * `assets/ad_config_debug.json`, whose one test id per all-price key replaces every
-         * requestable id, so a debug run never spends real ad units.
+         * `assets/ad_config_debug.json`, whose test `ids` replace each placement's waterfall, so a
+         * debug run never spends real ad units.
          */
         @JvmStatic
         fun initializeFromAssets(context: Context) {
@@ -254,30 +226,25 @@ data class AdRemoteConfig @JvmOverloads constructor(
         }
 
         /**
-         * [resolved] with the debug test ids in place of every requestable id: an all-price key
-         * takes its test id (none when `ad_config_debug.json` lists none) and a `_high*` floor
-         * none, so no waterfall runs. Every other field stays as resolved. Outside a debuggable
-         * build with a debug file, [resolved] as is.
+         * [resolved] with each key's `ids` replaced by its debug test ids (none when
+         * `ad_config_debug.json` lists none). Every other field stays as resolved. Outside a
+         * debuggable build with a debug file, [resolved] as is.
          */
         internal fun withTestIds(resolved: AdRemoteConfig): AdRemoteConfig {
             val testIds = debugTestIds ?: return resolved
             val remote = remotePatch.takeIf { allowRemoteOverrideInDebug }
             val merged = resolved.ads.mapValues { (key, unit) ->
                 val remoteFields = remote?.takeIf { key in it.ads }?.fieldsFor(key).orEmpty()
-                when {
-                    "id" in remoteFields || "ids" in remoteFields -> unit
-                    baseKeyOf(key) != key -> unit.copy(id = "", ids = emptyList())
-                    else -> unit.copy(id = testIds[key].orEmpty(), ids = emptyList())
-                }
+                if ("ids" in remoteFields) unit else unit.copy(ids = testIds[key].orEmpty())
             }
-            val missing = merged.filter { (key, unit) -> baseKeyOf(key) == key && unit.isEnable && unit.id.isEmpty() }
+            val missing = merged.filter { (_, unit) -> unit.isEnable && unit.waterfallIds.isEmpty() }
                 .keys.toSortedSet()
             if (missing != reportedMissingTestIds) {
                 reportedMissingTestIds = missing
                 Log.w(
                     TAG,
-                    "Debuggable build: settings from $RELEASE_FILE_NAME/remote, ids from $DEBUG_FILE_NAME, " +
-                        "no waterfall." + if (missing.isEmpty()) "" else " No test id, so no ad, for: $missing",
+                    "Debuggable build: settings from $RELEASE_FILE_NAME/remote, ids from $DEBUG_FILE_NAME." +
+                        if (missing.isEmpty()) "" else " No test id, so no ad, for: $missing",
                 )
             }
             return AdRemoteConfig(merged).also { it.declaredFields = resolved.declaredFields }
@@ -287,22 +254,15 @@ data class AdRemoteConfig @JvmOverloads constructor(
         internal fun pinTestIds(debugFile: AdRemoteConfig?) {
             reportedMissingTestIds = null
             debugTestIds = debugFile?.let { file ->
-                val ignored = file.ads.keys.filter { key ->
-                    baseKeyOf(key) != key || file.fieldsFor(key).any { it != "id" && it != "ids" }
-                }
+                val ignored = file.ads.keys.filter { key -> file.fieldsFor(key).any { it != "ids" } }
                 if (ignored.isNotEmpty()) {
                     Log.w(
                         TAG,
-                        "$DEBUG_FILE_NAME only supplies one \"id\" per all-price key; floors and other " +
-                            "fields come from $RELEASE_FILE_NAME. Ignored in: $ignored",
+                        "$DEBUG_FILE_NAME only supplies \"ids\"; other fields come from " +
+                            "$RELEASE_FILE_NAME. Ignored in: $ignored",
                     )
                 }
-                // A floor's id only stands in for an all-price key the file leaves out.
-                file.ads.entries.sortedBy { (key, _) -> if (baseKeyOf(key) == key) 0 else 1 }
-                    .fold(LinkedHashMap<String, String>()) { ids, (key, unit) ->
-                        unit.waterfallIds.lastOrNull()?.let { ids.putIfAbsent(baseKeyOf(key), it) }
-                        ids
-                    }
+                file.ads.mapValues { (_, unit) -> unit.ids }
             }
         }
 
@@ -427,7 +387,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
         val unit = ads[key]
         if (unit == null) {
             Log.w(TAG, "Ad unit '$key' not found in configuration")
-            return AdUnitConfig(id = "", isEnable = false)
+            return AdUnitConfig(ids = emptyList(), isEnable = false)
         }
         return unit
     }
@@ -445,33 +405,19 @@ data class AdRemoteConfig @JvmOverloads constructor(
     }
 
     /**
-     * The ad unit ids for [baseKey], highest floor first.
-     *
-     * Remote config spells a waterfall as one key per floor — `<key>_high`, `<key>_high1`, …,
-     * `<key>` — rather than a list inside one key, so this is what turns that convention into
-     * request order. A placement uses however many floors it actually declares: missing or
-     * disabled ones are simply absent, and one with no usable floor returns an empty list.
+     * The ad unit ids for [key], highest floor first: the enabled floors of its `ids` while the
+     * key is switched on; otherwise empty.
      *
      * ```
-     * tiersFor("inter_splash")  // [inter_splash_high, inter_splash_high1, inter_splash]
-     * tiersFor("banner_home")   // [banner_home] — single floor, still valid
+     * tiersFor("inter_splash")  // ["…/2floor", "…/allprice"]
+     * tiersFor("banner_home")   // ["…/banner"] — a one-floor ids, still valid
      * ```
      */
-    fun tiersFor(baseKey: String): List<String> {
-        // The base key is the placement's master switch: a declared `isEnable: false` there turns
-        // the whole waterfall off, so "disable a slot" is one edit rather than one per floor.
-        val base = ads[baseKey]
-        if (base != null && !base.isEnable) return emptyList()
-        return FLOOR_SUFFIXES
-            .mapNotNull { suffix -> ads[baseKey + suffix] }
-            .filter { it.isUsable }
-            .flatMap { it.waterfallIds }
-            .distinct()
-    }
+    fun tiersFor(key: String): List<String> = ads[key]?.takeIf { it.isUsable }?.waterfallIds.orEmpty()
 
-    /** True when the payload declares [baseKey] or any of its floors. */
-    fun declares(baseKey: String): Boolean = FLOOR_SUFFIXES.any { ads.containsKey(baseKey + it) }
+    /** True when the payload declares [key]. */
+    fun declares(key: String): Boolean = ads.containsKey(key)
 
-    /** True when [baseKey] resolves to at least one requestable ad unit id. */
-    fun isPlacementEnabled(baseKey: String): Boolean = tiersFor(baseKey).isNotEmpty()
+    /** True when [key] resolves to at least one requestable ad unit id. */
+    fun isPlacementEnabled(key: String): Boolean = tiersFor(key).isNotEmpty()
 }

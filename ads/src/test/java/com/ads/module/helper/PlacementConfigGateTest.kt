@@ -48,8 +48,8 @@ class PlacementConfigGateTest {
     private fun install(vararg units: Pair<String, AdUnitConfig>) =
         AdRemoteConfig.update(AdRemoteConfig(units.toMap()))
 
-    private fun unit(id: String, enabled: Boolean = true, ua: Boolean = false) =
-        AdUnitConfig(id = id, isEnable = enabled, enableUaCheck = ua)
+    private fun unit(vararg ids: String, enabled: Boolean = true, ua: Boolean = false) =
+        AdUnitConfig(ids = ids.toList(), isEnable = enabled, enableUaCheck = ua)
 
     /** Records what the load path decided without reaching the vendor SDK. */
     private fun loadOutcome(placement: String): Boolean {
@@ -61,11 +61,8 @@ class PlacementConfigGateTest {
     }
 
     @Test
-    fun `a disabled base key switches off every floor above it`() {
-        install(
-            "inter_back" to unit("all-price", enabled = false),
-            "inter_back_high" to unit("high"),
-        )
+    fun `a disabled placement switches off every floor in its ids`() {
+        install("inter_back" to unit("high", "all-price", enabled = false))
 
         assertEquals(emptyList<String>(), AdRemoteConfig.getInstance().tiersFor("inter_back"))
         assertTrue(loadOutcome("inter_back"))
@@ -77,11 +74,8 @@ class PlacementConfigGateTest {
     }
 
     @Test
-    fun `an enabled base key still serves its floors`() {
-        install(
-            "inter_back" to unit("all-price"),
-            "inter_back_high" to unit("high"),
-        )
+    fun `an enabled placement serves its floors`() {
+        install("inter_back" to unit("high", "all-price"))
 
         assertEquals(listOf("high", "all-price"), AdRemoteConfig.getInstance().tiersFor("inter_back"))
         assertNull(AdGate.placementSkipReason(context, "inter_back", checkNetwork = false))

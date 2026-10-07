@@ -61,7 +61,7 @@ class ContentAdPresentationDeviceTest {
                 behavior = BehaviorConfig(lockPagerSwipe = false)
             }.getOrThrow()).getOrThrow()
             if (case == "remote_off") AdRemoteConfig.update(AdRemoteConfig(mapOf(
-                "native_ob1" to AdUnitConfig("test-native", false),
+                "native_ob1" to AdUnitConfig(listOf("test-native"), false),
             )))
         }
         runBlocking { OnboardingSdk.reset() }

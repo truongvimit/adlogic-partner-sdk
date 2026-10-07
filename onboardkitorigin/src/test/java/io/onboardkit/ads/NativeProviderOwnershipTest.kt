@@ -126,7 +126,7 @@ class NativeProviderOwnershipTest {
             ads = io.onboardkit.config.AdsConfig.fromAdConfig()
         }.getOrThrow())
         adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_lang" to
-            com.ads.module.config.AdUnitConfig("native-test", true))))
+            com.ads.module.config.AdUnitConfig(listOf("native-test"), true))))
         val container = FrameLayout(host).also(host::setContentView)
         val ad = mock(NativeAd::class.java)
         doReturn("Install").`when`(ad).callToAction
@@ -140,7 +140,7 @@ class NativeProviderOwnershipTest {
             settings.document.acceptSuccessfulFetch("""{"lfo":{"native1":{"behavior":{"presentation":{"cta_corner_radius_dp":7}}}}}""")
             behavior.document.acceptSuccessfulFetch("""{"native":{"presentation":{"cta_corner_radius_dp":3}}}""")
             adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_lang" to
-                com.ads.module.config.AdUnitConfig("native-test", true, colorCTA = "#ff0000",
+                com.ads.module.config.AdUnitConfig(listOf("native-test"), true, colorCTA = "#ff0000",
                     components = listOf("cta", "media", "icon_headline")))))
             if (fillBeforeFetch) assertTrue(bind(container, layoutRes = template))
             else requests.single().onNativeAdLoaded(ad)
@@ -186,7 +186,7 @@ class NativeProviderOwnershipTest {
         val template = io.onboardkit.R.layout.ob_layout_native_lfo
         val container = FrameLayout(host).also(host::setContentView)
         try {
-            adConfig.updateCodeFromJson("""{"native_lang":{"id":"native-test","isEnable":true,"colorCTA":"#112233"}}""")
+            adConfig.updateCodeFromJson("""{"native_lang":{"ids":[{"id":"native-test"}],"isEnable":true,"colorCTA":"#112233"}}""")
             provider.preloadNative(host, request.copy(layoutRes = template))
             requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
             assertTrue(bind(container, layoutRes = template))
@@ -228,7 +228,7 @@ class NativeProviderOwnershipTest {
         try {
             pages.filter { sdk.requireConfig().ads.standardKeyFor(it) != null }.forEach { page ->
                 val key = checkNotNull(sdk.requireConfig().ads.standardKeyFor(page))
-                adConfig.updateCodeFromJson("""{"$key":{"id":"native-test","isEnable":true,"colorCTA":"#112233"}}""")
+                adConfig.updateCodeFromJson("""{"$key":{"ids":[{"id":"native-test"}],"isEnable":true,"colorCTA":"#112233"}}""")
                 val container = FrameLayout(host).also(host::setContentView)
                 val layout = NativeTemplates.layoutForPlacement(page)
                 provider.preloadNative(host, request.copy(placement = page, layoutRes = layout))
@@ -261,7 +261,7 @@ class NativeProviderOwnershipTest {
         try {
             assertNull(sdk.configuredPlacementKey(placement))
             adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("some_native" to
-                com.ads.module.config.AdUnitConfig("native-test", true, colorCTA = "#00ff00"))))
+                com.ads.module.config.AdUnitConfig(listOf("native-test"), true, colorCTA = "#00ff00"))))
             provider.preloadNative(host, request.copy(layoutRes = template))
             requests.single().onNativeAdLoaded(ad)
             assertTrue(bind(container, layoutRes = template))
@@ -338,7 +338,7 @@ class NativeProviderOwnershipTest {
         try {
             val key = checkNotNull(sdk.configuredPlacementKey(AdPlacement.SplashBanner))
             adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(key to
-                com.ads.module.config.AdUnitConfig("declared-banner", true))))
+                com.ads.module.config.AdUnitConfig(listOf("declared-banner"), true))))
             mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
                 singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(ads)
                 provider.loadBanner(host, io.onboardkit.config.BannerAdUnit("banner-unit"), silent)
@@ -504,13 +504,12 @@ class NativeProviderOwnershipTest {
         try {
             val blocked = listOf(
                 emptyMap(),
-                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig("native-test", false),
-                    "native_ob2_high" to com.ads.module.config.AdUnitConfig("high", true)),
-                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig(" ", true)),
+                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig(listOf("high", "native-test"), false)),
+                mapOf("native_ob2" to com.ads.module.config.AdUnitConfig(listOf(" "), true)),
             )
             blocked.forEach { entries ->
                 adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf("native_ob2" to
-                    com.ads.module.config.AdUnitConfig("native-test", true))))
+                    com.ads.module.config.AdUnitConfig(listOf("native-test"), true))))
                 controller.pause().stop()
                 provider.preloadNative(host, oldRequest)
                 assertEquals(NativeStatus.LOADING, provider.nativeStatus(slot))
@@ -537,7 +536,7 @@ class NativeProviderOwnershipTest {
         val adConfig = com.ads.module.config.AdRemoteConfig
         try {
             adConfig.update(com.ads.module.config.AdRemoteConfig(ids.associate {
-                "native_$it" to com.ads.module.config.AdUnitConfig("native-$it", true)
+                "native_$it" to com.ads.module.config.AdUnitConfig(listOf("native-$it"), true)
             }))
             sdk.preload().onLanguageSelected(host)
             assertEquals(6, requests.size)
@@ -821,7 +820,7 @@ class NativeProviderOwnershipTest {
 
     private fun clickActions(vararg units: Pair<String, NativeClickAction?>) =
         com.ads.module.config.AdRemoteConfig.update(com.ads.module.config.AdRemoteConfig(units.associate { (key, action) ->
-            key to com.ads.module.config.AdUnitConfig("native-test", true, clickAction = action)
+            key to com.ads.module.config.AdUnitConfig(listOf("native-test"), true, clickAction = action)
         }))
 
     private fun withClickActions(

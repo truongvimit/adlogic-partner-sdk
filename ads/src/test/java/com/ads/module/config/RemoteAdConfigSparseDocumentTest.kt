@@ -19,33 +19,31 @@ class RemoteAdConfigSparseDocumentTest {
         val code = AdRemoteConfig(
             mapOf(
                 "native_lang" to AdUnitConfig(
-                    id = "code",
+                    ids = listOf("code-high", "code"),
                     isEnable = true,
                     enableUaCheck = true,
                     reloadIntervalSeconds = 11,
                     colorCTA = "#101010",
                     heightCTA = 31,
                     components = listOf("body"),
-                    ids = listOf("code-high"),
                     appResumeLoadDelayMs = 700L,
                     clickAction = NativeClickAction.AUTO_NEXT,
                 ),
             ),
         )
         AdRemoteConfig.update(code, fromRemote = false)
-        assertEquals("code", AdRemoteConfig.getInstance().unit("native_lang").id)
+        assertEquals(listOf("code-high", "code"), AdRemoteConfig.getInstance().unit("native_lang").ids)
 
         val remote = AdRemoteConfig(
             mapOf(
                 "native_lang" to AdUnitConfig(
-                    id = "remote",
+                    ids = listOf("remote"),
                     isEnable = false,
                     enableUaCheck = false,
                     reloadIntervalSeconds = 0,
                     colorCTA = "",
                     heightCTA = 0,
                     components = emptyList(),
-                    ids = emptyList(),
                     appResumeLoadDelayMs = 0L,
                     clickAction = NativeClickAction.NONE,
                 ),
@@ -53,14 +51,13 @@ class RemoteAdConfigSparseDocumentTest {
         )
         AdRemoteConfig.applyRemote(remote)
         val active = AdRemoteConfig.getInstance().unit("native_lang")
-        assertEquals("remote", active.id)
+        assertEquals(listOf("remote"), active.ids)
         assertFalse(active.isEnable)
         assertFalse(active.enableUaCheck)
         assertEquals(0, active.reloadIntervalSeconds)
         assertEquals("", active.colorCTA)
         assertEquals(0, active.heightCTA)
         assertEquals(emptyList<String>(), active.components)
-        assertEquals(emptyList<String>(), active.ids)
         assertEquals(0L, active.appResumeLoadDelayMs)
         assertEquals(NativeClickAction.NONE, active.clickAction)
 
@@ -68,14 +65,13 @@ class RemoteAdConfigSparseDocumentTest {
         // tier is visible again immediately; a failed fetch would leave the remote instance intact.
         AdRemoteConfig.applyRemote(AdRemoteConfig())
         val restored = AdRemoteConfig.getInstance().unit("native_lang")
-        assertEquals("code", restored.id)
+        assertEquals(listOf("code-high", "code"), restored.ids)
         assertTrue(restored.isEnable)
         assertTrue(restored.enableUaCheck)
         assertEquals(11, restored.reloadIntervalSeconds)
         assertEquals("#101010", restored.colorCTA)
         assertEquals(31, restored.heightCTA)
         assertEquals(listOf("body"), restored.components)
-        assertEquals(listOf("code-high"), restored.ids)
         assertEquals(700L, restored.appResumeLoadDelayMs)
         assertEquals(NativeClickAction.AUTO_NEXT, restored.clickAction)
     }
@@ -83,19 +79,19 @@ class RemoteAdConfigSparseDocumentTest {
     @Test
     fun `remote-only placement disappears when that key is removed`() {
         AdRemoteConfig.update(
-            AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "code", isEnable = true))),
+            AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("code"), isEnable = true))),
             fromRemote = false,
         )
         AdRemoteConfig.applyRemote(
             AdRemoteConfig(
                 mapOf(
-                    "native_lang" to AdUnitConfig(id = "remote", isEnable = true),
-                    "native_welcome1" to AdUnitConfig(id = "remote-welcome", isEnable = true),
+                    "native_lang" to AdUnitConfig(ids = listOf("remote"), isEnable = true),
+                    "native_welcome1" to AdUnitConfig(ids = listOf("remote-welcome"), isEnable = true),
                 ),
             ),
         )
-        assertEquals("remote-welcome", AdRemoteConfig.getInstance().unit("native_welcome1").id)
-        AdRemoteConfig.applyRemote(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(id = "new", isEnable = true))))
+        assertEquals(listOf("remote-welcome"), AdRemoteConfig.getInstance().unit("native_welcome1").ids)
+        AdRemoteConfig.applyRemote(AdRemoteConfig(mapOf("native_lang" to AdUnitConfig(ids = listOf("new"), isEnable = true))))
         assertFalse(AdRemoteConfig.getInstance().declares("native_welcome1"))
         assertFalse(AdRemoteConfig.getInstance().isPlacementEnabled("native_welcome1"))
     }

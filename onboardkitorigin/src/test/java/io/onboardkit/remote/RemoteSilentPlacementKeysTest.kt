@@ -37,7 +37,7 @@ class RemoteSilentPlacementKeysTest {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
     }
 
-    private fun units(vararg keys: String) = AdRemoteConfig(keys.associateWith { AdUnitConfig("unit-$it", true, heightCTA = 50) })
+    private fun units(vararg keys: String) = AdRemoteConfig(keys.associateWith { AdUnitConfig(listOf("unit-$it"), true, heightCTA = 50) })
 
     @Test fun `a remote document under other key names leaves every app placement it omits listed`() {
         AdRemoteConfig.update(units("native_lang", "native_ob1", "inter_splash"), fromRemote = false)
@@ -46,7 +46,8 @@ class RemoteSilentPlacementKeysTest {
         AdRemoteConfig.update(units("native_language_1", "native_onboarding_1_1", "inter_splash"), fromRemote = true)
         assertEquals(listOf("native_lang", "native_ob1"), OnboardingSdk.remoteSilentPlacementKeys())
 
+        // A retired `_high` key no longer speaks for its base placement.
         AdRemoteConfig.update(units("native_lang_high", "native_ob1", "inter_splash"), fromRemote = true)
-        assertEquals(emptyList<String>(), OnboardingSdk.remoteSilentPlacementKeys())
+        assertEquals(listOf("native_lang"), OnboardingSdk.remoteSilentPlacementKeys())
     }
 }

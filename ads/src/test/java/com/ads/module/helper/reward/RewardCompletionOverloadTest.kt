@@ -40,7 +40,7 @@ class RewardCompletionOverloadTest {
     }
 
     private fun install(enabled: Boolean) = AdRemoteConfig.update(
-        AdRemoteConfig(mapOf("reward_example" to AdUnitConfig(id = "unit", isEnable = enabled))),
+        AdRemoteConfig(mapOf("reward_example" to AdUnitConfig(ids = listOf("unit"), isEnable = enabled))),
     )
 
     @Test
