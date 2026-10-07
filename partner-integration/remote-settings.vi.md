@@ -159,8 +159,8 @@ Mặc định khi key không khai `click_action`:
 
 | Native | Mặc định |
 |---|---|
-| Trang pager onboarding: content `ob1..ob4` và content step app tự khai, fullscreen `full1/full2` | `auto_next` |
-| LFO1, LFO2, dialog xác nhận LFO, Privacy/Goal, Welcome Back, OB5, native splash (`native_splash`, `native_fs`) và native ở màn app | `reload` |
+| Trang pager onboarding: content `ob1..ob4` và content step app tự khai, fullscreen `full1/full2`; native full-screen của splash `native_fs` | `auto_next` |
+| LFO1, LFO2, dialog xác nhận LFO, Privacy/Goal, Welcome Back, OB5, native slot đáy splash `native_splash` và native ở màn app | `reload` |
 
 Ad của trang pager không reload: `reload` và `reload_waterfall` trên các key đó được xử lý như `none`. Nếu lúc click placement đang có một lượt tải chạy dở thì click join vào lượt đó, bất kể nó đang ở tầng nào. LFO2 không có unit riêng thì dùng key của LFO1, kéo theo hành động của LFO1, khi key đó đã được gắn: `AdsConfig.fromAdConfig` (mặc định của builder) gắn nó, backend khai key đó cũng gắn. `AdsConfig(...)` tự dựng mà không có cả hai thì LFO2 đọc `native_lang_alt`. [ad_config mẫu](examples/ads-onboarding/ad_config.json) khai tường minh đúng các giá trị này trên mọi base key native.
 
@@ -359,7 +359,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 
 `interstitial_auto_buffer` là nhóm cấp cao nhất, mặc định `enabled: true`. Nhóm này chỉ điều khiển placements khai báo trong `InterstitialAutoBuffer` hoặc remote `rules`, trừ placements đã reserve. Host vẫn phải gọi `configure()` / `start()`; bật field này không tự khởi động buffer hoặc tự show quảng cáo. Các cấu hình interstitial khác vẫn nằm trong `interstitial`.
 
-`interstitial_auto_buffer.rules.<placement>` trong remote hoặc asset app có thể thêm placement được quản lý ngoài danh sách host; predicate của host và `enabled: false` vẫn chặn nó. Khi buffer đang chạy, placement vừa được nhận quản lý bắt đầu cooldown đầu tiên lúc settings thay đổi. `tick_ms: 0` theo `interstitial.frequency.interval_ms`, fallback về `ERainAdConfig.intervalInterstitialAd` của host.
+`interstitial_auto_buffer.rules.<placement>` trong remote hoặc asset app chỉnh hoặc tắt (`enabled: false`) placement mà host đã khai trong `configure()`; rule không thêm được placement, nên placement host không khai sẽ không bao giờ được preload tự động. `tick_ms: 0` theo `interstitial.frequency.interval_ms`, fallback về `ERainAdConfig.intervalInterstitialAd` của host.
 
 ## Force update
 

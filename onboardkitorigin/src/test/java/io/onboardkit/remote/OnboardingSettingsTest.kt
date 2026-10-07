@@ -39,9 +39,10 @@ class OnboardingSettingsTest {
         val auto = com.ads.module.helper.adnative.NativeClickAction.AUTO_NEXT
         val reload = com.ads.module.helper.adnative.NativeClickAction.RELOAD
         listOf(AdPlacement.Language1, AdPlacement.Language2, AdPlacement.LanguageConfirm,
-            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashNative, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
+            AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2, AdPlacement.SplashInlineNative, AdPlacement.Ob5).forEach {
             assertEquals(it.key, reload, OnboardingSettings.nativeClickAction(it))
         }
+        assertEquals(auto, OnboardingSettings.nativeClickAction(AdPlacement.SplashNative))
         listOf(StepId.OB1, StepId.OB2, StepId.OB3, StepId.OB4, StepId("custom_page")).forEach {
             assertEquals(it.value, auto, OnboardingSettings.nativeClickAction(AdPlacement.StepNative(it)))
         }

@@ -139,8 +139,8 @@ Defaults when the key has no `click_action`:
 
 | Natives | Default |
 | --- | --- |
-| Onboarding pager pages: content `ob1..ob4` and app-declared content steps, fullscreen `full1/full2` | `auto_next` |
-| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash natives (`native_splash`, `native_fs`) and app-screen natives | `reload` |
+| Onboarding pager pages: content `ob1..ob4` and app-declared content steps, fullscreen `full1/full2`; splash full-screen native `native_fs` | `auto_next` |
+| LFO1, LFO2, LFO confirmation dialog, Privacy/Goal, Welcome Back, OB5, splash bottom-slot native `native_splash` and app-screen natives | `reload` |
 
 Pager page ads never reload: `reload` and `reload_waterfall` on those keys act as `none`. If a load for the placement is already running when the ad is clicked, the click joins it whatever its floors. LFO2 without a unit of its own uses LFO1's key, and with it LFO1's action, once that key is bound: `AdsConfig.fromAdConfig` (the builder default) binds it, and so does the backend declaring it. A hand-built `AdsConfig(...)` with neither reads `native_lang_alt` for LFO2. The [sample ad_config](examples/ads-onboarding/ad_config.json) declares these same values explicitly on every native base key.
 
@@ -341,7 +341,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 
 `interstitial_auto_buffer` is a top-level group with `enabled: true` by default. This group controls only placements configured in `InterstitialAutoBuffer` or its remote `rules`, excluding reserved placements. The host must still call `configure()` / `start()`; enabling this field does not start the buffer or show ads automatically. Other interstitial settings remain under `interstitial`.
 
-Remote or app-asset `interstitial_auto_buffer.rules.<placement>` can add a managed placement without adding it to the host list; the host predicate and explicit `enabled: false` still block it. While the buffer is running, a newly owned placement begins its first cooldown when settings change. `tick_ms: 0` follows `interstitial.frequency.interval_ms`, with the host `ERainAdConfig.intervalInterstitialAd` as fallback.
+Remote or app-asset `interstitial_auto_buffer.rules.<placement>` tunes or disables (`enabled: false`) a placement the host lists in `configure()`; a rule cannot add a placement, so a placement the host does not list is never preloaded automatically. `tick_ms: 0` follows `interstitial.frequency.interval_ms`, with the host `ERainAdConfig.intervalInterstitialAd` as fallback.
 
 ### Onboarding primary color
 
