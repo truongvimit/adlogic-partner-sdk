@@ -125,8 +125,8 @@ Không tự gọi `OnboardingSdk.start()` hay finish splash; `ObSplashActivity` 
 - Hiện status/caption bar, ẩn navigation bar; dùng `SystemBarConfig` khi cần đổi.
 - Chưa hoàn thành flow thì lần mở mới chạy lại Splash → LFO → OB. Đã hoàn thành thì bỏ qua onboarding.
 - Chọn lại ngôn ngữ hiện tại thì popup mở ngay. Chọn ngôn ngữ khác chỉ mở khi đủ tổng số click đã cấu hình; click chọn lại vẫn được cộng count. Native được tải khi mở popup; click/open preload ad thay thế để hiện khi quay lại.
-- Hành động click của native lấy từ `click_action` trên base key của placement trong `ad_config`: `auto_next`, `none` hoặc `reload`. Bước content/fullscreen trong pager mặc định `auto_next`; native LFO1/LFO2, Privacy/Goal, Welcome Back, OB5, splash và popup mặc định `reload`.
-- `reload` gửi request thay thế ngay khi click/open ad và dùng kết quả khi quay lại; resume app thông thường không kích hoạt click reload. `auto_next` chuyển tiếp khi quay lại mà không xin ad thay thế; `none` không làm gì cả.
+- Hành động click của native lấy từ `click_action` trên base key của placement trong `ad_config`: `auto_next`, `none`, `reload` hoặc `reload_waterfall`. Bước content/fullscreen trong pager mặc định `auto_next`; native LFO1/LFO2, Privacy/Goal, Welcome Back, OB5, splash và popup mặc định `reload`.
+- `reload` gửi request thay thế chỉ ở tầng all price ngay khi click/open ad và dùng kết quả khi quay lại; `reload_waterfall` làm tương tự nhưng đi hết các tầng; resume app thông thường không kích hoạt click reload. `auto_next` chuyển tiếp khi quay lại mà không xin ad thay thế; `none` không làm gì cả.
 - `"click_action": "auto_next"` trên `native_lang_alt` tự xác nhận ngôn ngữ đã chọn khi quay lại. `auto_next` ở LFO1 lặp lại cú tap của user vào ngôn ngữ đã chọn, như khi tap lại hàng đó; chưa tap hàng nào thì không làm gì. Action cố định cho mỗi lượt click. Xem [hướng dẫn remote settings](../partner-integration/remote-settings.vi.md#hành-động-khi-click-native).
 
 

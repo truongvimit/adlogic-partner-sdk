@@ -147,10 +147,11 @@ Object behavior rỗng không che leaf ở scope rộng hơn hoặc nguồn bên
 
 ## Hành động khi click native
 
-Hành động click của native chỉ có một nguồn: `click_action` trên key của placement trong `ad_config`, nhận `auto_next`, `none` hoặc `reload`. Giống `enable_ua_check` và các field CTA, SDK chỉ đọc field này ở base key của placement (`native_ob1`, `native_lang`, `native_home`…); giá trị đặt trên key floor `_high`, `_high1`…`_high9` bị bỏ qua. `ad_behavior_config` và `onboarding_config` không có field hành động click. SDK chốt đúng một hành động ở callback click/open đầu tiên, giữ nguyên đến khi quay về kể cả remote thay đổi giữa chừng.
+Hành động click của native chỉ có một nguồn: `click_action` trên key của placement trong `ad_config`, nhận `auto_next`, `none`, `reload` hoặc `reload_waterfall`. Giống `enable_ua_check` và các field CTA, SDK chỉ đọc field này ở base key của placement (`native_ob1`, `native_lang`, `native_home`…); giá trị đặt trên key floor `_high`, `_high1`…`_high9` bị bỏ qua. `ad_behavior_config` và `onboarding_config` không có field hành động click. SDK chốt đúng một hành động ở callback click/open đầu tiên, giữ nguyên đến khi quay về kể cả remote thay đổi giữa chừng.
 
-- `reload`: request ad thay thế ngay lúc click/open, không đợi resume và không có delay cố định. Khi quay về, dùng ad đã tải hoặc chờ đúng request đang chạy. Resume app thông thường không kích hoạt click reload.
-  Trong lúc chờ vẫn hiển thị ad cũ, không hiện shimmer. Chỉ thay khi ad mới bind thành công; tải lỗi giữ ad cũ và khung quảng cáo. Shimmer chỉ dùng lúc tải ban đầu chưa có ad.
+- `reload`: request ad thay thế ngay lúc click/open, chỉ ở tầng all price (base key, hoặc tầng thấp nhất còn dùng được khi base key không có unit), không đợi resume và không có delay cố định. Khi quay về, dùng ad đã tải hoặc chờ đúng request đang chạy. User quay lại nhanh vì thế không phải chờ qua các tầng `_high`. Resume app thông thường không kích hoạt click reload.
+- `reload_waterfall`: như `reload`, nhưng ad thay thế đi hết waterfall, tầng `_high` trước.
+  Với cả hai kiểu reload, trong lúc chờ vẫn hiển thị ad cũ, không hiện shimmer. Chỉ thay khi ad mới bind thành công; tải lỗi giữ ad cũ và khung quảng cáo. Shimmer chỉ dùng lúc tải ban đầu chưa có ad.
 - `auto_next`: quay về thì chuyển trang onboarding đang hiển thị, không tải ad thay thế. Ở LFO2: tự confirm ngôn ngữ đã chọn. Ở LFO1: lặp lại cú tap của user vào ngôn ngữ họ đã chọn, như khi tap lại hàng đó; user chưa tap hàng nào thì không làm gì. Ở native khác, action này chỉ bỏ ad thay thế giống `none`; điều hướng vẫn do app quyết định.
 - `none`: giữ ad và trang hiện tại; không reload theo click, không tự chuyển trang.
 
@@ -161,7 +162,7 @@ Mặc định khi key không khai `click_action`:
 | Trang pager onboarding: content `ob1..ob4` và content step app tự khai, fullscreen `full1/full2` | `auto_next` |
 | LFO1, LFO2, dialog xác nhận LFO, Privacy/Goal, Welcome Back, OB5, native splash (`native_splash`, `native_fs`) và native ở màn app | `reload` |
 
-Ad của trang pager không reload: `reload` trên các key đó được xử lý như `none`. LFO2 không có unit riêng thì dùng key của LFO1, kéo theo hành động của LFO1, khi key đó đã được gắn: `AdsConfig.fromAdConfig` (mặc định của builder) gắn nó, backend khai key đó cũng gắn. `AdsConfig(...)` tự dựng mà không có cả hai thì LFO2 đọc `native_lang_alt`. [ad_config mẫu](examples/ads-onboarding/ad_config.json) khai tường minh đúng các giá trị này trên mọi base key native.
+Ad của trang pager không reload: `reload` và `reload_waterfall` trên các key đó được xử lý như `none`. Nếu lúc click placement đang có một lượt tải chạy dở thì click join vào lượt đó, bất kể nó đang ở tầng nào. LFO2 không có unit riêng thì dùng key của LFO1, kéo theo hành động của LFO1, khi key đó đã được gắn: `AdsConfig.fromAdConfig` (mặc định của builder) gắn nó, backend khai key đó cũng gắn. `AdsConfig(...)` tự dựng mà không có cả hai thì LFO2 đọc `native_lang_alt`. [ad_config mẫu](examples/ads-onboarding/ad_config.json) khai tường minh đúng các giá trị này trên mọi base key native.
 
 `click_action` theo thứ tự ưu tiên của ad_config, gộp theo từng field: `ad_remote_config` của backend > `ad_config.json` của app > mặc định trong code. Key remote không khai `click_action` giữ giá trị của asset; giá trị sai bị log và bỏ qua. `ad_config_debug.json` chỉ chứa ID, nên mọi build lấy `click_action` từ `ad_config.json` và remote. Với native ở màn app, mặc định trong code là `reload`; `NativeAdHelper.setReloadOnAdClick(false)` đổi thành `none`, và `click_action` vẫn thắng. Timer/resume refresh và timeout tự chuyển trang fullscreen là các cài đặt riêng.
 

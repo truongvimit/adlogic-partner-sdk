@@ -261,11 +261,13 @@ Each native takes exactly one click action from `click_action` on its placement'
 `ad_config`; values, defaults and precedence are in the
 [remote settings guide](../partner-integration/remote-settings.md#native-click-actions).
 
-- `reload` (default for app screens): click/open immediately preloads a replacement. On return,
+- `reload` (default for app screens): click/open immediately preloads a replacement from the
+  all-price floor only. On return,
   the helper consumes a ready ad or joins that same request. It does not wait for resume to start
   loading. The current ad stays visible while waiting, without shimmer. Only a successful
   replacement bind removes the old ad; a failed reload keeps it. Shimmer is for initial loading
   without an ad.
+- `reload_waterfall`: as `reload`, but the replacement walks every floor, highest first.
 - `none`: keep the current ad, with no click replacement or automatic navigation.
 - `auto_next`: no click replacement; the onboarding host advances on ad return.
 

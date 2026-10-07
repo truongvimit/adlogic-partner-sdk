@@ -229,6 +229,35 @@ class NativeOwnershipTest {
         } finally { com.ads.module.config.AdRemoteConfig.reset() }
     }
 
+    @Test fun `click reload requests only the all price floor and reload_waterfall walks every floor`() {
+        try {
+            val helper = NativeAdHelper(activity, activity,
+                NativeAdConfig.forUnits(listOf("high", "all-price"), config.layoutId, adConfigKey = "a"))
+                .also { it.placement = "a" }
+                .setNativeAdBinder { _, ad, container, _ -> container.tag = ad }
+                .setNativeContentView(android.widget.FrameLayout(activity).also(activity::setContentView))
+            helper.show()
+            requests.single().fill(NativeVendorAd())
+            clickAction("a", NativeClickAction.RELOAD)
+            requests.single().listener.onAdClicked()
+            assertEquals(listOf("high", "all-price"), requests.map { it.unit })
+            val allPrice = NativeVendorAd()
+            requests.last().fill(allPrice)
+            controller.pause().resume()
+            assertSame(allPrice, helper.nativeAd?.admobNativeAd)
+
+            clickAction("a", NativeClickAction.RELOAD_WATERFALL)
+            requests.last().listener.onAdClicked()
+            assertEquals(listOf("high", "all-price", "high"), requests.map { it.unit })
+            requests.last().fail()
+            assertEquals(listOf("high", "all-price", "high", "all-price"), requests.map { it.unit })
+            val lastFloor = NativeVendorAd()
+            requests.last().fill(lastFloor)
+            controller.pause().resume()
+            assertSame(lastFloor, helper.nativeAd?.admobNativeAd)
+        } finally { com.ads.module.config.AdRemoteConfig.reset() }
+    }
+
     @Test fun `click preload filled before pause stays unused until return then shows immediately`() {
         val helper = helper()
         helper.show()

@@ -196,15 +196,17 @@ class NativeAdHelper @JvmOverloads constructor(
     private fun prepareAdClickReturn() {
         if (adClickPending) return
         adClickPending = true
-        pendingClickAction = config.resolvedClickAction
+        val action = config.resolvedClickAction
+        pendingClickAction = action
         mainHandler.removeCallbacks(reloadByTimeRunnable)
         mainHandler.removeCallbacks(resumeReloadRunnable)
-        if (pendingClickAction != NativeClickAction.RELOAD) return
+        if (!action.reloads) return
         // Keep the current presentation until a replacement binds. Only the unused cache loads here;
         // it must never bind a replacement while the click destination is opening.
         requestVersion++
         loadSubscription?.cancel()
-        NativeAdManager.preload(activity.applicationContext, preloadKey, config,
+        val tiers = config.adUnitIds.let { if (action == NativeClickAction.RELOAD) it.takeLast(1) else it }
+        NativeAdManager.preload(activity.applicationContext, preloadKey, config, tiers,
             reportTelemetry = reportTelemetry && placement != null)
     }
 
@@ -328,7 +330,7 @@ class NativeAdHelper @JvmOverloads constructor(
         listeners.clear()
     }
 
-    /** Code default when `ad_config.<key>.click_action` is absent: RELOAD or NONE. Default: true. */
+    /** Code default when `ad_config.<key>.click_action` is absent: RELOAD (all price only) or NONE. Default: true. */
     fun setReloadOnAdClick(enabled: Boolean): NativeAdHelper = apply {
         config.clickAction = if (enabled) NativeClickAction.RELOAD else NativeClickAction.NONE
     }
@@ -436,7 +438,7 @@ class NativeAdHelper @JvmOverloads constructor(
                     return
                 }
                 if (adClickPending && isActiveState()) {
-                    if (pendingClickAction != NativeClickAction.RELOAD) {
+                    if (pendingClickAction?.reloads != true) {
                         // The containing flow may navigate on this return. Do not let either
                         // stop/resume restoration or resume refresh request an unseen ad.
                         adClickPending = false
@@ -511,7 +513,7 @@ class NativeAdHelper @JvmOverloads constructor(
 
     private fun currentPresentation(): NativePresentationStore.Presentation? {
         val state = _nativeAdState.value
-        val awaiting = (adClickPending && pendingClickAction == NativeClickAction.RELOAD) ||
+        val awaiting = (adClickPending && pendingClickAction?.reloads == true) ||
             state is AdNativeState.Loading
         val failed = state is AdNativeState.Fail ||
             (state is AdNativeState.None && NativeAdManager.isFailed(preloadKey))
