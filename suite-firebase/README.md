@@ -92,7 +92,8 @@ PayKit.configSource(FirebaseConfigSource())
 ```
 
 Keep only the imports and lines for modules your app uses. Installing a source does not fetch;
-`AdConfig.install` does apply the `ad_remote_config` value Firebase last activated, if any, right away.
+`AdConfig.install` applies, in the background, the `ad_remote_config` value Firebase last activated
+(or the SDK's persisted last valid copy), if any.
 From a coroutine, call `AdConfig.refresh()` or `PayKit.sync()` before using its remote config;
 `AdConfig.refresh()` returns whether an `ad_remote_config` document was applied.
 `ObSplashActivity` already calls `AdConfig.refresh()`; do not add a duplicate call there.
@@ -103,13 +104,15 @@ Publish these **String** parameters on Firebase Console → Remote Config:
 |---|---|
 | `ad_remote_config` | The same JSON structure as your `assets/ad_config.json`. It outranks the app's `ad_config.json`, which outranks ad unit IDs written in code. `ads_remote_config` is read when this parameter is absent. |
 | `paywall_config` | Your paywall JSON, including product IDs and optional placements. |
+| `ad_behavior_config`, `onboarding_config` | Optional grouped settings documents, also read by `FirebaseAdConfigSource`; see the [Firebase guide](../partner-integration/firebase-integration.md#remote-json). |
 
-Both sources accept a custom name through `key = "your_key"`. Blank values and in-app Firebase
-defaults are ignored. The two sources share a pending fetch and keep a successful result for
-the process; a failure permits a later retry. When a fetch fails, ads use the `ad_remote_config`
-value Firebase last activated and PayKit keeps its existing config. An `ad_remote_config` removed
-on the Console stays in effect for the session whose fetch sees the removal; the next launch runs
-on your asset.
+Both sources accept a custom name through `key = "your_key"`. In-app Firebase defaults are
+ignored. A blank `paywall_config` is ignored; a blank or removed `ad_remote_config` clears the
+remote ad document at the refresh that sees it, so ads fall back to your `ad_config.json`. The two
+sources share an in-flight fetch; each `AdConfig.refresh()` requests a new one, while PayKit keeps
+a successful result for the process. A failure permits a later retry. When a fetch fails, ads use
+the `ad_remote_config` value Firebase last activated (or the persisted last valid copy) and PayKit
+keeps its existing config.
 
 ## Troubleshooting
 

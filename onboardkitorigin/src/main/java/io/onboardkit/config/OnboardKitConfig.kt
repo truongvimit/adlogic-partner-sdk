@@ -242,8 +242,8 @@ class OnboardKitConfigBuilder internal constructor() {
         fun reject(name: String, value: Int) {
             if (value == 0) return
             errors += "[layout] $name is not honoured by any screen yet — remove it. " +
-                "Custom layouts are supported on SplashConfig.layoutRes and " +
-                "ContentStepDefinition.layoutRes only."
+                "Custom layouts are supported on splash, content-step, Welcome Back and " +
+                "Privacy/Goal layouts, not on the language screen or fullscreen steps."
         }
         reject("LanguageConfig.layoutRes", language.layoutRes)
         reject("LanguageConfig.itemLayoutRes", language.itemLayoutRes)

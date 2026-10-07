@@ -1,6 +1,6 @@
 # BillingKit
 
-**Partner integration (Vietnamese): [Step-by-step guide](../partner-integration/billing-integration.vi.md)** — required files, defaults, optional configuration and verification.
+**Partner integration: [Step-by-step guide](../partner-integration/billing-integration.md)** — required files, defaults, optional configuration and verification.
 
 Use BillingKit when your app has its own purchase UI. It connects to Google Play, loads your
 product catalogue, launches purchases and exposes premium state. For a ready-made purchase

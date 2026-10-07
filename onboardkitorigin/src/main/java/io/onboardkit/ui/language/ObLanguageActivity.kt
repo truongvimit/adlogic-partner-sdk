@@ -171,8 +171,9 @@ class ObLanguageActivity : BaseOnboardActivity() {
      * promotes the device-language row to position 2 so the hint is visible without scrolling.
      *
      * Three ways to end up with no hint: the SETTINGS screen, where the user came to change a
-     * language they have already chosen once; a preselected `defaultCode`; or the resolved
-     * `language.tapHintEnabled` is off (remote when it says so, else the partner's build value).
+     * language they have already chosen once; a selection restored from saved state; or the
+     * resolved `language.tapHintEnabled` is off (remote when it says so, else the partner's build
+     * value). A configured `defaultCode` does not preselect on first open, so it keeps the hint.
      */
     private fun resolveHintCode(): String? {
         if (mode != LanguageScreenMode.FIRST_OPEN) return null

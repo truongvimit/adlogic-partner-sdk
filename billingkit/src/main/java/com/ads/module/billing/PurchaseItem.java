@@ -20,7 +20,7 @@ public class PurchaseItem {
 
     /**
      * @param basePlanId base plan to launch, or empty to let the SDK resolve one
-     * @param offerId    offer within the base plan, or empty for the base plan itself
+     * @param offerId    offer within the base plan, or empty for the first offer Play lists under that base plan
      * @param type       one of {@link AppPurchase.TYPE_IAP}
      */
     public PurchaseItem(String itemId, String basePlanId, String offerId, int type) {

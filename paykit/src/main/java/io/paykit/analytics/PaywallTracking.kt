@@ -8,7 +8,7 @@ import io.trackkit.TrackkitEvents
 /**
  * Every paywall event, emitted through the shared taxonomy and nowhere else.
  *
- * `iap_success` is deliberately missing: `:ads` emits it when Play confirms the purchase, so
+ * `iap_success` is deliberately missing: `:billingkit` emits it when Play confirms the purchase, so
  * emitting it here as well would double-count the revenue on two different clocks.
  */
 internal object PaywallTracking {
