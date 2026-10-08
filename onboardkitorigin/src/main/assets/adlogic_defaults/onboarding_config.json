@@ -69,7 +69,10 @@
       "visible_before_selection": true,
       "save_on_back": true,
       "style": "CHECK_ICON",
-      "image_url": ""
+      "image_url": "",
+      "tap_hint": {
+        "enabled": false
+      }
     },
     "confirm_dialog": {
       "enabled": true,

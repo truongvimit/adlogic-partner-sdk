@@ -181,6 +181,7 @@ Pager page ads कभी reload नहीं होते: उन keys पर `r
 - `native.presentation.cta_corner_radius_dp`: `20` dp; placement/screen से override किया जा सकता है। `colorCTA`/`NativeAdStyle.ctaBackgroundColor` में explicit color हो तभी लागू होता है; `default` color XML drawable रखता है।
 - `lfo.confirm_button.style`: `CHECK_ICON` (default) shows the check icon; `TEXT` shows “Done”. Both use `onboarding.primary_color`, with 50% opacity before selection and full opacity after selection. `visible_before_selection=false` hides either style until selection. `image_url` applies only to `CHECK_ICON`.
 - `lfo.confirm_button.image_url`: `""` XML icon रखता है। Image failure पर SDK check icon आता है। Check tint हमेशा `onboarding.primary_color` से आता है; यह ad CTA से अलग है।
+- `lfo.confirm_button.tap_hint.enabled`: default में बंद (`false`)। सिर्फ़ `true` होने पर — remote से, या app के `onboarding_config.json` asset में — language चुनते ही (LFO2) LFO1 वाला हाथ confirm action पर आता है और check icon या “Done” text की ओर इशारा करता है। Screen छोड़ने तक loop चलता है; SETTINGS में कभी नहीं दिखता। Remote हमेशा asset से ऊपर है, इसलिए remote `false` asset के `true` को बंद कर देता है। LFO1 की row वाला हाथ `lfo.tap_hint` से चलता है।
 - `lfo.languages.supported_codes`: `[]` app/SDK catalog रखता है। Unknown codes हटते हैं; filtered result खाली हो तो catalog fallback है। `lfo.languages.default_code`: स्पष्ट `""` configured default हटाता है (saved user selection नहीं मिटाता); code दिखाई जाने वाली list (filtered `supported_codes`, वरना catalog) में होना चाहिए। Host का `LanguageConfig.defaultCode` अगर `supported_codes` से बाहर रह जाए तो preselect नहीं होता।
 
 हर native full-screen page के X side का override उदाहरण। Shipped JSON में `full1` और `full2` — standard full-screen pages — declare हैं; app अपना step id declare करे तो उसे भी इसी तरह जोड़ें:
@@ -309,6 +310,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` — `CHECK_ICON` / `TEXT` (Done); uses `onboarding.primary_color` |
 | `lfo.confirm_button.image_url` | `""` |
+| `lfo.confirm_button.tap_hint.enabled` | `false` — `true` (remote या app asset) होने पर selection के बाद confirm action पर हाथ |
 | `onboarding.primary_color` | `"#FF375E"` | Shared NEXT, final Get Started, active indicator, LFO check/Done और selected language radio color. |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |

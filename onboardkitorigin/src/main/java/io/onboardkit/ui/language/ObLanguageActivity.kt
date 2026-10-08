@@ -144,6 +144,15 @@ class ObLanguageActivity : BaseOnboardActivity() {
                 android.content.res.ColorStateList.valueOf(tint)
             binding.obLanguageConfirmText.setTextColor(tint)
         }
+        val textStyle = confirmStyle == LanguageConfirmButtonStyle.TEXT
+        binding.obLanguageConfirmHint.translationX = resources.getDimension(
+            if (textStyle) io.onboardkit.R.dimen.ob_language_confirm_hint_text_x
+            else io.onboardkit.R.dimen.ob_language_confirm_hint_icon_x,
+        )
+        binding.obLanguageConfirmHint.translationY = resources.getDimension(
+            if (textStyle) io.onboardkit.R.dimen.ob_language_confirm_hint_text_y
+            else io.onboardkit.R.dimen.ob_language_confirm_hint_icon_y,
+        )
         bindConfirmVisibility()
         binding.obLanguageConfirm.setOnClickListener { onConfirm() }
         binding.obLanguageSave.setOnClickListener { onConfirm() }
@@ -198,12 +207,20 @@ class ObLanguageActivity : BaseOnboardActivity() {
      * With a selection the button is always solid — whatever the flags say, the screen keeps a way
      * out. Before the first tap it is either dimmed (default) or hidden, per the resolved
      * `language.confirmVisibleBeforeSelect`.
+     *
+     * Once the first-open screen has a selection, the row hand moves to the action itself, but
+     * only when `lfo.confirm_button.tap_hint.enabled` is on (off by default). SETTINGS never
+     * gets it.
      */
     private fun bindConfirmVisibility() {
         val selected = selectedCode != null
         val showBeforeSelect = sdk.requireConfig().language.confirmVisibleBeforeSelect
         binding.obLanguageConfirm.isVisible = selected || showBeforeSelect
         binding.obLanguageConfirm.alpha = if (selected) 1f else 0.5f
+        binding.obLanguageConfirmHint.bindTapHint(
+            selected && mode == LanguageScreenMode.FIRST_OPEN && !languageExitStarted &&
+                OnboardingSettings.bool("lfo.confirm_button.tap_hint.enabled"),
+        )
     }
 
     private fun onLanguageTapped(language: ObLanguage) {

@@ -6,15 +6,12 @@ import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
 import io.onboardkit.R
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.config.ObLanguages
@@ -111,26 +108,10 @@ internal class LanguageAdapter(
 
         /**
          * The hint disappears for good once the user selects anything — it is a nudge for the
-         * untouched screen, not a decoration. Glide is asked for the GIF only on the one row that
-         * shows it, and cleared on every other row so a recycled holder cannot keep animating.
+         * untouched screen, not a decoration.
          */
-        private fun bindHint(language: ObLanguage): Unit = with(binding) {
-            val show = selectedCode == null && language.code == hintCode
-            if (!show) {
-                if (obLanguageHint.visibility != View.GONE) {
-                    Glide.with(obLanguageHint).clear(obLanguageHint)
-                    obLanguageHint.setImageDrawable(null)
-                    obLanguageHint.visibility = View.GONE
-                }
-                return
-            }
-            // Already running (a plain rebind of the same row) — reloading would restart the loop
-            if (obLanguageHint.isVisible && obLanguageHint.drawable != null) return
-            obLanguageHint.visibility = View.VISIBLE
-            Glide.with(obLanguageHint)
-                .load(R.raw.ob_anim_hand_tap)
-                .into(obLanguageHint)
-        }
+        private fun bindHint(language: ObLanguage) =
+            binding.obLanguageHint.bindTapHint(selectedCode == null && language.code == hintCode)
     }
 
     private object Diff : DiffUtil.ItemCallback<ObLanguage>() {

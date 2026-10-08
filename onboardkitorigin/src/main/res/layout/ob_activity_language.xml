@@ -4,12 +4,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ob_white">
+    android:background="@color/ob_white"
+    android:clipChildren="false">
 
+    <!-- Raised above the list and unclipped so the confirm hand may overhang the first row. -->
     <FrameLayout
         android:id="@+id/ob_language_header"
         android:layout_width="match_parent"
         android:layout_height="@dimen/ob_header_height"
+        android:clipChildren="false"
+        android:translationZ="1dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
@@ -51,6 +55,16 @@
                 android:text="@string/ob_language_done"
                 android:textColor="@color/ob_accent"
                 android:textSize="16sp"
+                android:visibility="gone" />
+
+            <!-- Offset per confirm style at runtime so the fingertip lands on the icon or text. -->
+            <ImageView
+                android:id="@+id/ob_language_confirm_hint"
+                android:layout_width="@dimen/ob_language_hint_size"
+                android:layout_height="@dimen/ob_language_hint_size"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
                 android:visibility="gone" />
         </FrameLayout>
     </FrameLayout>

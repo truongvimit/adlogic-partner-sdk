@@ -181,6 +181,7 @@ Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confir
 - `native.presentation.cta_corner_radius_dp`: `20` dp, overridable by placement/screen. It applies when an explicit CTA background color is supplied through `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; `default` color preserves the XML drawable.
 - `lfo.confirm_button.style`: `CHECK_ICON` (default) shows the check icon; `TEXT` shows “Done”. Both use `onboarding.primary_color`, with 50% opacity before selection and full opacity after selection. `visible_before_selection=false` hides either style until selection. `image_url` applies only to `CHECK_ICON`.
 - `lfo.confirm_button.image_url`: `""` keeps the XML icon. Image-load failure uses the SDK check icon. The check tint is always `onboarding.primary_color`, separately from ad CTA fields.
+- `lfo.confirm_button.tap_hint.enabled`: off by default (`false`). Only `true` — sent by remote, or declared in the app's `onboarding_config.json` asset — moves the LFO1 tapping hand onto the confirm action once a language is selected (LFO2), pointing at the check icon or at the “Done” text. It loops until the screen is left; SETTINGS never shows it. Remote outranks the asset either way, so a remote `false` turns off an asset `true`. The row hand on LFO1 stays under `lfo.tap_hint`.
 - `lfo.languages.supported_codes`: `[]` keeps the app/SDK catalog. Unknown codes are dropped and an empty filtered result falls back to that catalog. `lfo.languages.default_code`: an explicitly supplied `""` clears the configured default (without erasing a saved user selection); a code must be on the offered list (the filtered `supported_codes`, else the catalog). A host `LanguageConfig.defaultCode` that `supported_codes` leaves out is not preselected.
 
 Example override setting the X side of each native full-screen page. The shipped JSON declares `full1` and `full2`, the standard full-screen pages; an app that declares its own step id adds that id the same way:
@@ -309,6 +310,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `lfo.confirm_button.save_on_back` | `true` |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` — `CHECK_ICON` / `TEXT` (Done); uses `onboarding.primary_color` |
 | `lfo.confirm_button.image_url` | `""` |
+| `lfo.confirm_button.tap_hint.enabled` | `false` — `true` (remote or app asset) shows the hand on the confirm action after selection |
 | `onboarding.primary_color` | `"#FF375E"` — shared NEXT, Get Started, active indicator, LFO check/Done and selected language radio color |
 | `lfo.confirm_dialog.enabled` | `true` |
 | `lfo.confirm_dialog.show_from_tap` | `4` |

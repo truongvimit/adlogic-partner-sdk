@@ -96,6 +96,44 @@ class LanguageTapHintTest {
     }
 
     @Test
+    fun `confirm hand is off by default`() {
+        launch()
+        row(0).itemView.performClick()
+        assertEquals(
+            View.GONE,
+            controller!!.get().findViewById<View>(R.id.ob_language_confirm_hint).visibility,
+        )
+    }
+
+    @Test
+    fun `enabled confirm hand appears on the action only after a language is selected`() {
+        launch(settings = CONFIRM_HAND_ON)
+        val hand = controller!!.get().findViewById<View>(R.id.ob_language_confirm_hint)
+        assertEquals(View.GONE, hand.visibility)
+        row(0).itemView.performClick()
+        assertEquals(View.VISIBLE, hand.visibility)
+    }
+
+    @Test
+    fun `enabled confirm hand points at the Done text too`() {
+        launch(settings = """{"lfo":{"confirm_button":{"style":"TEXT","tap_hint":{"enabled":true}}}}""")
+        val activity = controller!!.get()
+        row(0).itemView.performClick()
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_language_confirm_hint).visibility)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.ob_language_confirm_text).visibility)
+    }
+
+    @Test
+    fun `settings never shows the confirm hand`() {
+        launch(mode = LanguageScreenMode.SETTINGS, settings = CONFIRM_HAND_ON)
+        row(0).itemView.performClick()
+        assertEquals(
+            View.GONE,
+            controller!!.get().findViewById<View>(R.id.ob_language_confirm_hint).visibility,
+        )
+    }
+
+    @Test
     fun `first open does not treat configured default as a reselect`() {
         launch(language = LanguageConfig(defaultCode = "en-US"))
         row(0).itemView.performClick()
@@ -247,4 +285,8 @@ class LanguageTapHintTest {
 
     private fun row(index: Int): LanguageAdapter.RowHolder =
         adapter.onCreateViewHolder(list, 0).also { adapter.onBindViewHolder(it, index) }
+
+    private companion object {
+        const val CONFIRM_HAND_ON = """{"lfo":{"confirm_button":{"tap_hint":{"enabled":true}}}}"""
+    }
 }

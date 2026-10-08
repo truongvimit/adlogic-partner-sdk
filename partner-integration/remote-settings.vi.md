@@ -201,6 +201,7 @@ Ví dụ trong `ad_config`: OB1 giữ nguyên trang sau khi click ad, LFO2 tự 
 - `native.presentation.cta_corner_radius_dp` mặc định `20` dp, có thể override theo placement hoặc scope native từng màn. Áp dụng khi CTA có màu nền tường minh từ `colorCTA`/`NativeAdStyle.ctaBackgroundColor`; màu `default` giữ drawable XML như trước.
 - `lfo.confirm_button.style`: `CHECK_ICON` (mặc định) hiển thị tick; `TEXT` hiển thị “Done”. Cả hai lấy màu từ `onboarding.primary_color`, mờ 50% trước khi chọn ngôn ngữ và sáng đầy đủ sau khi chọn. `visible_before_selection=false` ẩn cả hai kiểu trước khi chọn. `image_url` chỉ áp dụng với `CHECK_ICON`.
 - `lfo.confirm_button.image_url`: mặc định `""`, giữ icon XML. URL ảnh lỗi dùng icon check của SDK. Màu nút tick luôn lấy từ `onboarding.primary_color`; CTA quảng cáo vẫn dùng field của ad_config.
+- `lfo.confirm_button.tap_hint.enabled`: mặc định tắt (`false`). Chỉ khi là `true` — remote gửi, hoặc khai trong asset `onboarding_config.json` của app — bàn tay của LFO1 mới lên nút xác nhận ngay khi đã chọn ngôn ngữ (LFO2), chỉ vào icon tick hoặc chữ “Done”. Tay lặp tới khi rời màn; SETTINGS không bao giờ hiện. Remote luôn thắng asset, nên remote `false` tắt được asset `true`. Tay ở hàng ngôn ngữ LFO1 vẫn theo `lfo.tap_hint`.
 - `lfo.languages.supported_codes` mặc định `[]`: giữ catalog app/SDK; mã không có trong catalog bị loại, kết quả rỗng trở về catalog. `lfo.languages.default_code` mặc định `""` được gửi tường minh: xóa ngôn ngữ chọn sẵn trong cấu hình (không xóa lựa chọn user đã lưu); mã phải nằm trong danh sách được hiển thị (`supported_codes` đã lọc, nếu không có thì catalog). `LanguageConfig.defaultCode` của host nằm ngoài `supported_codes` sẽ không được chọn sẵn.
 
 Ví dụ chỉnh phía nút X cho từng trang native fullscreen. JSON gốc khai sẵn `full1` và `full2` — hai trang fullscreen tiêu chuẩn; app khai id riêng thì thêm id đó y hệt:
@@ -329,6 +330,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `lfo.confirm_button.save_on_back` | `true` | Back trước chọn vẫn inert. |
 | `lfo.confirm_button.style` | `"CHECK_ICON"` | `CHECK_ICON` / `TEXT` (Done); màu từ `onboarding.primary_color`. |
 | `lfo.confirm_button.image_url` | `""` | Rỗng giữ drawable check hiện tại; URL lỗi giữ icon dự phòng. |
+| `lfo.confirm_button.tap_hint.enabled` | `false` | Mặc định tắt; `true` (remote hoặc asset app) mới hiện bàn tay trên nút tick/Done sau khi chọn ngôn ngữ (LFO2). |
 | `onboarding.primary_color` | `"#FF375E"` | Màu dùng chung cho NEXT, Get Started cuối, indicator đang chọn, nút tick/Done LFO và radio ngôn ngữ đang chọn. |
 | `lfo.confirm_dialog.enabled` | `true` | Thay ob_show_language_confirm_dialog. |
 | `lfo.confirm_dialog.show_from_tap` | `4` | Số nguyên >=1; chỉ gate khi chọn ngôn ngữ khác. Chọn lại ngôn ngữ hiện tại mở popup ngay nhưng vẫn cộng count. |

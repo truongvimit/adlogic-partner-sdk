@@ -20,6 +20,11 @@
     <dimen name="ob_radio_size">20dp</dimen>
     <!-- "Tap here" hand hint, centred on the radio and allowed to overflow it. -->
     <dimen name="ob_language_hint_size">44dp</dimen>
+    <!-- Same hand on the LFO confirm action, shifted from the action's centre to its fingertip. -->
+    <dimen name="ob_language_confirm_hint_icon_x">8dp</dimen>
+    <dimen name="ob_language_confirm_hint_icon_y">16dp</dimen>
+    <dimen name="ob_language_confirm_hint_text_x">8dp</dimen>
+    <dimen name="ob_language_confirm_hint_text_y">16dp</dimen>
     <dimen name="ob_header_height">62dp</dimen>
     <dimen name="ob_ratio_anim_area">55dp</dimen>
 
