@@ -792,7 +792,7 @@ class NativeProviderOwnershipTest {
         assertEquals(0, unavailable)
     }
 
-    @Test fun `step click never reloads even when ad_config requests reload`() {
+    @Test fun `a pager page click keeps the action it captured until the return`() {
         val host = controller.get()
         val page = AdPlacement.StepNative(io.onboardkit.core.StepId.OB1)
         withClickActions("native_ob1" to NativeClickAction.AUTO_NEXT) {
@@ -808,13 +808,35 @@ class NativeProviderOwnershipTest {
             assertEquals(NativeClickAction.AUTO_NEXT, provider.pendingClickAction(page))
             controller.pause().stop().restart().start().resume()
             assertEquals(1, requests.size)
-            vendorEvents.single().onAdClicked()
-            assertEquals("Onboarding never reloads its consumed slot", 1, requests.size)
-            assertEquals(NativeClickAction.NONE, provider.pendingClickAction(page))
-            clickActions("native_ob1" to NativeClickAction.NONE)
-            controller.pause().resume()
-            assertEquals(1, requests.size)
-            assertNotEquals(NativeStatus.READY, provider.nativeStatus(page))
+            assertNull(provider.pendingClickAction(page))
+        }
+    }
+
+    @Test fun `pager page click reload preloads a replacement and binds it on return`() {
+        val host = controller.get()
+        listOf(
+            AdPlacement.StepNative(io.onboardkit.core.StepId.OB1) to ("native_ob1" to NativeClickAction.RELOAD),
+            AdPlacement.StepFullScreen(io.onboardkit.core.StepId.FULL1) to
+                ("native_full1" to NativeClickAction.RELOAD_WATERFALL),
+        ).forEach { (page, click) ->
+            withClickActions(click) {
+                val container = FrameLayout(host).also(host::setContentView)
+                provider.preloadNative(host, request.copy(placement = page))
+                requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+                assertTrue(bind(container, page))
+                val baseline = requests.size
+                val oldView = container.getChildAt(0)
+                vendorEvents.last().onAdClicked()
+                assertEquals(page.key, click.second, provider.pendingClickAction(page))
+                assertEquals("Click starts one replacement: ${page.key}", baseline + 1, requests.size)
+                requests.last().onNativeAdLoaded(mock(NativeAd::class.java))
+                assertSame("No bind before the return: ${page.key}", oldView, container.getChildAt(0))
+                controller.pause().stop().restart().start().resume()
+                main.idleFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                assertEquals("Return and resume request nothing more: ${page.key}", baseline + 1, requests.size)
+                assertNotSame("Replacement binds in the same slot: ${page.key}", oldView, container.getChildAt(0))
+                provider.releaseNative(page)
+            }
         }
     }
 

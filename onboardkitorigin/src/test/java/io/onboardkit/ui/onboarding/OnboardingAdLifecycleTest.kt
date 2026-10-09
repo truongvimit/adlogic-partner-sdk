@@ -698,15 +698,15 @@ class OnboardingAdLifecycleTest {
         assertOneCompletion(StepExit.AUTO_NEXT)
     }
 
-    @Test fun `fullscreen timeout still counts background time and return cannot advance again`() {
+    @Test fun `fullscreen time inside its ad does not count and the return advances once`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000))
         main.idleFor(500, MILLISECONDS)
         listener(true).onClicked()
         pause()
-        main.idleFor(2_500, MILLISECONDS)
-        assertOneCompletion(StepExit.AUTO_NEXT)
+        main.idleFor(10_000, MILLISECONDS)
+        assertTrue(completions.isEmpty())
         resume(); settle()
-        assertOneCompletion(StepExit.AUTO_NEXT)
+        assertOneCompletion(StepExit.AD_CLICK_RETURN)
     }
 
     @Test fun `fullscreen expired deadline catches up safely during resume`() {
@@ -743,12 +743,17 @@ class OnboardingAdLifecycleTest {
         assertOneCompletion(StepExit.AD_CLICK_RETURN)
     }
 
-    @Test fun `disabled click return does not disable fullscreen deadline catchup`() {
+    @Test fun `a none click holds the fullscreen deadline until the return`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), clickAction = NativeClickAction.NONE)
         listener(true).onClicked()
         pause()
         ShadowSystemClock.advanceBy(Duration.ofSeconds(4))
-        resume(); settle()
+        resume()
+        main.idleFor(100, MILLISECONDS)
+        assertEquals(0, pager.currentItem)
+        assertTrue(completions.isEmpty())
+        main.idleFor(3_000, MILLISECONDS)
+        settle()
         assertOneCompletion(StepExit.AUTO_NEXT)
     }
 
@@ -803,7 +808,6 @@ class OnboardingAdLifecycleTest {
 
     @Test fun `last fullscreen completes in background but exit interstitial waits for resume`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), lastOnly = true)
-        listener(true).onClicked()
         pause()
         main.idleFor(4_000, MILLISECONDS)
         assertEquals(listOf(StepExit.AUTO_NEXT), completions.map { it.exitReason })

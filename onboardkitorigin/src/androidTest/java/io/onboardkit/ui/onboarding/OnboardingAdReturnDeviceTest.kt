@@ -66,8 +66,11 @@ class OnboardingAdReturnDeviceTest {
                 })
             }
             OnboardingSdk.configure(onboardKitConfig {
-                step(if (fullscreen) AdFullScreenStepDefinition(StepId.OB1)
-                    else ContentStepDefinition(StepId.OB1, title = "Source page"))
+                step(when {
+                    case == "full_timeout" -> AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 1_000)
+                    fullscreen -> AdFullScreenStepDefinition(StepId.OB1)
+                    else -> ContentStepDefinition(StepId.OB1, title = "Source page")
+                })
                 step(if (nextFullscreen) AdFullScreenStepDefinition(StepId.OB2,
                     autoNextEnabled = case == "next_full_zero", autoNextDelayMs = 0)
                     else ContentStepDefinition(StepId.OB2, title = "Next page"))
@@ -91,12 +94,9 @@ class OnboardingAdReturnDeviceTest {
                 eventually("Ad destination must stop its pager host") {
                     scenario.state == Lifecycle.State.CREATED && ReturnAdDestinationActivity.current != null
                 }
-                if (case == "full_timeout") {
-                    eventually("Fullscreen deadline must complete while away") { completions.size == 1 }
-                    assertEquals("auto_next", completions.single().exitReason)
-                } else {
-                    assertTrue(completions.isEmpty())
-                }
+                // Time inside the ad is not the page's: its deadline holds until the return.
+                if (case == "full_timeout") SystemClock.sleep(2_500)
+                assertTrue(completions.isEmpty())
                 instrumentation.runOnMainSync { requireNotNull(ReturnAdDestinationActivity.current).finish() }
                 eventually("The pager host must return") { scenario.state == Lifecycle.State.RESUMED }
                 eventually("Expected pages must complete") { completions.size == if (nextFullscreen) 2 else 1 }
@@ -110,8 +110,7 @@ class OnboardingAdReturnDeviceTest {
                         completions.map { it.exitReason })
                 } else {
                     assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
-                    assertEquals(if (case == "full_timeout") "auto_next" else "ad_click_return",
-                        completions.single().exitReason)
+                    assertEquals("ad_click_return", completions.single().exitReason)
                 }
             }
         } finally {

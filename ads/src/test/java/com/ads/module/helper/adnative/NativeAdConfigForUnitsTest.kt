@@ -29,13 +29,15 @@ class NativeAdConfigForUnitsTest {
         assertTrue(config.canShowAds)
     }
 
-    @Test fun `a single fill slot never refills, reloads or reloads on click`() {
+    @Test fun `a single fill slot never refills or reloads by itself but follows its click action`() {
         AdBehavior.document.acceptSuccessfulFetch("""{"native":{"reload":{"allowed":true}}}""")
         val config = NativeAdConfig.forUnits(listOf("step"), 1, adConfigKey = "native_ob1", singleFill = true)
         assertFalse(config.canPreloadReplacement)
         assertFalse(config.canReloadAds)
-        assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
-        clickAction("native_ob1", NativeClickAction.RELOAD)
+        assertEquals(NativeClickAction.RELOAD, config.resolvedClickAction)
+        clickAction("native_ob1", NativeClickAction.RELOAD_WATERFALL)
+        assertEquals(NativeClickAction.RELOAD_WATERFALL, config.resolvedClickAction)
+        clickAction("native_ob1", NativeClickAction.NONE)
         assertEquals(NativeClickAction.NONE, config.resolvedClickAction)
         clickAction("native_ob1", NativeClickAction.AUTO_NEXT)
         assertEquals(NativeClickAction.AUTO_NEXT, config.resolvedClickAction)
@@ -98,7 +100,7 @@ class NativeAdConfigForUnitsTest {
         assertNotEquals(first, second)
     }
 
-    @Test fun `live sources are read on every access and still pass the single fill mapping`() {
+    @Test fun `live sources are read on every access, single fill included`() {
         var layout = 3
         var action = NativeClickAction.RELOAD
         val replaceable = NativeAdConfig.forUnits(listOf("lang"), 1,
@@ -106,10 +108,10 @@ class NativeAdConfigForUnitsTest {
         val step = NativeAdConfig.forUnits(listOf("step"), 1, singleFill = true, liveClickAction = { action })
         assertEquals(3, replaceable.layoutId)
         assertEquals(NativeClickAction.RELOAD, replaceable.resolvedClickAction)
-        assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
+        assertEquals(NativeClickAction.RELOAD, step.resolvedClickAction)
         action = NativeClickAction.RELOAD_WATERFALL
         assertEquals(NativeClickAction.RELOAD_WATERFALL, replaceable.resolvedClickAction)
-        assertEquals(NativeClickAction.NONE, step.resolvedClickAction)
+        assertEquals(NativeClickAction.RELOAD_WATERFALL, step.resolvedClickAction)
         layout = 4
         action = NativeClickAction.AUTO_NEXT
         assertEquals(4, replaceable.layoutId)

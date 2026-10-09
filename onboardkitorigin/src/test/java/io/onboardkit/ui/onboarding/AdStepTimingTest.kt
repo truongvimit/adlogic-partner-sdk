@@ -13,7 +13,9 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.consent.ConsentCenter
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
+import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdEventListener
+import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
@@ -49,12 +51,15 @@ class AdStepTimingTest {
 
     private fun launch(definition: AdFullScreenStepDefinition = AdFullScreenStepDefinition(StepId.OB3)) {
         val provider = object : FakeAdProvider() {
+            override fun pendingClickAction(placement: AdPlacement) = clickAction
+
             override fun bindNative(
                 activity: ComponentActivity,
                 request: NativeAdRequest,
                 container: FrameLayout,
                 listener: AdEventListener,
             ): Boolean {
+                adListener = listener
                 listener.onImpression()
                 return true
             }
@@ -79,6 +84,15 @@ class AdStepTimingTest {
     @After fun tearDown() {
         if (::controller.isInitialized) controller.pause().stop().destroy()
         ConsentCenter.clearHostConsent()
+        adListener = null
+        clickAction = null
+    }
+
+    // OnboardingSdk.install is once per process, so the provider the first test installed keeps
+    // serving later tests; its callbacks must not land on that first instance.
+    private companion object {
+        var adListener: AdEventListener? = null
+        var clickAction: NativeClickAction? = null
     }
 
     @Test fun `default skip unlocks at five seconds`() {
@@ -100,6 +114,57 @@ class AdStepTimingTest {
         assertEquals(listOf("auto_next"), controller.get().exits)
         controller.restart().start().resume()
         main.idleFor(4000, MILLISECONDS)
+        assertEquals(listOf("auto_next"), controller.get().exits)
+    }
+
+    @Test fun `time inside the page's ad does not count toward auto next`() {
+        clickAction = NativeClickAction.RELOAD_WATERFALL
+        launch()
+        main.idleFor(500, MILLISECONDS)
+        adListener!!.onClicked()
+        controller.pause().stop()
+        main.idleFor(60_000, MILLISECONDS)
+        assertTrue(controller.get().exits.isEmpty())
+        controller.restart().start().resume()
+        main.idleFor(14_499, MILLISECONDS)
+        assertTrue(controller.get().exits.isEmpty())
+        main.idleFor(1, MILLISECONDS)
+        assertEquals(listOf("auto_next"), controller.get().exits)
+    }
+
+    @Test fun `an auto next click advances as soon as the user returns`() {
+        clickAction = NativeClickAction.AUTO_NEXT
+        launch()
+        main.idleFor(500, MILLISECONDS)
+        adListener!!.onClicked()
+        controller.pause().stop()
+        main.idleFor(1_000, MILLISECONDS)
+        assertTrue(controller.get().exits.isEmpty())
+        controller.restart().start().resume()
+        assertEquals(listOf("ad_click_return"), controller.get().exits)
+        main.idleFor(20_000, MILLISECONDS)
+        assertEquals(listOf("ad_click_return"), controller.get().exits)
+    }
+
+    @Test fun `an auto next click returning after the deadline still exits through the click`() {
+        clickAction = NativeClickAction.AUTO_NEXT
+        launch()
+        adListener!!.onAdOpened()
+        controller.pause().stop()
+        main.idleFor(60_000, MILLISECONDS)
+        assertTrue(controller.get().exits.isEmpty())
+        controller.restart().start().resume()
+        assertEquals(listOf("ad_click_return"), controller.get().exits)
+    }
+
+    @Test fun `a click that opened nothing leaves the deadline running through a later Home`() {
+        clickAction = NativeClickAction.RELOAD
+        launch()
+        main.idleFor(500, MILLISECONDS)
+        adListener!!.onClicked()
+        fragment.onWindowTouched()
+        controller.pause().stop()
+        main.idleFor(14_500, MILLISECONDS)
         assertEquals(listOf("auto_next"), controller.get().exits)
     }
 

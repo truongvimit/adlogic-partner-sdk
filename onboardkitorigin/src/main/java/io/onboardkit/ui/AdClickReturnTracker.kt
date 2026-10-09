@@ -13,8 +13,16 @@ internal class AdClickReturnTracker {
     private var engaged = false
     private var away = false
 
+    /** True from the pause that confirmed the ad destination until the host resumes. */
+    val isAway: Boolean get() = away
+
     fun onEngaged(action: NativeClickAction) {
-        if (action == NativeClickAction.AUTO_NEXT && !away) engaged = true
+        if (action == NativeClickAction.AUTO_NEXT) arm()
+    }
+
+    /** Arms for any click action, for a host that only needs to know the ad took the screen. */
+    fun arm() {
+        if (!away) engaged = true
     }
 
     fun onPause() {

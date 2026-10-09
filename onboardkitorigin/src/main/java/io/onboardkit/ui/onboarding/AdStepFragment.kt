@@ -42,6 +42,7 @@ class AdStepFragment : LazyStepFragment() {
     private var selected = false
     private var completed = false
     private var autoNextDeadlineMs: Long? = null
+    private var heldAutoNextMs: Long? = null
     private var adRequested = false
     private var visitedBefore = false
     private var revisit = false
@@ -97,6 +98,7 @@ class AdStepFragment : LazyStepFragment() {
         skipJob?.cancel()
         autoNextJob?.cancel()
         autoNextDeadlineMs = null
+        heldAutoNextMs = null
     }
 
     /** The pager keeps the page list it was built with; a page's own settings are read as they stand now. */
@@ -176,10 +178,17 @@ class AdStepFragment : LazyStepFragment() {
         }
     }
 
-    /** One deadline per visit. Pausing the Activity does not cancel or restart it. */
+    /**
+     * One deadline per visit. Pausing the Activity does not cancel or restart it, except a trip
+     * into this page's ad: that time is not the page's, so the countdown holds until the return.
+     */
     private fun scheduleAutoNext(definition: AdFullScreenStepDefinition?) {
+        heldAutoNextMs = null
         if (definition == null || !definition.autoNextEnabled) return
-        val durationMs = definition.autoNextDelayMs.coerceAtLeast(0)
+        startAutoNext(definition.autoNextDelayMs.coerceAtLeast(0))
+    }
+
+    private fun startAutoNext(durationMs: Long) {
         autoNextDeadlineMs = SystemClock.elapsedRealtime() + durationMs
         autoNextJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(durationMs.milliseconds)
@@ -187,8 +196,22 @@ class AdStepFragment : LazyStepFragment() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        val deadline = autoNextDeadlineMs ?: return
+        if (!isAwayInAd || completed) return
+        autoNextJob?.cancel()
+        autoNextDeadlineMs = null
+        heldAutoNextMs = (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+    }
+
     override fun onResume() {
         super.onResume()
+        heldAutoNextMs?.let { remainingMs ->
+            heldAutoNextMs = null
+            if (selected && !completed) startAutoNext(remainingMs)
+            return
+        }
         // Android can suspend the process/CPU while away. Catch up before starting a new wait.
         if (autoNextDeadlineMs?.let { SystemClock.elapsedRealtime() >= it } == true) {
             completeStep(StepExit.AUTO_NEXT)
@@ -218,6 +241,7 @@ class AdStepFragment : LazyStepFragment() {
         }
         binding = null
         autoNextDeadlineMs = null
+        heldAutoNextMs = null
         adRequested = false
         visitedBefore = false
         revisit = false

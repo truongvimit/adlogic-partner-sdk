@@ -113,7 +113,10 @@ open class NativeAdConfig(
             placementKey = placement
         }
 
-        /** Explicit [tiers]; [singleFill] never refills or reloads. Lambdas serve an embedding SDK. */
+        /**
+         * Explicit [tiers]; [singleFill] never refills or reloads by itself, though a click still
+         * follows its click action. Lambdas serve an embedding SDK.
+         */
         @JvmStatic
         @JvmOverloads
         fun forUnits(
@@ -147,8 +150,6 @@ open class NativeAdConfig(
         override val canPreloadReplacement: Boolean get() = !singleFill
         override val canReloadAds: Boolean get() = !singleFill && super.canReloadAds
         override val resolvedClickAction: NativeClickAction
-            get() = (liveClickAction?.invoke() ?: super.resolvedClickAction).let {
-                if (singleFill && it.reloads) NativeClickAction.NONE else it
-            }
+            get() = liveClickAction?.invoke() ?: super.resolvedClickAction
     }
 }
