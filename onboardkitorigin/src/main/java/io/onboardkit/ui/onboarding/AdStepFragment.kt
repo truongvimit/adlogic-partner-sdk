@@ -238,8 +238,9 @@ class AdStepFragment : LazyStepFragment() {
         swipeGate.reset()
         skipJob?.cancel()
         autoNextJob?.cancel()
-        if (activity?.isChangingConfigurations != true) {
-            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId))
+        val container = binding?.obNativeContainer
+        if (activity?.isChangingConfigurations != true && container != null) {
+            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepFullScreen(stepId), container)
         }
         binding = null
         autoNextDeadlineMs = null

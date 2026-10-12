@@ -178,13 +178,31 @@ class ERainAdProvider : OnboardingAdProvider() {
         slots.remove(key)?.release()
     }
 
+    override fun releaseNative(placement: AdPlacement, container: FrameLayout) {
+        if (slots[placement.key]?.container === container) releaseNative(placement)
+    }
+
+    override fun releaseNativeKeepingUnseen(placement: AdPlacement) {
+        val key = placement.key
+        val slot = slots.remove(key) ?: return
+        queuedNatives.remove(key)?.job?.cancel()
+        if (slot.release(keepUnseenAd = true)) {
+            ObLog.d(ObLog.Section.LOAD, "$key unseen native kept for the next screen")
+        }
+    }
+
+    override fun reloadNative(placement: AdPlacement): Boolean {
+        if (queuedNatives[placement.key]?.job?.isActive == true) return false
+        return slots[placement.key]?.reload() == true
+    }
+
     override fun pendingClickAction(placement: AdPlacement): NativeClickAction? =
         slots[placement.key]?.helper?.pendingClickAction
 
     private inner class NativeSlot(
         private val activity: Activity,
         private val owner: LifecycleOwner,
-        private val container: FrameLayout,
+        val container: FrameLayout,
         request: NativeAdRequest,
     ) : AdCallback() {
         private val placement = request.placement
@@ -202,6 +220,7 @@ class ERainAdProvider : OnboardingAdProvider() {
         private var listener: AdEventListener? = null
         private var waiting = false
         private var binding = false
+        private var replacementPending = false
         private val forgetOnDestroy = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_DESTROY && slots[key] === this) slots.remove(key)
         }.also { owner.lifecycle.addObserver(it) }
@@ -248,10 +267,46 @@ class ERainAdProvider : OnboardingAdProvider() {
             if (refused && waiting) failUnlessShowing()
         }
 
-        fun release() {
+        /**
+         * The shown ad stays until the replacement binds. A replacement that lands while the screen
+         * is not resumed, or after a click on the shown ad, stays in the store and the next reload
+         * binds it without a request.
+         */
+        fun reload(): Boolean {
+            if (helper.nativeAd?.isUsable != true || helper.nativeAdState.value !is AdNativeState.Loaded) return false
+            if (helper.pendingClickAction != null || NativeAdManager.isLoading(key)) return false
+            if (!activity.canStartNativeRequest(allowWhileVisible = false)) return false
+            if (OnboardingSdk.guard().skipReason(activity, placement) != null) return false
+            refresh()
+            if (NativeAdManager.isReady(key)) return helper.bindAvailable()
+            replacementPending = true
+            val started = NativeAdManager.preload(activity, key, config, reportTelemetry = false) { reason ->
+                if (reason == null) bindReplacement() else replacementPending = false
+            }
+            if (!started) {
+                replacementPending = false
+                return false
+            }
+            nativeKeys += key
+            ObLog.d(ObLog.Section.LOAD, "$key reload over the waterfall tiers=${loadOrder.size}")
+            return true
+        }
+
+        private fun bindReplacement() {
+            if (!replacementPending || slots[key] !== this) return
+            replacementPending = false
+            if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+                helper.pendingClickAction != null) return
+            refresh()
+            helper.bindAvailable()
+        }
+
+        fun release(keepUnseenAd: Boolean = false): Boolean {
             listener?.onDetached()
             owner.lifecycle.removeObserver(forgetOnDestroy)
+            if (keepUnseenAd) return helper.destroyKeepingUnseenAd()
             helper.destroy()
+            return false
         }
 
         override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
@@ -271,9 +326,15 @@ class ERainAdProvider : OnboardingAdProvider() {
             if (!binding) failUnlessShowing()
         }
 
-        override fun onAdClicked() = report { onClicked() }
+        override fun onAdClicked() {
+            replacementPending = false
+            report { onClicked() }
+        }
 
-        override fun onAdOpened() = report { onAdOpened() }
+        override fun onAdOpened() {
+            replacementPending = false
+            report { onAdOpened() }
+        }
 
         private fun failUnlessShowing() {
             waiting = false

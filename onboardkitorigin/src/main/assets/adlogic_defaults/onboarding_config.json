@@ -112,6 +112,11 @@
       }
     },
     "steps": {
+      "ob1": {
+        "back": {
+          "enabled": true
+        }
+      },
       "full1": {
         "fullscreen": {
           "skip": {

@@ -120,10 +120,17 @@ class LfoNativeShowAuditTest {
         assertEquals(1, requests.count { it.first == "audit-lfo1" })
     }
 
-    private fun fill(id: String = "audit-lfo1"): NativeAd = mock(NativeAd::class.java).also {
+    /** [latest] fills the newest request for [id]; a reload asks the same top floor again. */
+    private fun fill(id: String = "audit-lfo1", latest: Boolean = false): NativeAd = mock(NativeAd::class.java).also {
         doReturn("Audit native").`when`(it).headline
         doReturn("Install").`when`(it).callToAction
-        requests.single { request -> request.first == id }.second.onNativeAdLoaded(it)
+        val matches = requests.filter { request -> request.first == id }
+        (if (latest) matches.last() else matches.single()).second.onNativeAdLoaded(it)
+        main.idle()
+    }
+
+    private fun noFill(id: String) {
+        requireNotNull(events[id]).onAdFailedToLoad(com.google.android.gms.ads.LoadAdError(3, "No fill", "test", null, null))
         main.idle()
     }
 
@@ -407,6 +414,93 @@ class LfoNativeShowAuditTest {
         fill("audit-lfo2")
         assertEquals(View.INVISIBLE, block().visibility)
         assertEquals(View.VISIBLE, block(R.id.ob_ad_block_2).visibility)
+    }
+
+    private fun tapRow(index: Int) {
+        val list = activity.findViewById<RecyclerView>(R.id.ob_language_list)
+        val adapter = list.adapter as LanguageAdapter
+        adapter.onCreateViewHolder(list, 0).also { adapter.onBindViewHolder(it, index) }.itemView.performClick()
+        main.idle()
+    }
+
+    private fun configureWaterfalls(lfo1: List<String>, lfo2: List<String>) {
+        OnboardingSdk.configure(onboardKitConfig {
+            defaultSteps()
+            ads = AdsConfig(languageNative = NativeAdUnit(lfo1), languageDupNative = NativeAdUnit(lfo2))
+        }.getOrThrow()).getOrThrow()
+    }
+
+    @Test fun `a language switch on the swapped LFO2 reloads it once over its waterfall`() {
+        configureWaterfalls(listOf("audit-lfo1"), listOf("audit-lfo2", "audit-lfo2-all"))
+        preload()
+        fill()
+        create()
+        resume()
+        requireNotNull(language).windowFocusChanged(true)
+        main.idle()
+        val swapped = fill("audit-lfo2")
+        tapRow(0)
+        assertEquals(View.VISIBLE, block(R.id.ob_ad_block_2).visibility)
+        val slot2 = activity.findViewById<FrameLayout>(R.id.ob_native_container_2)
+        val shownView = slot2.getChildAt(0)
+        assertTrue(shownView is NativeAdView)
+
+        tapRow(1)
+        assertEquals("The reload asks LFO2's top floor first",
+            listOf("audit-lfo1", "audit-lfo2", "audit-lfo2"), requests.map { it.first })
+        tapRow(0)
+        assertEquals("A switch while the reload loads requests nothing",
+            listOf("audit-lfo1", "audit-lfo2", "audit-lfo2"), requests.map { it.first })
+        noFill("audit-lfo2")
+        assertEquals("A top-floor miss walks on to all price",
+            listOf("audit-lfo1", "audit-lfo2", "audit-lfo2", "audit-lfo2-all"), requests.map { it.first })
+        assertSame("The swapped ad stays until its replacement binds", shownView, slot2.getChildAt(0))
+        verify(swapped, never()).destroy()
+
+        fill("audit-lfo2-all")
+        assertTrue(slot2.getChildAt(0) is NativeAdView)
+        assertNotSame(shownView, slot2.getChildAt(0))
+        verify(swapped).destroy()
+
+        tapRow(1)
+        assertTrue("Tap 4 raises the confirm modal", org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true)
+        assertEquals(listOf("audit-lfo1", "audit-lfo2", "audit-lfo2", "audit-lfo2-all"), requests.map { it.first })
+    }
+
+    @Test fun `with LFO2 off the first pick already reloads LFO1 over its waterfall`() {
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"native2":{"enabled":false}}}""")
+        configureWaterfalls(listOf("audit-lfo1", "audit-lfo1-all"), listOf("audit-lfo2"))
+        provider.preloadNative(host.get(), NativeAdRequest(AdPlacement.Language1,
+            NativeAdUnit(listOf("audit-lfo1", "audit-lfo1-all")), R.layout.ob_layout_native_lfo))
+        val first = fill()
+        create()
+        resume()
+        requireNotNull(language).windowFocusChanged(true)
+        main.idle()
+        assertFirstBound()
+        val shownView = container().getChildAt(0)
+
+        tapRow(0)
+        assertEquals("The first pick reloads from the top floor",
+            listOf("audit-lfo1", "audit-lfo1"), requests.map { it.first })
+        assertSame(shownView, container().getChildAt(0))
+        noFill("audit-lfo1")
+        assertEquals(listOf("audit-lfo1", "audit-lfo1", "audit-lfo1-all"), requests.map { it.first })
+        assertSame(shownView, container().getChildAt(0))
+        verify(first, never()).destroy()
+
+        fill("audit-lfo1-all")
+        assertTrue(container().getChildAt(0) is NativeAdView)
+        assertNotSame(shownView, container().getChildAt(0))
+        verify(first).destroy()
+        assertEquals(View.VISIBLE, block().visibility)
+
+        tapRow(1)
+        assertEquals("The next switch starts again at the top floor",
+            listOf("audit-lfo1", "audit-lfo1", "audit-lfo1-all", "audit-lfo1"), requests.map { it.first })
+        fill("audit-lfo1", latest = true)
+        assertEquals(View.VISIBLE, block().visibility)
+        assertTrue(container().getChildAt(0) is NativeAdView)
     }
 
     private fun layOut() {

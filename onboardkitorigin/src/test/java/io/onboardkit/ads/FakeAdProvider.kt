@@ -25,6 +25,13 @@ internal open class FakeAdProvider : OnboardingAdProvider() {
 
     override fun releaseNative(placement: AdPlacement) = Unit
 
+    /** A fake keeps no slots, so the page always still owns its placement. */
+    override fun releaseNative(placement: AdPlacement, container: FrameLayout) = releaseNative(placement)
+
+    override fun releaseNativeKeepingUnseen(placement: AdPlacement) = Unit
+
+    override fun reloadNative(placement: AdPlacement) = false
+
     override fun loadInterstitial(
         activity: Activity,
         placement: AdPlacement,

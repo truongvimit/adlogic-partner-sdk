@@ -5,18 +5,21 @@ import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.remote.OnboardingSettings
 import android.content.Context
 import android.content.Intent
+import android.content.res.Resources
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.os.ConfigurationCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.NativeStatus
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.ads.showNativeAd
@@ -36,6 +39,7 @@ import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -112,7 +116,7 @@ class ObLanguageActivity : BaseOnboardActivity() {
 
         languages = languageConfig.languages
         val hintCode = resolveHintCode()
-        if (hintCode != null) languages = DeviceLanguageHint.promote(languages)
+        if (hintCode != null) languages = DeviceLanguageHint.promote(languages, deviceLocale())
 
         adapter = LanguageAdapter(::onLanguageTapped, OnboardingSettings.onboardingPrimaryColor())
         adapter.selectedCode = selectedCode
@@ -188,8 +192,12 @@ class ObLanguageActivity : BaseOnboardActivity() {
         if (mode != LanguageScreenMode.FIRST_OPEN) return null
         if (selectedCode != null) return null
         if (!sdk.requireConfig().language.tapHintEnabled) return null
-        return DeviceLanguageHint.resolve(languages)
+        return DeviceLanguageHint.resolve(languages, deviceLocale())
     }
+
+    /** The system locale: once a language is picked, this screen's default locale is that pick. */
+    private fun deviceLocale(): Locale =
+        ConfigurationCompat.getLocales(Resources.getSystem().configuration)[0] ?: Locale.getDefault()
 
     private fun scheduleTapHint(hintCode: String?) {
         if (hintCode == null) return
@@ -244,10 +252,10 @@ class ObLanguageActivity : BaseOnboardActivity() {
         OnboardingSdk.track(
             AnalyticsEvent.LanguageSelected(if (secondAdShown) 2 else 1, language.code),
         )
+        val startsSwap = !secondSlotRequested && sdk.requireConfig().language.secondNativeOnSelectEnabled
         if (shouldShowConfirmDialog(reselected)) showConfirmDialog(language)
-        if (secondSlotRequested) return
-
-        if (!sdk.requireConfig().language.secondNativeOnSelectEnabled) return
+        else if (!reselected && !startsSwap) reloadShownNative()
+        if (!startsSwap) return
 
         secondSlotRequested = true
         showSecondNativeSlot(language.code)
@@ -270,6 +278,24 @@ class ObLanguageActivity : BaseOnboardActivity() {
             adSlot = confirmAdSlot,
             onConfirmed = ::onConfirm,
         ).also { it.show() }
+    }
+
+    /**
+     * Replaces the visible native over its waterfall: for a pick of another language that raises
+     * no confirm modal, or for the pick whose LFO2 swap failed. An LFO2 swap or a load still
+     * running is left to finish: rapid picks never stack requests.
+     */
+    private fun reloadShownNative(retrySwap: Boolean = true) {
+        if (secondSwapPending) return
+        val provider = sdk.provider() ?: return
+        val code = selectedCode
+        // An LFO2 fill that landed after its swap timed out is shown before LFO1 asks again.
+        if (retrySwap && secondSlotRequested && !secondAdShown && code != null &&
+            provider.nativeStatus(AdPlacement.Language2) == NativeStatus.READY) {
+            showSecondNativeSlot(code)
+            return
+        }
+        provider.reloadNative(if (secondAdShown) AdPlacement.Language2 else AdPlacement.Language1)
     }
 
     /** Keep slot 1 visible while the replacement binds inside the hidden second block. */
@@ -304,6 +330,8 @@ class ObLanguageActivity : BaseOnboardActivity() {
         if (!secondSwapPending) return
         cancelSecondNativeSwap()
         ObLog.w(ObLog.Section.SHOW, "language2 unavailable — keeping language1")
+        // The pick that started the swap still owes the user a fresh ad.
+        if (confirmDialog?.isShowing != true) reloadShownNative(retrySwap = false)
     }
 
     private fun clearSecondNativeWait() {

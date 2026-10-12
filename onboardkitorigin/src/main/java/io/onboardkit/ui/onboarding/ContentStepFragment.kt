@@ -303,8 +303,9 @@ class ContentStepFragment : LazyStepFragment() {
         releasePlayer()
         adPresentation?.finishTransition()
         adPresentation = null
-        if (activity?.isChangingConfigurations != true) {
-            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId))
+        val container = binding?.obNativeContainer
+        if (activity?.isChangingConfigurations != true && container != null) {
+            OnboardingSdk.provider()?.releaseNative(AdPlacement.StepNative(stepId), container)
         }
         binding = null
         adBound = false

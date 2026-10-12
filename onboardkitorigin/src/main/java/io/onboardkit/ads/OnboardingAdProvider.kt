@@ -50,6 +50,23 @@ abstract class OnboardingAdProvider internal constructor() {
 
     internal abstract fun releaseNative(placement: AdPlacement)
 
+    /** [releaseNative] only while [placement]'s ad is still the one bound in [container]. */
+    internal abstract fun releaseNative(placement: AdPlacement, container: FrameLayout)
+
+    /**
+     * [releaseNative], except that an ad bound at [placement] that recorded no impression, click
+     * or open yet stays buffered for the next screen of the same placement.
+     */
+    internal abstract fun releaseNativeKeepingUnseen(placement: AdPlacement)
+
+    /**
+     * Replaces the ad bound at [placement] over its waterfall, keeping the shown ad until the new
+     * one binds; a failed replacement keeps it. False, and no request, when nothing is shown
+     * there, a load is already running, its ad click has not returned, the guard refuses, or the
+     * screen is not resumed with focus.
+     */
+    internal abstract fun reloadNative(placement: AdPlacement): Boolean
+
     internal abstract fun loadInterstitial(
         activity: Activity,
         placement: AdPlacement,

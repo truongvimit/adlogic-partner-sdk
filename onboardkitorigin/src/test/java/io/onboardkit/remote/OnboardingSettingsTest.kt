@@ -150,6 +150,14 @@ class OnboardingSettingsTest {
         assertNull(ads.placementKeyFor(AdPlacement.StepFullScreen(StepId.OB3)))
     }
 
+    @Test fun `ob1 back is on by default and a remote false turns it off`() {
+        val key = "onboarding.steps.ob1.back.enabled"
+        assertTrue(OnboardingSettings.defaultBool(key))
+        assertTrue(OnboardingSettings.bool(key))
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""{"onboarding":{"steps":{"ob1":{"back":{"enabled":false}}}}}"""))
+        assertFalse(OnboardingSettings.bool(key))
+    }
+
     @After fun clearRemote() {
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         OnboardingSettings.acceptLegacy(RemoteFlags(supplied = emptySet()))

@@ -30,6 +30,8 @@
     <color name="ob_ad_compact_border">#F1F1F1</color>
 
     <color name="ob_content_card_bg">#80FFFFFF</color>
+    <!-- OB1 back button: light disc so the arrow reads over the step art. -->
+    <color name="ob_step_back_bg">#CCFFFFFF</color>
     <color name="ob_dot_active">#66FF375E</color>
     <color name="ob_dot_inactive">#66FFFFFF</color>
     <color name="ob_indicator_active">#FF375E</color>

@@ -31,6 +31,8 @@ import io.onboardkit.flow.ExitDecision
 import io.onboardkit.flow.FlowNavigator
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.language.LanguageScreenMode
+import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
 import io.onboardkit.ui.privacygoals.PrivacyGoalsActivity
 import io.onboardkit.ui.pager.AdvanceFlingDetector
@@ -48,7 +50,8 @@ import kotlinx.coroutines.launch
  * Pager host. Steps follow the resolved onboarding order and ad eligibility; an empty result
  * completes the flow instead of stranding the user on an empty pager. Swipe is locked by
  * default (buttons navigate); when enabled, every page but OB1 unlocks once its ad settles.
- * Back goes one step backwards and exits only from the first step.
+ * Back goes one step backwards and exits only from the first step, unless that step is OB1 with
+ * its back on: then the top-start button, back and the back gesture all return to the LFO.
  */
 class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
@@ -75,6 +78,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
     private var swipeUnlockedStep: StepId? = null
     private var exitResolved = false
     private var exitAdGone: CompletableDeferred<Unit>? = null
+    private var ob1BackEnabled = false
+    private var returningToLanguage = false
 
     override val currentIndex: StateFlow<Int> get() = _currentIndex
     override val totalSteps: StateFlow<Int> get() = _totalSteps
@@ -107,10 +112,17 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         pagerAdapter.submit(buildPages(), visibleIndex = -1)
         _totalSteps.value = enabledStepIds.size
 
+        ob1BackEnabled = enabledStepIds.first() == StepId.OB1 &&
+            OnboardingSettings.bool("onboarding.steps.ob1.back.enabled")
+        binding.obStepBack.setOnClickListener { returnToLanguage() }
         binding.obStepPager.registerOnPageChangeCallback(
             object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     dispatchPageChange(position)
+                }
+
+                override fun onPageScrolled(position: Int, offset: Float, offsetPx: Int) {
+                    showOb1Back(position, offset)
                 }
             },
         )
@@ -118,6 +130,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         val resume = intent.getIntExtra(EXTRA_RESUME_INDEX, 0)
             .coerceIn(0, enabledStepIds.size - 1)
         if (resume > 0) binding.obStepPager.setCurrentItem(resume, false)
+        showOb1Back(resume, 0f)
 
         if (!config.behavior.lockPagerSwipe && config.behavior.swipeCompletesLastStep) {
             advanceFlingDetector = AdvanceFlingDetector(
@@ -154,7 +167,19 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
 
     /** Hot-swap entry: rebuilds not-yet-visible pages when a better ad variant is available. */
     internal fun rebuildPendingPages() {
-        pagerAdapter.submit(buildPages(), visibleIndex = binding.obStepPager.currentItem)
+        val visible = binding.obStepPager.currentItem
+        val pages = buildPages()
+        val old = pagerAdapter.currentPages()
+        // A page rebuilt for a new variant hands its unseen ad to the page that replaces it.
+        if (pages.map { it.definition.id } == old.map { it.definition.id }) {
+            val provider = sdk.provider()
+            pages.forEachIndexed { index, page ->
+                if (index != visible && page.variantKey != old[index].variantKey) {
+                    stepPlacement(page.definition.id)?.let { provider?.releaseNativeKeepingUnseen(it) }
+                }
+            }
+        }
+        pagerAdapter.submit(pages, visibleIndex = visible)
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -273,7 +298,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         // Mid-transition next() is always a duplicate: a CTA double-tap, or a late ad callback
         // firing while the pager is already animating away. Letting it through completed the NEXT
         // step with zero dwell and jumped a page.
-        if (binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return
+        if (returningToLanguage || binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return
         val position = binding.obStepPager.currentItem
         // The scroll-state guard cannot catch a duplicate on the last step — the exit handoff
         // never scrolls the pager — so the last completion latches here, whichever of the CTA,
@@ -282,6 +307,7 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
             if (exitResolved) return
             exitResolved = true
             updatePagerSwipe()
+            binding.obStepBack.visibility = View.GONE
         }
         enabledStepIds.getOrNull(position)?.let { stepId ->
             val dwellMs = pagerAdapter.fragmentAt(position)?.dwellMs() ?: 0L
@@ -424,13 +450,59 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         sdk.presentPaywall(this, PaywallPlacement.AFTER_ONBOARDING)
     }
 
+    /** On OB1 with `onboarding.steps.ob1.back.enabled`, back returns to the LFO instead of leaving. */
     override fun handleBack() {
+        if (canReturnToLanguage()) {
+            returnToLanguage()
+            return
+        }
         val config = sdk.configOrNull()
         if (config?.behavior?.backNavigatesBack == true && back()) return
         finishAffinity()
     }
 
+    // ── Back to LFO from OB1 ──
+
+    private fun canReturnToLanguage(): Boolean = ob1BackEnabled && !exitResolved &&
+        ::binding.isInitialized && binding.obStepPager.currentItem == 0
+
+    // Follows the scroll, not currentItem: a programmatic Next moves currentItem before the slide.
+    private fun showOb1Back(position: Int, offset: Float) {
+        val shown = ob1BackEnabled && !exitResolved && !returningToLanguage && position == 0
+        val alpha = if (shown) 1f - offset else 0f
+        binding.obStepBack.alpha = alpha
+        binding.obStepBack.visibility = if (alpha > 0f) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Reopens the LFO as on first entry, minus the splash preload: LFO1 loads when the screen
+     * opens and LFO2 on its shown trigger, both over the full waterfall. Step requests are
+     * forgotten so the next language pick warms the pages again. Ads of the other pages that
+     * were bound but never seen go back to the store first, so that pick and the next pager
+     * reuse them instead of requesting again; OB1's own ad is spent as before.
+     */
+    private fun returnToLanguage() {
+        if (returningToLanguage || !canReturnToLanguage() || isFinishing) return
+        returningToLanguage = true
+        binding.obStepBack.isEnabled = false
+        ObLog.d(ObLog.Section.NAV, "ob_onboarding -> ob_language (ob1 back)")
+        val provider = sdk.provider()
+        val shown = binding.obStepPager.currentItem
+        if (provider != null) enabledStepIds.forEachIndexed { index, id ->
+            if (index != shown) stepPlacement(id)?.let(provider::releaseNativeKeepingUnseen)
+        }
+        sdk.preload().resetStepRequests()
+        ObLanguageActivity.start(this, LanguageScreenMode.FIRST_OPEN)
+        finish()
+    }
+
     internal fun stepIdAt(position: Int): StepId? = enabledStepIds.getOrNull(position)
+
+    private fun stepPlacement(id: StepId): AdPlacement? = when (stepDefinition(id)?.type) {
+        StepType.CONTENT -> AdPlacement.StepNative(id)
+        StepType.AD_FULL_SCREEN -> AdPlacement.StepFullScreen(id)
+        null -> null
+    }
 
     companion object {
         private const val EXTRA_RESUME_INDEX = "ob_extra_resume_index"
