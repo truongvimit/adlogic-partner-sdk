@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
+import androidx.annotation.RestrictTo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
@@ -146,6 +147,8 @@ class NativeAdHelper @JvmOverloads constructor(
     private var pendingRestoration: NativePresentationStore.Presentation? = null
     private var awaitingHost = false
     private var adClickPending = false
+    /** The bound ad recorded an impression, click or open, or was restored after recreation. */
+    private var boundAdSeen = false
     /** Frozen before listeners run, so navigation and reload use the same decision. */
     var pendingClickAction: NativeClickAction? = null
         private set
@@ -172,12 +175,14 @@ class NativeAdHelper @JvmOverloads constructor(
     // Follow the consumed ad itself; another preload at this placement must not redirect its events.
     private val preloadObserver = object : AdCallback() {
         override fun onAdImpression() {
+            if (nativeAd != null) boundAdSeen = true
             if (isActiveState() && nativeAd != null) {
                 listeners.forEach { it.onAdImpression() }
             }
         }
 
         override fun onAdClicked() {
+            if (nativeAd != null) boundAdSeen = true
             if (isActiveState() && nativeAd != null) {
                 prepareAdClickReturn()
                 listeners.forEach { it.onAdClicked() }
@@ -185,6 +190,7 @@ class NativeAdHelper @JvmOverloads constructor(
         }
 
         override fun onAdOpened() {
+            if (nativeAd != null) boundAdSeen = true
             if (isActiveState() && nativeAd != null) {
                 // Some mediation adapters report only opened for a native destination.
                 prepareAdClickReturn()
@@ -421,6 +427,31 @@ class NativeAdHelper @JvmOverloads constructor(
         shimmerView = null
     }
 
+    /**
+     * [destroy], except that a bound ad with no impression, click or open yet goes back unused to
+     * this placement's store when the store is empty and idle, so the next helper of the same
+     * placement binds it without a request. Every other case disposes exactly as [destroy] does.
+     * Returns whether the ad was kept.
+     */
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun destroyKeepingUnseenAd(): Boolean {
+        if (destroyed) return false
+        val ad = nativeAd?.takeIf {
+            !boundAdSeen && !adClickPending && it.isUsable && canShowAds() &&
+                _nativeAdState.value is AdNativeState.Loaded &&
+                !NativeAdManager.isLoading(preloadKey) && !NativeAdManager.isReady(preloadKey)
+        }
+        if (ad != null) {
+            eventSubscription?.cancel()
+            eventSubscription = null
+            nativeAd = null
+            detachAdViews()
+            NativeAdManager.returnUnused(preloadKey, ad)
+        }
+        destroy()
+        return ad != null
+    }
+
     /** Reload is allowed only after the last bind has been visible for a minimum time. */
     fun conditionReloadAdAvailable(): Boolean =
         !adClickPending && _nativeAdState.value !is AdNativeState.Loading &&
@@ -607,6 +638,7 @@ class NativeAdHelper @JvmOverloads constructor(
             return
         }
         nativeAd = ad
+        boundAdSeen = restoring
         eventSubscription?.cancel()
         eventSubscription = NativeAdManager.observe(ad, preloadObserver)
         setState(AdNativeState.Loaded(ad))

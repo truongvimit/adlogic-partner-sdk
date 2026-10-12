@@ -1151,6 +1151,248 @@ class NativeOwnershipTest {
         assertFalse(NativeAdManager.isReady("a"))
     }
 
+    // ── destroyKeepingUnseenAd ──
+
+    /** A helper whose container holds one child per bind, so a detach is visible. */
+    private fun viewHelper(key: String = "a"): Pair<NativeAdHelper, android.widget.FrameLayout> {
+        val container = android.widget.FrameLayout(activity).also(activity::setContentView)
+        val helper = NativeAdHelper(activity, activity, NativeAdConfig(config.adUnitIds, true, false, config.layoutId))
+            .also { it.placement = key }
+            .setNativeAdBinder { _, ad, frame, _ ->
+                frame.removeAllViews()
+                frame.addView(android.view.View(activity).apply { tag = ad })
+            }
+            .setNativeContentView(container)
+        return helper to container
+    }
+
+    private fun shownUnseen(): Pair<NativeAdHelper, NativeVendorAd> {
+        val helper = helper()
+        helper.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertSame(ad, helper.nativeAd?.admobNativeAd)
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loaded)
+        return helper to ad
+    }
+
+    private fun assertDisposed(ad: NativeVendorAd) {
+        assertTrue("The ad is destroyed as destroy() always did", ad.destroyed)
+        assertFalse("Nothing is left in the placement store", NativeAdManager.isReady("a"))
+    }
+
+    @Test fun `an unseen bound ad goes back to its placement and the next helper binds it without a request`() {
+        val (departing, container) = viewHelper()
+        val departingEvents = mutableListOf<String>()
+        departing.registerAdListener(object : com.ads.module.funtion.AdCallback() {
+            override fun onAdImpression() { departingEvents += "impression" }
+            override fun onAdClicked() { departingEvents += "click" }
+        })
+        departing.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertEquals(1, container.childCount)
+
+        assertTrue(departing.destroyKeepingUnseenAd())
+        assertFalse("The vendor ad survives", ad.destroyed)
+        assertNull(departing.nativeAd)
+        assertEquals("The departing view lets go of the ad", 0, container.childCount)
+        assertSame(ad, NativeAdManager.peek("a")?.admobNativeAd)
+        assertFalse("A destroyed helper keeps nothing twice", departing.destroyKeepingUnseenAd())
+        assertFalse(departing.bindAvailable())
+        assertTrue("The kept ad is still unused", NativeAdManager.isReady("a"))
+
+        val (next, nextContainer) = viewHelper()
+        val nextEvents = mutableListOf<String>()
+        next.registerAdListener(object : com.ads.module.funtion.AdCallback() {
+            override fun onAdImpression() { nextEvents += "impression" }
+        })
+        next.show()
+        assertSame("The next screen of the placement binds that very ad", ad, next.nativeAd?.admobNativeAd)
+        assertSame(next.nativeAd, nextContainer.getChildAt(0).tag)
+        assertEquals("No request was spent", 1, requests.size)
+        assertFalse(NativeAdManager.isReady("a"))
+        assertFalse(ad.destroyed)
+
+        requests.single().listener.onAdImpression()
+        assertEquals("Events of the kept ad reach only the screen showing it", listOf("impression"), nextEvents)
+        assertEquals(emptyList<String>(), departingEvents)
+    }
+
+    @Test fun `an ad that recorded an impression is destroyed, not kept`() {
+        val (helper, ad) = shownUnseen()
+        requests.single().listener.onAdImpression()
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+        val next = helper()
+        next.show()
+        assertEquals("The next screen requests a fresh ad", 2, requests.size)
+    }
+
+    @Test fun `an ad clicked without an impression is destroyed, not kept, even after the click returned`() {
+        val helper = helper().setReloadOnAdClick(false)
+        helper.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        requests.single().listener.onAdClicked()
+        assertFalse("click_action none asks for nothing", NativeAdManager.isLoading("a"))
+        controller.pause().resume()
+        assertNull("The click has returned", helper.pendingClickAction)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `an ad that only reported opened is destroyed, not kept`() {
+        val helper = helper().setReloadOnAdClick(false)
+        helper.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        requests.single().listener.onAdOpened()
+        controller.pause().resume()
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `an ad whose click return is still pending is destroyed, not kept`() {
+        val helper = helper().setReloadOnAdClick(false)
+        helper.show()
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        requests.single().listener.onAdClicked()
+        assertEquals(NativeClickAction.NONE, helper.pendingClickAction)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `a store that already holds a fill keeps that fill and the bound ad is destroyed`() {
+        val (helper, shown) = shownUnseen()
+        assertTrue(NativeAdManager.preload(activity, "a", config))
+        val stored = NativeVendorAd()
+        requests.last().fill(stored)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertTrue(shown.destroyed)
+        assertFalse(stored.destroyed)
+        assertSame(stored, NativeAdManager.peek("a")?.admobNativeAd)
+        assertEquals(2, requests.size)
+    }
+
+    @Test fun `a load running for the placement destroys the bound ad and its fill lands as before`() {
+        val (helper, shown) = shownUnseen()
+        assertTrue(NativeAdManager.preload(activity, "a", config))
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertTrue(shown.destroyed)
+        val late = NativeVendorAd()
+        requests.last().fill(late)
+        assertFalse(late.destroyed)
+        assertSame(late, NativeAdManager.peek("a")?.admobNativeAd)
+    }
+
+    @Test fun `a purchased user gets the bound ad destroyed, not kept`() {
+        var premium = false
+        Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = premium })
+        val (helper, ad) = shownUnseen()
+        premium = true
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `revoked consent gets the bound ad destroyed, not kept`() {
+        val (helper, ad) = shownUnseen()
+        ConsentCenter.setHostConsent(false, false)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `an ad restored after rotation counts as seen and is destroyed, not kept`() {
+        val old = helper()
+        old.show()
+        val first = NativeVendorAd()
+        requests.single().fill(first)
+        controller.configurationChange(android.content.res.Configuration(activity.resources.configuration).apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        })
+        controller.visible()
+        val restored = helper()
+        restored.show()
+        assertSame(first, restored.nativeAd?.admobNativeAd)
+        assertEquals(1, requests.size)
+        assertFalse(restored.destroyKeepingUnseenAd())
+        assertDisposed(first)
+    }
+
+    @Test fun `destroy and the screen's own destruction still destroy an unseen ad`() {
+        val (helper, ad) = shownUnseen()
+        helper.destroy()
+        assertDisposed(ad)
+
+        val other = helper()
+        other.show()
+        val second = NativeVendorAd()
+        requests.last().fill(second)
+        assertSame(second, other.nativeAd?.admobNativeAd)
+        controller.pause().stop().destroy()
+        assertTrue("Leaving the screen still disposes an unseen ad", second.destroyed)
+        assertFalse(NativeAdManager.isReady("a"))
+        controller = Robolectric.buildActivity(NativeHostActivity::class.java).setup()
+    }
+
+    @Test fun `an expired ad is destroyed, not kept`() {
+        val (helper, ad) = shownUnseen()
+        main.idleFor(AdBehavior.number("native.cache.max_age_ms") + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        assertDisposed(ad)
+    }
+
+    @Test fun `a kept ad still expires at the cache age counted from its load`() {
+        val (helper, ad) = shownUnseen()
+        val maxAge = AdBehavior.number("native.cache.max_age_ms")
+        main.idleFor(maxAge - 60_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue(helper.destroyKeepingUnseenAd())
+        assertTrue(NativeAdManager.isReady("a"))
+        main.idleFor(60_001, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertFalse("Keeping it did not restart its age", NativeAdManager.isReady("a"))
+        assertTrue(ad.destroyed)
+        val next = helper()
+        next.show()
+        assertEquals(2, requests.size)
+    }
+
+    @Test fun `a later preload of the placement neither requests nor overwrites a kept ad`() {
+        val (helper, ad) = shownUnseen()
+        assertTrue(helper.destroyKeepingUnseenAd())
+        assertFalse(NativeAdManager.preload(activity, "a", config))
+        preload.preloadWithKey("a", activity, config)
+        assertEquals(1, requests.size)
+        assertSame(ad, NativeAdManager.peek("a")?.admobNativeAd)
+        assertFalse(ad.destroyed)
+    }
+
+    @Test fun `a helper still loading its first ad keeps nothing and the fill lands unused as before`() {
+        val helper = helper()
+        helper.show()
+        assertTrue(helper.nativeAdState.value is AdNativeState.Loading)
+        assertFalse(helper.destroyKeepingUnseenAd())
+        val ad = NativeVendorAd()
+        requests.single().fill(ad)
+        assertFalse(ad.destroyed)
+        assertNull(helper.nativeAd)
+        assertSame(ad, NativeAdManager.peek("a")?.admobNativeAd)
+    }
+
+    @Test fun `keeping an unseen ad leaves other placements untouched`() {
+        val (helper, ad) = shownUnseen()
+        val other = helper("b")
+        other.show()
+        val otherAd = NativeVendorAd()
+        requests.last().fill(otherAd)
+        assertTrue(helper.destroyKeepingUnseenAd())
+        assertSame(ad, NativeAdManager.peek("a")?.admobNativeAd)
+        assertSame(otherAd, other.nativeAd?.admobNativeAd)
+        assertFalse(otherAd.destroyed)
+        assertFalse(NativeAdManager.isReady("b"))
+        assertEquals(2, requests.size)
+    }
+
 }
 
 class NativeRequest(val context: Context, val unit: String,
