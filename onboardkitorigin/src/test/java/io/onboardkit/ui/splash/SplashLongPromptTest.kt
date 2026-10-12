@@ -476,6 +476,19 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun backDuringTheSplashNeitherLeavesNorBreaksTheHandoff() {
+        launch(notification = false)
+        drainUntil("Resolved consent must start splash loading") { LongPromptFixture.provider.interstitialLoads == 1 }
+        val splash = requireNotNull(controller).get()
+        repeat(2) { splash.onBackPressedDispatcher.onBackPressed() }
+        main.idle()
+        assertFalse(splash.isFinishing)
+        assertEquals(null, shadowOf(splash).peekNextStartedActivity())
+        assertEquals(0, LongPromptFixture.flowStarts)
+        completeInterstitialAndAssertNormalHandoff()
+    }
+
+    @Test
     fun resolvedConsentWithoutNotificationRunsNormalSplashLoadAndPreload() {
         launch(notification = false)
         drainUntil("Resolved consent must start splash loading") { LongPromptFixture.provider.interstitialLoads == 1 }

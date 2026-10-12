@@ -728,6 +728,9 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
     }
 
+    /** Back button and back gesture are consumed: the splash only ever leaves by its own handoff. */
+    override fun handleBack() = Unit
+
     override fun onDestroy() {
         if (!restartedByGuard) pauseProgress()
         ConsentCenter.detach(this)
