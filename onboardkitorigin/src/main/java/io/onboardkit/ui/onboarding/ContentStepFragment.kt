@@ -139,6 +139,8 @@ class ContentStepFragment : LazyStepFragment() {
             adPresentation?.setAdVisible(enabled, animate = false)
         }
         showRemoteMediaWhenReady()
+        // Pre-binds while offscreen; the later call in onStepSelected is a no-op.
+        requestNativeAd()
     }
 
     private fun bindStaticContent(

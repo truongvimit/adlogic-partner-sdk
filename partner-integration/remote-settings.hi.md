@@ -322,6 +322,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `onboarding.navigation.lock_pager_swipe` | `false` |
 | `onboarding.navigation.swipe_completes_last_step` | `true` |
 | `onboarding.navigation.back_navigates_back` | `true` |
+| `onboarding.navigation.peek_px` | `1` |
 | `onboarding.ads.content_native_behavior` | `{}` |
 | `onboarding.ads.fullscreen_native_behavior` | `{}` |
 | `onboarding.fullscreen.skip.enabled` | `true` |

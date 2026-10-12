@@ -68,6 +68,8 @@ class AdStepFragment : LazyStepFragment() {
         b.obSkipButton.setOnClickListener {
             completeStep(if (adFailed) StepExit.AD_FAILED else StepExit.SKIP)
         }
+        // Pre-binds while offscreen; visit timers stay in onStepSelected.
+        requestAd()
     }
 
     override fun onStepSelected() {

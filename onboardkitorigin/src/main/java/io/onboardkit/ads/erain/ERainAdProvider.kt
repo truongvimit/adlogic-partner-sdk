@@ -152,7 +152,11 @@ class ERainAdProvider : OnboardingAdProvider() {
         listener: AdEventListener,
     ): Boolean {
         val key = request.placement.key
-        val owner = container.findViewTreeLifecycleOwner() ?: activity
+        // Pager pages use the host lifecycle so an offscreen page attaches its ad before the swipe.
+        val owner = when (request.placement) {
+            is AdPlacement.StepNative, is AdPlacement.StepFullScreen -> activity
+            else -> container.findViewTreeLifecycleOwner() ?: activity
+        }
         val current = slots[key]
         val slot = current?.takeIf { it.serves(activity, owner, container, request) } ?: run {
             current?.release()

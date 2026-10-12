@@ -342,6 +342,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.navigation.lock_pager_swipe` | `false` | Giữ chính sách page eligibility hiện tại; false không tự mở swipe OB1 trong working tree. |
 | `onboarding.navigation.swipe_completes_last_step` | `true` | Trong working tree còn cần !lock_pager_swipe. |
 | `onboarding.navigation.back_navigates_back` | `true` | Giữ behavior Back hiện tại. |
+| `onboarding.navigation.peek_px` | `1` | Padding ngang (px) của pager: page kề lộ ra đúng số px này; `0` tắt. Đọc khi mở màn OB. |
 | `onboarding.ads.content_native_behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `onboarding.ads.fullscreen_native_behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `onboarding.fullscreen.skip.enabled` | `true` | Thay showSkipButton && ob_show_skip_ob3. |

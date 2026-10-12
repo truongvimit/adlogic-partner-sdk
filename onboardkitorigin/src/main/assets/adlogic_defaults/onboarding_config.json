@@ -93,7 +93,8 @@
     "navigation": {
       "lock_pager_swipe": false,
       "swipe_completes_last_step": true,
-      "back_navigates_back": true
+      "back_navigates_back": true,
+      "peek_px": 1
     },
     "ads": {
       "content_native_behavior": {},

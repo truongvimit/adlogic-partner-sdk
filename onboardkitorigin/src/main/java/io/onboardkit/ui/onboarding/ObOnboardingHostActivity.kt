@@ -99,6 +99,11 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         binding.obStepPager.adapter = pagerAdapter
         binding.obStepPager.isUserInputEnabled = false
         binding.obStepPager.offscreenPageLimit = 1
+        val peekPx = OnboardingSettings.number("onboarding.navigation.peek_px").toInt()
+        (binding.obStepPager.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
+            rv.clipToPadding = false
+            rv.setPadding(peekPx, 0, peekPx, 0)
+        }
         pagerAdapter.submit(buildPages(), visibleIndex = -1)
         _totalSteps.value = enabledStepIds.size
 
