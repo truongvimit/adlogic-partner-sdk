@@ -20,6 +20,7 @@ import com.ads.module.helper.adnative.AdNativeState
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdManager
+import com.ads.module.helper.adnative.NativeAdParam
 import com.ads.module.helper.adnative.NativeClickAction
 import com.ads.module.helper.banner.BannerAdConfig
 import com.ads.module.helper.banner.BannerAdHelper
@@ -115,6 +116,10 @@ class ERainAdProvider : OnboardingAdProvider() {
         else preloadNativeNow(activity, current ?: request)
     }
 
+    override fun preloadNativeInBackground(context: Context, request: NativeAdRequest) {
+        preloadNativeNow(context.applicationContext, request)
+    }
+
     private fun preloadNativeNow(context: Context, request: NativeAdRequest) {
         val key = request.placement.key
         if (slots[key]?.helper?.isRestoringPresentation == true) return
@@ -196,6 +201,10 @@ class ERainAdProvider : OnboardingAdProvider() {
         return slots[placement.key]?.reload() == true
     }
 
+    override fun renewNative(placement: AdPlacement) {
+        slots[placement.key]?.renew()
+    }
+
     override fun pendingClickAction(placement: AdPlacement): NativeClickAction? =
         slots[placement.key]?.helper?.pendingClickAction
 
@@ -215,6 +224,8 @@ class ERainAdProvider : OnboardingAdProvider() {
             .setNativeContentView(container)
             .also {
                 it.reportTelemetry = false
+                // The resume screen closes on Start; its ad stays on screen at the next return.
+                it.retainShownAdOnDestroy = placement == AdPlacement.ResumeNative
                 it.registerAdListener(this)
             }
         private var listener: AdEventListener? = null
@@ -290,6 +301,12 @@ class ERainAdProvider : OnboardingAdProvider() {
             nativeKeys += key
             ObLog.d(ObLog.Section.LOAD, "$key reload over the waterfall tiers=${loadOrder.size}")
             return true
+        }
+
+        fun renew() {
+            if (helper.pendingClickAction != null) return
+            refresh()
+            helper.requestAds(NativeAdParam.Request)
         }
 
         private fun bindReplacement() {

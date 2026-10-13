@@ -116,5 +116,8 @@
       "max_age_ms": 14400000
     }
   },
+  "app_resume": {
+    "type": "native_resume"
+  },
   "placement_overrides": {}
 }

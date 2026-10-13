@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native resume: full-bleed image, translucent text card with Start over its bottom edge,
+     native ad block anchored bottom. Without an ad the image runs to the bottom. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <ImageView
+        android:id="@+id/ob_resume_image"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        app:layout_constraintBottom_toTopOf="@id/ob_resume_ad_block"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:src="@drawable/ob_img_onboard_placeholder" />
+
+    <LinearLayout
+        android:id="@+id/ob_resume_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/ob_screen_padding"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/ob_bg_content_card"
+        android:elevation="4dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="18dp"
+        app:layout_constraintBottom_toBottomOf="@id/ob_resume_image"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/ob_resume_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/ob_poppins_semibold"
+            android:gravity="center"
+            android:textColor="@color/ob_text_primary"
+            android:textSize="@dimen/ob_text_title"
+            tools:text="@string/ob_resume_title" />
+
+        <TextView
+            android:id="@+id/ob_resume_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/ob_poppins_medium"
+            android:gravity="center"
+            android:textColor="@color/ob_text_subtitle"
+            android:textSize="@dimen/ob_text_subtitle"
+            tools:text="@string/ob_resume_subtitle" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:layout_marginTop="4dp"
+            android:paddingHorizontal="4dp">
+
+            <TextView
+                android:id="@+id/ob_resume_start"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:fontFamily="@font/ob_poppins_bold"
+                android:gravity="center"
+                android:minWidth="48dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="@string/ob_start"
+                android:textColor="@color/ob_accent"
+                android:textSize="14sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/ob_resume_ad_block"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <FrameLayout
+            android:id="@+id/ob_resume_ad"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

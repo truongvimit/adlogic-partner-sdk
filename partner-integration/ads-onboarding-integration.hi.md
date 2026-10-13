@@ -6,7 +6,7 @@
 
 नमूना flow: **Splash → भाषा (LFO) → सामग्री 1 → सामग्री 2 → fullscreen native → सामग्री 3 → onboarding के अंत का interstitial → MainActivity**। SDK consent, notifications, ads और navigation संभालता है; ad तभी दिखता है जब वह eligible हो और fill मिले।
 
-कदम 1–6 करें और **package, app की जानकारी, सामग्री/images और destination स्क्रीन** बदलें। Code SDK के defaults रखता है; JSON example का debug configuration रखता है। Adjust चालू करने के लिए app token भरें; Firebase, app-open और purchases [वैकल्पिक tables](#7-सिर्फ-वही-configure-करें-जो-app-को-चाहिए) में हैं।
+कदम 1–6 करें और **package, app की जानकारी, सामग्री/images और destination स्क्रीन** बदलें। Code SDK के defaults रखता है; JSON example का debug configuration रखता है। Adjust चालू करने के लिए app token भरें; Firebase, लौटने पर ads और purchases [वैकल्पिक tables](#7-सिर्फ-वही-configure-करें-जो-app-को-चाहिए) में हैं।
 
 सभी modules के लिए [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) का **newest SDK version** इस्तेमाल करें। इसमें grouped `ad_behavior_config` / `onboarding_config`, custom local defaults और live `AdsConfig.fromAdConfig()` bindings शामिल हैं। केवल Firebase keys जोड़ने से app में पहले से integrated पुराना SDK update नहीं होता।
 
@@ -95,7 +95,7 @@ Test AdMob App ID में **`~`** होता है। चलाने स�
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** release का configuration; अभी हर ID test ID है।
 - **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** हर placement key के लिए सिर्फ test `ids` (आम तौर पर एक floor); बाकी हर field `ad_config.json` से आता है।
 
-Ad unit IDs में **`/`** होता है। `ad_config.json` हर build के लिए style, UA, app-resume delay और waterfalls रखती है; [debug example](examples/ads-onboarding/ad_config_debug.json) हर placement key को सिर्फ एक test floor से map करता है (interstitials `1033173712`)। नीचे OB slots दिए हैं; कदम 4 का `fromAdConfig()` `open_resume` (app-open), `native_welcome1/2` (Welcome Back) और `native_onboarding_fullscreen_1_4` (OB5) भी bind करता है। बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
+Ad unit IDs में **`/`** होता है। `ad_config.json` हर build के लिए style, UA, app-resume delay और waterfalls रखती है; [debug example](examples/ads-onboarding/ad_config_debug.json) हर placement key को सिर्फ एक test floor से map करता है (interstitials `1033173712`)। नीचे OB slots दिए हैं; कदम 4 का `fromAdConfig()` `native_resume` (native resume), `open_resume` (app-open), `native_welcome1/2` (Welcome Back) और `native_onboarding_fullscreen_1_4` (OB5) भी bind करता है। बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
 
 | JSON key | जगह | कदम 4 में `AdsConfig` में mapping |
 | --- | --- | --- |
@@ -187,7 +187,7 @@ LFO/Welcome Back/content OB natives अपना frame placement key के `tem
 
 क्रम: **Tracker → JSON → ERainAd → ERainTuning → install OnboardKit → configure**। Meta token manifest से पढ़ा जाता है। Firebase या अपने backend पर events भेजने के लिए Tracker को sink चाहिए।
 
-`ERainTuning.install()` [app screens के interstitials](#app-की-अपनी-screens-में-interstitial-placement-constant-के-साथ) के लिए `onComplete` का समय तय करता है और ad click के बाद app-open छोड़ देता है; OB flow नहीं बदलता।
+`ERainTuning.install()` [app screens के interstitials](#app-की-अपनी-screens-में-interstitial-placement-constant-के-साथ) के लिए `onComplete` का समय तय करता है और ad click के बाद अगला resume ad छोड़ देता है; OB flow नहीं बदलता।
 
 Listener `Completed`/`Skipped`/`Aborted` को आपकी मुख्य स्क्रीन पर भेजता है; जरूरत हो तो `Aborted` बदलें। `NEW_TASK` रखें और `CLEAR_TASK` न जोड़ें, ताकि मुख्य स्क्रीन लौटे हुए उपयोगकर्ता के splash interstitial या onboarding के अंत वाले interstitial के नीचे खुल सके। SDK पूरा होना खुद सहेजता है और खुद navigate करता है; कोई timer न जोड़ें।
 
@@ -301,7 +301,7 @@ Splash खुद UMP/notifications, ads और navigation संभालता 
 | OB navigation | Swipe चालू होने पर OB1 locked रहता है। OB2/OB3/OB4 और fullscreen पर load/bind के दौरान swipe बंद रहता है और ad impression के बाद खुलता है; जिस content page पर कोई ad नहीं है (unit नहीं, premium, no fill) वहाँ तुरंत खुलता है। हर नए visit पर फिर lock लगता है; global swipe lock हमेशा लागू रहता है. OB1 पहला page हो तो वह ऊपर-बाएँ back button दिखाता है; यह, Back और OB1 पर back gesture LFO पर लौटाते हैं, जो नए सिरे से खुलकर अपने natives फिर request करता है। किसी और page पर button नहीं है: वहाँ Back एक page पीछे जाता है और पहले page से app बंद करता है। | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: back button के बिना हर page से Back app से बाहर निकालता है), OB1 से button हटाने के लिए `onboarding.steps.ob1.back.enabled = false` (remote या app asset), `lockPortrait`; landscape app को manifest भी बदलना होगा |
 | Interstitial का अंतराल | `ERainAdConfig.intervalInterstitialAd = 0` (कोई सीमा नहीं); यह सिर्फ `InterstitialAutoBuffer` group पर लागू होता है, splash/OB या खुद load किए interstitials पर नहीं | init से पहले सेट करें, या `ERainAd.getInstance().setIntervalInterstitialAd(seconds)` इस्तेमाल करें |
 | Interstitial click cap | बंद (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: हर ad unit पर 24 घंटे में ज्यादा से ज्यादा `n` clicks, उसके बाद load/show रुक जाता है। जरूरत पर बुलाएँ, आम तौर पर remote fetch के बाद |
-| OB5, paywall, app-open | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `fromAdConfig()` के साथ OB5 `native_onboarding_fullscreen_1_4` bind करता है; `ad_config.json` या remote में declare होने पर यह key code में दिए unit से ऊपर रहती है। Key declare न हो तो `ob5Native`, फिर `fullScreenStepNative` (host setup) लागू होता है। Paywall जुड़ा नहीं है। `ad_config.json` या backend के `ad_remote_config` में ID वाला `open_resume` [app-open](#app-open-on-return) चालू करता है; `disableAppResume()` इसे बंद रखता है | इसकी ID `native_onboarding_fullscreen_1_4` के नीचे रखें (`AdsConfig.ob5Native` तभी लागू होता है जब वह key declare न हो); paywall/app-open तभी जोड़ें जब जरूरत हो |
+| OB5, paywall, resume | `ob_enable_step_ob5 = false`। OB5 चालू हो: इसका native लोड हो तो यह आखिरी interstitial के नीचे खुलता है, वरना छूट जाता है। `fromAdConfig()` के साथ OB5 `native_onboarding_fullscreen_1_4` bind करता है; `ad_config.json` या remote में declare होने पर यह key code में दिए unit से ऊपर रहती है। Key declare न हो तो `ob5Native`, फिर `fullScreenStepNative` (host setup) लागू होता है। Paywall जुड़ा नहीं है। [लौटने पर ads](#ads-on-return) `app_resume.type` (default `native_resume`) के अनुसार चलते हैं; `disableAppResume()` उन्हें बंद रखता है | इसकी ID `native_onboarding_fullscreen_1_4` के नीचे रखें (`AdsConfig.ob5Native` तभी लागू होता है जब वह key declare न हो); paywall तभी जोड़ें जब जरूरत हो |
 
 UMP की error या timeout [AdLogic fallback](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt) के जरिए process में **request की कोशिश** की अनुमति दे सकती है; यह न consent देता है, न fill की गारंटी। अपने CMP से `ConsentCenter.setHostConsent(false, false)` देकर requests बंद करने वाला host फिर भी जीतता है; request की अनुमति timer या personalization से न मानें।
 
@@ -316,7 +316,7 @@ Consent request की authority है। Custom CMP का परिणाम 
 | Field | नमूने में value | कैसे इस्तेमाल होता है / कहाँ लागू होता है |
 | --- | --- | --- |
 | `ids` | सही format का test ad unit | `{"id", "isEnable"}` floors का waterfall, सबसे ऊँचा पहले, all-price आख़िर में; एक unit वाला placement एक-floor array है। Placement-level `"id"` नहीं पढ़ा जाता। Release से पहले असली file के IDs बदलें; placement keys न बदलें। देखें [Waterfall](#waterfall-हर-placement-की-एक-key)। |
-| `isEnable` | `true`, सिवाय `native_welcome`, `inter_welcome`, `native_ob1..4`, `native_full1/2` और `native_fs` के, जो `false` हैं | Placement चालू या बंद करता है: `false` पूरा waterfall बंद करता है। `ids` के हर floor का अपना `isEnable` है, जो सिर्फ उसी floor को रोकता है। |
+| `isEnable` | `true`, सिवाय `native_ob1..4`, `native_full1/2` और `native_fs` के, जो `false` हैं | Placement चालू या बंद करता है: `false` पूरा waterfall बंद करता है। `ids` के हर floor का अपना `isEnable` है, जो सिर्फ उसी floor को रोकता है। |
 | `enable_ua_check` | उदाहरण में `true` और `false` दोनों | `true` के लिए paid/non-organic attribution चाहिए; Adjust उत्तर आने तक default organic है। Standard `AdsConfig.fromAdConfig()` bindings संबंधित OB placements, native LFO/OB और exit interstitial पर भी यह gate लागू करती हैं। Adjust न हो तो दिखाने वाले placements पर इसे `false` रखें। |
 | `reloadIntervalSeconds` | Banner: `30` | Positive value हर placement-bound banner (splash समेत) की auto-reload cadence सेकंड में तय करती है, जब तक `banner.reload.auto_enabled` `true` है (default)। Absent, `0` या invalid होने पर host/SDK value (15000 ms) लगती है। App स्क्रीन setup: [App स्क्रीन का banner](#अतिरिक्त-integrations)। |
 | `colorCTA` | `"default"` | Template का रंग बनाए रखता है; custom native चाहिए तो रंग सेट करें। |
@@ -326,7 +326,7 @@ Consent request की authority है। Custom CMP का परिणाम 
 | `heightCTA` | ज्यादातर natives के लिए `45`, `native_splash` पर `44`, popup के लिए `36` | dp में CTA height; field न हो तो SDK `44` (templates की button height) इस्तेमाल करता है और लागू करते समय value को 36–52 के बीच सीमित करता है। |
 | `templateId` | नहीं | Optional: placement का SDK native template चुनता है — `1` = LFO card (पूरी चौड़ाई में 1.68:1 media), `2` = 4:3 media-left card, `3` = 1.91:1 card। Slot की ऊँचाई card के बराबर होती है। न हो, `null` हो या अनजान number हो तो slot का default रहता है: LFO, Welcome Back और OB content पर `1`, Privacy/Goal और splash bottom slot पर `2`। Language popup और fullscreen natives अपने तय frame रखते हैं। देखें [Native templates](remote-settings.hi.md)। |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Blocks का क्रम, ऊपर से नीचे; गायब block छिपा रहता है और खाली array XML रखता है। न हो तो default क्रम CTA को नीचे रखता है। Templates `1` और `3` तथा [app स्क्रीन के natives](#app-की-अपनी-screens-में-native-placement-constant-के-साथ) इस क्रम का पालन करते हैं; template `2`, language popup और fullscreen natives हमेशा वैसे ही दिखते हैं जैसे बनाए गए हैं। |
-| `app_resume_load_delay_ms` | `open_resume`: `2000` | app के background जाने के बाद app-open ad लोड करने से पहले कितना इंतज़ार; यह तभी असर करता है जब app-resume चालू हो। |
+| `app_resume_load_delay_ms` | `open_resume`: `2000` | किसी भी `app_resume.type` का ad request होने से पहले app को कितनी देर background में रहना है; इससे जल्दी लौटने पर कुछ नहीं दिखता। |
 | `click_action` | `native_ob1..4`, `native_full1/2` और `native_fs` पर `"auto_next"`; बाकी हर native पर `"reload"` | native ad click के बाद वापसी पर क्या हो। `ids` के हर floor पर लागू होता है; इसे सिर्फ `ad_config.json` या remote में रखें (`ad_config_debug.json` इसे ignore करती है)। [Native click actions](remote-settings.hi.md#native-click-actions) देखें। |
 
 ### Waterfall: हर placement की एक key
@@ -464,7 +464,7 @@ Defaults: हर load tier के लिए 30 सेकंड, हर placement
 | UA / Adjust | resources भरें और [कदम 5](#adjust-token-और-verification) वाली wiring इस्तेमाल करें। `enable_ua_check` example की values रखता है; कहाँ लागू होता है यह JSON field तालिका में देखें। |
 | Firebase से JSON | [तीन String parameters publish करें](firebase-integration.hi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`। Assets के बाद एक बार `FirebaseAdConfigSource()` install करें; SDK splash refresh करता है। Backend के `ad_remote_config` या आपकी `ad_config.json` में declare हुई key code में लिखी ad unit IDs से ऊपर है। [Custom local fallback](firebase-integration.hi.md#local-defaults) वैकल्पिक है। |
 | Firebase Analytics | `suite-firebase` जोड़ें और `Tracker.install` के तुरंत बाद `Tracker.addSink(FirebaseSink())` register करें; consent policy [Firebase गाइड](firebase-integration.hi.md#शुरुआती-consent) से चुनें। |
-| लौटने पर app-open | `ad_config.json` या backend के `ad_remote_config` में ID वाला `open_resume` इसे चालू करता है, `idAdResume` seed हो या न हो; app-open बंद रखने के लिए `AppOpenManager.getInstance().disableAppResume()` बुलाएँ। [लौटने पर app-open](#app-open-on-return) देखें। |
+| लौटने पर ads | `app_resume.type` `native_resume` (default), `inter_resume`, `open_resume` या `none` चुनता है; उस type की `ad_config` key असली IDs के साथ चालू होनी चाहिए। `disableAppResume()` हर type बंद करता है। [लौटने पर ads](#ads-on-return) देखें। |
 | premium / paywall वाली app | [BillingKit](billing-integration.hi.md) / [PayKit](paywall-integration.hi.md) और [साथ चलने वाला billing hook](../onboardkitorigin/README.hi.md#वैकल्पिक-integrations) करें। `onInitBilling()` default रूप से खाली है; billing install बुलाने का मतलब यह नहीं कि premium restore हो चुका है। |
 | Settings से भाषा बदलना | `registerForActivityResult(StartActivityForResult())`, फिर `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (types `io.onboardkit.ui.language` में हैं)। `RESULT_OK` पर: `ObLanguageActivity.RESULT_LANGUAGE_CODE` पढ़ें, कदम 5 की तरह सहेजें और `recreate()` बुलाएँ; Back कोई code नहीं लौटाता। इस स्क्रीन पर ads नहीं हैं। `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` कोई result नहीं लौटाता; पसंद `OnboardingSdk.selectedLanguage()` से पढ़ें। |
 | Notification/widget entries | `SplashEntry` इस्तेमाल करें और अपने listener में passthrough बनाए रखें; [OnboardKit](../onboardkitorigin/README.hi.md#वैकल्पिक-integrations) देखें। सामान्य launcher start के लिए इनमें से कोई entry नहीं चाहिए। |
@@ -481,19 +481,32 @@ class SplashActivity : ObSplashActivity()
 
 Splash consent, remote refresh और billing साथ शुरू करता है। Consent पूरा होते ही banner/native slot और interstitial मौजूदा configuration और entitlement से request होते हैं; remote या billing का इंतज़ार नहीं होता। Cache या fetch से मिले remote values asset से ऊपर रहते हैं। SDK-owned refresh splash बंद होने के बाद भी चलता है, background wait कम-से-कम 60 सेकंड है। बाद के reads नई values लेते हैं; पहले भेजे requests, timers और तय navigation दोबारा नहीं चलते। `SAME_TIME` और `ALTERNATE` दोनों यही क्रम अपनाते हैं। `onRemoteFetched()` केवल जीवित splash पर चलता है; process-owned integration के लिए `SettingsRegistry.addFetchListener` इस्तेमाल करें।
 
-### App-open on return
+### Ads on return
 
 <details>
-<summary>App-open चालू करने के कदम खोलें</summary>
+<summary>लौटने पर ads चालू करने के कदम खोलें</summary>
 
-यह तभी करें जब आपका product app-open इस्तेमाल करता हो। `AppOpenManager` `com.ads.module.admob` में है।
+App के `open_resume.app_resume_load_delay_ms` (default 2000 ms) तक background में रहने पर SDK चुने गए type का ad request करता है; इससे जल्दी लौटने पर न request होता है, न कुछ दिखता है। `ad_behavior_config` में `app_resume.type` ठीक एक type चुनता है, default `native_resume`:
 
-1. **कदम 4:** `AdsConfig.fromAdConfig()` पहले ही `open_resume` bind करता है। Manual `AdsConfig(...)` में `appResume = InterstitialAdUnit(...)` खुद दें, जब तक `ad_config.json` या backend का `ad_remote_config` `open_resume` declare न करे; दोनों न हों तो OnboardKit हर screen पर app-open रोक देता है।
-2. **कदम 5**, `ERainAdConfig` के `apply` block में: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` है `com.ads.module.helper.AdGate`)।
-3. **Remote JSON:** कुछ जोड़ना नहीं — हर config बदलाव पर SDK app-resume unit को `open_resume` पर दोबारा point करता है, `isEnable` से चालू/बंद करना भी इसमें शामिल है, बशर्ते `open_resume` में ad unit ID हो। `ad_config.json` या backend के `ad_remote_config` में declare हुए `open_resume` को कदम 2 का seed नहीं चाहिए। इसे **असली ID के साथ चालू** ship करें; `isEnable: false` app-resume को तब तक बंद रखता है जब तक config उसे फिर चालू न करे।
-4. **बाहर जाने वाले intents** (browser/share/review): उस वापसी को छोड़ने के लिए `startActivity(...)` के तुरंत बाद `AppOpenManager.getInstance().disableAdResumeByClickAction()` बुलाएँ। `disableAppResume()`/`enableAppResume()` पूरे process के switches हैं।
+| `app_resume.type` | `ad_config` key | लौटने पर |
+|---|---|---|
+| `native_resume` | `native_resume` | तुरंत native resume screen खुलती है: एक image, Start button वाला text card, और नीचे ad; ad आने तक skeleton दिखता है। Start या back इसे बंद करके user को उसी screen पर लौटाता है जहाँ वह था। दिखाया गया ad रखा जाता है: अगली वापसी पर वही ad तुरंत दिखता है, और background में request हुआ ad आते ही उसकी जगह ले लेता है। |
+| `inter_resume` | `inter_resume` | Loading dialog के साथ load-and-show, ज़्यादा से ज़्यादा `interstitial.load_and_show.wait_timeout_ms` (default 8000 ms) तक इंतज़ार। |
+| `open_resume` | `open_resume` | App-open। |
+| `none` | — | कुछ नहीं। |
 
-Splash, OB5 और Welcome Back खुद को बाहर रखते हैं; सिर्फ अपनी app की संवेदनशील screens register करें। LFO और OB की content pages लौटने पर तैयार app-open ad दिखा सकती हैं, सिवाय fullscreen page, page transitions के दौरान, popup खुले रहने पर और onboarding ad पर click के बाद (जब तक remote `app_open.presentation.skip_after_ad_click` को `false` न करे)। Delay और gating के लिए [app-open](../onboardkitorigin/README.hi.md#app-open-on-return) देखें।
+चुने गए type की key बंद (`isEnable: false`) या undeclared हो तो वापसी पर कोई ad नहीं दिखता; SDK किसी दूसरे type पर नहीं जाता। Type बदलने के लिए `app_resume.type` बदलें।
+
+1. **कदम 4:** `AdsConfig.fromAdConfig()` पहले ही `native_resume` और `open_resume` bind करता है। Manual `AdsConfig(...)` में `resumeNative = NativeAdUnit(...)` / `appResume = InterstitialAdUnit(...)` खुद दें, जब तक `ad_config.json` या backend का `ad_remote_config` वह key declare न करे।
+2. **सिर्फ `open_resume` के लिए**, कदम 5, `ERainAdConfig` के `apply` block में: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` है `com.ads.module.helper.AdGate`)। `ad_config.json` या backend के `ad_remote_config` में declare हुए `open_resume` को seed नहीं चाहिए।
+3. **`ad_config`:** हर उस type की key declare करें जिसे आप चुन सकते हैं, `ids` में **असली IDs के साथ चालू**। `native_resume` native fields लेता है (`templateId`, `components`, `click_action`, CTA रंग; default template 1 और `reload`)।
+4. **बाहर जाने वाले intents** (browser/share/review): उस वापसी को छोड़ने के लिए `startActivity(...)` के तुरंत बाद `AppOpenManager.getInstance().disableAdResumeByClickAction()` बुलाएँ, type कोई भी हो। `disableAppResume()`/`enableAppResume()` हर type के लिए पूरे process के switches हैं।
+
+Screen exclusions हर type पर लागू होते हैं। Splash, OB5 और Welcome Back खुद को बाहर रखते हैं; सिर्फ अपनी app की संवेदनशील screens `disableAppResumeWithActivity` से register करें। LFO और OB की content pages लौटने पर resume ads दिखा सकती हैं, सिवाय fullscreen page, page transitions के दौरान, popup खुले रहने पर और onboarding ad पर click के बाद (जब तक remote `app_open.presentation.skip_after_ad_click` को `false` न करे)।
+
+**Native resume screen.** इसकी image और text `onboardKitConfig { resumeScreen = ResumeScreenConfig(titleRes = …, subtitleRes = …, imageRes = …) }` में दें, जैसे OB steps declare होते हैं; `title`/`subtitle` एक `CharSequence` लेते हैं जो resource से ऊपर है, और जो field न दें वह SDK default रखता है। Start का text color `onboarding_config` में `native_resume.start_button.color` है (`""` layout का color रखता है); नाम बदलने के लिए `ob_start` string override करें। दूसरे layout के लिए `res/layout/ob_resume_screen.xml` override करें और ids `ob_resume_image`, `ob_resume_title`, `ob_resume_subtitle`, `ob_resume_start`, `ob_resume_ad_block` व `ob_resume_ad` रखें।
+
+App-open के delay और gating के लिए [app-open](../onboardkitorigin/README.hi.md#app-open-on-return) देखें।
 
 </details>
 
@@ -536,6 +549,6 @@ Splash, OB5 और Welcome Back खुद को बाहर रखते ह�
 | आपकी मौजूदा Application या [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | SDK को एक बार initialize करती है और destination स्क्रीन चुनती है |
 | `SplashActivity.kt` | SDK की splash को extend करता है |
 
-`MainActivity` आपकी app की मौजूदा destination स्क्रीन है। `AppAdPlacement.kt` के अलावा JSON को ad config में बदलने के लिए कोई file नहीं चाहिए — हर entry point सीधे placement key लेता है। इस बुनियादी flow के लिए `AppConstants`, `RemoteConfigUtils`, `ResumeAdsEntryRule`, `AppLifecycleObserver`, DevConfig, Hilt या example की paywall/welcome/uninstall screens copy करने की जरूरत नहीं।
+`MainActivity` आपकी app की मौजूदा destination स्क्रीन है। `AppAdPlacement.kt` के अलावा JSON को ad config में बदलने के लिए कोई file नहीं चाहिए — हर entry point सीधे placement key लेता है। इस बुनियादी flow के लिए `AppConstants`, `RemoteConfigUtils`, DevConfig, Hilt या example की paywall/uninstall screens copy करने की जरूरत नहीं।
 
 [Ads संदर्भ](../ads/README.md) · [OnboardKit संदर्भ](../onboardkitorigin/README.hi.md)

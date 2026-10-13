@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import com.ads.module.config.settings.AdBehavior
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -62,6 +63,8 @@ class OnboardResumePolicyDeviceTest {
                     appResume = if (phase == "missing_open_unit") null else InterstitialAdUnit(TEST_UNIT),
                 )
             }.getOrThrow()).getOrThrow()
+            // After install initialized the settings: the resume type defaults to native_resume.
+            AdBehavior.document.acceptSuccessfulFetch("""{"app_resume":{"type":"open_resume"}}""")
         }
         try {
             ActivityScenario.launch<AppOpenResumeDeviceActivity>(

@@ -25,3 +25,20 @@ internal class NativePresentationStore : ViewModel() {
         retained.clear()
     }
 }
+
+/** A closed screen's shown ad, waiting for the next helper of its placement anywhere in the process. */
+internal object RetainedPresentations {
+    private val retained = mutableMapOf<String, NativePresentationStore.Presentation>()
+
+    fun retain(key: String, presentation: NativePresentationStore.Presentation) {
+        retained.put(key, presentation)?.ad?.takeIf { it !== presentation.ad }?.let(NativeAdManager::dispose)
+    }
+
+    /** Null, disposing the ad, once it has outlived the native cache age. */
+    fun take(key: String): NativePresentationStore.Presentation? {
+        val saved = retained.remove(key) ?: return null
+        if (saved.ad?.isUsable == true) return saved
+        saved.ad?.let(NativeAdManager::dispose)
+        return null
+    }
+}

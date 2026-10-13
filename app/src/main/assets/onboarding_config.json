@@ -8,5 +8,10 @@
   },
   "onboarding": {
     "primary_color": "#1E88E5"
+  },
+  "native_resume": {
+    "start_button": {
+      "color": "#1E88E5"
+    }
   }
 }

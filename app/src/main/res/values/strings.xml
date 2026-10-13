@@ -57,7 +57,6 @@
     <string name="paywall_terms_url" translatable="false">https://example.com/terms</string>
     <string name="paywall_privacy_url" translatable="false">https://example.com/privacy</string>
     <string name="we_re_better_than_ever">We’re better than ever</string>
-    <string name="well_comeback">Welcome back!</string>
     <string name="start">Start</string>
     <string name="privacy_goal_title">PDF Reader</string>
     <string name="privacy_goal_subtitle">Read, edit and convert all your documents in one place.</string>

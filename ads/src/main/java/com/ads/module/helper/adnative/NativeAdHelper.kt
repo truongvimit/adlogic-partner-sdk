@@ -155,6 +155,14 @@ class NativeAdHelper @JvmOverloads constructor(
     private var requestVersion = 0L
     /** Disable when a containing integration owns request analytics. */
     var reportTelemetry: Boolean = true
+    /**
+     * When the host is destroyed for good, a usable shown ad goes to the next helper of
+     * [preloadKey] in this process instead of being disposed. That helper shows it at once, then
+     * binds the placement's ready fill or joins its running load; with neither it keeps the old ad.
+     */
+    @set:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    var retainShownAdOnDestroy: Boolean = false
+
     /** A consumed presentation awaiting its recreated host; it must not trigger a preload. */
     val isRestoringPresentation: Boolean get() = pendingRestoration != null
     private val presentationStore by lazy {
@@ -507,6 +515,12 @@ class NativeAdHelper @JvmOverloads constructor(
                         nativeAd = null
                         pendingRestoration = null
                     }
+                } else if (retainShownAdOnDestroy) {
+                    nativeAd?.takeIf { it.isUsable && canShowAds() }?.let { ad ->
+                        RetainedPresentations.retain(preloadKey,
+                            NativePresentationStore.Presentation(ad, timeShowAdRecent, nextReloadAtMs, awaiting = true))
+                        nativeAd = null
+                    }
                 }
                 // After a configuration transfer the retained references are null; otherwise
                 // cancel also disposes a presentation taken before this host's first resume.
@@ -557,7 +571,7 @@ class NativeAdHelper @JvmOverloads constructor(
         val saved = pendingRestoration ?: run {
             if (restoreChecked) return false
             restoreChecked = true
-            presentationStore?.take(preloadKey) ?: return false
+            presentationStore?.take(preloadKey) ?: RetainedPresentations.take(preloadKey) ?: return false
         }
         if (!isResumed() || contentView == null) {
             pendingRestoration = saved

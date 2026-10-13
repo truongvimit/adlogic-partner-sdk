@@ -6,7 +6,7 @@
 
 Luồng mẫu: **Splash → ngôn ngữ (LFO) → nội dung 1 → nội dung 2 → native fullscreen → nội dung 3 → inter cuối OB → MainActivity**. SDK quản lý consent, thông báo, ads và điều hướng; quảng cáo chỉ hiện khi đủ điều kiện và có fill.
 
-Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, app-open và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
+Làm bước 1–6, thay **package, thông tin app, nội dung/ảnh và màn đích**. Code giữ default SDK; JSON giữ cấu hình example debug. Điền app token để bật Adjust; Firebase, ads khi quay lại và mua hàng ở [bảng tùy chọn](#7-cấu-hình-chỉ-khi-app-cần).
 
 Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) cho mọi module. Bản mới nhất có `ad_behavior_config` / `onboarding_config`, default local custom và liên kết trực tiếp `AdsConfig.fromAdConfig()`. Chỉ thêm key Firebase không nâng cấp SDK cũ đã tích hợp trong app.
 
@@ -95,7 +95,7 @@ Copy hai file đúng tên vào `assets` (tạo folder nếu thiếu):
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** cấu hình cho bản release; hiện toàn bộ ID là test.
 - **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** chỉ có `ids` test cho mỗi key placement (thường một tầng); mọi field khác lấy từ `ad_config.json`.
 
-Ad unit ID chứa **`/`**. `ad_config.json` chứa style, UA, app-resume delay và waterfall cho mọi build; [example debug](examples/ads-onboarding/ad_config_debug.json) chỉ map mỗi key placement sang một tầng test (interstitial `1033173712`). Dưới đây là các slot OB; `fromAdConfig()` ở bước 4 còn liên kết `open_resume` (app-open), `native_welcome1/2` (Welcome Back) và `native_onboarding_fullscreen_1_4` (OB5). Các key còn lại dành cho màn app, chưa tự tạo vị trí hiển thị. Giá trị mẫu có thể khác default parser; xem [bảng field JSON](#field-trong-json-mẫu).
+Ad unit ID chứa **`/`**. `ad_config.json` chứa style, UA, app-resume delay và waterfall cho mọi build; [example debug](examples/ads-onboarding/ad_config_debug.json) chỉ map mỗi key placement sang một tầng test (interstitial `1033173712`). Dưới đây là các slot OB; `fromAdConfig()` ở bước 4 còn liên kết `native_resume` (native resume), `open_resume` (app-open), `native_welcome1/2` (Welcome Back) và `native_onboarding_fullscreen_1_4` (OB5). Các key còn lại dành cho màn app, chưa tự tạo vị trí hiển thị. Giá trị mẫu có thể khác default parser; xem [bảng field JSON](#field-trong-json-mẫu).
 
 | Key trong JSON | Vị trí | Ánh xạ vào `AdsConfig` ở bước 4 |
 | --- | --- | --- |
@@ -187,7 +187,7 @@ Mẫu đã nối đủ:
 
 Thứ tự: **Tracker → JSON → ERainAd → ERainTuning → install OnboardKit → configure**. Meta token đọc từ manifest. Tracker cần sink để gửi event tới Firebase/backend.
 
-`ERainTuning.install()` đặt thời điểm `onComplete` cho [inter màn app](#interstitial-ở-màn-app-dùng-placement-constant) và bỏ app-open sau click quảng cáo; không đổi luồng OB.
+`ERainTuning.install()` đặt thời điểm `onComplete` cho [inter màn app](#interstitial-ở-màn-app-dùng-placement-constant) và bỏ lần ads khi quay lại kế tiếp sau click quảng cáo; không đổi luồng OB.
 
 Listener đưa `Completed`/`Skipped`/`Aborted` về màn chính; đổi `Aborted` nếu cần. Giữ `NEW_TASK`, không `CLEAR_TASK` để màn chính mở dưới inter splash của người dùng cũ/inter cuối OB. SDK tự lưu hoàn thành và điều hướng; không thêm timer.
 
@@ -301,7 +301,7 @@ Chỉ thêm option cần đổi vào `onboardKitConfig { ... }` ở bước 4; `
 | Điều hướng OB | Khi bật swipe: OB1 vẫn khóa. OB2/OB3/OB4 và fullscreen khóa khi đang load/bind, chỉ mở sau impression của ads; trang content không có ad để hiện (không unit, premium, no-fill) mở ngay; mỗi lần vào lại trang bắt đầu ở trạng thái khóa. Cờ khóa swipe toàn cục vẫn ưu tiên. Khi OB1 là trang đầu, OB1 có nút back góc trên bên trái; nút, Back và vuốt back trên OB1 quay về LFO, LFO mở lại từ đầu và request lại native của nó. Không trang nào khác có nút: ở đó Back lùi một trang, từ trang đầu thì thoát app. | `BehaviorConfig.lockPagerSwipe`, `swipeCompletesLastStep`, `backNavigatesBack` (`false`: Back thoát app ở mọi trang không có nút back), `onboarding.steps.ob1.back.enabled = false` (remote hoặc asset app) để bỏ nút ở OB1, `lockPortrait`; app ngang cần sửa cả manifest |
 | Khoảng cách interstitial | `ERainAdConfig.intervalInterstitialAd = 0` (không giới hạn); chỉ áp nhóm `InterstitialAutoBuffer`, không áp splash/OB/inter tự load | Đặt trước init hoặc dùng `ERainAd.getInstance().setIntervalInterstitialAd(giây)` |
 | Giới hạn click interstitial | Tắt (`0`) | `ERainAd.getInstance().setMaxClickAdsPerDay(n)`: mỗi ad unit tối đa `n` click/24 giờ rồi ngừng load/show. Gọi lúc cần, thường sau fetch remote |
-| OB5, paywall, app-open | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. Với `fromAdConfig()`, OB5 liên kết `native_onboarding_fullscreen_1_4`; key này khi đã khai báo trong `ad_config.json` hoặc remote thì thắng unit đặt trong code. Khi key chưa khai báo thì dùng `ob5Native`, rồi `fullScreenStepNative` (host setup). Paywall chưa nối. `open_resume` kèm ID trong `ad_config.json` hoặc `ad_remote_config` của backend sẽ bật [app-open](#app-open-khi-quay-lại); `disableAppResume()` giữ tắt | Đặt ID dưới `native_onboarding_fullscreen_1_4` (`AdsConfig.ob5Native` chỉ áp dụng khi key đó chưa khai báo); chỉ nối paywall/app-open khi cần |
+| OB5, paywall, resume | `ob_enable_step_ob5 = false`. Bật OB5: mở dưới inter cuối nếu native đã tải, chưa có thì bỏ qua. Với `fromAdConfig()`, OB5 liên kết `native_onboarding_fullscreen_1_4`; key này khi đã khai báo trong `ad_config.json` hoặc remote thì thắng unit đặt trong code. Khi key chưa khai báo thì dùng `ob5Native`, rồi `fullScreenStepNative` (host setup). Paywall chưa nối. [Ads khi quay lại](#ads-khi-quay-lại) theo `app_resume.type` (mặc định `native_resume`); `disableAppResume()` giữ tắt | Đặt ID dưới `native_onboarding_fullscreen_1_4` (`AdsConfig.ob5Native` chỉ áp dụng khi key đó chưa khai báo); chỉ nối paywall khi cần |
 
 UMP lỗi/timeout có thể cho **thử request** trong process qua [fallback AdLogic](../ads/src/main/java/com/ads/module/consent/ConsentCenter.kt), không cấp consent hay đảm bảo fill. Host tắt request bằng `ConsentCenter.setHostConsent(false, false)` từ CMP riêng vẫn được ưu tiên; không tự suy quyền request từ timer/personalization.
 
@@ -316,7 +316,7 @@ Cài `adProvider = ERainAdProvider()`, hoặc bỏ trống nếu onboarding khô
 | Field | Giá trị trong mẫu | Cách dùng / phạm vi áp dụng |
 | --- | --- | --- |
 | `ids` | Ad unit test đúng format | Waterfall gồm các tầng `{"id", "isEnable"}`, cao nhất trước, all price cuối; placement một unit là mảng một tầng. `"id"` cấp placement không được đọc. Thay ID ở file thật khi phát hành; không sửa key placement. Xem [Waterfall](#waterfall-mỗi-placement-một-key). |
-| `isEnable` | `true`, trừ `native_welcome`, `inter_welcome`, `native_ob1..4`, `native_full1/2` và `native_fs` là `false` | Bật/tắt placement: `false` tắt cả waterfall. Mỗi tầng trong `ids` có `isEnable` riêng để chỉ dừng tầng đó. |
+| `isEnable` | `true`, trừ `native_ob1..4`, `native_full1/2` và `native_fs` là `false` | Bật/tắt placement: `false` tắt cả waterfall. Mỗi tầng trong `ids` có `isEnable` riêng để chỉ dừng tầng đó. |
 | `enable_ua_check` | Có `true` và `false` | `true` yêu cầu paid/non-organic; chưa có kết quả Adjust thì mặc định organic. Liên kết chuẩn `AdsConfig.fromAdConfig()` áp gate này cho placement OB tương ứng, gồm native LFO/OB và inter cuối OB. Không dùng Adjust thì đặt `false` cho các placement muốn hiện. |
 | `reloadIntervalSeconds` | Banner: `30` | Số dương đặt nhịp auto-reload (giây) cho mọi banner gắn placement, kể cả splash, khi `banner.reload.auto_enabled` là `true` (mặc định). Thiếu, `0` hoặc sai dùng giá trị host/SDK (15000ms). Cách gắn ở màn app: [Banner ở màn app](#tích-hợp-bổ-sung). |
 | `colorCTA` | `"default"` | Giữ màu template; thay màu khi cần tùy biến native. |
@@ -326,7 +326,7 @@ Cài `adProvider = ERainAdProvider()`, hoặc bỏ trống nếu onboarding khô
 | `heightCTA` | Đa số native `45`, `native_splash` `44`, popup `36` | Chiều cao CTA (dp); SDK dùng `44` (chiều cao nút của các template) nếu bỏ field và ép giá trị vào khoảng 36–52 khi áp dụng. |
 | `templateId` | không có | Tuỳ chọn, chọn template native của SDK cho placement: `1` = card LFO (media 1.68:1 full chiều ngang), `2` = card media-left 4:3, `3` = card 1.91:1. Slot cao đúng bằng card. Không có, `null` hoặc số lạ thì giữ mặc định của slot: `1` cho LFO, Welcome Back và OB content, `2` cho Privacy/Goal và slot đáy splash. Popup ngôn ngữ và native fullscreen giữ khung cố định. Xem [Template native](remote-settings.vi.md#template-và-cta-để-uamo-thử-nghiệm). |
 | `components` | `["icon_headline", "body", "media", "cta"]` | Thứ tự khối từ trên xuống; khối thiếu bị ẩn, mảng rỗng giữ nguyên XML. Không có thì thứ tự mặc định đặt CTA ở dưới. Template `1`, `3` và [native màn app](#native-ở-màn-app-dùng-placement-constant) theo thứ tự này; template `2`, popup ngôn ngữ và native fullscreen luôn hiện đúng như layout vẽ sẵn. |
-| `app_resume_load_delay_ms` | `open_resume`: `2000` | Thời gian chờ tải app-open sau khi app ra background; chỉ có tác dụng khi đã bật app-resume. |
+| `app_resume_load_delay_ms` | `open_resume`: `2000` | App phải ở background bao lâu thì ad của mọi `app_resume.type` mới được request; quay lại sớm hơn thì không hiện gì. |
 | `click_action` | `"auto_next"` ở `native_ob1..4`, `native_full1/2` và `native_fs`; `"reload"` ở mọi native khác | Hành động khi quay lại sau click ad native. Áp cho mọi tầng trong `ids`; chỉ đặt trong `ad_config.json` hoặc remote (`ad_config_debug.json` bỏ qua field này). Xem [Hành động khi click native](remote-settings.vi.md#hành-động-khi-click-native). |
 
 ### Waterfall: mỗi placement một key
@@ -464,7 +464,7 @@ Mặc định: 30 giây/tầng tải, một cache/request theo placement, không
 | UA/Adjust | Điền resource và dùng wiring ở [bước 5](#adjust-token-và-kiểm-tra). `enable_ua_check` giữ giá trị example; xem phạm vi áp dụng trong bảng field JSON. |
 | JSON từ Firebase | [Publish ba parameter String](firebase-integration.vi.md#remote-json): `ad_remote_config`, `ad_behavior_config`, `onboarding_config`. Cài `FirebaseAdConfigSource()` một lần sau assets; splash SDK tự refresh. Key khai báo trong `ad_remote_config` của backend hoặc `ad_config.json` của app ưu tiên hơn ad unit ID ghi trong code. [Custom fallback local](firebase-integration.vi.md#local-defaults) là tùy chọn. |
 | Firebase Analytics | Cài `suite-firebase`, đăng ký `Tracker.addSink(FirebaseSink())` ngay sau `Tracker.install`; chọn consent policy theo [hướng dẫn Firebase](firebase-integration.vi.md#consent-ban-đầu). |
-| App-open khi quay lại | `open_resume` kèm ID trong `ad_config.json` hoặc `ad_remote_config` của backend bật tính năng, có hay không có seed `idAdResume`; muốn giữ app-open tắt, gọi `AppOpenManager.getInstance().disableAppResume()`. Làm theo [App-open khi quay lại](#app-open-khi-quay-lại). |
+| Ads khi quay lại | `app_resume.type` chọn `native_resume` (mặc định), `inter_resume`, `open_resume` hoặc `none`; key `ad_config` của dạng đó phải bật kèm ID thật. `disableAppResume()` tắt mọi dạng. Làm theo [Ads khi quay lại](#ads-khi-quay-lại). |
 | App có premium / paywall | Làm [BillingKit](billing-integration.vi.md) / [PayKit](paywall-integration.vi.md) và [hook billing chạy song song](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). `onInitBilling()` mặc định trống; gọi install billing chưa có nghĩa đã khôi phục premium. |
 | Đổi ngôn ngữ từ Settings | `registerForActivityResult(StartActivityForResult())`, rồi `launch(ObLanguageActivity.intentFor(activity, LanguageScreenMode.SETTINGS))` (kiểu trong `io.onboardkit.ui.language`). `RESULT_OK`: lấy `ObLanguageActivity.RESULT_LANGUAGE_CODE`, lưu như bước 5 và `recreate()`; Back không trả mã. Màn này không ads. `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` không trả result; đọc lựa chọn qua `OnboardingSdk.selectedLanguage()`. |
 | Entry từ notification/widget | Dùng `SplashEntry` và giữ passthrough trong listener; xem [OnboardKit](../onboardkitorigin/README.vi.md#tích-hợp-tùy-chọn). Không cần các entry này cho launcher thông thường. |
@@ -481,19 +481,32 @@ class SplashActivity : ObSplashActivity()
 
 Splash chạy consent, fetch remote và billing song song. Slot banner/native và interstitial được request ngay khi consent kết thúc, dùng cấu hình và entitlement hiện có; không đợi remote hoặc billing. Remote đã cache hoặc đã về vẫn ưu tiên hơn asset. Job refresh thuộc SDK, tiếp tục sau khi splash đóng, với thời gian chờ nền ít nhất 60 giây. Các lần đọc sau nhận giá trị mới; request, timer và quyết định chuyển màn đã chốt không chạy lại. `SAME_TIME` và `ALTERNATE` cùng dùng thứ tự này. `onRemoteFetched()` chỉ chạy khi splash còn sống; tích hợp cần sống cùng process dùng `SettingsRegistry.addFetchListener`.
 
-### App-open khi quay lại
+### Ads khi quay lại
 
 <details>
-<summary>Mở các bước bật app-open</summary>
+<summary>Mở các bước bật ads khi quay lại</summary>
 
-Chỉ làm khi sản phẩm dùng app-open. `AppOpenManager` thuộc `com.ads.module.admob`.
+App ở background đủ `open_resume.app_resume_load_delay_ms` (mặc định 2000ms) thì SDK request ad của dạng đang chọn; quay lại sớm hơn thì không request, không hiện gì. `app_resume.type` trong `ad_behavior_config` chọn đúng một dạng, mặc định `native_resume`:
 
-1. **Bước 4:** `AdsConfig.fromAdConfig()` đã liên kết `open_resume`. Nếu tự dựng `AdsConfig(...)`, truyền `appResume = InterstitialAdUnit(...)` trừ khi `ad_config.json` hoặc `ad_remote_config` của backend khai báo `open_resume`; thiếu cả hai thì OnboardKit chặn app-open trên mọi màn.
-2. **Bước 5**, trong khối `apply` của `ERainAdConfig`: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` là `com.ads.module.helper.AdGate`).
-3. **Remote JSON:** không cần thêm gì — SDK tự trỏ lại ID app-resume theo `open_resume` mỗi lần config đổi, gồm cả bật/tắt bằng `isEnable`, miễn là `open_resume` có ad unit ID. `open_resume` khai trong `ad_config.json` hoặc `ad_remote_config` của backend không cần seed ở bước 2. Ship nó **bật kèm ID thật**; `isEnable: false` giữ app-resume tắt tới khi config bật lại.
-4. **Intent ra ngoài** (browser/share/review): gọi `AppOpenManager.getInstance().disableAdResumeByClickAction()` ngay sau `startActivity(...)` để bỏ qua lần quay lại. `disableAppResume()`/`enableAppResume()` là công tắc cả process.
+| `app_resume.type` | Key `ad_config` | Khi quay lại |
+|---|---|---|
+| `native_resume` | `native_resume` | Mở ngay màn native resume: ảnh, card chữ có nút Start, ad ở dưới; ad chưa về thì hiện skeleton. Start hoặc back đóng màn, về đúng màn user đã rời. Ad đang hiện được giữ lại: lần quay lại sau hiện lại ad đó ngay, ad request trong background về thì thay vào. |
+| `inter_resume` | `inter_resume` | Load-and-show có dialog loading, chờ tối đa `interstitial.load_and_show.wait_timeout_ms` (mặc định 8000ms). |
+| `open_resume` | `open_resume` | App-open. |
+| `none` | — | Không hiện gì. |
 
-Splash/OB5/Welcome Back tự loại trừ; chỉ đăng ký thêm màn nhạy cảm của app. LFO/trang nội dung OB có thể hiện app-open sẵn có khi quay lại, trừ fullscreen, lúc chuyển trang, lúc mở popup và sau khi click vào ad onboarding (trừ khi remote đặt `app_open.presentation.skip_after_ad_click` là `false`). Delay/gate xem [app-open](../onboardkitorigin/README.vi.md#app-open-khi-quay-lại-app).
+Key của dạng đang chọn tắt (`isEnable: false`) hoặc chưa khai thì lần quay lại không có ad; SDK không chuyển sang dạng khác. Muốn đổi dạng thì đổi `app_resume.type`.
+
+1. **Bước 4:** `AdsConfig.fromAdConfig()` đã liên kết `native_resume` và `open_resume`. Nếu tự dựng `AdsConfig(...)`, truyền `resumeNative = NativeAdUnit(...)` / `appResume = InterstitialAdUnit(...)` trừ khi `ad_config.json` hoặc `ad_remote_config` của backend khai báo key đó.
+2. **Chỉ với `open_resume`**, bước 5, trong khối `apply` của `ERainAdConfig`: `idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()` (`AdGate` là `com.ads.module.helper.AdGate`). `open_resume` khai trong `ad_config.json` hoặc `ad_remote_config` của backend thì không cần seed.
+3. **`ad_config`:** khai key của mọi dạng có thể chọn, **bật kèm ID thật** trong `ids`. `native_resume` nhận các field native (`templateId`, `components`, `click_action`, màu CTA; mặc định template 1 và `reload`).
+4. **Intent ra ngoài** (browser/share/review): gọi `AppOpenManager.getInstance().disableAdResumeByClickAction()` ngay sau `startActivity(...)` để bỏ qua lần quay lại đó, với mọi dạng. `disableAppResume()`/`enableAppResume()` là công tắc cả process cho mọi dạng.
+
+Màn bị loại trừ áp dụng cho mọi dạng. Splash/OB5/Welcome Back tự loại trừ; chỉ đăng ký thêm màn nhạy cảm của app bằng `disableAppResumeWithActivity`. LFO/trang nội dung OB có thể hiện ads khi quay lại, trừ fullscreen, lúc chuyển trang, lúc mở popup và sau khi click vào ad onboarding (trừ khi remote đặt `app_open.presentation.skip_after_ad_click` là `false`).
+
+**Màn native resume.** Khai ảnh và chữ trong `onboardKitConfig { resumeScreen = ResumeScreenConfig(titleRes = …, subtitleRes = …, imageRes = …) }`, giống cách khai các bước OB; `title`/`subtitle` nhận `CharSequence` và ưu tiên hơn resource, field nào không khai thì giữ default SDK. Màu chữ nút Start lấy từ `native_resume.start_button.color` trong `onboarding_config` (`""` giữ màu của layout); đổi chữ nút bằng cách override string `ob_start`. Muốn đổi layout thì override `res/layout/ob_resume_screen.xml`, giữ các id `ob_resume_image`, `ob_resume_title`, `ob_resume_subtitle`, `ob_resume_start`, `ob_resume_ad_block`, `ob_resume_ad`.
+
+Delay/gate của app-open xem [app-open](../onboardkitorigin/README.vi.md#app-open-khi-quay-lại-app).
 
 </details>
 
@@ -536,6 +549,6 @@ Splash/OB5/Welcome Back tự loại trừ; chỉ đăng ký thêm màn nhạy c�
 | Application hiện có hoặc [PartnerApp.kt](examples/ads-onboarding/PartnerApp.kt) | Khởi tạo SDK một lần và chọn màn đích |
 | `SplashActivity.kt` | Kế thừa splash SDK |
 
-`MainActivity` là màn đích hiện có của app. Ngoài `AppAdPlacement.kt`, không cần file nào để dịch JSON sang config ads — mọi entry point nhận thẳng placement key. Không cần sao chép `AppConstants`, `RemoteConfigUtils`, `ResumeAdsEntryRule`, `AppLifecycleObserver`, DevConfig, Hilt hay các màn paywall/welcome/uninstall từ example cho luồng cơ bản này.
+`MainActivity` là màn đích hiện có của app. Ngoài `AppAdPlacement.kt`, không cần file nào để dịch JSON sang config ads — mọi entry point nhận thẳng placement key. Không cần sao chép `AppConstants`, `RemoteConfigUtils`, DevConfig, Hilt hay các màn paywall/uninstall từ example cho luồng cơ bản này.
 
 [Tra cứu Ads](../ads/README.md) · [Tra cứu OnboardKit](../onboardkitorigin/README.vi.md)

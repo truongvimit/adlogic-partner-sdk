@@ -149,6 +149,7 @@ object OnboardingSdk {
             override fun appOpenSkipReasonFor(activity: Activity): String? =
                 appResumeGuard.skipReason(activity)?.key
         })
+        if (adProvider != null) com.ads.module.admob.ResumeAds.nativeScreen = io.onboardkit.ads.ObNativeResume
         preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }

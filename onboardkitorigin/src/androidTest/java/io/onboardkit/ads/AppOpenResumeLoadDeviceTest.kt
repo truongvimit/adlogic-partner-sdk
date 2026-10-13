@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import com.ads.module.config.settings.AdBehavior
 import android.app.Application
 import android.app.ActivityManager
 import android.accessibilityservice.AccessibilityService
@@ -89,6 +90,8 @@ class AppOpenResumeLoadDeviceTest {
             // send an extra AppOpen request even against the unfixed implementation.
             manager.disableAppResume()
             manager.init(app, "")
+            // The resume type defaults to native_resume; this suite exercises app-open.
+            AdBehavior.document.acceptSuccessfulFetch("""{"app_resume":{"type":"open_resume"}}""")
             Tracker.install(app)
             Tracker.addSink(sink)
             AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":$delayMs}}""")

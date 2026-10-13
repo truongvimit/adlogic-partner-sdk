@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import com.ads.module.config.settings.AdBehavior
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.ActivityManager
@@ -74,6 +75,8 @@ class AppOpenResumePresentationDeviceTest {
             assertFalse("The real test host must not be premium", Entitlement.isPremium(app))
             manager.disableAppResume()
             manager.init(app, "")
+            // The resume type defaults to native_resume; this suite exercises app-open.
+            AdBehavior.document.acceptSuccessfulFetch("""{"app_resume":{"type":"open_resume"}}""")
             manager.setResumeSkipPolicy(null)
             manager.setInterstitialShowing(false)
             manager.setDisableAdResumeByClickAction(false)

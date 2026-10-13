@@ -1,6 +1,7 @@
 package io.onboardkit.ads
 
 import android.app.Activity
+import android.content.Context
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.annotation.LayoutRes
@@ -38,6 +39,9 @@ abstract class OnboardingAdProvider internal constructor() {
 
     internal abstract fun preloadNative(activity: Activity, request: NativeAdRequest)
 
+    /** [preloadNative] with no screen to wait for, e.g. while the app is in the background. */
+    internal abstract fun preloadNativeInBackground(context: Context, request: NativeAdRequest)
+
     internal abstract fun nativeStatus(placement: AdPlacement): NativeStatus
 
     // True for a bind done inside this call, not echoed as onLoaded; later binds report onLoaded.
@@ -66,6 +70,12 @@ abstract class OnboardingAdProvider internal constructor() {
      * screen is not resumed with focus.
      */
     internal abstract fun reloadNative(placement: AdPlacement): Boolean
+
+    /**
+     * Binds [placement]'s ready fill, or the one its running load brings, over the shown ad; never
+     * starts a request. The shown ad stays until then, and for good when neither exists.
+     */
+    internal abstract fun renewNative(placement: AdPlacement)
 
     internal abstract fun loadInterstitial(
         activity: Activity,

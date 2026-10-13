@@ -5,7 +5,7 @@ import com.ads.module.config.AdUnitConfig
 
 /**
  * Typed reads of a placement's configured *flags* — `isEnable`, `enableUaCheck`, `ids` — for the
- * debug dashboard and the resume-entry rule.
+ * debug dashboard.
  *
  * Not needed to load or show an ad: every entry point takes an [AppAdPlacement] key and resolves
  * its own config. This is only for screens that want to display or branch on what the payload says.
@@ -26,7 +26,7 @@ val AdRemoteConfig.Companion.native_permission: AdUnitConfig get() = unit(AppAdP
 
 val AdRemoteConfig.Companion.inter_onboarding: AdUnitConfig get() = unit(AppAdPlacement.INTER_ONBOARDING)
 
-val AdRemoteConfig.Companion.native_welcome: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_WELCOME)
+val AdRemoteConfig.Companion.native_resume: AdUnitConfig get() = unit(AppAdPlacement.NATIVE_RESUME)
 
-val AdRemoteConfig.Companion.inter_welcome: AdUnitConfig get() = unit(AppAdPlacement.INTER_WELCOME)
+val AdRemoteConfig.Companion.inter_resume: AdUnitConfig get() = unit(AppAdPlacement.INTER_RESUME)
 

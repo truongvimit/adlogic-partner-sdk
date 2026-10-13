@@ -52,6 +52,8 @@ class AppOpenResumeLoadStateTest {
 
     @Before
     fun setUp() {
+        // Resume type defaults to native_resume; these suites exercise app-open.
+        AdBehavior.document.install("""{"app_resume":{"type":"open_resume"}}""", null)
         app = ApplicationProvider.getApplicationContext()
         manager.disableAppResume()
         manager.currentActivity?.let { manager.onActivityDestroyed(it) }
@@ -73,6 +75,7 @@ class AppOpenResumeLoadStateTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.install(null, null)
         AdBehavior.document.acceptSuccessfulFetch(null)
         manager.disableAppResume()
         manager.setAppResumeAdId("")

@@ -24,8 +24,8 @@ Launcher से app खोलने वाला लौटता user splash क
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
 - **ad_config:** `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `colorBackground`, `colorAdBadge`, `colorAdBadgeText`, `heightCTA`, `templateId`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`। नए documents इन fields, ad-unit mappings या individual unit switches को दोहराते नहीं हैं।
-- **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius और app-open behavior। Banner type/size SDK presets हैं।
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
+- **ad_behavior_config:** format के अनुसार timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA radius, resume type और app-open behavior। Banner type/size SDK presets हैं।
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance, native resume का Start color और app के language catalog में से चयन। Step चालू करने से `isEnable=false` वाला ad unit चालू नहीं होता।
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation और Activity exclusions। SDK ad-presentation presets remote से बदले जा सकते हैं।
 
 हटाए गए aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches और app-content group `ui` ignore होते हैं, पुराने cached JSON में भी। पुराने remote UI APIs `ob_ui_content`, `ob_ui_design_tokens`, `ob_enable_ui_content` से चलते रहते हैं; वे नए grouped documents में fields नहीं हैं।
@@ -54,7 +54,7 @@ ads = AdsConfig.fromAdConfig()
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Welcome Back initial; ALT | `native_welcome1`; `native_welcome2` (हर एक का अपना `ids` waterfall) |
 | Exit interstitial | `inter_after_ob3` |
-| App resume | `open_resume`; `ad_config.json` या backend इसे ID के साथ declare करे तो `idAdResume` seed के बिना भी app-open चालू हो जाता है। App-open बंद रखने के लिए `AppOpenManager.getInstance().disableAppResume()` बुलाएँ |
+| App resume | `ad_behavior_config` का `app_resume.type` `native_resume`, `inter_resume`, `open_resume` या `none` चुनता है; उसी नाम की ad_config key ID के साथ चालू होनी चाहिए, वरना वापसी पर कुछ नहीं दिखता। ID के साथ declare हुए `open_resume` को `idAdResume` seed नहीं चाहिए। `AppOpenManager.getInstance().disableAppResume()` हर type बंद रखता है |
 
 नए users के लिए `inter_splash` और returning users के लिए `inter_splash_o` (`_o` declare न हो तो `inter_splash`) master switch है: वहाँ `isEnable: false` उस segment के हर splash interstitial को बंद करता है, entries समेत। Entry अपनी key तभी इस्तेमाल करती है जब वह declare हो और चालू हो, वरना segment की key। Load और show दोनों उसी key से gate होते हैं। पुरानी Firebase key `ob_ads_splash_inter_enabled=false` सभी users के लिए हर splash interstitial बंद करती है।
 
@@ -123,7 +123,7 @@ Native preload app/SDK code शुरू करता है। Replacement prel
 
 Splash interstitial slot पहले load होता है, फिर buffer से show होता है, इसलिए उसका `behavior` केवल `load.tier_timeout_ms` लेता है; `load_and_show.*` wait को अनदेखा किया जाता है क्योंकि slot पहले load और बाद में show होता है; वहाँ `load_and_show.*` field ignore होता है। केवल exit interstitial fill का इंतज़ार करता है: `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
-Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। SDK का banner refresh default में चालू है (`banner.reload.allowed` और `banner.reload.auto_enabled` `true` हैं); interval सिर्फ उसकी cadence तय करता है। हर banner ad unit पर, सभी floors समेत, AdMob console refresh बंद करें, वरना banner दो बार refresh होगा। SDK refresh बंद करने के लिए `banner.reload.auto_enabled` को `false` करें (timer नहीं; resume पर reload रहता है) या `banner.reload.allowed` को `false` करें (SDK reload बिल्कुल नहीं), globally या `placement_overrides.<key>` में। Initial app-open delay `open_resume.app_resume_load_delay_ms` में है (2000 ms)। किसी भी format के ad पर click अगला app-open केवल तब छोड़ता है जब `app_open.presentation.skip_after_ad_click` `true` हो (default `false`)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
+Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। SDK का banner refresh default में चालू है (`banner.reload.allowed` और `banner.reload.auto_enabled` `true` हैं); interval सिर्फ उसकी cadence तय करता है। हर banner ad unit पर, सभी floors समेत, AdMob console refresh बंद करें, वरना banner दो बार refresh होगा। SDK refresh बंद करने के लिए `banner.reload.auto_enabled` को `false` करें (timer नहीं; resume पर reload रहता है) या `banner.reload.allowed` को `false` करें (SDK reload बिल्कुल नहीं), globally या `placement_overrides.<key>` में। किसी भी resume ad के request से पहले background में रहने का समय `open_resume.app_resume_load_delay_ms` में है (2000 ms), हर `app_resume.type` के लिए। किसी भी format के ad पर click अगला resume ad केवल तब छोड़ता है जब `app_open.presentation.skip_after_ad_click` `true` हो (default `false`)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
 
 खाली behavior object व्यापक scope या निचले source की leaf value नहीं रोकता। `presentation.loading_enabled`, `show()` और `loadAndShow()` दोनों में captured placement/format behavior लेता है, ready cached ad पर भी। Interstitial screen scopes (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) केवल `load.tier_timeout_ms` और `load_and_show.wait_timeout_ms` लेते हैं (splash वाला `load_and_show.*` छोड़ देता है), इसलिए `loading_enabled` को `placement_overrides.<key>` या `interstitial` format में set करें। Remote refresh के बाद banner placement का `enable_ua_check` दोबारा पढ़ता है; host का explicit `forceUaCheck` setter पहले आता है। Explicit style न होने पर भी native helper `presentation.cta_corner_radius_dp` लागू करता है।
 
@@ -269,6 +269,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `app_open.presentation.pre_show_delay_ms` | `800` |
 | `app_open.presentation.skip_after_ad_click` | `false` |
 | `app_open.cache.max_age_ms` | `14400000` |
+| `app_resume.type` | `native_resume` — `native_resume`, `inter_resume`, `open_resume` या `none`; कोई और value ignore होती है और निचला tier लागू होता है। |
 | `placement_overrides` | `{}` |
 
 ### onboarding_config
@@ -352,6 +353,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `welcome_back.enabled` | `false` |
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
+| `native_resume.start_button.color` | `"#FF375E"` — native resume screen पर Start का text color; `""` layout का color रखता है। |
 
 `native_fs` मौजूदा splash preload का इंतज़ार करता है और loading के दौरान shimmer दिखाता है; स्क्रीन खोलने पर नया request नहीं होता। डिफ़ॉल्ट रूप से ad bind होने के 3 सेकंड बाद X दिखता है। स्क्रीन अपने आप बंद नहीं होती; पुरानी `splash.native.auto_dismiss_ms` key अनदेखी की जाती है।
 

@@ -105,6 +105,12 @@ sealed interface AdPlacement {
         override val format: AdFormat = AdFormat.NATIVE
     }
 
+    /** Native on the screen a return from the background opens when `app_resume.type` is native_resume. */
+    data object ResumeNative : AdPlacement {
+        override val key: String = "native_resume"
+        override val format: AdFormat = AdFormat.NATIVE
+    }
+
     /**
      * The ad shown when the app returns to the foreground.
      *

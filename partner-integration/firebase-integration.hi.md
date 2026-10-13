@@ -86,7 +86,7 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Paste करने वाला content | काम |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), app की production IDs के साथ | हर placement की एक key: `{"id", "isEnable"}` floors वाला `ids` waterfall (सबसे ऊँचा पहले, all-price आख़िर में; एक unit के लिए एक floor), switches और CTA fields। किसी key का remote `ids` पूरा array replace करता है, इसलिए हर floor उसके `isEnable` के साथ publish करें। यहाँ declare की गई key आपकी `ad_config.json` से ऊपर है, और वह file code में लिखी ad unit IDs से ऊपर है; ID वाला `open_resume` app-open चालू करता है। Parameter का नाम न बदलें। |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), app की production IDs के साथ | हर placement की एक key: `{"id", "isEnable"}` floors वाला `ids` waterfall (सबसे ऊँचा पहले, all-price आख़िर में; एक unit के लिए एक floor), switches और CTA fields। किसी key का remote `ids` पूरा array replace करता है, इसलिए हर floor उसके `isEnable` के साथ publish करें। यहाँ declare की गई key आपकी `ad_config.json` से ऊपर है, और वह file code में लिखी ad unit IDs से ऊपर है; लौटने पर ads के लिए `ad_behavior_config` का `app_resume.type` जिस key को चुनता है, वह ID के साथ चालू होनी चाहिए। Parameter का नाम न बदलें। |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Ad format behavior, timeout, reload/cache और native CTA radius। |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, X/Skip, swipe और preload। |
 

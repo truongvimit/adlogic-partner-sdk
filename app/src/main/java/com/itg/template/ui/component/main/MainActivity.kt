@@ -15,7 +15,6 @@ import androidx.annotation.LayoutRes
 import com.ads.module.ads.ERainAd
 import com.ads.module.ads.wrapper.ApInterstitialAd
 import com.ads.module.admob.Admob
-import com.ads.module.admob.AppOpenManager
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -43,8 +42,8 @@ import com.itg.template.ads.AppAdPlacement
 import com.itg.template.ads.RemoteConfigUtils
 import com.itg.template.ads.inter_onboarding
 import com.itg.template.ads.open_resume
-import com.itg.template.ads.native_welcome
-import com.itg.template.ads.inter_welcome
+import com.itg.template.ads.native_resume
+import com.itg.template.ads.inter_resume
 import com.itg.template.ads.native_home
 import com.itg.template.ads.native_full1
 import com.itg.template.ads.native_full2
@@ -61,8 +60,8 @@ import com.itg.template.ui.component.main.dialog.NoInternetDialog
 import com.itg.template.utils.ConnectionLiveData
 import com.itg.template.utils.ITGTrackingHelper
 import com.itg.template.utils.Routes
-import com.itg.template.app.ResumeAdsEntryRule
-import com.itg.template.app.ResumeAdsEntryMode
+import com.ads.module.admob.ResumeAdType
+import com.ads.module.config.settings.AdBehavior
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 import java.lang.ref.WeakReference
@@ -106,7 +105,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         checkConsentStatus()
         showSdkVersionInfo()
         buildFlagRows()
-        updateResumeModeUI()
+        updateResumeTypeUI()
         selectBannerType(defaultBannerType)
     }
 
@@ -211,25 +210,25 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 })
         }
 
-        // ── Interstitial Welcome ──
-        mBinding.btnLoadInterWelcome.click {
+        // ── Interstitial Resume ──
+        mBinding.btnLoadInterResume.click {
             ensureAdRemoteConfig()
-            mBinding.tvInterWelcomeStatus.text = "Loading…"
-            InterstitialAdManager.load(this, AppAdPlacement.INTER_WELCOME,
-                listener = interLoadStatus(mBinding.tvInterWelcomeStatus))
+            mBinding.tvInterResumeStatus.text = "Loading…"
+            InterstitialAdManager.load(this, AppAdPlacement.INTER_RESUME,
+                listener = interLoadStatus(mBinding.tvInterResumeStatus))
         }
-        mBinding.btnShowInterWelcome.click {
-            InterstitialAdManager.show(this, AppAdPlacement.INTER_WELCOME,
+        mBinding.btnShowInterResume.click {
+            InterstitialAdManager.show(this, AppAdPlacement.INTER_RESUME,
                 object : InterShowCallback() {
                     override fun onSkipped(reason: AdSkipReason) {
                         if (reason == AdSkipReason.FAILED_TO_SHOW) Timber.w("Interstitial show failed")
                     }
 
                     override fun onComplete() {
-                        Timber.d("Inter Welcome shown or skipped")
-                        mBinding.tvInterWelcomeStatus.text = "Loading…"
-                        InterstitialAdManager.load(this@MainActivity, AppAdPlacement.INTER_WELCOME,
-                            listener = interLoadStatus(mBinding.tvInterWelcomeStatus))
+                        Timber.d("Inter Resume shown or skipped")
+                        mBinding.tvInterResumeStatus.text = "Loading…"
+                        InterstitialAdManager.load(this@MainActivity, AppAdPlacement.INTER_RESUME,
+                            listener = interLoadStatus(mBinding.tvInterResumeStatus))
                     }
                 })
         }
@@ -285,10 +284,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         // ── Admin Ad Toggle Dialog ──
         mBinding.btnOpenAdminDialog.click { openAdminAdToggleDialog() }
 
-        // ── Resume / Welcome Flow Mode Buttons ──
-        mBinding.btnModeAppResume.click { setResumeMode(ResumeAdsEntryMode.APP_RESUME) }
-        mBinding.btnModeWelcome.click { setResumeMode(ResumeAdsEntryMode.WELCOME) }
-        mBinding.btnModeNone.click { setResumeMode(ResumeAdsEntryMode.NONE) }
+        // ── Resume Type Buttons ──
+        resumeTypeOptions.forEach { (button, type) -> button.click { setResumeType(type) } }
 
         // ── Banner Type Buttons ──
         bannerTypeOptions.forEach { (button, type) ->
@@ -432,7 +429,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         FlagInfo("shouldDisplayNativeHome") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_home.enableUaCheck) },
         FlagInfo("shouldDisplayNativePermission") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_permission.enableUaCheck) },
         FlagInfo("shouldDisplayInterOnboarding") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.inter_onboarding.enableUaCheck) },
-        FlagInfo("shouldDisplayNativeWelcomeBack") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_welcome.enableUaCheck) },
+        FlagInfo("shouldDisplayNativeResume") { ERainAd.getInstance().shouldDisplayForUa(AdRemoteConfig.native_resume.enableUaCheck) },
         FlagInfo("shouldDisplayWidgetUninstall") { ERainAd.getInstance().shouldDisplayForUa(RemoteConfigUtils.getOnEnableUninstallWidget()) },
     )
 
@@ -463,60 +460,32 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         DialogAdminOrganicAds.show(this)
     }
 
-    private fun setResumeMode(mode: ResumeAdsEntryMode) {
-        ensureAdRemoteConfig()
-        if (!AdRemoteConfig.isInitialized()) return
-        try {
-            val patch = JSONObject()
-            val placements = AdRemoteConfig.getInstance().ads.keys
-            if (AppAdPlacement.OPEN_RESUME in placements) {
-                patch.put(AppAdPlacement.OPEN_RESUME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.APP_RESUME))
-            }
-            if (AppAdPlacement.NATIVE_WELCOME in placements) {
-                patch.put(AppAdPlacement.NATIVE_WELCOME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.WELCOME))
-            }
-            if (AppAdPlacement.INTER_WELCOME in placements) {
-                patch.put(AppAdPlacement.INTER_WELCOME, JSONObject().put("isEnable", mode == ResumeAdsEntryMode.WELCOME))
-            }
-            AdRemoteConfig.updateCodeFromJson(patch.toString())
-
-            // Dynamically enable/disable AppOpenManager based on mode
-            if (mode == ResumeAdsEntryMode.APP_RESUME) {
-                val appResumeId = AdRemoteConfig.open_resume.waterfallIds.firstOrNull().orEmpty()
-                AppOpenManager.getInstance().setAppResumeAdId(appResumeId)
-                AppOpenManager.getInstance().enableAppResume()
-            } else {
-                AppOpenManager.getInstance().disableAppResume()
-            }
-
-            updateResumeModeUI()
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to set resume mode")
-        }
+    private val resumeTypeOptions: Map<MaterialButton, ResumeAdType> by lazy {
+        mapOf(
+            mBinding.btnResumeOpen to ResumeAdType.OPEN,
+            mBinding.btnResumeNative to ResumeAdType.NATIVE,
+            mBinding.btnResumeInter to ResumeAdType.INTER,
+            mBinding.btnResumeNone to ResumeAdType.NONE,
+        )
     }
 
-    private fun updateResumeModeUI() {
+    // Replaces the cached remote ad_behavior_config until the next fetch: a debug pin, not a merge.
+    private fun setResumeType(type: ResumeAdType) {
+        val json = JSONObject().put("app_resume", JSONObject().put("type", type.remoteValue))
+        AdBehavior.document.acceptSuccessfulFetch(json.toString())
+        updateResumeTypeUI()
+    }
+
+    private fun updateResumeTypeUI() {
         ensureAdRemoteConfig()
         if (!AdRemoteConfig.isInitialized()) return
-
-        val mode = ResumeAdsEntryRule.currentMode()
-        mBinding.tvCurrentResumeMode.text = "Current Mode: $mode"
-
-        val appResumeEnable = AdRemoteConfig.open_resume.isEnable
-        val nativeWelcomeEnable = AdRemoteConfig.native_welcome.isEnable
-        val interWelcomeEnable = AdRemoteConfig.inter_welcome.isEnable
-
-        mBinding.tvResumeConfigsDetail.text = "open_resume: ${if (appResumeEnable) "ON" else "OFF"} • native_welcome: ${if (nativeWelcomeEnable) "ON" else "OFF"} • inter_welcome: ${if (interWelcomeEnable) "ON" else "OFF"}"
-
-        // Highlight selected button
-        val allButtons = listOf(mBinding.btnModeAppResume, mBinding.btnModeWelcome, mBinding.btnModeNone)
-        val selected = when (mode) {
-            ResumeAdsEntryMode.APP_RESUME -> mBinding.btnModeAppResume
-            ResumeAdsEntryMode.WELCOME -> mBinding.btnModeWelcome
-            ResumeAdsEntryMode.NONE -> mBinding.btnModeNone
-        }
-
-        highlightSelectedButton(allButtons, selected)
+        val type = ResumeAdType.current()
+        mBinding.tvCurrentResumeMode.text = "app_resume.type: ${type.remoteValue}"
+        fun onOff(unit: AdUnitConfig) = if (unit.isUsable) "ON" else "OFF"
+        mBinding.tvResumeConfigsDetail.text = "open_resume: ${onOff(AdRemoteConfig.open_resume)} • " +
+            "native_resume: ${onOff(AdRemoteConfig.native_resume)} • inter_resume: ${onOff(AdRemoteConfig.inter_resume)}"
+        highlightSelectedButton(resumeTypeOptions.keys.toList(),
+            resumeTypeOptions.entries.first { it.value == type }.key)
     }
 
     private val bannerTypeOptions: Map<MaterialButton, BannerType> by lazy {

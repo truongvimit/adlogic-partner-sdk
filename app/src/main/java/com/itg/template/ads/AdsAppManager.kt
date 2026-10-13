@@ -16,7 +16,6 @@ import com.itg.template.app.AppConstants
 import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.ConfirmUninstallActivity
 import com.itg.template.ui.component.uninstall.SurveyActivity
-import com.itg.template.ui.component.welcome.WelcomeActivity
 import io.onboardkit.ads.erain.ERainTuning
 import io.suite.firebase.FirebaseAdConfigSource
 import kotlinx.coroutines.Dispatchers
@@ -44,14 +43,13 @@ object AdsAppManager : RemoteConfigUtils.Listener {
             listDeviceTest = listOf("1E25A7D66221E2116062EA114AFE2982")
         }
         ERainAd.getInstance().init(application, config)
-        // Retains the app's UnderAd default; Welcome explicitly uses AfterDismiss.
+        // Retains the app's UnderAd default.
         ERainTuning.install()
 
-        // The same exclusions apply to app-open and the welcome-back screen.
+        // The same exclusions apply to every resume type.
         AppOpenManager.getInstance().apply {
             disableAppResumeWithActivity(SplashActivity::class.java)
             disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)
-            disableAppResumeWithActivity(WelcomeActivity::class.java)
             disableAppResumeWithActivity(SurveyActivity::class.java)
         }
         // Product flags and caps must still apply if remote finishes after splash is gone.
@@ -69,10 +67,5 @@ object AdsAppManager : RemoteConfigUtils.Listener {
     private fun applyAdPolicy() {
         ERainAd.getInstance().setMaxClickAdsPerDay(RemoteConfigUtils.getMaxClickAdsPerDay())
         ERainAd.getInstance().setIntervalInterstitialAd(RemoteConfigUtils.getInterstitialIntervalSec())
-        // Seed the bundled app-open placement; subsequent remote documents own its live switch/ID.
-        if (com.itg.template.app.ResumeAdsEntryRule.shouldEnableAppResume()) {
-            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.waterfallIds.firstOrNull().orEmpty())
-            AppOpenManager.getInstance().enableAppResume()
-        }
     }
 }

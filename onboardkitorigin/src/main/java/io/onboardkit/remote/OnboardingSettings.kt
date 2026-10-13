@@ -75,17 +75,23 @@ object OnboardingSettings {
     fun text(path: String) = values.string(path)
 
     /** Shared onboarding color: remote > app asset; empty preserves the existing UI color. */
-    internal fun onboardingPrimaryColor(): Int? {
+    internal fun onboardingPrimaryColor(): Int? = color(PRIMARY_COLOR_PATH)
+
+    /** The native resume screen's Start text color, on the same terms as [onboardingPrimaryColor]. */
+    internal fun resumeStartColor(): Int? = color(RESUME_START_COLOR_PATH)
+
+    private fun color(path: String): Int? {
         val snapshot = values
         fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
             ?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
 
-        (snapshot.remoteValue(PRIMARY_COLOR_PATH) as? String)?.let { return parse(it) }
-        return (snapshot.assetValue(PRIMARY_COLOR_PATH) as? String)?.let(::parse)
-            ?: (document.defaultValue(PRIMARY_COLOR_PATH) as? String)?.let(::parse)
+        (snapshot.remoteValue(path) as? String)?.let { return parse(it) }
+        return (snapshot.assetValue(path) as? String)?.let(::parse)
+            ?: (document.defaultValue(path) as? String)?.let(::parse)
     }
 
     private const val PRIMARY_COLOR_PATH = "onboarding.primary_color"
+    internal const val RESUME_START_COLOR_PATH = "native_resume.start_button.color"
 
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"
@@ -103,6 +109,7 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.Ob5 -> "ob5.native"
         io.onboardkit.ads.AdPlacement.WelcomeBack1 -> "welcome_back.native1"
         io.onboardkit.ads.AdPlacement.WelcomeBack2 -> "welcome_back.native2"
+        io.onboardkit.ads.AdPlacement.ResumeNative -> "native_resume"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
     /** `ad_config.<key>.click_action`; absent, splash native and pager pages auto-advance. */
@@ -309,7 +316,7 @@ object OnboardingSettings {
         }
         return OnboardKitConfig(splash, language, steps, ads, c.system, behavior, c.privacyGoalsScreen.copy(
             enabled = v.boolean("privacy_goals_screen.enabled", c.privacyGoalsScreen.enabled),
-        ), c.welcomeBackScreen)
+        ), c.welcomeBackScreen, c.resumeScreen)
     }
 
     /** An order naming any id outside [catalog] is invalid as a whole; null [catalog] checks types only. */

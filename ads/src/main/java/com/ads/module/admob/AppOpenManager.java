@@ -202,6 +202,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         this.myApplication = application;
         this.myApplication.registerActivityLifecycleCallbacks(this);
         ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
+        // After this manager, so a return's one-shot skip is captured before native/inter read it.
+        ResumeAds.attach(application);
     }
 
     public boolean isInitialized() {
@@ -430,7 +432,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     /**
-     * Turns app-resume ads off for the rest of the process.
+     * Turns resume ads of every {@link ResumeAdType} off for the rest of the process.
      * <p>
      * This is the durable entry-mode switch, owned by whoever decides that mode — in this template
      * the splash, from remote config. It is the wrong tool for "not on this one return": use
@@ -451,6 +453,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     public void enableAppResume() {
         isAppResumeEnabled = true;
+    }
+
+    /** The process-wide switch; off silences every {@link ResumeAdType}, not only app-open. */
+    public boolean isAppResumeEnabled() {
+        return isAppResumeEnabled;
+    }
+
+    /** {@code app_resume.type} picks one resume format; the others stay idle. */
+    private static boolean isOpenSelected() {
+        return ResumeAdType.current() == ResumeAdType.OPEN;
     }
 
     public void setSplashActivity(Class splashActivity, String adId, int timeoutInMillis) {
@@ -724,7 +736,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     private boolean canFetchResume(boolean checkNetwork) {
-        if (myApplication == null || !isInitialized) return false;
+        if (myApplication == null || !isInitialized || !isOpenSelected()) return false;
         AdSkipReason reason = AdGate.skipReason(myApplication, isAppResumeEnabled,
                 AdGate.placementPassesUaGate(RESUME_PLACEMENT), checkNetwork);
         if (reason != null) Log.d(TAG, "fetchAd: resume gate=" + reason.getKey());
@@ -1006,7 +1018,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** Live admission for the resume path only; raw splash retains its existing flow. */
     private boolean canShowResumeOn(Activity host) {
-        return isInitialized && isAppResumeEnabled && !isInterstitialShowing
+        return isInitialized && isAppResumeEnabled && isOpenSelected() && !isInterstitialShowing
                 && host != null && host == currentActivity && host == resumedActivity
                 && !host.isFinishing() && !host.isDestroyed() && !(host instanceof AdActivity)
                 && ProcessLifecycleOwner.get().getLifecycle().getCurrentState()
@@ -2092,7 +2104,8 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
         String sharedReason = resumeSkipReasonFor(currentActivity);
         if (sharedReason != null) {
-            reportResumePolicySkip(sharedReason);
+            // Another resume type reports its own skip under its own placement.
+            if (isOpenSelected()) reportResumePolicySkip(sharedReason);
             return;
         }
 
@@ -2106,6 +2119,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
+        if (!isOpenSelected()) return;
         String appOpenReason = appOpenPolicySkipReasonFor(currentActivity);
         if (appOpenReason != null) {
             reportResumePolicySkip(appOpenReason);
@@ -2136,7 +2150,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         resumeBackground = true;
         // The SDK's own fullscreen and partner-suppressed external actions are not a new
         // opportunity to buy a resume ad. Their return remains governed by the same policy.
-        if (!isAppResumeEnabled || !isInitialized || isShowingAd || isInterstitialShowing
+        if (!isAppResumeEnabled || !isInitialized || !isOpenSelected() || isShowingAd || isInterstitialShowing
                 || pendingResumeSkipReason.get() != null
                 || currentActivity instanceof AdActivity) return;
         if (currentActivity != null && (isResumeSuppressedFor(currentActivity)

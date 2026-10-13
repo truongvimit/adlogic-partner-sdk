@@ -234,10 +234,11 @@ class SettingsDocument(
             if (path.endsWith("timeout_ms") || path.endsWith("min_after_bind_ms") || path.endsWith("min_tick_ms") || path.endsWith("idle_tick_ms") || path.endsWith("refresh_throttle_ms") || path.endsWith("offline_recheck_ms")) return n > 0
         }
         if (value is String) {
-            if (path == "onboarding.primary_color") {
+            if (path == "onboarding.primary_color" || path == "native_resume.start_button.color") {
                 return value.isEmpty() || Regex("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?").matches(value)
             }
             val allowed = when {
+                path == "app_resume.type" -> setOf("open_resume", "native_resume", "inter_resume", "none")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
                 path.endsWith("slot_format") -> setOf("BANNER", "NATIVE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")

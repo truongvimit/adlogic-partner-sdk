@@ -10,7 +10,6 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat.getSystemService
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.ads.module.application.AdsMultiDexApplication
 import com.ads.module.billing.AppPurchase
 import com.itg.devconfig.DevConfig
@@ -77,11 +76,6 @@ class GlobalApp : AdsMultiDexApplication() {
         // Before OnboardKit: its paywall gate calls straight into PayKit at the first checkpoint.
         initPayKit()
         initOnboardKit()
-
-        // The welcome-resume observer. The activity it acts on comes from AppOpenManager, which
-        // already tracks it from onActivityStarted — a second app-side tracker was a third copy of
-        // the same state, and the one that updated too late to be useful here.
-        ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())
     }
 
     private fun initTracking() {

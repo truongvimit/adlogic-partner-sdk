@@ -172,5 +172,10 @@
     "native2": {
       "behavior": {}
     }
+  },
+  "native_resume": {
+    "start_button": {
+      "color": "#FF375E"
+    }
   }
 }

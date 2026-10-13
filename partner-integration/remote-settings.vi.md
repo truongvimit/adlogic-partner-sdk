@@ -22,8 +22,8 @@ Welcome Back mặc định ẩn; bật `welcome_back.enabled` để user cũ m�
 ## Mỗi giá trị có một nơi quản lý
 
 - **ad_config:** `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `colorBackground`, `colorAdBadge`, `colorAdBadgeText`, `heightCTA`, `templateId`, `components`, `click_action` của native, `open_resume.app_resume_load_delay_ms`. Hai JSON mới không khai báo lại các field này, mapping ad unit hoặc công tắc từng ad unit.
-- **ad_behavior_config:** timeout/cache, policy reload, frequency/AutoBuffer, consent timeout, telemetry, bo góc CTA native và hành vi app-open. Banner type/size là preset định dạng quảng cáo của SDK; không chứa resource/layout của app.
-- **onboarding_config:** bật/tắt bước của luồng, skip/X delay, auto-next, swipe/back, chiến lược splash, thời điểm preload LFO/OB và hành vi exit; kiểu nút X/Skip, hình/màu nút xác nhận LFO và lựa chọn ngôn ngữ trong catalog của app. Bật bước không bật lại placement đang `isEnable=false` trong ad_config.
+- **ad_behavior_config:** timeout/cache, policy reload, frequency/AutoBuffer, consent timeout, telemetry, bo góc CTA native, dạng resume và hành vi app-open. Banner type/size là preset định dạng quảng cáo của SDK; không chứa resource/layout của app.
+- **onboarding_config:** bật/tắt bước của luồng, skip/X delay, auto-next, swipe/back, chiến lược splash, thời điểm preload LFO/OB và hành vi exit; kiểu nút X/Skip, hình/màu nút xác nhận LFO, màu nút Start của màn native resume và lựa chọn ngôn ngữ trong catalog của app. Bật bước không bật lại placement đang `isEnable=false` trong ad_config.
 - **Code/resource của app:** reference `R.layout`, `R.drawable`, `R.string`, layout custom của trang, catalog/resource ngôn ngữ, progress indicator, system bars/orientation và Activity exclusions. Các preset trình bày quảng cáo có sẵn trong SDK vẫn được remote điều khiển; không cần truyền resource ID qua JSON.
 
 `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, mọi `placement`/`native_placement`, các switch ad unit và nhóm payload nội dung app `ui` đã được bỏ khỏi schema mới. Payload/cached payload còn các field này được bỏ qua; không ghi đè nơi quản lý chính.
@@ -63,7 +63,7 @@ OnboardingSdk.configure(onboardKitConfig {
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Welcome Back đầu; ALT | `native_welcome1`; `native_welcome2` (mỗi key có waterfall `ids` riêng) |
 | Exit interstitial | `inter_after_ob3` |
-| App resume | `open_resume`; `ad_config.json` hoặc backend khai báo kèm ID thì bật app-open mà không cần seed `idAdResume`. Gọi `AppOpenManager.getInstance().disableAppResume()` để giữ app-open tắt |
+| App resume | `app_resume.type` trong `ad_behavior_config` chọn `native_resume`, `inter_resume`, `open_resume` hoặc `none`; key ad_config cùng tên phải bật kèm ID, nếu không thì quay lại không hiện gì. `open_resume` khai kèm ID không cần seed `idAdResume`. `AppOpenManager.getInstance().disableAppResume()` giữ tắt mọi dạng |
 
 `inter_splash` là công tắc tổng cho user mới, `inter_splash_o` (hoặc `inter_splash` khi chưa khai báo `_o`) cho user cũ: `isEnable: false` ở đó tắt mọi inter splash của tệp user đó, kể cả entry. Entry dùng key riêng khi key được khai báo và đang bật, nếu không thì dùng key của tệp user. Load và show đều gate theo cùng key. Key Firebase cũ `ob_ads_splash_inter_enabled=false` tắt mọi inter splash cho tất cả user.
 
@@ -143,7 +143,7 @@ App/SDK chủ động gọi preload native. Preload replacement dùng `setEnable
 
 Slot inter splash được load trước rồi show từ buffer, nên `behavior` của nó nhận `load.tier_timeout_ms`; mọi wait `load_and_show.*` bị bỏ qua vì slot được load trước rồi mới show; field `load_and_show.*` ở đó bị bỏ qua. Chỉ inter cuối OB chờ fill: `onboarding.exit_interstitial.wait_timeout_ms` ưu tiên hơn `placement_overrides` và `interstitial.load_and_show.wait_timeout_ms` ở scope format. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên.
 
-Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Refresh banner của SDK bật mặc định (`banner.reload.allowed` và `banner.reload.auto_enabled` là `true`); interval chỉ đặt nhịp. Tắt refresh trên console AdMob cho mọi banner ad unit, kể cả mọi tầng, nếu không banner sẽ refresh hai lần. Muốn tắt refresh của SDK: đặt `banner.reload.auto_enabled` là `false` (không timer; vẫn reload khi resume) hoặc `banner.reload.allowed` là `false` (SDK không reload gì), cho toàn bộ hoặc trong `placement_overrides.<key>`. App-open delay chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms. Click vào ad thuộc mọi format chỉ bỏ qua lần app-open kế tiếp khi `app_open.presentation.skip_after_ad_click` là `true` (mặc định `false`). Không thêm banner tier timeout khi loader chưa có timer đó.
+Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Refresh banner của SDK bật mặc định (`banner.reload.allowed` và `banner.reload.auto_enabled` là `true`); interval chỉ đặt nhịp. Tắt refresh trên console AdMob cho mọi banner ad unit, kể cả mọi tầng, nếu không banner sẽ refresh hai lần. Muốn tắt refresh của SDK: đặt `banner.reload.auto_enabled` là `false` (không timer; vẫn reload khi resume) hoặc `banner.reload.allowed` là `false` (SDK không reload gì), cho toàn bộ hoặc trong `placement_overrides.<key>`. Thời gian ở background trước khi request ad resume chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms, dùng chung cho mọi `app_resume.type`. Click vào ad thuộc mọi format chỉ bỏ qua lần resume kế tiếp khi `app_open.presentation.skip_after_ad_click` là `true` (mặc định `false`). Không thêm banner tier timeout khi loader chưa có timer đó.
 
 Object behavior rỗng không che leaf ở scope rộng hơn hoặc nguồn bên dưới. `presentation.loading_enabled` dùng behavior đã chốt theo placement/format cho cả `show()` và `loadAndShow()`, kể cả ad đã có sẵn. Scope màn của interstitial (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) chỉ nhận `load.tier_timeout_ms` và `load_and_show.wait_timeout_ms` (scope splash bỏ `load_and_show.*`), nên đặt `loading_enabled` trong `placement_overrides.<key>` hoặc format `interstitial`. Banner đọc lại `enable_ua_check` của placement sau refresh; setter `forceUaCheck` tường minh của host ưu tiên hơn. Native vẫn áp dụng `presentation.cta_corner_radius_dp` khi helper không có style tường minh.
 
@@ -289,6 +289,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `app_open.presentation.pre_show_delay_ms` | `800` | Delay trước show cached app-open. |
 | `app_open.presentation.skip_after_ad_click` | `false` | Map policy click-return; explicit one-shot suppression từ host vẫn giữ. Chỉ khi `true`, click ad (mọi format) mới bỏ lần app-open kế tiếp. |
 | `app_open.cache.max_age_ms` | `14400000` | Không tăng quá lifetime hiện tại. |
+| `app_resume.type` | `native_resume` | Dạng ad khi quay lại: `native_resume`, `inter_resume`, `open_resume` hoặc `none`; giá trị khác bị bỏ qua, dùng tầng dưới. |
 | `placement_overrides` | `{}` | Override theo key ad_config; chỉ các field hành vi được hỗ trợ. |
 
 ### onboarding_config
@@ -372,6 +373,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `welcome_back.enabled` | `false` | Màn Welcome Back cho user cũ mở từ launcher; xem [Welcome Back](welcome-back-screen.vi.md). |
 | `welcome_back.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `welcome_back.native2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
+| `native_resume.start_button.color` | `"#FF375E"` | Màu chữ nút Start trên màn native resume; `""` giữ màu của layout. |
 
 `native_fs` chờ đúng lượt preload từ splash và hiện shimmer trong lúc chờ; vào màn không tạo request mới. Mặc định nút X hiện sau 3 giây kể từ khi bind ad. Màn không tự chuyển tiếp; key cũ `splash.native.auto_dismiss_ms` không còn tác dụng.
 

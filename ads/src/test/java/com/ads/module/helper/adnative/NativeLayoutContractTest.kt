@@ -38,7 +38,6 @@ class NativeLayoutContractTest {
         "../app/src/main/res/layout/layout_native_ad_large.xml",
         "../app/src/main/res/layout/layout_native_ad_medium.xml",
         "../app/src/main/res/layout/layout_native_permission.xml",
-        "../app/src/main/res/layout/layout_native_welcome.xml",
     )
 
     @Test

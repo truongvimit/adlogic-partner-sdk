@@ -7,7 +7,6 @@ import com.itg.template.ui.component.main.MainActivity
 import com.itg.template.ui.component.setting.SettingActivity
 import com.itg.template.ui.component.splash.SplashActivity
 import com.itg.template.ui.component.uninstall.SurveyActivity
-import com.itg.template.ui.component.welcome.WelcomeActivity
 import kotlin.jvm.java
 
 object Routes {
@@ -30,13 +29,6 @@ object Routes {
 
     fun startSettingActivity(fromActivity: Activity) =
         Intent(fromActivity, SettingActivity::class.java).apply {
-            putExtra(AppConstants.KEY_TRACKING_SCREEN_FROM, fromActivity::class.java.simpleName)
-            fromActivity.startActivity(this)
-        }
-
-
-    fun startWelcomeActivity(fromActivity: Activity) =
-        Intent(fromActivity, WelcomeActivity::class.java).apply {
             putExtra(AppConstants.KEY_TRACKING_SCREEN_FROM, fromActivity::class.java.simpleName)
             fromActivity.startActivity(this)
         }

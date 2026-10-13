@@ -86,7 +86,7 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Nội dung cần dán | Dùng cho |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), thay ID production của app | Mỗi placement một key: waterfall `ids` gồm các tầng `{"id", "isEnable"}` (cao nhất trước, all price cuối; một tầng nếu chỉ một unit), bật/tắt và các field CTA. `ids` remote của một key thay toàn bộ mảng, nên publish đủ mọi tầng kèm `isEnable`. Key khai báo ở đây ưu tiên hơn `ad_config.json` của app, và file này ưu tiên hơn ad unit ID ghi trong code; `open_resume` kèm ID sẽ bật app-open. Giữ nguyên tên parameter. |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), thay ID production của app | Mỗi placement một key: waterfall `ids` gồm các tầng `{"id", "isEnable"}` (cao nhất trước, all price cuối; một tầng nếu chỉ một unit), bật/tắt và các field CTA. `ids` remote của một key thay toàn bộ mảng, nên publish đủ mọi tầng kèm `isEnable`. Key khai báo ở đây ưu tiên hơn `ad_config.json` của app, và file này ưu tiên hơn ad unit ID ghi trong code; key mà `app_resume.type` của `ad_behavior_config` chọn phải bật kèm ID thì mới có ads khi quay lại. Giữ nguyên tên parameter. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Hành vi theo dạng ads, timeout, reload/cache và bo góc CTA native. |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB, X/Skip, swipe và preload. |
 

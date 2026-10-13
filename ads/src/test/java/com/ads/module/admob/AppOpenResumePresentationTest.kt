@@ -1,6 +1,7 @@
 package com.ads.module.admob
 
 import android.app.Activity
+import com.ads.module.config.settings.AdBehavior
 import android.app.Application
 import android.app.Dialog
 import android.content.Context
@@ -61,6 +62,8 @@ class AppOpenResumePresentationTest {
 
     @Before
     fun setUp() {
+        // Resume type defaults to native_resume; these suites exercise app-open.
+        AdBehavior.document.install("""{"app_resume":{"type":"open_resume"}}""", null)
         val app = ApplicationProvider.getApplicationContext<Application>()
         manager.disableAppResume()
         manager.init(app, "")
@@ -101,6 +104,7 @@ class AppOpenResumePresentationTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.install(null, null)
         tearingDown = true
         ResumePresentationDialogShadow.afterShow = null
         ResumePresentationDialogShadow.throwOnShow = false

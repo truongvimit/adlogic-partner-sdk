@@ -86,7 +86,7 @@ AdConfig.install(FirebaseAdConfigSource())
 
 | Firebase parameter (String) | Content to paste | Purpose |
 | --- | --- | --- |
-| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | One key per placement: its `ids` waterfall of `{"id", "isEnable"}` floors (highest first, all-price last; one floor for a single unit), switches and CTA fields. A key's remote `ids` replaces the whole array, so publish every floor with its `isEnable`. A key declared here outranks your `ad_config.json`, which outranks ad unit IDs written in code; an `open_resume` with an ID turns app-open on. Keep the existing parameter name. |
+| `ad_remote_config` | [ad_config.json](examples/ads-onboarding/ad_config.json), with your production IDs | One key per placement: its `ids` waterfall of `{"id", "isEnable"}` floors (highest first, all-price last; one floor for a single unit), switches and CTA fields. A key's remote `ids` replaces the whole array, so publish every floor with its `isEnable`. A key declared here outranks your `ad_config.json`, which outranks ad unit IDs written in code; the key named by `ad_behavior_config` `app_resume.type` must be on with an ID for ads on return. Keep the existing parameter name. |
 | `ad_behavior_config` | [ad_behavior_config.json](examples/ads-onboarding/ad_behavior_config.json) | Ad-format behavior, timeouts, reload/cache and native CTA radius. |
 | `onboarding_config` | [onboarding_config.json](examples/ads-onboarding/onboarding_config.json) | Splash/LFO/OB behavior, X/Skip, swipe and preload. |
 

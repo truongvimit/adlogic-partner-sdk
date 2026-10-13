@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import com.ads.module.config.settings.AdBehavior
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.ActivityManager
@@ -70,6 +71,8 @@ class AppOpenEarlyFlowDeviceTest {
             ConsentCenter.setHostConsent(true, false)
             manager.disableAppResume()
             manager.init(app, "")
+            // The resume type defaults to native_resume; this suite exercises app-open.
+            AdBehavior.document.acceptSuccessfulFetch("""{"app_resume":{"type":"open_resume"}}""")
             manager.setAppResumeAdId(UNIT)
             manager.enableAppResume()
             AdRemoteConfig.initializeFromJson("""{"open_resume":{"app_resume_load_delay_ms":500}}""")

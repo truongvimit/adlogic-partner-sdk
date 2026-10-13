@@ -151,5 +151,7 @@ internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = w
     is AdPlacement.StepFullScreen, AdPlacement.Ob5 -> adsFullScreenNative
     // Like native_fs: the native_welcome1/2 entries in ad_config own these slots.
     AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> true
+    // app_resume.type picks this slot; its ad_config native_resume entry switches it.
+    AdPlacement.ResumeNative -> true
     AdPlacement.AppResume -> adsAppResume
 }

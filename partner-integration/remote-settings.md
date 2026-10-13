@@ -24,8 +24,8 @@ The existing Firebase parameter remains `ad_remote_config`; `ad_config.json` / `
 | `onboarding_config` | [Copy/paste sample](examples/ads-onboarding/onboarding_config.json) | [SDK source asset](../onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json) |
 
 - **ad_config:** `ids`, `isEnable`, `enable_ua_check`, `reloadIntervalSeconds`, `colorCTA`, `colorBackground`, `colorAdBadge`, `colorAdBadgeText`, `heightCTA`, `templateId`, `components`, native `click_action`, `open_resume.app_resume_load_delay_ms`. The new documents do not duplicate these fields, ad-unit mappings or individual unit switches.
-- **ad_behavior_config:** ad-format timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA corner radius and app-open behavior. Banner type/size uses SDK presets.
-- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
+- **ad_behavior_config:** ad-format timeout/cache, reload policy, frequency/AutoBuffer, consent timeout, telemetry, native CTA corner radius, the resume type and app-open behavior. Banner type/size uses SDK presets.
+- **onboarding_config:** flow steps, X/Skip timing/style, auto-next, swipe/back, splash strategy, LFO/OB preload, exit behavior, LFO confirmation appearance, the native resume Start color and selection from the app's language catalog. Enabling a step cannot re-enable an ad unit with `isEnable=false`.
 - **App code/resources:** `R.layout`, `R.drawable`, `R.string`, custom page layouts, language resources/catalog, progress indicators, system bars/orientation and Activity exclusions. SDK ad-presentation presets remain remotely configurable.
 
 The removed aliases `app_open.presentation.excluded_hosts`, `app_open.enabled`, `app_open.load.background_delay_ms`, `banner.reload.interval_ms`, placement/native-placement mappings, duplicate unit switches and grouped app-content payload `ui` are ignored, including in old cached JSON. Existing remote UI APIs still work through `ob_ui_content`, `ob_ui_design_tokens` and `ob_enable_ui_content`; these are not new fields in the two grouped documents.
@@ -54,7 +54,7 @@ This is also the `onboardKitConfig` builder default. It preserves placement keys
 | OB5 | `native_onboarding_fullscreen_1_4` |
 | Welcome Back initial; ALT | `native_welcome1`; `native_welcome2` (each with its own `ids` waterfall) |
 | Exit interstitial | `inter_after_ob3` |
-| App resume | `open_resume`; declared with an ID in `ad_config.json` or by the backend, it turns app-open on without an `idAdResume` seed. Call `AppOpenManager.getInstance().disableAppResume()` to keep app-open off |
+| App resume | `ad_behavior_config` `app_resume.type` picks `native_resume`, `inter_resume`, `open_resume` or `none`; the ad_config key of the same name must be on with an ID, or the return shows nothing. `open_resume` declared with an ID needs no `idAdResume` seed. `AppOpenManager.getInstance().disableAppResume()` keeps every type off |
 
 `inter_splash` is the master switch for new users and `inter_splash_o` (or `inter_splash` while `_o` is not declared) for returning users: `isEnable: false` there turns off every splash interstitial for that segment, entries included. An entry spends its own key while it is declared and on, otherwise its segment's key. The load and the show are gated by the same key. The legacy Firebase key `ob_ads_splash_inter_enabled=false` turns every splash interstitial off for everyone.
 
@@ -123,7 +123,7 @@ Native preloads are initiated by app/SDK code. Replacement preloads use `setEnab
 
 The splash interstitial slot is loaded, then shown from the buffer, so its `behavior` accepts `load.tier_timeout_ms`; `load_and_show.*` wait is ignored because this slot loads before it shows. Only the exit interstitial waits for a fill: `onboarding.exit_interstitial.wait_timeout_ms` outranks `placement_overrides` and format `interstitial.load_and_show.wait_timeout_ms`. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
 
-Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). SDK banner refresh is on by default (`banner.reload.allowed` and `banner.reload.auto_enabled` are `true`); the interval only sets its cadence. Turn AdMob console refresh off on every banner ad unit, all floors included, or the banner refreshes twice. To turn SDK refresh off, set `banner.reload.auto_enabled` to `false` (no timer; reload on resume stays) or `banner.reload.allowed` to `false` (no SDK reload at all), globally or under `placement_overrides.<key>`. Initial app-open delay stays in `open_resume.app_resume_load_delay_ms` (2000 ms). A click on an ad of any format skips the next app-open only when `app_open.presentation.skip_after_ad_click` is `true` (default `false`). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
+Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). SDK banner refresh is on by default (`banner.reload.allowed` and `banner.reload.auto_enabled` are `true`); the interval only sets its cadence. Turn AdMob console refresh off on every banner ad unit, all floors included, or the banner refreshes twice. To turn SDK refresh off, set `banner.reload.auto_enabled` to `false` (no timer; reload on resume stays) or `banner.reload.allowed` to `false` (no SDK reload at all), globally or under `placement_overrides.<key>`. The background stay before any resume ad is requested stays in `open_resume.app_resume_load_delay_ms` (2000 ms), for every `app_resume.type`. A click on an ad of any format skips the next resume ad only when `app_open.presentation.skip_after_ad_click` is `true` (default `false`). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
 
 Empty behavior objects do not suppress broader or lower-source leaf values. `presentation.loading_enabled` follows the captured placement/format behavior for both `show()` and `loadAndShow()`, including a ready cached ad. Interstitial screen scopes (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) accept only `load.tier_timeout_ms` and `load_and_show.wait_timeout_ms` (the splash one drops `load_and_show.*`), so set `loading_enabled` under `placement_overrides.<key>` or the `interstitial` format. Banner placement `enable_ua_check` is re-read after remote refresh; an explicit host `forceUaCheck` setter takes priority. Native `presentation.cta_corner_radius_dp` also applies when the helper has no explicit style.
 
@@ -269,6 +269,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `app_open.presentation.pre_show_delay_ms` | `800` |
 | `app_open.presentation.skip_after_ad_click` | `false` |
 | `app_open.cache.max_age_ms` | `14400000` |
+| `app_resume.type` | `native_resume` — `native_resume`, `inter_resume`, `open_resume` or `none`; any other value is ignored and the lower tier applies. |
 | `placement_overrides` | `{}` |
 
 ### onboarding_config
@@ -352,6 +353,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `welcome_back.enabled` | `false` |
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
+| `native_resume.start_button.color` | `"#FF375E"` — Start text color on the native resume screen; `""` keeps the layout color. |
 
 `native_fs` joins its existing splash preload, showing shimmer while it loads; entering the screen never starts another request. The close button appears 3 seconds after binding by default. There is no automatic dismissal; the legacy `splash.native.auto_dismiss_ms` key is ignored.
 

@@ -1,5 +1,6 @@
 package io.onboardkit.ads
 
+import com.ads.module.config.settings.AdBehavior
 import android.accessibilityservice.AccessibilityService
 import android.app.ActivityManager
 import android.app.Application
@@ -48,6 +49,8 @@ class AppOpenResumeHomeReturnDeviceTest {
             assertFalse("Run this class alone in a fresh process", manager.isInitialized)
             manager.disableAppResume()
             manager.init(app, "")
+            // The resume type defaults to native_resume; this suite exercises app-open.
+            AdBehavior.document.acceptSuccessfulFetch("""{"app_resume":{"type":"open_resume"}}""")
             manager.setResumeSkipPolicy(null)
             manager.setDisableAdResumeByClickAction(false)
             manager.setInterstitialShowing(false)

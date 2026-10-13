@@ -148,6 +148,7 @@ class OnboardKitConfig internal constructor(
     val behavior: BehaviorConfig,
     val privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig(),
     val welcomeBackScreen: WelcomeBackScreenConfig = WelcomeBackScreenConfig(),
+    val resumeScreen: ResumeScreenConfig = ResumeScreenConfig(),
 ) {
     fun stepById(id: StepId): StepDefinition? = steps.firstOrNull { it.id == id }
 
@@ -159,6 +160,7 @@ class OnboardKitConfigBuilder internal constructor() {
     var language: LanguageConfig = LanguageConfig()
     var privacyGoalsScreen: PrivacyGoalsScreenConfig = PrivacyGoalsScreenConfig()
     var welcomeBackScreen: WelcomeBackScreenConfig = WelcomeBackScreenConfig()
+    var resumeScreen: ResumeScreenConfig = ResumeScreenConfig()
     var ads: AdsConfig = AdsConfig.fromAdConfig()
     var system: SystemBarConfig = SystemBarConfig()
     var behavior: BehaviorConfig = BehaviorConfig()
@@ -207,6 +209,7 @@ class OnboardKitConfigBuilder internal constructor() {
                     steps = stepList.toList(),
                     privacyGoalsScreen = privacyGoalsScreen,
                     welcomeBackScreen = welcomeBackScreen,
+                    resumeScreen = resumeScreen,
                     ads = ads,
                     system = system,
                     behavior = behavior,

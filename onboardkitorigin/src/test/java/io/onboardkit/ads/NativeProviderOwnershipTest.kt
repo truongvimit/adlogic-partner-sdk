@@ -1426,6 +1426,56 @@ class NativeProviderOwnershipTest {
         assertEquals(1, restored.requireView().findViewById<FrameLayout>(io.onboardkit.R.id.ob_native_container).childCount)
     }
 
+    @Test fun `native resume shows its configured screen and keeps its ad until the next background fill binds`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(resumeNative = request.unit)
+            resumeScreen = io.onboardkit.config.ResumeScreenConfig(title = "Back again", subtitle = "Carry on")
+        }.getOrThrow())
+        kotlinx.coroutines.runBlocking { io.onboardkit.OnboardingSdk.reset() }
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"native_resume":{"start_button":{"color":"#00FF00"}}}""",
+        )
+
+        ObNativeResume.prepare(host.application)
+        assertEquals(1, requests.size)
+        val first = Robolectric.buildActivity(io.onboardkit.ui.resume.ObResumeActivity::class.java).setup()
+        main.idle()
+        val firstAd = mock(NativeAd::class.java)
+        requests.single().onNativeAdLoaded(firstAd)
+        main.idle()
+        val screen = first.get()
+        assertEquals("Back again", screen.findViewById<android.widget.TextView>(io.onboardkit.R.id.ob_resume_title).text.toString())
+        assertEquals("Carry on", screen.findViewById<android.widget.TextView>(io.onboardkit.R.id.ob_resume_subtitle).text.toString())
+        val start = screen.findViewById<android.widget.TextView>(io.onboardkit.R.id.ob_resume_start)
+        assertEquals("Start", start.text.toString())
+        assertEquals(android.graphics.Color.GREEN, start.currentTextColor)
+        start.performClick()
+        assertTrue(screen.isFinishing)
+        first.pause().stop().destroy()
+        verify(firstAd, never()).destroy()
+
+        ObNativeResume.prepare(host.application)
+        assertEquals("Each background stay requests a fresh ad", 2, requests.size)
+        val second = Robolectric.buildActivity(io.onboardkit.ui.resume.ObResumeActivity::class.java).setup()
+        main.idle()
+        val container = second.get().findViewById<FrameLayout>(io.onboardkit.R.id.ob_resume_ad)
+        assertEquals(1, container.childCount)
+        assertTrue("The kept ad shows at once", container.getChildAt(0) is com.google.android.gms.ads.nativead.NativeAdView)
+        verify(firstAd, never()).destroy()
+
+        requests[1].onNativeAdLoaded(mock(NativeAd::class.java))
+        main.idle()
+        verify(firstAd).destroy()
+        assertEquals("Joining the background load, never doubling it", 2, requests.size)
+        second.pause().stop().destroy()
+    }
+
     @Test fun `rotation pending native failure resolves only once`() = verifyPendingRotationOutcome(fail = true)
 
     @Test fun `helper load failure during pause is deferred until resume`() =

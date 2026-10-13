@@ -38,10 +38,10 @@
   "native_confirm_uninstall": {
     "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }]
   },
-  "native_welcome": {
+  "native_resume": {
     "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }]
   },
-  "inter_welcome": {
+  "inter_resume": {
     "ids": [{ "id": "ca-app-pub-3940256099942544/1033173712" }]
   },
   "reward_example": {

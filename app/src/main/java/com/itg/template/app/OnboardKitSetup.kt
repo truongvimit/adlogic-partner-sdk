@@ -7,6 +7,7 @@ import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.LanguageConfig
 import io.onboardkit.config.PrivacyGoalsScreenConfig
+import io.onboardkit.config.ResumeScreenConfig
 import io.onboardkit.config.GoalsScreenConfig
 import io.onboardkit.config.GoalOption
 import io.onboardkit.config.SelectionMode
@@ -57,6 +58,12 @@ object OnboardKitSetup {
                     subtitleRes = R.string.onboarding_des_4,
                     imageRes = R.drawable.img_onboard_sample_4,
                 ),
+            )
+            // The screen app_resume.type native_resume opens on a return from the background.
+            resumeScreen = ResumeScreenConfig(
+                titleRes = R.string.onboarding_title_1,
+                subtitleRes = R.string.onboarding_des_1,
+                imageRes = R.drawable.img_onboard_sample_1,
             )
             // Standard placement keys resolve directly from the current ad_config on each use.
             // Behavioral defaults/overrides come from the two bundled settings JSON documents.

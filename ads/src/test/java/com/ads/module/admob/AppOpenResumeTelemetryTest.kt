@@ -1,6 +1,7 @@
 package com.ads.module.admob
 
 import android.app.Activity
+import com.ads.module.config.settings.AdBehavior
 import android.app.Application
 import android.content.Context
 import android.os.Looper
@@ -46,6 +47,8 @@ class AppOpenResumeTelemetryTest {
 
     @Before
     fun setUp() {
+        // Resume type defaults to native_resume; these suites exercise app-open.
+        AdBehavior.document.install("""{"app_resume":{"type":"open_resume"}}""", null)
         app = ApplicationProvider.getApplicationContext()
         manager.disableAppResume()
         manager.currentActivity?.let { manager.onActivityDestroyed(it) }
@@ -66,6 +69,7 @@ class AppOpenResumeTelemetryTest {
 
     @After
     fun tearDown() {
+        AdBehavior.document.install(null, null)
         manager.disableAppResume()
         manager.setAppResumeAdId("")
         manager.releaseCachedAds()
