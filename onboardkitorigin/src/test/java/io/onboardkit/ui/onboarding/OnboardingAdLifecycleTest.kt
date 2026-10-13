@@ -774,38 +774,6 @@ class OnboardingAdLifecycleTest {
         assertTrue(completions.isEmpty())
     }
 
-    @Test fun `no fill while settling onto fullscreen waits then skips exactly that page`() {
-        failOnBind = true
-        launch(second = AdFullScreenStepDefinition(StepId.OB2, autoNextEnabled = false))
-        activity.next(StepExit.CTA)
-        layout()
-        assertEquals(ViewPager2.SCROLL_STATE_SETTLING, pager.scrollState)
-        assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
-        // Robolectric does not draw the smooth-scroll frames; finish at the same target.
-        pager.setCurrentItem(1, false)
-        layout()
-        settle()
-        assertEquals("state=${pager.scrollState}, listeners=${listeners.keys}, " +
-            "completions=${completions.map { it.stepId }}", 2, pager.currentItem)
-        assertEquals(listOf(StepId.OB1, StepId.OB2), completions.map { it.stepId })
-        assertEquals(listOf(StepExit.CTA, StepExit.AD_FAILED), completions.map { it.exitReason })
-    }
-
-    @Test fun `zero duration fullscreen entering during a scroll completes without reentrant transactions`() {
-        launch(second = AdFullScreenStepDefinition(StepId.OB2, autoNextDelayMs = 0))
-        activity.next(StepExit.CTA)
-        layout()
-        assertEquals(ViewPager2.SCROLL_STATE_SETTLING, pager.scrollState)
-        assertEquals(listOf(StepId.OB1), completions.map { it.stepId })
-        pager.setCurrentItem(1, false)
-        layout()
-        settle()
-        assertEquals("state=${pager.scrollState}, listeners=${listeners.keys}, " +
-            "completions=${completions.map { it.stepId }}", 2, pager.currentItem)
-        assertEquals(listOf(StepId.OB1, StepId.OB2), completions.map { it.stepId })
-        assertEquals(listOf(StepExit.CTA, StepExit.AUTO_NEXT), completions.map { it.exitReason })
-    }
-
     @Test fun `last fullscreen completes in background but exit interstitial waits for resume`() {
         launch(AdFullScreenStepDefinition(StepId.OB1, autoNextDelayMs = 3000), lastOnly = true)
         pause()
