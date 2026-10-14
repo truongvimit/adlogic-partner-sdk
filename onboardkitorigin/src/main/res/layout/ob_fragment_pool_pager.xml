@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SHARED_POOL pager stage: steps own their indicator and CTA, so the stage is the pager plus OB1's back. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_white">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/ob_pool_pager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- OB1 only, behind onboarding.steps.ob1.back.enabled: returns to the LFO stage. -->
+    <ImageButton
+        android:id="@+id/ob_pool_step_back"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:accessibilityTraversalBefore="@id/ob_pool_pager"
+        android:background="@drawable/ob_bg_step_back"
+        android:contentDescription="@string/ob_back"
+        android:src="@drawable/ob_ic_back"
+        android:visibility="gone" />
+</FrameLayout>

@@ -48,6 +48,9 @@ internal interface PoolPagerStage : PoolStage {
     fun next(exitReason: String?)
     fun completeAdStep(stepId: StepId, exitReason: String)
     fun onWindowTouched()
+
+    /** The placement [stepId]'s page was planned with; null for a page without a slot. */
+    fun pagePlacement(stepId: StepId): AdPlacement?
 }
 
 /**
@@ -260,6 +263,11 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         callbacks: StepSlotCallbacks,
     ): Boolean {
         if (!OnboardingPool.isActive) return false
+        // A page planned without a placement draws nothing in DashDrama; a slot would borrow other ads.
+        if (placement is AdPlacement.StepNative && pagerStage()?.pagePlacement(placement.stepId) == null) {
+            callbacks.onUnavailable(AdSkipReason.NO_AD_UNIT)
+            return true
+        }
         val minState = if (snapshot.parity.pagerSlotsBindResumed) Lifecycle.State.RESUMED else Lifecycle.State.STARTED
         PoolNativeSlot(
             owner = fragment.viewLifecycleOwner,
