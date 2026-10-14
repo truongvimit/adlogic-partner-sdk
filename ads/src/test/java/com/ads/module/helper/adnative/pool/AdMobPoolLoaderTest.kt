@@ -16,6 +16,7 @@ import com.ads.module.helper.interstitial.Int02Application
 import com.ads.module.helper.interstitial.Int02FacebookShadow
 import com.ads.module.helper.interstitial.Int02MobileAdsShadow
 import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdListener
 import io.trackkit.PlacementRegistry
 import io.trackkit.TrackSink
 import io.trackkit.Tracker
@@ -174,8 +175,54 @@ class AdMobPoolLoaderTest {
         gma.last().listener.onAdImpression()
         gma.last().listener.onAdClicked()
         gma.last().listener.onAdOpened()
-        assertEquals(listOf("loaded", "impression", "clicked", "clicked"), sink.names)
+        assertEquals(listOf("loaded", "impression", "clicked"), sink.names)
         assertTrue(sink.calls.all { it.ad === ad && it.onMain })
+    }
+
+    @Test fun `one tap is one click in either callback order, and a second tap is another`() {
+        listOf<(AdListener) -> Unit>(
+            { it.onAdClicked(); it.onAdOpened() },
+            { it.onAdOpened(); it.onAdClicked() },
+        ).forEach { tap ->
+            val sink = RecordingSink()
+            loader.load(request(), "unit-a", sink)
+            gma.last().fill()
+            tap(gma.last().listener)
+            assertEquals(listOf("loaded", "clicked"), sink.names)
+            main.idleFor(1, TimeUnit.SECONDS)
+            tap(gma.last().listener)
+            assertEquals(listOf("loaded", "clicked", "clicked"), sink.names)
+        }
+    }
+
+    @Test fun `an adapter that reports a tap with one callback only has every tap counted`() {
+        val clickedOnly = RecordingSink()
+        loader.load(request(), "unit-a", clickedOnly)
+        gma.last().fill()
+        repeat(2) { gma.last().listener.onAdClicked() }
+        assertEquals("Pangle-like", listOf("loaded", "clicked", "clicked"), clickedOnly.names)
+
+        val openedOnly = RecordingSink()
+        loader.load(request(), "unit-b", openedOnly)
+        gma.last().fill()
+        repeat(2) { gma.last().listener.onAdOpened() }
+        assertEquals("Meta-like", listOf("loaded", "clicked", "clicked"), openedOnly.names)
+    }
+
+    @Test fun `each id pairs only its own ad's callbacks`() {
+        val first = RecordingSink()
+        loader.load(request(), "unit-a", first)
+        val firstGma = gma.last()
+        firstGma.fill()
+        val second = RecordingSink()
+        loader.load(request(), "unit-b", second)
+        val secondGma = gma.last()
+        secondGma.fill()
+
+        firstGma.listener.onAdClicked()
+        secondGma.listener.onAdOpened()
+        assertEquals(listOf("loaded", "clicked"), first.names)
+        assertEquals(listOf("loaded", "clicked"), second.names)
     }
 
     @Test fun `failures settle the id at most once and never after a fill`() {

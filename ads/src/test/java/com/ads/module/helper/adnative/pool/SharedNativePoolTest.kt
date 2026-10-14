@@ -237,8 +237,8 @@ class SharedNativePoolTest {
         gma.last().listener.onAdOpened()
         assertTrue(loader()!!.state is PoolState.Showing)
         assertEquals(
-            listOf(PoolEvent.Impression(request.key, held.ad!!), PoolEvent.Clicked(request.key, held.ad!!),
-                PoolEvent.Clicked(request.key, held.ad!!)),
+            "One tap reported as clicked and opened is one click",
+            listOf(PoolEvent.Impression(request.key, held.ad!!), PoolEvent.Clicked(request.key, held.ad!!)),
             events.filter { it is PoolEvent.Impression || it is PoolEvent.Clicked },
         )
         assertTrue("Adoption requests nothing itself", fakeLoader.sinks.isEmpty())
@@ -249,13 +249,26 @@ class SharedNativePoolTest {
         val sink = CountingSink()
         val (callback, ad) = observedCallback(sink)
         assertEquals("Forwarded while the ad lives", 1, sink.impressions)
-        assertEquals(2, sink.clicks)
+        assertEquals("One tap, reported as clicked and opened", 1, sink.clicks)
 
         awaitCollected(ad)
         callback.onAdImpression()
         callback.onAdClicked()
         assertEquals(1, sink.impressions)
-        assertEquals(2, sink.clicks)
+        assertEquals(1, sink.clicks)
+    }
+
+    @Test fun `an adopted ad reports one click per tap whatever its adapter sends`() {
+        val ad = ApNativeAd(R.layout.custom_native_admob_medium, PoolVendorAd())
+        val gmaLike = CountingSink()
+        SharedNativePool.eventsInto(ad, gmaLike).apply { onAdOpened(); onAdClicked() }
+        assertEquals(1, gmaLike.clicks)
+        val metaLike = CountingSink()
+        SharedNativePool.eventsInto(ad, metaLike).apply { onAdOpened(); onAdOpened() }
+        assertEquals(2, metaLike.clicks)
+        val pangleLike = CountingSink()
+        SharedNativePool.eventsInto(ad, pangleLike).apply { onAdClicked(); onAdClicked() }
+        assertEquals(2, pangleLike.clicks)
     }
 
     @Test fun `ready adoption needs a pool and a ready fill`() {

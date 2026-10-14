@@ -16,6 +16,7 @@ import com.google.android.gms.ads.LoadAdError
 /**
  * One `ERainAd` native request per id; the glue, not this loader, reports `ad_request`.
  * An [AdGate] refusal is posted as a failure, never left silent like `Admob.loadNativeAd`'s.
+ * A tap reaches the sink as one click, however many of clicked and opened report it.
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 class AdMobPoolLoader internal constructor(
@@ -48,6 +49,7 @@ class AdMobPoolLoader internal constructor(
     private inner class IdCallback(private val sink: PoolLoadSink<ApNativeAd>) : AdCallback() {
         private var ad: ApNativeAd? = null
         private var settled = false
+        private val gesture = PoolClickGesture(SystemPoolClock)
 
         override fun onNativeAdLoaded(nativeAd: ApNativeAd) = onMain {
             if (settled) {
@@ -65,9 +67,9 @@ class AdMobPoolLoader internal constructor(
 
         override fun onAdImpression() = onMain { ad?.let(sink::onImpression) }
 
-        override fun onAdClicked() = onMain { ad?.let(sink::onClicked) }
+        override fun onAdClicked() = onMain { ad?.takeIf { gesture.clicked() }?.let(sink::onClicked) }
 
-        override fun onAdOpened() = onMain { ad?.let(sink::onClicked) }
+        override fun onAdOpened() = onMain { ad?.takeIf { gesture.opened() }?.let(sink::onClicked) }
 
         fun fail() = onMain {
             if (settled) return@onMain

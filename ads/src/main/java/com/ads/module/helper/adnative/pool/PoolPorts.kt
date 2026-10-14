@@ -18,6 +18,8 @@ interface PoolLoadSink<H : Any> {
     fun onLoaded(ad: H)
     fun onFailed()
     fun onImpression(ad: H)
+
+    /** Once per tap, however many vendor callbacks (clicked, opened) report that tap. */
     fun onClicked(ad: H)
 }
 

@@ -121,17 +121,18 @@ object SharedNativePool {
     @VisibleForTesting
     internal fun eventsInto(ad: ApNativeAd, sink: PoolLoadSink<ApNativeAd>): AdCallback {
         val ref = WeakReference(ad)
+        val gesture = PoolClickGesture(SystemPoolClock)
         return object : AdCallback() {
             override fun onAdImpression() {
                 ref.get()?.let(sink::onImpression)
             }
 
             override fun onAdClicked() {
-                ref.get()?.let(sink::onClicked)
+                ref.get()?.takeIf { gesture.clicked() }?.let(sink::onClicked)
             }
 
             override fun onAdOpened() {
-                ref.get()?.let(sink::onClicked)
+                ref.get()?.takeIf { gesture.opened() }?.let(sink::onClicked)
             }
         }
     }
