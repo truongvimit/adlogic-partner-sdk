@@ -6,7 +6,7 @@
 
 [English](remote-settings.md) · [Tiếng Việt](remote-settings.vi.md) · [हिन्दी](remote-settings.hi.md)
 
-SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK, trừ `onboarding.primary_color`: file mẫu để `""` để giữ màu hiện có của app, còn asset SDK đặt `"#FF375E"`.
+SDK giữ nguyên Firebase `ad_remote_config`, assets `ad_config.json` / `ad_config_debug.json`. Hai parameter mới là **String chứa object JSON**. Xem [các bước publish trên Firebase](firebase-integration.vi.md#remote-json) và [tạo hai file local custom default](firebase-integration.vi.md#local-defaults). Các [file mẫu](examples/ads-onboarding/) khớp default SDK, trừ ba chỗ trong file onboarding: `onboarding.primary_color` để `""` để giữ màu hiện có của app, còn asset SDK đặt `"#FF375E"`; `onboarding.exit_interstitial.enabled` là `true`, tức bật interstitial cuối OB, còn default SDK là `false`; và không có scope [`native_flow`](#kiểu-native-flow), nên app copy file mẫu làm asset vẫn lấy native flow từ remote và default SDK.
 
 Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvimit/adlogic-partner-sdk) cho mọi module. Chỉ thêm key Firebase không nâng cấp SDK cũ đã tích hợp trong app.
 
@@ -15,7 +15,7 @@ Dùng **version SDK mới nhất** trên [JitPack](https://jitpack.io/#truongvim
 | `ad_behavior_config` | `ads/src/main/assets/adlogic_defaults/ad_behavior_config.json` |
 | `onboarding_config` | `onboardkitorigin/src/main/assets/adlogic_defaults/onboarding_config.json` |
 
-Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
+Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau pager và interstitial cuối pager (nếu được bật; mặc định tắt). Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](privacy-goals-screen.vi.md).
 
 Welcome Back mặc định ẩn; bật `welcome_back.enabled` để user cũ mở từ launcher vào màn này sau splash. Xem [Welcome Back](welcome-back-screen.vi.md).
 
@@ -223,6 +223,63 @@ Ví dụ chỉnh phía nút X cho từng trang native fullscreen. JSON gốc kha
 
 Các field chỉ thuộc app đã loại khỏi nhóm UI 26 field là `flow.lock_portrait`, ba field `flow.system_bars.*` và `onboarding.steps.ob1/ob2/ob4.progress_visible`. Chúng tiếp tục dùng `BehaviorConfig`, `SystemBarConfig`, `ContentStepDefinition.showsProgressIndicator` với default cũ. Payload nội dung `ui.*` không nhân bản sang JSON mới; nội dung UI remote cũ vẫn qua `ob_ui_content`, `ob_ui_design_tokens` và toggle `ob_enable_ui_content`.
 
+## Kiểu native flow
+
+`native_flow.type` trong `onboarding_config` chọn cách các màn sau splash lấy native:
+
+- `PER_SCREEN` (mặc định): flow mà phần còn lại của tài liệu này mô tả. LFO, từng trang onboarding và Privacy → Goal tự request placement của riêng mình.
+- `SHARED_POOL`: LFO, pager onboarding và Privacy → Goal chạy trong một màn của SDK, mọi slot native lấy ad từ một pool dùng chung. Màn đang ở trước hiện ad của chính placement của nó ngay khi pool có ad đó; trước đó slot hiện ad mới nhất trong pool chưa được hiển thị, rồi tới ad đã hiển thị ở màn khác. Khi đang có một request chạy, lượt load nền của các màn khác bị bỏ qua chứ không xếp hàng. Key ad_config, các tầng và công tắc `isEnable` giống hệt `PER_SCREEN`. Kiểu này cần ad provider có sẵn của SDK; với `OnboardingAdProvider` tùy biến, lượt chạy vẫn là `PER_SCREEN`.
+
+Kiểu được đọc một lần mỗi lượt chạy, lúc splash mở màn ngôn ngữ; giá trị về sau áp dụng từ lượt chạy kế tiếp, nên một lượt không bao giờ đổi kiểu giữa chừng. Welcome Back và màn chọn ngôn ngữ trong app luôn dùng `PER_SCREEN`. Sau một lượt `SHARED_POOL`, native resume (`app_resume.type` `native_resume`) trong cùng process mở màn resume của pool: màn này hiện ad còn lại trong pool và request `native_resume`; lần mở nguội kế tiếp dùng lại màn resume thường.
+
+- **Alias phẳng.** Backend chỉ publish key phẳng có thể gửi Boolean `ob_native_reuse_enabled` (mặc định `false`): `true` chọn `SHARED_POOL`, `false` chọn `PER_SCREEN`. Key chỉ được tính khi backend thực sự gửi về, và được cache cho lần mở nguội kế tiếp như các key `ob_*` khác. Thứ tự ưu tiên: `native_flow.type` remote > `ob_native_reuse_enabled` đã gửi > asset app > default SDK `PER_SCREEN`. `native_flow.type` không hợp lệ bị bỏ qua và nguồn kế tiếp được áp dụng.
+- **Analytics.** Mỗi lượt chạy có mở màn ngôn ngữ đặt user property `ob_native_flow` thành `per_screen` hoặc `shared_pool`, tức flow thực sự đã chạy.
+- **Lần mở đầu tiên.** Splash không chờ remote, nên bản cài mới mà lượt fetch đầu chưa về sẽ chạy kiểu do asset app hoặc default SDK quy định, và onboarding không chạy lại sau khi hoàn tất. Tách kết quả A/B theo user property `ob_native_flow`, không theo giá trị remote được gán.
+- **QA.** Đặt `{"native_flow":{"type":"SHARED_POOL"}}` vào asset `onboarding_config.json` của app, hoặc publish remote, rồi khởi động lại process.
+
+Giá trị chỉ `SHARED_POOL` đọc nằm dưới `native_flow.pool`, đặt tên theo key classic cùng ý nghĩa. Key classic vẫn điều khiển `PER_SCREEN` và pool không đọc nó:
+
+| Key `PER_SCREEN` (mặc định) | Key `SHARED_POOL` (mặc định) |
+| --- | --- |
+| `onboarding.fullscreen.skip.delay_ms` (`5000`) | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` (`2000`), tính từ lần resume đầu của trang |
+| `onboarding.fullscreen.auto_next.delay_ms` (`15000`) | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (`10000`), tính từ lúc chọn trang |
+| `lfo.confirm_button.visible_before_selection` (`true`) | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (`3000`): nút xác nhận ẩn tới khi đủ khoảng này sau lần tap ngôn ngữ đầu tiên |
+| không có | `native_flow.pool.select.next_reveal_delay_ms` (`3000`): nút Continue của Privacy và Next của Goal ẩn tới khi đủ khoảng này sau lần đổi consent hoặc tap lựa chọn đầu tiên |
+
+Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, tap lại hàng đang chọn), nút back OB1 (`onboarding.steps.ob1.back.enabled`), thời hạn ad (`native.cache.max_age_ms` trong `ad_behavior_config`, một giờ) và thời gian chờ mỗi tầng (`native.load.tier_timeout_ms` cùng `placement_overrides` của nó, 30 giây; tầng không trả lời kịp được tính là lỗi và tầng kế tiếp được request). `onboarding.order`, `privacy_goals_screen.enabled` và `lfo.exit.reuse_splash_inter` áp dụng cho cả hai.
+
+`SHARED_POOL` không dùng các tính năng sau của `PER_SCREEN`: bàn tay gợi ý ở LFO và việc đưa ngôn ngữ thiết bị lên đầu, swap LFO2 và các timer của nó, `click_action` (click không chuyển trang cũng không reload), OB5, vuốt pager, interstitial cuối pager và paywall sau Goal. Back hệ thống không làm gì ở mọi màn của nó; nút back OB1 quay về LFO, giữ ngôn ngữ đã chọn và hiện sẵn nút xác nhận. Done ở LFO hiện interstitial splash còn lại khi `lfo.exit.reuse_splash_inter` là `true`, Next ở Goal cũng vậy khi `native_flow.pool.goals.exit_reuse_splash_inter` là `true`.
+
+| Field trong `native_flow.pool` | Mặc định | Tác dụng |
+| --- | --- | --- |
+| `adopt_splash_language1` | `true` | Native LFO1 mà splash đã preload được đưa vào pool thay vì request lại. |
+| `locale_apply` | `"IN_PLACE"` | `IN_PLACE` áp ngôn ngữ đã chọn lên màn đang chạy; `RECREATE` tạo lại màn. |
+| `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: chặng kế tiếp bắt đầu sau khi ad thoát của LFO hoặc Goal đóng, hay ngay bên dưới ad. |
+| `done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ; `false` giữ chỗ của nó. |
+| `pager.smooth_scroll` | `true` | Chuyển trang có animation. |
+| `pager.offscreen_pages` | `0` | Số trang giữ sống cạnh trang hiện tại; `0` giữ mọi trang. |
+| `resume_on_goals` | `true` | Ad khi quay lại app được phép hiện ở Privacy và Goal. |
+| `stuck_loading_log_ms` | `60000` | Ghi log request còn chạy sau khoảng này; chỉ log. |
+| `view.destroy_on_teardown` | `true` | View ad của slot bị hủy khi màn của nó đóng; ad vẫn ở trong pool. |
+| `goals.exit_reuse_splash_inter` | `true` | Next ở Goal hiện interstitial splash còn lại. |
+| `parity.refresh_overwrites_unshown` | `true` | Refresh khi quay lại màn thay cả ad chưa hiển thị; `false` chỉ thay ad đã hiển thị. |
+| `parity.retry_skipped_polite` | `false` | Lượt load nền bị bỏ qua khi request khác đang chạy thì bỏ luôn; `true` chạy lại khi pool rảnh. |
+| `parity.async_gate` | `true` | Trạng thái có request đang chạy được tính ngoài main thread và có thể trễ một frame; `false` tính ngay. |
+| `parity.async_selector` | `true` | Ad mỗi slot hiện được chọn ngoài main thread; `false` chọn ngay. |
+| `parity.borrow_showing` | `true` | Slot không còn gì khác để hiện có thể hiện ad đã hiển thị ở nơi khác; `false` ẩn slot. |
+| `parity.destroy_replaced_ads` | `false` | Ad bị thay hoặc hết hạn được bỏ mà không destroy; `true` destroy nó. |
+| `parity.keep_duplicate_ids` | `true` | Request các tầng đúng như liệt kê trong ad_config, giữ cả ID trùng; `false` bỏ ID trùng. |
+| `parity.impression_marks_loader` | `true` | Impression bất kỳ từ các request của placement đánh dấu placement đã hiển thị; `false` chỉ impression của ad hiện tại. |
+| `parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal và màn resume bind ad khi đã start; `false` khi đã resume. |
+| `parity.pager_slots_bind_resumed` | `true` | Trang pager bind ad khi đã resume; `false` khi đã start. |
+| `parity.keep_after_flow` | `true` | Pool sống tới khi process kết thúc, phục vụ màn resume; `false` giải phóng pool khi onboarding hoàn tất. |
+| `parity.reset_on_new_run` | `false` | Lượt chạy mới giữ ad trong pool; `true` bắt đầu với pool rỗng. |
+| `parity.respect_focus_window` | `false` | Request không chờ window focus; `true` chờ như native của `PER_SCREEN`. |
+| `parity.resume_background_preload` | `false` | Native resume chỉ request khi màn của nó mở; `true` còn preload ở background. |
+| `parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy, nên lượt load nền của màn khác phải chờ trong khi ad đang giữ vẫn hiện; `false` để refresh không ảnh hưởng tới kiểm tra đó. |
+
+Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
+
 ## Fetch và publish
 
 Firebase `fetchAndActivate().await()` chia sẻ tác vụ đang chạy qua delegate suite/example; timeout/cancellation của caller không hủy caller khác. Parse/validate trên Default, persist trên IO, publish snapshot trước khi flow dùng cấu hình; các notification chạm ads/UI chạy Main. Preset template/Skip và style ads đọc snapshot tại điểm sử dụng; payload nội dung trang qua API remote UI cũ vẫn có luồng publish riêng.
@@ -358,8 +415,8 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `onboarding.steps.full2.fullscreen.skip.position` | `"RIGHT"` | Phía đặt X/Skip của riêng trang full2. |
 | `onboarding.order` | Thứ tự app khi thiếu | Array chọn/sắp xếp catalog; `[]` bỏ pager. |
 | `onboarding.preload.ob5_on_last_step` | `true` | Preload duy nhất của OB5, chạy khi tới cuối pager; vẫn cần OB5 bật. Lúc rời pager OB5 chỉ mở khi native đã load xong, nên `false` tắt hẳn OB5 dù `ob5.enabled` là `true`. |
-| `onboarding.exit_interstitial.enabled` | `true` | Bật/tắt hành động interstitial cuối OB; unit vẫn phải được ad_config cho phép. |
-| `onboarding.exit_interstitial.preload_on_entry` | `true` | Preload inter kết thúc OB khi vào pager. |
+| `onboarding.exit_interstitial.enabled` | `false` | Mặc định tắt: interstitial cuối OB chỉ hiện khi remote, asset app, `ob_ads_inter_after_ob3_enabled = true` đã gửi về hoặc `AdsConfig.afterOnboardingInterstitialEnabled = true` bật nó; unit vẫn phải được ad_config cho phép. SDK cũ mặc định `true`. |
+| `onboarding.exit_interstitial.preload_on_entry` | `true` | Khi inter cuối OB đã bật, preload nó lúc vào pager. |
 | `onboarding.exit_interstitial.wait_timeout_ms` | `8000` | Riêng inter cuối OB. |
 | `onboarding.exit_interstitial.next_screen_timing` | `"UNDER_AD"` | AFTER_AD/UNDER_AD; entry đặc biệt vẫn AFTER_AD. |
 | `onboarding.exit_interstitial.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
@@ -374,6 +431,36 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `welcome_back.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `welcome_back.native2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `native_resume.start_button.color` | `"#FF375E"` | Màu chữ nút Start trên màn native resume; `""` giữ màu của layout. |
+| `native_flow.type` | `"PER_SCREEN"` | `PER_SCREEN` / `SHARED_POOL`; xem [Kiểu native flow](#kiểu-native-flow). |
+| `native_flow.pool.parity.refresh_overwrites_unshown` | `true` | Refresh thay cả ad chưa hiển thị. |
+| `native_flow.pool.parity.retry_skipped_polite` | `false` | Load nền bị bỏ qua không chạy lại. |
+| `native_flow.pool.parity.async_gate` | `true` | Trạng thái request đang chạy tính ngoài main thread. |
+| `native_flow.pool.parity.async_selector` | `true` | Ad của slot được chọn ngoài main thread. |
+| `native_flow.pool.parity.borrow_showing` | `true` | Slot được mượn ad đã hiển thị ở nơi khác. |
+| `native_flow.pool.parity.destroy_replaced_ads` | `false` | Ad bị thay không bị destroy. |
+| `native_flow.pool.parity.keep_duplicate_ids` | `true` | Giữ ID trùng trong waterfall. |
+| `native_flow.pool.parity.impression_marks_loader` | `true` | Impression bất kỳ của placement đánh dấu đã hiển thị. |
+| `native_flow.pool.parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal, màn resume bind khi start. |
+| `native_flow.pool.parity.pager_slots_bind_resumed` | `true` | Trang pager bind khi resume. |
+| `native_flow.pool.parity.keep_after_flow` | `true` | Pool sống tới hết process. |
+| `native_flow.pool.parity.reset_on_new_run` | `false` | Lượt chạy mới giữ pool. |
+| `native_flow.pool.parity.respect_focus_window` | `false` | Không chờ window focus. |
+| `native_flow.pool.parity.resume_background_preload` | `false` | Native resume không preload ở background. |
+| `native_flow.pool.parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy. |
+| `native_flow.pool.adopt_splash_language1` | `true` | Dùng native LFO1 splash đã preload. |
+| `native_flow.pool.locale_apply` | `"IN_PLACE"` | `IN_PLACE` / `RECREATE`. |
+| `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD` cho lối thoát LFO và Goal. |
+| `native_flow.pool.done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ. |
+| `native_flow.pool.pager.smooth_scroll` | `true` | Chuyển trang có animation. |
+| `native_flow.pool.pager.offscreen_pages` | `0` | `0` giữ mọi trang. |
+| `native_flow.pool.resume_on_goals` | `true` | Ad quay lại app được hiện ở Privacy/Goal. |
+| `native_flow.pool.stuck_loading_log_ms` | `60000` | Chỉ log. |
+| `native_flow.pool.view.destroy_on_teardown` | `true` | Hủy view ad khi màn đóng. |
+| `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` | Tương ứng `lfo.confirm_button.visible_before_selection` của `PER_SCREEN`. |
+| `native_flow.pool.select.next_reveal_delay_ms` | `3000` | Nút Continue/Next của Privacy và Goal. |
+| `native_flow.pool.goals.exit_reuse_splash_inter` | `true` | Next ở Goal dùng interstitial splash còn lại. |
+| `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` | Tương ứng `onboarding.fullscreen.skip.delay_ms` (`5000`). |
+| `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` | `10000` | Tương ứng `onboarding.fullscreen.auto_next.delay_ms` (`15000`), tính từ lúc chọn trang. |
 
 `native_fs` chờ đúng lượt preload từ splash và hiện shimmer trong lúc chờ; vào màn không tạo request mới. Mặc định nút X hiện sau 3 giây kể từ khi bind ad. Màn không tự chuyển tiếp; key cũ `splash.native.auto_dismiss_ms` không còn tác dụng.
 

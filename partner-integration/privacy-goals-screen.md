@@ -2,7 +2,7 @@
 
 [English](privacy-goals-screen.md) · [Tiếng Việt](privacy-goals-screen.vi.md) · [हिन्दी](privacy-goals-screen.hi.md)
 
-Privacy → Goal is an optional final part of onboarding: Splash → language → onboarding pager → exit interstitial → Privacy → Goal → app. It is available only for an unfinished flow. Enable it in the app asset or remote `onboarding_config`:
+Privacy → Goal is an optional final part of onboarding: Splash → language → onboarding pager → exit interstitial (when enabled; off by default) → Privacy → Goal → app. It is available only for an unfinished flow. Enable it in the app asset or remote `onboarding_config`:
 
 ```json
 { "privacy_goals_screen": { "enabled": true } }
@@ -61,7 +61,7 @@ Privacy and Goal have separate SDK placements sharing these configured keys. `na
 
 Each key's `isEnable` controls its entire `ids` waterfall; a floor's own `isEnable` pauses only that floor. Turning off either key disables that ad slot, not the screens. Consent, premium, UA and the global ad gate still apply. There are no separate `privacyAd.enabled`/`goalAd.enabled` switches.
 
-Privacy's first native preloads on the actual last pager step, including a fullscreen step. `onboarding.exit_interstitial.next_screen_timing` remains effective: `UNDER_AD` opens Privacy under the exit ad; `AFTER_AD` waits for dismissal. Notification/widget/uninstall entries wait for dismissal in this exit path.
+Privacy's first native preloads on the actual last pager step, including a fullscreen step. When the exit interstitial is enabled, `onboarding.exit_interstitial.next_screen_timing` remains effective: `UNDER_AD` opens Privacy under the exit ad; `AFTER_AD` waits for dismissal. Notification/widget/uninstall entries wait for dismissal in this exit path.
 
 Privacy requires acceptance before Continue. Finishing Goal records the picks as `GoalAnswer` values (emitted as `OnboardingEvent.GoalsSelected`, returned in `OnboardingOutcome.Completed.goals` and later by `OnboardingSdk.selectedGoals()`) and completes onboarding directly; this branch does not continue to the ordinary OB5/paywall exit. Back from Goal returns to Privacy; Back from Privacy closes the task. Goal choices are selected again when the Goal screen is recreated.
 

@@ -11,7 +11,7 @@ SDK quản lý chuyển màn, tải trước quảng cáo và lưu tiến trình
 
 Native trong pager được giữ khi view của trang còn tồn tại; quay lại content hoặc Full1/Full2 hiển thị cùng ad, không xin request mới. Auto-next fullscreen bắt đầu lại mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật hoặc cần chống kẹt. No-fill lần đầu tự đi tiếp; quay lại trang lỗi hiện fallback và Skip. Ad được giải phóng khi view bị hủy.
 
-Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau interstitial cuối pager. Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](../partner-integration/privacy-goals-screen.vi.md).
+Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau pager và interstitial cuối pager (nếu được bật; mặc định tắt). Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](../partner-integration/privacy-goals-screen.vi.md).
 
 ## Trước khi tích hợp
 
@@ -211,15 +211,16 @@ sau khi ad của trang đã hiện; quay lại trang có ad đã hiện thì m�
 X, timeout và tự hoàn thành khi no-fill vẫn hoạt động. Với `swipeCompletesLastStep = true`, vuốt tới ở trang
 content cuối đi qua đúng inter thoát như CTA của nó. `lockPagerSwipe = true` tắt luôn cử chỉ này.
 
-`inter_after_ob3` là placement riêng với splash. Provider có sẵn preload khi vào pager và
+`inter_after_ob3` là placement riêng với splash và mặc định tắt
+(`onboarding.exit_interstitial.enabled` là `false`). Khi được bật, provider có sẵn preload khi vào pager và
 chờ fill tối đa 8 giây lúc hoàn thành. Mặc định
 (`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) màn tiếp theo mở dưới
 quảng cáo; entry notification, widget, uninstall chờ đóng quảng cáo. Đặt
 `NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) để luôn chờ đóng.
-`afterOnboardingInterstitialEnabled` bật/tắt placement này; remote
-`onboarding.exit_interstitial.enabled` hoặc `ob_ads_inter_after_ob3_enabled` đã được gửi về sẽ quyết định
-thay, bật hay tắt. Đặt switch local thành `false` nếu app tự quản lý thời điểm hiện ad này; khi remote
-không gửi gì, SDK sẽ tắt cả preload lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
+`afterOnboardingInterstitialEnabled` bật/tắt placement này và mặc định là `false`, nên ví dụ trên đặt
+`true`; remote `onboarding.exit_interstitial.enabled` hoặc `ob_ads_inter_after_ob3_enabled` đã được gửi về
+sẽ quyết định thay, bật hay tắt. Giữ switch local là `false` nếu app tự quản lý thời điểm hiện ad này; khi
+remote không gửi gì, SDK sẽ tắt cả preload lẫn show tự động. Không đưa placement này vào nhóm AutoBuffer của màn nội dung.
 
 ## App-open khi quay lại app
 

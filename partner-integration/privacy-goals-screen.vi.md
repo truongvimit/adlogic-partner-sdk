@@ -2,7 +2,7 @@
 
 [English](privacy-goals-screen.md) · [Tiếng Việt](privacy-goals-screen.vi.md) · [हिन्दी](privacy-goals-screen.hi.md)
 
-Flow chuẩn vẫn là `Splash → LFO → OB → inter_after_ob3 → Privacy → Goal`. Privacy/Goal là phần
+Flow chuẩn vẫn là `Splash → LFO → OB → inter_after_ob3 → Privacy → Goal`; `inter_after_ob3` chỉ có khi được bật (mặc định tắt). Privacy/Goal là phần
 cuối của cùng onboarding flow, không phải một flow độc lập. SDK chỉ mở cụm này cho một flow chưa
 hoàn tất và chỉ khi partner bật cờ riêng trong
 `onboarding_config.json` (asset hoặc remote):
@@ -90,6 +90,6 @@ consent, chọn/bỏ chọn, preload, swap ad, reload khi click và hoàn tất 
 
 ## Thời điểm, điều hướng và dữ liệu
 
-Native Privacy đầu được preload khi tới trang cuối trong `onboarding.order`, kể cả fullscreen. Interstitial cuối OB vẫn theo `onboarding.exit_interstitial.next_screen_timing`: `UNDER_AD` mở Privacy bên dưới interstitial; `AFTER_AD` chờ ad đóng. Entry notification/widget/uninstall vẫn chờ ad đóng ở nhánh exit này.
+Native Privacy đầu được preload khi tới trang cuối trong `onboarding.order`, kể cả fullscreen. Khi được bật, interstitial cuối OB vẫn theo `onboarding.exit_interstitial.next_screen_timing`: `UNDER_AD` mở Privacy bên dưới interstitial; `AFTER_AD` chờ ad đóng. Entry notification/widget/uninstall vẫn chờ ad đóng ở nhánh exit này.
 
 Privacy chỉ cho tiếp tục sau khi đồng ý. Goal dùng `SelectionMode.SINGLE` hoặc `MULTIPLE` và `minSelection` của host; đặt minimum phù hợp số option (SINGLE dùng 1). Hoàn tất Goal ghi lựa chọn thành `GoalAnswer` (phát qua `OnboardingEvent.GoalsSelected`, có trong `OnboardingOutcome.Completed.goals` và đọc lại bằng `OnboardingSdk.selectedGoals()`) trước khi hoàn tất flow. Cụm Privacy/Goal hoàn tất trực tiếp, không mở tiếp OB5/paywall của nhánh exit thông thường. Back tại Goal quay về Privacy; Back tại Privacy đóng task. Lựa chọn Goal được chọn lại khi màn Goal được tạo lại; không phải tiến trình đã lưu qua process death.

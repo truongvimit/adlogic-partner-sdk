@@ -15,7 +15,7 @@ Pick the guide for the feature your app needs. Work through the basic integratio
 | Your app's events / choosing where analytics go | [Trackkit integration](trackkit-integration.md) | `trackkit` is already exposed by the kits |
 | Ad debugging dashboard | [AdTracer integration](adtracer-integration.md) | `adtracer`, debug only |
 
-Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
+Optional Privacy → Goal screens run after the pager and the exit interstitial (when enabled; off by default) as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](privacy-goals-screen.md).
 
 A returning user who opens the app from the launcher skips Welcome Back by default and goes to the app after the splash. Enable `welcome_back.enabled=true` to show it. See [Welcome Back](welcome-back-screen.md).
 

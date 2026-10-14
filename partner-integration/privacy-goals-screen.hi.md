@@ -2,7 +2,7 @@
 
 [English](privacy-goals-screen.md) · [Tiếng Việt](privacy-goals-screen.vi.md) · [हिन्दी](privacy-goals-screen.hi.md)
 
-यह अधूरे onboarding flow का वैकल्पिक अंतिम भाग है: Splash → भाषा → OB pager → exit interstitial → Privacy → Goal → app। App asset या remote `onboarding_config` में इसे चालू करें:
+यह अधूरे onboarding flow का वैकल्पिक अंतिम भाग है: Splash → भाषा → OB pager → exit interstitial (चालू होने पर; default रूप से बंद) → Privacy → Goal → app। App asset या remote `onboarding_config` में इसे चालू करें:
 
 ```json
 { "privacy_goals_screen": { "enabled": true } }
@@ -61,7 +61,7 @@ Privacy और Goal अलग SDK placements हैं, जो ये configured
 
 हर key का `isEnable` उसके पूरे `ids` waterfall को नियंत्रित करता है; floor का अपना `isEnable` सिर्फ उसी floor को रोकता है। किसी key को बंद करना उसका ad बंद करता है, screen नहीं। Consent, premium, UA और global ad gate लागू रहते हैं; अलग `privacyAd.enabled`/`goalAd.enabled` switches नहीं हैं।
 
-Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
+Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। Exit interstitial चालू हो तो `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
 
 Privacy में acceptance के बाद Continue मिलता है। Goal पूरा होने पर picks `GoalAnswer` के रूप में दर्ज होते हैं (`OnboardingEvent.GoalsSelected`, `OnboardingOutcome.Completed.goals` और बाद में `OnboardingSdk.selectedGoals()`), और onboarding सीधे complete होता है; सामान्य OB5/paywall exit आगे नहीं खुलता। Goal में Back से Privacy आता है; Privacy में Back task बंद करता है। Goal screen दोबारा बनने पर choices फिर चुननी पड़ती हैं।
 
