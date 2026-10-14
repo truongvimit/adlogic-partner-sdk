@@ -110,11 +110,14 @@ internal class PoolNativeSlot(
     /**
      * While frozen the slot keeps what it shows and ignores the pool, e.g. behind a modal that
      * binds the same ad. Unfreezing re-inflates: the modal's view took that ad's registration.
+     * It draws the pool's state of now: under `async_selector` the owner change that usually comes
+     * with an unfreeze reaches [latest] a message later, and the modal's own ad would flash here.
      */
     fun setFrozen(frozen: Boolean) {
         if (frozen == this.frozen) return
         this.frozen = frozen
         if (!frozen) {
+            OnboardingPool.engineOrNull()?.let { latest = it.currentSelection() }
             binder.forceFreshOnNextRender()
             rerender()
         }
