@@ -81,7 +81,8 @@ Real GMA tests require connectivity and an actual fill. A vendor no-fill is repo
 
 `io.onboardkit.ui.pool.PoolFlowDeviceTest` loads Google's test native unit through
 `AdMobPoolLoader` into a private `NativePoolEngine` and binds it with `PoolSlotBinder` into the
-real LFO slot template. No production ID is requested and only the test unit is clicked.
+real LFO slot template; the cover methods install that engine as the process pool and bind it
+through a real `PoolNativeSlot`. No production ID is requested and only the test unit is clicked.
 
 ```sh
 adb shell am instrument -w \
@@ -91,11 +92,20 @@ adb shell am instrument -w \
 
 - `oneFillInThreeFreshViewsCountsOneImpressionAndTheLastViewTakesTheClick`: one fill bound into
   three fresh views (a replay and a second slot) reports exactly one impression; a CTA click on
-  the last view reaches the sink exactly once. The click opens the test ad's destination; the
-  test presses Back to return.
-- `bindingWhileOnlyStartedUnderACoverCountsNoImpressionUntilVisible`: a cover with GMA
-  AdActivity's translucent window theme keeps the host STARTED; a bind there counts no
-  impression for 5 seconds, then exactly one once the cover finishes.
+  the last view reaches the sink exactly once, although GMA reports it as both clicked and
+  opened. The click opens the test ad's destination; the test presses Back to return.
+- `aDefaultScreenSlotUnderACoverInflatesNothingAndCountsOneImpressionOnceResumed`: a cover with
+  GMA AdActivity's translucent window theme keeps the host STARTED; a screen slot with the
+  default snapshot (D-BIND) inflates no view and reports no impression for 5 seconds, then binds
+  and reports exactly one once the cover finishes.
+- `gmaCountsAnImpressionForASlotBoundAtStartedUnderACover`: with
+  `parity.screen_slots_bind_started` the same slot binds under the cover and GMA reports its
+  impression while the host is still STARTED, the reason D-BIND is the default. It pins GMA's
+  behaviour, so it skips if GMA stops counting the covered view.
+- `aDefaultScreenSlotEngagesOnceWithItsOwnCtaTapWhateverTheHostStateWhenGmaReportsIt`: a CTA
+  tap on a default screen slot's view engages that slot exactly once, also when the click is
+  reported after the destination paused the host. The host's state when GMA reported the click
+  is logged under the `PoolFlowDeviceTest` tag.
 - `rebindAfterTeardownDestroyedTheLastRegistrantPopulatesAFreshView`: teardown destroys the
   last-registrant view, never the ad; a fresh bind populates and reports one impression.
 - `inPlaceLocaleReachesFragmentsInflatedAfterwards`: the hub's `updateConfiguration` switch

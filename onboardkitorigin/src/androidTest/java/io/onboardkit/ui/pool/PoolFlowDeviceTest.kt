@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.LocaleList
 import android.os.SystemClock
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -58,10 +59,20 @@ import com.ads.module.helper.adnative.pool.PoolSelection
 import com.ads.module.helper.adnative.pool.PoolSlotBinder
 import com.ads.module.helper.adnative.pool.PoolSlotBinder.Outcome
 import com.ads.module.helper.adnative.pool.PoolState
+import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.adnative.pool.SystemPoolClock
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.nativead.NativeAdView
+import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
+import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.FakeAdProvider
+import io.onboardkit.ads.pool.OnboardingPool
+import io.onboardkit.ads.pool.PoolNativeSlot
+import io.onboardkit.ads.pool.screenSlotMinState
+import io.onboardkit.config.onboardKitConfig
+import io.onboardkit.flow.NativeFlowSnapshot
+import io.onboardkit.flow.NativeFlowType
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -79,7 +90,9 @@ import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
+private const val TAG = "PoolFlowDeviceTest"
 private const val POOL_KEY = "pool_device_test"
 private const val TEST_NATIVE_UNIT = "ca-app-pub-3940256099942544/2247696110"
 private const val FILL_WAIT_S = 30L
@@ -159,35 +172,89 @@ class PoolFlowDeviceTest {
         }
     }
 
-    @Test fun bindingWhileOnlyStartedUnderACoverCountsNoImpressionUntilVisible() {
+    @Test fun aDefaultScreenSlotUnderACoverInflatesNothingAndCountsOneImpressionOnceResumed() {
         val (pool, ad) = loadOneFill()
+        installAsTheProcessPool(pool)
+        val minState = onMain { NativeFlowSnapshot().screenSlotMinState }
+        assertEquals("D-BIND: a screen slot binds only while RESUMED by default", Lifecycle.State.RESUMED, minState)
+        ActivityScenario.launch(PoolSlotDeviceActivity::class.java).use { scenario ->
+            val host = scenario.host()
+            val cover = cover(host)
+            val shown = AtomicInteger()
+            onMain { screenSlot(host, minState, shown).start() }
+            SystemClock.sleep(NO_IMPRESSION_WINDOW_MS)
+            onMain {
+                assertEquals("Still covered", Lifecycle.State.STARTED, host.lifecycle.currentState)
+                assertEquals("No NativeAdView inflated under the cover", 0, host.upper.childCount)
+            }
+            assertTrue("${pool.impressions.size} impression(s) under the cover", pool.impressions.isEmpty())
+            assertEquals(0, shown.get())
+
+            uncover(host, cover)
+            eventually("The slot binds once its host resumes") { onMain { host.upper.getChildAt(0) is NativeAdView } }
+            assertPopulated(onMain { host.upper.adView() }, ad)
+            eventually("The visible slot reports its impression", IMPRESSION_WAIT_MS) { pool.impressions.isNotEmpty() }
+            SystemClock.sleep(SETTLE_MS)
+            assertExactlyOneImpression(pool, ad)
+            assertEquals("The slot hears its one impression", 1, shown.get())
+        }
+    }
+
+    /**
+     * Why D-BIND exists: a slot bound at STARTED under the cover gets an unseen GMA impression.
+     * This pins GMA, not the SDK: a GMA that stops counting covered views skips it.
+     */
+    @Test fun gmaCountsAnImpressionForASlotBoundAtStartedUnderACover() {
+        val (pool, ad) = loadOneFill()
+        installAsTheProcessPool(pool)
+        val dashDrama = NativeFlowSnapshot(parity = PoolParity(screenSlotsBindStarted = true))
+        val minState = onMain { dashDrama.screenSlotMinState }
+        assertEquals(Lifecycle.State.STARTED, minState)
+        ActivityScenario.launch(PoolSlotDeviceActivity::class.java).use { scenario ->
+            val host = scenario.host()
+            val cover = cover(host)
+            onMain { screenSlot(host, minState).start() }
+            eventually("The slot binds under the cover") { onMain { host.upper.getChildAt(0) is NativeAdView } }
+            assertPopulated(onMain { host.upper.adView() }, ad)
+            val counted = waitFor(IMPRESSION_WAIT_MS) { pool.impressions.isNotEmpty() }
+            assertEquals("Still covered", Lifecycle.State.STARTED, onMain { host.lifecycle.currentState })
+            if (counted) SystemClock.sleep(SETTLE_MS)
+            val underCover = pool.impressions.toList()
+            uncover(host, cover)
+            assumeTrue("GMA counted no impression for the covered view; D-BIND may be unneeded", counted)
+            assertEquals("onAdImpression count for one NativeAd under the cover", listOf(ad), underCover)
+        }
+    }
+
+    /**
+     * The tap opens the ad's destination, which may pause the host before GMA reports the click:
+     * the default slot whose view took the tap engages once whichever comes first.
+     */
+    @Test fun aDefaultScreenSlotEngagesOnceWithItsOwnCtaTapWhateverTheHostStateWhenGmaReportsIt() {
+        val (pool, ad) = loadOneFill()
+        installAsTheProcessPool(pool)
         ActivityScenario.launch(PoolSlotDeviceActivity::class.java).use { scenario ->
             val host = scenario.host()
             eventually("Host window focus") { onMain { host.hasWindowFocus() } }
-            onMain { host.startActivity(Intent(host, PoolCoverDeviceActivity::class.java)) }
-            var cover: PoolCoverDeviceActivity? = null
-            eventually("Cover resumed with focus") {
-                cover = resumedCover()?.takeIf { onMain { it.hasWindowFocus() } }
-                cover != null
+            val reported = CopyOnWriteArrayList<Lifecycle.State>()
+            val engaged = CopyOnWriteArrayList<Lifecycle.State>()
+            pool.onClick = { reported += host.lifecycle.currentState }
+            onMain {
+                screenSlot(host, NativeFlowSnapshot().screenSlotMinState, onEngaged = {
+                    engaged += host.lifecycle.currentState
+                }).start()
             }
-            assertEquals("The cover leaves the host only STARTED", Lifecycle.State.STARTED, onMain { host.lifecycle.currentState })
-
-            val slot = onMain { slotBinder(host.upper) }
-            assertEquals(Outcome.BOUND_NEW, onMain { slot.render(pool.selection()) })
+            eventually("The slot binds") { onMain { host.upper.getChildAt(0) is NativeAdView } }
             assertPopulated(onMain { host.upper.adView() }, ad)
-            SystemClock.sleep(NO_IMPRESSION_WINDOW_MS)
-            assertEquals(Lifecycle.State.STARTED, onMain { host.lifecycle.currentState })
-            assertTrue(
-                "GMA counted ${pool.impressions.size} impression(s) for a slot hidden under the cover",
-                pool.impressions.isEmpty(),
-            )
+            eventually("The slot's view is live", IMPRESSION_WAIT_MS) { pool.impressions.isNotEmpty() }
 
-            onMain { requireNotNull(cover).finish() }
-            eventually("Host resumes once the cover is gone") { onMain { host.lifecycle.currentState == Lifecycle.State.RESUMED } }
-            eventually("The uncovered slot reports its impression", IMPRESSION_WAIT_MS) { pool.impressions.isNotEmpty() }
+            assertTrue(onMain { requireNotNull(host.upper.adView().callToActionView).performClick() })
+            eventually("GMA reports the click", CLICK_WAIT_MS) { pool.clicks.isNotEmpty() }
             SystemClock.sleep(SETTLE_MS)
-            assertExactlyOneImpression(pool, ad)
-            onMain { slot.teardown() }
+            Log.i(TAG, "GMA reported the CTA click with the host $reported; the slot engaged with the host $engaged")
+            assertEquals(listOf(ad), pool.clicks.toList())
+            assertEquals("Engagements (host when GMA reported the click: $reported)", 1, engaged.size)
+            returnFromClickDestination(host)
         }
     }
 
@@ -307,6 +374,50 @@ class PoolFlowDeviceTest {
 
     private fun slotBinder(container: FrameLayout) = PoolSlotBinder(container, SLOT_LAYOUT, { null }, destroyOnTeardown = true)
 
+    private fun installAsTheProcessPool(pool: PoolProbe) = onMain {
+        // A second install in this process is ignored by the SDK.
+        OnboardingSdk.install(app) {
+            adProvider = FakeAdProvider()
+            trackkitAutoTracking(false)
+        }
+        OnboardingSdk.configure(onboardKitConfig { }.getOrThrow()).getOrThrow()
+        pool.installAsProcessPool()
+        OnboardingPool.activate(app, NativeFlowSnapshot(type = NativeFlowType.SHARED_POOL))
+        assertTrue(OnboardingPool.isActive)
+    }
+
+    private fun screenSlot(
+        host: PoolSlotDeviceActivity,
+        minState: Lifecycle.State,
+        shown: AtomicInteger = AtomicInteger(),
+        onEngaged: () -> Unit = {},
+    ) = PoolNativeSlot(
+        owner = host,
+        placement = AdPlacement.Language1,
+        kind = PoolNativeSlot.Kind.OWNER,
+        minState = minState,
+        container = host.upper,
+        callbacks = StepSlotCallbacks(onShown = { shown.incrementAndGet() }, onAdEngaged = { onEngaged() }),
+        destroyOnTeardown = true,
+    )
+
+    private fun cover(host: PoolSlotDeviceActivity): PoolCoverDeviceActivity {
+        eventually("Host window focus") { onMain { host.hasWindowFocus() } }
+        onMain { host.startActivity(Intent(host, PoolCoverDeviceActivity::class.java)) }
+        var cover: PoolCoverDeviceActivity? = null
+        eventually("Cover resumed with focus") {
+            cover = resumedCover()?.takeIf { onMain { it.hasWindowFocus() } }
+            cover != null
+        }
+        assertEquals("The cover leaves the host only STARTED", Lifecycle.State.STARTED, onMain { host.lifecycle.currentState })
+        return requireNotNull(cover)
+    }
+
+    private fun uncover(host: PoolSlotDeviceActivity, cover: PoolCoverDeviceActivity) {
+        onMain { cover.finish() }
+        eventually("Host resumes once the cover is gone") { onMain { host.lifecycle.currentState == Lifecycle.State.RESUMED } }
+    }
+
     private fun assertPopulated(view: NativeAdView, ad: ApNativeAd) = onMain {
         val native = requireNotNull(ad.admobNativeAd)
         assertEquals(native.headline, (view.headlineView as TextView).text.toString())
@@ -360,9 +471,13 @@ class PoolFlowDeviceTest {
     }
 
     private fun eventually(message: String, timeout: Long = 10_000, condition: () -> Boolean) {
+        assertTrue(message, waitFor(timeout, condition))
+    }
+
+    private fun waitFor(timeout: Long, condition: () -> Boolean): Boolean {
         val deadline = SystemClock.elapsedRealtime() + timeout
         while (!condition() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(50)
-        assertTrue(message, condition())
+        return condition()
     }
 
     private companion object {
@@ -375,6 +490,9 @@ private class PoolProbe(context: Context) {
     val clicks = CopyOnWriteArrayList<ApNativeAd>()
     val events = CopyOnWriteArrayList<PoolEvent<ApNativeAd>>()
     val settled = CountDownLatch(1)
+
+    /** Runs on main as the sink hears each click. */
+    @Volatile var onClick: () -> Unit = {}
 
     private val adMob = AdMobPoolLoader(context)
     private val engine = NativePoolEngine<ApNativeAd>(
@@ -405,7 +523,18 @@ private class PoolProbe(context: Context) {
 
     fun state(): PoolState? = engine.debugSnapshot().loader(POOL_KEY)?.state
 
+    private var processPool = false
+
+    fun installAsProcessPool() {
+        SharedNativePool.installForTest(engine)
+        processPool = true
+    }
+
     fun release() {
+        if (processPool) {
+            OnboardingPool.resetForTest()
+            SharedNativePool.resetForTest()
+        }
         engine.releaseAll()
         engine.close()
     }
@@ -422,6 +551,7 @@ private class PoolProbe(context: Context) {
 
         override fun onClicked(ad: ApNativeAd) {
             clicks += ad
+            onClick()
             next.onClicked(ad)
         }
     }
