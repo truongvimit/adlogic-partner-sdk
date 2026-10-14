@@ -228,6 +228,29 @@ class PoolSlotBinderTest {
         assertEquals(View.VISIBLE, container.visibility)
     }
 
+    @Test fun `a slot whose ad another view registered since has lost its registration until it binds again`() {
+        val ad = ad()
+        val other = newContainer().also { root.addView(it) }
+        val first = binder()
+        val second = binder(into = other)
+        assertFalse("Nothing bound", first.lostRegistration())
+        first.render(shown(ad))
+        assertFalse(first.lostRegistration())
+
+        second.render(shown(ad, lender = "step_ob1"))
+        assertTrue(first.lostRegistration())
+        assertFalse(second.lostRegistration())
+        assertEquals("The same ad is no rebind", Outcome.BOUND_SAME, first.render(shown(ad)))
+        assertTrue(first.lostRegistration())
+
+        first.forceFreshOnNextRender()
+        assertEquals(Outcome.BOUND_NEW, first.render(shown(ad)))
+        assertFalse(first.lostRegistration())
+        assertTrue(second.lostRegistration())
+        second.render(hidden)
+        assertFalse("A hidden slot shows nothing to report from", second.lostRegistration())
+    }
+
     @Test fun `teardown destroys this slot's view only when it is the ad's last registrant`() {
         val ad = ad()
         val other = newContainer().also { root.addView(it) }

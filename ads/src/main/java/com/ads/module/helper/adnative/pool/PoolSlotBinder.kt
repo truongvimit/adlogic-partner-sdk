@@ -65,6 +65,10 @@ class PoolSlotBinder(
         forceFresh = true
     }
 
+    /** The container shows its ad, but another view took the ad's registration: impressions and clicks go there. */
+    fun lostRegistration(): Boolean = container.visibility == View.VISIBLE && boundAd() != null &&
+        !isLastRegistrant(registered, boundView)
+
     fun render(selection: PoolSelection<ApNativeAd>): Outcome {
         val ad = selection.ad
         return when {

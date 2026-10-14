@@ -127,6 +127,15 @@ class NativePoolEngine<H : Any>(
     /** Only a config refusal leaves no loader behind; see [LoadResult] for what each outcome saves. */
     fun load(request: PoolRequest, mode: LoadMode): LoadResult = load(request, mode) { gateOpen.value }
 
+    /** Whether [load] would start a chain now. Changes nothing: no sweep, no saved request, no event. */
+    fun wouldRequest(request: PoolRequest, mode: LoadMode): Boolean {
+        if (policy.configRefusal(request) != null) return false
+        if (mode == LoadMode.POLITE && !gateOpen.value) return false
+        if (policy.transientRefusal(request) != null) return false
+        val l = loaders[request.key] ?: return true
+        return !l.inFlight && !l.refreshing && (l.ad == null || isExpired(l))
+    }
+
     /** Repeats the saved request from its first id while the held ad keeps showing; false when it cannot. */
     fun refresh(key: String): Boolean {
         val l = loaders[key] ?: return false

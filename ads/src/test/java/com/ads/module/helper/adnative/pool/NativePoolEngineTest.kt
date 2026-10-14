@@ -67,6 +67,30 @@ class NativePoolEngineTest {
         assertTrue(h.loader.calls.isEmpty())
     }
 
+    @Test fun `wouldRequest answers what load would do and changes nothing`() {
+        val h = harness(maxAgeMs = 5_000L)
+        assertTrue("An empty pool requests", h.engine.wouldRequest(request("a"), POLITE))
+        h.loading("busy")
+        assertFalse("The gate is closed", h.engine.wouldRequest(request("a"), POLITE))
+        assertTrue("FORCED ignores the gate", h.engine.wouldRequest(request("a"), FORCED))
+        assertFalse("Its own chain runs", h.engine.wouldRequest(request("busy"), FORCED))
+        h.loader.fill("busy")
+        assertFalse("It holds an ad", h.engine.wouldRequest(request("busy"), FORCED))
+        h.policy.transientAll = "offline"
+        assertFalse(h.engine.wouldRequest(request("a"), FORCED))
+        h.policy.transientAll = null
+        h.policy.configByKey["a"] = "premium"
+        assertFalse(h.engine.wouldRequest(request("a"), FORCED))
+
+        val before = h.engine.debugSnapshot()
+        val events = h.events.size
+        h.clock.now += 5_000L
+        assertTrue("An expired ad is requested again", h.engine.wouldRequest(request("busy"), FORCED))
+        assertSame("No sweep, no publish", before, h.engine.debugSnapshot())
+        assertEquals(events, h.events.size)
+        assertEquals(listOf("busy" to "t0"), h.loader.calls)
+    }
+
     @Test fun `E1 loaders keep their first-use order and survive exhaustion`() {
         val h = harness()
         h.loading("b")
