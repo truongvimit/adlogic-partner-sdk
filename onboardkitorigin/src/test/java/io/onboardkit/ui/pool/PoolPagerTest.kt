@@ -629,14 +629,15 @@ class PoolPagerTest {
     }
 
     @Test fun `OC2 with LFO2 loading at Done page 0 is gate-skipped and shows LFO1 then LFO2`() {
+        // The fill itself, not the loader's latest attempt: the real LFO stage requests again
+        // (its resume refresh) after this ad filled, and that attempt holds no ad.
+        var language1: ApNativeAd? = null
         launch(steps = listOf(ob1, ob2), ads = POOL_ADS) {
             OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
-            val language1 = loader.fill(AdPlacement.Language1.key)
-            loader.impress(language1)
+            language1 = loader.fill(AdPlacement.Language1.key).also(loader::impress)
             OnboardingPool.claim(AdPlacement.Language2, LoadMode.FORCED)
             assertEquals("Done's page-0 preload", LoadResult.SkippedByGate, OnboardingPool.preload(stepOb1))
         }
-        val language1 = loader.last(AdPlacement.Language1.key).ad
         assertEquals(LoadResult.SkippedByGate, OnboardingPool.lastResult(stepOb1))
         assertEquals(stepOb1.key, engine.owner)
         assertSame("Rule 3: the showing LFO1", language1?.admobNativeAd, shownAd(0))
