@@ -46,6 +46,7 @@ import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowNetworkInfo
 import org.robolectric.shadows.ShadowViewGroup
 import org.robolectric.util.ReflectionHelpers
+import java.util.WeakHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** Gate and selection update inside every publish, so a test reads them right after a call. */
@@ -212,6 +213,9 @@ internal fun setOnline(context: Context, online: Boolean) {
         NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
 }
 
+/** The view each vendor ad was registered to last: GMA reports its impressions and clicks from that one. */
+internal val lastRegisteredView = WeakHashMap<NativeAd, NativeAdView>()
+
 /** Keeps GMA out of view registration and counts destroys; inflation and populate stay real. */
 @Implements(value = NativeAdView::class, isInAndroidSdk = false)
 class PoolGlueViewShadow : ShadowViewGroup() {
@@ -219,7 +223,10 @@ class PoolGlueViewShadow : ShadowViewGroup() {
     var registered: NativeAd? = null
     var destroyCount = 0
 
-    @Implementation fun setNativeAd(ad: NativeAd) { registered = ad }
+    @Implementation fun setNativeAd(ad: NativeAd) {
+        registered = ad
+        lastRegisteredView[ad] = realView as NativeAdView
+    }
     @Implementation fun destroy() { destroyCount++ }
     @Implementation fun setHeadlineView(view: android.view.View?) { assets["Headline"] = view }
     @Implementation fun getHeadlineView(): android.view.View? = assets["Headline"]

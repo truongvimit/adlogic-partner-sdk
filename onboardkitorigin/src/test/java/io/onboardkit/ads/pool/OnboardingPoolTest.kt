@@ -16,6 +16,8 @@ import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepId
+import io.onboardkit.core.analytics.AnalyticsEvent
+import io.trackkit.AdFormat
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,6 +109,21 @@ class OnboardingPoolTest {
             listOf("step_ob2" to AdSkipReason.NO_AD_UNIT.key, "language2" to AdSkipReason.OFFLINE.key),
             PoolTestSdk.skipped(),
         )
+    }
+
+    @Test fun `a chain that ends holding nothing reports one ad failure, a failed refresh none`() {
+        OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
+        loader.exhaust("language1")
+        main.idle()
+        val failed = PoolTestSdk.events<AnalyticsEvent.AdFailed>()
+        assertEquals(listOf("language1" to AdFormat.NATIVE), failed.map { it.placementName to it.format })
+
+        assertEquals(LoadResult.Requested, OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED))
+        loader.fill("language1")
+        assertTrue(OnboardingPool.refresh(AdPlacement.Language1))
+        loader.exhaust("language1")
+        main.idle()
+        assertEquals("A failed refresh keeps its ad", 1, PoolTestSdk.events<AnalyticsEvent.AdFailed>().size)
     }
 
     @Test fun `a gate skip is traced and counted but is no skipped-ad event`() {

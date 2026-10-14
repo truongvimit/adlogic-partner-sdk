@@ -1,5 +1,7 @@
 package io.onboardkit.ads.pool
 
+import android.os.Handler
+import android.os.Looper
 import android.widget.FrameLayout
 import androidx.annotation.MainThread
 import androidx.lifecycle.Lifecycle
@@ -33,6 +35,10 @@ import kotlinx.coroutines.launch
  * [minState] and inflates a fresh view on every re-entry, replay included, as DashDrama does.
  * Every slot hides while ads are refused for the whole flow; an [Kind.OWNER] slot also hides on
  * its own placement's config refusal, while a [Kind.NON_OWNER] slot keeps showing what it borrows.
+ *
+ * A slot bound while its screen is only STARTED (a pager page kept offscreen, a screen behind a
+ * translucent one) takes the ad's registration from the view the user sees; the RESUMED slot
+ * showing that ad takes it back, so impressions and clicks count where the ad is visible.
  */
 @MainThread
 internal class PoolNativeSlot(
@@ -67,10 +73,15 @@ internal class PoolNativeSlot(
     private var tornDown = false
     private var events: PoolCancellable? = null
     private var collector: Job? = null
+    private val reclaim = Runnable(::reclaimRegistration)
+    private var reclaimPosted = false
 
     private val lifecycleObserver = LifecycleEventObserver { _, event ->
         when (event) {
-            Lifecycle.Event.ON_RESUME -> rerender()
+            Lifecycle.Event.ON_RESUME -> {
+                takeBackRegistration()
+                rerender()
+            }
             Lifecycle.Event.ON_DESTROY -> teardown()
             else -> Unit
         }
@@ -84,6 +95,7 @@ internal class PoolNativeSlot(
             return
         }
         owner.lifecycle.addObserver(lifecycleObserver)
+        live += this
         events = OnboardingPool.addEventListener(::onEvent)
         collector = owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(minState) {
@@ -139,6 +151,33 @@ internal class PoolNativeSlot(
         retired.forEach(PoolSlotBinder::teardown)
         retired.clear()
         report(outcome, refusal ?: AdSkipReason.NO_FILL)
+        if (outcome == Outcome.BOUND_NEW && !resumed()) binder.boundAd()?.let(::handBackRegistration)
+    }
+
+    private fun resumed(): Boolean = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+
+    /** Every RESUMED slot that shows [ad] re-inflates once the binds of this emission are done. */
+    private fun handBackRegistration(ad: ApNativeAd) {
+        live.forEach { slot ->
+            if (slot !== this && slot.binder.boundAd() === ad && !slot.reclaimPosted) {
+                slot.reclaimPosted = true
+                main.post(slot.reclaim)
+            }
+        }
+    }
+
+    private fun reclaimRegistration() {
+        reclaimPosted = false
+        if (resumed() && takeBackRegistration()) rerender()
+    }
+
+    /** Arms a fresh inflation when the next render draws the same ad whose registration another view took. */
+    private fun takeBackRegistration(): Boolean {
+        if (frozen || tornDown || !binder.lostRegistration()) return false
+        val ad = binder.boundAd() ?: return false
+        if (latest?.ad !== ad || refusal() != null) return false
+        binder.forceFreshOnNextRender()
+        return true
     }
 
     private fun refusal(): AdSkipReason? {
@@ -192,6 +231,9 @@ internal class PoolNativeSlot(
     private fun teardown() {
         if (tornDown) return
         tornDown = true
+        live -= this
+        main.removeCallbacks(reclaim)
+        reclaimPosted = false
         collector?.cancel()
         events?.cancel()
         owner.lifecycle.removeObserver(lifecycleObserver)
@@ -220,4 +262,11 @@ internal class PoolNativeSlot(
         OnboardingSdk.configuredPlacementKey(placement)?.let { key ->
             AdRemoteConfig.getInstance().unit(key).toNativeStyle()
         }
+
+    private companion object {
+        val main = Handler(Looper.getMainLooper())
+
+        /** Started slots not torn down yet; main thread only. */
+        val live = LinkedHashSet<PoolNativeSlot>()
+    }
 }
