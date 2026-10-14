@@ -613,6 +613,7 @@ Without Privacy → Goal the pager's last page ends the flow, with the paywall w
 - The language-completed events are sent at the Done tap; the language is saved after the LFO exit ad (the splash interstitial's leftover) closes.
 - A slot's ad view is destroyed when its screen goes away (`view.destroy_on_teardown`); the ad stays in the pool.
 - A refresh counts as a running request (`parity.refresh_marks_in_flight`).
+- The LFO, language confirmation popup, Privacy, Goal and resume screen slots bind a new ad only while their screen is resumed: an ad that arrives while an interstitial or an ad's landing page covers the screen waits, unseen and uncounted, until the screen is back in front. DashDrama binds once the screen is started; `parity.screen_slots_bind_started` `true` restores that.
 - Ad expiry (one hour) and the wait per floor (30 seconds) are the SDK's values.
 - The language confirmation popup and the OB1 back button are kept.
 

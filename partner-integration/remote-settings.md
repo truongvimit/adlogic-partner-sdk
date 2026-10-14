@@ -250,7 +250,7 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `parity.destroy_replaced_ads` | `false` | A replaced or expired ad is dropped without being destroyed; `true` destroys it. |
 | `parity.keep_duplicate_ids` | `true` | Floors are requested as listed in ad_config, duplicates included; `false` drops duplicates. |
 | `parity.impression_marks_loader` | `true` | Any impression from a placement's requests marks it shown; `false` only its current ad's. |
-| `parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal and the resume screen bind ads once started; `false` once resumed. |
+| `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, the language confirmation popup and the resume screen bind a new ad only once resumed, so an ad landing under an interstitial is not counted unseen; `true` binds once started, as the reference app does. |
 | `parity.pager_slots_bind_resumed` | `true` | Pager pages bind ads once resumed; `false` once started. |
 | `parity.keep_after_flow` | `true` | The pool lives until the process ends, for the resume screen; `false` releases it when onboarding completes. |
 | `parity.reset_on_new_run` | `false` | A new run keeps the pool's ads; `true` starts empty. |
@@ -258,7 +258,7 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `parity.resume_background_preload` | `false` | Native resume requests only when its screen opens; `true` also preloads it in the background. |
 | `parity.refresh_marks_in_flight` | `true` | A refresh counts as a running request, so other screens' background loads wait while the held ad keeps showing; `false` makes a refresh invisible to that check. |
 
-The `parity.*` switches reproduce the reference app the pool was modelled on, except `parity.refresh_marks_in_flight`, whose default follows the SDK's refresh model. Leave them at their defaults unless you are tuning that behaviour on purpose.
+The `parity.*` switches reproduce the reference app the pool was modelled on, except `parity.refresh_marks_in_flight`, whose default follows the SDK's refresh model, and `parity.screen_slots_bind_started`, whose default follows ad policy. Leave them at their defaults unless you are tuning that behaviour on purpose.
 
 ## Fetch timing and QA
 
@@ -420,7 +420,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native_flow.pool.parity.destroy_replaced_ads` | `false` |
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` |
 | `native_flow.pool.parity.impression_marks_loader` | `true` |
-| `native_flow.pool.parity.screen_slots_bind_started` | `true` |
+| `native_flow.pool.parity.screen_slots_bind_started` | `false` |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `true` |
 | `native_flow.pool.parity.keep_after_flow` | `true` |
 | `native_flow.pool.parity.reset_on_new_run` | `false` |

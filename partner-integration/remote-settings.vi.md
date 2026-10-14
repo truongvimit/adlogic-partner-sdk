@@ -270,7 +270,7 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.destroy_replaced_ads` | `false` | Ad bị thay hoặc hết hạn được bỏ mà không destroy; `true` destroy nó. |
 | `parity.keep_duplicate_ids` | `true` | Request các tầng đúng như liệt kê trong ad_config, giữ cả ID trùng; `false` bỏ ID trùng. |
 | `parity.impression_marks_loader` | `true` | Impression bất kỳ từ các request của placement đánh dấu placement đã hiển thị; `false` chỉ impression của ad hiện tại. |
-| `parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal và màn resume bind ad khi đã start; `false` khi đã resume. |
+| `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, popup xác nhận ngôn ngữ và màn resume chỉ bind ad mới khi đã resume, nên ad về dưới interstitial không bị tính impression khi người dùng chưa thấy; `true` bind khi đã start như app tham chiếu. |
 | `parity.pager_slots_bind_resumed` | `true` | Trang pager bind ad khi đã resume; `false` khi đã start. |
 | `parity.keep_after_flow` | `true` | Pool sống tới khi process kết thúc, phục vụ màn resume; `false` giải phóng pool khi onboarding hoàn tất. |
 | `parity.reset_on_new_run` | `false` | Lượt chạy mới giữ ad trong pool; `true` bắt đầu với pool rỗng. |
@@ -278,7 +278,7 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.resume_background_preload` | `false` | Native resume chỉ request khi màn của nó mở; `true` còn preload ở background. |
 | `parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy, nên lượt load nền của màn khác phải chờ trong khi ad đang giữ vẫn hiện; `false` để refresh không ảnh hưởng tới kiểm tra đó. |
 
-Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo, trừ `parity.refresh_marks_in_flight`, có mặc định theo mô hình refresh của SDK. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
+Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo, trừ `parity.refresh_marks_in_flight`, có mặc định theo mô hình refresh của SDK, và `parity.screen_slots_bind_started`, có mặc định theo chính sách quảng cáo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
 
 ## Fetch và publish
 
@@ -440,7 +440,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.parity.destroy_replaced_ads` | `false` | Ad bị thay không bị destroy. |
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` | Giữ ID trùng trong waterfall. |
 | `native_flow.pool.parity.impression_marks_loader` | `true` | Impression bất kỳ của placement đánh dấu đã hiển thị. |
-| `native_flow.pool.parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal, màn resume bind khi start. |
+| `native_flow.pool.parity.screen_slots_bind_started` | `false` | LFO, popup xác nhận ngôn ngữ, Privacy, Goal, màn resume chỉ bind khi resume. |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `true` | Trang pager bind khi resume. |
 | `native_flow.pool.parity.keep_after_flow` | `true` | Pool sống tới hết process. |
 | `native_flow.pool.parity.reset_on_new_run` | `false` | Lượt chạy mới giữ pool. |

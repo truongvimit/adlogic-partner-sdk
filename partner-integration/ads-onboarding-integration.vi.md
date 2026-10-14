@@ -613,6 +613,7 @@ Không có Privacy → Goal thì trang cuối của pager kết thúc flow, có 
 - Các event hoàn tất ngôn ngữ được gửi lúc tap Done; ngôn ngữ được lưu sau khi ad thoát của LFO (interstitial splash còn lại) đóng.
 - View ad của slot bị huỷ khi màn của nó đóng (`view.destroy_on_teardown`); ad vẫn ở trong pool.
 - Refresh được tính là request đang chạy (`parity.refresh_marks_in_flight`).
+- Slot của LFO, popup xác nhận ngôn ngữ, Privacy, Goal và màn resume chỉ bind ad mới khi màn đang resume: ad về trong lúc interstitial hoặc trang đích của ad che màn sẽ chờ, không hiện và không tính impression, tới khi màn quay lại phía trước. DashDrama bind ngay khi màn start; `parity.screen_slots_bind_started` `true` khôi phục cách đó.
 - Thời hạn ad (một giờ) và thời gian chờ mỗi tầng (30 giây) là giá trị của SDK.
 - Giữ popup xác nhận ngôn ngữ và nút back OB1.
 

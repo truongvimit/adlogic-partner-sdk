@@ -250,7 +250,7 @@ Type हर run में एक बार पढ़ा जाता है, ज
 | `parity.destroy_replaced_ads` | `false` | बदला गया या expire हुआ ad destroy किए बिना छोड़ा जाता है; `true` उसे destroy करता है। |
 | `parity.keep_duplicate_ids` | `true` | Floors ad_config की सूची के अनुसार request होते हैं, duplicates समेत; `false` duplicates हटाता है। |
 | `parity.impression_marks_loader` | `true` | Placement की requests का कोई भी impression उसे shown चिह्नित करता है; `false` केवल उसके मौजूदा ad का। |
-| `parity.screen_slots_bind_started` | `true` | LFO, Privacy, Goal और resume screen started होते ही ads bind करते हैं; `false` resumed होने पर। |
+| `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, भाषा confirmation popup और resume screen नया ad केवल resumed होने पर bind करते हैं, ताकि interstitial के नीचे आया ad बिना दिखे गिना न जाए; `true` reference app की तरह started होते ही bind करता है। |
 | `parity.pager_slots_bind_resumed` | `true` | Pager pages resumed होने पर ads bind करते हैं; `false` started होते ही। |
 | `parity.keep_after_flow` | `true` | Resume screen के लिए pool process खत्म होने तक रहता है; `false` onboarding पूरा होने पर उसे release करता है। |
 | `parity.reset_on_new_run` | `false` | नया run pool के ads रखता है; `true` खाली pool से शुरू करता है। |
@@ -258,7 +258,7 @@ Type हर run में एक बार पढ़ा जाता है, ज
 | `parity.resume_background_preload` | `false` | Native resume केवल अपनी screen खुलने पर request करता है; `true` background में भी preload करता है। |
 | `parity.refresh_marks_in_flight` | `true` | Refresh चल रही request गिना जाता है, इसलिए दूसरी screens के background loads रुकते हैं जबकि रखा हुआ ad दिखता रहता है; `false` refresh को इस जाँच से बाहर रखता है। |
 
-`parity.refresh_marks_in_flight` को छोड़कर, जिसका default SDK के refresh model पर चलता है, `parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
+`parity.refresh_marks_in_flight` (जिसका default SDK के refresh model पर चलता है) और `parity.screen_slots_bind_started` (जिसका default ad policy पर चलता है) को छोड़कर, `parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
 
 ## Fetch timing और QA
 
@@ -420,7 +420,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.parity.destroy_replaced_ads` | `false` |
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` |
 | `native_flow.pool.parity.impression_marks_loader` | `true` |
-| `native_flow.pool.parity.screen_slots_bind_started` | `true` |
+| `native_flow.pool.parity.screen_slots_bind_started` | `false` |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `true` |
 | `native_flow.pool.parity.keep_after_flow` | `true` |
 | `native_flow.pool.parity.reset_on_new_run` | `false` |

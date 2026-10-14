@@ -613,6 +613,7 @@ Privacy → Goal के बिना pager का आखिरी page flow ख�
 - Language-completed events Done tap पर भेजे जाते हैं; भाषा LFO के exit ad (splash interstitial का बचा हुआ ad) के बंद होने के बाद सहेजी जाती है।
 - Screen हटने पर slot का ad view destroy होता है (`view.destroy_on_teardown`); ad pool में रहता है।
 - Refresh चल रही request गिना जाता है (`parity.refresh_marks_in_flight`)।
+- LFO, भाषा confirmation popup, Privacy, Goal और resume screen के slots नया ad केवल तब bind करते हैं जब उनकी screen resumed हो: interstitial या ad के landing page के screen को ढकते समय आया ad, screen के फिर सामने आने तक बिना दिखे और बिना impression गिने इंतज़ार करता है। DashDrama उन्हें screen के started होते ही bind करता है; `parity.screen_slots_bind_started` `true` वही व्यवहार लौटाता है।
 - Ad expiry (एक घंटा) और हर floor का wait (30 सेकंड) SDK की values हैं।
 - भाषा confirmation popup और OB1 back button रखे गए हैं।
 
