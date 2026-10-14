@@ -106,6 +106,12 @@ object ObRemoteKeys {
     val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", OnboardingSettings.defaultBool("onboarding.fullscreen.skip.enabled"))
     val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", OnboardingSettings.defaultBool("ob5.skip.enabled"))
 
+    /**
+     * Flat alias of `native_flow.type` for a console that only edits flat keys: true runs
+     * SHARED_POOL, false PER_SCREEN. Only a delivered value counts, and the grouped field outranks it.
+     */
+    val NATIVE_REUSE_ENABLED = RemoteKey.BoolKey("ob_native_reuse_enabled", false)
+
     // Server-driven UI payloads
     val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")
     val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "")
@@ -131,6 +137,7 @@ object ObRemoteKeys {
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_SLOT_MIN_VISIBLE_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,
+        NATIVE_REUSE_ENABLED,
         UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, CONFIG_VERSION,
     )
 }

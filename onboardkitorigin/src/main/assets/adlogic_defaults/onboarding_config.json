@@ -177,5 +177,63 @@
     "start_button": {
       "color": "#FF375E"
     }
+  },
+  "native_flow": {
+    "type": "PER_SCREEN",
+    "pool": {
+      "parity": {
+        "refresh_overwrites_unshown": true,
+        "retry_skipped_polite": false,
+        "async_gate": true,
+        "async_selector": true,
+        "borrow_showing": true,
+        "destroy_replaced_ads": false,
+        "keep_duplicate_ids": true,
+        "impression_marks_loader": true,
+        "screen_slots_bind_started": true,
+        "pager_slots_bind_resumed": true,
+        "keep_after_flow": true,
+        "reset_on_new_run": false,
+        "respect_focus_window": false,
+        "resume_background_preload": false,
+        "refresh_marks_in_flight": true
+      },
+      "adopt_splash_language1": true,
+      "locale_apply": "IN_PLACE",
+      "exit": {
+        "next_screen_timing": "AFTER_AD"
+      },
+      "done_hidden_gone": true,
+      "pager": {
+        "smooth_scroll": true,
+        "offscreen_pages": 0
+      },
+      "resume_on_goals": true,
+      "stuck_loading_log_ms": 60000,
+      "view": {
+        "destroy_on_teardown": true
+      },
+      "lfo": {
+        "confirm_button": {
+          "reveal_delay_ms": 3000
+        }
+      },
+      "select": {
+        "next_reveal_delay_ms": 3000
+      },
+      "goals": {
+        "exit_reuse_splash_inter": true
+      },
+      "onboarding": {
+        "fullscreen": {
+          "skip": {
+            "delay_ms": 2000
+          },
+          "auto_next": {
+            "delay_ms": 10000
+          }
+        }
+      }
+    }
   }
 }

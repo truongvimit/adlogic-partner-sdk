@@ -239,6 +239,8 @@ class SettingsDocument(
             }
             val allowed = when {
                 path == "app_resume.type" -> setOf("open_resume", "native_resume", "inter_resume", "none")
+                path == "native_flow.type" -> setOf("PER_SCREEN", "SHARED_POOL")
+                path == "native_flow.pool.locale_apply" -> setOf("IN_PLACE", "RECREATE")
                 path.endsWith("ad_strategy") -> setOf("SAME_TIME", "ALTERNATE")
                 path.endsWith("slot_format") -> setOf("BANNER", "NATIVE")
                 path.endsWith("lfo1_preload_mode") -> setOf("PARALLEL", "SEQUENTIAL")

@@ -12,6 +12,11 @@ import io.onboardkit.ads.NextScreenTiming
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.isPrivacyGoalsNative
+import io.onboardkit.flow.NativeFlowSnapshot
+import io.onboardkit.flow.NativeFlowType
+import io.onboardkit.flow.PoolLocaleApply
+import io.onboardkit.flow.resolveNativeFlowType
+import com.ads.module.helper.adnative.pool.PoolParity
 
 /**
  * Defaults come from onboarding_config.json. Remote (this document, then the legacy `ob_*` keys the
@@ -197,6 +202,8 @@ object OnboardingSettings {
         putMapped(k.FULLSCREEN_AUTO_DISMISS_SEC, f.fullScreenAutoDismissSec, f.fullScreenAutoDismissSec.coerceAtLeast(5) * 1000, "ob5.auto_dismiss_ms")
         put(k.SHOW_SKIP_OB3, f.showSkipOb3, "onboarding.fullscreen.skip.enabled")
         put(k.SHOW_SKIP_OB5, f.showSkipOb5, "ob5.skip.enabled")
+        putMapped(k.NATIVE_REUSE_ENABLED, f.nativeReuseEnabled,
+            if (f.nativeReuseEnabled) "SHARED_POOL" else "PER_SCREEN", NATIVE_FLOW_TYPE_PATH)
         legacySteps = listOf(k.ENABLE_STEP_OB1 to f.enableStepOb1, k.ENABLE_STEP_OB2 to f.enableStepOb2,
             k.ENABLE_STEP_OB3 to f.enableStepOb3, k.ENABLE_STEP_OB4 to f.enableStepOb4)
             .filter { (key, on) -> f.isSupplied(key, on) }
@@ -350,6 +357,67 @@ object OnboardingSettings {
 
     internal fun skipPosition(path: String, fallback: FullScreenSkipPosition): FullScreenSkipPosition =
         values.enumOr(path, fallback)
+
+    /**
+     * Read on the splash handoff, which may run inside the splash interstitial's callback: it must
+     * not throw, so anything unexpected runs the classic flow.
+     */
+    internal fun nativeFlowTypeOrDefault(): NativeFlowType =
+        runCatching { resolveNativeFlowType(text(NATIVE_FLOW_TYPE_PATH)) }.getOrDefault(NativeFlowType.PER_SCREEN)
+
+    /** Every `native_flow` value from one snapshot, so a refresh mid-read cannot mix two documents. */
+    internal fun nativeFlowSnapshot(): NativeFlowSnapshot {
+        val v = values
+        val defaults = NativeFlowSnapshot()
+        fun flag(path: String) = v.boolean("$POOL_PATH.$path")
+        fun ms(path: String) = v.long("$POOL_PATH.$path")
+        // An enum read falls through to the bundled value, so the fallback only guards a broken bundle.
+        fun <T : Enum<T>> choice(path: String, parse: (String) -> T, fallback: T): T {
+            val raw = v.string(path)
+            return runCatching { parse(raw) }.getOrElse {
+                Log.w(TAG, "$path ignored invalid enum '$raw'; using ${fallback.name}")
+                fallback
+            }
+        }
+        return NativeFlowSnapshot(
+            type = resolveNativeFlowType(v.string(NATIVE_FLOW_TYPE_PATH)),
+            parity = PoolParity(
+                refreshOverwritesUnshown = flag("parity.refresh_overwrites_unshown"),
+                retrySkippedPolite = flag("parity.retry_skipped_polite"),
+                asyncGate = flag("parity.async_gate"),
+                asyncSelector = flag("parity.async_selector"),
+                borrowShowing = flag("parity.borrow_showing"),
+                destroyReplacedAds = flag("parity.destroy_replaced_ads"),
+                keepDuplicateIds = flag("parity.keep_duplicate_ids"),
+                impressionMarksLoader = flag("parity.impression_marks_loader"),
+                screenSlotsBindStarted = flag("parity.screen_slots_bind_started"),
+                pagerSlotsBindResumed = flag("parity.pager_slots_bind_resumed"),
+                keepAfterFlow = flag("parity.keep_after_flow"),
+                resetOnNewRun = flag("parity.reset_on_new_run"),
+                respectFocusWindow = flag("parity.respect_focus_window"),
+                resumeBackgroundPreload = flag("parity.resume_background_preload"),
+                refreshMarksInFlight = flag("parity.refresh_marks_in_flight"),
+            ),
+            adoptSplashLanguage1 = flag("adopt_splash_language1"),
+            localeApply = choice("$POOL_PATH.locale_apply", PoolLocaleApply::valueOf, defaults.localeApply),
+            exitNextScreenTiming = choice("$POOL_PATH.exit.next_screen_timing", NextScreenTiming::valueOf,
+                defaults.exitNextScreenTiming),
+            doneHiddenGone = flag("done_hidden_gone"),
+            pagerSmoothScroll = flag("pager.smooth_scroll"),
+            pagerOffscreenPages = ms("pager.offscreen_pages").toInt(),
+            resumeOnGoals = flag("resume_on_goals"),
+            stuckLoadingLogMs = ms("stuck_loading_log_ms"),
+            viewDestroyOnTeardown = flag("view.destroy_on_teardown"),
+            lfoConfirmRevealDelayMs = ms("lfo.confirm_button.reveal_delay_ms"),
+            selectNextRevealDelayMs = ms("select.next_reveal_delay_ms"),
+            goalsExitReuseSplashInter = flag("goals.exit_reuse_splash_inter"),
+            fullscreenSkipDelayMs = ms("onboarding.fullscreen.skip.delay_ms"),
+            fullscreenAutoNextDelayMs = ms("onboarding.fullscreen.auto_next.delay_ms"),
+        )
+    }
+
+    private const val NATIVE_FLOW_TYPE_PATH = "native_flow.type"
+    private const val POOL_PATH = "native_flow.pool"
 
     private fun resolveAds(a: AdsConfig, adConfig: AdRemoteConfig, v: SettingsSnapshot): AdsConfig =
         a.resolvePlacements(adConfig).copy(

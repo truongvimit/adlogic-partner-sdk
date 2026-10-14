@@ -3,6 +3,7 @@ package io.onboardkit.core.session
 import android.os.Bundle
 import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.StepId
+import io.onboardkit.flow.NativeFlowSnapshot
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -17,6 +18,10 @@ internal class OnboardingSession {
 
     @Volatile
     var selectedLanguage: String? = null
+
+    /** The pooled flow this run latched at its start; null for a classic run. */
+    @Volatile
+    var nativeFlow: NativeFlowSnapshot? = null
 
     val stepsShown = CopyOnWriteArrayList<StepId>()
     val goals = CopyOnWriteArrayList<GoalAnswer>()
@@ -46,6 +51,7 @@ internal class OnboardingSession {
     /** Starts a new run while retaining the language shared by the app's onboarding screens. */
     fun begin(passthrough: Bundle?, nowMs: Long = System.currentTimeMillis()) {
         this.passthrough = passthrough
+        nativeFlow = null
         stepsShown.clear()
         goals.clear()
         finished.set(false)
@@ -55,6 +61,7 @@ internal class OnboardingSession {
     fun reset() {
         passthrough = null
         selectedLanguage = null
+        nativeFlow = null
         stepsShown.clear()
         goals.clear()
         finished.set(false)

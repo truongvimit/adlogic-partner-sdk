@@ -2,6 +2,7 @@ package io.onboardkit.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -135,6 +136,51 @@ class RemoteFlagsTest {
         assertFalse(
             flipped.adsLanguageConfirmNative == ObRemoteKeys.ADS_LANGUAGE_CONFIRM_NATIVE.default,
         )
+    }
+
+    @Test
+    fun `native reuse alias round-trips and is delivered only when sent`() {
+        val key = ObRemoteKeys.NATIVE_REUSE_ENABLED.key
+        assertTrue(key in ObRemoteKeys.ALL.map { it.key })
+        assertFalse(ObRemoteKeys.NATIVE_REUSE_ENABLED.default)
+        val silent = RemoteFlags.from(reader(emptyMap()))
+        assertFalse(silent.nativeReuseEnabled)
+        assertFalse(key in silent.supplied!!)
+        for ((raw, expected) in listOf("true" to true, "1" to true, "false" to false, "garbage" to false)) {
+            val flags = RemoteFlags.from(reader(mapOf(key to raw)))
+            assertEquals(raw, expected, flags.nativeReuseEnabled)
+            assertTrue(raw, key in flags.supplied!!)
+        }
+    }
+
+    @Test
+    fun `the alias field is declared after supplied so positional access keeps working`() {
+        val flags = RemoteFlags(supplied = setOf("x"), nativeReuseEnabled = true)
+        val components = RemoteFlags::class.java.methods.filter { it.name.matches(Regex("component\\d+")) }
+            .sortedBy { it.name.removePrefix("component").toInt() }
+        assertEquals(true, components.last().invoke(flags))
+        assertEquals(setOf("x"), components[components.size - 2].invoke(flags))
+    }
+
+    @Test
+    fun `a delivered alias maps to native_flow type and a silent one maps nothing`() {
+        val key = ObRemoteKeys.NATIVE_REUSE_ENABLED.key
+        try {
+            OnboardingSettings.acceptLegacy(RemoteFlags(nativeReuseEnabled = true, supplied = setOf(key)))
+            assertEquals("SHARED_POOL", OnboardingSettings.values.remoteValue("native_flow.type"))
+            OnboardingSettings.acceptLegacy(RemoteFlags(nativeReuseEnabled = false, supplied = setOf(key)))
+            assertEquals("PER_SCREEN", OnboardingSettings.values.remoteValue("native_flow.type"))
+            OnboardingSettings.acceptLegacy(RemoteFlags(nativeReuseEnabled = true, supplied = emptySet()))
+            assertNull(OnboardingSettings.values.remoteValue("native_flow.type"))
+            assertFalse(OnboardingSettings.values.hasOverride("native_flow"))
+            // A snapshot built in code counts a non-default value as delivered.
+            OnboardingSettings.acceptLegacy(RemoteFlags(nativeReuseEnabled = true))
+            assertEquals("SHARED_POOL", OnboardingSettings.values.remoteValue("native_flow.type"))
+            OnboardingSettings.acceptLegacy(RemoteFlags())
+            assertNull(OnboardingSettings.values.remoteValue("native_flow.type"))
+        } finally {
+            OnboardingSettings.acceptLegacy(RemoteFlags(supplied = emptySet()))
+        }
     }
 
     @Test
