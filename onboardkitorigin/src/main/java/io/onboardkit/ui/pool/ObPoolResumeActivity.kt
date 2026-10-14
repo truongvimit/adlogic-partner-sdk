@@ -4,11 +4,11 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
+import io.onboardkit.ads.pool.screenSlotMinState
 import io.onboardkit.databinding.ObResumeScreenBinding
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
@@ -63,7 +63,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             // OWNER only for visibility: like DashDrama's p(k()), the frame collapses when native_resume
             // itself is refused instead of lending another screen's ad. The screen still never claims.
             kind = PoolNativeSlot.Kind.OWNER,
-            minState = if (flow.parity.screenSlotsBindStarted) Lifecycle.State.STARTED else Lifecycle.State.RESUMED,
+            minState = flow.screenSlotMinState,
             container = b.obResumeAd,
             callbacks = StepSlotCallbacks(
                 onLoading = { if (!adClicked) b.obResumeAdBlock.isVisible = true },
@@ -81,8 +81,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Frozen at the click, while still in front: the slot's STARTED re-collect on the way back
-     * would otherwise draw the clicked ad again before onResume hides it.
+     * Frozen at the click, which may be reported once the landing page has paused the screen: the
+     * slot's re-collect on the way back (at STARTED under `screen_slots_bind_started`) would
+     * otherwise draw the clicked ad again before onResume hides it.
      */
     private fun onAdClicked() {
         adClicked = true

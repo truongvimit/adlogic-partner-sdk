@@ -23,8 +23,9 @@ internal enum class PoolLocaleApply {
 
 /**
  * Every `native_flow` value a SHARED_POOL run uses, latched at the run's start so a remote refresh
- * cannot change the flow halfway through. Defaults are DashDrama 1.0.6's and equal the bundled
- * document; the classic keys these mirror keep their own defaults for PER_SCREEN.
+ * cannot change the flow halfway through. Defaults equal the bundled document: DashDrama 1.0.6's,
+ * apart from the deviations [PoolParity] names; the classic keys these mirror keep their own
+ * defaults for PER_SCREEN.
  */
 internal data class NativeFlowSnapshot(
     val type: NativeFlowType = NativeFlowType.PER_SCREEN,

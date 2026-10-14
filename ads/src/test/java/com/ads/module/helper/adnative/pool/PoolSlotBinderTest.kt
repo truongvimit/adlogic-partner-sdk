@@ -251,6 +251,24 @@ class PoolSlotBinderTest {
         assertFalse("A hidden slot shows nothing to report from", second.lostRegistration())
     }
 
+    @Test fun `only the view an ad was last registered to holds its registration`() {
+        val ad = ad()
+        val other = newContainer().also { root.addView(it) }
+        val first = binder()
+        val second = binder(into = other)
+        assertFalse("Nothing bound", first.holdsRegistration())
+        first.render(shown(ad))
+        assertTrue(first.holdsRegistration())
+
+        second.render(shown(ad, lender = "step_ob1"))
+        assertFalse(first.holdsRegistration())
+        assertTrue(second.holdsRegistration())
+        second.render(hidden)
+        assertTrue("Hiding keeps the view and its registration", second.holdsRegistration())
+        assertEquals(Outcome.SHIMMER, second.render(shimmer))
+        assertFalse("A skeleton replaced the view", second.holdsRegistration())
+    }
+
     @Test fun `teardown destroys this slot's view only when it is the ad's last registrant`() {
         val ad = ad()
         val other = newContainer().also { root.addView(it) }

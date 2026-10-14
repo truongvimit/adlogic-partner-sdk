@@ -6,12 +6,12 @@ import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.Lifecycle
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.reportsSuccess
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
+import io.onboardkit.ads.pool.screenSlotMinState
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 
@@ -69,7 +69,7 @@ internal class PoolSelectScreen(
             owner = fragment.viewLifecycleOwner,
             placement = ad1,
             kind = PoolNativeSlot.Kind.NON_OWNER,
-            minState = if (snapshot.parity.screenSlotsBindStarted) Lifecycle.State.STARTED else Lifecycle.State.RESUMED,
+            minState = snapshot.screenSlotMinState,
             container = container,
             destroyOnTeardown = snapshot.viewDestroyOnTeardown,
         ).start()

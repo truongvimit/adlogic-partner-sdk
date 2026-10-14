@@ -26,6 +26,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.tracked
+import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.ui.pool.StepSlotCallbacks
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -36,9 +37,10 @@ import kotlinx.coroutines.launch
  * Every slot hides while ads are refused for the whole flow; an [Kind.OWNER] slot also hides on
  * its own placement's config refusal, while a [Kind.NON_OWNER] slot keeps showing what it borrows.
  *
- * A slot bound while its screen is only STARTED (a pager page kept offscreen, a screen behind a
- * translucent one) takes the ad's registration from the view the user sees; the RESUMED slot
- * showing that ad takes it back, so impressions and clicks count where the ad is visible.
+ * A slot bound while its screen is only STARTED (a pager page kept offscreen, or a screen behind a
+ * translucent one under `screen_slots_bind_started`) takes the ad's registration from the view the
+ * user sees; the RESUMED slot showing that ad takes it back, so impressions and clicks count where
+ * the ad is visible.
  */
 @MainThread
 internal class PoolNativeSlot(
@@ -135,7 +137,7 @@ internal class PoolNativeSlot(
         }
     }
 
-    /** Frozen or below its min state, the slot neither renders nor hears its ad's events. */
+    /** Frozen or below its min state, the slot neither renders nor hears its ad's impressions. */
     private fun isLive(): Boolean = !frozen && owner.lifecycle.currentState.isAtLeast(minState)
 
     private fun rerender() {
@@ -217,7 +219,11 @@ internal class PoolNativeSlot(
                 shownAd = event.ad
                 callbacks?.onShown?.invoke()
             }
-            is PoolEvent.Clicked -> if (isLive() && event.ad === binder.boundAd()) tracked.onClicked()
+            // The vendor reports a tap from the ad's registered view, some adapters only once the
+            // tap's destination has paused the screen: whatever its state, that view's slot hears it.
+            is PoolEvent.Clicked -> if (!frozen && event.ad === binder.boundAd() && binder.holdsRegistration()) {
+                tracked.onClicked()
+            }
             // A config refusal publishes nothing, so no selection arrives to hide the owner slot.
             is PoolEvent.Skipped -> if (kind == Kind.OWNER && event.key == placement.key &&
                 event.result is LoadResult.SkippedByConfig
@@ -270,3 +276,6 @@ internal class PoolNativeSlot(
         val live = LinkedHashSet<PoolNativeSlot>()
     }
 }
+
+internal val NativeFlowSnapshot.screenSlotMinState: Lifecycle.State
+    get() = if (parity.screenSlotsBindStarted) Lifecycle.State.STARTED else Lifecycle.State.RESUMED

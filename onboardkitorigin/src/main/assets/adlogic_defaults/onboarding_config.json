@@ -190,7 +190,7 @@
         "destroy_replaced_ads": false,
         "keep_duplicate_ids": true,
         "impression_marks_loader": true,
-        "screen_slots_bind_started": true,
+        "screen_slots_bind_started": false,
         "pager_slots_bind_resumed": true,
         "keep_after_flow": true,
         "reset_on_new_run": false,

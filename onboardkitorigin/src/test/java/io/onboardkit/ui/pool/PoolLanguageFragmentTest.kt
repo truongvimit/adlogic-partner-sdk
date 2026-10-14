@@ -397,6 +397,26 @@ class PoolLanguageFragmentTest {
         assertTrue(runBlocking { withTimeout(5_000) { store.state.first { it.isLfoCompleted } }.isLfoCompleted })
     }
 
+    @Test fun `D-BIND - a fill landing while the LFO is only started binds once it resumes`() {
+        launch()
+        requireNotNull(controller).pause()
+        main.idle()
+        val ad = fill("language1")
+        assertTrue("Nothing bound under the cover", container.getChildAt(0) is ShimmerFrameLayout)
+
+        requireNotNull(controller).resume()
+        main.idle()
+        assertSame(ad.admobNativeAd, shown())
+    }
+
+    @Test fun `screen_slots_bind_started binds the LFO's fill while it is only started, as DashDrama`() {
+        launch(poolSnapshot(SYNC_PARITY.copy(screenSlotsBindStarted = true)))
+        requireNotNull(controller).pause()
+        main.idle()
+        val ad = fill("language1")
+        assertSame(ad.admobNativeAd, shown())
+    }
+
     @Test fun `a Done callback while stopped switches the stage once started again`() {
         launch()
         tap(0)
@@ -632,6 +652,44 @@ class PoolLanguageFragmentTest {
         assertFalse(lfo.blocksAppResume)
         assertEquals(listOf("cancel"), PoolUiSdk.events<AnalyticsEvent.LanguageConfirmDismissed>().map { it.reason })
         assertEquals(0, PoolUiSdk.suppressDepth())
+    }
+
+    @Test fun `D-BIND - the confirm popup binds a fill landing under a translucent window once the LFO resumes`() {
+        launch()
+        fill("language1")
+        tap(0)
+        val ad2 = fill("language2")
+        tap(0)
+        val popupSlot = ShadowDialog.getLatestDialog().findViewById<FrameLayout>(R.id.ob_confirm_native_container)
+        val borrowed = popupSlot.getChildAt(0)
+        assertSame(ad2.admobNativeAd, popupSlot.shownAd())
+
+        requireNotNull(controller).pause()
+        main.idle()
+        val ad3 = fill("language_confirm")
+        assertSame("The popup stays RESUMED over a paused LFO, yet binds nothing", borrowed, popupSlot.getChildAt(0))
+
+        requireNotNull(controller).resume()
+        main.idle()
+        assertSame(ad3.admobNativeAd, popupSlot.shownAd())
+    }
+
+    @Test fun `screen_slots_bind_started binds the confirm popup's fill while the LFO is started, not while stopped`() {
+        launch(poolSnapshot(SYNC_PARITY.copy(screenSlotsBindStarted = true)))
+        fill("language1")
+        tap(0)
+        val ad2 = fill("language2")
+        tap(0)
+        val popupSlot = ShadowDialog.getLatestDialog().findViewById<FrameLayout>(R.id.ob_confirm_native_container)
+
+        requireNotNull(controller).pause().stop()
+        main.idle()
+        val ad3 = fill("language_confirm")
+        assertSame("Nothing bound in the background", ad2.admobNativeAd, popupSlot.shownAd())
+
+        requireNotNull(controller).restart().start()
+        main.idle()
+        assertSame(ad3.admobNativeAd, popupSlot.shownAd())
     }
 
     @Test fun `closing the dialog never draws its ad in the LFO slot while the selection lags`() {

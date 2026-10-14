@@ -34,7 +34,7 @@ class NativeFlowSettingsTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val alias = ObRemoteKeys.NATIVE_REUSE_ENABLED.key
 
-    /** Spec section 2, value for value: a change to the bundle must be a change to this list. */
+    /** Spec section 2 value for value, D-BIND aside: a change to the bundle must be a change to this list. */
     private val specDefaults: Map<String, Any> = mapOf(
         "native_flow.type" to "PER_SCREEN",
         "native_flow.pool.parity.refresh_overwrites_unshown" to true,
@@ -45,7 +45,7 @@ class NativeFlowSettingsTest {
         "native_flow.pool.parity.destroy_replaced_ads" to false,
         "native_flow.pool.parity.keep_duplicate_ids" to true,
         "native_flow.pool.parity.impression_marks_loader" to true,
-        "native_flow.pool.parity.screen_slots_bind_started" to true,
+        "native_flow.pool.parity.screen_slots_bind_started" to false,
         "native_flow.pool.parity.pager_slots_bind_resumed" to true,
         "native_flow.pool.parity.keep_after_flow" to true,
         "native_flow.pool.parity.reset_on_new_run" to false,
@@ -73,7 +73,7 @@ class NativeFlowSettingsTest {
         parity = PoolParity(
             refreshOverwritesUnshown = true, retrySkippedPolite = false, asyncGate = true, asyncSelector = true,
             borrowShowing = true, destroyReplacedAds = false, keepDuplicateIds = true, impressionMarksLoader = true,
-            screenSlotsBindStarted = true, pagerSlotsBindResumed = true, keepAfterFlow = true, resetOnNewRun = false,
+            screenSlotsBindStarted = false, pagerSlotsBindResumed = true, keepAfterFlow = true, resetOnNewRun = false,
             respectFocusWindow = false, resumeBackgroundPreload = false, refreshMarksInFlight = true,
         ),
         adoptSplashLanguage1 = true,
@@ -141,7 +141,7 @@ class NativeFlowSettingsTest {
             {"native_flow":{"type":"SHARED_POOL","pool":{
               "parity":{"refresh_overwrites_unshown":false,"retry_skipped_polite":true,"async_gate":false,
                 "async_selector":false,"borrow_showing":false,"destroy_replaced_ads":true,"keep_duplicate_ids":false,
-                "impression_marks_loader":false,"screen_slots_bind_started":false,"pager_slots_bind_resumed":false,
+                "impression_marks_loader":false,"screen_slots_bind_started":true,"pager_slots_bind_resumed":false,
                 "keep_after_flow":false,"reset_on_new_run":true,"respect_focus_window":true,
                 "resume_background_preload":true,"refresh_marks_in_flight":false},
               "adopt_splash_language1":false,"locale_apply":"RECREATE","exit":{"next_screen_timing":"UNDER_AD"},
@@ -154,7 +154,7 @@ class NativeFlowSettingsTest {
         val flipped = PoolParity(
             refreshOverwritesUnshown = false, retrySkippedPolite = true, asyncGate = false, asyncSelector = false,
             borrowShowing = false, destroyReplacedAds = true, keepDuplicateIds = false, impressionMarksLoader = false,
-            screenSlotsBindStarted = false, pagerSlotsBindResumed = false, keepAfterFlow = false, resetOnNewRun = true,
+            screenSlotsBindStarted = true, pagerSlotsBindResumed = false, keepAfterFlow = false, resetOnNewRun = true,
             respectFocusWindow = true, resumeBackgroundPreload = true, refreshMarksInFlight = false,
         )
         assertEquals(NativeFlowSnapshot(

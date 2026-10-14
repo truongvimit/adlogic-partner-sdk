@@ -27,7 +27,8 @@ import io.onboardkit.core.analytics.AnalyticsEvent
 /**
  * The pooled flow's copy of the LFO confirm modal; the classic one is untouched. Same chrome,
  * sizing, scrim and analytics, but its ad is an owner slot of the pool instead of a kept provider
- * buffer, so it is a [ComponentDialog]: the slot follows its lifecycle.
+ * buffer, so it is a [ComponentDialog]: the slot follows its lifecycle, capped by [activity]'s,
+ * and binds from [slotMinState] like the screen under it.
  *
  * The LFO claims [AdPlacement.LanguageConfirm] before [show] and takes the owner back in
  * [onClosed], which runs exactly once however the modal goes away.
@@ -36,6 +37,7 @@ internal class PoolConfirmLanguageDialog(
     private val activity: ComponentActivity,
     private val language: ObLanguage,
     private val destroyOnTeardown: Boolean,
+    private val slotMinState: Lifecycle.State,
     private val onConfirmed: () -> Unit,
     private val onClosed: () -> Unit,
 ) {
@@ -105,10 +107,10 @@ internal class PoolConfirmLanguageDialog(
         val adBlock = dialog.findViewById<FrameLayout>(R.id.ob_confirm_ad_block)
         val container = dialog.findViewById<FrameLayout>(R.id.ob_confirm_native_container)
         PoolNativeSlot(
-            owner = dialog,
+            owner = CappedLifecycleOwner(dialog, activity),
             placement = AdPlacement.LanguageConfirm,
             kind = PoolNativeSlot.Kind.OWNER,
-            minState = Lifecycle.State.STARTED,
+            minState = slotMinState,
             container = container,
             callbacks = StepSlotCallbacks(
                 onLoading = { adBlock.isVisible = true },

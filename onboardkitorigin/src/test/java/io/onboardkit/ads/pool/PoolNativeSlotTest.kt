@@ -305,7 +305,7 @@ class PoolNativeSlotTest {
         assertEquals(listOf("language2"), bound())
     }
 
-    @Test fun `only a live slot hears the events of an ad it shares`() {
+    @Test fun `of the slots sharing an ad, only a live one hears its impression and only the registered view's its click`() {
         val ad = filledLfo1()
         val lfo = Slot(AdPlacement.Language1)
         lfo.moveTo(Lifecycle.State.STARTED)
@@ -321,7 +321,37 @@ class PoolNativeSlotTest {
         loader.click(ad)
         assertEquals(listOf("bound", "shown", "engaged:NONE"), dialog.log)
         assertEquals("Frozen behind the dialog", listOf("bound"), lfo.log)
-        assertEquals("Paused below its min state", listOf("bound"), page.log)
+        assertEquals("Paused, and its view lost the ad's registration to the dialog's", listOf("bound"), page.log)
+    }
+
+    @Test fun `a click reported once the tap's destination paused or stopped the screen still engages its slot`() {
+        val ad = filledLfo1()
+        val s = Slot(AdPlacement.Language1, minState = Lifecycle.State.RESUMED)
+        s.moveTo(Lifecycle.State.RESUMED)
+        assertSame(ad.admobNativeAd, s.shownAd())
+
+        s.moveTo(Lifecycle.State.STARTED)
+        loader.click(ad)
+        assertEquals(listOf("bound", "engaged:NONE"), s.log)
+        s.moveTo(Lifecycle.State.CREATED)
+        loader.click(ad)
+        assertEquals(listOf("bound", "engaged:NONE", "engaged:NONE"), s.log)
+    }
+
+    @Test fun `a paused page whose view the next page's bind replaced never hears that ad's click`() {
+        val ad = filledLfo1()
+        val first = Slot(ob1, minState = Lifecycle.State.RESUMED)
+        first.moveTo(Lifecycle.State.RESUMED)
+        first.moveTo(Lifecycle.State.STARTED)
+        val next = Slot(ob2, minState = Lifecycle.State.RESUMED)
+        next.moveTo(Lifecycle.State.RESUMED)
+        listOf(first, next).forEach { assertSame(ad.admobNativeAd, it.shownAd()) }
+
+        loader.click(ad)
+        next.moveTo(Lifecycle.State.STARTED)
+        loader.click(ad)
+        assertEquals("Heard in front and once its destination paused it", listOf("bound", "engaged:NONE", "engaged:NONE"), next.log)
+        assertEquals(listOf("bound"), first.log)
     }
 
     @Test fun `a frozen slot keeps its view and draws the latest value when unfrozen`() {

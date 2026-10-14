@@ -26,6 +26,7 @@ import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.POOL_ADS
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.PoolTestSdk
+import io.onboardkit.ads.pool.SYNC_PARITY
 import io.onboardkit.ads.pool.installTestEngine
 import io.onboardkit.ads.pool.poolSnapshot
 import io.onboardkit.config.AdsConfig
@@ -237,6 +238,27 @@ class PoolGoalsTest {
         consent.performClick()
         assertTrue("Held: no request", OnboardingPool.lastResult(privacyAlt) is LoadResult.NoOpState)
         assertEquals(2, loader.callsFor(privacyAlt.key).size)
+    }
+
+    @Test fun `D-BIND - a select screen binds a fill landing under a translucent window once it resumes`() {
+        open(Stage.PRIVACY)
+        requireNotNull(controller).pause()
+        pump()
+        val ad = loader.fill(privacy.key)
+        pump()
+        assertTrue("Nothing bound under the cover", adSlot.getChildAt(0) is ShimmerFrameLayout)
+        requireNotNull(controller).resume()
+        pump()
+        assertSame(ad.admobNativeAd, shownAd())
+    }
+
+    @Test fun `screen_slots_bind_started binds a select screen's fill while it is only started`() {
+        open(Stage.GOAL, snapshot = poolSnapshot(SYNC_PARITY.copy(screenSlotsBindStarted = true)))
+        requireNotNull(controller).pause()
+        pump()
+        val goalAd = loader.fill(goal.key)
+        pump()
+        assertSame("screen_slots_bind_started: DashDrama's STARTED collector", goalAd.admobNativeAd, shownAd())
     }
 
     @Test fun `the forward button stays hidden until a fixed time after the first selection`() {

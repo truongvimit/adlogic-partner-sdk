@@ -5,8 +5,9 @@ import androidx.annotation.RestrictTo
 /**
  * Switches for every DashDrama 1.0.6 behaviour the pool reproduces, read once per run from
  * `native_flow.pool.parity.*`. Defaults are DashDrama's, except [refreshMarksInFlight], which is
- * the SDK's own refresh model (deviation D-REFRESH). Each switch names the DashDrama source and
- * the value an optimisation would flip it to.
+ * the SDK's own refresh model (deviation D-REFRESH), and [screenSlotsBindStarted], where ad
+ * policy wins (deviation D-BIND). Each switch names the DashDrama source and the value an
+ * optimisation would flip it to.
  *
  * Expiry and the per-id wait are not here: they are the SDK's own `native.cache.max_age_ms` and
  * `native.load.tier_timeout_ms`, shared with every other native.
@@ -29,8 +30,11 @@ data class PoolParity(
     val keepDuplicateIds: Boolean = true,
     /** Any impression from a loader's request marks it Showing. false: only its current ad's. */
     val impressionMarksLoader: Boolean = true,
-    /** LFO, Privacy, Goal and the resume screen collect the selection at STARTED (DD U5/h.java:49). */
-    val screenSlotsBindStarted: Boolean = true,
+    /**
+     * D-BIND: LFO, Privacy, Goal, the confirm popup and the resume screen bind only while RESUMED;
+     * GMA counts an impression under a translucent cover. true: DashDrama's STARTED (U5/h.java:49).
+     */
+    val screenSlotsBindStarted: Boolean = false,
     /** Pager pages collect at RESUMED (DD U5/f.java:52). */
     val pagerSlotsBindResumed: Boolean = true,
     /** DD keeps the pool until process death; the resume screen shows leftovers. false: release at completeFlow. */

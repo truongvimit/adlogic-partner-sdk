@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.ads.module.helper.adnative.pool.LoadMode
@@ -22,6 +21,7 @@ import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
 import io.onboardkit.ads.pool.PoolSplashAdoption
+import io.onboardkit.ads.pool.screenSlotMinState
 import io.onboardkit.config.LanguageConfirmButtonStyle
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -127,7 +127,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             owner = viewLifecycleOwner,
             placement = currentKey,
             kind = PoolNativeSlot.Kind.OWNER,
-            minState = if (flow.parity.screenSlotsBindStarted) Lifecycle.State.STARTED else Lifecycle.State.RESUMED,
+            minState = flow.screenSlotMinState,
             container = b.obNativeContainer,
             destroyOnTeardown = flow.viewDestroyOnTeardown,
         ).also { it.start() }
@@ -246,6 +246,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             activity = activity,
             language = language,
             destroyOnTeardown = snapshot.viewDestroyOnTeardown,
+            slotMinState = snapshot.screenSlotMinState,
             onConfirmed = ::onDone,
             onClosed = ::onConfirmDialogClosed,
         ).also { it.show() }

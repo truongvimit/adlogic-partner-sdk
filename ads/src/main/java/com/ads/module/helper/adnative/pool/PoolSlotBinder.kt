@@ -69,6 +69,9 @@ class PoolSlotBinder(
     fun lostRegistration(): Boolean = container.visibility == View.VISIBLE && boundAd() != null &&
         !isLastRegistrant(registered, boundView)
 
+    /** The container's view is its ad's last registrant, the one view the vendor reports clicks from. */
+    fun holdsRegistration(): Boolean = boundAd() != null && isLastRegistrant(registered, boundView)
+
     fun render(selection: PoolSelection<ApNativeAd>): Outcome {
         val ad = selection.ad
         return when {
