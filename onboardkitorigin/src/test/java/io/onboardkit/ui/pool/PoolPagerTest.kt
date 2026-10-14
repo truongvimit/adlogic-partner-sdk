@@ -34,6 +34,7 @@ import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.PoolTestSdk
 import io.onboardkit.ads.pool.SYNC_PARITY
 import io.onboardkit.ads.pool.installTestEngine
+import io.onboardkit.ads.pool.lastRegisteredView
 import io.onboardkit.ads.pool.poolSnapshot
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
@@ -53,6 +54,7 @@ import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.widget.ObPrimaryButton
 import io.onboardkit.ui.widget.ObStepIndicator
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -613,6 +615,55 @@ class PoolPagerTest {
         back.performClick()
         pump()
         assertEquals(ObPoolFlowActivity.Stage.PAGER, activity.stage)
+    }
+
+    @Test fun `with pager_slots_bind_resumed off the page on screen keeps its ad's registration`() {
+        launch(steps = listOf(ob1, ob2, ob3), snapshot = poolSnapshot(SYNC_PARITY.copy(pagerSlotsBindResumed = false)))
+        val first = loader.fill(stepOb1.key)
+        pump()
+        assertSame("Offscreen pages bind too", first.admobNativeAd, shownAd(2))
+        assertSame("The page on screen holds the registration", slot(0).getChildAt(0),
+            lastRegisteredView[first.admobNativeAd])
+
+        nextPage()
+        assertEquals(1, pager.currentItem)
+        assertSame(first.admobNativeAd, shownAd(1))
+        assertSame("The page now on screen took it", slot(1).getChildAt(0), lastRegisteredView[first.admobNativeAd])
+
+        val second = loader.fill(stepOb2.key)
+        pump()
+        assertSame(second.admobNativeAd, shownAd(1))
+        assertSame(second.admobNativeAd, shownAd(2))
+        assertSame(slot(1).getChildAt(0), lastRegisteredView[second.admobNativeAd])
+    }
+
+    @Test fun `after reset() mid-run the pages still render the pool and a full page waits for its ad`() {
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        configure(listOf(ob1, full1, ob2), pagerAds)
+        OnboardingSdk.session.begin(null)
+        val flow = poolSnapshot()
+        OnboardingSdk.session.nativeFlow = flow
+        OnboardingPool.activate(app, flow)
+        main.idle()
+        controller = Robolectric.buildActivity(ObPoolFlowActivity::class.java)
+        activity.setTheme(R.style.ob_Theme_OnboardKit)
+        requireNotNull(controller).setup().visible()
+        pump()
+        runBlocking { OnboardingSdk.reset() }
+        pump()
+        assertFalse(OnboardingPool.isActive)
+
+        activity.goTo(ObPoolFlowActivity.Stage.PAGER)
+        pump()
+        val ad = loader.fill(stepOb1.key)
+        pump()
+        assertSame("Page 0 still renders the pool's pick", ad.admobNativeAd, shownAd(0))
+
+        nextPage()
+        assertEquals(1, pager.currentItem)
+        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(fullPage))
+        assertTrue("The full page borrows while its own claim loads", completed().none { it.stepId == StepId.FULL1 })
+        assertSame(ad.admobNativeAd, shownAd(1))
     }
 
     @Test fun `OC1 a late LFO2 fill shows on page 0`() {

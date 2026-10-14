@@ -69,7 +69,9 @@ internal class PoolGoalFragment : Fragment(), PoolStage {
                 list.adapter = it
             }
         select.onViewCreated(ad, action)
-        action.isEnabled = selectedIds.size >= cfg.minSelection
+        // Recreated under its own exit's ad: the picks are recorded and the exit runs on this host.
+        exiting = exiting || (activity as? ObPoolFlowActivity)?.pendingExit == PoolExit.Goal
+        action.isEnabled = !exiting && selectedIds.size >= cfg.minSelection
         action.setOnClickListener { if (selectedIds.size >= cfg.minSelection) finishGoal(options) }
     }
 
@@ -83,7 +85,7 @@ internal class PoolGoalFragment : Fragment(), PoolStage {
             selectedIds -= id
         }
         adapter?.selectedIds = selectedIds.toSet()
-        next?.isEnabled = selectedIds.size >= cfg.minSelection
+        next?.isEnabled = !exiting && selectedIds.size >= cfg.minSelection
         select.onSelection()
     }
 
@@ -95,7 +97,7 @@ internal class PoolGoalFragment : Fragment(), PoolStage {
         val goals = options.filter { it.id in selectedIds }.map { GoalAnswer(it.id, it.label(requireContext())) }
         if (goals.isNotEmpty()) OnboardingSdk.recordGoals(goals)
         host.markExitStarted()
-        host.exitWithInterstitial(host.snapshot.goalsExitReuseSplashInter) { host.finishFlow(withPaywall = false) }
+        host.exitWithInterstitial(host.snapshot.goalsExitReuseSplashInter, PoolExit.Goal)
     }
 
     override fun onResume() {

@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.MotionEvent
 import android.widget.FrameLayout
+import androidx.annotation.MainThread
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
 import androidx.lifecycle.Lifecycle
@@ -18,6 +19,7 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NextScreenTiming
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
+import io.onboardkit.ads.pool.PoolPlacementMapper
 import io.onboardkit.ads.showInterstitial
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.core.FinishReason
@@ -33,12 +35,22 @@ import io.trackkit.Tracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.lang.ref.WeakReference
 import java.util.Locale
 
 /** What the host needs from the fragment running the current stage. */
 internal interface PoolStage {
     /** True while an app-resume ad must not open over this stage. Read live at return time. */
     val blocksAppResume: Boolean
+}
+
+/** A screen's last exit, waiting on its interstitial. */
+internal sealed interface PoolExit {
+    /** The LFO's Done with [code] picked. */
+    data class Language(val code: String) : PoolExit
+
+    /** Goal's Next: the run completes without a paywall. */
+    data object Goal : PoolExit
 }
 
 /** The pager stage; the host's [StepHost] delegates to it so the classic step fragments work unchanged. */
@@ -79,6 +91,9 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     internal var exitInProgress = false
         private set
 
+    /** The exit whose interstitial is up; a recreated host and its restored stage read it to stay latched. */
+    internal val pendingExit: PoolExit? get() = pending?.exit
+
     private var finishing = false
 
     /** The knobs latched for this run; a remote refresh mid-run cannot change them. */
@@ -87,7 +102,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     internal override val resumeBlockedByScreen: Boolean
         get() {
-            if (super.resumeBlockedByScreen || exitInProgress) return true
+            if (super.resumeBlockedByScreen || exitInProgress || pending != null) return true
             return when (stage) {
                 Stage.PRIVACY, Stage.GOAL -> !snapshot.resumeOnGoals || stageFragment()?.blocksAppResume == true
                 Stage.PAGER -> stageFragment()?.blocksAppResume ?: true
@@ -102,15 +117,35 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         setContentView(R.layout.ob_activity_pool_flow)
-        // Started only from startResolved, which activates the pool. A recreation in the same
-        // process keeps it; a restart after process death never gets here (BaseOnboardActivity).
-        if (!OnboardingPool.isActive) OnboardingPool.activate(applicationContext, snapshot)
+        if (savedInstanceState == null) {
+            // Started only from startResolved, which activates the pool. A recreation never
+            // activates: reset() or a classic run since then turned the pool off for good, and a
+            // restart after process death never gets here (BaseOnboardActivity).
+            if (!OnboardingPool.isActive) OnboardingPool.activate(applicationContext, snapshot)
+            // A new run: an exit an abandoned host left behind is not this run's.
+            pending = null
+        }
+        live = WeakReference(this)
+        OnboardingPool.attachScreen(this)
+        if (pending?.exit == PoolExit.Goal) exitInProgress = true
         stage = savedInstanceState?.getString(KEY_STAGE)
             ?.let { runCatching { Stage.valueOf(it) }.getOrNull() } ?: Stage.LANGUAGE
         if (supportFragmentManager.findFragmentByTag(STAGE_TAG) == null) {
             commitStage(stage, newStageFragment(stage, restoredLanguage = null))
         }
         ObLog.d(ObLog.Section.SCREEN, "pool | flow stage=${stage.name.lowercase()}")
+        // The previous instance may have died under the exit's ad: this one carries the exit on.
+        runEndedExit()
+    }
+
+    override fun onDestroy() {
+        OnboardingPool.detachScreen(this)
+        if (live?.get() === this) {
+            live = null
+            // Gone for good, not recreated: its exit never runs.
+            if (isFinishing && !isChangingConfigurations) pending = null
+        }
+        super.onDestroy()
     }
 
     // ── Stages ──
@@ -145,17 +180,17 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
      * @param restoredLanguage for the OB1 back return: the LFO comes back with this pick.
      */
     internal fun goTo(target: Stage, restoredLanguage: String? = null) {
-        lifecycleScope.launch {
-            withStarted {
-                if (isFinishing || isDestroyed) return@withStarted
-                val recreate = snapshot.localeApply == PoolLocaleApply.RECREATE && localeChanged()
-                if (!recreate) applyLocaleInPlace()
-                commitStage(target, newStageFragment(target, restoredLanguage))
-                // The committed stage is what the recreated activity restores; attachBaseContext
-                // wraps the new locale.
-                if (recreate) recreate()
-            }
-        }
+        lifecycleScope.launch { withStarted { switchStage(target, restoredLanguage) } }
+    }
+
+    private fun switchStage(target: Stage, restoredLanguage: String? = null) {
+        if (isFinishing || isDestroyed) return
+        val recreate = snapshot.localeApply == PoolLocaleApply.RECREATE && localeChanged()
+        if (!recreate) applyLocaleInPlace()
+        commitStage(target, newStageFragment(target, restoredLanguage))
+        // The committed stage is what the recreated activity restores; attachBaseContext
+        // wraps the new locale.
+        if (recreate) recreate()
     }
 
     private fun pickedLocale(): Locale? {
@@ -189,22 +224,63 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     // ── Exits ──
 
     /**
-     * Offers the splash interstitial that was loaded but never shown, then runs [next]: after the
-     * ad closes (AFTER_AD, DashDrama's Done) or once it is on screen (UNDER_AD).
+     * Offers the splash interstitial that was loaded but never shown, then carries out [exit]:
+     * after the ad closes (AFTER_AD, DashDrama's Done) or once it is on screen (UNDER_AD).
+     *
+     * The ad can outlive this instance (a configuration change, "Don't keep activities"), so its
+     * callbacks hold neither this host nor the screen: the exit runs once, on whichever host is
+     * alive and STARTED when the ad ends.
      */
-    internal fun exitWithInterstitial(reuseSplashInter: Boolean, next: () -> Unit) {
+    internal fun exitWithInterstitial(reuseSplashInter: Boolean, exit: PoolExit) {
+        val ticket = PendingExit(exit).also { pending = it }
         if (!reuseSplashInter) {
             ObLog.d(ObLog.Section.SHOW, "pool | splash_inter reuse off")
             AdPlacement.SplashInterstitial.trackSkipped(AdSkipReason.PLACEMENT_OFF_BY_REMOTE)
-            next()
+            adEnded(ticket)
             return
         }
         val underAd = snapshot.exitNextScreenTiming == NextScreenTiming.UNDER_AD
         showInterstitial(
             AdPlacement.SplashInterstitial,
-            onNext = { if (underAd) next() },
-            onFinished = { if (!underAd) next() },
+            onNext = { if (underAd) adEnded(ticket) },
+            onFinished = { if (!underAd) adEnded(ticket) },
         )
+    }
+
+    /** Runs the exit whose ad has ended, once, as soon as this host is STARTED. */
+    private fun runEndedExit() {
+        lifecycleScope.launch {
+            withStarted {
+                val ticket = pending?.takeIf { it.adEnded } ?: return@withStarted
+                if (isFinishing) return@withStarted
+                pending = null
+                when (val exit = ticket.exit) {
+                    is PoolExit.Language -> completeLanguage(exit.code)
+                    PoolExit.Goal -> finishFlow(withPaywall = false)
+                }
+            }
+        }
+    }
+
+    /** DashDrama's Done: save, warm the next stage's first slot without owning it, then move on. */
+    private fun completeLanguage(code: String) {
+        OnboardingSdk.persistLanguage(code)
+        // SDK scope: the stage switch destroys the LFO's view right away.
+        OnboardingSdk.stateStoreOrNull()?.let { store -> OnboardingSdk.scope().launch { store.markLfoCompleted() } }
+        val steps = OnboardingSdk.preload().stepDefinitions(sdk.guard().isPremium(this))
+        ObLog.d(ObLog.Section.NAV, "pool | language done enabledSteps=${steps.map { it.id.value }}")
+        when {
+            steps.isNotEmpty() -> {
+                PoolPlacementMapper.pagePlacement(steps.first())?.let(OnboardingPool::preload)
+                switchStage(Stage.PAGER)
+            }
+            // Privacy/Goal is the optional tail of this flow even when remote disables every page.
+            OnboardingSdk.privacyGoalsScreenEnabled() -> {
+                OnboardingPool.preload(AdPlacement.StepNative(StepId.PARTNER_PRIVACY))
+                switchStage(Stage.PRIVACY)
+            }
+            else -> finishFlow(withPaywall = true)
+        }
     }
 
     /**
@@ -262,7 +338,8 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         container: FrameLayout,
         callbacks: StepSlotCallbacks,
     ): Boolean {
-        if (!OnboardingPool.isActive) return false
+        // The engine, not the routing flag: after reset() mid-run the pages keep the pool they started on.
+        if (OnboardingPool.engineOrNull() == null) return false
         // A page planned without a placement draws nothing in DashDrama; a slot would borrow other ads.
         if (placement is AdPlacement.StepNative && pagerStage()?.pagePlacement(placement.stepId) == null) {
             callbacks.onUnavailable(AdSkipReason.NO_AD_UNIT)
@@ -294,12 +371,34 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         super.onSaveInstanceState(outState)
     }
 
+    /** An exit and whether its ad has ended. */
+    private class PendingExit(val exit: PoolExit) {
+        var adEnded = false
+    }
+
     internal companion object {
         private const val KEY_STAGE = "ob_pool_stage"
         private const val STAGE_TAG = "ob_pool_stage"
 
+        /**
+         * Process-wide, main thread: the exit outlives the host instance that offered its ad. A
+         * restart after process death never restores this host, so the bundle need not carry it.
+         */
+        private var pending: PendingExit? = null
+
+        /** The host instance a pending exit runs on. */
+        private var live: WeakReference<ObPoolFlowActivity>? = null
+
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, ObPoolFlowActivity::class.java))
+        }
+
+        /** An ad from an abandoned run ends nothing. */
+        @MainThread
+        private fun adEnded(ticket: PendingExit) {
+            if (pending !== ticket) return
+            ticket.adEnded = true
+            live?.get()?.runEndedExit()
         }
     }
 }

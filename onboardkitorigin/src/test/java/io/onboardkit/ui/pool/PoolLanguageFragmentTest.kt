@@ -25,6 +25,7 @@ import io.onboardkit.ads.pool.ApFakeLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.PoolPlacementMapper
+import io.onboardkit.ads.pool.SYNC_PARITY
 import io.onboardkit.ads.pool.poolSnapshot
 import io.onboardkit.ads.pool.setPremium
 import io.onboardkit.config.GoalOption
@@ -131,6 +132,35 @@ class PoolLanguageFragmentTest {
     }
 
     private fun reveal() = main.idleFor(3_000, MILLISECONDS)
+
+    /**
+     * A configuration change, or "Don't keep activities" with an opaque ad on top: a new instance
+     * gets the saved state in the same process. [between] runs while no instance exists.
+     */
+    private fun recreateHost(between: () -> Unit = {}) {
+        val state = Bundle()
+        requireNotNull(controller).pause().saveInstanceState(state).stop().destroy()
+        main.idle()
+        between()
+        controller = Robolectric.buildActivity(ObPoolFlowActivity::class.java).also {
+            it.get().setTheme(R.style.ob_Theme_OnboardKit)
+            it.setup(state)
+        }
+        main.idle()
+        activity.findViewById<RecyclerView?>(R.id.ob_language_list)?.itemAnimator = null
+    }
+
+    /** Done on es with both LFO ads filled; the leftover splash interstitial is up. */
+    private fun doneOnSpanish() = launch().let {
+        fill("language1")
+        tap(1)
+        fill("language2")
+        reveal()
+        done()
+        PoolUiSdk.provider.presentations.single()
+    }
+
+    private fun languageCompleted() = PoolUiSdk.events<AnalyticsEvent.LanguageCompleted>().map { it.screenIndex to it.code }
 
     private fun idleUntil(uptimeMs: Long) = main.idleFor((uptimeMs - SystemClock.uptimeMillis()).coerceAtLeast(0), MILLISECONDS)
 
@@ -405,6 +435,103 @@ class PoolLanguageFragmentTest {
         assertEquals("No refresh of language2", 1, loader.callsFor("language2").size)
         assertEquals(1, loader.callsFor("language1").size)
         assertEquals("Nothing closed the gate on the next stage's preload", 1, loader.callsFor("step_ob1").size)
+    }
+
+    @Test fun `a host recreated under the exit interstitial carries the exit on once the ad closes`() {
+        val presentation = doneOnSpanish()
+        presentation.onNextAction()
+        recreateHost()
+        assertEquals(ObPoolFlowActivity.Stage.LANGUAGE, activity.stage)
+        assertTrue("The restored LFO stays latched", lfo.blocksAppResume)
+        assertTrue(activity.resumeBlockedByScreen)
+        assertEquals(View.VISIBLE, confirm.visibility)
+
+        done()
+        tap(0)
+        assertEquals("Done is spent: no second interstitial", 1, PoolUiSdk.provider.presentations.size)
+        assertEquals("Nothing requested under the ad", 1, loader.callsFor("language2").size)
+        assertEquals(1, loader.callsFor("language1").size)
+        assertNull(OnboardingSdk.selectedLanguageOrNull())
+
+        presentation.onAdClosed()
+        main.idle()
+        assertEquals(ObPoolFlowActivity.Stage.PAGER, activity.stage)
+        assertTrue(stageFragment is PoolPagerFragment)
+        assertEquals("es", OnboardingSdk.selectedLanguageOrNull())
+        assertEquals(1, loader.callsFor("step_ob1").size)
+        assertEquals(listOf(1 to "es", 2 to "es"), languageCompleted())
+        assertEquals(listOf("es"), PoolUiSdk.events<AnalyticsEvent.LanguageFlowCompleted>().map { it.code })
+        assertEquals(0, PoolUiSdk.suppressDepth())
+    }
+
+    @Test fun `an exit ad that ends while no host exists runs on the next one, the flow end included`() {
+        PoolUiSdk.configure(steps = emptyList())
+        val presentation = doneOnSpanish()
+        recreateHost(between = { presentation.onAdClosed() })
+        main.idle()
+        assertEquals("es", OnboardingSdk.selectedLanguageOrNull())
+        assertTrue("completeFlow ran on the new host", OnboardingSdk.session.finished.get())
+        assertTrue(activity.isFinishing)
+        assertEquals(listOf("es"), PoolUiSdk.events<AnalyticsEvent.LanguageFlowCompleted>().map { it.code })
+    }
+
+    @Test fun `an exit left by an abandoned host does not run in a new hub`() {
+        doneOnSpanish()
+        requireNotNull(controller).pause().stop().destroy()
+        main.idle()
+        val stale = PoolUiSdk.provider.presentations.single()
+
+        launch()
+        assertFalse(lfo.blocksAppResume)
+        stale.onAdClosed()
+        main.idle()
+        assertEquals(ObPoolFlowActivity.Stage.LANGUAGE, activity.stage)
+        assertNull(OnboardingSdk.selectedLanguageOrNull())
+    }
+
+    @Test fun `a recreation after reset() keeps the pool off`() {
+        launch()
+        runBlocking { OnboardingSdk.reset() }
+        main.idle()
+        assertFalse(OnboardingPool.routeResume)
+
+        recreateHost()
+        assertFalse("A configuration change is not a new run", OnboardingPool.routeResume)
+        assertFalse(OnboardingPool.isActive)
+    }
+
+    @Test fun `under respect_focus_window the LFO's requests wait for its window`() {
+        val flow = poolSnapshot(SYNC_PARITY.copy(respectFocusWindow = true))
+        OnboardingSdk.session.nativeFlow = flow
+        OnboardingPool.activate(app, flow)
+        main.idle()
+        controller = Robolectric.buildActivity(ObPoolFlowActivity::class.java).also {
+            it.get().setTheme(R.style.ob_Theme_OnboardKit)
+            it.create().start().postCreate(null).resume()
+        }
+        main.idle()
+        assertTrue(stageFragment is PoolLanguageFragment)
+        assertFalse(activity.hasWindowFocus())
+        assertTrue("Nothing goes out before the window has focus", loader.callsFor("language1").isEmpty())
+        assertEquals("The LFO owns the slot meanwhile", "language1", engine.owner)
+        assertTrue("A wait is no skip", PoolUiSdk.events<AnalyticsEvent.AdSkipped>().isEmpty())
+
+        requireNotNull(controller).visible().windowFocusChanged(true)
+        main.idle()
+        assertEquals("One request once it has", 1, loader.callsFor("language1").size)
+        assertEquals(listOf("language1"), PoolUiSdk.events<AnalyticsEvent.AdRequested>().map { it.placementName })
+
+        list.itemAnimator = null
+        tap(0)
+        assertEquals("Focused, a tap requests at once", 1, loader.callsFor("language2").size)
+
+        requireNotNull(controller).windowFocusChanged(false)
+        fill("language2")
+        backgroundAndReturn()
+        assertEquals("The return's refresh waits for focus too", 1, loader.callsFor("language2").size)
+        requireNotNull(controller).windowFocusChanged(true)
+        main.idle()
+        assertEquals(2, loader.callsFor("language2").size)
     }
 
     @Test fun `UNDER_AD moves on as soon as the ad is on screen`() {

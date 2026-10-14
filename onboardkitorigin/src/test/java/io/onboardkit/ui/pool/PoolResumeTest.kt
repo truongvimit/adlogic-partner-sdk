@@ -3,6 +3,7 @@ package io.onboardkit.ui.pool
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
@@ -196,6 +197,42 @@ class PoolResumeTest {
         val screen = openResume()
         assertTrue(screen.get().isFinishing)
         assertTrue(loader.attempts.isEmpty())
+    }
+
+    @Test fun `back from its ad's landing page the screen keeps no ad and requests nothing`() {
+        val screen = openResume()
+        val own = fill("native_resume")
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        val view = screen.slot().getChildAt(0)
+        val requests = loader.attempts.size
+
+        loader.click(own)
+        main.idle()
+        screen.backAndForth()
+        assertEquals("DashDrama's p(false)", View.GONE, screen.block().visibility)
+        assertEquals("No refresh, no request", requests, loader.attempts.size)
+        assertSame("Nothing drawn again", view, screen.slot().getChildAt(0))
+
+        OnboardingPool.claim(ob1, LoadMode.FORCED)
+        fill("step_ob1")
+        screen.backAndForth()
+        assertEquals("For the rest of its life", View.GONE, screen.block().visibility)
+        assertSame(view, screen.slot().getChildAt(0))
+        assertEquals(requests + 1, loader.attempts.size)
+
+        val state = Bundle()
+        screen.pause().saveInstanceState(state).stop().destroy()
+        controllers -= screen
+        main.idle()
+        val restored = Robolectric.buildActivity(ObPoolResumeActivity::class.java).also {
+            controllers += it
+            it.get().setTheme(R.style.ob_Theme_OnboardKit)
+            it.setup(state)
+            main.idle()
+        }
+        assertEquals("A screen destroyed under the landing page comes back without its ad", View.GONE,
+            restored.block().visibility)
+        assertEquals(requests + 1, loader.attempts.size)
     }
 
     @Test fun `native resume opens the pooled screen only while the run routes it`() {

@@ -39,11 +39,15 @@ import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.GoalAnswer
 import io.onboardkit.core.OnboardingOutcome
 import io.onboardkit.core.StepId
+import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.paywall.PaywallGate
 import io.onboardkit.paywall.PaywallOutcome
 import io.onboardkit.paywall.PaywallPlacement
 import io.onboardkit.ui.pool.ObPoolFlowActivity.Stage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -388,6 +392,42 @@ class PoolGoalsTest {
         exits.single().onAdClosed()
         pump()
         assertEquals(1, outcomes.size)
+    }
+
+    @Test fun `a host recreated under the Goal interstitial completes the run once`() {
+        val events = mutableListOf<OnboardingEvent>()
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { OnboardingSdk.events.collect { events += it } }
+        try {
+            open(Stage.GOAL)
+            tap(0)
+            tap(2)
+            main.idleFor(3_000, MILLISECONDS)
+            forward.performClick()
+            pump()
+            assertEquals(1, exits.size)
+            exits.single().onNextAction()
+
+            recreate()
+            assertEquals(Stage.GOAL, activity.stage)
+            assertFalse("Next stays off on the restored screen", forward.isEnabled)
+            assertTrue((stage as PoolGoalFragment).blocksAppResume)
+            assertTrue(activity.resumeBlockedByScreen)
+            forward.performClick()
+            pump()
+            assertEquals("No second exit", 1, exits.size)
+            assertTrue(outcomes.isEmpty())
+
+            exits.single().onAdClosed()
+            pump()
+            assertEquals(1, outcomes.size)
+            assertTrue(outcomes.single() is OnboardingOutcome.Completed)
+            assertTrue("The new host ends the run", activity.isFinishing)
+            assertEquals(0, paywalls)
+            assertEquals(1, events.count { it is OnboardingEvent.GoalsSelected })
+            assertEquals(listOf("read", "sign"), OnboardingSdk.session.goals.map { it.id })
+        } finally {
+            job.cancel()
+        }
     }
 
     @Test fun `selections survive recreation`() {

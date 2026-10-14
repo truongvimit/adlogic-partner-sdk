@@ -21,12 +21,9 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
-import io.onboardkit.ads.pool.PoolPlacementMapper
 import io.onboardkit.ads.pool.PoolSplashAdoption
 import io.onboardkit.config.LanguageConfirmButtonStyle
 import io.onboardkit.config.ObLanguage
-import io.onboardkit.core.ObLog
-import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.core.events.OnboardingEvent
 import io.onboardkit.databinding.ObActivityLanguageBinding
@@ -111,6 +108,9 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             }
         }
 
+        // Recreated under its own exit's ad: Done was tapped and the exit runs on this host.
+        exitLatched = exitLatched || host?.pendingExit is PoolExit.Language
+
         adapter = LanguageAdapter(::onLanguageTapped, OnboardingSettings.onboardingPrimaryColor()).also {
             it.selectedCode = selectedCode
             b.obLanguageList.layoutManager = LinearLayoutManager(requireContext())
@@ -131,6 +131,12 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             container = b.obNativeContainer,
             destroyOnTeardown = flow.viewDestroyOnTeardown,
         ).also { it.start() }
+        if (exitLatched) {
+            // Requests nothing (see onResume) and is no new view of the screen.
+            OnboardingPool.setOwner(currentKey)
+            ownedKey = currentKey
+            return
+        }
         // Before the claim, so it finds LFO1 held or in flight instead of starting a second chain.
         if (restored == null || savedInstanceState != null) {
             PoolSplashAdoption.run(handoff, flow)
@@ -284,28 +290,8 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
         revealJob?.cancel()
         OnboardingSdk.track(AnalyticsEvent.LanguageCompleted(screenIndex(currentKey), code))
         OnboardingSdk.track(AnalyticsEvent.LanguageFlowCompleted(code))
-        host.exitWithInterstitial(OnboardingSdk.flags().reuseSplashInter) { leave(host, code) }
-    }
-
-    /** DashDrama's Done: save, warm the next stage's first slot without owning it, then move on. */
-    private fun leave(host: ObPoolFlowActivity, code: String) {
-        OnboardingSdk.persistLanguage(code)
-        // SDK scope: the stage switch destroys this view right away.
-        OnboardingSdk.stateStoreOrNull()?.let { store -> OnboardingSdk.scope().launch { store.markLfoCompleted() } }
-        val steps = OnboardingSdk.preload().stepDefinitions(OnboardingSdk.guard().isPremium(host))
-        ObLog.d(ObLog.Section.NAV, "pool | language done enabledSteps=${steps.map { it.id.value }}")
-        when {
-            steps.isNotEmpty() -> {
-                PoolPlacementMapper.pagePlacement(steps.first())?.let(OnboardingPool::preload)
-                host.goTo(ObPoolFlowActivity.Stage.PAGER)
-            }
-            // Privacy/Goal is the optional tail of this flow even when remote disables every page.
-            OnboardingSdk.privacyGoalsScreenEnabled() -> {
-                OnboardingPool.preload(AdPlacement.StepNative(StepId.PARTNER_PRIVACY))
-                host.goTo(ObPoolFlowActivity.Stage.PRIVACY)
-            }
-            else -> host.finishFlow(withPaywall = true)
-        }
+        // After the ad the host saves the pick, warms the next stage's first slot and moves on.
+        host.exitWithInterstitial(OnboardingSdk.flags().reuseSplashInter, PoolExit.Language(code))
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
