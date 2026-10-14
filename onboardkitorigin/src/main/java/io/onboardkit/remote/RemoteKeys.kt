@@ -61,7 +61,12 @@ object ObRemoteKeys {
     // Per-placement switches. One key per placement; disabling a position never affects another.
     val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", OnboardingSettings.defaultBool("lfo.exit.reuse_splash_inter"))
     val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
-    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
+    /**
+     * A kill switch, so it stays on while `onboarding.exit_interstitial.enabled` defaults to off:
+     * the guard requires both, and an off default here would overrule a host that turns the ad on
+     * with `afterOnboardingInterstitialEnabled = true`. A delivered value still decides either way.
+     */
+    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", true)
     val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
     val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
     val ADS_LANGUAGE_CONFIRM_NATIVE =

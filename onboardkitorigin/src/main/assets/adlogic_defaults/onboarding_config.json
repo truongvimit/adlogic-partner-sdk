@@ -136,7 +136,7 @@
       "ob5_on_last_step": true
     },
     "exit_interstitial": {
-      "enabled": true,
+      "enabled": false,
       "preload_on_entry": true,
       "wait_timeout_ms": 8000,
       "next_screen_timing": "UNDER_AD",

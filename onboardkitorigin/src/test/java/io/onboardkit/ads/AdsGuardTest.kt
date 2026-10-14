@@ -9,8 +9,11 @@ import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.config.onboardKitConfig
+import io.onboardkit.remote.ObRemoteKeys
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -138,13 +141,45 @@ class AdsGuardTest {
     @Test
     fun `explicit unit overrides the compiled slot`() {
         // The splash resolves the returning-user slot, which the caller passes explicitly
+        val enabled = config(AdsConfig(languageNative = NativeAdUnit("language-native"),
+            splashInterstitial = InterstitialAdUnit("splash-inter"), afterOnboardingInterstitialEnabled = true))
         assertNull(
-            guard().skipReason(
+            guard(config = enabled).skipReason(
                 context,
                 AdPlacement.AfterOnboardingInterstitial,
                 InterstitialAdUnit("remote-override"),
             ),
         )
+    }
+
+    @Test
+    fun `the exit interstitial is off by default and on once the host, the document or the legacy key says so`() {
+        val unit = InterstitialAdUnit("exit")
+        fun reason(ads: AdsConfig = AdsConfig(afterOnboardingInterstitial = unit), flags: RemoteFlags = RemoteFlags()) =
+            guard(config = OnboardingSettings.resolve(config(ads)), flags = flags)
+                .skipReason(context, AdPlacement.AfterOnboardingInterstitial)
+        val settings = OnboardingSettings.document
+        try {
+            assertFalse(AdsConfig().afterOnboardingInterstitialEnabled)
+            assertFalse(OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
+            assertEquals(AdSkipReason.ADS_OFF_IN_CONFIG, reason())
+            assertNull(reason(AdsConfig(afterOnboardingInterstitial = unit, afterOnboardingInterstitialEnabled = true)))
+
+            settings.acceptSuccessfulFetch("""{"onboarding":{"exit_interstitial":{"enabled":true}}}""")
+            assertNull(reason())
+            settings.acceptSuccessfulFetch(null)
+
+            val key = ObRemoteKeys.ADS_AFTER_ONBOARD_INTER.key
+            OnboardingSettings.acceptLegacy(RemoteFlags(adsAfterOnboardInter = true, supplied = setOf(key)))
+            assertNull(reason())
+            val off = RemoteFlags(adsAfterOnboardInter = false, supplied = setOf(key))
+            OnboardingSettings.acceptLegacy(off)
+            assertEquals(AdSkipReason.PLACEMENT_OFF_BY_REMOTE,
+                reason(AdsConfig(afterOnboardingInterstitial = unit, afterOnboardingInterstitialEnabled = true), off))
+        } finally {
+            settings.acceptSuccessfulFetch(null)
+            OnboardingSettings.acceptLegacy(RemoteFlags(supplied = emptySet()))
+        }
     }
 
     private fun guard(
