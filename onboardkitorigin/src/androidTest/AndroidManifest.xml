@@ -41,5 +41,15 @@
             android:name="io.onboardkit.ads.AppOpenResumeDeviceActivity"
             android:exported="false"
             android:theme="@style/ob_Theme_OnboardKit" />
+        <activity
+            android:name="io.onboardkit.ui.pool.PoolSlotDeviceActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/ob_Theme_OnboardKit" />
+        <!-- Same window theme as GMA's AdActivity: the activity below is paused, never stopped. -->
+        <activity
+            android:name="io.onboardkit.ui.pool.PoolCoverDeviceActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 </manifest>

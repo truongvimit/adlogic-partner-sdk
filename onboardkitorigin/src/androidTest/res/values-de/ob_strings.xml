@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Host-style translations of SDK strings for PoolFlowDeviceTest's in-place locale switch. -->
+<resources>
+    <string name="ob_next">Weiter</string>
+    <string name="ob_back">Zurück</string>
+</resources>

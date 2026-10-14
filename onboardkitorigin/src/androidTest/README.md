@@ -77,6 +77,35 @@ The notification remains open longer than the test's splash wait budget. This ve
 
 Real GMA tests require connectivity and an actual fill. A vendor no-fill is reported as a failure to exercise the intended scenario, not silently counted as a pass. These tests do not establish revenue uplift or exhaust every mediation network. Natural one-hour expiry remains covered by virtual-clock unit tests.
 
+## SHARED_POOL rendering
+
+`io.onboardkit.ui.pool.PoolFlowDeviceTest` loads Google's test native unit through
+`AdMobPoolLoader` into a private `NativePoolEngine` and binds it with `PoolSlotBinder` into the
+real LFO slot template. No production ID is requested and only the test unit is clicked.
+
+```sh
+adb shell am instrument -w \
+  -e class io.onboardkit.ui.pool.PoolFlowDeviceTest \
+  io.onboardkit.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+- `oneFillInThreeFreshViewsCountsOneImpressionAndTheLastViewTakesTheClick`: one fill bound into
+  three fresh views (a replay and a second slot) reports exactly one impression; a CTA click on
+  the last view reaches the sink exactly once. The click opens the test ad's destination; the
+  test presses Back to return.
+- `bindingWhileOnlyStartedUnderACoverCountsNoImpressionUntilVisible`: a cover with GMA
+  AdActivity's translucent window theme keeps the host STARTED; a bind there counts no
+  impression for 5 seconds, then exactly one once the cover finishes.
+- `rebindAfterTeardownDestroyedTheLastRegistrantPopulatesAFreshView`: teardown destroys the
+  last-registrant view, never the ad; a fresh bind populates and reports one impression.
+- `inPlaceLocaleReachesFragmentsInflatedAfterwards`: the hub's `updateConfiguration` switch
+  reaches a fragment committed afterwards (pager chrome and content step). The SDK ships no
+  translations, so `src/androidTest/res/values-fr` and `values-de` supply them as a host would.
+- `pooledActivitiesAreNotExportedInTheMergedManifest`: `ObPoolFlowActivity` and
+  `ObPoolResumeActivity` stay `exported=false` after manifest merging.
+
+The ad methods skip (never pass) when the device is offline or no fill arrives within 30 seconds.
+
 ## Interstitial preload screen whitelist
 
 `io.onboardkit.ads.InterstitialPreloadScreensDeviceTest` uses the public screen-report API,
