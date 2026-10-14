@@ -14,6 +14,8 @@ Optional Privacy → Goal screens run after the pager and the exit interstitial 
 
 A returning user who opens the app from the launcher skips Welcome Back by default and goes to the app after the splash. Enable `welcome_back.enabled=true` to show it. See [Welcome Back](welcome-back-screen.md).
 
+This guide describes the default `PER_SCREEN` native flow. The alternative `SHARED_POOL` flow runs LFO → pager → Privacy → Goal in one SDK screen fed by one shared native pool; see [SHARED_POOL native flow](#shared_pool-native-flow).
+
 Pager natives stay bound while their page view survives, so revisiting content or Full1/Full2 shows the same ad without another request. Fullscreen auto-next restarts on each visit; revisits show Skip immediately when enabled or required to prevent a trap. A first no-fill advances; revisiting a failed page shows its fallback and Skip. Ads are released when the view is destroyed.
 
 ## 1. Add the dependencies
@@ -510,6 +512,111 @@ For app-open delay and gating see [app-open](../onboardkitorigin/README.md#app-o
 
 </details>
 
+### SHARED_POOL native flow
+
+<details>
+<summary>Open the SHARED_POOL guide</summary>
+
+`native_flow.type` picks the flow that runs after the splash. `PER_SCREEN`, the default, is the flow the rest of this guide describes. `SHARED_POOL` reproduces the first-open flow of DashDrama 1.0.6, the reference app the pool was modelled on: LFO → onboarding pager → Goal, with the SDK's Privacy step before Goal (Privacy and Goal only when enabled). These stages run in one SDK activity, and every native slot in them draws from one pool shared by the whole process. The splash is the same in both flows. Keys, precedence, the `ob_native_reuse_enabled` alias, the `ob_native_flow` user property and every `native_flow.pool` default are listed in [Native flow type](remote-settings.md#native-flow-type); this section describes what the flow does.
+
+**How the pool decides.** The pool holds at most one ad per placement and keeps it from screen to screen.
+
+- **Owner screen.** The screen in front asks the pool for its placement and becomes the owner, unless the placement is refused for the whole run (premium, ads or the placement switched off, no ad unit, UA gate). A passing refusal (offline, consent not answered yet, requests held) still makes it the owner.
+- **POLITE and FORCED loads.** Opening a screen, selecting a page, coming back to a screen and preloading the next stage are POLITE loads: they are skipped while any request is running in the pool, and a skipped load is dropped, not queued (`parity.retry_skipped_polite`). A language tap and a Privacy or Goal selection are FORCED loads: they ignore the gate. Either way, a placement that already holds an ad or is loading requests nothing.
+- **Single-flight gate.** The gate is open only while no placement has a request running, so a POLITE load does not start while another request runs. The check is made off the main thread and can lag a frame (`parity.async_gate`). FORCED loads, return refreshes and the adopted splash load ignore the gate. A refresh counts as a running request.
+- **Selector.** Every slot shows the same pick: (1) the owner's ad, whenever the pool holds one for it; (2) otherwise the newest ad that no screen has shown yet; (3) otherwise the ad shown most recently; (4) otherwise a shimmer while a request runs, and a hidden slot when none does. A screen whose own ad has not arrived borrows another placement's ad, and its own ad replaces the borrowed one as soon as it fills.
+- **Refresh on return.** When a screen comes back to the front (from the background, an ad click or the resume screen), it requests the ad it owns again from the first floor while that ad keeps showing: a fill replaces it, a no-fill keeps it. This is the SDK's refresh model, not DashDrama's, whose refresh did not count as a running request (`parity.refresh_marks_in_flight`).
+- **Expiry and floor wait.** Both are the SDK's values, not pool keys: an ad older than `native.cache.max_age_ms` (one hour) is dropped and requested again the next time a screen asks for that placement, and a floor that does not answer within `native.load.tier_timeout_ms` (30 seconds) counts as a failure, so the next floor is requested.
+- **Floors.** A request walks the enabled floors of the key's `ids` in order. A repeated ID is requested again after a no-fill (`parity.keep_duplicate_ids`), unlike `PER_SCREEN`, which drops duplicates.
+
+**Turn it on.**
+
+- Set `native_flow.type` to `"SHARED_POOL"` in `onboarding_config`, remotely or in your app asset, or deliver the flat key `ob_native_reuse_enabled = true`. [Native flow type](remote-settings.md#native-flow-type) explains the precedence and why a fresh install whose first fetch has not landed runs the asset or SDK default.
+- Keep the built-in `adProvider = ERainAdProvider()`; without it every run is `PER_SCREEN`.
+- The type and every `native_flow.pool` value are read once per run, when the splash opens the language screen, and kept for that run; a value fetched later applies from the next run. Each run that opens the language screen sets the user property `ob_native_flow` and logs `native_flow_type=…` to `OB_FLOW`.
+- No code changes: the flow uses the same `ad_config` keys, `OnboardKitSetup`, content layouts and Privacy/Goal layouts as `PER_SCREEN`. Welcome Back and the in-app language picker stay `PER_SCREEN`.
+
+**Screen by screen.** Placements are named by their `ad_config` key from [step 2](#2-add-the-ids-and-the-two-json-files).
+
+| Screen | Placement | When it requests | Behaviour |
+| --- | --- | --- | --- |
+| LFO | `native_lang` until the first tap, then `native_lang_alt`; `native_popup_lang` while the confirmation popup is open | On open: takes over the splash's LFO1 preload (a ready ad shows with no new request, a running load is joined, a load still queued is cancelled), then POLITE `native_lang`; the resume right after opening does not refresh an adopted splash ad that has not shown yet. Every language tap: FORCED `native_lang_alt`. On return: a refresh of the current key, then POLITE on that key. | The saved language is preselected; otherwise nothing is. The confirm button stays hidden until `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (3 s) after the first tap. Done shows the splash interstitial's leftover when `lfo.exit.reuse_splash_inter` is `true`; after it closes (`native_flow.pool.exit.next_screen_timing`, `AFTER_AD`) the language is saved and applied (`native_flow.pool.locale_apply`, in place by default), the next stage's first ad is preloaded POLITE and the next stage opens. A `native_lang` refused for the run hides the slot. |
+| Pager content page | The page's `native_obN`; a page whose key is off has no slot | On page selection: POLITE on the page's key, plus a POLITE preload of the next page's key. When the pager comes back to the front: a refresh of the owner's key, then POLITE on the current page's key. | The slot binds once the page is resumed. Pages change only through the page's own controls; swipe is locked. |
+| Full page | The page's `native_fullN` | As a content page. | X appears `native_flow.pool.onboarding.fullscreen.skip.delay_ms` (2 s) after the page first resumes; the page advances by itself `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (10 s) after it was selected, background time included. With nothing to show and no request running, or with its key refused for the run, the page advances at once. Return ads never open over it. |
+| Privacy | `native_select` on open, `native_select_alt` on every consent change | On open: POLITE `native_select`. Every check or uncheck: FORCED `native_select_alt`. On return: a refresh of the owned key, then POLITE on the last key asked for. | Continue stays hidden until `native_flow.pool.select.next_reveal_delay_ms` (3 s) after the first consent change and works only while consent is checked. It preloads Goal's first ad POLITE and opens Goal. Details: [Privacy → Goal](privacy-goals-screen.md#under-shared_pool). |
+| Goal | `native_select` on open, `native_select_alt` on every option tap | As Privacy, with option taps as the selection. | Next stays hidden until the same delay after the first tap and works while at least `minSelection` options are picked. It records the goals, shows the splash interstitial's leftover when `native_flow.pool.goals.exit_reuse_splash_inter` is `true`, then completes onboarding without a paywall. |
+| Resume screen | `native_resume` | On open: POLITE `native_resume`. On return: a refresh of `native_resume`, then POLITE on it. | Opens on return when `app_resume.type` is `native_resume`, during the flow and after it in the same process. It never becomes the owner, so it shows the same pick as every other slot: during the flow usually the current screen's ad, after the flow the newest leftover not shown yet, otherwise the one shown most recently. Start or Back closes it. |
+
+Without Privacy → Goal the pager's last page ends the flow, with the paywall when one is wired, and never shows an exit interstitial. System Back does nothing on any stage.
+
+**Left out from `PER_SCREEN`.** The LFO tap hint and device-language promotion, the LFO2 swap and its timers, `click_action` (a native click neither navigates nor reloads), OB5, pager swipe, the exit interstitial after the pager (`inter_after_ob3`, whatever `onboarding.exit_interstitial.enabled` says) and the classic fullscreen delays (`onboarding.fullscreen.skip.delay_ms`, `onboarding.fullscreen.auto_next.delay_ms`). Two SDK features are kept with their classic keys:
+
+- The language confirmation popup (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, a re-tap of the selected row). While it is open it owns the pool with `native_popup_lang`; closing it hands ownership back to LFO.
+- The OB1 back button (`onboarding.steps.ob1.back.enabled`, OB1 as the first page). It returns to LFO with the picked language kept, the confirm button visible at once and the slot on `native_lang_alt`.
+
+**Privacy → Goal.** Off by default (`privacy_goals_screen.enabled = false`) in both flows, and it needs `goal.options`. DashDrama's first-open flow ends on its goal screen, so parity needs it on; without it the pooled flow ends after the pager. Privacy comes with Goal, as in `PER_SCREEN`, although that flow has no step between the pager and its goal screen. See [Privacy → Goal](privacy-goals-screen.md#under-shared_pool).
+
+**Ads on return.** The pool's resume screen needs `app_resume.type = native_resume` (the default) and `native_resume` declared and enabled in `ad_config`; with another type, return ads follow that type as described in [Ads on return](#ads-on-return). After the flow the pool keeps its ads until the process ends (`parity.keep_after_flow`), so the resume screen, DashDrama's welcome back, shows onboarding leftovers, each for at most one hour after its fill, and requests `native_resume` only while it is open. This lasts until process death or a later `PER_SCREEN` run in the same process; the next cold start uses the regular resume screen. It is unrelated to the SDK's Welcome Back screen.
+
+**Purchases.** Once the user is premium, every pooled slot hides and the pool stops requesting, including the next floor of a chain already running. The ads the pool already holds are released at the purchase only when the host calls `AdGate.installPremiumObserver(appScope, Billing.isPremium)` as in [BillingKit](billing-integration.md). Without it they stay in memory, never shown, until the flow ends or, for a purchase after the flow, until they expire one hour after their fill, a `PER_SCREEN` run releases the pool, or the process ends.
+
+**Revenue and reports.** Revenue is attributed per ad unit: before each floor the pool registers that ad unit ID under the placement requesting it, and the paid event looks the placement up by ID. A borrowed ad therefore reports under the placement that loaded it, not the screen that showed it. An ID shared by several placements (Privacy and Goal both use `native_select`; the sample shares one test ID per format) reports under whichever placement requested it last, which skews per-placement reports; give each placement its own IDs. `ad_request` is sent once per new load chain (a return refresh sends none), not per slot, and a POLITE load skipped by the gate sends no `ad_skipped`. Segment dashboards by `ob_native_flow`.
+
+**QA with DashDrama's 4-page shape.**
+
+1. Put this in `app/src/main/assets/onboarding_config.json` and supply `goal.options` in code ([Privacy → Goal](privacy-goals-screen.md)):
+
+   ```json
+   {
+     "native_flow": { "type": "SHARED_POOL" },
+     "onboarding": { "order": ["ob1", "ob2", "full1", "ob3"] },
+     "privacy_goals_screen": { "enabled": true }
+   }
+   ```
+
+   Keep `privacy_goals_screen.enabled` `true`: the SDK default is `false`. To try the pool on your own pages instead, the asset needs only `{"native_flow":{"type":"SHARED_POOL"}}`. A remote `native_flow.type` outranks the asset.
+2. In `ad_config.json`, turn on `native_ob1` and `native_full1` (off in the sample) and set `"isEnable": false` on `native_ob2` and `native_ob3`. Do not delete those two keys: a disabled key leaves its page without a slot, while a deleted key falls back to any unit your `AdsConfig` sets in code (for example `contentStepNative`). Keep `native_lang`, `native_lang_alt` and `native_resume` on, and add `native_select` and `native_select_alt` as in [Privacy → Goal](privacy-goals-screen.md#ads-and-completion) (the sample does not declare them), each with a test `ids` floor in `ad_config_debug.json`.
+3. Clear app data and restart the process, then walk LFO → OB1 → OB2 → Full1 → OB3 → Privacy → Goal → your app. OB2 and OB3 show no ad.
+
+**Reading the log.** Call `OnboardingSdk.setFlowLogging(true)` and filter Logcat on `OB_FLOW`. Pool lines read `[   +1234] LOAD   | pool | request key=language1 tier=0 refresh=false`: `key` is the pool key (`language1`, `language2`, `language_confirm`, `step_ob1`, `fullscreen_full1`, `step_partner_privacy`, `step_partner_goal_alt`, `native_resume`…) and `tier` is the 0-based position in the key's `ids`.
+
+| Line after `pool \|` | Meaning |
+| --- | --- |
+| `activate keep_after_flow=… reset_on_new_run=…` | A `SHARED_POOL` run started. `classic_run` means a `PER_SCREEN` run released the pool; `deactivate` means `OnboardingSdk.reset()` did. |
+| `flow stage=…`, `stage -> …`, `ob1 back -> language` | The stage shown, a stage change, the OB1 back button. |
+| `adopt language1 status=…` | The splash's LFO1 preload: `ready` (its ad was taken over), `pending` (its running load was joined), `cancelled_queue` (its queued load was cancelled and LFO requests its own), `none` (no handoff, or the splash load failed or never started), `off` (`adopt_splash_language1` is `false`). |
+| `request key=… tier=… refresh=…` | One floor requested; `refresh=true` for a refresh on return. |
+| `fill key=… refresh=…` | The placement now holds a new ad. |
+| `fail key=… tier=…`, `tier_timeout key=… tier=…` | That floor did not fill or did not answer in time; the next floor follows. |
+| `exhausted key=… refresh=… why=…` | The chain ended without a fill: `exhausted` (every floor tried), `refused reason=…` (a guard closed mid-chain), `adoption_failed`. A refresh keeps the ad it held. |
+| `gate_skip key=…` | A POLITE load skipped because another request was running; no analytics event is sent. |
+| `config_skip key=… reason=…` | Refused for the run (`premium`, `no_provider`, `ads_off_remote`, `ads_off_config`, `placement_off_remote`, `no_ad_unit`, `ua_gate`); the screen does not become the owner. |
+| `transient_skip key=… reason=…` | Refused for now (`requests_held`, `offline`, `consent_not_granted`); the screen still becomes the owner. |
+| `refresh_skip key=… reason=…` | A refresh refused by the same guards; the held ad stays. |
+| `expired key=…` | The held ad passed `native.cache.max_age_ms` and was dropped. |
+| `stale_fill key=…` | A fill arrived after its floor timed out or the pool was released; it is destroyed unshown. |
+| `stuck_loading key=… refresh=… ms=…` | A request still running after `stuck_loading_log_ms`; log only. |
+| `release_all loaders=…` | Every pooled ad was released: a purchase, the end of a flow that does not keep the pool, a `PER_SCREEN` run, `OnboardingSdk.reset()`, or a new `SHARED_POOL` run with `parity.reset_on_new_run` `true`. |
+
+`OnboardingSdk.dumpState()` is a suspend function; log it from a coroutine, for example `lifecycleScope.launch { Log.d("OB_STATE", OnboardingSdk.dumpState()) }`. It includes the run's native flow type, whether the pool is active and routes return ads, the run's gate skips per key, the owner, whether the gate is open, and one line per placement, for example `language1 #0 state=Showing(ts=…) ad=held inFlight=false refreshing=false adopted=false fillAtMs=… saved=2` (`saved` is the number of floors in its saved request).
+
+**Deviations from DashDrama 1.0.6.**
+
+- The splash's LFO1 preload is taken over by the pool; DashDrama has no splash preload.
+- The splash's own natives (the bottom slot, `native_fs`) stay outside the pool and its gate.
+- The SDK's ad guard (premium, consent, network, request hold, UA gate, placement switches) is checked before every request and every floor; an LFO without an ad unit hides its slot.
+- A purchase hides every slot, stops pool requests and releases the pool's ads (at once with `AdGate.installPremiumObserver`, otherwise when the flow ends; see Purchases above).
+- Privacy is an SDK step, run as a select screen.
+- `click_action` is ignored.
+- Ads are ordered by one strictly increasing timestamp, so two ads never tie; DashDrama breaks ties by map order.
+- The language-completed events are sent at the Done tap; the language is saved after the LFO exit ad (the splash interstitial's leftover) closes.
+- A slot's ad view is destroyed when its screen goes away (`view.destroy_on_teardown`); the ad stays in the pool.
+- A refresh counts as a running request (`parity.refresh_marks_in_flight`).
+- Ad expiry (one hour) and the wait per floor (30 seconds) are the SDK's values.
+- The language confirmation popup and the OB1 back button are kept.
+
+</details>
+
 ## 8. Final checks
 
 - [ ] If using grouped settings, verify remote overrides plus first-run offline local fallback and offline reuse of valid remote cache, per the [Firebase checklist](firebase-integration.md#remote-notes).
@@ -519,6 +626,7 @@ For app-open delay and gating see [app-open](../onboardkitorigin/README.md#app-o
 - [ ] LFO: selecting a language then pressing Back shows Save and stays on the screen; re-selecting the current language opens the popup immediately, while another language waits for the configured total tap count.
 - [ ] Denying notifications still continues; Home and return from splash, LFO, the popup and OB do not navigate twice. After enabling `native_ob1..4`, a native click on an OB page advances the step on return; on LFO/the popup it stays and binds the replacement ad once ready.
 - [ ] Enable `native_ob1`, `native_ob2` and `native_full1`, then disable `native_ob2`: content page 2 still shows and does not borrow page 1's native. Disable `native_full1` again: the ad-only page is skipped. Disable `inter_splash` and `inter_after_ob3`: the destination screen is still reached.
+- [ ] If you use `SHARED_POOL`, walk the [4-page QA shape](#shared_pool-native-flow) with `OB_FLOW` on: when the splash's LFO1 load had filled or was still running, the log shows `pool | adopt language1 status=ready` or `pending` (`cancelled_queue` or `none` otherwise), OB2 and OB3 show no ad, and Goal's Next completes onboarding.
 - [ ] Test with no network: by default the connection prompt appears; if you opted into offline support the flow still continues on the SDK timeout and does not hang on an app callback.
 - [ ] Relaunch after completion: through the splash into your app, with no OB rerun; your screen is already there when the splash interstitial closes. Clear app data to test first-open; closing the app mid-OB and reopening must start at LFO after the splash.
 - [ ] Your app screens use the selected language; check both the translations and the language split configuration when shipping an AAB.

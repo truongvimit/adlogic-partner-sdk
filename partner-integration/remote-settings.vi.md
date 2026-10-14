@@ -248,7 +248,7 @@ Giá trị chỉ `SHARED_POOL` đọc nằm dưới `native_flow.pool`, đặt t
 
 Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, tap lại hàng đang chọn), nút back OB1 (`onboarding.steps.ob1.back.enabled`), thời hạn ad (`native.cache.max_age_ms` trong `ad_behavior_config`, một giờ) và thời gian chờ mỗi tầng (`native.load.tier_timeout_ms` cùng `placement_overrides` của nó, 30 giây; tầng không trả lời kịp được tính là lỗi và tầng kế tiếp được request). `onboarding.order`, `privacy_goals_screen.enabled` và `lfo.exit.reuse_splash_inter` áp dụng cho cả hai.
 
-`SHARED_POOL` không dùng các tính năng sau của `PER_SCREEN`: bàn tay gợi ý ở LFO và việc đưa ngôn ngữ thiết bị lên đầu, swap LFO2 và các timer của nó, `click_action` (click không chuyển trang cũng không reload), OB5, vuốt pager, interstitial cuối pager và paywall sau Goal. Back hệ thống không làm gì ở mọi màn của nó; nút back OB1 quay về LFO, giữ ngôn ngữ đã chọn và hiện sẵn nút xác nhận. Done ở LFO hiện interstitial splash còn lại khi `lfo.exit.reuse_splash_inter` là `true`, Next ở Goal cũng vậy khi `native_flow.pool.goals.exit_reuse_splash_inter` là `true`.
+`SHARED_POOL` không dùng các tính năng sau của `PER_SCREEN`: bàn tay gợi ý ở LFO và việc đưa ngôn ngữ thiết bị lên đầu, swap LFO2 và các timer của nó, `click_action` (click không chuyển trang cũng không reload), OB5, vuốt pager và interstitial cuối pager. Back hệ thống không làm gì ở mọi màn của nó; nút back OB1 quay về LFO, giữ ngôn ngữ đã chọn và hiện sẵn nút xác nhận. Done ở LFO hiện interstitial splash còn lại khi `lfo.exit.reuse_splash_inter` là `true`, Next ở Goal cũng vậy khi `native_flow.pool.goals.exit_reuse_splash_inter` là `true`.
 
 | Field trong `native_flow.pool` | Mặc định | Tác dụng |
 | --- | --- | --- |
@@ -278,7 +278,7 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.resume_background_preload` | `false` | Native resume chỉ request khi màn của nó mở; `true` còn preload ở background. |
 | `parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy, nên lượt load nền của màn khác phải chờ trong khi ad đang giữ vẫn hiện; `false` để refresh không ảnh hưởng tới kiểm tra đó. |
 
-Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
+Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo, trừ `parity.refresh_marks_in_flight`, có mặc định theo mô hình refresh của SDK. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
 
 ## Fetch và publish
 

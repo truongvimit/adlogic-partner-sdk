@@ -13,6 +13,8 @@ Native trong pager được giữ khi view của trang còn tồn tại; quay l�
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau pager và interstitial cuối pager (nếu được bật; mặc định tắt). Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](../partner-integration/privacy-goals-screen.vi.md).
 
+`native_flow.type = SHARED_POOL` thay flow mặc định `PER_SCREEN` sau splash: LFO, pager onboarding và Privacy → Goal chạy trong một màn SDK, mọi slot native lấy ad từ một pool dùng chung, theo luật mở lần đầu của DashDrama 1.0.6, app tham chiếu mà pool được mô phỏng theo. Kiểu này cần `ERainAdProvider` có sẵn, được đọc một lần mỗi lượt chạy và không đổi splash; xem [Native flow SHARED_POOL](../partner-integration/ads-onboarding-integration.vi.md#native-flow-shared_pool).
+
 ## Trước khi tích hợp
 
 - Dùng minSdk 24, compileSdk 36 và JDK 17. Làm theo [cấu hình build chung](../README.vi.md) và dùng cùng một tag đã phát hành cho mọi module.

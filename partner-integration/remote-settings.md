@@ -228,7 +228,7 @@ Values only `SHARED_POOL` reads live under `native_flow.pool`, named after the c
 
 Both flows read the same key for the language confirmation dialog (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, a re-tap of the selected row), the OB1 back button (`onboarding.steps.ob1.back.enabled`), the ad expiry (`ad_behavior_config` `native.cache.max_age_ms`, one hour) and the wait per floor (`native.load.tier_timeout_ms` with its `placement_overrides`, 30 seconds; a floor that does not answer in time counts as a failure and the next floor is requested). `onboarding.order`, `privacy_goals_screen.enabled` and `lfo.exit.reuse_splash_inter` apply to both.
 
-`SHARED_POOL` leaves out these `PER_SCREEN` features: the LFO tap hint and device-language promotion, the LFO2 swap and its timers, `click_action` (a click neither navigates nor reloads), OB5, pager swipe, the exit interstitial after the pager and the paywall after Goal. System Back does nothing on any of its screens; the OB1 back button returns to LFO with the picked language kept and the confirm button shown. LFO's Done shows the splash interstitial's leftover when `lfo.exit.reuse_splash_inter` is `true`, and Goal's Next does when `native_flow.pool.goals.exit_reuse_splash_inter` is `true`.
+`SHARED_POOL` leaves out these `PER_SCREEN` features: the LFO tap hint and device-language promotion, the LFO2 swap and its timers, `click_action` (a click neither navigates nor reloads), OB5, pager swipe and the exit interstitial after the pager. System Back does nothing on any of its screens; the OB1 back button returns to LFO with the picked language kept and the confirm button shown. LFO's Done shows the splash interstitial's leftover when `lfo.exit.reuse_splash_inter` is `true`, and Goal's Next does when `native_flow.pool.goals.exit_reuse_splash_inter` is `true`.
 
 | `native_flow.pool` field | Default | Effect |
 | --- | --- | --- |
@@ -258,7 +258,7 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `parity.resume_background_preload` | `false` | Native resume requests only when its screen opens; `true` also preloads it in the background. |
 | `parity.refresh_marks_in_flight` | `true` | A refresh counts as a running request, so other screens' background loads wait while the held ad keeps showing; `false` makes a refresh invisible to that check. |
 
-The `parity.*` switches reproduce the reference app the pool was modelled on. Leave them at their defaults unless you are tuning that behaviour on purpose.
+The `parity.*` switches reproduce the reference app the pool was modelled on, except `parity.refresh_marks_in_flight`, whose default follows the SDK's refresh model. Leave them at their defaults unless you are tuning that behaviour on purpose.
 
 ## Fetch timing and QA
 

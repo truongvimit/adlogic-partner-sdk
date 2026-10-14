@@ -22,6 +22,8 @@ Pager natives stay bound while their page view survives, so revisiting content o
 
 Optional Privacy → Goal screens run after the pager and the exit interstitial (when enabled; off by default) as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](../partner-integration/privacy-goals-screen.md).
 
+`native_flow.type = SHARED_POOL` replaces the default `PER_SCREEN` flow after the splash: LFO, the onboarding pager and Privacy → Goal run in one SDK screen, and every native slot draws from one shared pool, following the first-open rules of DashDrama 1.0.6, the reference app the pool was modelled on. It needs the built-in `ERainAdProvider`, is read once per run and leaves the splash unchanged; see [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.md#shared_pool-native-flow).
+
 ## Before you start
 
 - Use minSdk 24, compileSdk 36 and JDK 17. Follow the [shared build setup](../README.md) and use the same published tag for every module.

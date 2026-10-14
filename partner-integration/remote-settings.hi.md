@@ -228,7 +228,7 @@ Type हर run में एक बार पढ़ा जाता है, ज
 
 दोनों flows इन चीज़ों के लिए एक ही key पढ़ते हैं: language confirmation dialog (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, चुनी हुई row पर दोबारा tap), OB1 back button (`onboarding.steps.ob1.back.enabled`), ad expiry (`ad_behavior_config` का `native.cache.max_age_ms`, एक घंटा) और हर floor का wait (`native.load.tier_timeout_ms` और उसके `placement_overrides`, 30 सेकंड; जो floor समय पर जवाब न दे वह failure गिना जाता है और अगला floor request होता है)। `onboarding.order`, `privacy_goals_screen.enabled` और `lfo.exit.reuse_splash_inter` दोनों पर लागू होते हैं।
 
-`SHARED_POOL` में `PER_SCREEN` की ये features नहीं हैं: LFO tap hint और device-language promotion, LFO2 swap और उसके timers, `click_action` (click न navigate करता है न reload), OB5, pager swipe, pager के बाद का exit interstitial और Goal के बाद का paywall। इसकी किसी भी screen पर system Back कुछ नहीं करता; OB1 back button चुनी हुई भाषा रखते हुए और confirm button दिखाते हुए LFO पर लौटाता है। LFO का Done splash interstitial का बचा हुआ ad दिखाता है जब `lfo.exit.reuse_splash_inter` `true` हो, और Goal का Next तब जब `native_flow.pool.goals.exit_reuse_splash_inter` `true` हो।
+`SHARED_POOL` में `PER_SCREEN` की ये features नहीं हैं: LFO tap hint और device-language promotion, LFO2 swap और उसके timers, `click_action` (click न navigate करता है न reload), OB5, pager swipe और pager के बाद का exit interstitial। इसकी किसी भी screen पर system Back कुछ नहीं करता; OB1 back button चुनी हुई भाषा रखते हुए और confirm button दिखाते हुए LFO पर लौटाता है। LFO का Done splash interstitial का बचा हुआ ad दिखाता है जब `lfo.exit.reuse_splash_inter` `true` हो, और Goal का Next तब जब `native_flow.pool.goals.exit_reuse_splash_inter` `true` हो।
 
 | `native_flow.pool` field | Default | असर |
 | --- | --- | --- |
@@ -258,7 +258,7 @@ Type हर run में एक बार पढ़ा जाता है, ज
 | `parity.resume_background_preload` | `false` | Native resume केवल अपनी screen खुलने पर request करता है; `true` background में भी preload करता है। |
 | `parity.refresh_marks_in_flight` | `true` | Refresh चल रही request गिना जाता है, इसलिए दूसरी screens के background loads रुकते हैं जबकि रखा हुआ ad दिखता रहता है; `false` refresh को इस जाँच से बाहर रखता है। |
 
-`parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
+`parity.refresh_marks_in_flight` को छोड़कर, जिसका default SDK के refresh model पर चलता है, `parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
 
 ## Fetch timing और QA
 

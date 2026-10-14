@@ -14,6 +14,8 @@ Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau pager và i
 
 User cũ mở app từ launcher mặc định bỏ qua Welcome Back và vào app sau splash. Bật `welcome_back.enabled=true` để hiện màn này. Xem [Welcome Back](welcome-back-screen.vi.md).
 
+Tài liệu này mô tả native flow mặc định `PER_SCREEN`. Flow thay thế `SHARED_POOL` chạy LFO → pager → Privacy → Goal trong một màn SDK, lấy ad từ một pool native dùng chung; xem [Native flow SHARED_POOL](#native-flow-shared_pool).
+
 Native trong pager được giữ khi view của trang còn tồn tại; quay lại content hoặc Full1/Full2 hiển thị cùng ad, không xin request mới. Auto-next fullscreen bắt đầu lại mỗi lượt ghé; Skip hiện ngay khi quay lại nếu được bật hoặc cần chống kẹt. No-fill lần đầu tự đi tiếp; quay lại trang lỗi hiện fallback và Skip. Ad được giải phóng khi view bị hủy.
 
 ## 1. Thêm dependency
@@ -510,6 +512,111 @@ Delay/gate của app-open xem [app-open](../onboardkitorigin/README.vi.md#app-op
 
 </details>
 
+### Native flow SHARED_POOL
+
+<details>
+<summary>Mở hướng dẫn SHARED_POOL</summary>
+
+`native_flow.type` chọn flow chạy sau splash. `PER_SCREEN`, mặc định, là flow mà phần còn lại của tài liệu này mô tả. `SHARED_POOL` tái hiện flow mở lần đầu của DashDrama 1.0.6, app tham chiếu mà pool được mô phỏng theo: LFO → pager onboarding → Goal, với bước Privacy của SDK trước Goal (Privacy và Goal chỉ khi được bật). Các chặng này chạy trong một activity SDK, và mọi slot native trong đó lấy ad từ một pool dùng chung cho cả process. Splash giống nhau ở cả hai flow. Key, thứ tự ưu tiên, alias `ob_native_reuse_enabled`, user property `ob_native_flow` và mọi default của `native_flow.pool` nằm ở [Kiểu native flow](remote-settings.vi.md#kiểu-native-flow); phần này mô tả flow làm gì.
+
+**Pool quyết định thế nào.** Pool giữ tối đa một ad cho mỗi placement và giữ nó qua các màn.
+
+- **Màn owner.** Màn đang ở trước xin pool placement của nó và trở thành owner, trừ khi placement bị từ chối cho cả lượt chạy (premium, ads hoặc placement bị tắt, không có ad unit, UA gate). Từ chối tạm thời (offline, consent chưa trả lời, request đang bị giữ) vẫn đưa màn thành owner.
+- **Load POLITE và FORCED.** Mở màn, chọn trang, quay lại màn và preload chặng kế tiếp là load POLITE: bị bỏ qua khi pool đang có request chạy, và load bị bỏ qua thì bỏ luôn, không xếp hàng (`parity.retry_skipped_polite`). Tap ngôn ngữ và lựa chọn ở Privacy hoặc Goal là load FORCED: chúng bỏ qua gate. Cả hai loại đều không request gì khi placement đã giữ ad hoặc đang load.
+- **Gate một request.** Gate chỉ mở khi không placement nào có request đang chạy, nên load POLITE không bắt đầu khi đang có request khác chạy. Việc kiểm tra chạy ngoài main thread và có thể trễ một frame (`parity.async_gate`). Load FORCED, refresh khi quay lại và load splash mà pool nhận lại bỏ qua gate. Refresh được tính là request đang chạy.
+- **Bộ chọn.** Mọi slot hiện cùng một lựa chọn: (1) ad của owner, khi pool có ad cho nó; (2) nếu không, ad mới nhất chưa màn nào hiển thị; (3) nếu không, ad được hiển thị gần nhất; (4) nếu không, shimmer khi có request đang chạy, và ẩn slot khi không có. Màn chưa có ad của mình thì mượn ad của placement khác, và ad của chính nó thay ad mượn ngay khi fill.
+- **Refresh khi quay lại.** Khi một màn trở lại phía trước (từ background, từ click ad hoặc từ màn resume), nó request lại ad mình đang sở hữu từ tầng đầu trong khi ad đó vẫn hiện: fill thì thay, no-fill thì giữ. Đây là mô hình refresh của SDK, không phải của DashDrama, nơi refresh không được tính là request đang chạy (`parity.refresh_marks_in_flight`).
+- **Hết hạn và thời gian chờ mỗi tầng.** Cả hai là giá trị của SDK, không phải key của pool: ad cũ hơn `native.cache.max_age_ms` (một giờ) bị bỏ và lần kế tiếp một màn xin placement đó sẽ request lại; tầng không trả lời trong `native.load.tier_timeout_ms` (30 giây) được tính là lỗi, nên tầng kế tiếp được request.
+- **Các tầng.** Một request đi lần lượt các tầng đang bật trong `ids` của key. ID lặp lại được request lại sau no-fill (`parity.keep_duplicate_ids`), khác `PER_SCREEN` là bỏ ID trùng.
+
+**Bật flow.**
+
+- Đặt `native_flow.type` thành `"SHARED_POOL"` trong `onboarding_config`, qua remote hoặc asset app, hoặc gửi key phẳng `ob_native_reuse_enabled = true`. [Kiểu native flow](remote-settings.vi.md#kiểu-native-flow) giải thích thứ tự ưu tiên và vì sao bản cài mới mà lượt fetch đầu chưa về chạy theo asset hoặc default SDK.
+- Giữ provider có sẵn `adProvider = ERainAdProvider()`; không có nó thì mọi lượt chạy là `PER_SCREEN`.
+- Kiểu và mọi giá trị `native_flow.pool` được đọc một lần mỗi lượt chạy, lúc splash mở màn ngôn ngữ, và giữ nguyên trong lượt đó; giá trị fetch về sau áp dụng từ lượt chạy kế tiếp. Mỗi lượt chạy có mở màn ngôn ngữ đặt user property `ob_native_flow` và ghi `native_flow_type=…` vào `OB_FLOW`.
+- Không cần sửa code: flow dùng cùng key `ad_config`, `OnboardKitSetup`, layout nội dung và layout Privacy/Goal như `PER_SCREEN`. Welcome Back và màn chọn ngôn ngữ trong app vẫn là `PER_SCREEN`.
+
+**Từng màn.** Placement được gọi theo key `ad_config` ở [bước 2](#2-thêm-id-và-hai-file-json).
+
+| Màn | Placement | Khi nào request | Hành vi |
+| --- | --- | --- | --- |
+| LFO | `native_lang` tới lần tap đầu, sau đó `native_lang_alt`; `native_popup_lang` khi popup xác nhận đang mở | Khi mở: nhận preload LFO1 của splash (ad đã sẵn thì hiện mà không request mới, load đang chạy thì join, load còn trong queue thì bị huỷ), rồi POLITE `native_lang`; lần resume ngay sau khi mở không refresh ad splash đã nhận mà chưa hiển thị. Mỗi tap ngôn ngữ: FORCED `native_lang_alt`. Khi quay lại: refresh key hiện tại, rồi POLITE trên key đó. | Ngôn ngữ đã lưu được chọn sẵn; không có thì không chọn gì. Nút xác nhận ẩn tới `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (3 giây) sau lần tap đầu. Done hiện interstitial splash còn lại khi `lfo.exit.reuse_splash_inter` là `true`; sau khi ad đóng (`native_flow.pool.exit.next_screen_timing`, `AFTER_AD`) ngôn ngữ được lưu và áp dụng (`native_flow.pool.locale_apply`, mặc định áp ngay trên màn), ad đầu của chặng kế tiếp được preload POLITE và chặng kế tiếp mở. `native_lang` bị từ chối cho cả lượt chạy thì ẩn slot. |
+| Trang nội dung của pager | `native_obN` của trang; trang có key tắt thì không có slot | Khi chọn trang: POLITE trên key của trang, kèm preload POLITE key của trang kế tiếp. Khi pager trở lại phía trước: refresh key của owner, rồi POLITE trên key của trang hiện tại. | Slot bind khi trang đã resume. Chỉ chuyển trang bằng điều khiển của chính trang; vuốt bị khoá. |
+| Trang full | `native_fullN` của trang | Như trang nội dung. | X hiện sau `native_flow.pool.onboarding.fullscreen.skip.delay_ms` (2 giây) kể từ lần resume đầu của trang; trang tự đi tiếp sau `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (10 giây) kể từ lúc được chọn, tính cả thời gian ở background. Không có gì để hiện và không có request đang chạy, hoặc key của trang bị từ chối cho cả lượt chạy, thì trang đi tiếp ngay. Ad khi quay lại không bao giờ mở đè lên trang này. |
+| Privacy | `native_select` khi mở, `native_select_alt` ở mỗi lần đổi consent | Khi mở: POLITE `native_select`. Mỗi lần tick hoặc bỏ tick: FORCED `native_select_alt`. Khi quay lại: refresh key đang sở hữu, rồi POLITE trên key xin gần nhất. | Continue ẩn tới `native_flow.pool.select.next_reveal_delay_ms` (3 giây) sau lần đổi consent đầu và chỉ dùng được khi consent đang được tick. Continue preload POLITE ad đầu của Goal rồi mở Goal. Chi tiết: [Privacy → Goal](privacy-goals-screen.vi.md#khi-chạy-shared_pool). |
+| Goal | `native_select` khi mở, `native_select_alt` ở mỗi lần tap lựa chọn | Như Privacy, lựa chọn là tap option. | Next ẩn tới cùng khoảng trễ sau lần tap đầu và dùng được khi đã chọn ít nhất `minSelection` option. Next ghi lại goal, hiện interstitial splash còn lại khi `native_flow.pool.goals.exit_reuse_splash_inter` là `true`, rồi hoàn tất onboarding, không có paywall. |
+| Màn resume | `native_resume` | Khi mở: POLITE `native_resume`. Khi quay lại: refresh `native_resume`, rồi POLITE trên nó. | Mở khi quay lại app nếu `app_resume.type` là `native_resume`, trong flow và sau flow trong cùng process. Màn này không bao giờ thành owner, nên hiện cùng lựa chọn với mọi slot khác: trong flow thường là ad của màn hiện tại, sau flow là ad còn lại mới nhất chưa được hiển thị, nếu không có thì ad được hiển thị gần nhất. Start hoặc Back đóng màn. |
+
+Không có Privacy → Goal thì trang cuối của pager kết thúc flow, có paywall nếu app đã nối paywall, và không bao giờ hiện interstitial cuối pager. Back hệ thống không làm gì ở mọi chặng.
+
+**Không mang sang từ `PER_SCREEN`.** Bàn tay gợi ý ở LFO và việc đưa ngôn ngữ thiết bị lên đầu, swap LFO2 và các timer của nó, `click_action` (click native không chuyển trang cũng không reload), OB5, vuốt pager, interstitial cuối pager (`inter_after_ob3`, bất kể `onboarding.exit_interstitial.enabled`) và các khoảng trễ fullscreen classic (`onboarding.fullscreen.skip.delay_ms`, `onboarding.fullscreen.auto_next.delay_ms`). Hai tính năng SDK được giữ, cùng key classic:
+
+- Popup xác nhận ngôn ngữ (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, tap lại hàng đang chọn). Khi mở, popup sở hữu pool với `native_popup_lang`; đóng popup thì trả quyền owner về LFO.
+- Nút back OB1 (`onboarding.steps.ob1.back.enabled`, OB1 là trang đầu). Nút quay về LFO, giữ ngôn ngữ đã chọn, hiện ngay nút xác nhận và slot ở `native_lang_alt`.
+
+**Privacy → Goal.** Mặc định tắt (`privacy_goals_screen.enabled = false`) ở cả hai flow, và cần `goal.options`. Flow mở lần đầu của DashDrama kết thúc ở màn goal, nên muốn giống DashDrama thì phải bật; không bật thì flow pool kết thúc sau pager. Privacy đi cùng Goal như ở `PER_SCREEN`, dù flow đó không có bước nào giữa pager và màn goal. Xem [Privacy → Goal](privacy-goals-screen.vi.md#khi-chạy-shared_pool).
+
+**Ads khi quay lại.** Màn resume của pool cần `app_resume.type = native_resume` (mặc định) và `native_resume` được khai và bật trong `ad_config`; với dạng khác, ad khi quay lại theo dạng đó như mô tả ở [Ads khi quay lại](#ads-khi-quay-lại). Sau flow, pool giữ ad tới khi process kết thúc (`parity.keep_after_flow`), nên màn resume, tức màn welcome back của DashDrama, hiện ad onboarding còn lại, mỗi ad tối đa một giờ kể từ lúc fill, và chỉ request `native_resume` khi màn đang mở. Việc này kéo dài tới khi process chết hoặc một lượt `PER_SCREEN` sau đó chạy trong cùng process; lần mở nguội kế tiếp dùng màn resume thường. Màn này không liên quan tới màn Welcome Back của SDK.
+
+**Mua hàng.** Khi user thành premium, mọi slot của pool ẩn và pool ngừng request, kể cả tầng kế tiếp của chuỗi đang chạy. Ad pool đang giữ chỉ được giải phóng ngay lúc mua khi host gọi `AdGate.installPremiumObserver(appScope, Billing.isPremium)` như trong [BillingKit](billing-integration.vi.md). Không có observer này, ad nằm trong bộ nhớ, không bao giờ hiện, tới khi flow kết thúc; nếu user mua sau flow thì tới khi ad hết hạn một giờ sau lúc fill, một lượt `PER_SCREEN` giải phóng pool, hoặc process kết thúc.
+
+**Doanh thu và báo cáo.** Doanh thu được gán theo ad unit: trước mỗi tầng, pool đăng ký ad unit ID đó dưới placement đang request, và paid event tra placement theo ID. Vì vậy ad được mượn báo cáo dưới placement đã load nó, không phải màn đã hiển thị nó. ID dùng chung cho nhiều placement (Privacy và Goal cùng dùng `native_select`; bản mẫu dùng chung một ID test cho mỗi định dạng) báo cáo dưới placement request nó gần nhất, làm lệch báo cáo theo placement; hãy dùng ID riêng cho mỗi placement. `ad_request` được gửi một lần cho mỗi chuỗi load mới (refresh khi quay lại không gửi), không phải mỗi slot, và load POLITE bị gate bỏ qua không gửi `ad_skipped`. Chia dashboard theo `ob_native_flow`.
+
+**QA với dạng 4 trang của DashDrama.**
+
+1. Đặt nội dung này vào `app/src/main/assets/onboarding_config.json` và cung cấp `goal.options` trong code ([Privacy → Goal](privacy-goals-screen.vi.md)):
+
+   ```json
+   {
+     "native_flow": { "type": "SHARED_POOL" },
+     "onboarding": { "order": ["ob1", "ob2", "full1", "ob3"] },
+     "privacy_goals_screen": { "enabled": true }
+   }
+   ```
+
+   Giữ `privacy_goals_screen.enabled` là `true`: default SDK là `false`. Nếu chỉ muốn thử pool trên các trang của app, asset chỉ cần `{"native_flow":{"type":"SHARED_POOL"}}`. `native_flow.type` remote thắng asset.
+2. Trong `ad_config.json`, bật `native_ob1` và `native_full1` (bản mẫu để tắt) và đặt `"isEnable": false` cho `native_ob2` và `native_ob3`. Đừng xoá hai key đó: key bị tắt khiến trang của nó không có slot, còn key bị xoá rơi về unit mà `AdsConfig` của bạn khai trong code (ví dụ `contentStepNative`). Giữ `native_lang`, `native_lang_alt` và `native_resume` bật, và thêm `native_select`, `native_select_alt` như trong [Privacy → Goal](privacy-goals-screen.vi.md) (bản mẫu không khai hai key này), mỗi key một tầng test trong `ids` của `ad_config_debug.json`.
+3. Clear app data và khởi động lại process, rồi đi LFO → OB1 → OB2 → Full1 → OB3 → Privacy → Goal → app. OB2 và OB3 không có ad.
+
+**Đọc log.** Gọi `OnboardingSdk.setFlowLogging(true)` và lọc Logcat theo `OB_FLOW`. Dòng của pool có dạng `[   +1234] LOAD   | pool | request key=language1 tier=0 refresh=false`: `key` là key của pool (`language1`, `language2`, `language_confirm`, `step_ob1`, `fullscreen_full1`, `step_partner_privacy`, `step_partner_goal_alt`, `native_resume`…) và `tier` là vị trí (tính từ 0) trong `ids` của key.
+
+| Dòng sau `pool \|` | Ý nghĩa |
+| --- | --- |
+| `activate keep_after_flow=… reset_on_new_run=…` | Một lượt `SHARED_POOL` bắt đầu. `classic_run` nghĩa là một lượt `PER_SCREEN` đã giải phóng pool; `deactivate` nghĩa là `OnboardingSdk.reset()` đã giải phóng pool. |
+| `flow stage=…`, `stage -> …`, `ob1 back -> language` | Chặng đang hiện, chuyển chặng, nút back OB1. |
+| `adopt language1 status=…` | Preload LFO1 của splash: `ready` (ad đã được nhận), `pending` (load đang chạy đã được join), `cancelled_queue` (load trong queue đã bị huỷ và LFO tự request), `none` (không có handoff, hoặc load của splash fail hoặc chưa bắt đầu), `off` (`adopt_splash_language1` là `false`). |
+| `request key=… tier=… refresh=…` | Request một tầng; `refresh=true` khi là refresh lúc quay lại. |
+| `fill key=… refresh=…` | Placement vừa giữ ad mới. |
+| `fail key=… tier=…`, `tier_timeout key=… tier=…` | Tầng đó không fill hoặc không trả lời kịp; tầng kế tiếp được request. |
+| `exhausted key=… refresh=… why=…` | Chuỗi kết thúc không có fill: `exhausted` (đã thử mọi tầng), `refused reason=…` (một guard đóng giữa chuỗi), `adoption_failed`. Refresh giữ ad đang có. |
+| `gate_skip key=…` | Load POLITE bị bỏ qua vì request khác đang chạy; không gửi event analytics. |
+| `config_skip key=… reason=…` | Bị từ chối cho cả lượt chạy (`premium`, `no_provider`, `ads_off_remote`, `ads_off_config`, `placement_off_remote`, `no_ad_unit`, `ua_gate`); màn không thành owner. |
+| `transient_skip key=… reason=…` | Bị từ chối tạm thời (`requests_held`, `offline`, `consent_not_granted`); màn vẫn thành owner. |
+| `refresh_skip key=… reason=…` | Refresh bị cùng các guard từ chối; ad đang giữ vẫn ở lại. |
+| `expired key=…` | Ad đang giữ đã quá `native.cache.max_age_ms` và bị bỏ. |
+| `stale_fill key=…` | Fill về sau khi tầng đã timeout hoặc pool đã được giải phóng; bị huỷ mà không hiển thị. |
+| `stuck_loading key=… refresh=… ms=…` | Request vẫn chạy sau `stuck_loading_log_ms`; chỉ log. |
+| `release_all loaders=…` | Mọi ad của pool đã được giải phóng: mua hàng, kết thúc flow không giữ pool, một lượt `PER_SCREEN`, `OnboardingSdk.reset()`, hoặc một lượt `SHARED_POOL` mới khi `parity.reset_on_new_run` là `true`. |
+
+`OnboardingSdk.dumpState()` là hàm suspend; ghi log nó từ coroutine, ví dụ `lifecycleScope.launch { Log.d("OB_STATE", OnboardingSdk.dumpState()) }`. Kết quả gồm native flow type của lượt chạy, pool có đang hoạt động và nhận ad khi quay lại không, số lần gate skip của lượt chạy theo từng key, owner, gate đang mở hay đóng, và một dòng cho mỗi placement, ví dụ `language1 #0 state=Showing(ts=…) ad=held inFlight=false refreshing=false adopted=false fillAtMs=… saved=2` (`saved` là số tầng trong request đã lưu).
+
+**Khác biệt so với DashDrama 1.0.6.**
+
+- Preload LFO1 của splash được pool nhận lại; DashDrama không có preload ở splash.
+- Native riêng của splash (slot dưới, `native_fs`) nằm ngoài pool và gate của nó.
+- Guard ads của SDK (premium, consent, mạng, giữ request, UA gate, công tắc placement) được kiểm trước mỗi request và mỗi tầng; LFO không có ad unit thì ẩn slot.
+- Mua hàng ẩn mọi slot, dừng request của pool và giải phóng ad của pool (ngay lúc mua khi có `AdGate.installPremiumObserver`, nếu không thì khi flow kết thúc; xem Mua hàng ở trên).
+- Privacy là bước của SDK, chạy như một màn chọn.
+- `click_action` bị bỏ qua.
+- Ad được xếp theo một timestamp chung tăng ngặt nên không bao giờ bằng nhau; DashDrama phân định bằng thứ tự map.
+- Các event hoàn tất ngôn ngữ được gửi lúc tap Done; ngôn ngữ được lưu sau khi ad thoát của LFO (interstitial splash còn lại) đóng.
+- View ad của slot bị huỷ khi màn của nó đóng (`view.destroy_on_teardown`); ad vẫn ở trong pool.
+- Refresh được tính là request đang chạy (`parity.refresh_marks_in_flight`).
+- Thời hạn ad (một giờ) và thời gian chờ mỗi tầng (30 giây) là giá trị của SDK.
+- Giữ popup xác nhận ngôn ngữ và nút back OB1.
+
+</details>
+
 ## 8. Kiểm tra hoàn tất
 
 - [ ] Nếu dùng settings mới, thử remote override, offline lần đầu dùng local và offline giữ remote cache hợp lệ theo [checklist Firebase](firebase-integration.vi.md#remote-notes).
@@ -519,6 +626,7 @@ Delay/gate của app-open xem [app-open](../onboardkitorigin/README.vi.md#app-op
 - [ ] LFO: chọn ngôn ngữ rồi Back thì hiện Save và vẫn ở lại; chọn lại ngôn ngữ hiện tại mở popup ngay, còn chọn ngôn ngữ khác phải chờ đủ tổng số click đã cấu hình.
 - [ ] Từ chối notification vẫn đi tiếp; Home/quay lại khi ở splash, LFO, popup và OB không điều hướng lặp. Sau khi bật `native_ob1..4`, click native ở trang OB rồi quay lại thì chuyển bước; ở LFO/popup thì ở lại và bind ad thay thế khi sẵn sàng.
 - [ ] Bật `native_ob1`, `native_ob2` và `native_full1`, rồi tắt `native_ob2`: trang nội dung 2 vẫn hiện, không lấy native trang 1. Tắt lại `native_full1`: bỏ trang chỉ quảng cáo. Tắt `inter_splash` và `inter_after_ob3`: vẫn tới màn đích.
+- [ ] Nếu dùng `SHARED_POOL`, đi [dạng 4 trang để QA](#native-flow-shared_pool) với `OB_FLOW` bật: khi load LFO1 của splash đã fill hoặc vẫn đang chạy, log có `pool | adopt language1 status=ready` hoặc `pending` (nếu không thì `cancelled_queue` hoặc `none`), OB2 và OB3 không có ad, và Next ở Goal hoàn tất onboarding.
 - [ ] Thử mất mạng: mặc định hiện prompt kết nối; nếu chọn hỗ trợ offline thì luồng vẫn đi tiếp theo timeout SDK, không treo vì callback app.
 - [ ] Mở lại sau khi hoàn thành: đi qua splash rồi vào app, không chạy lại OB; màn app đã sẵn khi đóng inter splash. Clear app data để kiểm tra first-open; đóng app giữa OB rồi mở lại phải bắt đầu từ LFO sau splash.
 - [ ] Các màn app dùng đúng ngôn ngữ đã chọn; kiểm tra cả bản dịch và cấu hình language split khi phát hành AAB.
