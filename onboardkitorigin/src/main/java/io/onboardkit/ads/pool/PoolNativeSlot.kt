@@ -51,6 +51,11 @@ internal class PoolNativeSlot(
     private val container: FrameLayout,
     private val callbacks: StepSlotCallbacks? = null,
     private val destroyOnTeardown: Boolean = true,
+    /**
+     * Below [minState] at start, show the template's skeleton instead of an empty container: a
+     * pager page binds only once RESUMED, after its slide, and would otherwise grow under the user.
+     */
+    private val placeholderUntilLive: Boolean = false,
 ) {
     enum class Kind { OWNER, NON_OWNER }
 
@@ -97,6 +102,11 @@ internal class PoolNativeSlot(
             return
         }
         owner.lifecycle.addObserver(lifecycleObserver)
+        if (placeholderUntilLive && !isLive() && refusal() == null &&
+            binder.placeholder() == Outcome.SHIMMER
+        ) {
+            report(Outcome.SHIMMER, AdSkipReason.NO_FILL)
+        }
         live += this
         events = OnboardingPool.addEventListener(::onEvent)
         collector = owner.lifecycleScope.launch {

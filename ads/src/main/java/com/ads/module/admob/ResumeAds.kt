@@ -38,6 +38,12 @@ object ResumeAds : DefaultLifecycleObserver {
 
         /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
         fun show(host: Activity)
+
+        /**
+         * How long the app must stay in the background before a return opens the screen, or null
+         * for `open_resume.app_resume_load_delay_ms`. The screen's request follows the same delay.
+         */
+        fun minBackgroundMs(): Long? = null
     }
 
     @JvmStatic
@@ -77,7 +83,9 @@ object ResumeAds : DefaultLifecycleObserver {
         if (host is AdActivity) return
         if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host) != null)) return
         if (placementSkipReason(placement) != null) return
-        val delayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
+        val delayMs = nativeScreen?.takeIf { type == ResumeAdType.NATIVE }?.minBackgroundMs()
+            ?.takeIf { it in 0..AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS }
+            ?: AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
         val next = Stay(type, placement, delayMs)
         stay = next
         val request = Runnable { request(next) }

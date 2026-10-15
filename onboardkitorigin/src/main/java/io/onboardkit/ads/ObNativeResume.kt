@@ -38,6 +38,10 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         if (host is ObResumeActivity) host.renew() else ObResumeActivity.start(host)
     }
 
+    /** The pooled screen opens after `native_flow.pool.resume.min_background_ms` away; classic keeps open_resume's delay. */
+    override fun minBackgroundMs(): Long? =
+        if (OnboardingPool.routeResume) ObPoolResumeActivity.runSnapshot().resumeMinBackgroundMs else null
+
     /** DashDrama loads native resume only when its screen opens; `resume_background_preload` warms it earlier. */
     private fun preparePooled() {
         if (!OnboardingSdk.isReady() || !ObPoolResumeActivity.runSnapshot().parity.resumeBackgroundPreload) return

@@ -121,9 +121,9 @@ internal object OnboardingPool {
         return result
     }
 
-    /** A POLITE load that leaves the owner alone. */
+    /** A load that leaves the owner alone; POLITE unless the caller warms a full page ahead. */
     @MainThread
-    fun preload(placement: AdPlacement): LoadResult = load(placement, LoadMode.POLITE)
+    fun preload(placement: AdPlacement, mode: LoadMode = LoadMode.POLITE): LoadResult = load(placement, mode)
 
     @MainThread
     fun refresh(placement: AdPlacement): Boolean {
@@ -131,6 +131,20 @@ internal object OnboardingPool {
         val held = snapshot.parity.respectFocusWindow && engine.debugSnapshot().loader(placement.key)?.ad != null
         if (held && waitForWindow(placement, "refresh") { refresh(placement) }) return false
         return engine.refresh(placement.key)
+    }
+
+    /**
+     * [refresh] that waits its turn like a POLITE load: skipped, not queued, while any loader has a
+     * request in flight. The pooled resume screen renews its ad this way and never jumps the gate.
+     */
+    @MainThread
+    fun refreshPolite(placement: AdPlacement): Boolean {
+        val engine = engineOrNull() ?: return false
+        if (!engine.gateOpen.value) {
+            ObLog.d(ObLog.Section.LOAD, "pool | gate_skip refresh key=${placement.key}")
+            return false
+        }
+        return refresh(placement)
     }
 
     /**

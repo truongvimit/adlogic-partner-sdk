@@ -155,7 +155,10 @@ object OnboardingSdk {
                 appResumeGuard.skipReason(activity)?.key
         })
         if (adProvider != null) com.ads.module.admob.ResumeAds.nativeScreen = io.onboardkit.ads.ObNativeResume
-        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
+        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep).also {
+            it.pooledLanguageRun = { plannedNativeFlow() == NativeFlowType.SHARED_POOL && OnboardingPool.canRun() }
+            it.onSplashAttempt = { plannedNativeFlow = null }
+        }
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }
 
@@ -313,6 +316,7 @@ object OnboardingSdk {
                 FlowDestination.WELCOME_BACK -> ObWelcomeBackActivity.start(activity)
             }
         }
+        plannedNativeFlow = null
     }
 
     /**
@@ -322,8 +326,7 @@ object OnboardingSdk {
      * LFO rather than leaving the user on the splash.
      */
     private fun startLanguage(activity: Activity) {
-        val requested = runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowTypeOrDefault() }
-            .getOrDefault(NativeFlowType.PER_SCREEN)
+        val requested = plannedNativeFlow()
         val pooled = requested == NativeFlowType.SHARED_POOL && OnboardingPool.canRun() && runCatching {
             val snapshot = io.onboardkit.remote.OnboardingSettings.nativeFlowSnapshot()
             session.nativeFlow = snapshot
@@ -340,6 +343,20 @@ object OnboardingSdk {
         OnboardingPool.onClassicRun()
         ObLanguageActivity.start(activity, LanguageScreenMode.FIRST_OPEN)
     }
+
+    /** The type [plannedNativeFlow] answered for this run, until the run starts or a splash attempt begins. */
+    @Volatile
+    private var plannedNativeFlow: NativeFlowType? = null
+
+    /**
+     * `native_flow.type` for this run, read once. The splash asks first, so a SHARED_POOL run skips
+     * the LFO1 preload, and the LANGUAGE arm of [startResolved] gets the same answer even if a
+     * remote fetch lands in between. Never throws: anything odd is PER_SCREEN.
+     */
+    internal fun plannedNativeFlow(): NativeFlowType = plannedNativeFlow
+        ?: runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowTypeOrDefault() }
+            .getOrDefault(NativeFlowType.PER_SCREEN)
+            .also { plannedNativeFlow = it }
 
     /** Re-usable language picker; SETTINGS mode shows no ads and never touches flow state. */
     fun openLanguagePicker(activity: Activity, mode: LanguageScreenMode) {

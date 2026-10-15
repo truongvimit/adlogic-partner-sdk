@@ -148,7 +148,7 @@ class PoolResumeTest {
         assertEquals("step_ob1", engine.owner)
     }
 
-    @Test fun `the host's refresh runs before the resume screen's own`() {
+    @Test fun `the host refreshes first and the screen's own refresh is POLITE, skipped while that runs`() {
         val host = hub()
         fill("language1")
         ObNativeResume.show(host.get())
@@ -158,7 +158,22 @@ class PoolResumeTest {
 
         val before = loader.attempts.size
         returnOver(host)
-        assertEquals(listOf("language1", "native_resume"), loader.attempts.drop(before).map { it.request.key })
+        assertEquals("No native_resume refresh jumps the host's request", listOf("language1"),
+            loader.attempts.drop(before).map { it.request.key })
+    }
+
+    @Test fun `with no other request in flight the screen refreshes its held native_resume`() {
+        val host = hub()
+        fill("language1")
+        ObNativeResume.show(host.get())
+        val screen = openResume(shadowOf(host.get()).nextStartedActivity)
+        fill("native_resume")
+
+        val before = loader.attempts.size
+        screen.pause().resume()
+        main.idle()
+        assertEquals(listOf("native_resume"), loader.attempts.drop(before).map { it.request.key })
+        assertTrue(requireNotNull(engine.debugSnapshot().loader("native_resume")).refreshing)
     }
 
     @Test fun `while the host's owner refreshes the screen's POLITE load is skipped and the slot follows the owner`() {

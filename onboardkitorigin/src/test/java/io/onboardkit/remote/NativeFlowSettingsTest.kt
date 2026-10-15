@@ -66,6 +66,7 @@ class NativeFlowSettingsTest {
         "native_flow.pool.goals.exit_reuse_splash_inter" to true,
         "native_flow.pool.onboarding.fullscreen.skip.delay_ms" to 2_000L,
         "native_flow.pool.onboarding.fullscreen.auto_next.delay_ms" to 10_000L,
+        "native_flow.pool.resume.min_background_ms" to 1_000L,
     )
 
     private val specSnapshot = NativeFlowSnapshot(
@@ -90,6 +91,7 @@ class NativeFlowSettingsTest {
         goalsExitReuseSplashInter = true,
         fullscreenSkipDelayMs = 2_000L,
         fullscreenAutoNextDelayMs = 10_000L,
+        resumeMinBackgroundMs = 1_000L,
     )
 
     @Before fun setup() {
@@ -148,7 +150,7 @@ class NativeFlowSettingsTest {
               "done_hidden_gone":false,"pager":{"smooth_scroll":false,"offscreen_pages":2},"resume_on_goals":false,
               "stuck_loading_log_ms":0,"view":{"destroy_on_teardown":false},
               "lfo":{"confirm_button":{"reveal_delay_ms":11}},"select":{"next_reveal_delay_ms":12},
-              "goals":{"exit_reuse_splash_inter":false},
+              "goals":{"exit_reuse_splash_inter":false},"resume":{"min_background_ms":15},
               "onboarding":{"fullscreen":{"skip":{"delay_ms":13},"auto_next":{"delay_ms":14}}}}}}
         """.trimIndent()))
         val flipped = PoolParity(
@@ -174,6 +176,7 @@ class NativeFlowSettingsTest {
             goalsExitReuseSplashInter = false,
             fullscreenSkipDelayMs = 13L,
             fullscreenAutoNextDelayMs = 14L,
+            resumeMinBackgroundMs = 15L,
         ), OnboardingSettings.nativeFlowSnapshot())
         assertEquals(NativeFlowType.SHARED_POOL, OnboardingSettings.nativeFlowTypeOrDefault())
     }

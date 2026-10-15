@@ -365,7 +365,7 @@ class PoolLanguageFragmentTest {
         assertEquals("Later resumes refresh as usual", 1, loader.callsFor("language1").size)
     }
 
-    @Test fun `Done shows the interstitial, then persists, warms page 0 without owning it and switches stage`() {
+    @Test fun `Done shows the interstitial, then persists and switches stage, warming no content page 0`() {
         launch()
         fill("language1")
         tap(1)
@@ -382,13 +382,14 @@ class PoolLanguageFragmentTest {
 
         presentation.onAdClosed()
         assertEquals("es", OnboardingSdk.selectedLanguageOrNull())
-        assertEquals(1, loader.callsFor("step_ob1").size)
-        assertEquals("The preload leaves the owner alone", "language2", engine.owner)
+        assertTrue("Only a full page is warmed a screen ahead", loader.callsFor("step_ob1").isEmpty())
+        assertEquals("language2", engine.owner)
         assertTrue("The switch is committed, not yet run", stageFragment is PoolLanguageFragment)
 
         main.idle()
         assertEquals(ObPoolFlowActivity.Stage.PAGER, activity.stage)
         assertTrue(stageFragment is PoolPagerFragment)
+        assertEquals("Page 0 asks for its own ad once selected", 1, loader.callsFor("step_ob1").size)
         assertEquals(listOf(2 to "es"), PoolUiSdk.events<AnalyticsEvent.LanguageCompleted>()
             .filter { it.screenIndex == 2 }.map { it.screenIndex to it.code })
         assertEquals(listOf("es"), PoolUiSdk.events<AnalyticsEvent.LanguageFlowCompleted>().map { it.code })
@@ -566,9 +567,10 @@ class PoolLanguageFragmentTest {
 
         presentation.onNextAction()
         assertEquals("es", OnboardingSdk.selectedLanguageOrNull())
-        assertEquals(1, loader.callsFor("step_ob1").size)
+        assertTrue(loader.callsFor("step_ob1").isEmpty())
         main.idle()
         assertEquals(ObPoolFlowActivity.Stage.PAGER, activity.stage)
+        assertEquals(1, loader.callsFor("step_ob1").size)
 
         presentation.onAdClosed()
         main.idle()
@@ -590,7 +592,7 @@ class PoolLanguageFragmentTest {
         assertFalse(activity.isFinishing)
     }
 
-    @Test fun `with no page left the LFO hands over to Privacy, warming its first slot`() {
+    @Test fun `with no page left the LFO hands over to Privacy, which claims its own first slot`() {
         PoolUiSdk.configure(steps = emptyList(), privacyGoals = PrivacyGoalsScreenConfig(
             enabled = true, goal = GoalsScreenConfig(options = listOf(GoalOption("learn", "Learn"))),
         ))
@@ -601,10 +603,11 @@ class PoolLanguageFragmentTest {
         fill("language2")
         reveal()
         confirm.performClick()
-        assertEquals(1, loader.callsFor("step_partner_privacy").size)
+        assertTrue("Only a full page is warmed a screen ahead", loader.callsFor("step_partner_privacy").isEmpty())
         assertEquals("language2", engine.owner)
         main.idle()
         assertEquals(ObPoolFlowActivity.Stage.PRIVACY, activity.stage)
+        assertEquals(1, loader.callsFor("step_partner_privacy").size)
     }
 
     @Test fun `with nothing left Done ends the flow`() {

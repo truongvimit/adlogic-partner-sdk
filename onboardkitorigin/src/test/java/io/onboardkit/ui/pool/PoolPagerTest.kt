@@ -234,25 +234,71 @@ class PoolPagerTest {
 
     private fun completedAs(stepId: StepId) = completed().single { it.stepId == stepId }.exitReason
 
-    @Test fun `a selection claims its page and preloads the next one without making it the owner`() {
-        launch(steps = listOf(ob1, ob2, ob3)) {
-            // The LFO's Done warms page 0.
-            OnboardingPool.preload(stepOb1)
+    @Test fun `a selection claims its page and preloads only a full next page, without making it the owner`() {
+        launch(steps = listOf(ob1, full1, ob2)) {
+            OnboardingPool.claim(stepOb1, LoadMode.FORCED)
             loader.fill(stepOb1.key)
         }
         assertEquals(0, pager.currentItem)
-        assertTrue(OnboardingPool.lastResult(stepOb1) is LoadResult.NoOpState)
-        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(stepOb2))
+        assertEquals("The full page is warmed one screen ahead", LoadResult.Requested, OnboardingPool.lastResult(fullPage))
         assertEquals(stepOb1.key, engine.owner)
-        assertEquals(listOf("content"), loader.callsFor(stepOb2.key))
+        loader.fill(fullPage.key)
+        pump()
 
         nextPage()
         assertEquals(1, pager.currentItem)
-        assertEquals("Its own preload closed the gate", LoadResult.SkippedByGate, OnboardingPool.lastResult(stepOb2))
-        assertEquals("A gate skip still takes the slot", stepOb2.key, engine.owner)
-        assertEquals(listOf("content"), loader.callsFor(stepOb2.key))
-        assertEquals(LoadResult.SkippedByGate, OnboardingPool.lastResult(stepOb3))
-        assertTrue(loader.callsFor(stepOb3.key).isEmpty())
+        assertTrue("Its preload filled it: no second request", OnboardingPool.lastResult(fullPage) is LoadResult.NoOpState)
+        assertEquals(fullPage.key, engine.owner)
+        assertNull("A content next page is never preloaded", OnboardingPool.lastResult(stepOb2))
+        assertTrue(loader.callsFor(stepOb2.key).isEmpty())
+
+        nextPage()
+        assertEquals(2, pager.currentItem)
+        assertEquals("A content page asks for its own ad when it is selected", LoadResult.Requested,
+            OnboardingPool.lastResult(stepOb2))
+        assertEquals(stepOb2.key, engine.owner)
+    }
+
+    @Test fun `a full page whose preload is still loading shows the newest ad and requests nothing more`() {
+        var newest: ApNativeAd? = null
+        launch(steps = listOf(ob1, full1, ob2)) {
+            OnboardingPool.claim(stepOb1, LoadMode.FORCED)
+            newest = loader.fill(stepOb1.key)
+        }
+        pump()
+        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(fullPage))
+        val callsBefore = loader.callsFor(fullPage.key).size
+
+        nextPage()
+        assertEquals(1, pager.currentItem)
+        assertEquals("Its own preload is in flight: the claim is a gate skip", LoadResult.SkippedByGate,
+            OnboardingPool.lastResult(fullPage))
+        assertEquals(callsBefore, loader.callsFor(fullPage.key).size)
+        assertEquals(fullPage.key, engine.owner)
+        pump()
+        assertSame("Until its own fill lands the full page shows the newest ad", newest?.admobNativeAd, shownAd(1))
+
+        val own = loader.fill(fullPage.key)
+        pump()
+        assertSame(own.admobNativeAd, shownAd(1))
+    }
+
+    @Test fun `an offscreen content page holds its ad's height with a still skeleton, then binds once it resumes`() {
+        launch(steps = listOf(ob1, ob2)) {
+            OnboardingPool.claim(stepOb1, LoadMode.FORCED)
+        }
+        val ad = loader.fill(stepOb1.key)
+        pump()
+        assertFalse(page(1).isResumed)
+        val holder = slot(1)
+        assertEquals("Laid out at the ad's height before its slide", View.VISIBLE, holder.visibility)
+        val still = holder.getChildAt(0) as ShimmerFrameLayout
+        assertFalse("A page nobody sees does not animate", still.isShimmerStarted)
+        assertEquals(View.VISIBLE, page(1).requireView().findViewById<View>(R.id.ob_ad_block).visibility)
+
+        nextPage()
+        assertTrue(page(1).isResumed)
+        assertSame("Rule 2 binds the newest ad over the placeholder", ad.admobNativeAd, shownAd(1))
     }
 
     @Test fun `a page without a slot keeps the previous owner and draws nothing`() {
@@ -472,7 +518,9 @@ class PoolPagerTest {
         loader.exhaust(stepOb1.key)
         pump()
         nextPage()
-        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(fullPage))
+        assertEquals("Warmed FORCED from page 0, its own claim finds it loading", LoadResult.SkippedByGate,
+            OnboardingPool.lastResult(fullPage))
+        assertEquals(1, loader.callsFor(fullPage.key).size)
         assertEquals(1, pager.currentItem)
         assertTrue(slot(1).getChildAt(0) is ShimmerFrameLayout)
 
@@ -496,6 +544,8 @@ class PoolPagerTest {
             MainLooperPoolScheduler(), PoolExpiry { 0L }, late).also(SharedNativePool::installForTest)
         launch(snapshot = poolSnapshot(parity))
         loader.exhaust(stepOb1.key)
+        // The FORCED warm-up of page 1 fails too, so nothing is left loading offscreen.
+        loader.exhaust(fullPage.key)
         pump()
         assertEquals("The offscreen full page saw nothing to show", View.GONE, slot(1).visibility)
 
@@ -661,7 +711,8 @@ class PoolPagerTest {
 
         nextPage()
         assertEquals(1, pager.currentItem)
-        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(fullPage))
+        assertEquals("Warmed FORCED from page 0, its own claim finds it loading", LoadResult.SkippedByGate,
+            OnboardingPool.lastResult(fullPage))
         assertTrue("The full page borrows while its own claim loads", completed().none { it.stepId == StepId.FULL1 })
         assertSame(ad.admobNativeAd, shownAd(1))
     }

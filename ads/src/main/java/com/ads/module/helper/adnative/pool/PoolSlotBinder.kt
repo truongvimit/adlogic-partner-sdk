@@ -84,6 +84,17 @@ class PoolSlotBinder(
     }
 
     /**
+     * Reserves the slot's height with a still skeleton of its template before the slot may render,
+     * e.g. a pager page laid out offscreen: the page slides in at its final layout instead of
+     * growing from no ad to a full one. A container already showing something keeps it.
+     */
+    fun placeholder(): Outcome {
+        if (container.childCount > 0 && container.visibility == View.VISIBLE) return Outcome.IGNORED
+        if (!canShowAds()) return Outcome.IGNORED
+        return showSkeleton(animate = false)
+    }
+
+    /**
      * Never destroys the ad. Destroys every view this slot bound that its ad was last registered
      * to, including one a later bind swapped out: nothing else would release that registration.
      */
@@ -143,7 +154,7 @@ class PoolSlotBinder(
     private fun isLastRegistrant(nativeAd: NativeAd?, view: NativeAdView?): Boolean =
         nativeAd != null && view != null && lastRegistrant[nativeAd]?.get() === view
 
-    private fun showSkeleton(): Outcome {
+    private fun showSkeleton(animate: Boolean = true): Outcome {
         val reusable = skeleton?.takeIf { it.parent === container }
         val shimmer = reusable ?: NativeAdShimmer.from(container.context, slotLayout, style()).also {
             container.removeAllViews()
@@ -151,7 +162,7 @@ class PoolSlotBinder(
             skeleton = it
         }
         container.visibility = View.VISIBLE
-        shimmer.startShimmer()
+        if (animate) shimmer.startShimmer()
         return Outcome.SHIMMER
     }
 

@@ -148,7 +148,7 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         selectedAtMs[position] = System.currentTimeMillis()
 
         placements.getOrNull(position)?.let(::attempt)
-        placements.getOrNull(position + 1)?.let(OnboardingPool::preload)
+        preloadIfFullPage(position + 1)
         ObLog.d(ObLog.Section.NAV, "pool | page=$position step=${step.id.value} owner=${ownerKey?.key}")
 
         cancelAutoNext()
@@ -160,6 +160,17 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
                 pagerAdapter.fragmentAt(position)?.dispatchSelected()
             }
         }
+    }
+
+    /**
+     * Only a full page is warmed one screen ahead: it has nothing to show but the ad. FORCED,
+     * because it is asked in the same moment as the current page's own request, which would close
+     * a POLITE gate on it every time; a full page already holding or loading an ad asks for nothing.
+     * A content page claims its own placement when it is selected and borrows the newest ad meanwhile.
+     */
+    private fun preloadIfFullPage(position: Int) {
+        if (pages.getOrNull(position)?.type != StepType.AD_FULL_SCREEN) return
+        placements.getOrNull(position)?.let { OnboardingPool.preload(it, LoadMode.FORCED) }
     }
 
     private fun attempt(placement: AdPlacement) {

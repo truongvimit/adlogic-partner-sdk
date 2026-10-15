@@ -46,6 +46,8 @@ internal data class NativeFlowSnapshot(
     val fullscreenSkipDelayMs: Long = 2_000L,
     /** Counted from page selection, not from the ad's bind. */
     val fullscreenAutoNextDelayMs: Long = 10_000L,
+    /** How long the app stays in the background before a return opens the pooled resume screen. */
+    val resumeMinBackgroundMs: Long = 1_000L,
 )
 
 /** Anything but an exact type name runs the classic flow. */

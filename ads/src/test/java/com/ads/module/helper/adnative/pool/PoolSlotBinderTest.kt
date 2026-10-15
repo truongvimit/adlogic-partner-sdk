@@ -154,6 +154,24 @@ class PoolSlotBinderTest {
         assertEquals(View.VISIBLE, view.findViewById<View>(R.id.ad_icon).visibility)
     }
 
+    @Test fun `a placeholder reserves the template's height with a still skeleton the next shimmer starts`() {
+        val binder = binder()
+        container.visibility = View.GONE
+        assertEquals(Outcome.SHIMMER, binder.placeholder())
+        val still = skeleton()
+        assertEquals(View.VISIBLE, container.visibility)
+        assertFalse("Offscreen it does not animate", still.isShimmerStarted)
+        assertNull(binder.boundAd())
+
+        assertEquals(Outcome.SHIMMER, binder.render(shimmer))
+        assertSame(still, skeleton())
+        assertTrue(still.isShimmerStarted)
+
+        binder.render(shown(ad()))
+        assertEquals("A container showing an ad keeps it", Outcome.IGNORED, binder.placeholder())
+        assertNotNull(binder.boundAd())
+    }
+
     @Test fun `the skeleton is built lazily, started explicitly and reused while it is the container's child`() {
         val binder = binder()
         assertEquals("Nothing is built before a shimmer value", 0, container.childCount)

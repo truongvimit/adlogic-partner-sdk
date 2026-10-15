@@ -165,6 +165,23 @@ class ResumeAdsTest {
     }
 
     @Test
+    fun `a native screen with its own minimum background time uses it instead of open_resume's delay`() {
+        ResumeAds.nativeScreen = object : ResumeAds.NativeScreen {
+            override fun prepare(context: Context) { calls += "prepare" }
+            override fun show(host: Activity) { calls += "show" }
+            override fun minBackgroundMs(): Long = 1_000L
+        }
+        ResumeAds.onStop(owner)
+        main.idleFor(Duration.ofMillis(999))
+        ResumeAds.onStart(owner)
+        assertEquals("A return inside the screen's own second opens nothing", emptyList<String>(), calls)
+        ResumeAds.onStop(owner)
+        main.idleFor(Duration.ofMillis(1_000))
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show"), calls)
+    }
+
+    @Test
     fun `the selected type's key switched off means no resume, with no fallback`() {
         AdRemoteConfig.initializeFromJson(
             """{"native_resume":{"ids":[{"id":"native-unit"}],"isEnable":false},""" +

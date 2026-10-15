@@ -8,14 +8,13 @@ import androidx.fragment.app.Fragment
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.config.PrivacyScreenConfig
 import io.onboardkit.core.StepId
 
 /**
  * The SDK's Privacy step as a pooled select screen (deviation D-PRIVACY): the consent toggle is
  * the selection, in both directions, and Continue is enabled while consent is given. Continue
- * warms the Goal's first ad without taking the slot from this screen.
+ * opens Goal, which claims its own ad: only full pages are warmed a screen ahead.
  */
 internal class PoolPrivacyFragment : Fragment(), PoolStage {
 
@@ -64,7 +63,6 @@ internal class PoolPrivacyFragment : Fragment(), PoolStage {
         val host = activity as? ObPoolFlowActivity ?: return
         if (continued) return
         continued = true
-        OnboardingPool.preload(AdPlacement.StepNative(StepId.PARTNER_GOAL))
         host.goTo(ObPoolFlowActivity.Stage.GOAL)
     }
 

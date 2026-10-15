@@ -12,6 +12,7 @@ import androidx.fragment.app.commit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withStarted
+import com.ads.module.helper.adnative.pool.LoadMode
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
@@ -26,6 +27,7 @@ import io.onboardkit.core.FinishReason
 import io.onboardkit.core.ObLog
 import io.onboardkit.core.StepHost
 import io.onboardkit.core.StepId
+import io.onboardkit.core.StepType
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.flow.PoolLocaleApply
 import io.onboardkit.paywall.PaywallPlacement
@@ -262,7 +264,10 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         }
     }
 
-    /** DashDrama's Done: save, warm the next stage's first slot without owning it, then move on. */
+    /**
+     * DashDrama's Done: save, then move on. Only a full first page is warmed here, without owning
+     * it; any other first screen claims its own ad when it opens.
+     */
     private fun completeLanguage(code: String) {
         OnboardingSdk.persistLanguage(code)
         // SDK scope: the stage switch destroys the LFO's view right away.
@@ -271,14 +276,13 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         ObLog.d(ObLog.Section.NAV, "pool | language done enabledSteps=${steps.map { it.id.value }}")
         when {
             steps.isNotEmpty() -> {
-                PoolPlacementMapper.pagePlacement(steps.first())?.let(OnboardingPool::preload)
+                steps.first().takeIf { it.type == StepType.AD_FULL_SCREEN }
+                    ?.let(PoolPlacementMapper::pagePlacement)
+                    ?.let { OnboardingPool.preload(it, LoadMode.FORCED) }
                 switchStage(Stage.PAGER)
             }
             // Privacy/Goal is the optional tail of this flow even when remote disables every page.
-            OnboardingSdk.privacyGoalsScreenEnabled() -> {
-                OnboardingPool.preload(AdPlacement.StepNative(StepId.PARTNER_PRIVACY))
-                switchStage(Stage.PRIVACY)
-            }
+            OnboardingSdk.privacyGoalsScreenEnabled() -> switchStage(Stage.PRIVACY)
             else -> finishFlow(withPaywall = true)
         }
     }
@@ -354,6 +358,8 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
             container = container,
             callbacks = callbacks,
             destroyOnTeardown = snapshot.viewDestroyOnTeardown,
+            // Pages are laid out offscreen and bind after their slide: hold the ad's height meanwhile.
+            placeholderUntilLive = true,
         ).start()
         return true
     }

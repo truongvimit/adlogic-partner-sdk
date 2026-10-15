@@ -51,6 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -369,7 +370,7 @@ class PoolGoalsTest {
         assertFalse(activity.isFinishing)
     }
 
-    @Test fun `Privacy Continue warms the Goal's first ad without taking the slot, then opens Goal`() {
+    @Test fun `Privacy Continue opens Goal, which claims its own first ad`() {
         open(Stage.PRIVACY)
         loader.fill(privacy.key)
         consent.performClick()
@@ -378,13 +379,13 @@ class PoolGoalsTest {
         assertEquals(View.VISIBLE, forward.visibility)
 
         forward.performClick()
-        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(goal))
+        assertNull("Only a full page is warmed a screen ahead", OnboardingPool.lastResult(goal))
         assertEquals(privacyAlt.key, engine.owner)
         pump()
         assertEquals(Stage.GOAL, activity.stage)
         assertTrue(stage is PoolGoalFragment)
         assertEquals(goal.key, engine.owner)
-        assertEquals("The Goal's own claim found it in flight", listOf("content"), loader.callsFor(goal.key))
+        assertEquals("The Goal's own claim requests it", listOf("content"), loader.callsFor(goal.key))
     }
 
     @Test fun `Goal Next records the picks and completes once after the leftover splash interstitial, with no paywall`() {

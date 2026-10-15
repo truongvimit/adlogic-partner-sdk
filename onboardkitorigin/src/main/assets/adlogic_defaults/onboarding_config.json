@@ -224,6 +224,9 @@
       "goals": {
         "exit_reuse_splash_inter": true
       },
+      "resume": {
+        "min_background_ms": 1000
+      },
       "onboarding": {
         "fullscreen": {
           "skip": {

@@ -17,7 +17,7 @@ import io.onboardkit.ui.base.BaseOnboardActivity
 /**
  * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
  * it shows the owner of the screen underneath, or after the flow the newest leftover, and asks for
- * its own native only POLITE. A config refusal of native_resume hides it, as in DashDrama and the
+ * its own native only POLITE, a refresh included. A config refusal of native_resume hides it, as in DashDrama and the
  * classic screen. It never suppresses app-resume either; an ad click is the only mark.
  *
  * Once its ad is clicked the screen keeps no ad for the rest of its life and requests nothing
@@ -73,11 +73,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             ),
             destroyOnTeardown = flow.viewDestroyOnTeardown,
         ).also { it.start() }
-        if (adClicked) {
-            hideAd()
-            return
-        }
-        OnboardingPool.preload(AdPlacement.ResumeNative)
+        if (adClicked) hideAd()
     }
 
     /**
@@ -96,8 +92,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     }
 
     /**
-     * DashDrama ResumeActivity.onResume: refresh its own native, then ask for it POLITE; back from
-     * its ad's landing page, hide the ad and ask for nothing (ResumeActivity.java:142-149).
+     * Every request of this screen is POLITE: a held native_resume is refreshed only while no other
+     * request is in flight, otherwise it is asked for POLITE; back from its ad's landing page the
+     * screen hides the ad and asks for nothing (DashDrama ResumeActivity.java:142-149).
      */
     override fun onResume() {
         super.onResume()
@@ -106,8 +103,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             hideAd()
             return
         }
-        OnboardingPool.refresh(AdPlacement.ResumeNative)
-        OnboardingPool.preload(AdPlacement.ResumeNative)
+        if (!OnboardingPool.refreshPolite(AdPlacement.ResumeNative)) OnboardingPool.preload(AdPlacement.ResumeNative)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

@@ -336,7 +336,7 @@ class PoolLegacyIsolationTest {
 
     // ── Splash ──
 
-    @Test fun `the splash requests the same natives in both types up to the LFO`() {
+    @Test fun `the splash requests the same natives in both types up to the LFO, minus LFO1 for a pooled run`() {
         installVendor()
         OnboardingSdk.configure(onboardKitConfig {
             splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = false,
@@ -360,9 +360,10 @@ class PoolLegacyIsolationTest {
         assertEquals(NativeFlowType.SHARED_POOL, OnboardingSdk.session.nativeFlow?.type)
 
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), classic.natives.map { it.placement })
-        assertEquals(classic.natives, pooled.natives)
+        // The pooled LFO requests LFO1 itself, as DashDrama does: the splash skips that one preload.
+        assertEquals(classic.natives.filter { it.placement != AdPlacement.Language1 }, pooled.natives)
         assertEquals(classic.interstitials, pooled.interstitials)
-        assertTrue("Both splashes left the LFO1 handoff", classic.handoff && pooled.handoff)
+        assertTrue("Only the classic splash leaves an LFO1 handoff", classic.handoff && !pooled.handoff)
         assertTrue("The pool requested nothing before its LFO", loader.attempts.isEmpty())
     }
 

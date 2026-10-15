@@ -338,8 +338,8 @@ class PoolFlowScenarioTest {
 
         assertEquals(Stage.PAGER, host.stage)
         assertEquals(LoadResult.SkippedByGate, OnboardingPool.lastResult(stepOb1))
-        assertTrue("Neither Done's preload nor page 0's claim went out", loader.callsFor(stepOb1.key).isEmpty())
-        assertTrue(OnboardingPool.dump(), OnboardingPool.dump().contains("step_ob1=2"))
+        assertTrue("Page 0's claim did not go out (Done warms only a full page)", loader.callsFor(stepOb1.key).isEmpty())
+        assertTrue(OnboardingPool.dump(), OnboardingPool.dump().contains("step_ob1=1"))
         assertEquals(stepOb1.key, engine.owner)
         assertSame("Rule 3: the showing LFO1", lfo1.admobNativeAd, pageSlot(0).shownAd())
 
@@ -355,13 +355,15 @@ class PoolFlowScenarioTest {
         tapLanguage(1)
         fill(language2)
         doneThroughInterstitial()
-        assertEquals("Done's preload went out with the gate open", listOf("content"), loader.callsFor(stepOb1.key))
+        assertEquals("Page 0's claim went out with the gate open", listOf("content"), loader.callsFor(stepOb1.key))
         val ob1Ad = fill(stepOb1.key)
         assertSame(ob1Ad.admobNativeAd, pageSlot(0).shownAd())
 
         cta()
         assertEquals(1, pager.currentItem)
-        assertEquals(LoadResult.Requested, OnboardingPool.lastResult(fullPage))
+        assertEquals("FULL1 was warmed FORCED from page 0: its own claim finds it loading",
+            LoadResult.SkippedByGate, OnboardingPool.lastResult(fullPage))
+        assertEquals(1, loader.callsFor(fullPage.key).size)
         skipFullPage()
         assertEquals(2, pager.currentItem)
         assertEquals("FULL1 still loading", LoadResult.SkippedByGate, OnboardingPool.lastResult(stepOb2))
@@ -385,7 +387,8 @@ class PoolFlowScenarioTest {
     @Test fun `OC4 nothing is cancelled across stage changes or completeFlow`() {
         ScenarioSdk.configure(listOf(ob1, full1, ob2), privacyGoals = goals)
         start()
-        val pending = listOf(language1, language2, privacyAlt.key, goalAlt.key)
+        // FULL1 is warmed FORCED from page 0, so its chain also runs across every later stage.
+        val pending = listOf(language1, language2, fullPage.key, privacyAlt.key, goalAlt.key)
         val seen = recordPool {
             tapLanguage(1)
             doneThroughInterstitial()
