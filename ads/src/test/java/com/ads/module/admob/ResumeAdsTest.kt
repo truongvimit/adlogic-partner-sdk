@@ -140,12 +140,25 @@ class ResumeAdsTest {
     }
 
     @Test
-    fun `a device asleep through the timer still requests before opening`() {
+    fun `a native screen opens at the exact deadline before its load starts`() {
         ResumeAds.onStop(owner)
-        ShadowSystemClock.advanceBy(Duration.ofSeconds(3))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
         ResumeAds.onStart(owner)
         main.idle()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show", "prepare"), calls)
+    }
+
+    @Test
+    fun `a return just before the deadline waits the remainder then opens before loading`() {
+        ResumeAds.onStop(owner)
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_850))
+        ResumeAds.onStart(owner)
+        main.idle()
+        assertEquals(emptyList<String>(), calls)
+
+        ShadowSystemClock.advanceBy(Duration.ofMillis(150))
+        main.idle()
+        assertEquals(listOf("show", "prepare"), calls)
     }
 
     @Test

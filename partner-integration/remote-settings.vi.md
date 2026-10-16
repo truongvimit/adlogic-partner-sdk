@@ -143,7 +143,7 @@ App/SDK chủ động gọi preload native. Preload replacement dùng `setEnable
 
 Slot inter splash được load trước rồi show từ buffer, nên `behavior` của nó nhận `load.tier_timeout_ms`; mọi wait `load_and_show.*` bị bỏ qua vì slot được load trước rồi mới show; field `load_and_show.*` ở đó bị bỏ qua. Chỉ inter cuối OB chờ fill: `onboarding.exit_interstitial.wait_timeout_ms` ưu tiên hơn `placement_overrides` và `interstitial.load_and_show.wait_timeout_ms` ở scope format. Frequency, next-screen timing, pre-show delay, app-open và native cache TTL ở scope format chung. Per-step fullscreen cho phép `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}` và `.auto_next.{enabled,delay_ms}`; riêng `position` chỉ tồn tại ở mức per-step, không có scope `onboarding.fullscreen` hay `flow` ở trên.
 
-Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Refresh banner của SDK bật mặc định (`banner.reload.allowed` và `banner.reload.auto_enabled` là `true`); interval chỉ đặt nhịp. Tắt refresh trên console AdMob cho mọi banner ad unit, kể cả mọi tầng, nếu không banner sẽ refresh hai lần. Muốn tắt refresh của SDK: đặt `banner.reload.auto_enabled` là `false` (không timer; vẫn reload khi resume) hoặc `banner.reload.allowed` là `false` (SDK không reload gì), cho toàn bộ hoặc trong `placement_overrides.<key>`. Thời gian ở background trước khi request ad resume chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms, dùng chung cho mọi `app_resume.type`. Ngoại lệ là màn resume của `SHARED_POOL`: màn mở sau `native_flow.pool.resume.min_background_ms` (1000ms; xem [Kiểu native flow](#kiểu-native-flow)). Click vào ad thuộc mọi format chỉ bỏ qua lần resume kế tiếp khi `app_open.presentation.skip_after_ad_click` là `true` (mặc định `false`). Không thêm banner tier timeout khi loader chưa có timer đó.
+Banner reload cadence lấy `ad_config.<key>.reloadIntervalSeconds` nếu là số dương; thiếu/sai dùng giá trị host (mặc định SDK 15000ms). Refresh banner của SDK bật mặc định (`banner.reload.allowed` và `banner.reload.auto_enabled` là `true`); interval chỉ đặt nhịp. Tắt refresh trên console AdMob cho mọi banner ad unit, kể cả mọi tầng, nếu không banner sẽ refresh hai lần. Muốn tắt refresh của SDK: đặt `banner.reload.auto_enabled` là `false` (không timer; vẫn reload khi resume) hoặc `banner.reload.allowed` là `false` (SDK không reload gì), cho toàn bộ hoặc trong `placement_overrides.<key>`. Thời gian ở background trước khi request ad resume chỉ lấy `open_resume.app_resume_load_delay_ms`, mặc định 2000ms, dùng chung cho mọi `app_resume.type`. Ngoại lệ là màn resume của `SHARED_POOL`: màn mở sau `native_flow.pool.resume.min_background_ms` (2000ms; xem [Kiểu native flow](#kiểu-native-flow)). Click vào ad thuộc mọi format chỉ bỏ qua lần resume kế tiếp khi `app_open.presentation.skip_after_ad_click` là `true` (mặc định `false`). Không thêm banner tier timeout khi loader chưa có timer đó.
 
 Object behavior rỗng không che leaf ở scope rộng hơn hoặc nguồn bên dưới. `presentation.loading_enabled` dùng behavior đã chốt theo placement/format cho cả `show()` và `loadAndShow()`, kể cả ad đã có sẵn. Scope màn của interstitial (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) chỉ nhận `load.tier_timeout_ms` và `load_and_show.wait_timeout_ms` (scope splash bỏ `load_and_show.*`), nên đặt `loading_enabled` trong `placement_overrides.<key>` hoặc format `interstitial`. Banner đọc lại `enable_ua_check` của placement sau refresh; setter `forceUaCheck` tường minh của host ưu tiên hơn. Native vẫn áp dụng `presentation.cta_corner_radius_dp` khi helper không có style tường minh.
 
@@ -190,7 +190,7 @@ Ví dụ trong `ad_config`: OB1 giữ nguyên trang sau khi click ad, LFO2 tự 
 
 ## Template và CTA để UA/MO thử nghiệm
 
-- `ad_remote_config.<placement>.templateId` (số) chọn khung: `1` khung LFO, `2` card media-left 4:3, `3` card 1.91:1. Không có, `null` hoặc số lạ thì giữ mặc định của slot — `1` cho LFO1/2, Welcome Back và OB content, `2` cho Privacy/Goal và splash inline. Remote > asset app > code như mọi field.
+- `ad_remote_config.<placement>.templateId` (số) chọn khung: `1` LFO classic, `2` card media-left 4:3, `3` card 1.91:1, `4` card LFO rộng theo DashDrama. Không có, `null` hoặc số lạ thì giữ mặc định của slot — `4` cho LFO1/2 trong `SHARED_POOL`, `1` cho LFO classic/Welcome Back/OB content, `2` cho Privacy/Goal và splash inline. Remote > asset app > code như mọi field.
 - `components` là thứ duy nhất sắp thứ tự native. Template `1` và `3` theo nó; không có thì thứ tự mặc định đặt CTA ở dưới. Template `1`: `["icon_headline","media","cta"]` (mặc định) hoặc `["cta","media","icon_headline"]` để đưa CTA lên trên.
 - `positionCTA` đã bỏ; payload vẫn gửi field này sẽ bị bỏ qua. Các field `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template` cũng đã bỏ; payload cũ chứa chúng sẽ bị bỏ qua.
 - Template 3 là một layout, bốn cách sắp xếp của thiết kế lấy từ thứ tự `components`: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (thứ tự mặc định), D `["cta","media","icon_headline","body"]`. Body nằm trong header nên bỏ `body` chỉ làm ẩn nó.
@@ -257,12 +257,12 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: chặng kế tiếp bắt đầu sau khi ad thoát của LFO hoặc Goal đóng, hay ngay bên dưới ad. |
 | `done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ; `false` giữ chỗ của nó. |
 | `pager.smooth_scroll` | `true` | Chuyển trang có animation. |
-| `pager.offscreen_pages` | `0` | Số trang giữ sống cạnh trang hiện tại; `0` giữ mọi trang. |
+| `pager.offscreen_pages` | `1` | Số trang giữ sống cạnh trang hiện tại; `1` giữ trang kế tiếp để prepare. Giá trị lớn hơn giữ thêm trang kề bên. |
 | `resume_on_goals` | `true` | Ad khi quay lại app được phép hiện ở Privacy và Goal. |
 | `stuck_loading_log_ms` | `60000` | Ghi log request còn chạy sau khoảng này; chỉ log. |
 | `view.destroy_on_teardown` | `true` | View ad của slot bị hủy khi màn của nó đóng; ad vẫn ở trong pool. |
 | `goals.exit_reuse_splash_inter` | `true` | Next ở Goal hiện interstitial splash còn lại. |
-| `resume.min_background_ms` | `1000` | App phải ở background bao lâu thì lần quay lại mới mở màn resume của pool; request của màn theo cùng khoảng trễ này. Native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms`. Giá trị ngoài khoảng 0–86400000 (một ngày) dùng lại khoảng trễ classic đó. |
+| `resume.min_background_ms` | `2000` | App phải ở background bao lâu thì lần quay lại mới mở màn resume của pool; request của màn theo cùng khoảng trễ này. Native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms`. Giá trị ngoài khoảng 0–86400000 (một ngày) dùng lại khoảng trễ classic đó. |
 | `parity.refresh_overwrites_unshown` | `true` | Refresh khi quay lại màn thay cả ad chưa hiển thị; `false` chỉ thay ad đã hiển thị. |
 | `parity.retry_skipped_polite` | `false` | Lượt load nền bị bỏ qua khi request khác đang chạy thì bỏ luôn; `true` chạy lại khi pool rảnh. |
 | `parity.async_gate` | `true` | Trạng thái có request đang chạy được tính ngoài main thread và có thể trễ một frame; `false` tính ngay. |
@@ -272,7 +272,7 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.keep_duplicate_ids` | `true` | Request các tầng đúng như liệt kê trong ad_config, giữ cả ID trùng; `false` bỏ ID trùng. |
 | `parity.impression_marks_loader` | `true` | Impression bất kỳ từ các request của placement đánh dấu placement đã hiển thị; `false` chỉ impression của ad hiện tại. |
 | `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, popup xác nhận ngôn ngữ và màn resume chỉ bind ad mới khi đã resume, nên ad về dưới interstitial không bị tính impression khi người dùng chưa thấy; `true` bind khi đã start như app tham chiếu. |
-| `parity.pager_slots_bind_resumed` | `true` | Trang pager bind ad khi đã resume; `false` khi đã start. |
+| `parity.pager_slots_bind_resumed` | `false` | Trang pager bind ad ngay khi đã start để page kế bên hiện ad đang giữ mới nhất trước khi swipe kết thúc; `true` thì đợi resume. |
 | `parity.keep_after_flow` | `true` | Pool sống tới khi process kết thúc, phục vụ màn resume; `false` giải phóng pool khi onboarding hoàn tất. |
 | `parity.reset_on_new_run` | `false` | Lượt chạy mới giữ ad trong pool; `true` bắt đầu với pool rỗng. |
 | `parity.respect_focus_window` | `false` | Request không chờ window focus; `true` chờ như native của `PER_SCREEN`. |
@@ -432,6 +432,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `welcome_back.native1.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `welcome_back.native2.behavior` | `{}` | Override tùy chọn; mặc định không có leaf override. |
 | `native_resume.start_button.color` | `"#FF375E"` | Màu chữ nút Start trên màn native resume; `""` giữ màu của layout. |
+| `native_resume.start_button.delay_ms` | `0` | Delay trước khi nút Start hiện; áp dụng cho cả `PER_SCREEN` và `SHARED_POOL`. |
 | `native_flow.type` | `"PER_SCREEN"` | `PER_SCREEN` / `SHARED_POOL`; xem [Kiểu native flow](#kiểu-native-flow). |
 | `native_flow.pool.parity.refresh_overwrites_unshown` | `true` | Refresh thay cả ad chưa hiển thị. |
 | `native_flow.pool.parity.retry_skipped_polite` | `false` | Load nền bị bỏ qua không chạy lại. |
@@ -442,7 +443,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` | Giữ ID trùng trong waterfall. |
 | `native_flow.pool.parity.impression_marks_loader` | `true` | Impression bất kỳ của placement đánh dấu đã hiển thị. |
 | `native_flow.pool.parity.screen_slots_bind_started` | `false` | LFO, popup xác nhận ngôn ngữ, Privacy, Goal, màn resume chỉ bind khi resume. |
-| `native_flow.pool.parity.pager_slots_bind_resumed` | `true` | Trang pager bind khi resume. |
+| `native_flow.pool.parity.pager_slots_bind_resumed` | `false` | Trang pager bind khi start. |
 | `native_flow.pool.parity.keep_after_flow` | `true` | Pool sống tới hết process. |
 | `native_flow.pool.parity.reset_on_new_run` | `false` | Lượt chạy mới giữ pool. |
 | `native_flow.pool.parity.respect_focus_window` | `false` | Không chờ window focus. |
@@ -453,14 +454,14 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD` cho lối thoát LFO và Goal. |
 | `native_flow.pool.done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ. |
 | `native_flow.pool.pager.smooth_scroll` | `true` | Chuyển trang có animation. |
-| `native_flow.pool.pager.offscreen_pages` | `0` | `0` giữ mọi trang. |
+| `native_flow.pool.pager.offscreen_pages` | `1` | `1` giữ trang kế tiếp để prepare; giá trị lớn hơn giữ thêm trang kề bên. |
 | `native_flow.pool.resume_on_goals` | `true` | Ad quay lại app được hiện ở Privacy/Goal. |
 | `native_flow.pool.stuck_loading_log_ms` | `60000` | Chỉ log. |
 | `native_flow.pool.view.destroy_on_teardown` | `true` | Hủy view ad khi màn đóng. |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` | Tương ứng `lfo.confirm_button.visible_before_selection` của `PER_SCREEN`. |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` | Nút Continue/Next của Privacy và Goal. |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` | Next ở Goal dùng interstitial splash còn lại. |
-| `native_flow.pool.resume.min_background_ms` | `1000` | Thời gian ở background tối thiểu trước khi lần quay lại mở màn resume của pool; native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms`. |
+| `native_flow.pool.resume.min_background_ms` | `2000` | Thời gian ở background tối thiểu trước khi lần quay lại mở màn resume của pool; native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms`. |
 | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` | Tương ứng `onboarding.fullscreen.skip.delay_ms` (`5000`). |
 | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` | `10000` | Tương ứng `onboarding.fullscreen.auto_next.delay_ms` (`15000`), tính từ lúc chọn trang. |
 

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Native resume: full-bleed image, translucent text card with Start over its bottom edge,
-     native ad block anchored bottom. Without an ad the image runs to the bottom. -->
+<!-- Native resume default. Partners may replace this resource with a layout containing only
+     @id/ob_resume_ad (FrameLayout) and @id/ob_resume_start (Button/TextView); the other views
+     are optional decorations filled by the SDK when present. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"

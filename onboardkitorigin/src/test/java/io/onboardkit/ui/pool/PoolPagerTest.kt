@@ -283,7 +283,7 @@ class PoolPagerTest {
         assertSame(own.admobNativeAd, shownAd(1))
     }
 
-    @Test fun `an offscreen content page holds its ad's height with a still skeleton, then binds once it resumes`() {
+    @Test fun `an offscreen content page prepares the newest pool ad before it resumes`() {
         launch(steps = listOf(ob1, ob2)) {
             OnboardingPool.claim(stepOb1, LoadMode.FORCED)
         }
@@ -291,9 +291,8 @@ class PoolPagerTest {
         pump()
         assertFalse(page(1).isResumed)
         val holder = slot(1)
-        assertEquals("Laid out at the ad's height before its slide", View.VISIBLE, holder.visibility)
-        val still = holder.getChildAt(0) as ShimmerFrameLayout
-        assertFalse("A page nobody sees does not animate", still.isShimmerStarted)
+        assertEquals("The prepared neighbour already has the held ad", ad.admobNativeAd, shownAd(1))
+        assertEquals(View.VISIBLE, holder.visibility)
         assertEquals(View.VISIBLE, page(1).requireView().findViewById<View>(R.id.ob_ad_block).visibility)
 
         nextPage()
@@ -333,7 +332,7 @@ class PoolPagerTest {
         nextPage()
         assertTrue("Claimed as planned, and refused", OnboardingPool.lastResult(stepOb2) is LoadResult.SkippedByConfig)
         assertEquals(stepOb1.key, engine.owner)
-        assertNull("OB2 hides instead of borrowing OB1's ad", shownAd(1))
+        assertEquals("OB2 hides instead of borrowing OB1's ad", View.GONE, slot(1).visibility)
     }
 
     @Test fun `a page planned without a slot claims nothing when the config later gives it a unit`() {
@@ -362,14 +361,13 @@ class PoolPagerTest {
         assertFalse(pager.isUserInputEnabled)
     }
 
-    @Test fun `every page stays alive unless a smaller offscreen limit is configured`() {
+    @Test fun `the pager keeps its adjacent page prepared by default`() {
         launch(steps = listOf(ob1, full1, ob2, ob3))
-        assertEquals(4, pager.offscreenPageLimit)
-        assertEquals(4, pagerStage.childFragmentManager.fragments.size)
+        assertEquals(1, pager.offscreenPageLimit)
         destroy()
 
-        launch(steps = listOf(ob1, full1, ob2, ob3), snapshot = poolSnapshot().copy(pagerOffscreenPages = 1))
-        assertEquals(1, pager.offscreenPageLimit)
+        launch(steps = listOf(ob1, full1, ob2, ob3), snapshot = poolSnapshot().copy(pagerOffscreenPages = 2))
+        assertEquals(2, pager.offscreenPageLimit)
     }
 
     @Test fun `back in front the stage takes its owner back, refreshes it and retries its page politely`() {
@@ -403,6 +401,10 @@ class PoolPagerTest {
         launch(steps = listOf(ob1, ob2, ob3))
         assertEquals(3, activity.poolTotalSteps())
         (0..2).forEach { position ->
+            if (pager.currentItem != position) {
+                pager.setCurrentItem(position, false)
+                pump()
+            }
             val view = page(position).requireView()
             val indicator = view.findViewById<ObStepIndicator>(R.id.ob_step_indicator)
             assertEquals(3, indicator.count)
@@ -671,7 +673,6 @@ class PoolPagerTest {
         launch(steps = listOf(ob1, ob2, ob3), snapshot = poolSnapshot(SYNC_PARITY.copy(pagerSlotsBindResumed = false)))
         val first = loader.fill(stepOb1.key)
         pump()
-        assertSame("Offscreen pages bind too", first.admobNativeAd, shownAd(2))
         assertSame("The page on screen holds the registration", slot(0).getChildAt(0),
             lastRegisteredView[first.admobNativeAd])
 
@@ -683,8 +684,12 @@ class PoolPagerTest {
         val second = loader.fill(stepOb2.key)
         pump()
         assertSame(second.admobNativeAd, shownAd(1))
-        assertSame(second.admobNativeAd, shownAd(2))
         assertSame(slot(1).getChildAt(0), lastRegisteredView[second.admobNativeAd])
+
+        // With offset 1, page 2 is prepared when page 1 is selected and binds once it is entered.
+        nextPage()
+        assertEquals(2, pager.currentItem)
+        assertSame(second.admobNativeAd, shownAd(2))
     }
 
     @Test fun `after reset() mid-run the pages still render the pool and a full page waits for its ad`() {

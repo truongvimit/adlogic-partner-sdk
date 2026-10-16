@@ -123,7 +123,7 @@ Native preloads are initiated by app/SDK code. Replacement preloads use `setEnab
 
 The splash interstitial slot is loaded, then shown from the buffer, so its `behavior` accepts `load.tier_timeout_ms`; `load_and_show.*` wait is ignored because this slot loads before it shows. Only the exit interstitial waits for a fill: `onboarding.exit_interstitial.wait_timeout_ms` outranks `placement_overrides` and format `interstitial.load_and_show.wait_timeout_ms`. Frequency, next-screen timing, pre-show delay, app-open and native cache TTL are format-wide. Custom steps support `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}`. Of those, `position` exists only per step — it has no `onboarding.fullscreen` or `flow` scope above it.
 
-Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). SDK banner refresh is on by default (`banner.reload.allowed` and `banner.reload.auto_enabled` are `true`); the interval only sets its cadence. Turn AdMob console refresh off on every banner ad unit, all floors included, or the banner refreshes twice. To turn SDK refresh off, set `banner.reload.auto_enabled` to `false` (no timer; reload on resume stays) or `banner.reload.allowed` to `false` (no SDK reload at all), globally or under `placement_overrides.<key>`. The background stay before any resume ad is requested stays in `open_resume.app_resume_load_delay_ms` (2000 ms), for every `app_resume.type`. The `SHARED_POOL` resume screen is the exception: it opens after `native_flow.pool.resume.min_background_ms` (1000 ms; see [Native flow type](#native-flow-type)). A click on an ad of any format skips the next resume ad only when `app_open.presentation.skip_after_ad_click` is `true` (default `false`). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
+Banner cadence comes from positive `ad_config.<key>.reloadIntervalSeconds`, otherwise the host value (SDK default 15000 ms). SDK banner refresh is on by default (`banner.reload.allowed` and `banner.reload.auto_enabled` are `true`); the interval only sets its cadence. Turn AdMob console refresh off on every banner ad unit, all floors included, or the banner refreshes twice. To turn SDK refresh off, set `banner.reload.auto_enabled` to `false` (no timer; reload on resume stays) or `banner.reload.allowed` to `false` (no SDK reload at all), globally or under `placement_overrides.<key>`. The background stay before any resume ad is requested stays in `open_resume.app_resume_load_delay_ms` (2000 ms), for every `app_resume.type`. The `SHARED_POOL` resume screen is the exception: it opens after `native_flow.pool.resume.min_background_ms` (2000 ms; see [Native flow type](#native-flow-type)). A click on an ad of any format skips the next resume ad only when `app_open.presentation.skip_after_ad_click` is `true` (default `false`). Native click actions and defaults are described below. Native timer reload is separate from click replacement. Cache age may only be shortened from the documented SDK limits.
 
 Empty behavior objects do not suppress broader or lower-source leaf values. `presentation.loading_enabled` follows the captured placement/format behavior for both `show()` and `loadAndShow()`, including a ready cached ad. Interstitial screen scopes (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) accept only `load.tier_timeout_ms` and `load_and_show.wait_timeout_ms` (the splash one drops `load_and_show.*`), so set `loading_enabled` under `placement_overrides.<key>` or the `interstitial` format. Banner placement `enable_ua_check` is re-read after remote refresh; an explicit host `forceUaCheck` setter takes priority. Native `presentation.cta_corner_radius_dp` also applies when the helper has no explicit style.
 
@@ -170,7 +170,7 @@ Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confir
 
 ## Native templates, CTA and X/Skip experiments
 
-- `ad_remote_config.<placement>.templateId` (number) picks the frame: `1` LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card. Absent, `null` or an unknown number keeps the slot's default — `1` on LFO1/2, Welcome Back and OB content, `2` on Privacy/Goal and splash inline. Remote > app asset > code like every field.
+- `ad_remote_config.<placement>.templateId` (number) picks the frame: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` DashDrama-shaped wide LFO card. Absent, `null` or an unknown number keeps the slot's default — `4` on LFO1/2 in `SHARED_POOL`, `1` on classic LFO/Welcome Back/OB content, `2` on Privacy/Goal and splash inline. Remote > app asset > code like every field.
 - `components` is the only thing that orders a native. Templates `1` and `3` follow it; absent, the default order puts the CTA at the bottom. Template `1`: `["icon_headline","media","cta"]` (default) or `["cta","media","icon_headline"]` for the CTA on top.
 - `positionCTA` has been removed; a payload that still sends it is ignored. `lfo.native_template`, `onboarding.ads.content_template` and `onboarding.steps.<id>.native_template` are removed too; old payloads containing them are ignored.
 - Template 3's four design arrangements are `components` orders: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (the default order), D `["cta","media","icon_headline","body"]`. The body sits in the header, so leaving out `body` only hides it.
@@ -237,12 +237,12 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: whether the next stage starts after the LFO or Goal exit ad closes or underneath it. |
 | `done_hidden_gone` | `true` | A hidden forward button takes no space; `false` keeps its space. |
 | `pager.smooth_scroll` | `true` | Page changes animate. |
-| `pager.offscreen_pages` | `0` | Pages kept alive beside the current one; `0` keeps every page. |
+| `pager.offscreen_pages` | `1` | Pages kept alive beside the current one; `1` keeps the next page prepared. Larger values keep more neighbours. |
 | `resume_on_goals` | `true` | Return ads may show on Privacy and Goal. |
 | `stuck_loading_log_ms` | `60000` | Logs a request still running after this long; log only. |
 | `view.destroy_on_teardown` | `true` | A slot's ad view is destroyed when its screen goes away; the ad stays in the pool. |
 | `goals.exit_reuse_splash_inter` | `true` | Goal's Next shows the splash interstitial's leftover. |
-| `resume.min_background_ms` | `1000` | How long the app must stay in the background before a return opens the pool's resume screen; its request follows the same delay. Classic native resume keeps `open_resume.app_resume_load_delay_ms`. A value outside 0–86400000 (one day) falls back to that classic delay. |
+| `resume.min_background_ms` | `2000` | How long the app must stay in the background before a return opens the pool's resume screen; its request follows the same delay. Classic native resume keeps `open_resume.app_resume_load_delay_ms`. A value outside 0–86400000 (one day) falls back to that classic delay. |
 | `parity.refresh_overwrites_unshown` | `true` | A screen's return refresh also replaces an ad not shown yet; `false` only a shown one. |
 | `parity.retry_skipped_polite` | `false` | A background load skipped while another request ran is dropped; `true` replays it once the pool is idle. |
 | `parity.async_gate` | `true` | Whether a request is running is computed off the main thread and may lag a frame; `false` computes it at once. |
@@ -252,7 +252,7 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `parity.keep_duplicate_ids` | `true` | Floors are requested as listed in ad_config, duplicates included; `false` drops duplicates. |
 | `parity.impression_marks_loader` | `true` | Any impression from a placement's requests marks it shown; `false` only its current ad's. |
 | `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, the language confirmation popup and the resume screen bind a new ad only once resumed, so an ad landing under an interstitial is not counted unseen; `true` binds once started, as the reference app does. |
-| `parity.pager_slots_bind_resumed` | `true` | Pager pages bind ads once resumed; `false` once started. |
+| `parity.pager_slots_bind_resumed` | `false` | Pager pages bind ads once started, so the next page can show the newest held ad before the swipe settles; `true` waits for resumed. |
 | `parity.keep_after_flow` | `true` | The pool lives until the process ends, for the resume screen; `false` releases it when onboarding completes. |
 | `parity.reset_on_new_run` | `false` | A new run keeps the pool's ads; `true` starts empty. |
 | `parity.respect_focus_window` | `false` | Requests do not wait for window focus; `true` waits like the `PER_SCREEN` natives. |
@@ -412,6 +412,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
 | `native_resume.start_button.color` | `"#FF375E"` — Start text color on the native resume screen; `""` keeps the layout color. |
+| `native_resume.start_button.delay_ms` | `0` — delay before Start becomes visible; applies to both `PER_SCREEN` and `SHARED_POOL`. |
 | `native_flow.type` | `"PER_SCREEN"` — `PER_SCREEN` / `SHARED_POOL`; see [Native flow type](#native-flow-type) |
 | `native_flow.pool.parity.refresh_overwrites_unshown` | `true` |
 | `native_flow.pool.parity.retry_skipped_polite` | `false` |
@@ -422,7 +423,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` |
 | `native_flow.pool.parity.impression_marks_loader` | `true` |
 | `native_flow.pool.parity.screen_slots_bind_started` | `false` |
-| `native_flow.pool.parity.pager_slots_bind_resumed` | `true` |
+| `native_flow.pool.parity.pager_slots_bind_resumed` | `false` |
 | `native_flow.pool.parity.keep_after_flow` | `true` |
 | `native_flow.pool.parity.reset_on_new_run` | `false` |
 | `native_flow.pool.parity.respect_focus_window` | `false` |
@@ -433,14 +434,14 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` — `AFTER_AD` / `UNDER_AD` |
 | `native_flow.pool.done_hidden_gone` | `true` |
 | `native_flow.pool.pager.smooth_scroll` | `true` |
-| `native_flow.pool.pager.offscreen_pages` | `0` |
+| `native_flow.pool.pager.offscreen_pages` | `1` |
 | `native_flow.pool.resume_on_goals` | `true` |
 | `native_flow.pool.stuck_loading_log_ms` | `60000` |
 | `native_flow.pool.view.destroy_on_teardown` | `true` |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` |
-| `native_flow.pool.resume.min_background_ms` | `1000` |
+| `native_flow.pool.resume.min_background_ms` | `2000` |
 | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` |
 | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` | `10000` |
 

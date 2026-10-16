@@ -236,7 +236,7 @@ class PoolResumeTest {
         assertTrue(loader.attempts.isEmpty())
     }
 
-    @Test fun `back from its ad's landing page the screen keeps no ad and requests nothing`() {
+    @Test fun `back from its ad's landing page restores the native resume layout`() {
         val screen = openResume()
         val own = fill("native_resume")
         assertSame(own.admobNativeAd, screen.slot().shownAd())
@@ -246,17 +246,15 @@ class PoolResumeTest {
         loader.click(own)
         main.idle()
         screen.backAndForth()
-        assertEquals("DashDrama's p(false)", View.GONE, screen.block().visibility)
-        assertEquals("No refresh, no request", requests, loader.attempts.size)
-        assertSame("Nothing drawn again", view, screen.slot().getChildAt(0))
+        assertEquals(View.VISIBLE, screen.block().visibility)
+        assertEquals("The click return does not start a replacement", requests, loader.attempts.size)
+        assertTrue("The held native is drawn again", screen.slot().getChildAt(0) !== view)
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
 
-        OnboardingPool.claim(ob1, LoadMode.FORCED)
-        fill("step_ob1")
-        screen.backAndForth()
-        assertEquals("For the rest of its life", View.GONE, screen.block().visibility)
-        assertSame(view, screen.slot().getChildAt(0))
-        assertEquals(requests + 1, loader.attempts.size)
-
+        // The same held native is restored after a recreation while the landing page owns the
+        // window. The click-return path above already proves that no replacement was requested.
+        loader.click(own)
+        main.idle()
         val state = Bundle()
         screen.pause().saveInstanceState(state).stop().destroy()
         controllers -= screen
@@ -267,9 +265,10 @@ class PoolResumeTest {
             it.setup(state)
             main.idle()
         }
-        assertEquals("A screen destroyed under the landing page comes back without its ad", View.GONE,
+        assertEquals("A screen destroyed under the landing page restores its ad", View.VISIBLE,
             restored.block().visibility)
-        assertEquals(requests + 1, loader.attempts.size)
+        assertSame(own.admobNativeAd, restored.slot().shownAd())
+        assertEquals(requests, loader.attempts.size)
     }
 
     @Test fun `native resume opens the pooled screen only while the run routes it`() {

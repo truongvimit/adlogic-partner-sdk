@@ -35,8 +35,8 @@ data class PoolParity(
      * GMA counts an impression under a translucent cover. true: DashDrama's STARTED (U5/h.java:49).
      */
     val screenSlotsBindStarted: Boolean = false,
-    /** Pager pages collect at RESUMED (DD U5/f.java:52). */
-    val pagerSlotsBindResumed: Boolean = true,
+    /** Pager pages collect while STARTED so an offscreen neighbour can show the pool's held ad. */
+    val pagerSlotsBindResumed: Boolean = false,
     /** DD keeps the pool until process death; the resume screen shows leftovers. false: release at completeFlow. */
     val keepAfterFlow: Boolean = true,
     /** DD keeps loaders across runs. true: a new run starts with an empty pool. */

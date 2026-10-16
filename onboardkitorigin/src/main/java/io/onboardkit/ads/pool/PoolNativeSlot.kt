@@ -234,11 +234,13 @@ internal class PoolNativeSlot(
             is PoolEvent.Clicked -> if (!frozen && event.ad === binder.boundAd() && binder.holdsRegistration()) {
                 tracked.onClicked()
             }
-            // A config refusal publishes nothing, so no selection arrives to hide the owner slot.
+            // A config refusal publishes no selection. Hide the owner directly from the event so
+            // a page that was pre-bound while STARTED cannot keep borrowing an ad after its own
+            // placement is disabled.
             is PoolEvent.Skipped -> if (kind == Kind.OWNER && event.key == placement.key &&
                 event.result is LoadResult.SkippedByConfig
             ) {
-                rerender()
+                render(PoolSelection.hidden())
             }
             else -> Unit
         }

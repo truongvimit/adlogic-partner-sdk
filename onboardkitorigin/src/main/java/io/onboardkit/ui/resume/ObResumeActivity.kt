@@ -5,12 +5,14 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
-import io.onboardkit.databinding.ObResumeScreenBinding
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.base.BaseOnboardActivity
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Native resume, opened when the app returns from the background. Start or back closes it onto the
@@ -30,28 +32,40 @@ class ObResumeActivity : BaseOnboardActivity() {
     private var renewOnResume = false
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
-        val b = ObResumeScreenBinding.inflate(layoutInflater)
-        setContentView(b.root)
+        val views = ResumeScreenViews.inflate(layoutInflater)
+        setContentView(views.root)
         val cfg = sdk.requireConfig().resumeScreen
-        b.obResumeImage.setImageResource(cfg.imageRes)
-        b.obResumeTitle.text = cfg.title ?: getString(cfg.titleRes)
-        b.obResumeSubtitle.text = cfg.subtitle ?: getString(cfg.subtitleRes)
-        OnboardingSettings.resumeStartColor()?.let(b.obResumeStart::setTextColor)
-        b.obResumeStart.setOnClickListener { finish() }
+        ResumeScreenViews.bindOptionalCopy(views, cfg.imageRes, cfg.title ?: getString(cfg.titleRes), cfg.subtitle ?: getString(cfg.subtitleRes), this)
+        (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
+        views.start.setOnClickListener { finish() }
+        revealStart(views.start)
 
         val placement = AdPlacement.ResumeNative
         var bound = false
         showNativeAd(
             placement = placement,
             unit = sdk.requireConfig().ads.nativeUnitFor(placement),
-            container = b.obResumeAd,
-            onLoading = { b.obResumeAdBlock.isVisible = true },
+            container = views.ad,
+            onLoading = { views.adBlock.isVisible = true },
             onBound = {
                 bound = true
-                b.obResumeAdBlock.isVisible = true
+                views.adBlock.isVisible = true
             },
-            onUnavailable = { if (!bound) b.obResumeAdBlock.isVisible = false },
+            onUnavailable = { if (!bound) views.adBlock.isVisible = false },
         )
+    }
+
+    private fun revealStart(start: android.view.View) {
+        val delayMs = OnboardingSettings.resumeStartDelayMs()
+        if (delayMs == 0L) {
+            start.isVisible = true
+            return
+        }
+        start.isVisible = false
+        lifecycleScope.launch {
+            delay(delayMs)
+            if (!isFinishing && !isDestroyed) start.isVisible = true
+        }
     }
 
     override fun onResume() {

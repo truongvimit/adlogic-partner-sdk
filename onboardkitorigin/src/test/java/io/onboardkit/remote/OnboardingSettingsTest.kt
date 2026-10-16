@@ -17,11 +17,23 @@ class OnboardingSettingsTest {
         assertFalse(OnboardingSettings.defaultBool("welcome_back.enabled"))
     }
 
+    @Test fun `native resume start delay is accepted in both native flow modes`() {
+        listOf("PER_SCREEN", "SHARED_POOL").forEach { type ->
+            assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
+                """{"native_flow":{"type":"$type"},"native_resume":{"start_button":{"delay_ms":2400}}}""",
+            ))
+            assertEquals(type, OnboardingSettings.nativeFlowTypeOrDefault().name)
+            assertEquals(2400L, OnboardingSettings.resumeStartDelayMs())
+        }
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertEquals(0L, OnboardingSettings.resumeStartDelayMs())
+    }
+
     @Test fun `language confirm style accepts icon and text and rejects malformed remote values`() {
         val config = onboardKitConfig {
             language = LanguageConfig(confirmButtonStyle = LanguageConfirmButtonStyle.TEXT)
         }.getOrThrow()
-        assertEquals(LanguageConfirmButtonStyle.CHECK_ICON, LanguageConfig().confirmButtonStyle)
+        assertEquals(LanguageConfirmButtonStyle.TEXT, LanguageConfig().confirmButtonStyle)
         for (style in listOf("CHECK_ICON", "TEXT")) {
             OnboardingSettings.document.acceptSuccessfulFetch("""{"lfo":{"confirm_button":{"style":"$style"}}}""")
             assertEquals(LanguageConfirmButtonStyle.valueOf(style), OnboardingSettings.resolve(config).language.confirmButtonStyle)

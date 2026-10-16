@@ -9,10 +9,13 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
 import io.onboardkit.ads.pool.screenSlotMinState
-import io.onboardkit.databinding.ObResumeScreenBinding
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.resume.ResumeScreenViews
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
@@ -20,8 +23,9 @@ import io.onboardkit.ui.base.BaseOnboardActivity
  * its own native only POLITE, a refresh included. A config refusal of native_resume hides it, as in DashDrama and the
  * classic screen. It never suppresses app-resume either; an ad click is the only mark.
  *
- * Once its ad is clicked the screen keeps no ad for the rest of its life and requests nothing
- * (DashDrama's f23721c): the user comes back from the landing page to the Start button alone.
+ * A click pauses the slot while the landing page owns the window. When the user returns, the
+ * held selection is drawn again instead of collapsing the ad block; the click itself still marks
+ * the next foreground return as an ad return through the shared resume guard.
  */
 internal class ObPoolResumeActivity : BaseOnboardActivity() {
 
@@ -33,7 +37,6 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     // Restored over the app's own restored screen, not a restart of the whole flow.
     override val restartFlowAfterProcessDeath: Boolean get() = false
 
-    private var binding: ObResumeScreenBinding? = null
     private var slot: PoolNativeSlot? = null
 
     /** DashDrama's f23721c; saved, as its click flag survives a screen destroyed under the landing page. */
@@ -47,14 +50,13 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         }
         adClicked = savedInstanceState?.getBoolean(KEY_AD_CLICKED) == true
         OnboardingPool.attachScreen(this)
-        val b = ObResumeScreenBinding.inflate(layoutInflater).also { binding = it }
-        setContentView(b.root)
+        val views = ResumeScreenViews.inflate(layoutInflater)
+        setContentView(views.root)
         val cfg = sdk.requireConfig().resumeScreen
-        b.obResumeImage.setImageResource(cfg.imageRes)
-        b.obResumeTitle.text = cfg.title ?: getString(cfg.titleRes)
-        b.obResumeSubtitle.text = cfg.subtitle ?: getString(cfg.subtitleRes)
-        OnboardingSettings.resumeStartColor()?.let(b.obResumeStart::setTextColor)
-        b.obResumeStart.setOnClickListener { finish() }
+        ResumeScreenViews.bindOptionalCopy(views, cfg.imageRes, cfg.title ?: getString(cfg.titleRes), cfg.subtitle ?: getString(cfg.subtitleRes), this)
+        (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
+        views.start.setOnClickListener { finish() }
+        revealStart(views.start)
 
         val flow = runSnapshot()
         slot = PoolNativeSlot(
@@ -64,43 +66,56 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             // itself is refused instead of lending another screen's ad. The screen still never claims.
             kind = PoolNativeSlot.Kind.OWNER,
             minState = flow.screenSlotMinState,
-            container = b.obResumeAd,
+            container = views.ad,
             callbacks = StepSlotCallbacks(
-                onLoading = { if (!adClicked) b.obResumeAdBlock.isVisible = true },
-                onBound = { if (!adClicked) b.obResumeAdBlock.isVisible = true },
-                onUnavailable = { b.obResumeAdBlock.isVisible = false },
+                onLoading = { if (!adClicked) views.adBlock.isVisible = true },
+                onBound = { if (!adClicked) views.adBlock.isVisible = true },
+                onUnavailable = { views.adBlock.isVisible = false },
                 onAdEngaged = { onAdClicked() },
             ),
             destroyOnTeardown = flow.viewDestroyOnTeardown,
         ).also { it.start() }
-        if (adClicked) hideAd()
+        if (adClicked) slot?.setFrozen(true)
+    }
+
+    private fun revealStart(start: android.view.View) {
+        val delayMs = OnboardingSettings.resumeStartDelayMs()
+        if (delayMs == 0L) {
+            start.isVisible = true
+            return
+        }
+        start.isVisible = false
+        lifecycleScope.launch {
+            delay(delayMs)
+            if (!isFinishing && !isDestroyed) start.isVisible = true
+        }
     }
 
     /**
      * Frozen at the click, which may be reported once the landing page has paused the screen: the
-     * slot's re-collect on the way back (at STARTED under `screen_slots_bind_started`) would
-     * otherwise draw the clicked ad again before onResume hides it.
+     * slot's re-collect on the way back (at STARTED under `screen_slots_bind_started`) must wait
+     * until onResume explicitly redraws the held selection.
      */
     private fun onAdClicked() {
         adClicked = true
         slot?.setFrozen(true)
     }
 
-    private fun hideAd() {
-        slot?.setFrozen(true)
-        binding?.obResumeAdBlock?.isVisible = false
+    private fun restoreAfterAdClick() {
+        adClicked = false
+        slot?.setFrozen(false)
     }
 
     /**
      * Every request of this screen is POLITE: a held native_resume is refreshed only while no other
-     * request is in flight, otherwise it is asked for POLITE; back from its ad's landing page the
-     * screen hides the ad and asks for nothing (DashDrama ResumeActivity.java:142-149).
+     * request is in flight, otherwise it is asked for POLITE. Returning from its ad's landing page
+     * only redraws the held selection; it must not start a replacement request.
      */
     override fun onResume() {
         super.onResume()
         if (isFinishing || !OnboardingPool.isActive) return
         if (adClicked) {
-            hideAd()
+            restoreAfterAdClick()
             return
         }
         if (!OnboardingPool.refreshPolite(AdPlacement.ResumeNative)) OnboardingPool.preload(AdPlacement.ResumeNative)
@@ -114,7 +129,6 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     override fun onDestroy() {
         OnboardingPool.detachScreen(this)
         slot = null
-        binding = null
         super.onDestroy()
     }
 

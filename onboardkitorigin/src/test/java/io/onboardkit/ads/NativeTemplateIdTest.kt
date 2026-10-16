@@ -16,6 +16,8 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.core.StepId
+import io.onboardkit.flow.NativeFlowSnapshot
+import io.onboardkit.flow.NativeFlowType
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -63,6 +65,7 @@ class NativeTemplateIdTest {
 
     @Before fun setup() {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
+        OnboardingSdk.session.reset()
         OnboardingSdk.install(app) {
             adProvider = FakeAdProvider()
             trackkitAutoTracking(false)
@@ -73,6 +76,7 @@ class NativeTemplateIdTest {
 
     @After fun cleanup() {
         AdRemoteConfig.reset()
+        OnboardingSdk.session.reset()
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
     }
 
@@ -98,11 +102,24 @@ class NativeTemplateIdTest {
             1 to R.layout.ob_layout_native_lfo,
             2 to R.layout.ob_layout_native_media_left,
             3 to R.layout.ob_layout_native_med_1_91,
+            4 to R.layout.ob_layout_native_lfo_pool,
         ).forEach { (id, layout) ->
             declare(cardSlots, ""","templateId":$id""")
             assertEquals("templateId $id", cardSlots.map { layout }, layouts(cardSlots))
             assertEquals("TEMPLATE_$id", NativeTemplates.variantFor(AdPlacement.Language1))
         }
+    }
+
+    @Test fun `shared pool LFO defaults to template 4 while classic LFO keeps template 1`() {
+        declare(mapOf(AdPlacement.Language1 to "native_lang"), "")
+        assertEquals(R.layout.ob_layout_native_lfo, NativeTemplates.layoutForPlacement(AdPlacement.Language1))
+
+        OnboardingSdk.session.nativeFlow = NativeFlowSnapshot(type = NativeFlowType.SHARED_POOL)
+        assertEquals(R.layout.ob_layout_native_lfo_pool,
+            NativeTemplates.layoutForPlacement(AdPlacement.Language1))
+        assertEquals(R.layout.ob_layout_native_lfo_pool,
+            NativeTemplates.layoutForPlacement(AdPlacement.Language2))
+        assertEquals("TEMPLATE_4", NativeTemplates.variantFor(AdPlacement.Language1))
     }
 
     @Test fun `an unknown templateId falls back to the slot's default`() {
@@ -117,13 +134,14 @@ class NativeTemplateIdTest {
     }
 
     @Test fun `every template is an SDK frame, so a live templateId change can re-frame the slot`() {
-        listOf(1, 2, 3).forEach { id ->
+        listOf(1, 2, 3, 4).forEach { id ->
             assertTrue(NativeTemplates.isSdkLayout(NativeTemplates.layoutForTemplateId(id)!!))
         }
     }
 
-    @Test fun `templates 1 and 3 carry every AdMob asset view they draw under the SDK ids`() {
-        listOf(R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_med_1_91).forEach { layout ->
+    @Test fun `templates 1 3 and 4 carry every AdMob asset view they draw under the SDK ids`() {
+        listOf(R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_med_1_91,
+            R.layout.ob_layout_native_lfo_pool).forEach { layout ->
             val root = inflate(layout)
             assertTrue(root.findViewById<View>(com.ads.module.R.id.ad_media) is MediaView)
             assertTrue(root.findViewById<View>(com.ads.module.R.id.ad_headline) is TextView)
@@ -133,11 +151,15 @@ class NativeTemplateIdTest {
         val med = inflate(R.layout.ob_layout_native_med_1_91)
         assertTrue(med.findViewById<View>(com.ads.module.R.id.ad_body) is TextView)
         assertTrue(med.findViewById<View>(com.ads.module.R.id.ad_app_icon) is ImageView)
+        val pool = inflate(R.layout.ob_layout_native_lfo_pool)
+        assertTrue(pool.findViewById<View>(com.ads.module.R.id.ad_body) is TextView)
+        assertTrue(pool.findViewById<View>(com.ads.module.R.id.ad_app_icon) is ImageView)
     }
 
     @Test fun `with no components declared the CTA sits at the bottom of templates 1 and 3`() {
         declare(mapOf(AdPlacement.Language1 to "native_lang"), "")
-        listOf(R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_med_1_91).forEach { layout ->
+        listOf(R.layout.ob_layout_native_lfo, R.layout.ob_layout_native_med_1_91,
+            R.layout.ob_layout_native_lfo_pool).forEach { layout ->
             assertEquals(com.ads.module.R.id.ad_call_to_action, visibleOrder(layout).last())
         }
     }

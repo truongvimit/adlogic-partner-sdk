@@ -85,6 +85,9 @@ object OnboardingSettings {
     /** The native resume screen's Start text color, on the same terms as [onboardingPrimaryColor]. */
     internal fun resumeStartColor(): Int? = color(RESUME_START_COLOR_PATH)
 
+    /** Delay before the partner/SDK native resume Start action becomes visible. */
+    internal fun resumeStartDelayMs(): Long = number(RESUME_START_DELAY_PATH).coerceAtLeast(0L)
+
     private fun color(path: String): Int? {
         val snapshot = values
         fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
@@ -97,6 +100,7 @@ object OnboardingSettings {
 
     private const val PRIMARY_COLOR_PATH = "onboarding.primary_color"
     internal const val RESUME_START_COLOR_PATH = "native_resume.start_button.color"
+    internal const val RESUME_START_DELAY_PATH = "native_resume.start_button.delay_ms"
 
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"

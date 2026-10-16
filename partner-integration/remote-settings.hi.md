@@ -123,7 +123,7 @@ Native preload app/SDK code शुरू करता है। Replacement prel
 
 Splash interstitial slot पहले load होता है, फिर buffer से show होता है, इसलिए उसका `behavior` केवल `load.tier_timeout_ms` लेता है; `load_and_show.*` wait को अनदेखा किया जाता है क्योंकि slot पहले load और बाद में show होता है; वहाँ `load_and_show.*` field ignore होता है। केवल exit interstitial fill का इंतज़ार करता है: `onboarding.exit_interstitial.wait_timeout_ms`, `placement_overrides` और format `interstitial.load_and_show.wait_timeout_ms` से ऊपर है। Frequency, next-screen timing, pre-show delay, app-open और native cache TTL format scope में हैं। Custom steps `onboarding.steps.<id>.fullscreen.skip.{enabled,delay_ms,style,position}`, `.auto_next.{enabled,delay_ms}` support करते हैं। इनमें `position` केवल per-step है — इसके ऊपर `onboarding.fullscreen` या `flow` scope नहीं है।
 
-Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। SDK का banner refresh default में चालू है (`banner.reload.allowed` और `banner.reload.auto_enabled` `true` हैं); interval सिर्फ उसकी cadence तय करता है। हर banner ad unit पर, सभी floors समेत, AdMob console refresh बंद करें, वरना banner दो बार refresh होगा। SDK refresh बंद करने के लिए `banner.reload.auto_enabled` को `false` करें (timer नहीं; resume पर reload रहता है) या `banner.reload.allowed` को `false` करें (SDK reload बिल्कुल नहीं), globally या `placement_overrides.<key>` में। किसी भी resume ad के request से पहले background में रहने का समय `open_resume.app_resume_load_delay_ms` में है (2000 ms), हर `app_resume.type` के लिए। अपवाद `SHARED_POOL` की resume screen है: वह `native_flow.pool.resume.min_background_ms` (1000 ms; [Native flow type](#native-flow-type) देखें) के बाद खुलती है। किसी भी format के ad पर click अगला resume ad केवल तब छोड़ता है जब `app_open.presentation.skip_after_ad_click` `true` हो (default `false`)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
+Banner cadence positive `ad_config.<key>.reloadIntervalSeconds` से, नहीं तो host value से आती है (SDK default 15000 ms)। SDK का banner refresh default में चालू है (`banner.reload.allowed` और `banner.reload.auto_enabled` `true` हैं); interval सिर्फ उसकी cadence तय करता है। हर banner ad unit पर, सभी floors समेत, AdMob console refresh बंद करें, वरना banner दो बार refresh होगा। SDK refresh बंद करने के लिए `banner.reload.auto_enabled` को `false` करें (timer नहीं; resume पर reload रहता है) या `banner.reload.allowed` को `false` करें (SDK reload बिल्कुल नहीं), globally या `placement_overrides.<key>` में। किसी भी resume ad के request से पहले background में रहने का समय `open_resume.app_resume_load_delay_ms` में है (2000 ms), हर `app_resume.type` के लिए। अपवाद `SHARED_POOL` की resume screen है: वह `native_flow.pool.resume.min_background_ms` (2000 ms; [Native flow type](#native-flow-type) देखें) के बाद खुलती है। किसी भी format के ad पर click अगला resume ad केवल तब छोड़ता है जब `app_open.presentation.skip_after_ad_click` `true` हो (default `false`)। Native click actions और defaults नीचे दिए हैं। Timer reload click replacement से अलग है। Cache age केवल documented SDK limit से कम की जा सकती है।
 
 खाली behavior object व्यापक scope या निचले source की leaf value नहीं रोकता। `presentation.loading_enabled`, `show()` और `loadAndShow()` दोनों में captured placement/format behavior लेता है, ready cached ad पर भी। Interstitial screen scopes (`splash.ads.interstitial.behavior`, `onboarding.exit_interstitial.behavior`) केवल `load.tier_timeout_ms` और `load_and_show.wait_timeout_ms` लेते हैं (splash वाला `load_and_show.*` छोड़ देता है), इसलिए `loading_enabled` को `placement_overrides.<key>` या `interstitial` format में set करें। Remote refresh के बाद banner placement का `enable_ua_check` दोबारा पढ़ता है; host का explicit `forceUaCheck` setter पहले आता है। Explicit style न होने पर भी native helper `presentation.cta_corner_radius_dp` लागू करता है।
 
@@ -170,7 +170,7 @@ Pager page ads timer या resume पर कभी refresh नहीं हो�
 
 ## Native template, CTA और X/Skip प्रयोग
 
-- `ad_remote_config.<placement>.templateId` (number) frame चुनता है: `1` LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card। न हो, `null` हो या अनजान number हो तो slot का default रहता है — LFO1/2, Welcome Back और OB content पर `1`, Privacy/Goal और splash inline पर `2`। हर field की तरह remote > app asset > code।
+- `ad_remote_config.<placement>.templateId` (number) frame चुनता है: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` DashDrama-shaped wide LFO card। न हो, `null` हो या अनजान number हो तो slot का default रहता है — `SHARED_POOL` में LFO1/2 पर `4`, classic LFO/Welcome Back/OB content पर `1`, Privacy/Goal और splash inline पर `2`। हर field की तरह remote > app asset > code।
 - `components` ही अकेली चीज़ है जो native का क्रम तय करती है। Templates `1` और `3` इसका पालन करते हैं; न हो तो default क्रम CTA को नीचे रखता है। Template `1`: `["icon_headline","media","cta"]` (default) या CTA ऊपर रखने के लिए `["cta","media","icon_headline"]`।
 - `positionCTA` हटा दिया गया है; जो payload अब भी इसे भेजता है, उसे अनदेखा किया जाता है। `lfo.native_template`, `onboarding.ads.content_template` और `onboarding.steps.<id>.native_template` भी हटा दिए गए हैं; पुराने payload में ये fields अनदेखे होते हैं।
 - Template 3 एक layout है; design की चार arrangements `components` के क्रम से आती हैं: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (default क्रम), D `["cta","media","icon_headline","body"]`। Body header के अंदर है, इसलिए `body` हटाने से वह सिर्फ़ छिपता है।
@@ -237,12 +237,12 @@ Type हर run में एक बार तय होता है: splash �
 | `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: अगला stage LFO या Goal के exit ad के बंद होने के बाद शुरू हो या उसके नीचे। |
 | `done_hidden_gone` | `true` | छिपा forward button जगह नहीं लेता; `false` उसकी जगह रखता है। |
 | `pager.smooth_scroll` | `true` | Page बदलना animate होता है। |
-| `pager.offscreen_pages` | `0` | मौजूदा page के बगल में जीवित रखे pages; `0` हर page रखता है। |
+| `pager.offscreen_pages` | `1` | मौजूदा page के बगल में जीवित रखे pages; `1` अगला page तैयार रखता है। बड़ी value और पड़ोसी pages रखती है। |
 | `resume_on_goals` | `true` | Privacy और Goal पर return ads दिख सकते हैं। |
 | `stuck_loading_log_ms` | `60000` | इतनी देर बाद भी चल रही request log करता है; केवल log। |
 | `view.destroy_on_teardown` | `true` | Screen हटने पर slot का ad view destroy होता है; ad pool में रहता है। |
 | `goals.exit_reuse_splash_inter` | `true` | Goal का Next splash interstitial का बचा हुआ ad दिखाता है। |
-| `resume.min_background_ms` | `1000` | लौटने पर pool की resume screen खुलने से पहले app को कितनी देर background में रहना है; screen की request भी इसी delay का पालन करती है। Classic native resume `open_resume.app_resume_load_delay_ms` ही रखता है। 0–86400000 (एक दिन) से बाहर की value उसी classic delay पर लौटती है। |
+| `resume.min_background_ms` | `2000` | लौटने पर pool की resume screen खुलने से पहले app को कितनी देर background में रहना है; screen की request भी इसी delay का पालन करती है। Classic native resume `open_resume.app_resume_load_delay_ms` ही रखता है। 0–86400000 (एक दिन) से बाहर की value उसी classic delay पर लौटती है। |
 | `parity.refresh_overwrites_unshown` | `true` | Screen पर लौटने का refresh अभी तक न दिखाए गए ad को भी बदलता है; `false` केवल दिखाए गए को। |
 | `parity.retry_skipped_polite` | `false` | दूसरी request चलते समय छोड़ा गया background load छोड़ ही दिया जाता है; `true` pool खाली होने पर उसे फिर चलाता है। |
 | `parity.async_gate` | `true` | कोई request चल रही है या नहीं, यह main thread से बाहर गिना जाता है और एक frame पीछे रह सकता है; `false` तुरंत गिनता है। |
@@ -252,7 +252,7 @@ Type हर run में एक बार तय होता है: splash �
 | `parity.keep_duplicate_ids` | `true` | Floors ad_config की सूची के अनुसार request होते हैं, duplicates समेत; `false` duplicates हटाता है। |
 | `parity.impression_marks_loader` | `true` | Placement की requests का कोई भी impression उसे shown चिह्नित करता है; `false` केवल उसके मौजूदा ad का। |
 | `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, भाषा confirmation popup और resume screen नया ad केवल resumed होने पर bind करते हैं, ताकि interstitial के नीचे आया ad बिना दिखे गिना न जाए; `true` reference app की तरह started होते ही bind करता है। |
-| `parity.pager_slots_bind_resumed` | `true` | Pager pages resumed होने पर ads bind करते हैं; `false` started होते ही। |
+| `parity.pager_slots_bind_resumed` | `false` | Pager pages started होते ही ads bind करते हैं, ताकि अगला page swipe पूरा होने से पहले रखा हुआ नया ad दिखा सके; `true` resumed तक रुकता है। |
 | `parity.keep_after_flow` | `true` | Resume screen के लिए pool process खत्म होने तक रहता है; `false` onboarding पूरा होने पर उसे release करता है। |
 | `parity.reset_on_new_run` | `false` | नया run pool के ads रखता है; `true` खाली pool से शुरू करता है। |
 | `parity.respect_focus_window` | `false` | Requests window focus का इंतज़ार नहीं करतीं; `true` `PER_SCREEN` natives की तरह इंतज़ार करता है। |
@@ -412,6 +412,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `welcome_back.native1.behavior` | `{}` |
 | `welcome_back.native2.behavior` | `{}` |
 | `native_resume.start_button.color` | `"#FF375E"` — native resume screen पर Start का text color; `""` layout का color रखता है। |
+| `native_resume.start_button.delay_ms` | `0` | Start दिखने से पहले delay; `PER_SCREEN` और `SHARED_POOL` दोनों पर लागू। |
 | `native_flow.type` | `"PER_SCREEN"` — `PER_SCREEN` / `SHARED_POOL`; [Native flow type](#native-flow-type) देखें |
 | `native_flow.pool.parity.refresh_overwrites_unshown` | `true` |
 | `native_flow.pool.parity.retry_skipped_polite` | `false` |
@@ -422,7 +423,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.parity.keep_duplicate_ids` | `true` |
 | `native_flow.pool.parity.impression_marks_loader` | `true` |
 | `native_flow.pool.parity.screen_slots_bind_started` | `false` |
-| `native_flow.pool.parity.pager_slots_bind_resumed` | `true` |
+| `native_flow.pool.parity.pager_slots_bind_resumed` | `false` |
 | `native_flow.pool.parity.keep_after_flow` | `true` |
 | `native_flow.pool.parity.reset_on_new_run` | `false` |
 | `native_flow.pool.parity.respect_focus_window` | `false` |
@@ -433,14 +434,14 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` — `AFTER_AD` / `UNDER_AD` |
 | `native_flow.pool.done_hidden_gone` | `true` |
 | `native_flow.pool.pager.smooth_scroll` | `true` |
-| `native_flow.pool.pager.offscreen_pages` | `0` |
+| `native_flow.pool.pager.offscreen_pages` | `1` |
 | `native_flow.pool.resume_on_goals` | `true` |
 | `native_flow.pool.stuck_loading_log_ms` | `60000` |
 | `native_flow.pool.view.destroy_on_teardown` | `true` |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` |
-| `native_flow.pool.resume.min_background_ms` | `1000` |
+| `native_flow.pool.resume.min_background_ms` | `2000` |
 | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` |
 | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` | `10000` |
 

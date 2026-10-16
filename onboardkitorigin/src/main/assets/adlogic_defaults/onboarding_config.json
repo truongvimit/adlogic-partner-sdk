@@ -68,7 +68,7 @@
     "confirm_button": {
       "visible_before_selection": true,
       "save_on_back": true,
-      "style": "CHECK_ICON",
+      "style": "TEXT",
       "image_url": "",
       "tap_hint": {
         "enabled": false
@@ -175,7 +175,8 @@
   },
   "native_resume": {
     "start_button": {
-      "color": "#FF375E"
+      "color": "#FF375E",
+      "delay_ms": 0
     }
   },
   "native_flow": {
@@ -190,8 +191,8 @@
         "destroy_replaced_ads": false,
         "keep_duplicate_ids": true,
         "impression_marks_loader": true,
-        "screen_slots_bind_started": false,
-        "pager_slots_bind_resumed": true,
+        "screen_slots_bind_started": true,
+        "pager_slots_bind_resumed": false,
         "keep_after_flow": true,
         "reset_on_new_run": false,
         "respect_focus_window": false,
@@ -206,7 +207,7 @@
       "done_hidden_gone": true,
       "pager": {
         "smooth_scroll": true,
-        "offscreen_pages": 0
+        "offscreen_pages": 1
       },
       "resume_on_goals": true,
       "stuck_loading_log_ms": 60000,
@@ -225,7 +226,7 @@
         "exit_reuse_splash_inter": true
       },
       "resume": {
-        "min_background_ms": 1000
+        "min_background_ms": 2000
       },
       "onboarding": {
         "fullscreen": {

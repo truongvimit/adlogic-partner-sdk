@@ -102,8 +102,10 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
                 confirmRevealed = selectedCode != null
             }
             else -> {
-                // DashDrama preselects the saved language but keeps Done hidden until a tap.
-                selectedCode = offered(OnboardingSdk.selectedLanguageOrNull())
+                // A fresh pooled LFO starts with no selected row. A language saved by a previous
+                // run must not become an implicit pick; OB1 back and recreation restore their
+                // explicit in-progress pick through the branches above.
+                selectedCode = null
                 handoff = OnboardingSdk.preload().takeLanguage1Preload()
             }
         }

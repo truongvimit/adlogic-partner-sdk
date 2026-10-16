@@ -236,18 +236,19 @@ class PoolLanguageFragmentTest {
         assertEquals(View.VISIBLE, adBlock.visibility)
     }
 
-    @Test fun `the saved language is preselected while Done stays hidden`() {
+    @Test fun `a fresh pooled LFO starts with no selected language`() {
         OnboardingSdk.session.selectedLanguage = "es"
         launch()
-        assertEquals("es", adapter.selectedCode)
+        assertNull(adapter.selectedCode)
         assertEquals(View.GONE, confirm.visibility)
         reveal()
         assertEquals("DashDrama reveals Done only after a tap", View.GONE, confirm.visibility)
     }
 
-    @Test fun `a preselected saved language is no re-tap, so its first tap raises no dialog`() {
+    @Test fun `a fresh pooled LFO requires a real tap before a repeat raises the dialog`() {
         OnboardingSdk.session.selectedLanguage = "es"
         launch()
+        assertNull(adapter.selectedCode)
         tap(1)
         assertNull(ShadowDialog.getLatestDialog()?.takeIf { it.isShowing })
         assertEquals("language2", engine.owner)

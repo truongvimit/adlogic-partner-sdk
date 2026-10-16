@@ -120,7 +120,9 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         val pager = b.obPoolPager
         // DD Style5.java:158-163: adapter, offscreen limit, input lock, callback, initial dispatch.
         pager.adapter = PoolPagerAdapter(this, pages).also { adapter = it }
-        pager.offscreenPageLimit = snapshot.pagerOffscreenPages.takeIf { it > 0 } ?: pages.size
+        // Keep only the selected page and its neighbour alive: the next page is prepared without
+        // inflating every page (and every native slot) in the pager at once.
+        pager.offscreenPageLimit = snapshot.pagerOffscreenPages.coerceAtLeast(1)
         pager.isUserInputEnabled = false
         pager.registerOnPageChangeCallback(pageCallback)
         pager.post { if (binding?.obPoolPager === pager) select(pager.currentItem) }

@@ -175,7 +175,8 @@
   },
   "native_resume": {
     "start_button": {
-      "color": "#FF375E"
+      "color": "#FF375E",
+      "delay_ms": 0
     }
   }
 }
