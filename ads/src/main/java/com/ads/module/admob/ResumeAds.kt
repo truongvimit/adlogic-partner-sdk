@@ -38,6 +38,12 @@ object ResumeAds : DefaultLifecycleObserver {
 
         /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
         fun show(host: Activity)
+
+        /**
+         * How long the app must stay in the background before a return opens the screen, or null
+         * for `open_resume.app_resume_load_delay_ms`. The screen's request follows the same delay.
+         */
+        fun minBackgroundMs(): Long? = null
     }
 
     @JvmStatic
@@ -53,6 +59,14 @@ object ResumeAds : DefaultLifecycleObserver {
     private var application: Application? = null
     private var stay: Stay? = null
     private var pendingRequest: Runnable? = null
+    private var pendingPresentation: Runnable? = null
+
+    /**
+     * Activity/process callbacks can straddle the deadline by a frame or two on a real device.
+     * Keep a return that is already within this small window alive until the exact deadline;
+     * longer early returns still lose the opportunity as before.
+     */
+    private const val RETURN_DEADLINE_TOLERANCE_MS = 250L
 
     @JvmStatic
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -77,20 +91,53 @@ object ResumeAds : DefaultLifecycleObserver {
         if (host is AdActivity) return
         if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host) != null)) return
         if (placementSkipReason(placement) != null) return
-        val delayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
+        val delayMs = nativeScreen?.takeIf { type == ResumeAdType.NATIVE }?.minBackgroundMs()
+            ?.takeIf { it in 0..AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS }
+            ?: AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
         val next = Stay(type, placement, delayMs)
         stay = next
-        val request = Runnable { request(next) }
+        val request = Runnable {
+            pendingRequest = null
+            request(next)
+        }
         pendingRequest = request
         handler.postDelayed(request, delayMs)
     }
 
     override fun onStart(owner: LifecycleOwner) {
         val left = stay ?: return
-        endStay()
         // Judged on the elapsed clock, which the timer is not: a device asleep through the delay
         // returns with the request still owed.
-        if (SystemClock.elapsedRealtime() - left.leftAtMs < left.delayMs) return
+        val remainingMs = left.delayMs - (SystemClock.elapsedRealtime() - left.leftAtMs)
+        if (remainingMs > 0L) {
+            if (remainingMs > RETURN_DEADLINE_TOLERANCE_MS) {
+                endStay()
+                return
+            }
+            schedulePresentation(left, remainingMs)
+            return
+        }
+        endStay()
+        present(left)
+    }
+
+    private fun schedulePresentation(left: Stay, remainingMs: Long) {
+        // The background request has the same deadline. If the user is already returning, keep
+        // the screen's show-first ordering even when both callbacks become due in this frame.
+        pendingRequest?.let(handler::removeCallbacks)
+        pendingRequest = null
+        pendingPresentation?.let(handler::removeCallbacks)
+        val presentation = Runnable {
+            pendingPresentation = null
+            if (stay !== left) return@Runnable
+            endStay()
+            present(left)
+        }
+        pendingPresentation = presentation
+        handler.postDelayed(presentation, remainingMs)
+    }
+
+    private fun present(left: Stay) {
         if (ResumeAdType.current() != left.type) return
         val manager = AppOpenManager.getInstance()
         val host = manager.currentActivity ?: return
@@ -101,10 +148,18 @@ object ResumeAds : DefaultLifecycleObserver {
             AdTracking.skipped(left.placement, formatOf(left.type), reason)
             return
         }
-        request(left)
         when (left.type) {
-            ResumeAdType.NATIVE -> nativeScreen?.show(host)
-            ResumeAdType.INTER -> showInterstitial(host, left.placement)
+            // Native resume owns a real screen. Open it first so its skeleton and surrounding UI
+            // are visible at the return deadline; the native request can run while that screen is
+            // on top. A provider may do synchronous setup before dispatching its async load.
+            ResumeAdType.NATIVE -> {
+                nativeScreen?.show(host)
+                request(left)
+            }
+            ResumeAdType.INTER -> {
+                request(left)
+                showInterstitial(host, left.placement)
+            }
             else -> Unit
         }
     }
@@ -156,7 +211,9 @@ object ResumeAds : DefaultLifecycleObserver {
 
     private fun endStay() {
         pendingRequest?.let(handler::removeCallbacks)
+        pendingPresentation?.let(handler::removeCallbacks)
         pendingRequest = null
+        pendingPresentation = null
         stay = null
     }
 }

@@ -194,6 +194,7 @@ class RemoteConfigSyncer internal constructor(
         )
         put(ObRemoteKeys.SHOW_SKIP_OB3.key, snapshot.showSkipOb3.toString())
         put(ObRemoteKeys.SHOW_SKIP_OB5.key, snapshot.showSkipOb5.toString())
+        put(ObRemoteKeys.NATIVE_REUSE_ENABLED.key, snapshot.nativeReuseEnabled.toString())
         put(ObRemoteKeys.UI_CONTENT_JSON.key, snapshot.uiContentJson)
         put(ObRemoteKeys.UI_DESIGN_TOKENS_JSON.key, snapshot.uiDesignTokensJson)
         put(ObRemoteKeys.CONFIG_VERSION.key, snapshot.configVersion.toString())

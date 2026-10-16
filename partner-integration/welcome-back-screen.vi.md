@@ -34,6 +34,12 @@ Muốn đổi giao diện, override các resource cùng tên trong app:
 
 Giữ `ob_welcome_back_options` là `RecyclerView`, `ob_welcome_back_continue` là nút hành động và `ob_welcome_back_ad` là `FrameLayout` nằm trong một block cha riêng. Root của item nhận click và `isSelected`; `TextView` đầu tiên nhận tiêu đề, `ImageView` đầu tiên nhận ảnh.
 
+## Layout native resume
+
+Màn native resume cũng nhận layout override qua `res/layout/ob_resume_screen.xml`, dùng chung cho `PER_SCREEN` và `SHARED_POOL`. Partner chỉ bắt buộc đặt `ob_resume_ad` là `FrameLayout` và một Button/TextView cho Start (nên dùng `@id/ob_resume_start`); `ob_resume_image`, `ob_resume_title`, `ob_resume_subtitle` và `ob_resume_ad_block` đều tùy chọn. SDK vẫn giữ logic request/bind ad, màu Start, click và đóng màn.
+
+`native_resume.start_button.delay_ms` (mặc định `0`) điều khiển thời gian từ lúc màn mở tới khi Start hiện; đặt ở `native_resume.start_button` trong `onboarding_config`, áp dụng cho cả hai flow.
+
 ## Ads và kết thúc
 
 Khai trong `ad_config.json` (id production), cùng dạng với các vị trí native khác; `ad_config_debug.json` chỉ cần `native_welcome1` và `native_welcome2`, mỗi key một tầng test trong `ids`:

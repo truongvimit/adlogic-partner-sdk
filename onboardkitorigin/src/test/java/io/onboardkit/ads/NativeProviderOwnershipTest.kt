@@ -1439,8 +1439,9 @@ class NativeProviderOwnershipTest {
         }.getOrThrow())
         kotlinx.coroutines.runBlocking { io.onboardkit.OnboardingSdk.reset() }
         io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"native_resume":{"start_button":{"color":"#00FF00"}}}""",
+            """{"native_resume":{"start_button":{"color":"#00FF00","delay_ms":1000}}}""",
         )
+        assertEquals(1000L, io.onboardkit.remote.OnboardingSettings.resumeStartDelayMs())
 
         ObNativeResume.prepare(host.application)
         assertEquals(1, requests.size)

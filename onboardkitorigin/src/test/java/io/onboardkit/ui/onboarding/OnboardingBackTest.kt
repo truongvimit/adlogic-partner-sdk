@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
@@ -19,6 +20,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.ObInterstitialCallback
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
@@ -65,6 +67,7 @@ class OnboardingBackTest {
     private companion object {
         val preloads = mutableListOf<NativeAdRequest>()
         val kept = mutableListOf<Kept>()
+        val exitShows = mutableListOf<AdPlacement>()
         var host: ObOnboardingHostActivity? = null
         val lfo1 = NativeAdUnit(listOf("lfo1-high", "lfo1-all"))
         val lfo2 = NativeAdUnit(listOf("lfo2-high", "lfo2-all"))
@@ -88,6 +91,7 @@ class OnboardingBackTest {
     @Before fun setup() {
         preloads.clear()
         kept.clear()
+        exitShows.clear()
         host = null
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         OnboardingSdk.install(app) {
@@ -100,6 +104,17 @@ class OnboardingBackTest {
                     val current = host
                     kept += Kept(placement, current != null && !current.isFinishing &&
                         shadowOf(current).peekNextStartedActivity() == null)
+                }
+
+                // Never answers, so the host stays alive with the exit ad in flight.
+                override fun loadAndShowInterstitial(
+                    activity: AppCompatActivity,
+                    placement: AdPlacement,
+                    unit: InterstitialAdUnit,
+                    callback: ObInterstitialCallback,
+                    timeoutMs: Long,
+                ) {
+                    exitShows += placement
                 }
 
                 // A fullscreen page with its ad bound stays put: no fallback timer moves the pager.
@@ -137,7 +152,8 @@ class OnboardingBackTest {
             language = LanguageConfig(languages = listOf("en-US", "es").map { requireNotNull(ObLanguages.find(it)) })
             ads = AdsConfig(languageNative = lfo1, languageDupNative = lfo2, contentStepNative = content,
                 fullScreenStepNative = fullscreen,
-                afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { exitAd })
+                afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { exitAd },
+                afterOnboardingInterstitialEnabled = exitAd)
         }.getOrThrow()).getOrThrow()
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)
         activity.setTheme(R.style.ob_Theme_OnboardKit)
@@ -378,6 +394,8 @@ class OnboardingBackTest {
         launch(steps = listOf(ob1), exitAd = true)
         assertButtonShown(0)
         activity.next(null)
+        assertEquals("The exit ad is in flight", listOf<AdPlacement>(AdPlacement.AfterOnboardingInterstitial), exitShows)
+        assertFalse(activity.isFinishing)
         assertEquals(View.GONE, back.visibility)
         back.performClick()
         activity.onBackPressedDispatcher.onBackPressed()

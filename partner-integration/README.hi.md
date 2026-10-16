@@ -12,7 +12,7 @@
 | App के events / analytics कहाँ जाएँ यह चुनना | [Trackkit integration](trackkit-integration.hi.md) | `trackkit` kits पहले से देते हैं |
 | Ad debugging dashboard | [AdTracer integration](adtracer-integration.hi.md) | `adtracer`, सिर्फ debug में |
 
-वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
+वैकल्पिक Privacy → Goal, pager और उसके exit interstitial (चालू होने पर; default रूप से बंद) के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](privacy-goals-screen.hi.md) देखें।
 
 Launcher से app खोलने वाला लौटता user splash के बाद डिफ़ॉल्ट रूप से Welcome Back छोड़कर app में जाता है। इसे दिखाने के लिए `welcome_back.enabled=true` करें। [Welcome Back](welcome-back-screen.hi.md) देखें।
 

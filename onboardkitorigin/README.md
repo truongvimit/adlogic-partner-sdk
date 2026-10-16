@@ -6,7 +6,8 @@ The SDK owns screen transitions, ad preloading and saved progress; your app supp
 Default order: **OB1 → Full1 → OB2 → Full2 → OB3 → OB4**. Step IDs are stable identities:
 `OB1..OB4` use `native_ob1..4`; `FULL1/FULL2` use `native_full1/2`.
 The first language selection preloads every eligible native in the configured list. Pager entry
-preloads the exit interstitial. Step ads never reload on return or refill after showing.
+preloads the exit interstitial when it is enabled; it is off by default. Step ads never reload on
+return or refill after showing.
 App definitions may set `enabled = false`. A remote `onboarding.order` selects and orders pages
 from the whole catalog, disabled ones included; an `order` in your app asset selects among enabled
 pages only. Without a remote order, a delivered `ob_enable_step_obN` adds or removes its page.
@@ -19,7 +20,9 @@ Per-placement ads are controlled by `ad_config` (`isEnable`). See the [configura
 
 Pager natives stay bound while their page view survives, so revisiting content or Full1/Full2 shows the same ad without another request. Fullscreen auto-next restarts on each visit; revisits show Skip immediately when enabled or required to prevent a trap. A first no-fill advances; revisiting a failed page shows its fallback and Skip. Ads are released when the view is destroyed.
 
-Optional Privacy → Goal screens run after the exit interstitial as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](../partner-integration/privacy-goals-screen.md).
+Optional Privacy → Goal screens run after the pager and the exit interstitial (when enabled; off by default) as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](../partner-integration/privacy-goals-screen.md).
+
+`native_flow.type = SHARED_POOL` replaces the default `PER_SCREEN` flow after the splash: LFO, the onboarding pager and Privacy → Goal run in one SDK screen, and every native slot draws from one shared pool, following the first-open rules of DashDrama 1.0.6, the reference app the pool was modelled on. It needs the built-in `ERainAdProvider`, is read once per run and leaves the splash unchanged; see [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.md#shared_pool-native-flow).
 
 ## Before you start
 
@@ -221,16 +224,17 @@ X, timeout and automatic no-fill completion still work. Forward swipe on the las
 content page uses the same exit interstitial as its CTA when `swipeCompletesLastStep = true`.
 `lockPagerSwipe = true` disables this last-page gesture as well.
 
-`inter_after_ob3` is a separate placement from splash. The built-in provider preloads it on
+`inter_after_ob3` is a separate placement from splash, and it is off by default
+(`onboarding.exit_interstitial.enabled` is `false`). Once enabled, the built-in provider preloads it on
 pager entry and waits up to 8 seconds for a fill on completion. By default
 (`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) the next screen starts
 underneath the ad; notification, widget and uninstall entries wait for dismissal. Set
 `NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) to always wait.
-`afterOnboardingInterstitialEnabled` switches this placement; a remote
-`onboarding.exit_interstitial.enabled` or a delivered `ob_ads_inter_after_ob3_enabled` decides
-instead, on or off. Set the local switch to `false` if your app owns this ad trigger; while remote
-is silent this disables both automatic preload and show. Keep this placement out of your content
-AutoBuffer group.
+`afterOnboardingInterstitialEnabled` switches this placement and defaults to `false`, so the example
+above sets `true`; a remote `onboarding.exit_interstitial.enabled` or a delivered
+`ob_ads_inter_after_ob3_enabled` decides instead, on or off. Leave the local switch `false` if your
+app owns this ad trigger; while remote is silent this disables both automatic preload and show.
+Keep this placement out of your content AutoBuffer group.
 
 ## App-open on return
 

@@ -11,7 +11,9 @@ SDK स्क्रीन बदलना, ads preload करना और प�
 
 Pager page का view बने रहने तक native bound रहता है; content या Full1/Full2 पर लौटने पर वही ad दिखता है, नया request नहीं होता। Fullscreen auto-next हर visit पर फिर शुरू होता है; लौटने पर enabled Skip तुरंत दिखता है, और exit न होने पर सुरक्षा के लिए भी दिखता है। पहली no-fill पर अगला page आता है; failed page पर वापस आने पर fallback और Skip दिखते हैं। View नष्ट होने पर ad release होता है।
 
-वैकल्पिक Privacy → Goal, pager के exit interstitial के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](../partner-integration/privacy-goals-screen.hi.md) देखें।
+वैकल्पिक Privacy → Goal, pager और उसके exit interstitial (चालू होने पर; default रूप से बंद) के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](../partner-integration/privacy-goals-screen.hi.md) देखें।
+
+`native_flow.type = SHARED_POOL` splash के बाद default `PER_SCREEN` flow की जगह लेता है: LFO, onboarding pager और Privacy → Goal SDK की एक screen में चलते हैं, और हर native slot एक साझा pool से ad लेता है, DashDrama 1.0.6, यानी उस reference app के first-open नियमों के अनुसार जिस पर pool बना है। इसके लिए built-in `ERainAdProvider` चाहिए, यह हर run में एक बार पढ़ा जाता है और splash नहीं बदलता; [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.hi.md#shared_pool-native-flow) देखें।
 
 ## शुरू करने से पहले
 
@@ -211,15 +213,16 @@ default रूप से step पूरा करती है, इसलिए 
 X, timeout और no-fill पर automatic completion फिर भी काम करते हैं। `swipeCompletesLastStep = true` होने पर आखिरी content
 page पर forward swipe उसी exit interstitial से गुज़रता है जो उसका CTA इस्तेमाल करता है। `lockPagerSwipe = true` यह gesture भी बंद करता है।
 
-`inter_after_ob3` splash से अलग placement है। दिया गया provider pager entry पर preload करता
+`inter_after_ob3` splash से अलग placement है और default रूप से बंद है
+(`onboarding.exit_interstitial.enabled` `false` है)। चालू होने पर दिया गया provider pager entry पर preload करता
 है और completion पर fill के लिए अधिकतम 8 सेकंड इंतज़ार करता है। Default रूप से
 (`AdsConfig.afterOnboardingInterstitialTiming = NextScreenTiming.UNDER_AD`) अगली स्क्रीन ad के नीचे
 खुलती है; notification, widget और uninstall entries dismissal का इंतज़ार करती हैं। हमेशा इंतज़ार के लिए
 `NextScreenTiming.AFTER_AD` (`io.onboardkit.ads`) रखें।
-`afterOnboardingInterstitialEnabled` इस placement को चालू/बंद करता है; remote
-`onboarding.exit_interstitial.enabled` या delivered `ob_ads_inter_after_ob3_enabled` हो तो वही तय
-करता है, चालू या बंद। ऐप इस ad trigger को संभालता हो तो local switch `false` रखें; remote चुप रहे तो
-इससे automatic preload और show दोनों बंद होते हैं। इसे content AutoBuffer group में शामिल न करें।
+`afterOnboardingInterstitialEnabled` इस placement को चालू/बंद करता है और इसका default `false` है, इसलिए
+ऊपर का उदाहरण `true` रखता है; remote `onboarding.exit_interstitial.enabled` या delivered
+`ob_ads_inter_after_ob3_enabled` हो तो वही तय करता है, चालू या बंद। ऐप इस ad trigger को संभालता हो तो
+local switch `false` ही रखें; remote चुप रहे तो इससे automatic preload और show दोनों बंद होते हैं। इसे content AutoBuffer group में शामिल न करें।
 
 ## App-open on return
 

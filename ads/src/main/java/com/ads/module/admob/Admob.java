@@ -1951,37 +1951,41 @@ public class Admob {
             e.printStackTrace();
         }
 
-        try {
+        // Price, star rating and advertiser are optional assets. A partner template is allowed
+        // to omit them (the pooled LFO template does), so an absent view must be a no-op rather
+        // than a caught NullPointerException on every native bind.
+        View priceView = adView.getPriceView();
+        if (priceView != null) {
             if (nativeAd.getPrice() == null) {
-                Objects.requireNonNull(adView.getPriceView()).setVisibility(View.INVISIBLE);
+                priceView.setVisibility(View.INVISIBLE);
             } else {
-                Objects.requireNonNull(adView.getPriceView()).setVisibility(View.VISIBLE);
-                ((TextView) adView.getPriceView()).setText(nativeAd.getPrice());
+                priceView.setVisibility(View.VISIBLE);
+                if (priceView instanceof TextView) ((TextView) priceView).setText(nativeAd.getPrice());
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
 
-        try {
+        View starRatingView = adView.getStarRatingView();
+        if (starRatingView != null) {
             if (nativeAd.getStarRating() == null) {
-                Objects.requireNonNull(adView.getStarRatingView()).setVisibility(View.INVISIBLE);
+                starRatingView.setVisibility(View.INVISIBLE);
             } else {
-                ((RatingBar) Objects.requireNonNull(adView.getStarRatingView())).setRating(nativeAd.getStarRating().floatValue());
-                adView.getStarRatingView().setVisibility(View.VISIBLE);
+                starRatingView.setVisibility(View.VISIBLE);
+                if (starRatingView instanceof RatingBar) {
+                    ((RatingBar) starRatingView).setRating(nativeAd.getStarRating().floatValue());
+                }
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
 
-        try {
+        View advertiserView = adView.getAdvertiserView();
+        if (advertiserView != null) {
             if (nativeAd.getAdvertiser() == null) {
-                adView.getAdvertiserView().setVisibility(View.INVISIBLE);
+                advertiserView.setVisibility(View.INVISIBLE);
             } else {
-                ((TextView) adView.getAdvertiserView()).setText(nativeAd.getAdvertiser());
-                adView.getAdvertiserView().setVisibility(View.VISIBLE);
+                advertiserView.setVisibility(View.VISIBLE);
+                if (advertiserView instanceof TextView) {
+                    ((TextView) advertiserView).setText(nativeAd.getAdvertiser());
+                }
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
         adView.setNativeAd(nativeAd);
 

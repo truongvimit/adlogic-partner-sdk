@@ -42,7 +42,7 @@ class PreloadChainTest {
             ads = AdsConfig(languageNative = NativeAdUnit("language"),
                 welcomeBackNative = NativeAdUnit("welcome1"), welcomeBackDupNative = NativeAdUnit("welcome2"),
                 contentStepNative = NativeAdUnit("content"), fullScreenStepNative = NativeAdUnit("fullscreen"),
-                afterOnboardingInterstitial = InterstitialAdUnit("exit"))
+                afterOnboardingInterstitial = InterstitialAdUnit("exit"), afterOnboardingInterstitialEnabled = true)
         }.getOrThrow()
         OnboardingSdk.configure(cfg).getOrThrow()
         val provider = object : FakeAdProvider() {

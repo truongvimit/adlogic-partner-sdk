@@ -61,7 +61,12 @@ object ObRemoteKeys {
     // Per-placement switches. One key per placement; disabling a position never affects another.
     val REUSE_SPLASH_INTER = RemoteKey.BoolKey("ob_reuse_splash_inter", OnboardingSettings.defaultBool("lfo.exit.reuse_splash_inter"))
     val ADS_SPLASH_BANNER = RemoteKey.BoolKey("ob_ads_splash_banner_enabled", true)
-    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", OnboardingSettings.defaultBool("onboarding.exit_interstitial.enabled"))
+    /**
+     * A kill switch, so it stays on while `onboarding.exit_interstitial.enabled` defaults to off:
+     * the guard requires both, and an off default here would overrule a host that turns the ad on
+     * with `afterOnboardingInterstitialEnabled = true`. A delivered value still decides either way.
+     */
+    val ADS_AFTER_ONBOARD_INTER = RemoteKey.BoolKey("ob_ads_inter_after_ob3_enabled", true)
     val ADS_SPLASH_INTER = RemoteKey.BoolKey("ob_ads_splash_inter_enabled", true)
     val ADS_LANGUAGE_NATIVE = RemoteKey.BoolKey("ob_ads_language_native_enabled", true)
     val ADS_LANGUAGE_CONFIRM_NATIVE =
@@ -106,6 +111,12 @@ object ObRemoteKeys {
     val SHOW_SKIP_OB3 = RemoteKey.BoolKey("ob_show_skip_ob3", OnboardingSettings.defaultBool("onboarding.fullscreen.skip.enabled"))
     val SHOW_SKIP_OB5 = RemoteKey.BoolKey("ob_show_skip_ob5", OnboardingSettings.defaultBool("ob5.skip.enabled"))
 
+    /**
+     * Flat alias of `native_flow.type` for a console that only edits flat keys: true runs
+     * SHARED_POOL, false PER_SCREEN. Only a delivered value counts, and the grouped field outranks it.
+     */
+    val NATIVE_REUSE_ENABLED = RemoteKey.BoolKey("ob_native_reuse_enabled", false)
+
     // Server-driven UI payloads
     val UI_CONTENT_JSON = RemoteKey.StringKey("ob_ui_content", "")
     val UI_DESIGN_TOKENS_JSON = RemoteKey.StringKey("ob_ui_design_tokens", "")
@@ -131,6 +142,7 @@ object ObRemoteKeys {
         SPLASH_MIN_DISPLAY_MS, SPLASH_AD_BUDGET_MS, SPLASH_SLOT_MIN_VISIBLE_MS,
         SKIP_BUTTON_DELAY_SEC, FULLSCREEN_AUTO_DISMISS_SEC,
         SHOW_SKIP_OB3, SHOW_SKIP_OB5,
+        NATIVE_REUSE_ENABLED,
         UI_CONTENT_JSON, UI_DESIGN_TOKENS_JSON, CONFIG_VERSION,
     )
 }

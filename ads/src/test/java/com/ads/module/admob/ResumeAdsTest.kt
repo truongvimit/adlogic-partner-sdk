@@ -140,12 +140,25 @@ class ResumeAdsTest {
     }
 
     @Test
-    fun `a device asleep through the timer still requests before opening`() {
+    fun `a native screen opens at the exact deadline before its load starts`() {
         ResumeAds.onStop(owner)
-        ShadowSystemClock.advanceBy(Duration.ofSeconds(3))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
         ResumeAds.onStart(owner)
         main.idle()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show", "prepare"), calls)
+    }
+
+    @Test
+    fun `a return just before the deadline waits the remainder then opens before loading`() {
+        ResumeAds.onStop(owner)
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_850))
+        ResumeAds.onStart(owner)
+        main.idle()
+        assertEquals(emptyList<String>(), calls)
+
+        ShadowSystemClock.advanceBy(Duration.ofMillis(150))
+        main.idle()
+        assertEquals(listOf("show", "prepare"), calls)
     }
 
     @Test
@@ -160,6 +173,23 @@ class ResumeAdsTest {
         assertEquals(emptyList<String>(), calls)
         ResumeAds.onStop(owner)
         main.idleFor(Duration.ofMillis(5_000))
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show"), calls)
+    }
+
+    @Test
+    fun `a native screen with its own minimum background time uses it instead of open_resume's delay`() {
+        ResumeAds.nativeScreen = object : ResumeAds.NativeScreen {
+            override fun prepare(context: Context) { calls += "prepare" }
+            override fun show(host: Activity) { calls += "show" }
+            override fun minBackgroundMs(): Long = 1_000L
+        }
+        ResumeAds.onStop(owner)
+        main.idleFor(Duration.ofMillis(999))
+        ResumeAds.onStart(owner)
+        assertEquals("A return inside the screen's own second opens nothing", emptyList<String>(), calls)
+        ResumeAds.onStop(owner)
+        main.idleFor(Duration.ofMillis(1_000))
         ResumeAds.onStart(owner)
         assertEquals(listOf("prepare", "show"), calls)
     }

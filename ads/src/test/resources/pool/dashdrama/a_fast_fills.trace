@@ -1,0 +1,112 @@
+# Golden trace (a) "fast fills": DashDrama 1.0.6 on a device, one first-open run,
+# LFO -> onboarding pager (Style5, variant 7) -> Favorite.
+#
+# Source: DashDrama_quickdrama_1.0.6_device/analysis/ads_events_all_runs.txt, the run of pid 31682
+# (logcat 10-14 01:32:42 to 01:36:42), log lines 30-81: every NativeLanguage1/2 and NativeOnboard1-4
+# LOADING/LOADED/ERROR/IMPRESSION line, plus the SplashFlow lines that name the screen action between
+# them. Left out on purpose: the splash natives (NativeSplash, NativeFullSplash; DD keeps them out of
+# the pool) and the interstitial / app-open lines. This run shows no NativeFull* page native of its own.
+#
+# Ad unit ids are replaced by their tier index inside each placement: t0 is the first id DD requested
+# for that placement, t1 the second. No ad unit id appears in this file.
+#
+# Keys: NativeLanguage1 -> language1, NativeLanguage2 -> language2, NativeOnboard4 -> onboard4 (Style5
+# page 0), NativeOnboard3 -> onboard3 (Style5 page 2, the full page; pages 1 and 3 have no native in
+# variant 7, so page 1 only preloads page 2), NativeOnboard1 -> onboard1 (Favorite ad1),
+# NativeOnboard2 -> onboard2 (Favorite ad2).
+#
+# Line format: <hh:mm:ss.SSS> <verb> <args...> [@<log line>]
+#   placement <key> <ids...>            the waterfall every request for <key> carries
+#   claim <key> POLITE|FORCED <result>  a screen load; the screen becomes owner when the result reports success
+#   preload <key> <result>              POLITE load, owner unchanged
+#   refresh <key> true|false            D-REFRESH; the value is what refresh() returns
+#   set_owner <key> | clear_owner <key> owner changes on resume / onDestroyView
+#   request <key> <tier>                the pool asked the loader for that tier (a LOADING line)
+#   fail <key> <tier>                   that attempt failed (an ERROR line)
+#   fill <key> <tier>                   that attempt filled (a LOADED line)
+#   impression <key>                    the slot on screen renders <key>'s ad and reports its impression
+#   select <key>|shimmer|hidden         what the selector gives here; not logged, implied by its rules
+# <result> is one of requested, noop, gate_skip, transient_skip, config_skip.
+# A line with @N replays log line N. A line without it is a call the SDK screens make around it that
+# DD does not log (owner changes, onResume refresh and polite claim); none of them may add a request.
+
+placement language1 t0 t1
+placement language2 t0 t1
+placement onboard4 t0 t1
+placement onboard3 t0 t1
+placement onboard1 t0 t1
+placement onboard2 t0 t1
+
+# LFO opens: polite claim of language1, then onResume refreshes (nothing held) and claims again.
+01:33:26.247 claim language1 POLITE requested @31
+01:33:26.247 request language1 t0 @30
+01:33:26.247 select shimmer
+01:33:26.258 refresh language1 false
+01:33:26.258 claim language1 POLITE gate_skip @32
+01:33:27.552 fail language1 t0 @34
+01:33:27.567 request language1 t1 @35
+01:33:29.356 fill language1 t1 @36
+01:33:29.420 impression language1 @37
+
+# First language tap: forced language2; the slot keeps borrowing the shown language1 ad.
+01:33:58.564 claim language2 FORCED requested @40
+01:33:58.564 request language2 t0 @39
+01:33:58.564 select language1
+01:34:02.135 fail language2 t0 @41
+01:34:02.155 request language2 t1 @42
+01:34:03.797 fill language2 t1 @43
+01:34:03.830 impression language2 @44
+
+# Second tap: language2 already holds an ad, so nothing is requested.
+01:34:28.961 claim language2 FORCED noop @46
+
+# Done: polite preload of page 0's native, then the pager replaces the LFO.
+01:34:32.162 preload onboard4 requested
+01:34:32.162 request onboard4 t0 @49
+01:34:32.239 clear_owner language2
+01:34:32.239 claim onboard4 POLITE gate_skip @50
+01:34:32.243 select language2
+01:34:33.873 fail onboard4 t0 @52
+01:34:33.888 request onboard4 t1 @53
+01:34:35.313 fill onboard4 t1 @54
+01:34:35.363 impression onboard4 @55
+
+# Page 1 has no native: it only preloads page 2's; page 0's owner keeps its ad.
+01:35:08.975 preload onboard3 requested @56
+01:35:08.996 request onboard3 t0 @57
+01:35:08.996 select onboard4
+01:35:09.814 fail onboard3 t0 @59
+01:35:09.833 request onboard3 t1 @60
+01:35:10.895 fill onboard3 t1 @61
+01:35:10.895 select onboard4
+
+# Page 2 (full page) claims the ad it preloaded and shows it.
+01:35:24.401 claim onboard3 POLITE noop @62
+01:35:24.653 impression onboard3 @64
+
+# Page 3 has no native either.
+01:35:34.418 select onboard3 @66
+
+# Favorite: ad1 polite on view created, onResume set_owner/refresh/claim, ad2 forced on the tap.
+01:35:59.340 clear_owner onboard3 @68
+01:35:59.364 claim onboard1 POLITE requested
+01:35:59.364 request onboard1 t0 @69
+01:35:59.364 select onboard3
+01:35:59.364 set_owner onboard1
+01:35:59.364 refresh onboard1 false
+01:35:59.364 claim onboard1 POLITE gate_skip
+01:36:01.017 fail onboard1 t0 @70
+01:36:01.033 request onboard1 t1 @71
+01:36:02.015 fill onboard1 t1 @72
+01:36:02.106 impression onboard1 @73
+01:36:22.069 claim onboard2 FORCED requested @74
+01:36:22.088 request onboard2 t0 @75
+01:36:22.088 select onboard1
+01:36:23.652 fail onboard2 t0 @76
+01:36:23.668 request onboard2 t1 @77
+01:36:25.160 fill onboard2 t1 @78
+01:36:25.211 impression onboard2 @79
+
+# Favorite -> Main: the owner is cleared, the leftovers stay for the resume screen.
+01:36:42.851 clear_owner onboard2 @81
+01:36:42.851 select onboard2

@@ -34,6 +34,12 @@ Restyle करने के लिए app में ये resource names overri
 
 `ob_welcome_back_options` को `RecyclerView`, `ob_welcome_back_continue` को action और `ob_welcome_back_ad` को अपने parent block के अंदर `FrameLayout` रखें। Option root को clicks और `isSelected` मिलते हैं; पहला `TextView` title और पहला `ImageView` image पाता है।
 
+## Native resume layout
+
+Native resume भी `res/layout/ob_resume_screen.xml` override लेता है और यह `PER_SCREEN` तथा `SHARED_POOL` दोनों में चलता है। Partner layout में केवल `ob_resume_ad` (`FrameLayout`) और एक Start Button/TextView जरूरी हैं (बेहतर है `@id/ob_resume_start` रखें); image, title, subtitle और `ob_resume_ad_block` वैकल्पिक हैं। Ad request/bind, Start color, click और close logic SDK संभालता है।
+
+`native_resume.start_button.delay_ms` (default `0`) screen खुलने के बाद Start दिखने तक का समय है। इसे `onboarding_config` में `native_resume.start_button` के नीचे रखें; दोनों flows पर लागू है।
+
 ## Ads और completion
 
 इन्हें `ad_config.json` (production IDs) में, बाकी native placements जैसे shape में declare करें; `ad_config_debug.json` में सिर्फ `native_welcome1` और `native_welcome2`, हर एक के `ids` में एक test floor चाहिए:

@@ -32,8 +32,18 @@ class PreloadChain internal constructor(
     private var language1HandoffPending = false
     private var welcome1HandoffPending = false
 
+    /**
+     * True when this run's LFO will be the SHARED_POOL one. That LFO requests LFO1 itself, as
+     * DashDrama does, so the splash does not preload it. Set by [io.onboardkit.OnboardingSdk].
+     */
+    internal var pooledLanguageRun: () -> Boolean = { false }
+
+    /** A new splash attempt: the SDK forgets the native flow type it planned for the last one. */
+    internal var onSplashAttempt: () -> Unit = {}
+
     internal fun beginSplashAttempt(id: String) {
         if (splashAttemptId == id) return
+        onSplashAttempt()
         resetStepRequests()
         splashAttemptId = id
         language1HandoffPending = false
@@ -100,6 +110,11 @@ class PreloadChain internal constructor(
     /** Splash warms only LFO1; content natives wait for language selection. */
     @JvmOverloads
     fun preloadLanguage1(activity: Activity, allowWhileVisible: Boolean = false) {
+        if (pooledLanguageRun()) {
+            language1HandoffPending = false
+            ObLog.d(ObLog.Section.PRELOAD, "language1 skip — the shared_pool LFO requests it itself")
+            return
+        }
         language1HandoffPending = true
         preloadNative(activity, AdPlacement.Language1, allowWhileVisible)
     }

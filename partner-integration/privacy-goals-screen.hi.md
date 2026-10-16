@@ -2,13 +2,15 @@
 
 [English](privacy-goals-screen.md) · [Tiếng Việt](privacy-goals-screen.vi.md) · [हिन्दी](privacy-goals-screen.hi.md)
 
-यह अधूरे onboarding flow का वैकल्पिक अंतिम भाग है: Splash → भाषा → OB pager → exit interstitial → Privacy → Goal → app। App asset या remote `onboarding_config` में इसे चालू करें:
+यह अधूरे onboarding flow का वैकल्पिक अंतिम भाग है: Splash → भाषा → OB pager → exit interstitial (चालू होने पर; default रूप से बंद) → Privacy → Goal → app। App asset या remote `onboarding_config` में इसे चालू करें:
 
 ```json
 { "privacy_goals_screen": { "enabled": true } }
 ```
 
 Default `false` है। Host `PrivacyGoalsScreenConfig` से भी चालू कर सकता है; remote और app asset code से ऊपर हैं। `goal.options` दें। यह list खाली हो तो warning आती है, ये screens और उनके native preloads छोड़ दिए जाते हैं और सामान्य onboarding exit चलता है। Ad fill या premium status इन screens को बंद नहीं करता।
+
+इस page का बाकी हिस्सा default `PER_SCREEN` flow बताता है; [SHARED_POOL में](#shared_pool-में) बताता है कि `SHARED_POOL` flow में क्या बदलता है।
 
 ```kotlin
 privacyGoalsScreen = PrivacyGoalsScreenConfig(
@@ -61,8 +63,23 @@ Privacy और Goal अलग SDK placements हैं, जो ये configured
 
 हर key का `isEnable` उसके पूरे `ids` waterfall को नियंत्रित करता है; floor का अपना `isEnable` सिर्फ उसी floor को रोकता है। किसी key को बंद करना उसका ad बंद करता है, screen नहीं। Consent, premium, UA और global ad gate लागू रहते हैं; अलग `privacyAd.enabled`/`goalAd.enabled` switches नहीं हैं।
 
-Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
+Privacy का पहला native वास्तविक अंतिम pager step पर preload होता है, fullscreen होने पर भी। Exit interstitial चालू हो तो `onboarding.exit_interstitial.next_screen_timing` लागू है: `UNDER_AD` Privacy को ad के नीचे खोलता है; `AFTER_AD` dismissal का इंतज़ार करता है। Notification/widget/uninstall entry इस exit path में dismissal का इंतज़ार करती है।
 
 Privacy में acceptance के बाद Continue मिलता है। Goal पूरा होने पर picks `GoalAnswer` के रूप में दर्ज होते हैं (`OnboardingEvent.GoalsSelected`, `OnboardingOutcome.Completed.goals` और बाद में `OnboardingSdk.selectedGoals()`), और onboarding सीधे complete होता है; सामान्य OB5/paywall exit आगे नहीं खुलता। Goal में Back से Privacy आता है; Privacy में Back task बंद करता है। Goal screen दोबारा बनने पर choices फिर चुननी पड़ती हैं।
 
 Goal पूरा होने पर ही flow completed होता है। उससे पहले app बंद करने पर अगला launch Splash → भाषा से शुरू होता है। Feature बंद हो तो layouts inflate नहीं होते और सामान्य onboarding exit चलता है।
+
+## SHARED_POOL में
+
+[`native_flow.type`](remote-settings.hi.md#native-flow-type) `SHARED_POOL` होने पर Privacy और Goal pooled onboarding screen के आखिरी stages हैं ([SHARED_POOL native flow](ads-onboarding-integration.hi.md#shared_pool-native-flow))। `privacy_goals_screen.enabled` (default रूप से बंद), `goal.options`, ऊपर का layout contract और `native_select` / `native_select_alt` keys वही रहते हैं। दोनों screens एक ही select-screen pattern पर चलती हैं:
+
+| | Privacy | Goal |
+| --- | --- | --- |
+| खुलने पर | `native_select` को POLITE load के रूप में request करती है (दूसरी pool request चलते समय छोड़ा जाता है) और pool की owner बनती है | Privacy जैसा |
+| Selection | हर consent बदलाव, check या uncheck | हर option tap |
+| हर selection पर | `native_select_alt` को FORCED load के रूप में request करती है (दूसरी pool request चलते समय भी नहीं छोड़ा जाता; `native_select_alt` के पास ad होने या उसके load होते रहने पर बाद के selections कुछ request नहीं करते) और उसे owner बनाती है | Privacy जैसा |
+| Forward button | Continue पहले consent बदलाव के `native_flow.pool.select.next_reveal_delay_ms` (3000 ms) बाद तक छिपा रहता है, फिर केवल consent checked रहने पर काम करता है | Next पहले tap के बाद उसी delay तक छिपा रहता है, फिर कम से कम `minSelection` options चुने रहने पर काम करता है |
+| Forward action | Goal खोलता है, जो खुलने पर अपना पहला ad खुद POLITE load के रूप में request करती है | ऊपर की तरह goals दर्ज करता है, `native_flow.pool.goals.exit_reuse_splash_inter` `true` हो तो splash interstitial का बचा हुआ ad दिखाता है, फिर बिना paywall के onboarding पूरा करता है |
+| Back | कुछ नहीं करता | कुछ नहीं करता |
+
+हर बार screen फिर सामने आने पर pool की ownership वापस लेती है, अपने owned ad को refresh करती है जबकि वह ad दिखता रहता है, और आखिरी माँगी गई placement के लिए POLITE request दोहराती है। उसका अपना ad fill होने तक slot pool का चुनाव दिखाता है: पहले सबसे नया ad जो किसी screen ने अभी तक नहीं दिखाया, नहीं तो सबसे हाल में दिखाया गया ad, और request चलते समय shimmer। Native click न reload करता है न navigate (`click_action` ignore होता है)। Return ads दोनों screens के ऊपर खुल सकते हैं (`native_flow.pool.resume_on_goals`, default `true`)। Privacy से पहले कोई exit interstitial नहीं चलता, और Privacy का पहला ad preload नहीं होता, न pager के आखिरी page पर, न LFO के Done पर जब pager में कोई page न हो: Privacy खुलने पर उसे request करती है। केवल pager के full pages एक screen पहले preload होते हैं। Privacy और Goal अलग-अलग request करते हैं पर `native_select` / `native_select_alt` की IDs साझा करते हैं, इसलिए उन IDs का revenue उस screen के नाम report होता है जिसने सबसे बाद में request किया।

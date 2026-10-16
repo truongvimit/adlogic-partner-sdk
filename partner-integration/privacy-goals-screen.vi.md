@@ -2,7 +2,7 @@
 
 [English](privacy-goals-screen.md) · [Tiếng Việt](privacy-goals-screen.vi.md) · [हिन्दी](privacy-goals-screen.hi.md)
 
-Flow chuẩn vẫn là `Splash → LFO → OB → inter_after_ob3 → Privacy → Goal`. Privacy/Goal là phần
+Flow chuẩn vẫn là `Splash → LFO → OB → inter_after_ob3 → Privacy → Goal`; `inter_after_ob3` chỉ có khi được bật (mặc định tắt). Privacy/Goal là phần
 cuối của cùng onboarding flow, không phải một flow độc lập. SDK chỉ mở cụm này cho một flow chưa
 hoàn tất và chỉ khi partner bật cờ riêng trong
 `onboarding_config.json` (asset hoặc remote):
@@ -23,6 +23,8 @@ Chỉ khi user bấm hoàn tất ở Goal SDK mới ghi nhận onboarding comple
 Đây là nguồn bật/tắt duy nhất cho từng placement; không có `privacyAd.enabled` hay
 `goalAd.enabled` riêng. Các gate consent, premium, UA và master ads vẫn áp dụng qua cùng AdsGuard
 như LFO. `isEnable` của key bật/tắt cả waterfall `ids`; `isEnable` của một tầng chỉ dừng tầng đó.
+
+Phần còn lại của trang mô tả flow mặc định `PER_SCREEN`; [Khi chạy SHARED_POOL](#khi-chạy-shared_pool) liệt kê những gì thay đổi ở flow `SHARED_POOL`.
 
 SDK có layout mặc định. Partner không cần truyền `layoutRes` hay từng view ID trong `Config`. Android resource
 merge sẽ cho resource của app override resource cùng tên trong SDK. Chỉ cần tạo các file sau trong
@@ -90,6 +92,21 @@ consent, chọn/bỏ chọn, preload, swap ad, reload khi click và hoàn tất 
 
 ## Thời điểm, điều hướng và dữ liệu
 
-Native Privacy đầu được preload khi tới trang cuối trong `onboarding.order`, kể cả fullscreen. Interstitial cuối OB vẫn theo `onboarding.exit_interstitial.next_screen_timing`: `UNDER_AD` mở Privacy bên dưới interstitial; `AFTER_AD` chờ ad đóng. Entry notification/widget/uninstall vẫn chờ ad đóng ở nhánh exit này.
+Native Privacy đầu được preload khi tới trang cuối trong `onboarding.order`, kể cả fullscreen. Khi được bật, interstitial cuối OB vẫn theo `onboarding.exit_interstitial.next_screen_timing`: `UNDER_AD` mở Privacy bên dưới interstitial; `AFTER_AD` chờ ad đóng. Entry notification/widget/uninstall vẫn chờ ad đóng ở nhánh exit này.
 
 Privacy chỉ cho tiếp tục sau khi đồng ý. Goal dùng `SelectionMode.SINGLE` hoặc `MULTIPLE` và `minSelection` của host; đặt minimum phù hợp số option (SINGLE dùng 1). Hoàn tất Goal ghi lựa chọn thành `GoalAnswer` (phát qua `OnboardingEvent.GoalsSelected`, có trong `OnboardingOutcome.Completed.goals` và đọc lại bằng `OnboardingSdk.selectedGoals()`) trước khi hoàn tất flow. Cụm Privacy/Goal hoàn tất trực tiếp, không mở tiếp OB5/paywall của nhánh exit thông thường. Back tại Goal quay về Privacy; Back tại Privacy đóng task. Lựa chọn Goal được chọn lại khi màn Goal được tạo lại; không phải tiến trình đã lưu qua process death.
+
+## Khi chạy SHARED_POOL
+
+Khi [`native_flow.type`](remote-settings.vi.md#kiểu-native-flow) là `SHARED_POOL`, Privacy và Goal là các chặng cuối của màn onboarding dùng pool ([Native flow SHARED_POOL](ads-onboarding-integration.vi.md#native-flow-shared_pool)). `privacy_goals_screen.enabled` (mặc định tắt), `goal.options`, contract layout ở trên và hai key `native_select` / `native_select_alt` giữ nguyên. Cả hai màn theo cùng một mẫu màn chọn:
+
+| | Privacy | Goal |
+| --- | --- | --- |
+| Khi mở | Request `native_select` dạng load POLITE (bị bỏ qua khi pool đang có request khác chạy) và trở thành owner của pool | Như Privacy |
+| Lựa chọn | Mỗi lần đổi consent, tick hay bỏ tick | Mỗi lần tap option |
+| Mỗi lần chọn | Request `native_select_alt` dạng load FORCED (không bị bỏ qua khi pool đang có request khác chạy; khi `native_select_alt` đã giữ ad hoặc đang load thì các lần chọn sau không request gì) và chuyển owner sang nó | Như Privacy |
+| Nút đi tiếp | Continue ẩn tới `native_flow.pool.select.next_reveal_delay_ms` (3000 ms) sau lần đổi consent đầu, sau đó chỉ dùng được khi consent đang được tick | Next ẩn tới cùng khoảng trễ sau lần tap đầu, sau đó dùng được khi đã chọn ít nhất `minSelection` option |
+| Khi đi tiếp | Mở Goal; Goal tự request ad đầu của mình dạng load POLITE khi mở | Ghi goal như ở trên, hiện interstitial splash còn lại khi `native_flow.pool.goals.exit_reuse_splash_inter` là `true`, rồi hoàn tất onboarding, không có paywall |
+| Back | Không làm gì | Không làm gì |
+
+Mỗi lần màn trở lại phía trước, màn lấy lại quyền owner của pool, refresh ad mình sở hữu trong khi ad đó vẫn hiện, và lặp lại request POLITE cho placement xin gần nhất. Tới khi ad của chính màn fill, slot hiện lựa chọn của pool: ưu tiên ad mới nhất chưa màn nào hiển thị, nếu không thì ad được hiển thị gần nhất, và shimmer khi có request đang chạy. Click native không reload cũng không chuyển màn (`click_action` bị bỏ qua). Ad khi quay lại app có thể mở đè lên cả hai màn (`native_flow.pool.resume_on_goals`, mặc định `true`). Không có interstitial cuối pager trước Privacy, và ad đầu của Privacy không được preload, cả ở trang cuối pager lẫn lúc Done ở LFO khi pager không có trang nào: Privacy request nó khi mở. Chỉ trang full của pager được preload trước một màn. Privacy và Goal request riêng nhưng dùng chung ID của `native_select` / `native_select_alt`, nên doanh thu của các ID đó được báo dưới màn nào request gần nhất.

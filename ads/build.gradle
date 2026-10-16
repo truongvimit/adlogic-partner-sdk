@@ -103,6 +103,7 @@ dependencies {
     // Real JSON on the JVM: constructor defaults are read before an Android Context exists.
     testImplementation 'org.json:json:20250517'
     testImplementation 'org.mockito:mockito-core:5.14.2'
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
     testImplementation 'org.robolectric:robolectric:4.13'
     testImplementation 'androidx.test:core:1.6.1'
 }

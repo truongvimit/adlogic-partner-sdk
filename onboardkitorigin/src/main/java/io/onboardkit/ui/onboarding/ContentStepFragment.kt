@@ -24,6 +24,8 @@ import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.uiconfig.UiStepStyle
 import io.onboardkit.ui.pager.AdSwipeGate
 import io.onboardkit.ui.pager.LazyStepFragment
+import io.onboardkit.ui.pool.ObPoolFlowActivity
+import io.onboardkit.ui.pool.StepSlotCallbacks
 import io.onboardkit.ui.widget.ObPrimaryButton
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -230,6 +232,31 @@ class ContentStepFragment : LazyStepFragment() {
         adRequested = true
         val placement = AdPlacement.StepNative(stepId)
         val viewVersion = stepViewVersion
+        (activity as? ObPoolFlowActivity)?.let {
+            if (it.bindStepSlot(
+                    this,
+                    placement,
+                    b.obNativeContainer,
+                    StepSlotCallbacks(
+                        onLoading = { if (isCurrentStepView(viewVersion)) showAdSlot(true) },
+                        onBound = {
+                            if (isCurrentStepView(viewVersion)) {
+                                adBound = true
+                                showAdSlot(true)
+                            }
+                        },
+                        onShown = { if (isCurrentStepView(viewVersion)) swipeGate.settle() },
+                        onUnavailable = {
+                            if (isCurrentStepView(viewVersion)) {
+                                if (!adBound) showAdSlot(false)
+                                swipeGate.settle()
+                            }
+                        },
+                        onAdEngaged = { action -> if (isCurrentStepView(viewVersion)) onStepAdEngaged(action) },
+                    ),
+                )
+            ) return
+        }
         activity.showNativeAd(
             placement = placement,
             // nativeUnitFor, not contentStepNative: a page with its own entry in `stepNatives` is
@@ -295,8 +322,11 @@ class ContentStepFragment : LazyStepFragment() {
         ((activity as? ObOnboardingHostActivity)?.stepDefinition(stepId)
             ?: OnboardingSdk.configOrNull()?.stepById(stepId)) as? ContentStepDefinition
 
-    private fun totalSteps(): Int =
-        (activity as? ObOnboardingHostActivity)?.totalSteps?.value ?: 0
+    private fun totalSteps(): Int = when (val host = activity) {
+        is ObOnboardingHostActivity -> host.totalSteps.value
+        is ObPoolFlowActivity -> host.poolTotalSteps()
+        else -> 0
+    }
 
     override fun onDestroyView() {
         swipeGate.reset()

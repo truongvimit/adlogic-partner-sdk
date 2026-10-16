@@ -4,10 +4,12 @@ import com.ads.module.config.AdRemoteConfig
 import androidx.annotation.LayoutRes
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
+import io.onboardkit.flow.NativeFlowType
 
 /**
  * Which SDK layout each native placement inflates: the `ad_config.<key>.templateId` catalog for
- * card slots, a fixed frame for the confirm modal and the full-screen format.
+ * card slots, a fixed frame for the confirm modal and the full-screen format. The pooled LFO has
+ * its own default (template 4) so its frame matches DashDrama; an explicit templateId still wins.
  *
  * Only the frame is chosen here. Block order is the placement's `components`, applied at bind
  * time by the templates that can reorder.
@@ -16,12 +18,14 @@ object NativeTemplates {
 
     private const val TEMPLATE_LFO = 1
     private const val TEMPLATE_MEDIA_LEFT = 2
+    private const val TEMPLATE_LFO_POOL = 4
 
     /** The catalog behind `ad_config.<key>.templateId`: the one place a number becomes a layout. */
     private val templateLayouts: Map<Int, Int> = mapOf(
         TEMPLATE_LFO to R.layout.ob_layout_native_lfo,
         TEMPLATE_MEDIA_LEFT to R.layout.ob_layout_native_media_left,
         3 to R.layout.ob_layout_native_med_1_91,
+        TEMPLATE_LFO_POOL to R.layout.ob_layout_native_lfo_pool,
     )
 
     /** Null for a number the catalog does not know, which leaves the placement on its default. */
@@ -67,6 +71,13 @@ object NativeTemplates {
             AdPlacement.Ob5,
             is AdPlacement.StepFullScreen,
             -> return null
+            AdPlacement.Language1,
+            AdPlacement.Language2,
+            -> if (OnboardingSdk.session.nativeFlow?.type == NativeFlowType.SHARED_POOL) {
+                TEMPLATE_LFO_POOL
+            } else {
+                TEMPLATE_LFO
+            }
             // Horizontal slots: a splash bottom bar and the Privacy/Goal card.
             AdPlacement.SplashInlineNative -> TEMPLATE_MEDIA_LEFT
             is AdPlacement.StepNative -> if (placement.isPrivacyGoalsNative) TEMPLATE_MEDIA_LEFT else TEMPLATE_LFO

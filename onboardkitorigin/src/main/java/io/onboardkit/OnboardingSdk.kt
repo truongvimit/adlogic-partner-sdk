@@ -5,12 +5,14 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import android.util.Log
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdsGuard
 import io.onboardkit.ads.ObAppResume
 import io.onboardkit.ads.OnboardingAdProvider
 import io.onboardkit.ads.PreloadChain
+import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.config.GoalOption
 import io.onboardkit.core.ObLog
@@ -31,6 +33,7 @@ import io.onboardkit.core.state.OnboardingStateStore
 import io.onboardkit.core.state.StoredGoal
 import io.onboardkit.flow.FlowDestination
 import io.onboardkit.flow.FlowNavigator
+import io.onboardkit.flow.NativeFlowType
 import io.onboardkit.flow.StartDecision
 import io.onboardkit.paywall.PaywallGate
 import io.onboardkit.paywall.PaywallOutcome
@@ -39,10 +42,12 @@ import io.onboardkit.remote.ObRemote
 import io.onboardkit.ui.language.LanguageScreenMode
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
+import io.onboardkit.ui.pool.ObPoolFlowActivity
 import io.onboardkit.ui.welcomeback.ObWelcomeBackActivity
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.admob.ResumeSkipPolicy
+import io.trackkit.Tracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -150,7 +155,10 @@ object OnboardingSdk {
                 appResumeGuard.skipReason(activity)?.key
         })
         if (adProvider != null) com.ads.module.admob.ResumeAds.nativeScreen = io.onboardkit.ads.ObNativeResume
-        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep)
+        preloadChain = PreloadChain(adProvider, adsGuard, ::configOrNull, ::flags, ::canFillAdOnlyStep).also {
+            it.pooledLanguageRun = { plannedNativeFlow() == NativeFlowType.SHARED_POOL && OnboardingPool.canRun() }
+            it.onSplashAttempt = { plannedNativeFlow = null }
+        }
         Log.i(TAG, "OnboardKit ${BuildConfig.SDK_VERSION} installed")
     }
 
@@ -206,6 +214,7 @@ object OnboardingSdk {
         if (::preloadChain.isInitialized) preloadChain.resetStepRequests()
         stateStore?.reset()
         session.reset()
+        OnboardingPool.deactivate()
     }
 
     /** Marks onboarding done without running it. */
@@ -299,8 +308,7 @@ object OnboardingSdk {
             )
 
             is StartDecision.Start -> when (decision.destination) {
-                FlowDestination.LANGUAGE ->
-                    ObLanguageActivity.start(activity, LanguageScreenMode.FIRST_OPEN)
+                FlowDestination.LANGUAGE -> startLanguage(activity)
 
                 FlowDestination.ONBOARDING ->
                     ObOnboardingHostActivity.start(activity, decision.resumeStepIndex)
@@ -308,7 +316,47 @@ object OnboardingSdk {
                 FlowDestination.WELCOME_BACK -> ObWelcomeBackActivity.start(activity)
             }
         }
+        plannedNativeFlow = null
     }
+
+    /**
+     * The one place `native_flow.type` is read: once per run, latched with every pool knob so a
+     * remote refresh mid-run changes nothing. This may run inside the splash interstitial's
+     * callback, so any failure, or a SHARED_POOL the provider cannot run, falls back to the classic
+     * LFO rather than leaving the user on the splash.
+     */
+    private fun startLanguage(activity: Activity) {
+        val requested = plannedNativeFlow()
+        val pooled = requested == NativeFlowType.SHARED_POOL && OnboardingPool.canRun() && runCatching {
+            val snapshot = io.onboardkit.remote.OnboardingSettings.nativeFlowSnapshot()
+            session.nativeFlow = snapshot
+            OnboardingPool.activate(activity.applicationContext, snapshot)
+            ObPoolFlowActivity.start(activity)
+        }.onFailure {
+            ObLog.w(ObLog.Section.NAV, "native_flow_type shared_pool failed (${it.javaClass.simpleName}); classic flow")
+        }.isSuccess
+        val type = if (pooled) NativeFlowType.SHARED_POOL else NativeFlowType.PER_SCREEN
+        ObLog.d(ObLog.Section.NAV, "native_flow_type=${type.name} requested=${requested.name}")
+        Tracker.setUserProperty("ob_native_flow", type.name.lowercase())
+        if (pooled) return
+        session.nativeFlow = null
+        OnboardingPool.onClassicRun()
+        ObLanguageActivity.start(activity, LanguageScreenMode.FIRST_OPEN)
+    }
+
+    /** The type [plannedNativeFlow] answered for this run, until the run starts or a splash attempt begins. */
+    @Volatile
+    private var plannedNativeFlow: NativeFlowType? = null
+
+    /**
+     * `native_flow.type` for this run, read once. The splash asks first, so a SHARED_POOL run skips
+     * the LFO1 preload, and the LANGUAGE arm of [startResolved] gets the same answer even if a
+     * remote fetch lands in between. Never throws: anything odd is PER_SCREEN.
+     */
+    internal fun plannedNativeFlow(): NativeFlowType = plannedNativeFlow
+        ?: runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowTypeOrDefault() }
+            .getOrDefault(NativeFlowType.PER_SCREEN)
+            .also { plannedNativeFlow = it }
 
     /** Re-usable language picker; SETTINGS mode shows no ads and never touches flow state. */
     fun openLanguagePicker(activity: Activity, mode: LanguageScreenMode) {
@@ -320,6 +368,9 @@ object OnboardingSdk {
         appendLine("installed=${application != null} configured=${config != null}")
         appendLine("state=${stateStore?.current()}")
         appendLine("flags=${remote?.flags?.value}")
+        appendLine("nativeFlow=${session.nativeFlow?.type ?: "none"} routeResume=${OnboardingPool.routeResume}")
+        // The pool is main-thread only; a caller off main gets the latch without the engine's state.
+        if (Looper.myLooper() === Looper.getMainLooper()) appendLine(OnboardingPool.dump())
     }
 
     // ── Internal wiring for SDK screens ──

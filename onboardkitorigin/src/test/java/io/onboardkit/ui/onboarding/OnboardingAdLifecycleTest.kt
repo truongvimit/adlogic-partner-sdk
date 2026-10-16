@@ -145,7 +145,8 @@ class OnboardingAdLifecycleTest {
             behavior = BehaviorConfig(lockPagerSwipe = lockSwipe, swipeCompletesLastStep = swipeCompletesLastStep)
             ads = adsOverride ?: AdsConfig(contentStepNative = NativeAdUnit("test-content"),
                 fullScreenStepNative = NativeAdUnit("test-fullscreen"),
-                afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly })
+                afterOnboardingInterstitial = InterstitialAdUnit("test-exit").takeIf { lastOnly },
+                afterOnboardingInterstitialEnabled = true)
         }.getOrThrow()).getOrThrow()
         clickAction?.let(::pagerClickAction)
         controller = Robolectric.buildActivity(ObOnboardingHostActivity::class.java)

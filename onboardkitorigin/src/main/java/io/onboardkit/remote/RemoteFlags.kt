@@ -59,6 +59,11 @@ data class RemoteFlags(
      * every field that differs from its key's default as delivered.
      */
     val supplied: Set<String>? = null,
+    /**
+     * `ob_native_reuse_enabled`, the flat alias of `native_flow.type`. Declared after [supplied] so
+     * positional constructor calls and componentN of this public class keep their meaning.
+     */
+    val nativeReuseEnabled: Boolean = ObRemoteKeys.NATIVE_REUSE_ENABLED.default,
 ) {
 
     internal fun isSupplied(key: RemoteKey<*>, value: Any?): Boolean =
@@ -146,6 +151,7 @@ data class RemoteFlags(
                     ?: ObRemoteKeys.UI_DESIGN_TOKENS_JSON.default,
                 configVersion = long(ObRemoteKeys.CONFIG_VERSION),
                 supplied = ObRemoteKeys.ALL.mapNotNullTo(mutableSetOf()) { k -> k.key.takeIf { reader.string(it) != null } },
+                nativeReuseEnabled = bool(ObRemoteKeys.NATIVE_REUSE_ENABLED),
             )
         }
     }

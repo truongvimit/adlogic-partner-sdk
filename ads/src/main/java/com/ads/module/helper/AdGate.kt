@@ -8,6 +8,7 @@ import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.ads.ERainAd
 import com.ads.module.helper.adnative.NativeAdPreload
+import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.helper.reward.RewardAdManager
 import kotlinx.coroutines.CoroutineScope
@@ -137,6 +138,7 @@ object AdGate {
         InterstitialAdManager.releaseAll()
         RewardAdManager.releaseAll()
         AppOpenManager.getInstance().releaseCachedAds()
+        SharedNativePool.releaseAllIfCreated()
     }
 
     @JvmStatic

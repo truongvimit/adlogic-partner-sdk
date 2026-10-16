@@ -81,6 +81,61 @@ class SettingsDocumentTest {
         assertTrue(d.snapshot.boolean("native.presentation.auto_shimmer"))
     }
 
+    private fun nativeFlowDocument() = SettingsDocument("native_flow_test", """
+        {"schema_version":1,"native_flow":{"type":"PER_SCREEN","pool":{
+          "locale_apply":"IN_PLACE","exit":{"next_screen_timing":"AFTER_AD"},
+          "stuck_loading_log_ms":60000,"pager":{"offscreen_pages":0},
+          "lfo":{"confirm_button":{"reveal_delay_ms":3000}},"select":{"next_reveal_delay_ms":3000},
+          "onboarding":{"fullscreen":{"skip":{"delay_ms":2000},"auto_next":{"delay_ms":10000}}}}}}
+    """.trimIndent())
+
+    @Test fun `native flow type and locale apply accept only their own values`() {
+        for (type in listOf("PER_SCREEN", "SHARED_POOL")) {
+            val d = nativeFlowDocument()
+            assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"type":"$type"}}"""))
+            assertEquals(type, d.snapshot.remoteValue("native_flow.type"))
+        }
+        for (apply in listOf("IN_PLACE", "RECREATE")) {
+            val d = nativeFlowDocument()
+            assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"pool":{"locale_apply":"$apply"}}}"""))
+            assertEquals(apply, d.snapshot.remoteValue("native_flow.pool.locale_apply"))
+        }
+        for (raw in listOf("shared_pool", "POOL", "", "native_resume")) {
+            val d = nativeFlowDocument()
+            assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"type":"$raw","pool":{"locale_apply":"$raw"}}}"""))
+            assertNull(raw, d.snapshot.remoteValue("native_flow.type"))
+            assertNull(raw, d.snapshot.remoteValue("native_flow.pool.locale_apply"))
+            assertEquals("PER_SCREEN", d.snapshot.string("native_flow.type"))
+            assertEquals("IN_PLACE", d.snapshot.string("native_flow.pool.locale_apply"))
+        }
+    }
+
+    @Test fun `the pool exit timing follows the next_screen_timing suffix rule`() {
+        val d = nativeFlowDocument()
+        assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"pool":{"exit":{"next_screen_timing":"UNDER_AD"}}}}"""))
+        assertEquals("UNDER_AD", d.snapshot.string("native_flow.pool.exit.next_screen_timing"))
+        assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"pool":{"exit":{"next_screen_timing":"AUTO"}}}}"""))
+        assertNull(d.snapshot.remoteValue("native_flow.pool.exit.next_screen_timing"))
+        assertEquals("AFTER_AD", d.snapshot.string("native_flow.pool.exit.next_screen_timing"))
+    }
+
+    @Test fun `zero pool numbers are values, not rejected timeouts`() {
+        val paths = listOf("stuck_loading_log_ms", "pager.offscreen_pages", "lfo.confirm_button.reveal_delay_ms",
+            "select.next_reveal_delay_ms", "onboarding.fullscreen.skip.delay_ms", "onboarding.fullscreen.auto_next.delay_ms")
+            .map { "native_flow.pool.$it" }
+        val d = nativeFlowDocument()
+        val payload = org.json.JSONObject()
+        paths.forEach { path ->
+            var node = payload
+            path.split('.').dropLast(1).forEach { key -> node = node.optJSONObject(key) ?: org.json.JSONObject().also { node.put(key, it) } }
+            node.put(path.substringAfterLast('.'), 0)
+        }
+        assertTrue(d.acceptSuccessfulFetch(payload.toString()))
+        paths.forEach { assertEquals(it, 0L, (d.snapshot.remoteValue(it) as Number).toLong()) }
+        assertTrue(d.acceptSuccessfulFetch("""{"native_flow":{"pool":{"stuck_loading_log_ms":-1}}}"""))
+        assertNull(d.snapshot.remoteValue("native_flow.pool.stuck_loading_log_ms"))
+    }
+
     @Test fun `invalid numeric ranges do not reach scheduling or enum constructors`() {
         val d = document()
         d.acceptSuccessfulFetch("""{"native":{"load":{"tier_timeout_ms":0},"reload":{"interval_ms":0}},"app_open":{"cache":{"max_age_ms":999999999}},"interstitial":{"presentation":{"next_screen_timing":"AUTO"}}}""")
