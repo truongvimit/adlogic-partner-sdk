@@ -7,12 +7,15 @@
     android:background="@color/ob_white"
     android:clipChildren="false">
 
-    <!-- Raised above the list and unclipped so the confirm hand may overhang the first row. -->
+    <!-- Raised above the list and unclipped so the confirm hand may overhang the first row.
+         Opaque: the unclipped list draws a scrolling row up to one row above its top. -->
     <FrameLayout
         android:id="@+id/ob_language_header"
         android:layout_width="match_parent"
         android:layout_height="@dimen/ob_header_height"
+        android:background="@color/ob_white"
         android:clipChildren="false"
+        android:outlineProvider="none"
         android:translationZ="1dp"
         app:layout_constraintTop_toTopOf="parent">
 
