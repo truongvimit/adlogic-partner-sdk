@@ -245,6 +245,7 @@ Giá trị chỉ `SHARED_POOL` đọc nằm dưới `native_flow.pool`, đặt t
 | `onboarding.fullscreen.auto_next.delay_ms` (`15000`) | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (`10000`), tính từ lúc chọn trang |
 | `lfo.confirm_button.visible_before_selection` (`true`) | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (`3000`): nút xác nhận ẩn tới khi đủ khoảng này sau lần tap ngôn ngữ đầu tiên |
 | không có | `native_flow.pool.select.next_reveal_delay_ms` (`3000`): nút Continue của Privacy và Next của Goal ẩn tới khi đủ khoảng này sau lần đổi consent hoặc tap lựa chọn đầu tiên |
+| không có | `native_flow.pool.lfo.loading_dialog.duration_ms` (`0`, tắt): LFO1 mở mới hiện card "Loading languages" chặn header và danh sách (không bao giờ đè ad) trong khoảng này, chỉ đếm khi màn đang hiển thị |
 
 Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, tap lại hàng đang chọn), nút back OB1 (`onboarding.steps.ob1.back.enabled`), thời hạn ad (`native.cache.max_age_ms` trong `ad_behavior_config`, một giờ) và thời gian chờ mỗi tầng (`native.load.tier_timeout_ms` cùng `placement_overrides` của nó, 30 giây; tầng không trả lời kịp được tính là lỗi và tầng kế tiếp được request). `onboarding.order`, `privacy_goals_screen.enabled` và `lfo.exit.reuse_splash_inter` áp dụng cho cả hai.
 
@@ -460,6 +461,7 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.view.destroy_on_teardown` | `true` | Hủy view ad khi màn đóng. |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` | Tương ứng `lfo.confirm_button.visible_before_selection` của `PER_SCREEN`. |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` | Nút Continue/Next của Privacy và Goal. |
+| `native_flow.pool.lfo.loading_dialog.duration_ms` | `0` | Card "Loading languages" chặn LFO1; `0` là tắt. |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` | Next ở Goal dùng interstitial splash còn lại. |
 | `native_flow.pool.resume.min_background_ms` | `2000` | Thời gian ở background tối thiểu trước khi lần quay lại mở màn resume của pool; native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms`. |
 | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` | Tương ứng `onboarding.fullscreen.skip.delay_ms` (`5000`). |

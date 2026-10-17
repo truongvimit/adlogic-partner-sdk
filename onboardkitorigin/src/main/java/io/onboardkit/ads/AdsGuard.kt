@@ -153,5 +153,7 @@ internal fun RemoteFlags.isPlacementEnabled(placement: AdPlacement): Boolean = w
     AdPlacement.WelcomeBack1, AdPlacement.WelcomeBack2 -> true
     // app_resume.type picks this slot; its ad_config native_resume entry switches it.
     AdPlacement.ResumeNative -> true
+    // Like native_resume: its ad_config inter_resume entry switches it.
+    AdPlacement.ResumeInterstitial -> true
     AdPlacement.AppResume -> adsAppResume
 }

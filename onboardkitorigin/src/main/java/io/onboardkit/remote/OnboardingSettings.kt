@@ -119,6 +119,7 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.WelcomeBack1 -> "welcome_back.native1"
         io.onboardkit.ads.AdPlacement.WelcomeBack2 -> "welcome_back.native2"
         io.onboardkit.ads.AdPlacement.ResumeNative -> "native_resume"
+        io.onboardkit.ads.AdPlacement.ResumeInterstitial -> "native_resume.interstitial"
         io.onboardkit.ads.AdPlacement.AppResume -> "app_resume"
     }
     /** `ad_config.<key>.click_action`; absent, splash native and pager pages auto-advance. */
@@ -136,7 +137,8 @@ object OnboardingSettings {
     internal fun behavior(p: AdPlacement, adConfigKey: String? = null): com.ads.module.config.settings.BehaviorValues {
         val format = when (p) {
             AdPlacement.SplashBanner -> "banner"
-            AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial -> "interstitial"
+            AdPlacement.SplashInterstitial, AdPlacement.AfterOnboardingInterstitial,
+            AdPlacement.ResumeInterstitial -> "interstitial"
             AdPlacement.AppResume -> "app_open"
             else -> "native"
         }
@@ -413,6 +415,7 @@ object OnboardingSettings {
             stuckLoadingLogMs = ms("stuck_loading_log_ms"),
             viewDestroyOnTeardown = flag("view.destroy_on_teardown"),
             lfoConfirmRevealDelayMs = ms("lfo.confirm_button.reveal_delay_ms"),
+            lfoLoadingDialogMs = ms("lfo.loading_dialog.duration_ms"),
             selectNextRevealDelayMs = ms("select.next_reveal_delay_ms"),
             goalsExitReuseSplashInter = flag("goals.exit_reuse_splash_inter"),
             fullscreenSkipDelayMs = ms("onboarding.fullscreen.skip.delay_ms"),

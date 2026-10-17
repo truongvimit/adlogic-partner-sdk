@@ -849,5 +849,64 @@ class PoolLanguageFragmentTest {
         assertEquals("No second LFO1 completion", 1, PoolUiSdk.events<AnalyticsEvent.LanguageCompleted>()
             .count { it.screenIndex == 1 })
     }
-}
 
+    private val loadingCard get() = activity.findViewById<View>(R.id.ob_language_loading)
+
+    /** Launching already lets the resumed screen's clock run, so tests read what is left. */
+    private fun loadingLeft(): Long = ReflectionHelpers.getField(lfo, "loadingLeftMs")
+
+    private fun loadingFlow(ms: Long = 4_000L) = poolSnapshot().copy(lfoLoadingDialogMs = ms)
+
+    @Test fun `LFO1 opens under a loading card that takes no tap until its countdown ends`() {
+        launch(loadingFlow())
+        val left = loadingLeft()
+        assertTrue(left in 1..4_000)
+        assertEquals(View.VISIBLE, loadingCard.visibility)
+        assertEquals("The ad is requested under the card", 1, loader.callsFor("language1").size)
+
+        tap(0)
+        assertNull("No pick while loading", adapter.selectedCode)
+        assertTrue(loader.callsFor("language2").isEmpty())
+
+        main.idleFor(left - 100, MILLISECONDS)
+        assertEquals(View.VISIBLE, loadingCard.visibility)
+        main.idleFor(400, MILLISECONDS)
+        assertEquals(View.GONE, loadingCard.visibility)
+
+        tap(0)
+        assertEquals("en-US", adapter.selectedCode)
+    }
+
+    @Test fun `the loading countdown stands still while the app is away`() {
+        launch(loadingFlow(8_000L))
+        val left = loadingLeft()
+        requireNotNull(controller).pause().stop()
+        main.idleFor(10_000, MILLISECONDS)
+        assertEquals(left, loadingLeft())
+        requireNotNull(controller).restart().start().resume()
+        main.idle()
+        val back = loadingLeft()
+        assertTrue("Counted again only once resumed: $back of $left", back in 1..left)
+        main.idleFor(back - 100, MILLISECONDS)
+        assertEquals(View.VISIBLE, loadingCard.visibility)
+        main.idleFor(400, MILLISECONDS)
+        assertEquals(View.GONE, loadingCard.visibility)
+    }
+
+    @Test fun `a recreated LFO1 keeps only what is left of the countdown`() {
+        launch(loadingFlow(8_000L))
+        main.idleFor(500, MILLISECONDS)
+        val before = loadingLeft()
+        recreateHost()
+        assertEquals(View.VISIBLE, loadingCard.visibility)
+        val left = loadingLeft()
+        assertTrue("Resumed from $before, not restarted: $left", left in 1..before)
+        main.idleFor(left + 300, MILLISECONDS)
+        assertEquals(View.GONE, loadingCard.visibility)
+    }
+
+    @Test fun `no loading card at the bundled zero`() {
+        launch()
+        assertEquals(View.GONE, loadingCard.visibility)
+    }
+}

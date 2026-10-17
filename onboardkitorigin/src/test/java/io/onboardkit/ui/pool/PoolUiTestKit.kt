@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
+import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.config.AdRemoteConfig
@@ -21,6 +22,7 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
+import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.FakeAdProvider
@@ -79,6 +81,8 @@ internal class PoolUiProvider : FakeAdProvider() {
     var interstitialReady = true
     val presentations = mutableListOf<ObInterstitialCallback>()
     val backgroundPreloads = mutableListOf<AdPlacement>()
+    val interstitialLoads = mutableListOf<AdPlacement>()
+    val loadAndShows = mutableListOf<AdPlacement>()
 
     override fun preloadNativeInBackground(context: Context, request: NativeAdRequest) {
         backgroundPreloads += request.placement
@@ -88,6 +92,27 @@ internal class PoolUiProvider : FakeAdProvider() {
         interstitialReady && placement == AdPlacement.SplashInterstitial
 
     override fun showInterstitial(activity: Activity, placement: AdPlacement, callback: ObInterstitialCallback) {
+        presentations += callback
+    }
+
+    override fun loadInterstitial(
+        activity: Activity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        adConfigKey: String?,
+        listener: AdEventListener?,
+    ) {
+        interstitialLoads += placement
+    }
+
+    override fun loadAndShowInterstitial(
+        activity: AppCompatActivity,
+        placement: AdPlacement,
+        unit: InterstitialAdUnit,
+        callback: ObInterstitialCallback,
+        timeoutMs: Long,
+    ) {
+        loadAndShows += placement
         presentations += callback
     }
 

@@ -24,6 +24,9 @@
     <string name="ob_no_internet_description">It seem you\'re offline. Reconnect to enjoy the full app experience</string>
     <string name="ob_no_internet_action">Enable Internet</string>
     <string name="ob_language_save">Save</string>
+    <!-- SHARED_POOL LFO1 loading card -->
+    <string name="ob_language_loading_title">Loading languages…</string>
+    <string name="ob_language_loading_message">Getting every language ready for you. Just a moment!</string>
     <!-- Confirm Language modal -->
     <string name="ob_confirm_language_title">Confirm Language</string>
     <!-- %1$s is the language the user just re-tapped, e.g. "Continue with English?" -->

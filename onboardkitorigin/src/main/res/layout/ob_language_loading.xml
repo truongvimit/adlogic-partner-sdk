@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SHARED_POOL LFO1 "loading languages" card, shown for native_flow.pool.lfo.loading_dialog.duration_ms.
+  It covers the header and the rows only: the ad block below it is never obscured. The scrim
+  swallows every touch until the countdown ends.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ob_language_loading_scrim"
+    android:clickable="true"
+    android:focusable="true"
+    android:translationZ="2dp">
+
+    <LinearLayout
+        android:id="@+id/ob_language_loading_card"
+        android:layout_width="@dimen/ob_language_loading_card_width"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/ob_bg_confirm_dialog"
+        android:elevation="8dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="20dp">
+
+        <FrameLayout
+            android:layout_width="64dp"
+            android:layout_height="64dp">
+
+            <ProgressBar
+                android:id="@+id/ob_language_loading_ring"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/ob_splash_progress" />
+
+            <ImageView
+                android:id="@+id/ob_language_loading_flag"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                tools:src="@drawable/ob_flag_en_gb" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/ob_language_loading_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:accessibilityLiveRegion="polite"
+            android:fontFamily="@font/ob_poppins_semibold"
+            android:gravity="center"
+            android:text="@string/ob_language_loading_title"
+            android:textColor="@color/ob_confirm_title"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/ob_language_loading_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/ob_poppins_regular"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:textColor="@color/ob_confirm_subtitle"
+            android:textSize="13sp"
+            tools:text="English" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/ob_language_loading_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="6dp"
+                android:layout_weight="1"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/ob_splash_progress" />
+
+            <TextView
+                android:id="@+id/ob_language_loading_percent"
+                android:layout_width="36dp"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:textColor="@color/ob_text_splash_loading"
+                android:textSize="12sp"
+                tools:text="64%" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/ob_poppins_regular"
+            android:gravity="center"
+            android:text="@string/ob_language_loading_message"
+            android:textColor="@color/ob_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+</FrameLayout>

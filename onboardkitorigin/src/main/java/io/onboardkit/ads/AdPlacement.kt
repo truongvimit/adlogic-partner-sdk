@@ -112,6 +112,15 @@ sealed interface AdPlacement {
     }
 
     /**
+     * Interstitial behind the Start of either native resume screen. The screen closes once it is
+     * gone, or at once when it never shows.
+     */
+    data object ResumeInterstitial : AdPlacement {
+        override val key: String = "inter_resume"
+        override val format: AdFormat = AdFormat.INTERSTITIAL
+    }
+
+    /**
      * The ad shown when the app returns to the foreground.
      *
      * A placement like any other so it goes through the same gate and reports the same block

@@ -217,6 +217,9 @@
       "lfo": {
         "confirm_button": {
           "reveal_delay_ms": 3000
+        },
+        "loading_dialog": {
+          "duration_ms": 0
         }
       },
       "select": {

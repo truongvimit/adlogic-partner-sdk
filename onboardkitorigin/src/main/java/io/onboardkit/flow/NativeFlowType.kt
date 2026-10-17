@@ -42,6 +42,8 @@ internal data class NativeFlowSnapshot(
     val stuckLoadingLogMs: Long = 60_000L,
     val viewDestroyOnTeardown: Boolean = true,
     val lfoConfirmRevealDelayMs: Long = 3_000L,
+    /** LFO1's blocking "loading languages" card on a fresh open; 0 shows none. */
+    val lfoLoadingDialogMs: Long = 0L,
     val selectNextRevealDelayMs: Long = 3_000L,
     val goalsExitReuseSplashInter: Boolean = true,
     val fullscreenSkipDelayMs: Long = 2_000L,

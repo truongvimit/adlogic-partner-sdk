@@ -2,13 +2,16 @@ package io.onboardkit.ui.pool
 
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.LoadResult
@@ -51,6 +54,10 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     private var slot: PoolNativeSlot? = null
     private var dialog: PoolConfirmLanguageDialog? = null
     private var revealJob: Job? = null
+    private var loadingJob: Job? = null
+
+    /** What is left of LFO1's loading card; it counts down only while the screen is resumed. */
+    private var loadingLeftMs = 0L
 
     private var selectedCode: String? = null
     private var tapCount = 0
@@ -93,6 +100,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
                 if (savedInstanceState.getBoolean(KEY_ON_LANGUAGE2)) currentKey = AdPlacement.Language2
                 confirmRevealed = savedInstanceState.getBoolean(KEY_CONFIRM_REVEALED)
                 handoff = savedInstanceState.getBoolean(KEY_HANDOFF)
+                loadingLeftMs = savedInstanceState.getLong(KEY_LOADING_LEFT)
             }
             // OB1 back (D-OB1BACK): the pick and LFO2 come back, the splash handoff stays spent.
             restored != null -> {
@@ -107,6 +115,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
                 // explicit in-progress pick through the branches above.
                 selectedCode = null
                 handoff = OnboardingSdk.preload().takeLanguage1Preload()
+                loadingLeftMs = snapshot.lfoLoadingDialogMs
             }
         }
 
@@ -145,6 +154,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             handoff = false
         }
         claimCurrent()
+        if (loadingLeftMs > 0L) runLoading(b)
         if (tapCount > 0 && selectedCode != null && !confirmRevealed) scheduleReveal()
         OnboardingSdk.track(AnalyticsEvent.LanguageViewed(screenIndex(currentKey), variant = variant(currentKey)))
     }
@@ -190,6 +200,52 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     }
 
     /**
+     * LFO1's "loading languages" card: it blocks the header and rows, never the ad below, while
+     * its progress runs to 100%. Paused with the screen, so time away never shortens the wait.
+     */
+    private fun runLoading(b: ObActivityLanguageBinding) {
+        val card = b.obLanguageLoading
+        val totalMs = maxOf(snapshot.lfoLoadingDialogMs, loadingLeftMs)
+        val languages = OnboardingSdk.requireConfig().language.languages
+        OnboardingSettings.onboardingPrimaryColor()?.let { tint ->
+            card.obLanguageLoadingRing.indeterminateTintList = ColorStateList.valueOf(tint)
+            card.obLanguageLoadingProgress.progressTintList = ColorStateList.valueOf(tint)
+        }
+        card.root.isVisible = true
+        var shownIndex = -1
+        fun render() {
+            val doneMs = totalMs - loadingLeftMs
+            val percent = (doneMs * 100 / totalMs).toInt()
+            card.obLanguageLoadingProgress.progress = percent
+            card.obLanguageLoadingPercent.text = getString(R.string.ob_splash_percent, percent)
+            if (languages.isEmpty()) return
+            val index = (doneMs / LOADING_FLAG_STEP_MS % languages.size).toInt()
+            if (index == shownIndex) return
+            shownIndex = index
+            card.obLanguageLoadingFlag.setImageResource(languages[index].flagRes)
+            card.obLanguageLoadingName.text = languages[index].displayName
+        }
+        render()
+        loadingJob = viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var lastMs = SystemClock.uptimeMillis()
+                while (loadingLeftMs > 0L) {
+                    delay(LOADING_TICK_MS)
+                    val nowMs = SystemClock.uptimeMillis()
+                    loadingLeftMs = (loadingLeftMs - (nowMs - lastMs)).coerceAtLeast(0L)
+                    lastMs = nowMs
+                    render()
+                }
+                card.root.animate().alpha(0f).setDuration(LOADING_FADE_MS).withEndAction {
+                    card.root.isVisible = false
+                    card.root.alpha = 1f
+                }
+                loadingJob?.cancel()
+            }
+        }
+    }
+
+    /**
      * DashDrama's LanguageFirstFragment.h: the slot of a placement refused for this run collapses.
      * A transient refusal keeps it: the pool may still lend another screen's ad.
      */
@@ -201,7 +257,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     }
 
     private fun onLanguageTapped(language: ObLanguage) {
-        if (exitLatched) return
+        if (exitLatched || loadingLeftMs > 0L) return
         // The DashDrama preselection is not a pick: only a row the user already tapped is a re-tap.
         val reselected = tapCount > 0 && selectedCode == language.code
         if (tapCount < Int.MAX_VALUE) tapCount++
@@ -304,12 +360,15 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
         outState.putBoolean(KEY_ON_LANGUAGE2, currentKey == AdPlacement.Language2)
         outState.putBoolean(KEY_CONFIRM_REVEALED, confirmRevealed)
         outState.putBoolean(KEY_HANDOFF, handoff)
+        outState.putLong(KEY_LOADING_LEFT, loadingLeftMs)
     }
 
     override fun onDestroyView() {
         tearingDown = true
         revealJob?.cancel()
         revealJob = null
+        loadingJob?.cancel()
+        loadingJob = null
         // DashDrama clears only its own key: the next stage may already own the pool.
         dialog?.let {
             it.dismiss()
@@ -335,6 +394,10 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
         private const val KEY_ON_LANGUAGE2 = "ob_pool_language2"
         private const val KEY_CONFIRM_REVEALED = "ob_pool_confirm_revealed"
         private const val KEY_HANDOFF = "ob_pool_lfo1_preload_handoff"
+        private const val KEY_LOADING_LEFT = "ob_pool_lfo1_loading_left_ms"
+        private const val LOADING_TICK_MS = 50L
+        private const val LOADING_FLAG_STEP_MS = 400L
+        private const val LOADING_FADE_MS = 200L
 
         fun newInstance(restoredLanguage: String?): PoolLanguageFragment =
             PoolLanguageFragment().apply { arguments = bundleOf(ARG_RESTORED_LANGUAGE to restoredLanguage) }
