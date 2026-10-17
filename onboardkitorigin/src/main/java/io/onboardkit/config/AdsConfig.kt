@@ -106,6 +106,7 @@ data class BannerAdUnit(val id: String)
  * | [welcomeBackNative] | native on the returning-user Welcome Back screen |
  * | [welcomeBackDupNative] | native that replaces it on the first option tap |
  * | [resumeNative] | native on the screen a return from the background opens |
+ * | [resumeInterstitial] | full-screen ad behind that screen's Start |
  */
 data class AdsConfig(
     val splashBanner: BannerAdUnit? = null,
@@ -152,6 +153,8 @@ data class AdsConfig(
     val welcomeBackDupNative: NativeAdUnit? = null,
     /** Native resume screen, used when `app_resume.type` is native_resume. */
     val resumeNative: NativeAdUnit? = null,
+    /** Load-and-show on the native resume screen's Start; unset, Start closes the screen at once. */
+    val resumeInterstitial: InterstitialAdUnit? = null,
     /** App-resume / app-open ad, shown when the app returns to the foreground. */
     val appResume: InterstitialAdUnit? = null,
     /** Premium users skip the steps that contain nothing but a full-screen ad. */
@@ -208,6 +211,7 @@ data class AdsConfig(
                 AdPlacement.WelcomeBack1 to "native_welcome1",
                 AdPlacement.WelcomeBack2 to "native_welcome2",
                 AdPlacement.ResumeNative to "native_resume",
+                AdPlacement.ResumeInterstitial to "inter_resume",
                 AdPlacement.AppResume to "open_resume",
             )
     }
@@ -268,6 +272,7 @@ data class AdsConfig(
             welcomeBackNative = native(AdPlacement.WelcomeBack1, welcomeBackNative),
             welcomeBackDupNative = native(AdPlacement.WelcomeBack2, welcomeBackDupNative),
             resumeNative = native(AdPlacement.ResumeNative, resumeNative),
+            resumeInterstitial = inter(AdPlacement.ResumeInterstitial, resumeInterstitial),
             afterOnboardingInterstitial = inter(AdPlacement.AfterOnboardingInterstitial, afterOnboardingInterstitial),
             appResume = inter(AdPlacement.AppResume, appResume),
         )
@@ -297,6 +302,7 @@ data class AdsConfig(
         AdPlacement.WelcomeBack1 -> welcomeBackNative
         AdPlacement.WelcomeBack2 -> welcomeBackDupNative
         AdPlacement.ResumeNative -> resumeNative
+        AdPlacement.ResumeInterstitial -> resumeInterstitial
         AdPlacement.AppResume -> appResume
     }
 }

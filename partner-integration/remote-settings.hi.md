@@ -225,6 +225,7 @@ Type हर run में एक बार तय होता है: splash �
 | `onboarding.fullscreen.auto_next.delay_ms` (`15000`) | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (`10000`), page selection से गिना जाता है |
 | `lfo.confirm_button.visible_before_selection` (`true`) | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (`3000`): पहले language tap के इतनी देर बाद तक confirm button छिपा रहता है |
 | कोई नहीं | `native_flow.pool.select.next_reveal_delay_ms` (`3000`): पहले consent बदलाव या option tap के इतनी देर बाद तक Privacy का Continue और Goal का Next छिपे रहते हैं |
+| कोई नहीं | `native_flow.pool.lfo.loading_dialog.duration_ms` (`0`, बंद): नई LFO1 पर "Loading languages" card इतनी देर header और rows रोकता है (ad को कभी नहीं), केवल screen दिखते समय गिना जाता है |
 
 दोनों flows इन चीज़ों के लिए एक ही key पढ़ते हैं: language confirmation dialog (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, चुनी हुई row पर दोबारा tap), OB1 back button (`onboarding.steps.ob1.back.enabled`), ad expiry (`ad_behavior_config` का `native.cache.max_age_ms`, एक घंटा) और हर floor का wait (`native.load.tier_timeout_ms` और उसके `placement_overrides`, 30 सेकंड; जो floor समय पर जवाब न दे वह failure गिना जाता है और अगला floor request होता है)। `onboarding.order`, `privacy_goals_screen.enabled` और `lfo.exit.reuse_splash_inter` दोनों पर लागू होते हैं।
 
@@ -440,6 +441,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.view.destroy_on_teardown` | `true` |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` |
+| `native_flow.pool.lfo.loading_dialog.duration_ms` | `0` |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` |
 | `native_flow.pool.resume.min_background_ms` | `2000` |
 | `native_flow.pool.onboarding.fullscreen.skip.delay_ms` | `2000` |

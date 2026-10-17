@@ -50,6 +50,7 @@
          at x=296 with a 16dp glyph and a 16dp inset. -->
     <dimen name="ob_confirm_dialog_width">328dp</dimen>
     <dimen name="ob_confirm_dialog_radius">16dp</dimen>
+    <dimen name="ob_language_loading_card_width">280dp</dimen>
     <dimen name="ob_confirm_dialog_padding_h">16dp</dimen>
     <dimen name="ob_confirm_dialog_padding_top">32dp</dimen>
     <dimen name="ob_confirm_dialog_padding_bottom">20dp</dimen>

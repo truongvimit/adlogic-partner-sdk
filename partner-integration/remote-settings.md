@@ -225,6 +225,7 @@ Values only `SHARED_POOL` reads live under `native_flow.pool`, named after the c
 | `onboarding.fullscreen.auto_next.delay_ms` (`15000`) | `native_flow.pool.onboarding.fullscreen.auto_next.delay_ms` (`10000`), counted from page selection |
 | `lfo.confirm_button.visible_before_selection` (`true`) | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` (`3000`): the confirm button stays hidden until this long after the first language tap |
 | none | `native_flow.pool.select.next_reveal_delay_ms` (`3000`): Privacy's Continue and Goal's Next stay hidden until this long after the first consent change or option tap |
+| none | `native_flow.pool.lfo.loading_dialog.duration_ms` (`0`, off): on a fresh LFO1, a "Loading languages" card blocks the header and rows (never the ad) for this long, counted only while the screen is on |
 
 Both flows read the same key for the language confirmation dialog (`lfo.confirm_dialog.enabled`, `lfo.confirm_dialog.show_from_tap`, a re-tap of the selected row), the OB1 back button (`onboarding.steps.ob1.back.enabled`), the ad expiry (`ad_behavior_config` `native.cache.max_age_ms`, one hour) and the wait per floor (`native.load.tier_timeout_ms` with its `placement_overrides`, 30 seconds; a floor that does not answer in time counts as a failure and the next floor is requested). `onboarding.order`, `privacy_goals_screen.enabled` and `lfo.exit.reuse_splash_inter` apply to both.
 
@@ -439,6 +440,7 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native_flow.pool.stuck_loading_log_ms` | `60000` |
 | `native_flow.pool.view.destroy_on_teardown` | `true` |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` |
+| `native_flow.pool.lfo.loading_dialog.duration_ms` | `0` |
 | `native_flow.pool.select.next_reveal_delay_ms` | `3000` |
 | `native_flow.pool.goals.exit_reuse_splash_inter` | `true` |
 | `native_flow.pool.resume.min_background_ms` | `2000` |

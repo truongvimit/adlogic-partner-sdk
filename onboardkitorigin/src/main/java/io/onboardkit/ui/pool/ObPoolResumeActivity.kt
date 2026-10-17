@@ -13,6 +13,7 @@ import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.base.BaseOnboardActivity
 import io.onboardkit.ui.resume.ResumeScreenViews
+import io.onboardkit.ui.resume.ResumeStart
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -38,6 +39,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     override val restartFlowAfterProcessDeath: Boolean get() = false
 
     private var slot: PoolNativeSlot? = null
+    private val startAction = ResumeStart(this)
 
     /** DashDrama's f23721c; saved, as its click flag survives a screen destroyed under the landing page. */
     private var adClicked = false
@@ -55,8 +57,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         val cfg = sdk.requireConfig().resumeScreen
         ResumeScreenViews.bindOptionalCopy(views, cfg.imageRes, cfg.title ?: getString(cfg.titleRes), cfg.subtitle ?: getString(cfg.subtitleRes), this)
         (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
-        views.start.setOnClickListener { finish() }
+        views.start.setOnClickListener { startAction.press() }
         revealStart(views.start)
+        startAction.preload()
 
         val flow = runSnapshot()
         slot = PoolNativeSlot(

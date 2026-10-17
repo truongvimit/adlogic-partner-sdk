@@ -30,6 +30,7 @@ class ObResumeActivity : BaseOnboardActivity() {
     override val restartFlowAfterProcessDeath: Boolean get() = false
 
     private var renewOnResume = false
+    private val startAction = ResumeStart(this)
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         val views = ResumeScreenViews.inflate(layoutInflater)
@@ -37,8 +38,9 @@ class ObResumeActivity : BaseOnboardActivity() {
         val cfg = sdk.requireConfig().resumeScreen
         ResumeScreenViews.bindOptionalCopy(views, cfg.imageRes, cfg.title ?: getString(cfg.titleRes), cfg.subtitle ?: getString(cfg.subtitleRes), this)
         (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
-        views.start.setOnClickListener { finish() }
+        views.start.setOnClickListener { startAction.press() }
         revealStart(views.start)
+        startAction.preload()
 
         val placement = AdPlacement.ResumeNative
         var bound = false

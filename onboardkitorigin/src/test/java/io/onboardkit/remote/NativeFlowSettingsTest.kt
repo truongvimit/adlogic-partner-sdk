@@ -62,6 +62,7 @@ class NativeFlowSettingsTest {
         "native_flow.pool.stuck_loading_log_ms" to 60_000L,
         "native_flow.pool.view.destroy_on_teardown" to true,
         "native_flow.pool.lfo.confirm_button.reveal_delay_ms" to 3_000L,
+        "native_flow.pool.lfo.loading_dialog.duration_ms" to 0L,
         "native_flow.pool.select.next_reveal_delay_ms" to 3_000L,
         "native_flow.pool.goals.exit_reuse_splash_inter" to true,
         "native_flow.pool.onboarding.fullscreen.skip.delay_ms" to 2_000L,
@@ -87,6 +88,7 @@ class NativeFlowSettingsTest {
         stuckLoadingLogMs = 60_000L,
         viewDestroyOnTeardown = true,
         lfoConfirmRevealDelayMs = 3_000L,
+        lfoLoadingDialogMs = 0L,
         selectNextRevealDelayMs = 3_000L,
         goalsExitReuseSplashInter = true,
         fullscreenSkipDelayMs = 2_000L,
@@ -155,7 +157,7 @@ class NativeFlowSettingsTest {
               "adopt_splash_language1":false,"locale_apply":"RECREATE","exit":{"next_screen_timing":"UNDER_AD"},
               "done_hidden_gone":false,"pager":{"smooth_scroll":false,"offscreen_pages":2},"resume_on_goals":false,
               "stuck_loading_log_ms":0,"view":{"destroy_on_teardown":false},
-              "lfo":{"confirm_button":{"reveal_delay_ms":11}},"select":{"next_reveal_delay_ms":12},
+              "lfo":{"confirm_button":{"reveal_delay_ms":11},"loading_dialog":{"duration_ms":16}},"select":{"next_reveal_delay_ms":12},
               "goals":{"exit_reuse_splash_inter":false},"resume":{"min_background_ms":15},
               "onboarding":{"fullscreen":{"skip":{"delay_ms":13},"auto_next":{"delay_ms":14}}}}}}
         """.trimIndent()))
@@ -178,6 +180,7 @@ class NativeFlowSettingsTest {
             stuckLoadingLogMs = 0L,
             viewDestroyOnTeardown = false,
             lfoConfirmRevealDelayMs = 11L,
+            lfoLoadingDialogMs = 16L,
             selectNextRevealDelayMs = 12L,
             goalsExitReuseSplashInter = false,
             fullscreenSkipDelayMs = 13L,

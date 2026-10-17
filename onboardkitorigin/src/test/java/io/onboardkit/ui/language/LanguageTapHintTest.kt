@@ -85,8 +85,8 @@ class LanguageTapHintTest {
     }
 
     @Test
-    fun `default action remains a dim check icon with primary color`() {
-        launch(settings = """{"onboarding":{"primary_color":"#1E88E5"}}""")
+    fun `remote check icon action uses primary color and stays dim until language selection`() {
+        launch(settings = """{"lfo":{"confirm_button":{"style":"CHECK_ICON"}},"onboarding":{"primary_color":"#1E88E5"}}""")
         val activity = controller!!.get()
         val icon = activity.findViewById<ImageView>(R.id.ob_language_confirm_icon)
         assertEquals(View.VISIBLE, icon.visibility)

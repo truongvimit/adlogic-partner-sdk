@@ -108,6 +108,16 @@
         app:barrierDirection="top"
         app:constraint_referenced_ids="ob_ad_block,ob_ad_block_2" />
 
+    <!-- SHARED_POOL only: the LFO1 loading card over the header and rows, ending above the ads. -->
+    <include
+        android:id="@+id/ob_language_loading"
+        layout="@layout/ob_language_loading"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/ob_ad_blocks_top"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- Slot 1: native preloaded from Splash, visible until the first language tap. -->
     <FrameLayout
         android:id="@+id/ob_ad_block"
