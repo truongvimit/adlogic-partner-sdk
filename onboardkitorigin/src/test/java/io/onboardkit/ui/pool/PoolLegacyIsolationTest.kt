@@ -269,16 +269,13 @@ class PoolLegacyIsolationTest {
 
     @Test fun `a pool run followed by a forceRestart PER_SCREEN run restores the classic flow`() {
         val engine = installVendor()
-        // Adoption off still spends the splash's LFO1 handoff.
-        OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"native_flow":{"type":"SHARED_POOL","pool":{"adopt_splash_language1":false}}}""")
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"SHARED_POOL"}}""")
         val from = appScreen()
         // The splash's LFO1 preload left its handoff for the LFO.
         ReflectionHelpers.setField(OnboardingSdk.preload(), "language1HandoffPending", true)
         runBlocking { OnboardingSdk.start(from) }
         main.idle()
         assertEquals(NativeFlowType.SHARED_POOL, OnboardingSdk.session.nativeFlow?.type)
-        assertFalse(OnboardingSdk.session.nativeFlow!!.adoptSplashLanguage1)
         runPooled(requireNotNull(shadowOf(from).nextStartedActivity))
         assertTrue("OC5: the pooled run keeps resume routing", OnboardingPool.routeResume)
         assertTrue(loader.callsFor(AdPlacement.Language1.key).isNotEmpty())
@@ -318,9 +315,9 @@ class PoolLegacyIsolationTest {
         assertSame(configured, before)
 
         OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"native_flow":{"type":"SHARED_POOL","pool":{"locale_apply":"RECREATE","parity":{"keep_after_flow":false}}}}""")
+            """{"native_flow":{"type":"SHARED_POOL","pool":{"locale_apply":"RECREATE","parity":{"borrow_showing":false}}}}""")
         assertEquals(NativeFlowType.SHARED_POOL, OnboardingSettings.nativeFlowTypeOrDefault())
-        assertFalse(OnboardingSettings.nativeFlowSnapshot().parity.keepAfterFlow)
+        assertFalse(OnboardingSettings.nativeFlowSnapshot().parity.borrowShowing)
         assertSame(before, OnboardingSdk.configOrNull())
 
         OnboardingSettings.document.acceptSuccessfulFetch(null)

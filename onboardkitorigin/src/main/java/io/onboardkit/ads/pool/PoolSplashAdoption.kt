@@ -23,22 +23,15 @@ internal object PoolSplashAdoption {
 
         /** No handoff, or the splash load failed or never started: the LFO's claim requests. */
         NONE("none"),
-
-        /** `adopt_splash_language1` is off: the splash preload is left alone. */
-        OFF("off"),
     }
 
     /**
-     * @param handoff the LFO's own `takeLanguage1Preload()`, which it consumes whether or not
-     *   adoption is on, so no stale flag reaches a later classic LFO
+     * @param handoff the LFO's own `takeLanguage1Preload()`, which it consumes so no stale flag
+     *   reaches a later classic LFO
      */
     @MainThread
     fun run(handoff: Boolean, snapshot: NativeFlowSnapshot): Status {
-        val status = when {
-            !handoff -> Status.NONE
-            !snapshot.adoptSplashLanguage1 -> Status.OFF
-            else -> adopt(snapshot)
-        }
+        val status = if (handoff) adopt(snapshot) else Status.NONE
         ObLog.d(ObLog.Section.LOAD, "pool | adopt language1 status=${status.wire} handoff=$handoff")
         return status
     }

@@ -241,25 +241,13 @@ class PoolGoalsTest {
         assertEquals(2, loader.callsFor(privacyAlt.key).size)
     }
 
-    @Test fun `D-BIND - a select screen binds a fill landing under a translucent window once it resumes`() {
-        open(Stage.PRIVACY)
-        requireNotNull(controller).pause()
-        pump()
-        val ad = loader.fill(privacy.key)
-        pump()
-        assertTrue("Nothing bound under the cover", adSlot.getChildAt(0) is ShimmerFrameLayout)
-        requireNotNull(controller).resume()
-        pump()
-        assertSame(ad.admobNativeAd, shownAd())
-    }
-
-    @Test fun `screen_slots_bind_started binds a select screen's fill while it is only started`() {
-        open(Stage.GOAL, snapshot = poolSnapshot(SYNC_PARITY.copy(screenSlotsBindStarted = true)))
+    @Test fun `a select screen binds a fill while it is only started`() {
+        open(Stage.GOAL)
         requireNotNull(controller).pause()
         pump()
         val goalAd = loader.fill(goal.key)
         pump()
-        assertSame("screen_slots_bind_started: DashDrama's STARTED collector", goalAd.admobNativeAd, shownAd())
+        assertSame("DashDrama's STARTED collector", goalAd.admobNativeAd, shownAd())
     }
 
     @Test fun `the forward button stays hidden until a fixed time after the first selection`() {
@@ -274,17 +262,6 @@ class PoolGoalsTest {
         assertEquals(View.GONE, forward.visibility)
         idleUntil(firstAt + 3_000)
         assertEquals("Counted from the first selection", View.VISIBLE, forward.visibility)
-        requireNotNull(controller).pause().stop().destroy()
-        pump()
-
-        open(Stage.GOAL, snapshot = poolSnapshot().copy(doneHiddenGone = false))
-        assertEquals(View.INVISIBLE, forward.visibility)
-        val tapAt = SystemClock.uptimeMillis()
-        tap(0)
-        idleUntil(tapAt + 2_999)
-        assertEquals(View.INVISIBLE, forward.visibility)
-        idleUntil(tapAt + 3_000)
-        assertEquals(View.VISIBLE, forward.visibility)
     }
 
     @Test fun `Goal claims its first ad politely, the second forcibly on every tap, and Next needs minSelection`() {

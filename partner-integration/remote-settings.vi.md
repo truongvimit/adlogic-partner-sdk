@@ -253,13 +253,9 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 
 | Field trong `native_flow.pool` | Mặc định | Tác dụng |
 | --- | --- | --- |
-| `adopt_splash_language1` | `true` | Nếu LFO1 vẫn được preload, native đó được đưa vào pool thay vì request lại. Splash của SDK không preload LFO1 cho lượt `SHARED_POOL` (LFO tự request), nên key này hiếm khi có tác dụng. |
 | `locale_apply` | `"IN_PLACE"` | `IN_PLACE` áp ngôn ngữ đã chọn lên màn đang chạy; `RECREATE` tạo lại màn. |
 | `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: chặng kế tiếp bắt đầu sau khi ad thoát của LFO hoặc Goal đóng, hay ngay bên dưới ad. |
-| `done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ; `false` giữ chỗ của nó. |
-| `pager.smooth_scroll` | `true` | Chuyển trang có animation. |
 | `pager.offscreen_pages` | `1` | Số trang giữ sống cạnh trang hiện tại; `1` giữ trang kế tiếp để prepare. Giá trị lớn hơn giữ thêm trang kề bên. |
-| `resume_on_goals` | `true` | Ad khi quay lại app được phép hiện ở Privacy và Goal. |
 | `stuck_loading_log_ms` | `60000` | Ghi log request còn chạy sau khoảng này; chỉ log. |
 | `view.destroy_on_teardown` | `true` | View ad của slot bị hủy khi màn của nó đóng; ad vẫn ở trong pool. |
 | `goals.exit_reuse_splash_inter` | `true` | Next ở Goal hiện interstitial splash còn lại. |
@@ -270,17 +266,9 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.async_selector` | `true` | Ad mỗi slot hiện được chọn ngoài main thread; `false` chọn ngay. |
 | `parity.borrow_showing` | `true` | Slot không còn gì khác để hiện có thể hiện ad đã hiển thị ở nơi khác; `false` ẩn slot. |
 | `parity.destroy_replaced_ads` | `false` | Ad bị thay hoặc hết hạn được bỏ mà không destroy; `true` destroy nó. |
-| `parity.keep_duplicate_ids` | `true` | Request các tầng đúng như liệt kê trong ad_config, giữ cả ID trùng; `false` bỏ ID trùng. |
-| `parity.impression_marks_loader` | `true` | Impression bất kỳ từ các request của placement đánh dấu placement đã hiển thị; `false` chỉ impression của ad hiện tại. |
-| `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, popup xác nhận ngôn ngữ và màn resume chỉ bind ad mới khi đã resume, nên ad về dưới interstitial không bị tính impression khi người dùng chưa thấy; `true` bind khi đã start như app tham chiếu. |
 | `parity.pager_slots_bind_resumed` | `false` | Trang pager bind ad ngay khi đã start để page kế bên hiện ad đang giữ mới nhất trước khi swipe kết thúc; `true` thì đợi resume. |
-| `parity.keep_after_flow` | `true` | Pool sống tới khi process kết thúc, phục vụ màn resume; `false` giải phóng pool khi onboarding hoàn tất. |
-| `parity.reset_on_new_run` | `false` | Lượt chạy mới giữ ad trong pool; `true` bắt đầu với pool rỗng. |
-| `parity.respect_focus_window` | `false` | Request không chờ window focus; `true` chờ như native của `PER_SCREEN`. |
-| `parity.resume_background_preload` | `false` | Native resume chỉ request khi màn của nó mở; `true` còn preload ở background. |
-| `parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy, nên lượt load nền của màn khác phải chờ trong khi ad đang giữ vẫn hiện; `false` để refresh không ảnh hưởng tới kiểm tra đó. |
 
-Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo, trừ `parity.refresh_marks_in_flight`, có mặc định theo mô hình refresh của SDK, và `parity.screen_slots_bind_started`, có mặc định theo chính sách quảng cáo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
+Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
 
 ## Fetch và publish
 
@@ -441,22 +429,10 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.parity.async_selector` | `true` | Ad của slot được chọn ngoài main thread. |
 | `native_flow.pool.parity.borrow_showing` | `true` | Slot được mượn ad đã hiển thị ở nơi khác. |
 | `native_flow.pool.parity.destroy_replaced_ads` | `false` | Ad bị thay không bị destroy. |
-| `native_flow.pool.parity.keep_duplicate_ids` | `true` | Giữ ID trùng trong waterfall. |
-| `native_flow.pool.parity.impression_marks_loader` | `true` | Impression bất kỳ của placement đánh dấu đã hiển thị. |
-| `native_flow.pool.parity.screen_slots_bind_started` | `false` | LFO, popup xác nhận ngôn ngữ, Privacy, Goal, màn resume chỉ bind khi resume. |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `false` | Trang pager bind khi start. |
-| `native_flow.pool.parity.keep_after_flow` | `true` | Pool sống tới hết process. |
-| `native_flow.pool.parity.reset_on_new_run` | `false` | Lượt chạy mới giữ pool. |
-| `native_flow.pool.parity.respect_focus_window` | `false` | Không chờ window focus. |
-| `native_flow.pool.parity.resume_background_preload` | `false` | Native resume không preload ở background. |
-| `native_flow.pool.parity.refresh_marks_in_flight` | `true` | Refresh được tính là request đang chạy. |
-| `native_flow.pool.adopt_splash_language1` | `true` | Dùng native LFO1 splash đã preload, nếu có; splash của SDK không preload LFO1 cho lượt `SHARED_POOL`. |
 | `native_flow.pool.locale_apply` | `"IN_PLACE"` | `IN_PLACE` / `RECREATE`. |
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD` cho lối thoát LFO và Goal. |
-| `native_flow.pool.done_hidden_gone` | `true` | Nút đi tiếp khi ẩn không chiếm chỗ. |
-| `native_flow.pool.pager.smooth_scroll` | `true` | Chuyển trang có animation. |
 | `native_flow.pool.pager.offscreen_pages` | `1` | `1` giữ trang kế tiếp để prepare; giá trị lớn hơn giữ thêm trang kề bên. |
-| `native_flow.pool.resume_on_goals` | `true` | Ad quay lại app được hiện ở Privacy/Goal. |
 | `native_flow.pool.stuck_loading_log_ms` | `60000` | Chỉ log. |
 | `native_flow.pool.view.destroy_on_teardown` | `true` | Hủy view ad khi màn đóng. |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` | Tương ứng `lfo.confirm_button.visible_before_selection` của `PER_SCREEN`. |

@@ -67,30 +67,6 @@ class NativePoolEngineTest {
         assertTrue(h.loader.calls.isEmpty())
     }
 
-    @Test fun `wouldRequest answers what load would do and changes nothing`() {
-        val h = harness(maxAgeMs = 5_000L)
-        assertTrue("An empty pool requests", h.engine.wouldRequest(request("a"), POLITE))
-        h.loading("busy")
-        assertFalse("The gate is closed", h.engine.wouldRequest(request("a"), POLITE))
-        assertTrue("FORCED ignores the gate", h.engine.wouldRequest(request("a"), FORCED))
-        assertFalse("Its own chain runs", h.engine.wouldRequest(request("busy"), FORCED))
-        h.loader.fill("busy")
-        assertFalse("It holds an ad", h.engine.wouldRequest(request("busy"), FORCED))
-        h.policy.transientAll = "offline"
-        assertFalse(h.engine.wouldRequest(request("a"), FORCED))
-        h.policy.transientAll = null
-        h.policy.configByKey["a"] = "premium"
-        assertFalse(h.engine.wouldRequest(request("a"), FORCED))
-
-        val before = h.engine.debugSnapshot()
-        val events = h.events.size
-        h.clock.now += 5_000L
-        assertTrue("An expired ad is requested again", h.engine.wouldRequest(request("busy"), FORCED))
-        assertSame("No sweep, no publish", before, h.engine.debugSnapshot())
-        assertEquals(events, h.events.size)
-        assertEquals(listOf("busy" to "t0"), h.loader.calls)
-    }
-
     @Test fun `E1 loaders keep their first-use order and survive exhaustion`() {
         val h = harness()
         h.loading("b")
@@ -287,25 +263,17 @@ class NativePoolEngineTest {
         assertTrue(h.view("a")!!.inFlight)
     }
 
-    @Test fun `E4 an impression from a replaced ad marks the loader unless impressionMarksLoader is off`() {
-        for (marks in listOf(true, false)) {
-            val h = harness(SYNC.copy(impressionMarksLoader = marks))
-            val old = h.showing("a")
-            h.engine.refresh("a")
-            val fresh = h.loader.fill("a")
-            val freshState = h.state("a")
-            h.loader.impress(old)
-            if (marks) {
-                assertTrue(h.state("a") is PoolState.Showing)
-                assertTrue(ts(h.state("a")) > ts(freshState))
-            } else {
-                assertEquals(freshState, h.state("a"))
-            }
-            assertSame(fresh, h.view("a")!!.ad)
-            assertEquals(PoolEvent.Impression("a", old), h.events.last())
-            h.loader.impress(fresh)
-            assertTrue(h.state("a") is PoolState.Showing)
-        }
+    @Test fun `E4 an impression from a replaced ad marks the loader`() {
+        val h = harness()
+        val old = h.showing("a")
+        h.engine.refresh("a")
+        val fresh = h.loader.fill("a")
+        val freshState = h.state("a")
+        h.loader.impress(old)
+        assertTrue(h.state("a") is PoolState.Showing)
+        assertTrue(ts(h.state("a")) > ts(freshState))
+        assertSame(fresh, h.view("a")!!.ad)
+        assertEquals(PoolEvent.Impression("a", old), h.events.last())
     }
 
     @Test fun `E4 clicks are never filtered, a replaced ad's included`() {
@@ -425,26 +393,18 @@ class NativePoolEngineTest {
         assertEquals(PoolEvent.Exhausted<FakeAd>("a", refresh = true), h.events.last())
     }
 
-    @Test fun `D-REFRESH the gate is closed during a refresh only when refreshMarksInFlight`() {
-        for (marks in listOf(true, false)) {
-            val h = harness(SYNC.copy(refreshMarksInFlight = marks))
-            h.showing("a")
-            assertTrue(h.engine.gateOpen.value)
-            h.engine.refresh("a")
-            assertEquals("marks=$marks", !marks, h.engine.gateOpen.value)
-            val polite = h.engine.load(request("resume"), POLITE)
-            if (marks) {
-                assertEquals(LoadResult.SkippedByGate, polite)
-                assertTrue(h.loader.callsFor("resume").isEmpty())
-            } else {
-                assertEquals(LoadResult.Requested, polite)
-                assertEquals(listOf("t0"), h.loader.callsFor("resume"))
-            }
-            h.loader.last("a").fail()
-            h.loader.last("a").fail()
-            assertFalse(h.view("a")!!.refreshing)
-            if (marks) assertTrue(h.engine.gateOpen.value)
-        }
+    @Test fun `D-REFRESH the gate is closed during a refresh`() {
+        val h = harness()
+        h.showing("a")
+        assertTrue(h.engine.gateOpen.value)
+        h.engine.refresh("a")
+        assertFalse(h.engine.gateOpen.value)
+        assertEquals(LoadResult.SkippedByGate, h.engine.load(request("resume"), POLITE))
+        assertTrue(h.loader.callsFor("resume").isEmpty())
+        h.loader.last("a").fail()
+        h.loader.last("a").fail()
+        assertFalse(h.view("a")!!.refreshing)
+        assertTrue(h.engine.gateOpen.value)
     }
 
     @Test fun `D-REFRESH the last id timing out ends the refresh with the shown ad and the gate as before`() {
@@ -835,23 +795,16 @@ class NativePoolEngineTest {
         assertEquals(3, h.view("a")!!.index)
     }
 
-    @Test fun `onNewRun clears the owner and keeps the pool unless resetOnNewRun`() {
-        for (reset in listOf(false, true)) {
-            val h = harness(SYNC.copy(resetOnNewRun = reset))
-            val ad = h.showing("a")
-            h.engine.setOwner("a")
-            h.engine.onNewRun()
-            assertNull(h.engine.owner)
-            assertNull(h.engine.debugSnapshot().owner)
-            if (reset) {
-                assertTrue(h.engine.debugSnapshot().loaders.isEmpty())
-                assertEquals(1, ad.destroyed)
-            } else {
-                assertTrue(h.state("a") is PoolState.Showing)
-                assertEquals(0, ad.destroyed)
-                assertEquals(PoolSelection("a", ad, true), h.selection())
-            }
-        }
+    @Test fun `onNewRun clears the owner and keeps the pool`() {
+        val h = harness()
+        val ad = h.showing("a")
+        h.engine.setOwner("a")
+        h.engine.onNewRun()
+        assertNull(h.engine.owner)
+        assertNull(h.engine.debugSnapshot().owner)
+        assertTrue(h.state("a") is PoolState.Showing)
+        assertEquals(0, ad.destroyed)
+        assertEquals(PoolSelection("a", ad, true), h.selection())
     }
 
     // Parity and diagnostics

@@ -24,7 +24,7 @@ import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
 import io.onboardkit.ads.pool.PoolSplashAdoption
-import io.onboardkit.ads.pool.screenSlotMinState
+import io.onboardkit.ads.pool.SCREEN_SLOT_MIN_STATE
 import io.onboardkit.config.LanguageConfirmButtonStyle
 import io.onboardkit.config.ObLanguage
 import io.onboardkit.core.analytics.AnalyticsEvent
@@ -138,7 +138,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             owner = viewLifecycleOwner,
             placement = currentKey,
             kind = PoolNativeSlot.Kind.OWNER,
-            minState = flow.screenSlotMinState,
+            minState = SCREEN_SLOT_MIN_STATE,
             container = b.obNativeContainer,
             destroyOnTeardown = flow.viewDestroyOnTeardown,
         ).also { it.start() }
@@ -178,15 +178,11 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
         }
     }
 
-    /** Hidden (GONE by default, INVISIBLE under `done_hidden_gone=false`) until revealed. */
+    /** GONE until revealed. */
     private fun bindConfirm() {
         val b = binding ?: return
         b.obLanguageConfirm.alpha = 1f
-        b.obLanguageConfirm.visibility = when {
-            confirmRevealed -> View.VISIBLE
-            snapshot.doneHiddenGone -> View.GONE
-            else -> View.INVISIBLE
-        }
+        b.obLanguageConfirm.visibility = if (confirmRevealed) View.VISIBLE else View.GONE
     }
 
     private fun scheduleReveal() {
@@ -304,7 +300,6 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             activity = activity,
             language = language,
             destroyOnTeardown = snapshot.viewDestroyOnTeardown,
-            slotMinState = snapshot.screenSlotMinState,
             onConfirmed = ::onDone,
             onClosed = ::onConfirmDialogClosed,
         ).also { it.show() }

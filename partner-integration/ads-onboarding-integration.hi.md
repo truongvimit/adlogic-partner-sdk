@@ -525,9 +525,9 @@ App-open के delay और gating के लिए [app-open](../onboardkitori
 - **POLITE और FORCED loads.** Screen खोलना, page चुनना और screen पर लौटना POLITE loads हैं: pool में कोई request चल रही हो तो ये छोड़ दिए जाते हैं, और छोड़ा गया load queue नहीं होता, हट जाता है (`parity.retry_skipped_polite`)। Language tap, Privacy या Goal पर selection और अगले full page का preload FORCED loads हैं: ये gate को नज़रअंदाज़ करते हैं। Full page का preload FORCED है क्योंकि वह मौजूदा page की अपनी request के साथ उसी पल माँगा जाता है, जो POLITE होने पर हर बार उसके लिए gate बंद कर देती; यह owner कभी नहीं बदलता। दोनों में, जिस placement के पास पहले से ad है या जो load हो रही है, वह कुछ request नहीं करती।
 - **Single-flight gate.** Gate तभी खुला रहता है जब किसी placement की request न चल रही हो, इसलिए दूसरी request चलते समय POLITE load शुरू नहीं होता। यह जाँच main thread से बाहर होती है और एक frame पीछे रह सकती है (`parity.async_gate`)। FORCED loads, लौटने पर होने वाले refresh और splash से लिया गया load gate को नज़रअंदाज़ करते हैं; resume screen का refresh अपवाद है और POLITE load की तरह gate का इंतज़ार करता है। Refresh चल रही request गिना जाता है।
 - **Selector.** हर slot एक ही चुनाव दिखाता है: (1) owner का ad, जब भी pool के पास उसके लिए ad हो; (2) नहीं तो सबसे नया ad जो किसी screen ने अभी तक नहीं दिखाया; (3) नहीं तो सबसे हाल में दिखाया गया ad; (4) नहीं तो request चलते समय shimmer, और कोई request न हो तो slot छिपा रहता है। जिस screen का अपना ad अभी नहीं आया, वह किसी दूसरी placement का ad उधार लेती है, और उसका अपना ad fill होते ही उधार वाले की जगह ले लेता है।
-- **लौटने पर refresh.** जब कोई screen फिर सामने आती है (background, ad click या resume screen से), वह अपने owned ad को पहले floor से फिर request करती है जबकि वह ad दिखता रहता है: fill उसे बदल देता है, no-fill उसे रखता है। यह SDK का refresh model है, DashDrama का नहीं, जिसमें refresh चल रही request नहीं गिना जाता था (`parity.refresh_marks_in_flight`)।
+- **लौटने पर refresh.** जब कोई screen फिर सामने आती है (background, ad click या resume screen से), वह अपने owned ad को पहले floor से फिर request करती है जबकि वह ad दिखता रहता है: fill उसे बदल देता है, no-fill उसे रखता है। यह SDK का refresh model है, DashDrama का नहीं, जिसमें refresh चल रही request नहीं गिना जाता था।
 - **Expiry और floor का wait.** दोनों SDK की values हैं, pool keys नहीं: `native.cache.max_age_ms` (एक घंटा) से पुराना ad हटा दिया जाता है और अगली बार कोई screen वह placement माँगे तो फिर request होता है, और जो floor `native.load.tier_timeout_ms` (30 सेकंड) में जवाब न दे वह failure गिना जाता है, इसलिए अगला floor request होता है।
-- **Floors.** Request key के `ids` के चालू floors को क्रम से चलती है। दोहराई गई ID no-fill के बाद फिर request होती है (`parity.keep_duplicate_ids`), `PER_SCREEN` से अलग, जो duplicates हटा देता है।
+- **Floors.** Request key के `ids` के चालू floors को क्रम से चलती है। दोहराई गई ID no-fill के बाद फिर request होती है, `PER_SCREEN` से अलग, जो duplicates हटा देता है।
 
 **इसे चालू करें।**
 
@@ -556,7 +556,7 @@ Privacy → Goal के बिना pager का आखिरी page flow ख�
 
 **Privacy → Goal.** दोनों flows में default रूप से बंद (`privacy_goals_screen.enabled = false`), और इसके लिए `goal.options` चाहिए। DashDrama का first-open flow उसकी goal screen पर खत्म होता है, इसलिए parity के लिए इसे चालू करना होगा; इसके बिना pooled flow pager के बाद खत्म होता है। `PER_SCREEN` की तरह Privacy, Goal के साथ आती है, हालाँकि उस flow में pager और goal screen के बीच कोई step नहीं है। [Privacy → Goal](privacy-goals-screen.hi.md#shared_pool-में) देखें।
 
-**Ads on return.** Pool की resume screen के लिए `app_resume.type = native_resume` (default) और `ad_config` में declared और चालू `native_resume` चाहिए; दूसरे type के साथ return ads उसी type के अनुसार चलते हैं, जैसा [Ads on return](#ads-on-return) में बताया गया है। यह तभी खुलती है जब app कम से कम `native_flow.pool.resume.min_background_ms` (default 2000 ms) background में रहा हो; classic native resume screen `open_resume.app_resume_load_delay_ms` (sample में 2000 ms) ही रखती है। Flow के बाद pool अपने ads process खत्म होने तक रखता है (`parity.keep_after_flow`), इसलिए resume screen, यानी DashDrama का welcome back, onboarding के बचे हुए ads दिखाती है, हर ad अपने fill के बाद अधिकतम एक घंटे तक, और `native_resume` केवल खुली रहने पर, हमेशा POLITE, request करती है। यह process death या उसी process में बाद के किसी `PER_SCREEN` run तक चलता है; अगला cold start सामान्य resume screen इस्तेमाल करता है। इसका SDK की Welcome Back screen से कोई संबंध नहीं।
+**Ads on return.** Pool की resume screen के लिए `app_resume.type = native_resume` (default) और `ad_config` में declared और चालू `native_resume` चाहिए; दूसरे type के साथ return ads उसी type के अनुसार चलते हैं, जैसा [Ads on return](#ads-on-return) में बताया गया है। यह तभी खुलती है जब app कम से कम `native_flow.pool.resume.min_background_ms` (default 2000 ms) background में रहा हो; classic native resume screen `open_resume.app_resume_load_delay_ms` (sample में 2000 ms) ही रखती है। Flow के बाद pool अपने ads process खत्म होने तक रखता है, इसलिए resume screen, यानी DashDrama का welcome back, onboarding के बचे हुए ads दिखाती है, हर ad अपने fill के बाद अधिकतम एक घंटे तक, और `native_resume` केवल खुली रहने पर, हमेशा POLITE, request करती है। यह process death या उसी process में बाद के किसी `PER_SCREEN` run तक चलता है; अगला cold start सामान्य resume screen इस्तेमाल करता है। इसका SDK की Welcome Back screen से कोई संबंध नहीं।
 
 **Purchases.** User premium होते ही हर pooled slot छिप जाता है और pool request करना बंद कर देता है, पहले से चल रही chain का अगला floor भी। Pool के पास पहले से रखे ads purchase के समय तभी release होते हैं जब host [BillingKit](billing-integration.hi.md) की तरह `AdGate.installPremiumObserver(appScope, Billing.isPremium)` बुलाता है। इसके बिना वे memory में रहते हैं, कभी दिखते नहीं, flow खत्म होने तक; flow के बाद हुई purchase में तब तक, जब तक वे अपने fill के एक घंटे बाद expire न हों, कोई `PER_SCREEN` run pool release न करे, या process खत्म न हो।
 
@@ -582,23 +582,22 @@ Privacy → Goal के बिना pager का आखिरी page flow ख�
 
 | `pool \|` के बाद की line | अर्थ |
 | --- | --- |
-| `activate keep_after_flow=… reset_on_new_run=…` | एक `SHARED_POOL` run शुरू हुआ। `classic_run` का अर्थ है कि एक `PER_SCREEN` run ने pool release किया; `deactivate` का अर्थ है कि `OnboardingSdk.reset()` ने किया। |
+| `activate` | एक `SHARED_POOL` run शुरू हुआ। `classic_run` का अर्थ है कि एक `PER_SCREEN` run ने pool release किया; `deactivate` का अर्थ है कि `OnboardingSdk.reset()` ने किया। |
 | `flow stage=…`, `stage -> …`, `ob1 back -> language` | दिख रहा stage, stage बदलाव, OB1 back button। |
-| `adopt language1 status=…` | LFO ने splash का LFO1 preload लिया या नहीं। आमतौर पर `none`, क्योंकि SDK का splash `SHARED_POOL` run के लिए LFO1 preload नहीं करता। अगर LFO1 फिर भी preload हुआ हो: `ready` (उसका ad ले लिया गया), `pending` (उसका चल रहा load join हुआ), `cancelled_queue` (queue में रुका load cancel हुआ और LFO अपना request करती है), `none` (splash load fail हुआ या शुरू ही नहीं हुआ), `off` (`adopt_splash_language1` `false` है)। |
+| `adopt language1 status=…` | LFO ने splash का LFO1 preload लिया या नहीं। आमतौर पर `none`, क्योंकि SDK का splash `SHARED_POOL` run के लिए LFO1 preload नहीं करता। अगर LFO1 फिर भी preload हुआ हो: `ready` (उसका ad ले लिया गया), `pending` (उसका चल रहा load join हुआ), `cancelled_queue` (queue में रुका load cancel हुआ और LFO अपना request करती है), `none` (splash load fail हुआ या शुरू ही नहीं हुआ)। |
 | `request key=… tier=… refresh=…` | एक floor request हुआ; लौटने पर refresh के लिए `refresh=true`। |
 | `fill key=… refresh=…` | Placement के पास अब नया ad है। |
 | `fail key=… tier=…`, `tier_timeout key=… tier=…` | उस floor ने fill नहीं दिया या समय पर जवाब नहीं दिया; अगला floor आता है। |
 | `exhausted key=… refresh=… why=…` | Chain बिना fill के खत्म हुई: `exhausted` (हर floor आज़माया), `refused reason=…` (chain के बीच कोई guard बंद हुआ), `adoption_failed`। Refresh अपना रखा ad रखता है। |
 | `gate_skip key=…` | दूसरी request चलने के कारण POLITE load छोड़ा गया; कोई analytics event नहीं भेजा जाता। |
 | `gate_skip refresh key=native_resume` | दूसरी pool request चलने के कारण resume screen ने अपना रखा हुआ ad refresh नहीं किया; उसके बाद की POLITE `native_resume` request भी उसी gate के अधीन है। कोई analytics event नहीं भेजा जाता। |
-| `window_wait key=… op=…` | `parity.respect_focus_window` `true` होने पर, screen के window focus के साथ सामने आने से पहले माँगा गया load या refresh; screen को focus मिलते ही request जाती है। इंतज़ार पर कोई analytics event नहीं भेजा जाता। |
 | `config_skip key=… reason=…` | पूरे run के लिए refuse (`premium`, `no_provider`, `ads_off_remote`, `ads_off_config`, `placement_off_remote`, `no_ad_unit`, `ua_gate`); screen owner नहीं बनती। |
 | `transient_skip key=… reason=…` | अभी के लिए refuse (`requests_held`, `offline`, `consent_not_granted`); screen फिर भी owner बनती है। |
 | `refresh_skip key=… reason=…` | उन्हीं guards ने refresh refuse किया; रखा हुआ ad बना रहता है। |
 | `expired key=…` | रखा ad `native.cache.max_age_ms` पार कर गया और हटाया गया। |
 | `stale_fill key=…` | Floor का timeout होने या pool release होने के बाद fill आया; उसे बिना दिखाए destroy किया जाता है। |
 | `stuck_loading key=… refresh=… ms=…` | `stuck_loading_log_ms` के बाद भी चल रही request; केवल log। |
-| `release_all loaders=…` | हर pooled ad release हुआ: purchase, pool न रखने वाले flow का अंत, एक `PER_SCREEN` run, `OnboardingSdk.reset()`, या `parity.reset_on_new_run` `true` होने पर नया `SHARED_POOL` run। |
+| `release_all loaders=…` | हर pooled ad release हुआ: purchase, एक `PER_SCREEN` run या `OnboardingSdk.reset()`। |
 
 `OnboardingSdk.dumpState()` एक suspend function है; इसे coroutine से log करें, जैसे `lifecycleScope.launch { Log.d("OB_STATE", OnboardingSdk.dumpState()) }`। इसमें run का native flow type, pool active है या नहीं और return ads को route करता है या नहीं, run के gate skips हर key के अनुसार, owner, gate खुला है या नहीं, और हर placement की एक line होती है, जैसे `language1 #0 state=Showing(ts=…) ad=held inFlight=false refreshing=false adopted=false fillAtMs=… saved=2` (`saved` उसकी saved request में floors की संख्या है)।
 
@@ -612,8 +611,7 @@ Privacy → Goal के बिना pager का आखिरी page flow ख�
 - Ads एक सख्ती से बढ़ते (strictly increasing) timestamp से क्रम में रहते हैं, इसलिए कभी बराबरी नहीं होती; DashDrama बराबरी map order से तय करता है।
 - Language-completed events Done tap पर भेजे जाते हैं; भाषा LFO के exit ad (splash interstitial का बचा हुआ ad) के बंद होने के बाद सहेजी जाती है।
 - Screen हटने पर slot का ad view destroy होता है (`view.destroy_on_teardown`); ad pool में रहता है।
-- Refresh चल रही request गिना जाता है (`parity.refresh_marks_in_flight`)।
-- LFO, भाषा confirmation popup, Privacy, Goal और resume screen के slots नया ad केवल तब bind करते हैं जब उनकी screen resumed हो: interstitial या ad के landing page के screen को ढकते समय आया ad, screen के फिर सामने आने तक बिना दिखे और बिना impression गिने इंतज़ार करता है। DashDrama उन्हें screen के started होते ही bind करता है; `parity.screen_slots_bind_started` `true` वही व्यवहार लौटाता है।
+- Refresh चल रही request गिना जाता है।
 - Ad expiry (एक घंटा) और हर floor का wait (30 सेकंड) SDK की values हैं।
 - भाषा confirmation popup और OB1 back button रखे गए हैं।
 

@@ -31,14 +31,10 @@ internal enum class PoolLocaleApply {
 internal data class NativeFlowSnapshot(
     val type: NativeFlowType = NativeFlowType.PER_SCREEN,
     val parity: PoolParity = PoolParity(),
-    val adoptSplashLanguage1: Boolean = true,
     val localeApply: PoolLocaleApply = PoolLocaleApply.IN_PLACE,
     val exitNextScreenTiming: NextScreenTiming = NextScreenTiming.AFTER_AD,
-    val doneHiddenGone: Boolean = true,
-    val pagerSmoothScroll: Boolean = true,
     /** Keep the selected page and its immediate neighbour prepared. */
     val pagerOffscreenPages: Int = 1,
-    val resumeOnGoals: Boolean = true,
     val stuckLoadingLogMs: Long = 60_000L,
     val viewDestroyOnTeardown: Boolean = true,
     val lfoConfirmRevealDelayMs: Long = 3_000L,

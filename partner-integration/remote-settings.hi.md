@@ -233,13 +233,9 @@ Type हर run में एक बार तय होता है: splash �
 
 | `native_flow.pool` field | Default | असर |
 | --- | --- | --- |
-| `adopt_splash_language1` | `true` | अगर LFO1 फिर भी preload हुआ हो, तो वह native दोबारा request होने के बजाय pool में जुड़ता है। SDK का splash `SHARED_POOL` run के लिए LFO1 preload नहीं करता (LFO उसे खुद request करती है), इसलिए इसका असर कम ही होता है। |
 | `locale_apply` | `"IN_PLACE"` | `IN_PLACE` चुनी भाषा चल रही screen पर लागू करता है; `RECREATE` उसे फिर से बनाता है। |
 | `exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD`: अगला stage LFO या Goal के exit ad के बंद होने के बाद शुरू हो या उसके नीचे। |
-| `done_hidden_gone` | `true` | छिपा forward button जगह नहीं लेता; `false` उसकी जगह रखता है। |
-| `pager.smooth_scroll` | `true` | Page बदलना animate होता है। |
 | `pager.offscreen_pages` | `1` | मौजूदा page के बगल में जीवित रखे pages; `1` अगला page तैयार रखता है। बड़ी value और पड़ोसी pages रखती है। |
-| `resume_on_goals` | `true` | Privacy और Goal पर return ads दिख सकते हैं। |
 | `stuck_loading_log_ms` | `60000` | इतनी देर बाद भी चल रही request log करता है; केवल log। |
 | `view.destroy_on_teardown` | `true` | Screen हटने पर slot का ad view destroy होता है; ad pool में रहता है। |
 | `goals.exit_reuse_splash_inter` | `true` | Goal का Next splash interstitial का बचा हुआ ad दिखाता है। |
@@ -250,17 +246,9 @@ Type हर run में एक बार तय होता है: splash �
 | `parity.async_selector` | `true` | हर slot कौन सा ad दिखाए, यह main thread से बाहर चुना जाता है; `false` तुरंत चुनता है। |
 | `parity.borrow_showing` | `true` | जिस slot के पास दिखाने को और कुछ नहीं, वह कहीं और दिखाया जा चुका ad दिखा सकता है; `false` उसे छिपाता है। |
 | `parity.destroy_replaced_ads` | `false` | बदला गया या expire हुआ ad destroy किए बिना छोड़ा जाता है; `true` उसे destroy करता है। |
-| `parity.keep_duplicate_ids` | `true` | Floors ad_config की सूची के अनुसार request होते हैं, duplicates समेत; `false` duplicates हटाता है। |
-| `parity.impression_marks_loader` | `true` | Placement की requests का कोई भी impression उसे shown चिह्नित करता है; `false` केवल उसके मौजूदा ad का। |
-| `parity.screen_slots_bind_started` | `false` | LFO, Privacy, Goal, भाषा confirmation popup और resume screen नया ad केवल resumed होने पर bind करते हैं, ताकि interstitial के नीचे आया ad बिना दिखे गिना न जाए; `true` reference app की तरह started होते ही bind करता है। |
 | `parity.pager_slots_bind_resumed` | `false` | Pager pages started होते ही ads bind करते हैं, ताकि अगला page swipe पूरा होने से पहले रखा हुआ नया ad दिखा सके; `true` resumed तक रुकता है। |
-| `parity.keep_after_flow` | `true` | Resume screen के लिए pool process खत्म होने तक रहता है; `false` onboarding पूरा होने पर उसे release करता है। |
-| `parity.reset_on_new_run` | `false` | नया run pool के ads रखता है; `true` खाली pool से शुरू करता है। |
-| `parity.respect_focus_window` | `false` | Requests window focus का इंतज़ार नहीं करतीं; `true` `PER_SCREEN` natives की तरह इंतज़ार करता है। |
-| `parity.resume_background_preload` | `false` | Native resume केवल अपनी screen खुलने पर request करता है; `true` background में भी preload करता है। |
-| `parity.refresh_marks_in_flight` | `true` | Refresh चल रही request गिना जाता है, इसलिए दूसरी screens के background loads रुकते हैं जबकि रखा हुआ ad दिखता रहता है; `false` refresh को इस जाँच से बाहर रखता है। |
 
-`parity.refresh_marks_in_flight` (जिसका default SDK के refresh model पर चलता है) और `parity.screen_slots_bind_started` (जिसका default ad policy पर चलता है) को छोड़कर, `parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
+`parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
 
 ## Fetch timing और QA
 
@@ -421,22 +409,10 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.parity.async_selector` | `true` |
 | `native_flow.pool.parity.borrow_showing` | `true` |
 | `native_flow.pool.parity.destroy_replaced_ads` | `false` |
-| `native_flow.pool.parity.keep_duplicate_ids` | `true` |
-| `native_flow.pool.parity.impression_marks_loader` | `true` |
-| `native_flow.pool.parity.screen_slots_bind_started` | `false` |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `false` |
-| `native_flow.pool.parity.keep_after_flow` | `true` |
-| `native_flow.pool.parity.reset_on_new_run` | `false` |
-| `native_flow.pool.parity.respect_focus_window` | `false` |
-| `native_flow.pool.parity.resume_background_preload` | `false` |
-| `native_flow.pool.parity.refresh_marks_in_flight` | `true` |
-| `native_flow.pool.adopt_splash_language1` | `true` |
 | `native_flow.pool.locale_apply` | `"IN_PLACE"` — `IN_PLACE` / `RECREATE` |
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` — `AFTER_AD` / `UNDER_AD` |
-| `native_flow.pool.done_hidden_gone` | `true` |
-| `native_flow.pool.pager.smooth_scroll` | `true` |
 | `native_flow.pool.pager.offscreen_pages` | `1` |
-| `native_flow.pool.resume_on_goals` | `true` |
 | `native_flow.pool.stuck_loading_log_ms` | `60000` |
 | `native_flow.pool.view.destroy_on_teardown` | `true` |
 | `native_flow.pool.lfo.confirm_button.reveal_delay_ms` | `3000` |

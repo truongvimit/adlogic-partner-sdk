@@ -28,7 +28,7 @@ internal object PoolPlacementMapper {
         val adConfigKey = OnboardingSdk.configuredPlacementKey(placement)
         return PoolRequest(
             key = placement.key,
-            ids = idsFor(placement, adConfigKey, snapshot.parity.keepDuplicateIds),
+            ids = idsFor(placement, adConfigKey),
             layoutRes = NativeTemplates.layoutForPlacement(placement),
             adConfigKey = adConfigKey,
             tierDeadlineMs = OnboardingSettings.behavior(placement)
@@ -51,12 +51,11 @@ internal object PoolPlacementMapper {
      * DashDrama requests the declared list as is, a repeated id included. The parser already
      * dropped disabled and blank floors; only the dedup of the classic waterfall is skipped.
      */
-    private fun idsFor(placement: AdPlacement, adConfigKey: String?, keepDuplicates: Boolean): List<String> {
+    private fun idsFor(placement: AdPlacement, adConfigKey: String?): List<String> {
         val adConfig = AdRemoteConfig.getInstance()
-        if (keepDuplicates && adConfigKey != null && adConfig.declares(adConfigKey)) {
+        if (adConfigKey != null && adConfig.declares(adConfigKey)) {
             return adConfig.ads[adConfigKey]?.takeIf { it.isEnable }?.ids.orEmpty()
         }
-        val unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement) ?: return emptyList()
-        return if (keepDuplicates) unit.tiers else unit.loadOrder
+        return OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement)?.tiers.orEmpty()
     }
 }

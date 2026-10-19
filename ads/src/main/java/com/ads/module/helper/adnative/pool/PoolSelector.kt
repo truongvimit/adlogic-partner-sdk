@@ -24,12 +24,12 @@ fun <H : Any> selectFromPool(
     if (parity.borrowShowing) {
         visible.newestBy { (it.state as? PoolState.Showing)?.ts }?.let { return it.selected() }
     }
-    return PoolSelection(null, null, anyInFlight(snapshot, parity))
+    return PoolSelection(null, null, anyInFlight(snapshot))
 }
 
-/** The gate's input: a refresh counts only under [PoolParity.refreshMarksInFlight]. */
-internal fun anyInFlight(snapshot: PoolSnapshot<*>, parity: PoolParity): Boolean =
-    snapshot.loaders.any { it.inFlight || (it.refreshing && parity.refreshMarksInFlight) }
+/** The gate's input; a refresh counts while the held ad keeps showing. */
+internal fun anyInFlight(snapshot: PoolSnapshot<*>): Boolean =
+    snapshot.loaders.any { it.inFlight || it.refreshing }
 
 internal fun isExpiredAt(fillAtMs: Long, nowMs: Long, maxAgeMs: Long): Boolean =
     maxAgeMs > 0 && nowMs - fillAtMs >= maxAgeMs

@@ -69,7 +69,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
-import io.onboardkit.ads.pool.screenSlotMinState
+import io.onboardkit.ads.pool.SCREEN_SLOT_MIN_STATE
 import io.onboardkit.config.onboardKitConfig
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.flow.NativeFlowType
@@ -98,7 +98,6 @@ private const val TEST_NATIVE_UNIT = "ca-app-pub-3940256099942544/2247696110"
 private const val FILL_WAIT_S = 30L
 private const val IMPRESSION_WAIT_MS = 15_000L
 private const val CLICK_WAIT_MS = 10_000L
-private const val NO_IMPRESSION_WINDOW_MS = 5_000L
 private const val SETTLE_MS = 3_000L
 private val SLOT_LAYOUT = R.layout.ob_layout_native_lfo
 
@@ -172,44 +171,14 @@ class PoolFlowDeviceTest {
         }
     }
 
-    @Test fun aDefaultScreenSlotUnderACoverInflatesNothingAndCountsOneImpressionOnceResumed() {
-        val (pool, ad) = loadOneFill()
-        installAsTheProcessPool(pool)
-        val minState = onMain { NativeFlowSnapshot().screenSlotMinState }
-        assertEquals("D-BIND: a screen slot binds only while RESUMED by default", Lifecycle.State.RESUMED, minState)
-        ActivityScenario.launch(PoolSlotDeviceActivity::class.java).use { scenario ->
-            val host = scenario.host()
-            val cover = cover(host)
-            val shown = AtomicInteger()
-            onMain { screenSlot(host, minState, shown).start() }
-            SystemClock.sleep(NO_IMPRESSION_WINDOW_MS)
-            onMain {
-                assertEquals("Still covered", Lifecycle.State.STARTED, host.lifecycle.currentState)
-                assertEquals("No NativeAdView inflated under the cover", 0, host.upper.childCount)
-            }
-            assertTrue("${pool.impressions.size} impression(s) under the cover", pool.impressions.isEmpty())
-            assertEquals(0, shown.get())
-
-            uncover(host, cover)
-            eventually("The slot binds once its host resumes") { onMain { host.upper.getChildAt(0) is NativeAdView } }
-            assertPopulated(onMain { host.upper.adView() }, ad)
-            eventually("The visible slot reports its impression", IMPRESSION_WAIT_MS) { pool.impressions.isNotEmpty() }
-            SystemClock.sleep(SETTLE_MS)
-            assertExactlyOneImpression(pool, ad)
-            assertEquals("The slot hears its one impression", 1, shown.get())
-        }
-    }
-
     /**
-     * Why D-BIND exists: a slot bound at STARTED under the cover gets an unseen GMA impression.
-     * This pins GMA, not the SDK: a GMA that stops counting covered views skips it.
+     * Screen slots bind at STARTED, so a fill under a cover is drawn already. This pins whether GMA
+     * reports an impression for that covered view; a GMA that waits for the view to be seen skips it.
      */
     @Test fun gmaCountsAnImpressionForASlotBoundAtStartedUnderACover() {
         val (pool, ad) = loadOneFill()
         installAsTheProcessPool(pool)
-        val dashDrama = NativeFlowSnapshot(parity = PoolParity(screenSlotsBindStarted = true))
-        val minState = onMain { dashDrama.screenSlotMinState }
-        assertEquals(Lifecycle.State.STARTED, minState)
+        val minState = SCREEN_SLOT_MIN_STATE
         ActivityScenario.launch(PoolSlotDeviceActivity::class.java).use { scenario ->
             val host = scenario.host()
             val cover = cover(host)
@@ -221,7 +190,7 @@ class PoolFlowDeviceTest {
             if (counted) SystemClock.sleep(SETTLE_MS)
             val underCover = pool.impressions.toList()
             uncover(host, cover)
-            assumeTrue("GMA counted no impression for the covered view; D-BIND may be unneeded", counted)
+            assumeTrue("GMA counted no impression for the covered view", counted)
             assertEquals("onAdImpression count for one NativeAd under the cover", listOf(ad), underCover)
         }
     }
@@ -240,7 +209,7 @@ class PoolFlowDeviceTest {
             val engaged = CopyOnWriteArrayList<Lifecycle.State>()
             pool.onClick = { reported += host.lifecycle.currentState }
             onMain {
-                screenSlot(host, NativeFlowSnapshot().screenSlotMinState, onEngaged = {
+                screenSlot(host, SCREEN_SLOT_MIN_STATE, onEngaged = {
                     engaged += host.lifecycle.currentState
                 }).start()
             }

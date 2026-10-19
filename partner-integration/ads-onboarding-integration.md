@@ -525,9 +525,9 @@ For app-open delay and gating see [app-open](../onboardkitorigin/README.md#app-o
 - **POLITE and FORCED loads.** Opening a screen, selecting a page and coming back to a screen are POLITE loads: they are skipped while any request is running in the pool, and a skipped load is dropped, not queued (`parity.retry_skipped_polite`). A language tap, a Privacy or Goal selection and the preload of the next full page are FORCED loads: they ignore the gate. The full-page preload is FORCED because it is asked in the same moment as the current page's own request, which would otherwise close a POLITE gate on it every time; it never changes the owner. Either way, a placement that already holds an ad or is loading requests nothing.
 - **Single-flight gate.** The gate is open only while no placement has a request running, so a POLITE load does not start while another request runs. The check is made off the main thread and can lag a frame (`parity.async_gate`). FORCED loads, return refreshes and an adopted splash load ignore the gate; the resume screen's refresh is the exception and waits for the gate like a POLITE load. A refresh counts as a running request.
 - **Selector.** Every slot shows the same pick: (1) the owner's ad, whenever the pool holds one for it; (2) otherwise the newest ad that no screen has shown yet; (3) otherwise the ad shown most recently; (4) otherwise a shimmer while a request runs, and a hidden slot when none does. A screen whose own ad has not arrived borrows another placement's ad, and its own ad replaces the borrowed one as soon as it fills.
-- **Refresh on return.** When a screen comes back to the front (from the background, an ad click or the resume screen), it requests the ad it owns again from the first floor while that ad keeps showing: a fill replaces it, a no-fill keeps it. This is the SDK's refresh model, not DashDrama's, whose refresh did not count as a running request (`parity.refresh_marks_in_flight`).
+- **Refresh on return.** When a screen comes back to the front (from the background, an ad click or the resume screen), it requests the ad it owns again from the first floor while that ad keeps showing: a fill replaces it, a no-fill keeps it. This is the SDK's refresh model, not DashDrama's, whose refresh did not count as a running request.
 - **Expiry and floor wait.** Both are the SDK's values, not pool keys: an ad older than `native.cache.max_age_ms` (one hour) is dropped and requested again the next time a screen asks for that placement, and a floor that does not answer within `native.load.tier_timeout_ms` (30 seconds) counts as a failure, so the next floor is requested.
-- **Floors.** A request walks the enabled floors of the key's `ids` in order. A repeated ID is requested again after a no-fill (`parity.keep_duplicate_ids`), unlike `PER_SCREEN`, which drops duplicates.
+- **Floors.** A request walks the enabled floors of the key's `ids` in order. A repeated ID is requested again after a no-fill, unlike `PER_SCREEN`, which drops duplicates.
 
 **Turn it on.**
 
@@ -556,7 +556,7 @@ Without Privacy → Goal the pager's last page ends the flow, with the paywall w
 
 **Privacy → Goal.** Off by default (`privacy_goals_screen.enabled = false`) in both flows, and it needs `goal.options`. DashDrama's first-open flow ends on its goal screen, so parity needs it on; without it the pooled flow ends after the pager. Privacy comes with Goal, as in `PER_SCREEN`, although that flow has no step between the pager and its goal screen. See [Privacy → Goal](privacy-goals-screen.md#under-shared_pool).
 
-**Ads on return.** The pool's resume screen needs `app_resume.type = native_resume` (the default) and `native_resume` declared and enabled in `ad_config`; with another type, return ads follow that type as described in [Ads on return](#ads-on-return). It opens only after the app stayed in the background at least `native_flow.pool.resume.min_background_ms` (default 2000 ms); the classic native resume screen keeps `open_resume.app_resume_load_delay_ms` (2000 ms in the sample). After the flow the pool keeps its ads until the process ends (`parity.keep_after_flow`), so the resume screen, DashDrama's welcome back, shows onboarding leftovers, each for at most one hour after its fill, and requests `native_resume` only while it is open, always POLITE. This lasts until process death or a later `PER_SCREEN` run in the same process; the next cold start uses the regular resume screen. It is unrelated to the SDK's Welcome Back screen.
+**Ads on return.** The pool's resume screen needs `app_resume.type = native_resume` (the default) and `native_resume` declared and enabled in `ad_config`; with another type, return ads follow that type as described in [Ads on return](#ads-on-return). It opens only after the app stayed in the background at least `native_flow.pool.resume.min_background_ms` (default 2000 ms); the classic native resume screen keeps `open_resume.app_resume_load_delay_ms` (2000 ms in the sample). After the flow the pool keeps its ads until the process ends, so the resume screen, DashDrama's welcome back, shows onboarding leftovers, each for at most one hour after its fill, and requests `native_resume` only while it is open, always POLITE. This lasts until process death or a later `PER_SCREEN` run in the same process; the next cold start uses the regular resume screen. It is unrelated to the SDK's Welcome Back screen.
 
 **Purchases.** Once the user is premium, every pooled slot hides and the pool stops requesting, including the next floor of a chain already running. The ads the pool already holds are released at the purchase only when the host calls `AdGate.installPremiumObserver(appScope, Billing.isPremium)` as in [BillingKit](billing-integration.md). Without it they stay in memory, never shown, until the flow ends or, for a purchase after the flow, until they expire one hour after their fill, a `PER_SCREEN` run releases the pool, or the process ends.
 
@@ -582,23 +582,22 @@ Without Privacy → Goal the pager's last page ends the flow, with the paywall w
 
 | Line after `pool \|` | Meaning |
 | --- | --- |
-| `activate keep_after_flow=… reset_on_new_run=…` | A `SHARED_POOL` run started. `classic_run` means a `PER_SCREEN` run released the pool; `deactivate` means `OnboardingSdk.reset()` did. |
+| `activate` | A `SHARED_POOL` run started. `classic_run` means a `PER_SCREEN` run released the pool; `deactivate` means `OnboardingSdk.reset()` did. |
 | `flow stage=…`, `stage -> …`, `ob1 back -> language` | The stage shown, a stage change, the OB1 back button. |
-| `adopt language1 status=…` | Whether the LFO took over a splash LFO1 preload. Normally `none`, since the SDK splash does not preload LFO1 for a `SHARED_POOL` run. If LFO1 was preloaded anyway: `ready` (its ad was taken over), `pending` (its running load was joined), `cancelled_queue` (its queued load was cancelled and LFO requests its own), `none` (the splash load failed or never started), `off` (`adopt_splash_language1` is `false`). |
+| `adopt language1 status=…` | Whether the LFO took over a splash LFO1 preload. Normally `none`, since the SDK splash does not preload LFO1 for a `SHARED_POOL` run. If LFO1 was preloaded anyway: `ready` (its ad was taken over), `pending` (its running load was joined), `cancelled_queue` (its queued load was cancelled and LFO requests its own), `none` (the splash load failed or never started). |
 | `request key=… tier=… refresh=…` | One floor requested; `refresh=true` for a refresh on return. |
 | `fill key=… refresh=…` | The placement now holds a new ad. |
 | `fail key=… tier=…`, `tier_timeout key=… tier=…` | That floor did not fill or did not answer in time; the next floor follows. |
 | `exhausted key=… refresh=… why=…` | The chain ended without a fill: `exhausted` (every floor tried), `refused reason=…` (a guard closed mid-chain), `adoption_failed`. A refresh keeps the ad it held. |
 | `gate_skip key=…` | A POLITE load skipped because another request was running; no analytics event is sent. |
 | `gate_skip refresh key=native_resume` | The resume screen did not refresh its held ad because another pool request was running; its POLITE request for `native_resume` follows under the same gate. No analytics event is sent. |
-| `window_wait key=… op=…` | With `parity.respect_focus_window` `true`, a load or refresh asked while the screen was not in front with window focus; it goes out once the screen has focus. No analytics event is sent for the wait. |
 | `config_skip key=… reason=…` | Refused for the run (`premium`, `no_provider`, `ads_off_remote`, `ads_off_config`, `placement_off_remote`, `no_ad_unit`, `ua_gate`); the screen does not become the owner. |
 | `transient_skip key=… reason=…` | Refused for now (`requests_held`, `offline`, `consent_not_granted`); the screen still becomes the owner. |
 | `refresh_skip key=… reason=…` | A refresh refused by the same guards; the held ad stays. |
 | `expired key=…` | The held ad passed `native.cache.max_age_ms` and was dropped. |
 | `stale_fill key=…` | A fill arrived after its floor timed out or the pool was released; it is destroyed unshown. |
 | `stuck_loading key=… refresh=… ms=…` | A request still running after `stuck_loading_log_ms`; log only. |
-| `release_all loaders=…` | Every pooled ad was released: a purchase, the end of a flow that does not keep the pool, a `PER_SCREEN` run, `OnboardingSdk.reset()`, or a new `SHARED_POOL` run with `parity.reset_on_new_run` `true`. |
+| `release_all loaders=…` | Every pooled ad was released: a purchase, a `PER_SCREEN` run or `OnboardingSdk.reset()`. |
 
 `OnboardingSdk.dumpState()` is a suspend function; log it from a coroutine, for example `lifecycleScope.launch { Log.d("OB_STATE", OnboardingSdk.dumpState()) }`. It includes the run's native flow type, whether the pool is active and routes return ads, the run's gate skips per key, the owner, whether the gate is open, and one line per placement, for example `language1 #0 state=Showing(ts=…) ad=held inFlight=false refreshing=false adopted=false fillAtMs=… saved=2` (`saved` is the number of floors in its saved request).
 
@@ -612,8 +611,7 @@ Without Privacy → Goal the pager's last page ends the flow, with the paywall w
 - Ads are ordered by one strictly increasing timestamp, so two ads never tie; DashDrama breaks ties by map order.
 - The language-completed events are sent at the Done tap; the language is saved after the LFO exit ad (the splash interstitial's leftover) closes.
 - A slot's ad view is destroyed when its screen goes away (`view.destroy_on_teardown`); the ad stays in the pool.
-- A refresh counts as a running request (`parity.refresh_marks_in_flight`).
-- The LFO, language confirmation popup, Privacy, Goal and resume screen slots bind a new ad only while their screen is resumed: an ad that arrives while an interstitial or an ad's landing page covers the screen waits, unseen and uncounted, until the screen is back in front. DashDrama binds once the screen is started; `parity.screen_slots_bind_started` `true` restores that.
+- A refresh counts as a running request.
 - Ad expiry (one hour) and the wait per floor (30 seconds) are the SDK's values.
 - The language confirmation popup and the OB1 back button are kept.
 

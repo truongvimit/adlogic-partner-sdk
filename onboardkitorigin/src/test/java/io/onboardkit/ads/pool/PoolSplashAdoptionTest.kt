@@ -197,20 +197,6 @@ class PoolSplashAdoptionTest {
         assertEquals(listOf("adopt language1 status=none handoff=false"), adoptLog())
     }
 
-    @Test fun `with adoption off the splash preload is left alone`() {
-        startSplashLoad()
-        splashFill()
-        PoolTestProvider.language1Status = NativeStatus.READY
-        assertEquals(Status.OFF, run(snapshot = poolSnapshot(adoptSplashLanguage1 = false)))
-        assertTrue(NativeAdManager.isReady(key))
-        assertTrue(PoolTestProvider.released.isEmpty())
-        assertNull(lfo1())
-        assertEquals(LoadResult.Requested, claimLfo1())
-        assertEquals(listOf("lfo1-high"), loader.callsFor(key))
-        assertEquals(listOf("adopt language1 status=off handoff=true"), adoptLog())
-        assertEquals(listOf(key), PoolTestSdk.requested())
-    }
-
     @Test fun `without a pool nothing is adopted or cancelled`() {
         SharedNativePool.resetForTest()
         PoolTestProvider.language1Status = NativeStatus.LOADING
@@ -219,15 +205,11 @@ class PoolSplashAdoptionTest {
         assertTrue(PoolTestSdk.requested().isEmpty())
     }
 
-    @Test fun `the handoff flag is the caller's to consume, whether or not adoption runs`() {
+    @Test fun `the handoff flag is the caller's to consume`() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val preload = OnboardingSdk.preload()
         preload.preloadLanguage1(activity)
         assertEquals(Status.NONE, run(handoff = true))
         assertTrue("run() never reads or clears the flag", preload.takeLanguage1Preload())
-
-        preload.preloadLanguage1(activity)
-        assertEquals(Status.OFF, run(handoff = true, snapshot = poolSnapshot(adoptSplashLanguage1 = false)))
-        assertTrue("Nor with adoption off: the LFO consumes it", preload.takeLanguage1Preload())
     }
 }

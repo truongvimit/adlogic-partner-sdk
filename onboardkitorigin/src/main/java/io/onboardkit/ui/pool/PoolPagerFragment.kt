@@ -230,10 +230,7 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
             leave()
             return
         }
-        val smooth = snapshot.pagerSmoothScroll
-        pager.setCurrentItem(position + 1, smooth)
-        // A jump onto a page that is already laid out may report no scroll at all.
-        if (!smooth) showOb1Back(position + 1, 0f)
+        pager.setCurrentItem(position + 1, true)
     }
 
     /** The page's own clock once it was told it is selected, else the stage's from the selection. */

@@ -94,15 +94,12 @@ class PoolSelectorTest {
         )
     }
 
-    @Test fun `a refreshing owner is still selected by rule 1 in both refresh models`() {
-        for (marks in listOf(true, false)) {
-            val loaders = listOf(
-                loader("own", PoolState.Showing(10), refreshing = true),
-                loader("other", PoolState.Loaded(20)),
-            )
-            val selection = select(*loaders.toTypedArray(), owner = "own", parity = PoolParity(refreshMarksInFlight = marks))
-            assertLender("own", selection, loaders)
-        }
+    @Test fun `a refreshing owner is still selected by rule 1`() {
+        val loaders = listOf(
+            loader("own", PoolState.Showing(10), refreshing = true),
+            loader("other", PoolState.Loaded(20)),
+        )
+        assertLender("own", select(*loaders.toTypedArray(), owner = "own"), loaders)
     }
 
     @Test fun `a refreshing loader lends its held ad to other slots`() {
@@ -110,20 +107,15 @@ class PoolSelectorTest {
         assertLender("a", select(*loaders.toTypedArray(), owner = "elsewhere"), loaders)
     }
 
-    @Test fun `a refresh counts for rule 4 only when refreshMarksInFlight`() {
+    @Test fun `a refresh counts for rule 4`() {
         val refreshing = loader("a", PoolState.Showing(10), refreshing = true)
-        val marking = select(refreshing, parity = PoolParity(borrowShowing = false, refreshMarksInFlight = true))
-        val invisible = select(refreshing, parity = PoolParity(borrowShowing = false, refreshMarksInFlight = false))
-        assertEquals(PoolSelection.shimmer<FakeAd>(), marking)
-        assertEquals(PoolSelection.hidden<FakeAd>(), invisible)
+        assertEquals(PoolSelection.shimmer<FakeAd>(), select(refreshing, parity = PoolParity(borrowShowing = false)))
     }
 
-    @Test fun `anyInFlight counts a refresh only when refreshMarksInFlight`() {
-        val snapshot = PoolSnapshot(listOf(loader("a", PoolState.Loaded(1), refreshing = true)), null, 1L)
-        assertTrue(anyInFlight(snapshot, PoolParity(refreshMarksInFlight = true)))
-        assertFalse(anyInFlight(snapshot, PoolParity(refreshMarksInFlight = false)))
-        val normal = PoolSnapshot(listOf(loader("b", PoolState.None, inFlight = true)), null, 1L)
-        assertTrue(anyInFlight(normal, PoolParity(refreshMarksInFlight = false)))
+    @Test fun `anyInFlight counts a refresh`() {
+        assertTrue(anyInFlight(PoolSnapshot(listOf(loader("a", PoolState.Loaded(1), refreshing = true)), null, 1L)))
+        assertTrue(anyInFlight(PoolSnapshot(listOf(loader("b", PoolState.None, inFlight = true)), null, 1L)))
+        assertFalse(anyInFlight(PoolSnapshot(listOf(loader("c", PoolState.Loaded(1))), null, 1L)))
     }
 
     @Test fun `an expired ad is invisible to every rule, the owner's included`() {

@@ -173,9 +173,6 @@ class OnboardingPoolTest {
         assertNull(OnboardingPool.lastResult(AdPlacement.Language1))
         assertTrue(OnboardingPool.isActive)
         assertTrue(OnboardingPool.routeResume)
-
-        activate(poolSnapshot(SYNC_PARITY.copy(resetOnNewRun = true)))
-        assertTrue(engine.debugSnapshot().loaders.isEmpty())
     }
 
     @Test fun `a classic run turns resume routing off and releases the pool`() {

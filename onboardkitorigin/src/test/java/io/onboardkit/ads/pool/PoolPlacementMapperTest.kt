@@ -29,7 +29,6 @@ import org.robolectric.annotation.LooperMode
 class PoolPlacementMapperTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val keep = poolSnapshot()
-    private val dedup = poolSnapshot(SYNC_PARITY.copy(keepDuplicateIds = false))
 
     @Before fun setUp() {
         PoolTestSdk.install(app)
@@ -54,23 +53,16 @@ class PoolPlacementMapperTest {
         assertSame(AdPlacement.Language1, PoolPlacementMapper.placementFor("language1"))
     }
 
-    @Test fun `without keep_duplicate_ids the waterfall is deduplicated like the classic one`() {
-        declare("""{"native_lang":{"ids":[{"id":"a"},{"id":"a"},{"id":"b"}],"isEnable":true}}""")
-        assertEquals(listOf("a", "b"), request(AdPlacement.Language1, dedup).ids)
-    }
-
     @Test fun `a switched-off ad_config entry has no ids`() {
         declare("""{"native_lang":{"ids":[{"id":"a"}],"isEnable":false}}""")
         assertEquals(emptyList<String>(), request(AdPlacement.Language1).ids)
     }
 
     @Test fun `units set in code are requested in their declared order`() {
-        // The config validator already refuses a repeated id in code, so both modes agree here.
         PoolTestSdk.configure(POOL_ADS.copy(languageNative = NativeAdUnit(listOf("y", "x"))))
         val raw = request(AdPlacement.Language1)
         assertEquals(listOf("y", "x"), raw.ids)
         assertNull("No ad_config key declares it", raw.adConfigKey)
-        assertEquals(listOf("y", "x"), request(AdPlacement.Language1, dedup).ids)
     }
 
     @Test fun `Language2 without units of its own reads Language1's key`() {

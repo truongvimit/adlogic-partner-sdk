@@ -8,7 +8,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
-import io.onboardkit.ads.pool.screenSlotMinState
+import io.onboardkit.ads.pool.SCREEN_SLOT_MIN_STATE
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.base.BaseOnboardActivity
@@ -49,7 +49,6 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             return
         }
         adClicked = savedInstanceState?.getBoolean(KEY_AD_CLICKED) == true
-        OnboardingPool.attachScreen(this)
         val views = ResumeScreenViews.inflate(layoutInflater)
         setContentView(views.root)
         val cfg = sdk.requireConfig().resumeScreen
@@ -66,7 +65,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             // OWNER only for visibility: like DashDrama's p(k()), the frame collapses when native_resume
             // itself is refused instead of lending another screen's ad. The screen still never claims.
             kind = PoolNativeSlot.Kind.OWNER,
-            minState = flow.screenSlotMinState,
+            minState = SCREEN_SLOT_MIN_STATE,
             container = views.ad,
             callbacks = StepSlotCallbacks(
                 onLoading = { if (!adClicked) views.adBlock.isVisible = true },
@@ -94,7 +93,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
 
     /**
      * Frozen at the click, which may be reported once the landing page has paused the screen: the
-     * slot's re-collect on the way back (at STARTED under `screen_slots_bind_started`) must wait
+     * slot's re-collect on the way back (at STARTED) must wait
      * until onResume explicitly redraws the held selection.
      */
     private fun onAdClicked() {
@@ -128,7 +127,6 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     }
 
     override fun onDestroy() {
-        OnboardingPool.detachScreen(this)
         slot = null
         super.onDestroy()
     }

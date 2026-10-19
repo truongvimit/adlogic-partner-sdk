@@ -111,20 +111,7 @@ class PoolResumeTest {
         assertEquals(0, PoolUiSdk.suppressDepth())
     }
 
-    @Test fun `D-BIND - the resume screen binds a fill only while resumed`() {
-        OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
-        val screen = openResume()
-        screen.pause()
-        main.idle()
-        val ad = fill("language1")
-        assertNull("Nothing bound while only started", screen.slot().shownAd())
-        screen.resume()
-        main.idle()
-        assertSame(ad.admobNativeAd, screen.slot().shownAd())
-    }
-
-    @Test fun `screen_slots_bind_started binds the resume screen's fill while it is only started`() {
-        OnboardingSdk.session.nativeFlow = poolSnapshot(SYNC_PARITY.copy(screenSlotsBindStarted = true))
+    @Test fun `the resume screen binds a fill while it is only started`() {
         OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
         val screen = openResume()
         screen.pause()
@@ -288,17 +275,10 @@ class PoolResumeTest {
         assertNull("The classic screen never opens over the pooled one", shadowOf(screen.get()).nextStartedActivity)
     }
 
-    @Test fun `prepare stays out of the provider while routed and warms the pool only under resume_background_preload`() {
+    @Test fun `prepare stays out of the provider and the pool while routed`() {
         ObNativeResume.prepare(app)
         main.idle()
         assertTrue(loader.callsFor("native_resume").isEmpty())
-        assertTrue(PoolUiSdk.provider.backgroundPreloads.isEmpty())
-
-        OnboardingSdk.session.nativeFlow = poolSnapshot(SYNC_PARITY.copy(resumeBackgroundPreload = true))
-        ObNativeResume.prepare(app)
-        main.idle()
-        assertEquals(1, loader.callsFor("native_resume").size)
-        assertNull("A preload never owns", engine.owner)
         assertTrue(PoolUiSdk.provider.backgroundPreloads.isEmpty())
 
         OnboardingPool.onClassicRun()

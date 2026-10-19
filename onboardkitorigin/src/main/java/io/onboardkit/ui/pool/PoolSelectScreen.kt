@@ -11,7 +11,7 @@ import com.ads.module.helper.adnative.pool.reportsSuccess
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
-import io.onboardkit.ads.pool.screenSlotMinState
+import io.onboardkit.ads.pool.SCREEN_SLOT_MIN_STATE
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 
@@ -59,17 +59,13 @@ internal class PoolSelectScreen(
     fun onViewCreated(container: FrameLayout, forward: View) {
         val snapshot = snapshot
         this.forward = forward
-        forward.visibility = when {
-            selectedOnce -> View.VISIBLE
-            snapshot.doneHiddenGone -> View.GONE
-            else -> View.INVISIBLE
-        }
+        forward.visibility = if (selectedOnce) View.VISIBLE else View.GONE
         attempt(ad1, LoadMode.POLITE)
         PoolNativeSlot(
             owner = fragment.viewLifecycleOwner,
             placement = ad1,
             kind = PoolNativeSlot.Kind.NON_OWNER,
-            minState = snapshot.screenSlotMinState,
+            minState = SCREEN_SLOT_MIN_STATE,
             container = container,
             destroyOnTeardown = snapshot.viewDestroyOnTeardown,
         ).start()

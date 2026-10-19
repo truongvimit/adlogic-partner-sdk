@@ -664,13 +664,6 @@ class PoolPagerTest {
         assertEquals(View.GONE, back.visibility)
         destroy()
 
-        // A jump onto a laid-out page may report no scroll at all.
-        launch(snapshot = poolSnapshot().copy(pagerSmoothScroll = false))
-        assertEquals(View.VISIBLE, back.visibility)
-        activity.next(StepExit.CTA)
-        assertEquals(View.GONE, back.visibility)
-        destroy()
-
         launch(settings = """{"onboarding":{"steps":{"ob1":{"back":{"enabled":false}}}}}""")
         assertEquals(View.GONE, back.visibility)
         back.performClick()

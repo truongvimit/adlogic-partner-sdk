@@ -525,9 +525,9 @@ Delay/gate của app-open xem [app-open](../onboardkitorigin/README.vi.md#app-op
 - **Load POLITE và FORCED.** Mở màn, chọn trang và quay lại màn là load POLITE: bị bỏ qua khi pool đang có request chạy, và load bị bỏ qua thì bỏ luôn, không xếp hàng (`parity.retry_skipped_polite`). Tap ngôn ngữ, lựa chọn ở Privacy hoặc Goal và preload trang full kế tiếp là load FORCED: chúng bỏ qua gate. Preload trang full là FORCED vì nó được gọi cùng lúc với request của chính trang hiện tại, nên nếu là POLITE thì lần nào cũng bị gate chặn; nó không bao giờ đổi owner. Cả hai loại đều không request gì khi placement đã giữ ad hoặc đang load.
 - **Gate một request.** Gate chỉ mở khi không placement nào có request đang chạy, nên load POLITE không bắt đầu khi đang có request khác chạy. Việc kiểm tra chạy ngoài main thread và có thể trễ một frame (`parity.async_gate`). Load FORCED, refresh khi quay lại và load splash mà pool nhận lại bỏ qua gate; riêng refresh của màn resume là ngoại lệ, chờ gate như một load POLITE. Refresh được tính là request đang chạy.
 - **Bộ chọn.** Mọi slot hiện cùng một lựa chọn: (1) ad của owner, khi pool có ad cho nó; (2) nếu không, ad mới nhất chưa màn nào hiển thị; (3) nếu không, ad được hiển thị gần nhất; (4) nếu không, shimmer khi có request đang chạy, và ẩn slot khi không có. Màn chưa có ad của mình thì mượn ad của placement khác, và ad của chính nó thay ad mượn ngay khi fill.
-- **Refresh khi quay lại.** Khi một màn trở lại phía trước (từ background, từ click ad hoặc từ màn resume), nó request lại ad mình đang sở hữu từ tầng đầu trong khi ad đó vẫn hiện: fill thì thay, no-fill thì giữ. Đây là mô hình refresh của SDK, không phải của DashDrama, nơi refresh không được tính là request đang chạy (`parity.refresh_marks_in_flight`).
+- **Refresh khi quay lại.** Khi một màn trở lại phía trước (từ background, từ click ad hoặc từ màn resume), nó request lại ad mình đang sở hữu từ tầng đầu trong khi ad đó vẫn hiện: fill thì thay, no-fill thì giữ. Đây là mô hình refresh của SDK, không phải của DashDrama, nơi refresh không được tính là request đang chạy.
 - **Hết hạn và thời gian chờ mỗi tầng.** Cả hai là giá trị của SDK, không phải key của pool: ad cũ hơn `native.cache.max_age_ms` (một giờ) bị bỏ và lần kế tiếp một màn xin placement đó sẽ request lại; tầng không trả lời trong `native.load.tier_timeout_ms` (30 giây) được tính là lỗi, nên tầng kế tiếp được request.
-- **Các tầng.** Một request đi lần lượt các tầng đang bật trong `ids` của key. ID lặp lại được request lại sau no-fill (`parity.keep_duplicate_ids`), khác `PER_SCREEN` là bỏ ID trùng.
+- **Các tầng.** Một request đi lần lượt các tầng đang bật trong `ids` của key. ID lặp lại được request lại sau no-fill, khác `PER_SCREEN` là bỏ ID trùng.
 
 **Bật flow.**
 
@@ -556,7 +556,7 @@ Không có Privacy → Goal thì trang cuối của pager kết thúc flow, có 
 
 **Privacy → Goal.** Mặc định tắt (`privacy_goals_screen.enabled = false`) ở cả hai flow, và cần `goal.options`. Flow mở lần đầu của DashDrama kết thúc ở màn goal, nên muốn giống DashDrama thì phải bật; không bật thì flow pool kết thúc sau pager. Privacy đi cùng Goal như ở `PER_SCREEN`, dù flow đó không có bước nào giữa pager và màn goal. Xem [Privacy → Goal](privacy-goals-screen.vi.md#khi-chạy-shared_pool).
 
-**Ads khi quay lại.** Màn resume của pool cần `app_resume.type = native_resume` (mặc định) và `native_resume` được khai và bật trong `ad_config`; với dạng khác, ad khi quay lại theo dạng đó như mô tả ở [Ads khi quay lại](#ads-khi-quay-lại). Màn chỉ mở khi app đã ở background ít nhất `native_flow.pool.resume.min_background_ms` (mặc định 2000ms); màn native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms` (2000ms trong bản mẫu). Sau flow, pool giữ ad tới khi process kết thúc (`parity.keep_after_flow`), nên màn resume, tức màn welcome back của DashDrama, hiện ad onboarding còn lại, mỗi ad tối đa một giờ kể từ lúc fill, và chỉ request `native_resume` khi màn đang mở, luôn ở dạng POLITE. Việc này kéo dài tới khi process chết hoặc một lượt `PER_SCREEN` sau đó chạy trong cùng process; lần mở nguội kế tiếp dùng màn resume thường. Màn này không liên quan tới màn Welcome Back của SDK.
+**Ads khi quay lại.** Màn resume của pool cần `app_resume.type = native_resume` (mặc định) và `native_resume` được khai và bật trong `ad_config`; với dạng khác, ad khi quay lại theo dạng đó như mô tả ở [Ads khi quay lại](#ads-khi-quay-lại). Màn chỉ mở khi app đã ở background ít nhất `native_flow.pool.resume.min_background_ms` (mặc định 2000ms); màn native resume classic vẫn dùng `open_resume.app_resume_load_delay_ms` (2000ms trong bản mẫu). Sau flow, pool giữ ad tới khi process kết thúc, nên màn resume, tức màn welcome back của DashDrama, hiện ad onboarding còn lại, mỗi ad tối đa một giờ kể từ lúc fill, và chỉ request `native_resume` khi màn đang mở, luôn ở dạng POLITE. Việc này kéo dài tới khi process chết hoặc một lượt `PER_SCREEN` sau đó chạy trong cùng process; lần mở nguội kế tiếp dùng màn resume thường. Màn này không liên quan tới màn Welcome Back của SDK.
 
 **Mua hàng.** Khi user thành premium, mọi slot của pool ẩn và pool ngừng request, kể cả tầng kế tiếp của chuỗi đang chạy. Ad pool đang giữ chỉ được giải phóng ngay lúc mua khi host gọi `AdGate.installPremiumObserver(appScope, Billing.isPremium)` như trong [BillingKit](billing-integration.vi.md). Không có observer này, ad nằm trong bộ nhớ, không bao giờ hiện, tới khi flow kết thúc; nếu user mua sau flow thì tới khi ad hết hạn một giờ sau lúc fill, một lượt `PER_SCREEN` giải phóng pool, hoặc process kết thúc.
 
@@ -582,23 +582,22 @@ Không có Privacy → Goal thì trang cuối của pager kết thúc flow, có 
 
 | Dòng sau `pool \|` | Ý nghĩa |
 | --- | --- |
-| `activate keep_after_flow=… reset_on_new_run=…` | Một lượt `SHARED_POOL` bắt đầu. `classic_run` nghĩa là một lượt `PER_SCREEN` đã giải phóng pool; `deactivate` nghĩa là `OnboardingSdk.reset()` đã giải phóng pool. |
+| `activate` | Một lượt `SHARED_POOL` bắt đầu. `classic_run` nghĩa là một lượt `PER_SCREEN` đã giải phóng pool; `deactivate` nghĩa là `OnboardingSdk.reset()` đã giải phóng pool. |
 | `flow stage=…`, `stage -> …`, `ob1 back -> language` | Chặng đang hiện, chuyển chặng, nút back OB1. |
-| `adopt language1 status=…` | LFO có nhận preload LFO1 của splash hay không. Thường là `none`, vì splash của SDK không preload LFO1 cho lượt `SHARED_POOL`. Nếu LFO1 vẫn được preload: `ready` (ad đã được nhận), `pending` (load đang chạy đã được join), `cancelled_queue` (load trong queue đã bị huỷ và LFO tự request), `none` (load của splash fail hoặc chưa bắt đầu), `off` (`adopt_splash_language1` là `false`). |
+| `adopt language1 status=…` | LFO có nhận preload LFO1 của splash hay không. Thường là `none`, vì splash của SDK không preload LFO1 cho lượt `SHARED_POOL`. Nếu LFO1 vẫn được preload: `ready` (ad đã được nhận), `pending` (load đang chạy đã được join), `cancelled_queue` (load trong queue đã bị huỷ và LFO tự request), `none` (load của splash fail hoặc chưa bắt đầu). |
 | `request key=… tier=… refresh=…` | Request một tầng; `refresh=true` khi là refresh lúc quay lại. |
 | `fill key=… refresh=…` | Placement vừa giữ ad mới. |
 | `fail key=… tier=…`, `tier_timeout key=… tier=…` | Tầng đó không fill hoặc không trả lời kịp; tầng kế tiếp được request. |
 | `exhausted key=… refresh=… why=…` | Chuỗi kết thúc không có fill: `exhausted` (đã thử mọi tầng), `refused reason=…` (một guard đóng giữa chuỗi), `adoption_failed`. Refresh giữ ad đang có. |
 | `gate_skip key=…` | Load POLITE bị bỏ qua vì request khác đang chạy; không gửi event analytics. |
 | `gate_skip refresh key=native_resume` | Màn resume không refresh ad đang giữ vì một request khác của pool đang chạy; request POLITE `native_resume` theo sau cũng chịu cùng gate. Không gửi event analytics. |
-| `window_wait key=… op=…` | Khi `parity.respect_focus_window` là `true`, load hoặc refresh được gọi lúc màn chưa ở trước với window focus; request đi khi màn có focus. Việc chờ không gửi event analytics. |
 | `config_skip key=… reason=…` | Bị từ chối cho cả lượt chạy (`premium`, `no_provider`, `ads_off_remote`, `ads_off_config`, `placement_off_remote`, `no_ad_unit`, `ua_gate`); màn không thành owner. |
 | `transient_skip key=… reason=…` | Bị từ chối tạm thời (`requests_held`, `offline`, `consent_not_granted`); màn vẫn thành owner. |
 | `refresh_skip key=… reason=…` | Refresh bị cùng các guard từ chối; ad đang giữ vẫn ở lại. |
 | `expired key=…` | Ad đang giữ đã quá `native.cache.max_age_ms` và bị bỏ. |
 | `stale_fill key=…` | Fill về sau khi tầng đã timeout hoặc pool đã được giải phóng; bị huỷ mà không hiển thị. |
 | `stuck_loading key=… refresh=… ms=…` | Request vẫn chạy sau `stuck_loading_log_ms`; chỉ log. |
-| `release_all loaders=…` | Mọi ad của pool đã được giải phóng: mua hàng, kết thúc flow không giữ pool, một lượt `PER_SCREEN`, `OnboardingSdk.reset()`, hoặc một lượt `SHARED_POOL` mới khi `parity.reset_on_new_run` là `true`. |
+| `release_all loaders=…` | Mọi ad của pool đã được giải phóng: mua hàng, một lượt `PER_SCREEN` hoặc `OnboardingSdk.reset()`. |
 
 `OnboardingSdk.dumpState()` là hàm suspend; ghi log nó từ coroutine, ví dụ `lifecycleScope.launch { Log.d("OB_STATE", OnboardingSdk.dumpState()) }`. Kết quả gồm native flow type của lượt chạy, pool có đang hoạt động và nhận ad khi quay lại không, số lần gate skip của lượt chạy theo từng key, owner, gate đang mở hay đóng, và một dòng cho mỗi placement, ví dụ `language1 #0 state=Showing(ts=…) ad=held inFlight=false refreshing=false adopted=false fillAtMs=… saved=2` (`saved` là số tầng trong request đã lưu).
 
@@ -612,8 +611,7 @@ Không có Privacy → Goal thì trang cuối của pager kết thúc flow, có 
 - Ad được xếp theo một timestamp chung tăng ngặt nên không bao giờ bằng nhau; DashDrama phân định bằng thứ tự map.
 - Các event hoàn tất ngôn ngữ được gửi lúc tap Done; ngôn ngữ được lưu sau khi ad thoát của LFO (interstitial splash còn lại) đóng.
 - View ad của slot bị huỷ khi màn của nó đóng (`view.destroy_on_teardown`); ad vẫn ở trong pool.
-- Refresh được tính là request đang chạy (`parity.refresh_marks_in_flight`).
-- Slot của LFO, popup xác nhận ngôn ngữ, Privacy, Goal và màn resume chỉ bind ad mới khi màn đang resume: ad về trong lúc interstitial hoặc trang đích của ad che màn sẽ chờ, không hiện và không tính impression, tới khi màn quay lại phía trước. DashDrama bind ngay khi màn start; `parity.screen_slots_bind_started` `true` khôi phục cách đó.
+- Refresh được tính là request đang chạy.
 - Thời hạn ad (một giờ) và thời gian chờ mỗi tầng (30 giây) là giá trị của SDK.
 - Giữ popup xác nhận ngôn ngữ và nút back OB1.
 

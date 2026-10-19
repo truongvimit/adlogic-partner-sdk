@@ -91,7 +91,7 @@ class NativePoolEngine<H : Any>(
 
     private val derived = PoolDerived(
         mutableSnapshot, asyncGate, asyncSelector, derivedDispatcher,
-        gateOf = { !anyInFlight(it, this.parity) },
+        gateOf = { !anyInFlight(it) },
         selectionOf = { selectFromPool(it, this.parity, clock.nowMs(), expiry.maxAgeMs()) },
     )
 
@@ -126,15 +126,6 @@ class NativePoolEngine<H : Any>(
 
     /** Only a config refusal leaves no loader behind; see [LoadResult] for what each outcome saves. */
     fun load(request: PoolRequest, mode: LoadMode): LoadResult = load(request, mode) { gateOpen.value }
-
-    /** Whether [load] would start a chain now. Changes nothing: no sweep, no saved request, no event. */
-    fun wouldRequest(request: PoolRequest, mode: LoadMode): Boolean {
-        if (policy.configRefusal(request) != null) return false
-        if (mode == LoadMode.POLITE && !gateOpen.value) return false
-        if (policy.transientRefusal(request) != null) return false
-        val l = loaders[request.key] ?: return true
-        return !l.inFlight && !l.refreshing && (l.ad == null || isExpired(l))
-    }
 
     /** Repeats the saved request from its first id while the held ad keeps showing; false when it cannot. */
     fun refresh(key: String): Boolean {
@@ -243,7 +234,7 @@ class NativePoolEngine<H : Any>(
     fun onNewRun() {
         owner = null
         clearPendingPolite()
-        if (parity.resetOnNewRun) releaseAll() else publish()
+        publish()
     }
 
     /** One line per loader after a header with the owner, the gate and the skip count. */
@@ -405,7 +396,7 @@ class NativePoolEngine<H : Any>(
     }
 
     private fun markImpression(l: Loader<H>, ad: H) {
-        val marks = loaders[l.key] === l && l.ad != null && (parity.impressionMarksLoader || ad === l.ad)
+        val marks = loaders[l.key] === l && l.ad != null
         if (marks) {
             l.state = PoolState.Showing(nextTs())
             publish(PoolEvent.Impression(l.key, ad))
@@ -468,7 +459,7 @@ class NativePoolEngine<H : Any>(
      */
     private fun queuePolite(request: PoolRequest) {
         pendingPolite[request.key] = request
-        if (replayPost == null && !anyInFlight(mutableSnapshot.value, parity)) {
+        if (replayPost == null && !anyInFlight(mutableSnapshot.value)) {
             replayPost = scheduler.postDelayed(0) {
                 replayPost = null
                 replayPendingPolite()
@@ -486,7 +477,7 @@ class NativePoolEngine<H : Any>(
         if (replaying || pendingPolite.isEmpty() || !parity.retrySkippedPolite) return
         replaying = true
         try {
-            val gateIsOpen = { !anyInFlight(mutableSnapshot.value, parity) }
+            val gateIsOpen = { !anyInFlight(mutableSnapshot.value) }
             while (pendingPolite.isNotEmpty() && gateIsOpen()) {
                 val request = pendingPolite.values.first()
                 pendingPolite.remove(request.key)

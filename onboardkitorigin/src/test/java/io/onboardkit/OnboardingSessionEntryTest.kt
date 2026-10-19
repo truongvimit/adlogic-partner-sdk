@@ -231,10 +231,10 @@ class OnboardingSessionEntryTest {
     fun `SHARED_POOL opens the pooled flow and latches its knobs for the run`() {
         installTestEngine(ApFakeLoader())
         OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"native_flow":{"type":"SHARED_POOL","pool":{"done_hidden_gone":false}}}""")
+            """{"native_flow":{"type":"SHARED_POOL","pool":{"lfo":{"confirm_button":{"reveal_delay_ms":11}}}}}""")
         assertRoutes(POOLED_FLOW, "shared pool")
         val latched = requireNotNull(OnboardingSdk.session.nativeFlow)
-        assertFalse(latched.doneHiddenGone)
+        assertEquals(11L, latched.lfoConfirmRevealDelayMs)
 
         OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"PER_SCREEN"}}""")
         assertSame("A fetch mid-run changes nothing", latched, OnboardingSdk.session.nativeFlow)

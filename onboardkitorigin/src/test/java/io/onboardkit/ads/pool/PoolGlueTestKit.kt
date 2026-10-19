@@ -52,8 +52,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** Gate and selection update inside every publish, so a test reads them right after a call. */
 internal val SYNC_PARITY = PoolParity(asyncGate = false, asyncSelector = false)
 
-internal fun poolSnapshot(parity: PoolParity = SYNC_PARITY, adoptSplashLanguage1: Boolean = true) =
-    NativeFlowSnapshot(type = NativeFlowType.SHARED_POOL, parity = parity, adoptSplashLanguage1 = adoptSplashLanguage1)
+internal fun poolSnapshot(parity: PoolParity = SYNC_PARITY) =
+    NativeFlowSnapshot(type = NativeFlowType.SHARED_POOL, parity = parity)
 
 /** Records each id attempt; the test settles it through that attempt's sink. */
 internal class ApFakeLoader : PoolAdLoader<ApNativeAd> {

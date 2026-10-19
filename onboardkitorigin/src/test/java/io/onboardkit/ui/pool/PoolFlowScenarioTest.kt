@@ -440,7 +440,7 @@ class PoolFlowScenarioTest {
         assertTrue(host.isFinishing)
         close(requireNotNull(run))
         assertTrue(ScenarioSdk.outcomes.single() is OnboardingOutcome.Completed)
-        assertTrue("keep_after_flow: routing stays on", OnboardingPool.routeResume)
+        assertTrue("The pool outlives the flow: routing stays on", OnboardingPool.routeResume)
         assertTrue(OnboardingPool.isActive)
         assertNull("Every stage cleared its own owner", engine.owner)
 

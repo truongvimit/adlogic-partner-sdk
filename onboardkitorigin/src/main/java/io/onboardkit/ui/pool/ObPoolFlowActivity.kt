@@ -106,7 +106,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         get() {
             if (super.resumeBlockedByScreen || exitInProgress || pending != null) return true
             return when (stage) {
-                Stage.PRIVACY, Stage.GOAL -> !snapshot.resumeOnGoals || stageFragment()?.blocksAppResume == true
+                Stage.PRIVACY, Stage.GOAL -> stageFragment()?.blocksAppResume == true
                 Stage.PAGER -> stageFragment()?.blocksAppResume ?: true
                 Stage.LANGUAGE -> stageFragment()?.blocksAppResume == true
             }
@@ -128,7 +128,6 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
             pending = null
         }
         live = WeakReference(this)
-        OnboardingPool.attachScreen(this)
         if (pending?.exit == PoolExit.Goal) exitInProgress = true
         stage = savedInstanceState?.getString(KEY_STAGE)
             ?.let { runCatching { Stage.valueOf(it) }.getOrNull() } ?: Stage.LANGUAGE
@@ -141,7 +140,6 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     }
 
     override fun onDestroy() {
-        OnboardingPool.detachScreen(this)
         if (live?.get() === this) {
             live = null
             // Gone for good, not recreated: its exit never runs.
@@ -289,7 +287,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     /**
      * Ends the run: the paywall on the paths that classic shows it on, then completion exactly once.
-     * Pool ads outlive the flow unless `parity.keep_after_flow` is off or the user just bought.
+     * Pool ads outlive the flow, for the pooled resume screen, unless the user just bought.
      */
     internal fun finishFlow(withPaywall: Boolean) {
         if (finishing) return
@@ -297,7 +295,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         exitInProgress = true
         lifecycleScope.launch {
             if (withPaywall) sdk.presentPaywall(this@ObPoolFlowActivity, PaywallPlacement.AFTER_ONBOARDING)
-            if (sdk.guard().isPremium(this@ObPoolFlowActivity) || !snapshot.parity.keepAfterFlow) {
+            if (sdk.guard().isPremium(this@ObPoolFlowActivity)) {
                 OnboardingPool.releaseAll()
             }
             OnboardingSdk.completeFlow(this@ObPoolFlowActivity)

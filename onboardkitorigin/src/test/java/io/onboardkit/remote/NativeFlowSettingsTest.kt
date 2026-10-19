@@ -34,7 +34,7 @@ class NativeFlowSettingsTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val alias = ObRemoteKeys.NATIVE_REUSE_ENABLED.key
 
-    /** Spec section 2 value for value, D-BIND aside: a change to the bundle must be a change to this list. */
+    /** Spec section 2 value for value: a change to the bundle must be a change to this list. */
     private val specDefaults: Map<String, Any> = mapOf(
         "native_flow.type" to "PER_SCREEN",
         "native_flow.pool.parity.refresh_overwrites_unshown" to true,
@@ -43,22 +43,10 @@ class NativeFlowSettingsTest {
         "native_flow.pool.parity.async_selector" to true,
         "native_flow.pool.parity.borrow_showing" to true,
         "native_flow.pool.parity.destroy_replaced_ads" to false,
-        "native_flow.pool.parity.keep_duplicate_ids" to true,
-        "native_flow.pool.parity.impression_marks_loader" to true,
-        "native_flow.pool.parity.screen_slots_bind_started" to true,
         "native_flow.pool.parity.pager_slots_bind_resumed" to false,
-        "native_flow.pool.parity.keep_after_flow" to true,
-        "native_flow.pool.parity.reset_on_new_run" to false,
-        "native_flow.pool.parity.respect_focus_window" to false,
-        "native_flow.pool.parity.resume_background_preload" to false,
-        "native_flow.pool.parity.refresh_marks_in_flight" to true,
-        "native_flow.pool.adopt_splash_language1" to true,
         "native_flow.pool.locale_apply" to "IN_PLACE",
         "native_flow.pool.exit.next_screen_timing" to "AFTER_AD",
-        "native_flow.pool.done_hidden_gone" to true,
-        "native_flow.pool.pager.smooth_scroll" to true,
         "native_flow.pool.pager.offscreen_pages" to 1L,
-        "native_flow.pool.resume_on_goals" to true,
         "native_flow.pool.stuck_loading_log_ms" to 60_000L,
         "native_flow.pool.view.destroy_on_teardown" to true,
         "native_flow.pool.lfo.confirm_button.reveal_delay_ms" to 3_000L,
@@ -74,17 +62,11 @@ class NativeFlowSettingsTest {
         type = NativeFlowType.PER_SCREEN,
         parity = PoolParity(
             refreshOverwritesUnshown = true, retrySkippedPolite = false, asyncGate = true, asyncSelector = true,
-            borrowShowing = true, destroyReplacedAds = false, keepDuplicateIds = true, impressionMarksLoader = true,
-            screenSlotsBindStarted = false, pagerSlotsBindResumed = false, keepAfterFlow = true, resetOnNewRun = false,
-            respectFocusWindow = false, resumeBackgroundPreload = false, refreshMarksInFlight = true,
+            borrowShowing = true, destroyReplacedAds = false, pagerSlotsBindResumed = false,
         ),
-        adoptSplashLanguage1 = true,
         localeApply = PoolLocaleApply.IN_PLACE,
         exitNextScreenTiming = NextScreenTiming.AFTER_AD,
-        doneHiddenGone = true,
-        pagerSmoothScroll = true,
         pagerOffscreenPages = 1,
-        resumeOnGoals = true,
         stuckLoadingLogMs = 60_000L,
         viewDestroyOnTeardown = true,
         lfoConfirmRevealDelayMs = 3_000L,
@@ -97,10 +79,7 @@ class NativeFlowSettingsTest {
     )
 
     /** The checked-in asset keeps the legacy flow unless the host opts into the pool. */
-    private val bundledSnapshot = specSnapshot.copy(
-        type = NativeFlowType.PER_SCREEN,
-        parity = specSnapshot.parity.copy(screenSlotsBindStarted = true, pagerSlotsBindResumed = false),
-    )
+    private val bundledSnapshot = specSnapshot.copy(type = NativeFlowType.PER_SCREEN)
 
     @Before fun setup() {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
@@ -150,12 +129,10 @@ class NativeFlowSettingsTest {
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
             {"native_flow":{"type":"SHARED_POOL","pool":{
               "parity":{"refresh_overwrites_unshown":false,"retry_skipped_polite":true,"async_gate":false,
-                "async_selector":false,"borrow_showing":false,"destroy_replaced_ads":true,"keep_duplicate_ids":false,
-                "impression_marks_loader":false,"screen_slots_bind_started":true,"pager_slots_bind_resumed":false,
-                "keep_after_flow":false,"reset_on_new_run":true,"respect_focus_window":true,
-                "resume_background_preload":true,"refresh_marks_in_flight":false},
-              "adopt_splash_language1":false,"locale_apply":"RECREATE","exit":{"next_screen_timing":"UNDER_AD"},
-              "done_hidden_gone":false,"pager":{"smooth_scroll":false,"offscreen_pages":2},"resume_on_goals":false,
+                "async_selector":false,"borrow_showing":false,"destroy_replaced_ads":true,
+                "pager_slots_bind_resumed":true},
+              "locale_apply":"RECREATE","exit":{"next_screen_timing":"UNDER_AD"},
+              "pager":{"offscreen_pages":2},
               "stuck_loading_log_ms":0,"view":{"destroy_on_teardown":false},
               "lfo":{"confirm_button":{"reveal_delay_ms":11},"loading_dialog":{"duration_ms":16}},"select":{"next_reveal_delay_ms":12},
               "goals":{"exit_reuse_splash_inter":false},"resume":{"min_background_ms":15},
@@ -163,20 +140,14 @@ class NativeFlowSettingsTest {
         """.trimIndent()))
         val flipped = PoolParity(
             refreshOverwritesUnshown = false, retrySkippedPolite = true, asyncGate = false, asyncSelector = false,
-            borrowShowing = false, destroyReplacedAds = true, keepDuplicateIds = false, impressionMarksLoader = false,
-            screenSlotsBindStarted = true, pagerSlotsBindResumed = false, keepAfterFlow = false, resetOnNewRun = true,
-            respectFocusWindow = true, resumeBackgroundPreload = true, refreshMarksInFlight = false,
+            borrowShowing = false, destroyReplacedAds = true, pagerSlotsBindResumed = true,
         )
         assertEquals(NativeFlowSnapshot(
             type = NativeFlowType.SHARED_POOL,
             parity = flipped,
-            adoptSplashLanguage1 = false,
             localeApply = PoolLocaleApply.RECREATE,
             exitNextScreenTiming = NextScreenTiming.UNDER_AD,
-            doneHiddenGone = false,
-            pagerSmoothScroll = false,
             pagerOffscreenPages = 2,
-            resumeOnGoals = false,
             stuckLoadingLogMs = 0L,
             viewDestroyOnTeardown = false,
             lfoConfirmRevealDelayMs = 11L,
@@ -261,7 +232,7 @@ class NativeFlowSettingsTest {
         val before = OnboardingSdk.configOrNull()
 
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
-            """{"native_flow":{"type":"SHARED_POOL","pool":{"pager":{"smooth_scroll":false}}}}"""))
+            """{"native_flow":{"type":"SHARED_POOL","pool":{"pager":{"offscreen_pages":2}}}}"""))
         assertTrue(OnboardingSettings.values.hasOverride("native_flow"))
         // resolveConfig returns the host config untouched unless one of its own scopes, "flow" among
         // them, is overridden; the prefix match must not mistake native_flow for flow.

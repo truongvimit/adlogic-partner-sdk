@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
  * its own placement's config refusal, while a [Kind.NON_OWNER] slot keeps showing what it borrows.
  *
  * A slot bound while its screen is only STARTED (a pager page kept offscreen, or a screen behind a
- * translucent one under `screen_slots_bind_started`) takes the ad's registration from the view the
+ * translucent one) takes the ad's registration from the view the
  * user sees; the RESUMED slot showing that ad takes it back, so impressions and clicks count where
  * the ad is visible.
  */
@@ -289,5 +289,9 @@ internal class PoolNativeSlot(
     }
 }
 
-internal val NativeFlowSnapshot.screenSlotMinState: Lifecycle.State
-    get() = if (parity.screenSlotsBindStarted) Lifecycle.State.STARTED else Lifecycle.State.RESUMED
+/**
+ * LFO, its confirm popup, Privacy, Goal and the resume screen bind from STARTED, as DashDrama does:
+ * a fill under the interstitial is drawn already, and GMA reports its impression once the screen
+ * is back on top.
+ */
+internal val SCREEN_SLOT_MIN_STATE = Lifecycle.State.STARTED
