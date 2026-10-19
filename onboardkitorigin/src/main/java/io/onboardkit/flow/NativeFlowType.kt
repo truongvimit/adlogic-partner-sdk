@@ -1,6 +1,5 @@
 package io.onboardkit.flow
 
-import com.ads.module.config.AdRemoteConfig
 import com.ads.module.helper.adnative.pool.PoolParity
 import io.onboardkit.ads.NextScreenTiming
 
@@ -45,9 +44,6 @@ internal data class NativeFlowSnapshot(
     val fullscreenSkipDelayMs: Long = 2_000L,
     /** Counted from page selection, not from the ad's bind. */
     val fullscreenAutoNextDelayMs: Long = 10_000L,
-    /** How long the app stays in the background before a return opens the pooled resume screen;
-     * defaults to the same 2 s delay as `open_resume.app_resume_load_delay_ms`. */
-    val resumeMinBackgroundMs: Long = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
 )
 
 /** Anything but an exact type name runs the classic flow. */

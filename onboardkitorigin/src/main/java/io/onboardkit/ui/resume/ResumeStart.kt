@@ -8,8 +8,8 @@ import io.onboardkit.ads.loadAndShowInterstitial
 import io.onboardkit.remote.OnboardingSettings
 
 /**
- * Start on either native resume screen: `inter_resume` load-and-show, then the screen closes. Its
- * closing is Start itself, and an inter that never shows (off, capped, no fill) closes at once.
+ * Start, or back, on either native resume screen: `inter_resume` load-and-show, then the screen
+ * closes. An inter that never shows (off, capped, no fill) closes it at once.
  */
 internal class ResumeStart(private val screen: AppCompatActivity) {
 

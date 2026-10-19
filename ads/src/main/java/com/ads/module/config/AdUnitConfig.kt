@@ -33,7 +33,11 @@ data class AdUnitConfig(
      * reorder ignore it.
      */
     val components: List<String> = DEFAULT_COMPONENTS,
-    /** Extra wait after process ON_STOP before loading the app-resume placement. */
+    /**
+     * Extra wait after process ON_STOP before loading the app-resume placement. Read from
+     * open_resume for app-open and inter resume, from native_resume for native resume; a JSON
+     * native_resume entry that leaves it out waits 0.
+     */
     val appResumeLoadDelayMs: Long = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS,
     /**
      * What a click on this native does once the user returns; `null` leaves it to the screen's

@@ -23,10 +23,11 @@ import com.google.android.gms.ads.AdActivity
 import io.trackkit.AdFormat
 
 /**
- * Native and interstitial resume; app-open stays with [AppOpenManager]. Same opportunity as
- * app-open: the request goes out once the app has stayed in the background for
- * `open_resume.app_resume_load_delay_ms`, and only a return after that delay shows anything.
- * Native opens its screen at once, a skeleton standing in until the fill; interstitial waits for
+ * Native and interstitial resume; app-open stays with [AppOpenManager]. The request goes out once
+ * the app has stayed in the background for the type's delay, and only a return after that delay
+ * shows anything: `native_resume.app_resume_load_delay_ms` (default 0) for native,
+ * `open_resume.app_resume_load_delay_ms` for interstitial. Native opens its screen at once, a
+ * skeleton standing in until the fill, a return from an ad click included; interstitial waits for
  * its fill with the placement's load-and-show timeout.
  */
 object ResumeAds : DefaultLifecycleObserver {
@@ -38,12 +39,6 @@ object ResumeAds : DefaultLifecycleObserver {
 
         /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
         fun show(host: Activity)
-
-        /**
-         * How long the app must stay in the background before a return opens the screen, or null
-         * for `open_resume.app_resume_load_delay_ms`. The screen's request follows the same delay.
-         */
-        fun minBackgroundMs(): Long? = null
     }
 
     @JvmStatic
@@ -84,16 +79,22 @@ object ResumeAds : DefaultLifecycleObserver {
         if (type == ResumeAdType.NATIVE && nativeScreen == null) return
         val manager = AppOpenManager.getInstance()
         // The SDK's own fullscreen and an external trip the partner excused are not a new
-        // opportunity, exactly as for app-open.
+        // opportunity, exactly as for app-open. A return from an ad click still is one for native.
+        val honorAdClick = type != ResumeAdType.NATIVE
+        val returnReason = manager.resumeReturnSkipReason
+            ?.takeIf { honorAdClick || it != AppOpenManager.AD_CLICK_RETURN }
         if (!manager.isInitialized || !manager.isAppResumeEnabled || manager.isShowingAd ||
-            manager.isInterstitialShowing || manager.resumeReturnSkipReason != null) return
+            manager.isInterstitialShowing || returnReason != null) return
         val host = manager.currentActivity
         if (host is AdActivity) return
-        if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host) != null)) return
+        if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host, honorAdClick) != null)) return
         if (placementSkipReason(placement) != null) return
-        val delayMs = nativeScreen?.takeIf { type == ResumeAdType.NATIVE }?.minBackgroundMs()
-            ?.takeIf { it in 0..AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS }
-            ?: AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
+        val config = AdRemoteConfig.getInstance()
+        val delayMs = if (type == ResumeAdType.NATIVE) {
+            config.nativeResumeLoadDelayMs.coerceIn(0L, AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS)
+        } else {
+            AdRemoteConfig.normalizeAppResumeLoadDelayMs(config.appResumeLoadDelayMs)
+        }
         val next = Stay(type, placement, delayMs)
         stay = next
         val request = Runnable {
@@ -143,7 +144,8 @@ object ResumeAds : DefaultLifecycleObserver {
         val host = manager.currentActivity ?: return
         if (host is AdActivity || host.isFinishing || host.isDestroyed || !manager.isAppResumeEnabled ||
             manager.isResumeSuppressedFor(host) || manager.isShowingAd || manager.isInterstitialShowing) return
-        val reason = manager.resumeSkipReasonFor(host) ?: placementSkipReason(left.placement)
+        val reason = manager.resumeSkipReasonFor(host, left.type != ResumeAdType.NATIVE)
+            ?: placementSkipReason(left.placement)
         if (reason != null) {
             AdTracking.skipped(left.placement, formatOf(left.type), reason)
             return

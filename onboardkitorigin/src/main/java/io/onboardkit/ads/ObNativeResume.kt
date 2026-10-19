@@ -30,8 +30,4 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         if (!OnboardingSdk.isReady()) return
         if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host) else ObResumeActivity.start(host)
     }
-
-    /** The pooled screen opens after `native_flow.pool.resume.min_background_ms` away; classic keeps open_resume's delay. */
-    override fun minBackgroundMs(): Long? =
-        if (OnboardingPool.routeResume) ObPoolResumeActivity.runSnapshot().resumeMinBackgroundMs else null
 }

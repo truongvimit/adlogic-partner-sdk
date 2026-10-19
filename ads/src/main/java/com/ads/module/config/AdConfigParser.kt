@@ -66,7 +66,7 @@ internal object AdConfigParser {
         var isEnable = false
         var enableUaCheck = false
         var reloadIntervalSeconds: Int? = null
-        var appResumeLoadDelayMs = AdRemoteConfig.DEFAULT_APP_RESUME_LOAD_DELAY_MS
+        var appResumeLoadDelayMs = AdRemoteConfig.defaultAppResumeLoadDelayMs(key)
         var colorCTA = DEFAULT_COLOR
         var colorBackground = DEFAULT_COLOR
         var colorAdBadge = DEFAULT_COLOR

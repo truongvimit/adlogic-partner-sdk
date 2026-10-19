@@ -21,7 +21,8 @@ import kotlinx.coroutines.launch
 /**
  * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
  * it shows the owner of the screen underneath, or after the flow the newest leftover, and asks for
- * its own native only POLITE, a refresh included. A config refusal of native_resume hides it, as in DashDrama and the
+ * its own native only POLITE, a refresh included. Start and back both run the `inter_resume`
+ * load-and-show, then close it. A config refusal of native_resume hides it, as in DashDrama and the
  * classic screen. A return to it opens nothing: it keeps the base exclusion from app-resume, and its
  * own onResume refreshes the ad. It never holds the shared suppression; an ad click is the only mark.
  *
@@ -131,7 +132,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         super.onDestroy()
     }
 
-    override fun handleBack() = finish()
+    override fun handleBack() = startAction.press()
 
     internal companion object {
         private const val KEY_AD_CLICKED = "ob_pool_resume_ad_clicked"

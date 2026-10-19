@@ -124,6 +124,7 @@
     "enable_ua_check": false
   },
   "native_resume": {
+    "app_resume_load_delay_ms": 0,
     "ids": [
       { "id": "ca-app-pub-7208941695689653/9849017274", "isEnable": true },
       { "id": "ca-app-pub-7208941695689653/9849017274", "isEnable": true }

@@ -1477,6 +1477,28 @@ class NativeProviderOwnershipTest {
         second.pause().stop().destroy()
     }
 
+    @Test fun `native resume requests on open when no background request ran`() {
+        val host = controller.get()
+        io.onboardkit.OnboardingSdk.install(host.application) {
+            adProvider = provider
+            trackkitAutoTracking(false)
+        }
+        io.onboardkit.OnboardingSdk.configure(io.onboardkit.config.onboardKitConfig {
+            defaultSteps()
+            ads = io.onboardkit.config.AdsConfig(resumeNative = request.unit)
+        }.getOrThrow())
+        kotlinx.coroutines.runBlocking { io.onboardkit.OnboardingSdk.reset() }
+
+        val screen = Robolectric.buildActivity(io.onboardkit.ui.resume.ObResumeActivity::class.java).setup()
+        main.idle()
+        assertEquals("The open asks for native_resume", 1, requests.size)
+        requests.single().onNativeAdLoaded(mock(NativeAd::class.java))
+        main.idle()
+        val container = screen.get().findViewById<FrameLayout>(io.onboardkit.R.id.ob_resume_ad)
+        assertTrue(container.getChildAt(0) is com.google.android.gms.ads.nativead.NativeAdView)
+        screen.pause().stop().destroy()
+    }
+
     @Test fun `rotation pending native failure resolves only once`() = verifyPendingRotationOutcome(fail = true)
 
     @Test fun `helper load failure during pause is deferred until resume`() =

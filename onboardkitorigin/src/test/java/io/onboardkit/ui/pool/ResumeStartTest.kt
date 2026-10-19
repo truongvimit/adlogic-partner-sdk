@@ -27,7 +27,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
-/** Start on both native resume screens: inter_resume first, the screen closes once it is gone. */
+/** Start and back on both native resume screens: inter_resume first, the screen closes once it is gone. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, shadows = [PoolGlueViewShadow::class],
     instrumentedPackages = ["io.onboardkit.ui.pool", "io.onboardkit.ui.resume"])
@@ -67,6 +67,11 @@ class ResumeStartTest {
         main.idle()
     }
 
+    private fun AppCompatActivity.pressBack() {
+        onBackPressedDispatcher.onBackPressed()
+        main.idle()
+    }
+
     private fun screens() = listOf(ObResumeActivity::class.java, ObPoolResumeActivity::class.java)
 
     @Test fun `Start shows inter_resume and closes the screen only once it is gone`() = screens().forEach { type ->
@@ -84,6 +89,28 @@ class ResumeStartTest {
         main.idle()
         assertTrue("${type.simpleName}: the ad's close is Start", screen.isFinishing)
         assertEquals(0, PoolUiSdk.suppressDepth())
+    }
+
+    @Test fun `back shows inter_resume like Start and closes the screen only once it is gone`() = screens().forEach { type ->
+        withResumeInter()
+        provider.loadAndShows.clear()
+        val screen = open(type)
+        screen.pressBack()
+        screen.pressBack()
+        assertEquals("${type.simpleName}: one presentation per back", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
+
+        provider.presentations.removeAt(provider.presentations.lastIndex).onAdClosed()
+        main.idle()
+        assertTrue("${type.simpleName}: the ad's close ends the screen", screen.isFinishing)
+    }
+
+    @Test fun `without inter_resume back closes the screen at once`() = screens().forEach { type ->
+        provider.loadAndShows.clear()
+        val screen = open(type)
+        screen.pressBack()
+        assertTrue(provider.loadAndShows.isEmpty())
+        assertTrue("${type.simpleName} closes at once", screen.isFinishing)
     }
 
     @Test fun `without inter_resume Start closes the screen at once`() = screens().forEach { type ->

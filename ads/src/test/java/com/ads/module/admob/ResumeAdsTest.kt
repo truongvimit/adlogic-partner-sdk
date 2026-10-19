@@ -119,8 +119,25 @@ class ResumeAdsTest {
         AdBehavior.document.acceptSuccessfulFetch(null)
     }
 
+    /** native_resume carrying its own [delayMs], open_resume keeping the 2 s default. */
+    private fun nativeDelay(delayMs: Long) = AdRemoteConfig.initializeFromJson(
+        """{"native_resume":{"app_resume_load_delay_ms":$delayMs,"ids":[{"id":"native-unit"}],"isEnable":true},""" +
+            """"open_resume":{"ids":[{"id":"open-unit"}],"isEnable":true}}""",
+    )
+
     @Test
-    fun `native requests once the delay elapses in the background and opens on the return`() {
+    fun `native waits 0 by default, requesting on leave and opening on any return`() {
+        assertEquals(0L, AdRemoteConfig.getInstance().nativeResumeLoadDelayMs)
+        ResumeAds.onStop(owner)
+        main.idle()
+        assertEquals(listOf("prepare"), calls)
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show"), calls)
+    }
+
+    @Test
+    fun `native requests once its own delay elapses in the background and opens on the return`() {
+        nativeDelay(2_000)
         ResumeAds.onStop(owner)
         main.idleFor(Duration.ofMillis(1_999))
         assertEquals(emptyList<String>(), calls)
@@ -132,6 +149,7 @@ class ResumeAdsTest {
 
     @Test
     fun `a return inside the delay neither requests nor opens`() {
+        nativeDelay(2_000)
         ResumeAds.onStop(owner)
         main.idleFor(Duration.ofMillis(1_000))
         ResumeAds.onStart(owner)
@@ -141,6 +159,7 @@ class ResumeAdsTest {
 
     @Test
     fun `a native screen opens at the exact deadline before its load starts`() {
+        nativeDelay(2_000)
         ResumeAds.onStop(owner)
         ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
         ResumeAds.onStart(owner)
@@ -150,6 +169,7 @@ class ResumeAdsTest {
 
     @Test
     fun `a return just before the deadline waits the remainder then opens before loading`() {
+        nativeDelay(2_000)
         ResumeAds.onStop(owner)
         ShadowSystemClock.advanceBy(Duration.ofMillis(1_850))
         ResumeAds.onStart(owner)
@@ -162,36 +182,34 @@ class ResumeAdsTest {
     }
 
     @Test
-    fun `the delay is open_resume's app_resume_load_delay_ms`() {
+    fun `native ignores open_resume's delay and inter keeps it`() {
         AdRemoteConfig.initializeFromJson(
             """{"native_resume":{"ids":[{"id":"native-unit"}],"isEnable":true},""" +
+                """"inter_resume":{"ids":[{"id":"inter-unit"}],"isEnable":true},""" +
                 """"open_resume":{"app_resume_load_delay_ms":5000,"isEnable":false}}""",
         )
         ResumeAds.onStop(owner)
-        main.idleFor(Duration.ofMillis(4_000))
-        ResumeAds.onStart(owner)
-        assertEquals(emptyList<String>(), calls)
-        ResumeAds.onStop(owner)
-        main.idleFor(Duration.ofMillis(5_000))
+        main.idle()
         ResumeAds.onStart(owner)
         assertEquals(listOf("prepare", "show"), calls)
+
+        AdBehavior.document.install("""{"app_resume":{"type":"inter_resume"}}""", null)
+        ResumeAds.onStop(owner)
+        main.idleFor(Duration.ofMillis(4_999))
+        assertEquals(0, Int02InterstitialShadow.requests.size)
+        main.idleFor(Duration.ofMillis(1))
+        assertEquals(1, Int02InterstitialShadow.requests.size)
     }
 
     @Test
-    fun `a native screen with its own minimum background time uses it instead of open_resume's delay`() {
-        ResumeAds.nativeScreen = object : ResumeAds.NativeScreen {
-            override fun prepare(context: Context) { calls += "prepare" }
-            override fun show(host: Activity) { calls += "show" }
-            override fun minBackgroundMs(): Long = 1_000L
-        }
+    fun `a return from an ad click opens native resume at once, app-open's click skip aside`() {
+        manager.disableAdResumeByClickAction()
+        manager.setResumeSkipPolicy(ResumeSkipPolicy { AppOpenManager.AD_CLICK_RETURN })
         ResumeAds.onStop(owner)
-        main.idleFor(Duration.ofMillis(999))
-        ResumeAds.onStart(owner)
-        assertEquals("A return inside the screen's own second opens nothing", emptyList<String>(), calls)
-        ResumeAds.onStop(owner)
-        main.idleFor(Duration.ofMillis(1_000))
+        main.idle()
         ResumeAds.onStart(owner)
         assertEquals(listOf("prepare", "show"), calls)
+        manager.setResumeSkipPolicy(null)
     }
 
     @Test
@@ -228,7 +246,7 @@ class ResumeAdsTest {
         ResumeAds.onStart(owner)
         manager.enableAppResumeWithActivity(Int02Activity::class.java)
 
-        manager.disableAdResumeByClickAction()
+        manager.skipNextResume("app_update")
         ResumeAds.onStop(owner)
         main.idleFor(Duration.ofMillis(3_000))
         ResumeAds.onStart(owner)

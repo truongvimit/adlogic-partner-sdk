@@ -240,9 +240,12 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         isInterstitialShowing = interstitialShowing;
     }
 
+    /** The skip reason a return from an ad's landing page carries. */
+    public static final String AD_CLICK_RETURN = "returning_from_ad_click";
+
     /** Marks the next host return as coming from an ad click; does not enable app-open mode. */
     public void disableAdResumeByClickAction() {
-        skipNextResume("returning_from_ad_click");
+        skipNextResume(AD_CLICK_RETURN);
     }
 
     /** Compatibility setter. False clears both the pending skip and the current-return snapshot. */
@@ -293,15 +296,25 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     @Nullable
     public String resumeSkipReasonFor(@NonNull Activity activity) {
+        return resumeSkipReasonFor(activity, true);
+    }
+
+    /**
+     * {@link #resumeSkipReasonFor(Activity)}, where {@code honorAdClickReturn} false lets a return
+     * from an ad's landing page through: native resume opens its screen over it.
+     */
+    @Nullable
+    public String resumeSkipReasonFor(@NonNull Activity activity, boolean honorAdClickReturn) {
         if (activity instanceof AdActivity) return "ad_activity";
         String returnReason = getResumeReturnSkipReason();
-        if (returnReason != null) return returnReason;
+        if (returnReason != null && (honorAdClickReturn || !AD_CLICK_RETURN.equals(returnReason))) return returnReason;
         com.ads.module.helper.AdSkipReason core = AdGate.skipReason(activity, true, true, false);
         if (core != null) return core.getKey();
         ResumeSkipPolicy policy = resumeSkipPolicy;
         if (policy == null) return null;
         try {
-            return policy.skipReasonFor(activity);
+            String reason = policy.skipReasonFor(activity);
+            return honorAdClickReturn || !AD_CLICK_RETURN.equals(reason) ? reason : null;
         } catch (RuntimeException error) {
             Log.w(TAG, "Resume policy failed; keeping prior extension fallback", error);
             return null;

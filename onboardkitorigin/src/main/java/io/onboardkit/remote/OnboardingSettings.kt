@@ -408,7 +408,6 @@ object OnboardingSettings {
             goalsExitReuseSplashInter = flag("goals.exit_reuse_splash_inter"),
             fullscreenSkipDelayMs = ms("onboarding.fullscreen.skip.delay_ms"),
             fullscreenAutoNextDelayMs = ms("onboarding.fullscreen.auto_next.delay_ms"),
-            resumeMinBackgroundMs = ms("resume.min_background_ms"),
         )
     }
 

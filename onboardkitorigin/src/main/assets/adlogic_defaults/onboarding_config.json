@@ -216,9 +216,6 @@
       "goals": {
         "exit_reuse_splash_inter": true
       },
-      "resume": {
-        "min_background_ms": 2000
-      },
       "onboarding": {
         "fullscreen": {
           "skip": {
