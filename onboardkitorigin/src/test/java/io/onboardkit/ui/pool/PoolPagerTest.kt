@@ -576,7 +576,7 @@ class PoolPagerTest {
     }
 
     @Test fun `app resume is vetoed on a full page and allowed on a resting content page`() {
-        launch()
+        launch(steps = listOf(ob1, full1, ob2, ob3))
         assertFalse(activity.resumeBlockedByScreen)
         nextPage()
         assertTrue(activity.resumeBlockedByScreen)
@@ -587,6 +587,15 @@ class PoolPagerTest {
         assertTrue("Blocked while the pager slides", activity.resumeBlockedByScreen)
         settle(pager)
         assertFalse(activity.resumeBlockedByScreen)
+    }
+
+    @Test fun `app resume is vetoed on the last page even when it is content`() {
+        launch(steps = listOf(ob1, ob2))
+        assertFalse(activity.resumeBlockedByScreen)
+        activity.next(StepExit.CTA)
+        settle(pager)
+        assertEquals(1, pager.currentItem)
+        assertTrue(activity.resumeBlockedByScreen)
     }
 
     @Test fun `dwell on a full page counts from its selection`() {

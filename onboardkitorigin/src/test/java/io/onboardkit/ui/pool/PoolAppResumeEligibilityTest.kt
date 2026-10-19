@@ -74,7 +74,7 @@ class PoolAppResumeEligibilityTest {
         assertTrue("The latched exit still blocks until the next stage takes over", host.resumeBlockedByScreen)
     }
 
-    @Test fun `the pooled resume screen is eligible and never suppresses`() {
+    @Test fun `the pooled resume screen is excluded from app-resume and never suppresses`() {
         launchPoolFlow(app).also { controllers += it }
         val screen = Robolectric.buildActivity(ObPoolResumeActivity::class.java).also {
             controllers += it
@@ -83,8 +83,8 @@ class PoolAppResumeEligibilityTest {
         }
         main.idle()
         assertFalse(screen.get().isFinishing)
-        assertFalse(manager.isResumeSuppressedFor(screen.get()))
-        assertNull(manager.resumeSkipReasonFor(screen.get()))
+        assertTrue(manager.isResumeSuppressedFor(screen.get()))
+        assertEquals(blocked, manager.resumeSkipReasonFor(screen.get()))
         assertEquals(0, PoolUiSdk.suppressDepth())
 
         screen.pause().stop().restart().start().resume()

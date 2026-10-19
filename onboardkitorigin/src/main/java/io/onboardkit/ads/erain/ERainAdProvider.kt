@@ -20,7 +20,6 @@ import com.ads.module.helper.adnative.AdNativeState
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdManager
-import com.ads.module.helper.adnative.NativeAdParam
 import com.ads.module.helper.adnative.NativeClickAction
 import com.ads.module.helper.banner.BannerAdConfig
 import com.ads.module.helper.banner.BannerAdHelper
@@ -201,10 +200,6 @@ class ERainAdProvider : OnboardingAdProvider() {
         return slots[placement.key]?.reload() == true
     }
 
-    override fun renewNative(placement: AdPlacement) {
-        slots[placement.key]?.renew()
-    }
-
     override fun pendingClickAction(placement: AdPlacement): NativeClickAction? =
         slots[placement.key]?.helper?.pendingClickAction
 
@@ -301,12 +296,6 @@ class ERainAdProvider : OnboardingAdProvider() {
             nativeKeys += key
             ObLog.d(ObLog.Section.LOAD, "$key reload over the waterfall tiers=${loadOrder.size}")
             return true
-        }
-
-        fun renew() {
-            if (helper.pendingClickAction != null) return
-            refresh()
-            helper.requestAds(NativeAdParam.Request)
         }
 
         private fun bindReplacement() {

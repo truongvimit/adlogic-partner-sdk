@@ -62,6 +62,8 @@ class ObOnboardingHostActivity : BaseOnboardActivity(), StepHost {
         get() {
             if (super.resumeBlockedByScreen || !::binding.isInitialized || exitResolved ||
                 binding.obStepPager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return true
+            // The last step ends onboarding: a resume screen never covers it, content or not.
+            if (binding.obStepPager.currentItem >= enabledStepIds.lastIndex) return true
             val id = enabledStepIds.getOrNull(binding.obStepPager.currentItem) ?: return true
             return stepDefinition(id)?.type != StepType.CONTENT
         }

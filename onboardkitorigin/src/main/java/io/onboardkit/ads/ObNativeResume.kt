@@ -28,14 +28,11 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
     }
 
     override fun show(host: Activity) {
-        if (OnboardingPool.routeResume) {
-            // The pooled screen renews its own ad in onResume; a return to it opens nothing.
-            if (OnboardingSdk.isReady() && host !is ObPoolResumeActivity) ObPoolResumeActivity.start(host)
-            return
-        }
+        // Both screens exclude themselves; this also covers a routing switch while one is open.
+        if (host is ObResumeActivity || host is ObPoolResumeActivity) return
         // Without config the screen's guard would restart the whole flow from the launcher.
         if (!OnboardingSdk.isReady()) return
-        if (host is ObResumeActivity) host.renew() else ObResumeActivity.start(host)
+        if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host) else ObResumeActivity.start(host)
     }
 
     /** The pooled screen opens after `native_flow.pool.resume.min_background_ms` away; classic keeps open_resume's delay. */

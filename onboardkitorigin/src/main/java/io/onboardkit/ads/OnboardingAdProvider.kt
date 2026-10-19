@@ -71,12 +71,6 @@ abstract class OnboardingAdProvider internal constructor() {
      */
     internal abstract fun reloadNative(placement: AdPlacement): Boolean
 
-    /**
-     * Binds [placement]'s ready fill, or the one its running load brings, over the shown ad; never
-     * starts a request. The shown ad stays until then, and for good when neither exists.
-     */
-    internal abstract fun renewNative(placement: AdPlacement)
-
     internal abstract fun loadInterstitial(
         activity: Activity,
         placement: AdPlacement,

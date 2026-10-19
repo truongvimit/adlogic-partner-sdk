@@ -284,6 +284,8 @@ class PoolResumeTest {
         main.idle()
         ObNativeResume.show(host)
         assertEquals(ObResumeActivity::class.java.name, shadowOf(host).nextStartedActivity.component?.className)
+        ObNativeResume.show(screen.get())
+        assertNull("The classic screen never opens over the pooled one", shadowOf(screen.get()).nextStartedActivity)
     }
 
     @Test fun `prepare stays out of the provider while routed and warms the pool only under resume_background_preload`() {

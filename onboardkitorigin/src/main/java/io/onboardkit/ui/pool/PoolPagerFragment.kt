@@ -72,6 +72,8 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         get() {
             val pager = binding?.obPoolPager ?: return true
             if (exitLatched || returningToLanguage || pager.scrollState != ViewPager2.SCROLL_STATE_IDLE) return true
+            // The last page ends onboarding: a resume screen never covers it, content or not.
+            if (pager.currentItem >= pages.lastIndex) return true
             return pages.getOrNull(pager.currentItem)?.type != StepType.CONTENT
         }
 

@@ -4,9 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.remote.OnboardingSettings
@@ -17,19 +15,16 @@ import kotlinx.coroutines.launch
 /**
  * Native resume, opened when the app returns from the background. Start or back closes it onto the
  * screen the user left. Its shown ad outlives it, so the next return shows that ad at once and binds
- * a newer one over it when that loads.
+ * a newer one over it when that loads. A return to this screen itself opens nothing: it keeps the
+ * base exclusion from app-resume, like the splash and the ad screens.
  */
 class ObResumeActivity : BaseOnboardActivity() {
 
     override val screenName: String = "ob_resume"
 
-    // An ordinary screen to every resume type, so its own return renews its ad.
-    override val excludeFromAppResume: Boolean = false
-
     // Restored over the app's own restored screen, not a restart of the whole flow.
     override val restartFlowAfterProcessDeath: Boolean get() = false
 
-    private var renewOnResume = false
     private val startAction = ResumeStart(this)
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
@@ -68,23 +63,6 @@ class ObResumeActivity : BaseOnboardActivity() {
             delay(delayMs)
             if (!isFinishing && !isDestroyed) start.isVisible = true
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (renewOnResume) {
-            renewOnResume = false
-            renewAd()
-        }
-    }
-
-    /** A return to this screen itself: bind what its background request brought. */
-    internal fun renew() {
-        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) renewAd() else renewOnResume = true
-    }
-
-    private fun renewAd() {
-        OnboardingSdk.provider()?.renewNative(AdPlacement.ResumeNative)
     }
 
     override fun handleBack() = finish()

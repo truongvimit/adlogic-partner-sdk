@@ -29,6 +29,8 @@ import io.onboardkit.core.StepId
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.splash.ObSplashActivity
 import io.onboardkit.ui.ob5.ObFullScreenAdActivity
+import io.onboardkit.ui.resume.ObResumeActivity
+import io.onboardkit.ui.welcomeback.ObWelcomeBackActivity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -78,6 +80,7 @@ class OnboardingResumeEligibilityTest {
         ConsentCenter.setHostConsent(true, false)
         OnboardingSdk.configure(onboardKitConfig {
             step(ContentStepDefinition(StepId.OB1, title = "Introduction"))
+            step(ContentStepDefinition(StepId.OB2, title = "Last"))
             ads = AdsConfig(appResume = InterstitialAdUnit("test-resume"))
         }.getOrThrow()).getOrThrow()
     }
@@ -105,6 +108,7 @@ class OnboardingResumeEligibilityTest {
         OnboardingSdk.configure(onboardKitConfig {
             step(AdFullScreenStepDefinition(StepId.OB1, autoNextEnabled = false))
             step(ContentStepDefinition(StepId.OB2, title = "Content"))
+            step(ContentStepDefinition(StepId.OB3, title = "Last"))
             ads = AdsConfig(appResume = InterstitialAdUnit("test-resume"),
                 fullScreenStepNative = NativeAdUnit("test-native"))
         }.getOrThrow()).getOrThrow()
@@ -119,6 +123,23 @@ class OnboardingResumeEligibilityTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("The filled fullscreen page stays selected on return", 0, pager.currentItem)
         assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
+    }
+
+    @Test fun `the last onboarding page blocks resume without excluding the pager host`() {
+        val activity = launch(ObOnboardingHostActivity::class.java)
+        assertNull(manager.resumeSkipReasonFor(activity))
+        activity.findViewById<ViewPager2>(R.id.ob_step_pager).setCurrentItem(1, false)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(manager.isResumeSuppressedFor(activity))
+        assertEquals(AdSkipReason.SUPPRESSED_BY_FLOW.key, manager.resumeSkipReasonFor(activity))
+    }
+
+    @Test fun `the native resume screen remains excluded`() {
+        assertTrue(manager.isResumeSuppressedFor(launch(ObResumeActivity::class.java)))
+    }
+
+    @Test fun `welcome back remains excluded`() {
+        assertTrue(Robolectric.buildActivity(ObWelcomeBackActivity::class.java).get().resumeBlockedByScreen)
     }
 
     @Test fun `partner exclusion is never removed by a language screen opt-in`() {

@@ -35,7 +35,6 @@ internal open class FakeAdProvider : OnboardingAdProvider() {
 
     override fun reloadNative(placement: AdPlacement) = false
 
-    override fun renewNative(placement: AdPlacement) = Unit
 
     override fun preloadNativeInBackground(context: android.content.Context, request: NativeAdRequest) = Unit
 
