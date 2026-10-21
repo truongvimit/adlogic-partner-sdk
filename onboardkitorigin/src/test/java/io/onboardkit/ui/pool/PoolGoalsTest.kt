@@ -430,6 +430,33 @@ class PoolGoalsTest {
         }
     }
 
+    @Test fun `a host relaunched without state after the run ended finishes without claiming an ad`() {
+        open(Stage.GOAL, ads = POOL_ADS.copy(splashInterstitial = InterstitialAdUnit("splash-inter")))
+        tap(0)
+        tap(2)
+        main.idleFor(3_000, MILLISECONDS)
+        forward.performClick()
+        pump()
+        exits.single().onAdClosed()
+        pump()
+        assertEquals(1, outcomes.size)
+        assertTrue(activity.isFinishing)
+        val attempts = loader.attempts.size
+
+        // A finishing activity saves no state, so a configuration change relaunches it bare.
+        requireNotNull(controller).pause().stop().destroy()
+        pump()
+        controller = Robolectric.buildActivity(ObPoolFlowActivity::class.java)
+        activity.setTheme(R.style.ob_Theme_OnboardKit)
+        requireNotNull(controller).setup()
+        pump()
+
+        assertTrue(activity.isFinishing)
+        assertNull("No stage is committed", stage)
+        assertEquals("No pool request", attempts, loader.attempts.size)
+        assertEquals(1, outcomes.size)
+    }
+
     @Test fun `selections survive recreation`() {
         open(Stage.PRIVACY)
         consent.performClick()

@@ -118,6 +118,14 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     override val totalSteps: StateFlow<Int> get() = pagerStage()?.totalSteps ?: noIndex
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
+        // A host relaunched after completeFlow (the app applying the picked locale in its
+        // listener changes the configuration while this host is finishing, so no bundle comes
+        // back) would otherwise reopen the LFO and claim ads from the still-active pool.
+        if (OnboardingSdk.session.finished.get()) {
+            ObLog.d(ObLog.Section.SCREEN, "pool | relaunched after the run ended -> finish")
+            finish()
+            return
+        }
         setContentView(R.layout.ob_activity_pool_flow)
         if (savedInstanceState == null) {
             // Started only from startResolved, which activates the pool. A recreation never
