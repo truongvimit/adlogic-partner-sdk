@@ -38,6 +38,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import java.util.concurrent.TimeUnit.MILLISECONDS
 
 /** Native resume while a SHARED_POOL run routes it: leftovers, the owner's ad and D-REFRESH case B. */
 @RunWith(RobolectricTestRunner::class)
@@ -137,7 +138,7 @@ class PoolResumeTest {
         assertEquals("step_ob1", engine.owner)
     }
 
-    @Test fun `after the flow, back from inter_resume shows the native_resume that filled behind it without a refresh`() {
+    @Test fun `after the flow, back from inter_resume draws the native_resume that filled behind it, then closes`() {
         PoolUiSdk.configure(POOL_UI_ADS.copy(resumeInterstitial = InterstitialAdUnit("resume-inter")))
         OnboardingPool.claim(ob1, LoadMode.FORCED)
         val leftover = fill("step_ob1")
@@ -153,15 +154,17 @@ class PoolResumeTest {
         screen.pause().stop()
         main.idle()
         val behind = fill("native_resume")
+        inter.onAdClosed()
+        main.idle()
+        assertFalse("Not closed while the ad still covers it", screen.get().isFinishing)
 
         val before = loader.attempts.size
         screen.restart().start().resume()
         main.idle()
-        inter.onAdClosed()
-        main.idle()
-        assertTrue("No replacement request on the way back", loader.attempts.drop(before).isEmpty())
-        assertFalse(screen.get().isFinishing)
+        assertTrue("No request on the way back to close", loader.attempts.drop(before).isEmpty())
         assertSame(behind.admobNativeAd, screen.slot().shownAd())
+        main.idleFor(400, MILLISECONDS)
+        assertTrue(screen.get().isFinishing)
     }
 
     @Test fun `the host refreshes first and the screen's own refresh is POLITE, skipped while that runs`() {

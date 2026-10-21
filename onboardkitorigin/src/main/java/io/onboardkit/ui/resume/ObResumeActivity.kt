@@ -15,8 +15,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Native resume, opened when the app returns from the background. Start and back both run the
- * `inter_resume` load-and-show ([ResumeStart]); the screen stays up after that ad and the next Start
- * or back closes it onto the screen the user left. Its shown ad outlives
+ * `inter_resume` load-and-show ([ResumeStart]), AFTER_AD: once back in front after that ad it closes
+ * onto the screen the user left. Its shown ad outlives
  * it, so the next return shows that ad at once and binds a newer one over it when that loads. A return to this screen itself opens nothing: it keeps the
  * base exclusion from app-resume, like the splash and the ad screens.
  */

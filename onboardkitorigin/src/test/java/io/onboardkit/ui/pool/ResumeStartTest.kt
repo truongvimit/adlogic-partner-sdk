@@ -27,8 +27,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import java.util.concurrent.TimeUnit.MILLISECONDS
 
-/** Start and back on both native resume screens: inter_resume first, AFTER_AD; the screen closes on the next press. */
+/** Start and back on both native resume screens: inter_resume first, AFTER_AD; the screen closes once back in front. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, shadows = [PoolGlueViewShadow::class],
     instrumentedPackages = ["io.onboardkit.ui.pool", "io.onboardkit.ui.resume"])
@@ -75,18 +76,30 @@ class ResumeStartTest {
 
     private fun screens() = listOf(ObResumeActivity::class.java, ObPoolResumeActivity::class.java)
 
-    /** What the vendor reports for a shown ad: on screen, then closed. */
-    private fun closeShownInter() {
+    /**
+     * What a shown ad does to the screen: it covers it, then reports its close while still on top,
+     * and only after that is the screen back in front.
+     */
+    private fun showAndCloseInter(screen: ActivityController<*>) {
         val shown = provider.presentations.removeAt(provider.presentations.lastIndex)
         shown.onNextAction()
+        screen.pause().stop()
+        main.idle()
         shown.onAdClosed()
         main.idle()
     }
 
-    @Test fun `Start shows inter_resume AFTER_AD, stays up once it is gone and closes on the next Start`() = screens().forEach { type ->
+    private fun backInFront(screen: ActivityController<*>) {
+        screen.restart().start().resume()
+        main.idle()
+        main.idleFor(400, MILLISECONDS)
+    }
+
+    @Test fun `Start shows inter_resume and closes the screen AFTER_AD, once it is back in front`() = screens().forEach { type ->
         withResumeInter()
         provider.loadAndShows.clear()
         val screen = open(type)
+        val controller = controllers.last()
         assertTrue("${type.simpleName} warms the fill on open", AdPlacement.ResumeInterstitial in provider.interstitialLoads)
 
         screen.tapStart()
@@ -94,30 +107,29 @@ class ResumeStartTest {
         assertEquals("${type.simpleName}: one presentation per Start", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
         assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
 
-        closeShownInter()
-        assertFalse("${type.simpleName}: back on the screen once the ad is gone", screen.isFinishing)
+        showAndCloseInter(controller)
+        assertFalse("${type.simpleName}: not closed while the ad still covers it", screen.isFinishing)
         assertEquals(0, PoolUiSdk.suppressDepth())
 
-        screen.tapStart()
-        assertEquals("${type.simpleName}: no second interstitial", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
-        assertTrue("${type.simpleName}: the next Start closes it", screen.isFinishing)
+        backInFront(controller)
+        assertTrue("${type.simpleName}: closed once back in front", screen.isFinishing)
+        assertEquals(listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
     }
 
-    @Test fun `back shows inter_resume like Start, stays up once it is gone and closes on the next back`() = screens().forEach { type ->
+    @Test fun `back shows inter_resume like Start and closes the screen AFTER_AD`() = screens().forEach { type ->
         withResumeInter()
         provider.loadAndShows.clear()
         val screen = open(type)
+        val controller = controllers.last()
         screen.pressBack()
         screen.pressBack()
         assertEquals("${type.simpleName}: one presentation per back", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
         assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
 
-        closeShownInter()
-        assertFalse("${type.simpleName}: back on the screen once the ad is gone", screen.isFinishing)
-
-        screen.pressBack()
-        assertEquals(listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
-        assertTrue("${type.simpleName}: the next back closes it", screen.isFinishing)
+        showAndCloseInter(controller)
+        assertFalse(screen.isFinishing)
+        backInFront(controller)
+        assertTrue("${type.simpleName}: the ad's close ends the screen", screen.isFinishing)
     }
 
     @Test fun `an inter_resume that does not show closes the screen at once`() = screens().forEach { type ->
