@@ -69,9 +69,19 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             minState = SCREEN_SLOT_MIN_STATE,
             container = views.ad,
             callbacks = StepSlotCallbacks(
-                onLoading = { if (!adClicked) views.adBlock.isVisible = true },
-                onBound = { if (!adClicked) views.adBlock.isVisible = true },
-                onUnavailable = { views.adBlock.isVisible = false },
+                onLoading = {
+                    if (!adClicked) views.adBlock.isVisible = true
+                    startAction.onNativeLoading()
+                },
+                onBound = {
+                    if (!adClicked) views.adBlock.isVisible = true
+                    startAction.onNativeBound(alreadyShown = slot?.showsImpressedAd() == true)
+                },
+                onShown = startAction::onNativeShown,
+                onUnavailable = {
+                    views.adBlock.isVisible = false
+                    startAction.onNativeUnavailable()
+                },
                 onAdEngaged = { onAdClicked() },
             ),
             destroyOnTeardown = flow.viewDestroyOnTeardown,
@@ -134,7 +144,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         super.onDestroy()
     }
 
-    override fun handleBack() = startAction.press()
+    override fun handleBack() = startAction.pressBack()
 
     internal companion object {
         private const val KEY_AD_CLICKED = "ob_pool_resume_ad_clicked"

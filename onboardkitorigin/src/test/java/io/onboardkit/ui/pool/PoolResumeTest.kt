@@ -230,6 +230,21 @@ class PoolResumeTest {
         assertEquals(View.VISIBLE, screen.block().visibility)
     }
 
+    @Test fun `back works at once over a leftover that already made its impression`() {
+        OnboardingPool.claim(ob1, LoadMode.FORCED)
+        val leftover = fill("step_ob1")
+        loader.impress(leftover)
+        main.idle()
+        OnboardingPool.setOwner(null)
+        val screen = openResume()
+        assertSame(leftover.admobNativeAd, screen.slot().shownAd())
+        assertEquals("native_resume itself is still loading", 1, loader.callsFor("native_resume").size)
+
+        screen.get().onBackPressedDispatcher.onBackPressed()
+        main.idle()
+        assertTrue("No inter_resume configured: back closes at once", screen.get().isFinishing)
+    }
+
     @Test fun `with nothing to show the block collapses`() {
         PoolUiSdk.configure(POOL_UI_ADS.copy(resumeNative = null))
         val screen = openResume()

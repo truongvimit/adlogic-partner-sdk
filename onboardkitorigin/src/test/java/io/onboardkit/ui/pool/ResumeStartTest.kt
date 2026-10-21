@@ -40,8 +40,11 @@ class ResumeStartTest {
     private val provider get() = PoolUiSdk.provider
     private val controllers = mutableListOf<ActivityController<*>>()
 
+    private lateinit var loader: ApFakeLoader
+
     @Before fun setUp() {
-        PoolUiSdk.install(app, ApFakeLoader())
+        loader = ApFakeLoader()
+        PoolUiSdk.install(app, loader)
         val flow = poolSnapshot()
         OnboardingSdk.session.nativeFlow = flow
         OnboardingPool.activate(app, flow)
@@ -71,6 +74,30 @@ class ResumeStartTest {
 
     private fun AppCompatActivity.pressBack() {
         onBackPressedDispatcher.onBackPressed()
+        main.idle()
+    }
+
+    /** The screen's native fills and makes its impression. */
+    private fun nativeShown(type: Class<*>) {
+        if (type == ObResumeActivity::class.java) {
+            val listener = requireNotNull(provider.nativeListeners[AdPlacement.ResumeNative])
+            listener.onLoaded()
+            listener.onImpression()
+        } else {
+            val ad = loader.fill("native_resume")
+            main.idle()
+            loader.impress(ad)
+        }
+        main.idle()
+    }
+
+    /** The screen's native will not show. */
+    private fun nativeUnavailable(type: Class<*>) {
+        if (type == ObResumeActivity::class.java) {
+            requireNotNull(provider.nativeListeners[AdPlacement.ResumeNative]).onFailedToLoad()
+        } else {
+            loader.exhaust("native_resume")
+        }
         main.idle()
     }
 
@@ -121,6 +148,7 @@ class ResumeStartTest {
         provider.loadAndShows.clear()
         val screen = open(type)
         val controller = controllers.last()
+        nativeShown(type)
         screen.pressBack()
         screen.pressBack()
         assertEquals("${type.simpleName}: one presentation per back", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
@@ -142,12 +170,57 @@ class ResumeStartTest {
         assertTrue("${type.simpleName} closes at once", screen.isFinishing)
     }
 
-    @Test fun `without inter_resume back closes the screen at once`() = screens().forEach { type ->
+    @Test fun `without inter_resume back closes the screen at once once its native is shown`() = screens().forEach { type ->
         provider.loadAndShows.clear()
         val screen = open(type)
+        nativeShown(type)
         screen.pressBack()
         assertTrue(provider.loadAndShows.isEmpty())
         assertTrue("${type.simpleName} closes at once", screen.isFinishing)
+    }
+
+    @Test fun `back does nothing while the native loads, Start still runs`() = screens().forEach { type ->
+        withResumeInter()
+        provider.loadAndShows.clear()
+        val screen = open(type)
+        screen.pressBack()
+        assertTrue("${type.simpleName}: back held while native_resume loads", provider.loadAndShows.isEmpty())
+        assertFalse(screen.isFinishing)
+
+        screen.tapStart()
+        assertEquals("${type.simpleName}: Start is not held", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        provider.endPresentations()
+        main.idle()
+    }
+
+    @Test fun `a replacement bound over a seen ad holds back again until its own impression`() {
+        withResumeInter()
+        provider.loadAndShows.clear()
+        val screen = open(ObResumeActivity::class.java)
+        val listener = requireNotNull(provider.nativeListeners[AdPlacement.ResumeNative])
+        listener.onLoaded()
+        listener.onImpression()
+        listener.onLoaded()
+        main.idle()
+        screen.pressBack()
+        assertTrue("The new ad is not seen yet", provider.loadAndShows.isEmpty())
+
+        listener.onImpression()
+        main.idle()
+        screen.pressBack()
+        assertEquals(listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        provider.endPresentations()
+        main.idle()
+    }
+
+    @Test fun `back works once the native will not show`() = screens().forEach { type ->
+        provider.loadAndShows.clear()
+        val screen = open(type)
+        screen.pressBack()
+        assertFalse(screen.isFinishing)
+        nativeUnavailable(type)
+        screen.pressBack()
+        assertTrue("${type.simpleName} closes on back after a no-fill", screen.isFinishing)
     }
 
     @Test fun `without inter_resume Start closes the screen at once`() = screens().forEach { type ->

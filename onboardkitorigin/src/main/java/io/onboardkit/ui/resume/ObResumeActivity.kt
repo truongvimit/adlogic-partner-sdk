@@ -47,12 +47,20 @@ class ObResumeActivity : BaseOnboardActivity() {
             placement = placement,
             unit = sdk.requireConfig().ads.nativeUnitFor(placement),
             container = views.ad,
-            onLoading = { views.adBlock.isVisible = true },
+            onLoading = {
+                views.adBlock.isVisible = true
+                startAction.onNativeLoading()
+            },
             onBound = {
                 bound = true
                 views.adBlock.isVisible = true
+                startAction.onNativeBound(alreadyShown = false)
             },
-            onUnavailable = { if (!bound) views.adBlock.isVisible = false },
+            onShown = startAction::onNativeShown,
+            onUnavailable = {
+                if (!bound) views.adBlock.isVisible = false
+                startAction.onNativeUnavailable()
+            },
         )
     }
 
@@ -69,7 +77,7 @@ class ObResumeActivity : BaseOnboardActivity() {
         }
     }
 
-    override fun handleBack() = startAction.press()
+    override fun handleBack() = startAction.pressBack()
 
     internal companion object {
         fun start(host: Activity) {

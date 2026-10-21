@@ -60,6 +60,7 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.util.ReflectionHelpers
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import androidx.activity.ComponentActivity
 
 /** Every pooled UI slot of these suites, plus the confirm modal and the leftover splash interstitial. */
 internal val POOL_UI_ADS = AdsConfig(
@@ -84,8 +85,21 @@ internal class PoolUiProvider : FakeAdProvider() {
     val interstitialLoads = mutableListOf<AdPlacement>()
     val loadAndShows = mutableListOf<AdPlacement>()
 
+    /** The classic screens' native listener, so a test can report a fill, an impression or a no-fill. */
+    val nativeListeners = mutableMapOf<AdPlacement, AdEventListener>()
+
     override fun preloadNativeInBackground(context: Context, request: NativeAdRequest) {
         backgroundPreloads += request.placement
+    }
+
+    override fun bindNative(
+        activity: ComponentActivity,
+        request: NativeAdRequest,
+        container: FrameLayout,
+        listener: AdEventListener,
+    ): Boolean {
+        nativeListeners[request.placement] = listener
+        return false
     }
 
     override fun isInterstitialReady(placement: AdPlacement) =

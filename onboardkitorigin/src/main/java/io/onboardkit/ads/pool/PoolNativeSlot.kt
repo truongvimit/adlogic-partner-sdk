@@ -20,6 +20,7 @@ import com.ads.module.helper.adnative.pool.PoolEvent
 import com.ads.module.helper.adnative.pool.PoolSelection
 import com.ads.module.helper.adnative.pool.PoolSlotBinder
 import com.ads.module.helper.adnative.pool.PoolSlotBinder.Outcome
+import com.ads.module.helper.adnative.pool.PoolState
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
@@ -145,6 +146,13 @@ internal class PoolNativeSlot(
             binder.forceFreshOnNextRender()
             rerender()
         }
+    }
+
+    /** True when the ad this slot shows already made its impression, here or on another screen. */
+    fun showsImpressedAd(): Boolean {
+        val ad = binder.boundAd() ?: return false
+        return OnboardingPool.engineOrNull()?.debugSnapshot()?.loaders
+            ?.any { it.ad === ad && it.state is PoolState.Showing } == true
     }
 
     /** Frozen or below its min state, the slot neither renders nor hears its ad's impressions. */
