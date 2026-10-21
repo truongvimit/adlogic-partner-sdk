@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.pool.ApFakeLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
@@ -27,7 +28,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
-/** Start and back on both native resume screens: inter_resume first, the screen closes once it is gone. */
+/** Start and back on both native resume screens: inter_resume first, AFTER_AD; the screen closes on the next press. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, shadows = [PoolGlueViewShadow::class],
     instrumentedPackages = ["io.onboardkit.ui.pool", "io.onboardkit.ui.resume"])
@@ -74,7 +75,15 @@ class ResumeStartTest {
 
     private fun screens() = listOf(ObResumeActivity::class.java, ObPoolResumeActivity::class.java)
 
-    @Test fun `Start shows inter_resume and closes the screen only once it is gone`() = screens().forEach { type ->
+    /** What the vendor reports for a shown ad: on screen, then closed. */
+    private fun closeShownInter() {
+        val shown = provider.presentations.removeAt(provider.presentations.lastIndex)
+        shown.onNextAction()
+        shown.onAdClosed()
+        main.idle()
+    }
+
+    @Test fun `Start shows inter_resume AFTER_AD, stays up once it is gone and closes on the next Start`() = screens().forEach { type ->
         withResumeInter()
         provider.loadAndShows.clear()
         val screen = open(type)
@@ -85,13 +94,16 @@ class ResumeStartTest {
         assertEquals("${type.simpleName}: one presentation per Start", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
         assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
 
-        provider.presentations.removeAt(provider.presentations.lastIndex).onAdClosed()
-        main.idle()
-        assertTrue("${type.simpleName}: the ad's close is Start", screen.isFinishing)
+        closeShownInter()
+        assertFalse("${type.simpleName}: back on the screen once the ad is gone", screen.isFinishing)
         assertEquals(0, PoolUiSdk.suppressDepth())
+
+        screen.tapStart()
+        assertEquals("${type.simpleName}: no second interstitial", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        assertTrue("${type.simpleName}: the next Start closes it", screen.isFinishing)
     }
 
-    @Test fun `back shows inter_resume like Start and closes the screen only once it is gone`() = screens().forEach { type ->
+    @Test fun `back shows inter_resume like Start, stays up once it is gone and closes on the next back`() = screens().forEach { type ->
         withResumeInter()
         provider.loadAndShows.clear()
         val screen = open(type)
@@ -100,9 +112,22 @@ class ResumeStartTest {
         assertEquals("${type.simpleName}: one presentation per back", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
         assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
 
-        provider.presentations.removeAt(provider.presentations.lastIndex).onAdClosed()
+        closeShownInter()
+        assertFalse("${type.simpleName}: back on the screen once the ad is gone", screen.isFinishing)
+
+        screen.pressBack()
+        assertEquals(listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        assertTrue("${type.simpleName}: the next back closes it", screen.isFinishing)
+    }
+
+    @Test fun `an inter_resume that does not show closes the screen at once`() = screens().forEach { type ->
+        withResumeInter()
+        provider.loadAndShows.clear()
+        val screen = open(type)
+        screen.tapStart()
+        provider.presentations.removeAt(provider.presentations.lastIndex).onAdSkipped(AdSkipReason.NOT_READY)
         main.idle()
-        assertTrue("${type.simpleName}: the ad's close ends the screen", screen.isFinishing)
+        assertTrue("${type.simpleName} closes at once", screen.isFinishing)
     }
 
     @Test fun `without inter_resume back closes the screen at once`() = screens().forEach { type ->

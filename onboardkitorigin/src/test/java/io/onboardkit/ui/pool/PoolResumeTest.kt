@@ -20,11 +20,13 @@ import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.SYNC_PARITY
 import io.onboardkit.ads.pool.poolSnapshot
+import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.core.StepId
 import io.onboardkit.ui.resume.ObResumeActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -133,6 +135,33 @@ class PoolResumeTest {
         screen.backAndForth()
         assertEquals("The held fill is refreshed, the POLITE load is a no-op", 2, loader.callsFor("native_resume").size)
         assertEquals("step_ob1", engine.owner)
+    }
+
+    @Test fun `after the flow, back from inter_resume shows the native_resume that filled behind it without a refresh`() {
+        PoolUiSdk.configure(POOL_UI_ADS.copy(resumeInterstitial = InterstitialAdUnit("resume-inter")))
+        OnboardingPool.claim(ob1, LoadMode.FORCED)
+        val leftover = fill("step_ob1")
+        OnboardingPool.setOwner(null)
+        val screen = openResume()
+        assertSame(leftover.admobNativeAd, screen.slot().shownAd())
+        assertEquals("Its own POLITE request", 1, loader.callsFor("native_resume").size)
+
+        screen.get().findViewById<View>(R.id.ob_resume_start).performClick()
+        main.idle()
+        val inter = PoolUiSdk.provider.presentations.last()
+        inter.onNextAction()
+        screen.pause().stop()
+        main.idle()
+        val behind = fill("native_resume")
+
+        val before = loader.attempts.size
+        screen.restart().start().resume()
+        main.idle()
+        inter.onAdClosed()
+        main.idle()
+        assertTrue("No replacement request on the way back", loader.attempts.drop(before).isEmpty())
+        assertFalse(screen.get().isFinishing)
+        assertSame(behind.admobNativeAd, screen.slot().shownAd())
     }
 
     @Test fun `the host refreshes first and the screen's own refresh is POLITE, skipped while that runs`() {
