@@ -268,6 +268,27 @@ class AdConfigParserFieldMatrixTest {
     }
 
     @Test
+    fun `carousel is a boolean placement switch, off when absent or malformed`() {
+        val config = AdRemoteConfig.fromJson(
+            """{"on":{"carousel":true},"off":{"ids":[{"id":"x"}]},"bad":{"carousel":"yes","isEnable":true}}""",
+        )!!
+        assertTrue(config.unit("on").carousel)
+        assertTrue(config.fieldsFor("on").contains("carousel"))
+        assertFalse(config.unit("off").carousel)
+        assertFalse(config.unit("bad").carousel)
+        assertFalse(config.fieldsFor("bad").contains("carousel"))
+    }
+
+    @Test
+    fun `a patch that leaves carousel out keeps the lower tier's, an explicit false clears it`() {
+        val asset = AdRemoteConfig.fromJson("""{"native_lang":{"ids":[{"id":"a"}],"isEnable":true,"carousel":true}}""")!!
+        val ids = AdRemoteConfig.fromJson("""{"native_lang":{"ids":[{"id":"r"}]}}""")!!
+        val off = AdRemoteConfig.fromJson("""{"native_lang":{"carousel":false}}""")!!
+        assertTrue(AdRemoteConfig.merge(asset, ids).unit("native_lang").carousel)
+        assertFalse(AdRemoteConfig.merge(asset, off).unit("native_lang").carousel)
+    }
+
+    @Test
     fun `an empty ids is a declared empty waterfall`() {
         val config = AdRemoteConfig.fromJson("""{"matrix": {"ids": [], "isEnable": true}}""")!!
         assertTrue(config.fieldsFor("matrix").contains("ids"))

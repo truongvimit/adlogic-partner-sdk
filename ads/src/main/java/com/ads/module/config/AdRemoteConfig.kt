@@ -57,7 +57,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             "ids", "isEnable", "enable_ua_check", "reloadIntervalSeconds", "colorCTA", "colorBackground",
             "colorAdBadge", "colorAdBadgeText",
             "heightCTA", "components", "app_resume_load_delay_ms", "click_action",
-            "templateId",
+            "templateId", "carousel",
         )
 
         private fun defaultUnit(key: String) =
@@ -113,6 +113,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             appResumeLoadDelayMs = if ("app_resume_load_delay_ms" in fields) top.appResumeLoadDelayMs else base.appResumeLoadDelayMs,
             clickAction = if ("click_action" in fields) top.clickAction else base.clickAction,
             templateId = if ("templateId" in fields) top.templateId else base.templateId,
+            carousel = if ("carousel" in fields) top.carousel else base.carousel,
         )
 
         @Volatile

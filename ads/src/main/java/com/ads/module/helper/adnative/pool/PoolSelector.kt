@@ -27,6 +27,43 @@ fun <H : Any> selectFromPool(
     return PoolSelection(null, null, anyInFlight(snapshot))
 }
 
+/** What the two pages of a carousel render, decided together so they never show one ad twice. */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+data class CarouselSelection<H : Any>(val first: PoolSelection<H>, val second: PoolSelection<H>)
+
+/**
+ * Both pages of a carousel for [snapshot]. Each page shows its own loader's ad ([firstKey],
+ * [secondKey]), else the ad it already shows while a loader still holds it, else borrows: the
+ * first page the newest unshown ad (or, with [PoolParity.borrowShowing], the newest shown one)
+ * that the second page does not show, the second page only the newest unshown ad, never the first
+ * page's. A page with nothing shows a shimmer while anything loads. Pure, like [selectFromPool].
+ */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+fun <H : Any> selectCarouselPages(
+    snapshot: PoolSnapshot<H>,
+    firstKey: String,
+    secondKey: String,
+    firstShown: H?,
+    secondShown: H?,
+    parity: PoolParity,
+    nowMs: Long,
+    maxAgeMs: Long,
+): CarouselSelection<H> {
+    val visible = snapshot.loaders
+        .filter { it.holdsAd() && !isExpiredAt(it.fillAtMs, nowMs, maxAgeMs) }
+        .sortedBy { it.index }
+    fun pick(key: String, shown: H?, excluded: H?, borrowShowing: Boolean): PoolSelection<H> {
+        val candidates = visible.filter { it.ad !== excluded }
+        candidates.firstOrNull { it.key == key }?.let { return it.selected() }
+        shown?.let { ad -> candidates.firstOrNull { it.ad === ad }?.let { return it.selected() } }
+        candidates.newestBy { (it.state as? PoolState.Loaded)?.ts }?.let { return it.selected() }
+        if (borrowShowing) candidates.newestBy { (it.state as? PoolState.Showing)?.ts }?.let { return it.selected() }
+        return PoolSelection(null, null, anyInFlight(snapshot))
+    }
+    val first = pick(firstKey, firstShown, excluded = secondShown, borrowShowing = parity.borrowShowing)
+    return CarouselSelection(first, pick(secondKey, secondShown, excluded = first.ad, borrowShowing = false))
+}
+
 /** The gate's input; a refresh counts while the held ad keeps showing. */
 internal fun anyInFlight(snapshot: PoolSnapshot<*>): Boolean =
     snapshot.loaders.any { it.inFlight || it.refreshing }

@@ -353,6 +353,7 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `lfo.native2.behavior` | `{}` |
 | `lfo.native2.swap_wait_timeout_ms` | `8000` |
 | `lfo.native2.preload_trigger` | `"LFO_SHOWN"` |
+| `lfo.carousel.auto_scroll_ms` | `3000` |
 | `lfo.tap_hint.enabled` | `true` |
 | `lfo.tap_hint.delay_ms` | `3000` |
 | `lfo.confirm_button.visible_before_selection` | `true` |

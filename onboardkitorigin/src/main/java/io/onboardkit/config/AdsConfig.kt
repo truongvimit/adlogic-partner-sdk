@@ -4,6 +4,7 @@ import io.onboardkit.remote.OnboardingSettings
 import com.ads.module.config.AdRemoteConfig
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
+import io.onboardkit.ads.carouselBase
 import io.onboardkit.core.StepId
 
 /**
@@ -217,7 +218,7 @@ data class AdsConfig(
     }
 
     /** The standard ad_config key of [placement], whether or not anything declares it. */
-    internal fun standardKeyFor(placement: AdPlacement): String? = STANDARD_PLACEMENT_KEYS[placement]
+    internal fun standardKeyFor(placement: AdPlacement): String? = STANDARD_PLACEMENT_KEYS[placement.carouselBase]
 
     // The splash key also joins when ad_config declares only its returning-user `_o`.
     private val keys: Map<AdPlacement, String>
@@ -230,9 +231,10 @@ data class AdsConfig(
      * The key a placement reads ad_config under. LFO2 with no units of its own shows LFO1's, so it
      * follows LFO1's template, UA gate and overrides too rather than those of a key that is absent.
      */
-    internal fun placementKeyFor(placement: AdPlacement): String? =
-        if (placement == AdPlacement.Language2 && languageDupNative == null) keys[AdPlacement.Language1]
-        else keys[placement]
+    internal fun placementKeyFor(placement: AdPlacement): String? = when (val base = placement.carouselBase) {
+        AdPlacement.Language2 -> if (languageDupNative == null) keys[AdPlacement.Language1] else keys[base]
+        else -> keys[base]
+    }
 
     /** Resolve from the current ad document for both flow eligibility and ad requests. */
     internal fun resolvePlacements(config: AdRemoteConfig): AdsConfig {
@@ -295,6 +297,7 @@ data class AdsConfig(
         AdPlacement.AfterOnboardingInterstitial -> afterOnboardingInterstitial
         AdPlacement.Language1 -> languageNative
         AdPlacement.Language2 -> languageDupNative ?: languageNative
+        AdPlacement.Language1Carousel, AdPlacement.Language2Carousel -> unitFor(placement.carouselBase)
         AdPlacement.LanguageConfirm -> languageConfirmNative
         is AdPlacement.StepNative -> stepNatives[placement.stepId] ?: contentStepNative
         is AdPlacement.StepFullScreen -> stepNatives[placement.stepId] ?: fullScreenStepNative

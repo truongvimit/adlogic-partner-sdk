@@ -34,6 +34,8 @@ sealed interface PoolState {
  * @param layoutRes the template the loading call inflates against; slots bind into their own
  * @param adConfigKey the `ad_config` key the ids came from, for the UA gate and logging
  * @param tierDeadlineMs per-id wait; a silent id counts as a failure after it. 0 waits forever.
+ * @param trackingKey the placement paid events name, when it is not [key]: a second loader that
+ *   serves the same placement reports as that placement
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 data class PoolRequest(
@@ -42,6 +44,7 @@ data class PoolRequest(
     @LayoutRes val layoutRes: Int,
     val adConfigKey: String? = null,
     val tierDeadlineMs: Long = 0L,
+    val trackingKey: String = key,
 )
 
 /** POLITE loads are skipped while any loader has a request in flight; FORCED ones are not. */

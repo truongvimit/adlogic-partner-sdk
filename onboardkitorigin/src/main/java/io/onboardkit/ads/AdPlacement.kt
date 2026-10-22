@@ -9,6 +9,14 @@ internal val AdPlacement.isPrivacyGoalsNative: Boolean
         StepId.PARTNER_GOAL, StepId.PARTNER_GOAL_ALT,
     )
 
+/** The placement whose ad units and ad_config key a carousel slot 2 shares; itself otherwise. */
+internal val AdPlacement.carouselBase: AdPlacement
+    get() = when (this) {
+        AdPlacement.Language1Carousel -> AdPlacement.Language1
+        AdPlacement.Language2Carousel -> AdPlacement.Language2
+        else -> this
+    }
+
 /**
  * Every ad slot the flow knows about. Preload buffers, enable flags and analytics all key
  * off [key] — the SDK never references vendor ad objects by screen name.
@@ -62,6 +70,22 @@ sealed interface AdPlacement {
 
     data object Language2 : AdPlacement {
         override val key: String = "language2"
+        override val format: AdFormat = AdFormat.NATIVE
+    }
+
+    /**
+     * Slot 2 of the LFO1 carousel: [Language1] in everything but its pool buffer. It reads
+     * `native_lang`, and analytics and paid events name it `language1`; only [key] differs, so the
+     * two slots of one carousel can each hold an ad.
+     */
+    data object Language1Carousel : AdPlacement {
+        override val key: String = "language1_carousel"
+        override val format: AdFormat = AdFormat.NATIVE
+    }
+
+    /** Slot 2 of the LFO2 carousel: [Language2] in everything but its pool buffer, like [Language1Carousel]. */
+    data object Language2Carousel : AdPlacement {
+        override val key: String = "language2_carousel"
         override val format: AdFormat = AdFormat.NATIVE
     }
 

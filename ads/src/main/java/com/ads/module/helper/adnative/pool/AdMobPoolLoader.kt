@@ -37,7 +37,7 @@ class AdMobPoolLoader internal constructor(
             return
         }
         // Paid events resolve their placement by id: it must name the lender, not a slot.
-        AdTracking.registerPlacement(id, request.key)
+        AdTracking.registerPlacement(id, request.trackingKey)
         val callback = IdCallback(sink)
         try {
             requestNative(appContext, id, request.layoutRes, callback)

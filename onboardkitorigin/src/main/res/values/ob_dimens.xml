@@ -14,6 +14,9 @@
     <dimen name="ob_language_row_gap">8dp</dimen>
     <!-- LFO native slot inset on start, end and bottom; matches the row side inset and gap. -->
     <dimen name="ob_language_ad_margin">8dp</dimen>
+    <dimen name="ob_language_list_bottom_gap">8dp</dimen>
+    <!-- GMS minimum for a MediaView that plays video. -->
+    <dimen name="ob_native_media_min_video">120dp</dimen>
     <!-- Figma LFO: header ends y=100, first row starts y=116. -->
     <dimen name="ob_language_list_top">16dp</dimen>
     <dimen name="ob_flag_size">28dp</dimen>

@@ -73,6 +73,8 @@ object NativeTemplates {
             -> return null
             AdPlacement.Language1,
             AdPlacement.Language2,
+            AdPlacement.Language1Carousel,
+            AdPlacement.Language2Carousel,
             -> if (OnboardingSdk.session.nativeFlow?.type == NativeFlowType.SHARED_POOL) {
                 TEMPLATE_LFO_POOL
             } else {

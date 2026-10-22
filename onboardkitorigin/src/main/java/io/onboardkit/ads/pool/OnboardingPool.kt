@@ -7,18 +7,22 @@ import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import com.ads.module.ads.wrapper.ApNativeAd
 import com.ads.module.config.settings.AdBehavior
+import com.ads.module.helper.adnative.pool.CarouselSelection
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.LoadResult
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import com.ads.module.helper.adnative.pool.PoolCancellable
 import com.ads.module.helper.adnative.pool.PoolEvent
 import com.ads.module.helper.adnative.pool.PoolSelection
+import com.ads.module.helper.adnative.pool.PoolSnapshot
+import com.ads.module.helper.adnative.pool.PoolState
 import com.ads.module.helper.adnative.pool.PoolTraceSink
 import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.adnative.pool.reportsSuccess
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.carouselBase
 import io.onboardkit.ads.erain.ERainAdProvider
 import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
@@ -26,8 +30,10 @@ import io.onboardkit.core.ObLog
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.onboardkit.flow.NativeFlowSnapshot
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -67,6 +73,64 @@ internal object OnboardingPool {
     val selection: Flow<PoolSelection<ApNativeAd>> = flow {
         val engine = engineOrNull()
         if (engine == null) emit(PoolSelection.hidden()) else emitAll(engine.selection)
+    }
+
+    /** The two keys an LFO carousel's pages show, and the ad each page's view holds now. */
+    class CarouselPages(
+        val firstKey: () -> String,
+        val secondKey: () -> String,
+        val firstShown: () -> ApNativeAd?,
+        val secondShown: () -> ApNativeAd?,
+    )
+
+    /** What an LFO carousel's two pages render, re-decided on every pool change. */
+    fun carouselSelection(pages: CarouselPages): Flow<CarouselSelection<ApNativeAd>?> = flow {
+        val engine = engineOrNull()
+        if (engine == null) {
+            emit(null)
+        } else {
+            emitAll(engine.snapshot.map { snapshot -> carouselSelectionOf(engine, snapshot, pages) }.distinctUntilChanged())
+        }
+    }
+
+    /** [carouselSelection] of the pool as it is now. */
+    @MainThread
+    fun currentCarouselSelection(pages: CarouselPages): CarouselSelection<ApNativeAd>? =
+        engineOrNull()?.let { carouselSelectionOf(it, it.debugSnapshot(), pages) }
+
+    private fun carouselSelectionOf(
+        engine: NativePoolEngine<ApNativeAd>,
+        snapshot: PoolSnapshot<ApNativeAd>,
+        pages: CarouselPages,
+    ): CarouselSelection<ApNativeAd> =
+        engine.carouselSelection(snapshot, pages.firstKey(), pages.secondKey(), pages.firstShown(), pages.secondShown())
+
+    /** [placement]'s loader state; null before anything loaded it. */
+    @MainThread
+    fun loaderState(placement: AdPlacement): PoolState? =
+        engineOrNull()?.debugSnapshot()?.loader(placement.key)?.state
+
+    /** A load or a refresh of [placement]'s loader is running. */
+    @MainThread
+    fun isLoading(placement: AdPlacement): Boolean =
+        engineOrNull()?.debugSnapshot()?.loader(placement.key)?.let { it.inFlight || it.refreshing } == true
+
+    /**
+     * A carousel page asks for a new ad, and only while no loader of the pool has a load running,
+     * read synchronously: however fast the user swipes, the carousel never has two ads loading.
+     * With [refreshHeld] a held ad is refreshed (it stays shown until the new one fills, and on a
+     * failure); an empty loader loads POLITE. The owner is untouched. False when nothing started.
+     */
+    @MainThread
+    fun loadCarouselPage(placement: AdPlacement, refreshHeld: Boolean): Boolean {
+        val engine = engineOrNull() ?: return false
+        if (engine.anyLoadInFlight()) {
+            ObLog.d(ObLog.Section.LOAD, "pool | carousel_gate_skip key=${placement.key}")
+            return false
+        }
+        val held = engine.debugSnapshot().loader(placement.key)?.ad != null
+        if (held) return refreshHeld && engine.refresh(placement.key)
+        return load(placement, LoadMode.POLITE) == LoadResult.Requested
     }
 
     /** The pool loads through the ERain ad stack; a test engine stands in for it. */
@@ -196,13 +260,17 @@ internal object OnboardingPool {
         return engine.load(request, mode).also { record(placement, it) }
     }
 
-    /** Requests and refusals go to analytics as in the classic flow; a gate skip only to the trace. */
+    /**
+     * Requests and refusals go to analytics as in the classic flow; a gate skip only to the trace.
+     * A carousel's second page reports as its LFO: the same placement, on the same ad_config key.
+     */
     private fun record(placement: AdPlacement, result: LoadResult) {
         results[placement.key] = result
+        val reported = placement.carouselBase
         when (result) {
-            LoadResult.Requested -> placement.trackRequest()
-            is LoadResult.SkippedTransient -> trackSkip(placement, result.reason)
-            is LoadResult.SkippedByConfig -> trackSkip(placement, result.reason)
+            LoadResult.Requested -> reported.trackRequest()
+            is LoadResult.SkippedTransient -> trackSkip(reported, result.reason)
+            is LoadResult.SkippedByConfig -> trackSkip(reported, result.reason)
             LoadResult.SkippedByGate -> runGateSkips.merge(placement.key, 1, Int::plus)
             is LoadResult.NoOpState -> Unit
         }
@@ -248,7 +316,7 @@ internal object OnboardingPool {
      */
     private fun reportNoFill(event: PoolEvent.Exhausted<ApNativeAd>) {
         if (event.refresh || engineOrNull()?.debugSnapshot()?.loader(event.key)?.ad != null) return
-        val placement = PoolPlacementMapper.placementFor(event.key) ?: return
+        val placement = PoolPlacementMapper.placementFor(event.key)?.carouselBase ?: return
         if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) {
             OnboardingSdk.track(AnalyticsEvent.AdFailed(placement.key, placement.format))
         }

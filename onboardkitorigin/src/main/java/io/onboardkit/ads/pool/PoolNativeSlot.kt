@@ -2,6 +2,7 @@ package io.onboardkit.ads.pool
 
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.MainThread
 import androidx.lifecycle.Lifecycle
@@ -26,10 +27,12 @@ import io.onboardkit.ads.AdEventListener
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.NativeTemplates
+import io.onboardkit.ads.carouselBase
 import io.onboardkit.ads.tracked
 import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.ui.pool.StepSlotCallbacks
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 /**
@@ -57,6 +60,12 @@ internal class PoolNativeSlot(
      * pager page binds only once RESUMED, after its slide, and would otherwise grow under the user.
      */
     private val placeholderUntilLive: Boolean = false,
+    /** What the slot renders; an LFO carousel's second page passes [OnboardingPool.carouselSelection]. */
+    private val selection: () -> Flow<PoolSelection<ApNativeAd>> = { OnboardingPool.selection },
+    /** [selection] as it is now, for an unfreeze. */
+    private val currentSelection: () -> PoolSelection<ApNativeAd>? = {
+        OnboardingPool.engineOrNull()?.currentSelection()
+    },
 ) {
     enum class Kind { OWNER, NON_OWNER }
 
@@ -113,7 +122,7 @@ internal class PoolNativeSlot(
         collector = owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(minState) {
                 binder.forceFreshOnNextRender()
-                OnboardingPool.selection.collect { selection ->
+                selection().collect { selection ->
                     latest = selection
                     if (!frozen) render(selection)
                 }
@@ -142,7 +151,7 @@ internal class PoolNativeSlot(
         if (frozen == this.frozen) return
         this.frozen = frozen
         if (!frozen) {
-            OnboardingPool.engineOrNull()?.let { latest = it.currentSelection() }
+            currentSelection()?.let { latest = it }
             binder.forceFreshOnNextRender()
             rerender()
         }
@@ -154,6 +163,15 @@ internal class PoolNativeSlot(
         return OnboardingPool.engineOrNull()?.debugSnapshot()?.loaders
             ?.any { it.ad === ad && it.state is PoolState.Showing } == true
     }
+
+    /** The ad this slot's view holds, shown or hidden; null under a skeleton. */
+    fun shownAd(): ApNativeAd? = binder.boundAd()
+
+    /** The container shows an ad, not a skeleton and not hidden. */
+    fun showsAd(): Boolean = binder.boundAd() != null && container.visibility == View.VISIBLE
+
+    /** Ends the slot before its owner does, e.g. a carousel page taken down mid-screen. */
+    fun stop() = teardown()
 
     /** Frozen or below its min state, the slot neither renders nor hears its ad's impressions. */
     private fun isLive(): Boolean = !frozen && owner.lifecycle.currentState.isAtLeast(minState)
@@ -275,8 +293,11 @@ internal class PoolNativeSlot(
         destroyOnTeardown,
     )
 
-    /** Reports fo_ad_bound for [placement]; a click also tells app-resume the user is leaving. */
-    private fun trackedFor(placement: AdPlacement): AdEventListener = placement.tracked(
+    /**
+     * Reports fo_ad_bound for [placement], a carousel's second page under its LFO; a click also
+     * tells app-resume the user is leaving.
+     */
+    private fun trackedFor(placement: AdPlacement): AdEventListener = placement.carouselBase.tracked(
         object : AdEventListener {
             override fun onClicked() {
                 callbacks?.onAdEngaged?.invoke(NativeClickAction.NONE)

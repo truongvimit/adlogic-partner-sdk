@@ -5,6 +5,7 @@ import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.adnative.pool.PoolRequest
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.carouselBase
 import io.onboardkit.ads.NativeTemplates
 import io.onboardkit.config.StepDefinition
 import io.onboardkit.core.StepType
@@ -33,6 +34,7 @@ internal object PoolPlacementMapper {
             adConfigKey = adConfigKey,
             tierDeadlineMs = OnboardingSettings.behavior(placement)
                 .long("load.tier_timeout_ms", AdBehavior.number("native.load.tier_timeout_ms")),
+            trackingKey = placement.carouselBase.key,
         )
     }
 

@@ -112,6 +112,19 @@ class NativePoolEngine<H : Any>(
 
     fun debugSnapshot(): PoolSnapshot<H> = mutableSnapshot.value
 
+    /** [selectCarouselPages] of [snapshot] on this engine's parity, clock and expiry. */
+    fun carouselSelection(
+        snapshot: PoolSnapshot<H>,
+        firstKey: String,
+        secondKey: String,
+        firstShown: H?,
+        secondShown: H?,
+    ): CarouselSelection<H> =
+        selectCarouselPages(snapshot, firstKey, secondKey, firstShown, secondShown, parity, clock.nowMs(), expiry.maxAgeMs())
+
+    /** Any loader has a load or a refresh running, read synchronously unlike [gateOpen]. */
+    fun anyLoadInFlight(): Boolean = anyInFlight(mutableSnapshot.value)
+
     fun setOwner(key: String?) {
         owner = key
         key?.let { loaders[it] }?.let(::sweepIfExpired)

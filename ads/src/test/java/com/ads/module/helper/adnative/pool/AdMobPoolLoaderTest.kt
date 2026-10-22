@@ -164,6 +164,13 @@ class AdMobPoolLoaderTest {
         assertFalse("The glue reports requests, never the loader", "ad_request" in events)
     }
 
+    @Test fun `a second loader of the same placement registers its ids to that placement`() {
+        val carousel = PoolRequest("language1_carousel", listOf("unit-a"), R.layout.custom_native_admob_medium,
+            trackingKey = "language1")
+        loader.load(carousel, "unit-a", RecordingSink())
+        assertEquals("language1", PlacementRegistry.placementOf("unit-a"))
+    }
+
     @Test fun `the fill and every later event carry the produced ad`() {
         val sink = RecordingSink()
         loader.load(request(), "unit-a", sink)

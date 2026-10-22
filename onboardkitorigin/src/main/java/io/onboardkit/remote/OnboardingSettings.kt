@@ -112,6 +112,8 @@ object OnboardingSettings {
         io.onboardkit.ads.AdPlacement.AfterOnboardingInterstitial -> "onboarding.exit_interstitial"
         io.onboardkit.ads.AdPlacement.Language1 -> "lfo.native1"
         io.onboardkit.ads.AdPlacement.Language2 -> "lfo.native2"
+        io.onboardkit.ads.AdPlacement.Language1Carousel -> "lfo.native1"
+        io.onboardkit.ads.AdPlacement.Language2Carousel -> "lfo.native2"
         io.onboardkit.ads.AdPlacement.LanguageConfirm -> "lfo.confirm_dialog"
         is io.onboardkit.ads.AdPlacement.StepNative -> "onboarding.steps.${p.stepId.value}"
         is io.onboardkit.ads.AdPlacement.StepFullScreen -> "onboarding.steps.${p.stepId.value}"
@@ -129,6 +131,20 @@ object OnboardingSettings {
             p is AdPlacement.StepFullScreen || p is AdPlacement.StepNative && !p.isPrivacyGoalsNative
         return if (autoNext) NativeClickAction.AUTO_NEXT else NativeClickAction.RELOAD
     }
+
+    /**
+     * `ad_config.<key>.carousel` of an LFO native: its screen shows two slots that auto-scroll.
+     * Absent or false keeps the single native.
+     */
+    internal fun nativeCarouselEnabled(p: AdPlacement): Boolean =
+        AdRemoteConfig.getInstance().ads[placementKeyOf(p)]?.carousel == true
+
+    /** `lfo.carousel.auto_scroll_ms`, floored so a slot is readable before the next scroll. */
+    internal fun carouselAutoScrollMs(): Long =
+        number(CAROUSEL_AUTO_SCROLL_PATH).coerceAtLeast(MIN_CAROUSEL_AUTO_SCROLL_MS)
+
+    private const val CAROUSEL_AUTO_SCROLL_PATH = "lfo.carousel.auto_scroll_ms"
+    private const val MIN_CAROUSEL_AUTO_SCROLL_MS = 1_000L
 
     private fun placementKeyOf(p: AdPlacement): String = io.onboardkit.OnboardingSdk.configuredPlacementKey(p)
         ?: io.onboardkit.OnboardingSdk.configOrNull()?.ads?.standardKeyFor(p) ?: p.key

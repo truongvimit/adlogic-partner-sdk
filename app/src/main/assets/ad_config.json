@@ -160,6 +160,7 @@
     "enable_ua_check": false
   },
   "native_lang": {
+    "carousel": true,
     "ids": [
       { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true },
       { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true }
@@ -177,6 +178,7 @@
     "enable_ua_check": false
   },
   "native_lang_alt": {
+    "carousel": true,
     "ids": [
       { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true },
       { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true }

@@ -50,6 +50,11 @@ data class AdUnitConfig(
      * an unknown number falls back to that default too.
      */
     val templateId: Int? = null,
+    /**
+     * Shows this placement as a two-slot native carousel where a screen supports one (the LFO
+     * natives); every other placement ignores it.
+     */
+    val carousel: Boolean = false,
 ) {
 
     /**

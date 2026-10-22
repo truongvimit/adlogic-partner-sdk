@@ -76,14 +76,19 @@ internal object AdConfigParser {
         var ids: List<String> = emptyList()
         var clickAction: NativeClickAction? = null
         var templateId: Int? = null
+        var carousel = false
 
         reader.beginObject()
         while (reader.hasNext()) {
             val field = reader.nextName()
             when (field) {
-                "isEnable", "enable_ua_check" -> readBoolean(reader).also { parsed ->
+                "isEnable", "enable_ua_check", "carousel" -> readBoolean(reader).also { parsed ->
                     if (parsed.valid) {
-                        if (field == "isEnable") isEnable = parsed.value!! else enableUaCheck = parsed.value!!
+                        when (field) {
+                            "isEnable" -> isEnable = parsed.value!!
+                            "enable_ua_check" -> enableUaCheck = parsed.value!!
+                            else -> carousel = parsed.value!!
+                        }
                         fields += field
                     } else invalid(key, field, parsed.raw)
                 }
@@ -145,6 +150,7 @@ internal object AdConfigParser {
             appResumeLoadDelayMs = appResumeLoadDelayMs,
             clickAction = clickAction,
             templateId = templateId,
+            carousel = carousel,
         ), fields)
     }
 
