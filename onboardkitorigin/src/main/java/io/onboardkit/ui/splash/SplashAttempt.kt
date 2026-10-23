@@ -42,6 +42,8 @@ internal class SplashAttempt(application: Application) : AndroidViewModel(applic
     var showRequested = false
     val showNext = CompletableDeferred<Unit>()
     val showFinished = CompletableDeferred<Unit>()
+    /** This attempt's native_fs went to the SHARED_POOL pool, so its screen is a pool slot. */
+    var splashNativePooled = false
     var nativeScreenRequested = false
     var nativeScreenResolved = false
     val nativeScreenFinished = CompletableDeferred<Unit>()

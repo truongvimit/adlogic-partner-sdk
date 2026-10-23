@@ -1,5 +1,7 @@
 package io.onboardkit.ui.splash
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.Lifecycle
@@ -8,6 +10,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
+import io.onboardkit.ads.pool.OnboardingPool
+import io.onboardkit.ads.pool.PoolNativeSlot
 import io.onboardkit.ads.showNativeAd
 import io.onboardkit.ads.whenResumed
 import io.onboardkit.config.FullScreenSkipPosition
@@ -17,6 +21,7 @@ import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.AdClickReturnTracker
 import io.onboardkit.ui.applyFullScreenSkip
 import io.onboardkit.ui.base.BaseOnboardActivity
+import io.onboardkit.ui.pool.StepSlotCallbacks
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,6 +48,10 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
         )
         binding.obSkipButton.setOnClickListener { close() }
         if (skipUnlocked) unlockSkip()
+        if (pooled) {
+            bindPoolSlot()
+            return
+        }
         // A ready fill cannot bind before RESUMED. On recreation the helper may instead own a
         // retained presentation, so a READY-only buffer check would wrongly close this screen.
         whenResumed(onHostLost = {}) {
@@ -58,6 +67,27 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
                 onAdEngaged = ::onAdEngaged,
             )
         }
+    }
+
+    /**
+     * SHARED_POOL: the screen is the pool's first slot. It owns native_fs and requests nothing; the
+     * ad, shown or still loading, stays in the pool for the LFO after it.
+     */
+    private fun bindPoolSlot() {
+        OnboardingPool.setOwner(AdPlacement.SplashNative)
+        PoolNativeSlot(
+            owner = this,
+            placement = AdPlacement.SplashNative,
+            kind = PoolNativeSlot.Kind.OWNER,
+            minState = Lifecycle.State.RESUMED,
+            container = binding.obNativeContainer,
+            callbacks = StepSlotCallbacks(
+                onBound = ::startSkipTimer,
+                onUnavailable = { close() },
+                onAdEngaged = ::onAdEngaged,
+            ),
+            destroyOnTeardown = OnboardingSettings.nativeFlowSnapshot().viewDestroyOnTeardown,
+        ).start()
     }
 
     override fun onPause() {
@@ -123,11 +153,20 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
     }
 
     override fun onDestroy() {
-        if (!isChangingConfigurations) sdk.provider()?.releaseNative(AdPlacement.SplashNative)
+        if (!isChangingConfigurations) {
+            if (pooled) OnboardingPool.clearOwnerIf(AdPlacement.SplashNative)
+            else sdk.provider()?.releaseNative(AdPlacement.SplashNative)
+        }
         super.onDestroy()
     }
 
-    private companion object {
-        const val KEY_SKIP_UNLOCKED = "ob_splash_native_skip_unlocked"
+    private val pooled: Boolean get() = intent.getBooleanExtra(EXTRA_POOLED, false)
+
+    internal companion object {
+        private const val KEY_SKIP_UNLOCKED = "ob_splash_native_skip_unlocked"
+        private const val EXTRA_POOLED = "ob_splash_native_pooled"
+
+        fun intent(context: Context, pooled: Boolean): Intent =
+            Intent(context, ObSplashNativeActivity::class.java).putExtra(EXTRA_POOLED, pooled)
     }
 }

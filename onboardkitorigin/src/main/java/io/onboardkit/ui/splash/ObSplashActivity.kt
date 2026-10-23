@@ -41,6 +41,8 @@ import io.onboardkit.ads.tracked
 import com.ads.module.config.AdRemoteConfig
 import io.onboardkit.ads.ObInterstitial
 import io.onboardkit.ads.SplashInterCase
+import io.onboardkit.ads.pool.OnboardingPool
+import com.ads.module.helper.adnative.pool.PoolState
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.config.SplashAdSlotFormat
@@ -127,8 +129,16 @@ open class ObSplashActivity : BaseOnboardActivity() {
     }
 
     private fun forgetIdlePreloads() {
-        attempt.preloadsRequested.retainAll { sdk.provider()?.nativeStatus(it) != NativeStatus.IDLE }
+        attempt.preloadsRequested.retainAll {
+            if (it == AdPlacement.SplashNative && attempt.splashNativePooled) splashNativeSentToPool()
+            else sdk.provider()?.nativeStatus(it) != NativeStatus.IDLE
+        }
     }
+
+    /** The provider's IDLE for a pooled native_fs: no fill, no load, no failed walk yet. */
+    private fun splashNativeSentToPool(): Boolean =
+        OnboardingPool.holdsOrLoads(AdPlacement.SplashNative) ||
+            OnboardingPool.loaderState(AdPlacement.SplashNative) == PoolState.LoadError
 
     override fun onResume() {
         super.onResume()
@@ -345,7 +355,8 @@ open class ObSplashActivity : BaseOnboardActivity() {
         }
         if (destination != FlowDestination.LANGUAGE) return
         if (interResult == InterResult.LOADED && attempt.preloadsRequested.add(AdPlacement.SplashNative)) {
-            sdk.preload().preloadSplashNative(this, allowWhileVisible)
+            attempt.splashNativePooled = sdk.requestSplashNativeInPool(this, allowWhileVisible)
+            if (!attempt.splashNativePooled) sdk.preload().preloadSplashNative(this, allowWhileVisible)
         }
     }
 
@@ -357,15 +368,18 @@ open class ObSplashActivity : BaseOnboardActivity() {
         if (attempt.nativeScreenResolved) return
         if (!attempt.nativeScreenRequested) {
             val status = sdk.provider()?.nativeStatus(AdPlacement.SplashNative)
-            if (!splashNativeEligible() ||
-                (status != NativeStatus.READY && status != NativeStatus.LOADING)
-            ) {
+            val available = if (attempt.splashNativePooled) {
+                OnboardingPool.holdsOrLoads(AdPlacement.SplashNative)
+            } else {
+                status == NativeStatus.READY || status == NativeStatus.LOADING
+            }
+            if (!splashNativeEligible() || !available) {
                 sdk.provider()?.releaseNative(AdPlacement.SplashNative)
                 attempt.nativeScreenResolved = true
                 return
             }
             attempt.nativeScreenRequested = true
-            nativeScreenLauncher.launch(Intent(this, ObSplashNativeActivity::class.java))
+            nativeScreenLauncher.launch(ObSplashNativeActivity.intent(this, pooled = attempt.splashNativePooled))
         }
         attempt.nativeScreenFinished.await()
         awaitSplashFocus()

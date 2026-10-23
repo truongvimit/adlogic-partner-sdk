@@ -44,6 +44,7 @@ import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.remote.RemoteFlags
 import io.onboardkit.ui.language.LanguageAdapter
 import io.onboardkit.ui.language.LanguageScreenMode
+import io.onboardkit.ui.splash.ObSplashNativeActivity
 import io.onboardkit.ui.language.ObLanguageActivity
 import io.onboardkit.ui.onboarding.ObOnboardingHostActivity
 import io.onboardkit.ui.resume.ObResumeActivity
@@ -104,6 +105,8 @@ class PoolLegacyIsolationTest {
         controllers.asReversed().forEach(::close)
         controllers.clear()
         ReflectionHelpers.getField<Deferred<Unit>?>(OnboardingSdk, "remoteRefresh")?.cancel()
+        // A splash stopped before its handoff leaves the type it planned for the next test.
+        ReflectionHelpers.setField(OnboardingSdk, "plannedNativeFlow", null)
         ScenarioSdk.tearDown()
         ShadowChoreographer.reset()
         Locale.setDefault(locale)
@@ -333,7 +336,7 @@ class PoolLegacyIsolationTest {
 
     // ── Splash ──
 
-    @Test fun `the splash requests the same natives in both types up to the LFO, minus LFO1 for a pooled run`() {
+    @Test fun `a pooled splash sends LFO1 to the LFO and native_fs to the pool, the classic one both to the provider`() {
         installVendor()
         OnboardingSdk.configure(onboardKitConfig {
             splash = SplashConfig(noInternetPromptEnabled = false, notificationPermissionEnabled = false,
@@ -348,20 +351,22 @@ class PoolLegacyIsolationTest {
         val classic = runSplash()
         assertEquals(ObLanguageActivity::class.java.name, classic.next)
         assertNull(OnboardingSdk.session.nativeFlow)
+        assertTrue("The classic splash never touches the pool", loader.attempts.isEmpty())
 
         runBlocking { OnboardingSdk.reset() }
         main.idle()
         pooledByRemote()
         val pooled = runSplash()
-        assertEquals(ObPoolFlowActivity::class.java.name, pooled.next)
-        assertEquals(NativeFlowType.SHARED_POOL, OnboardingSdk.session.nativeFlow?.type)
+        assertEquals("native_fs is loading in the pool, so its screen opens to wait",
+            ObSplashNativeActivity::class.java.name, pooled.next)
 
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), classic.natives.map { it.placement })
-        // The pooled LFO requests LFO1 itself, as DashDrama does: the splash skips that one preload.
-        assertEquals(classic.natives.filter { it.placement != AdPlacement.Language1 }, pooled.natives)
+        // The pooled LFO requests LFO1 itself, as DashDrama does; native_fs is the pool's first ad.
+        assertTrue(pooled.natives.isEmpty())
         assertEquals(classic.interstitials, pooled.interstitials)
         assertTrue("Only the classic splash leaves an LFO1 handoff", classic.handoff && !pooled.handoff)
-        assertTrue("The pool requested nothing before its LFO", loader.attempts.isEmpty())
+        assertEquals("The pool's only request before its LFO is native_fs",
+            listOf(AdPlacement.SplashNative.key), loader.attempts.map { it.request.key })
     }
 
     private class SplashRun(
@@ -380,6 +385,9 @@ class PoolLegacyIsolationTest {
         splash.setup().visible()
         splash.get().onWindowFocusChanged(true)
         drainUntil("The splash requests its interstitial") { vendor.interstitialLoads.isNotEmpty() }
+        // A pooled native_fs waits for the real window focus, as the provider queue does.
+        splash.windowFocusChanged(true)
+        main.idle()
         requireNotNull(vendor.interstitialLoads.single().second).onLoaded()
         drainUntil("The splash shows its interstitial") { vendor.presentations.isNotEmpty() }
         val presentation = vendor.presentations.single()

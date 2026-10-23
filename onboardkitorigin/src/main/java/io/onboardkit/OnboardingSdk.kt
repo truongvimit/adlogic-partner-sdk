@@ -47,6 +47,11 @@ import io.onboardkit.ui.welcomeback.ObWelcomeBackActivity
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.admob.ResumeSkipPolicy
+import com.ads.module.helper.adnative.pool.LoadMode
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import io.onboardkit.ads.awaitNativeRequestWindow
+import io.onboardkit.ads.canStartNativeRequest
 import io.trackkit.Tracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -357,6 +362,30 @@ object OnboardingSdk {
         ?: runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowTypeOrDefault() }
             .getOrDefault(NativeFlowType.PER_SCREEN)
             .also { plannedNativeFlow = it }
+
+    /**
+     * A SHARED_POOL run's pool starts at native_fs: the splash activates it and asks native_fs
+     * FORCED, so the native_fs screen, then the LFO and every later slot, share that ad, shown or
+     * still loading. The request waits for the splash's request window, as the provider queue
+     * holds a classic one; a wait that dies with the splash sends nothing. False for a classic
+     * run, which preloads native_fs through the provider.
+     */
+    internal fun requestSplashNativeInPool(activity: ComponentActivity, allowWhileVisible: Boolean): Boolean {
+        if (plannedNativeFlow() != NativeFlowType.SHARED_POOL || !OnboardingPool.canRun()) return false
+        val snapshot = runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowSnapshot() }
+            .getOrElse { return false }
+        OnboardingPool.activate(activity.applicationContext, snapshot)
+        if (activity.canStartNativeRequest(allowWhileVisible)) {
+            OnboardingPool.preload(AdPlacement.SplashNative, LoadMode.FORCED)
+        } else {
+            activity.lifecycleScope.launch {
+                if (activity.awaitNativeRequestWindow(allowWhileVisible)) {
+                    OnboardingPool.preload(AdPlacement.SplashNative, LoadMode.FORCED)
+                }
+            }
+        }
+        return true
+    }
 
     /** Re-usable language picker; SETTINGS mode shows no ads and never touches flow state. */
     fun openLanguagePicker(activity: Activity, mode: LanguageScreenMode) {

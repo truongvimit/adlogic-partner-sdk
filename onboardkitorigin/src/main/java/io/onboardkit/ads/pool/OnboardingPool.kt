@@ -115,6 +115,11 @@ internal object OnboardingPool {
     fun isLoading(placement: AdPlacement): Boolean =
         engineOrNull()?.debugSnapshot()?.loader(placement.key)?.let { it.inFlight || it.refreshing } == true
 
+    /** [placement]'s loader holds an ad, shown or not, or is loading one. */
+    @MainThread
+    fun holdsOrLoads(placement: AdPlacement): Boolean =
+        engineOrNull()?.debugSnapshot()?.loader(placement.key)?.let { it.ad != null || it.inFlight || it.refreshing } == true
+
     /**
      * A carousel page asks for a new ad, and only while no loader of the pool has a load running,
      * read synchronously: however fast the user swipes, the carousel never has two ads loading.

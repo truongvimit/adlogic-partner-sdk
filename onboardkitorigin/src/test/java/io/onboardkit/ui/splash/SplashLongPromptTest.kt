@@ -344,6 +344,43 @@ class SplashLongPromptTest {
     }
 
     @Test
+    fun pooledRunAsksSplashNativeIntoThePoolAndOpensItsScreenAsAPoolSlot() {
+        io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"SHARED_POOL"}}""")
+        val loader = io.onboardkit.ads.pool.ApFakeLoader()
+        io.onboardkit.ads.pool.installTestEngine(loader)
+        io.onboardkit.ads.pool.allowAds(app)
+        try {
+            LongPromptFixture.nativeConfigured = true
+            LongPromptFixture.provider.successfulShow = true
+            launch(notification = false)
+            drainUntil("Inter must start") { LongPromptFixture.provider.pending != null }
+            LongPromptFixture.provider.ready = true
+            // The pool request waits for the real window focus, as the provider queue does.
+            requireNotNull(controller).windowFocusChanged(true)
+            idleFrames(Duration.ofMillis(32))
+            requireNotNull(LongPromptFixture.provider.pending).onLoaded()
+            main.idle()
+            assertTrue("Neither LFO1 nor native_fs goes through the provider", LongPromptFixture.provider.nativeRequests.isEmpty())
+            assertEquals("native_fs is the pool's first request", 1, loader.callsFor(AdPlacement.SplashNative.key).size)
+            idleFrames(Duration.ofSeconds(4))
+            requireNotNull(LongPromptFixture.provider.presentation).onAdClosed()
+            main.idle()
+            val host = requireNotNull(controller).get()
+            val request = requireNotNull(shadowOf(host).nextStartedActivityForResult)
+            assertEquals("Still loading in the pool: the screen opens to wait",
+                ObSplashNativeActivity::class.java.name, request.intent.component?.className)
+            assertTrue(request.intent.getBooleanExtra("ob_splash_native_pooled", false))
+            host.activityResultRegistry.dispatchResult(request.requestCode, Activity.RESULT_OK, null)
+            main.idle()
+            assertEquals(1, LongPromptFixture.flowStarts)
+            assertEquals("The screen requested nothing more", 1, loader.callsFor(AdPlacement.SplashNative.key).size)
+        } finally {
+            com.ads.module.helper.adnative.pool.SharedNativePool.resetForTest()
+            io.onboardkit.ads.pool.OnboardingPool.resetForTest()
+        }
+    }
+
+    @Test
     fun pendingSplashNativeOpensToWaitWithoutAnotherPreloadAndBlocksLfo() {
         LongPromptFixture.nativeConfigured = true
         LongPromptFixture.provider.nativeReady = false

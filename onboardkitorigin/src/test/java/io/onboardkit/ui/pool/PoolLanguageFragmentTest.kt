@@ -183,7 +183,7 @@ class PoolLanguageFragmentTest {
 
     private fun shown(): NativeAd? = container.shownAd()
 
-    @Test fun `on create the LFO claims language1 POLITE, owns it and shows a skeleton`() {
+    @Test fun `on create the LFO claims language1 FORCED, owns it and shows a skeleton`() {
         launch()
         assertEquals(1, loader.callsFor("language1").size)
         assertEquals("language1", engine.owner)
@@ -200,12 +200,11 @@ class PoolLanguageFragmentTest {
         assertSame(ad.admobNativeAd, shown())
     }
 
-    @Test fun `the create claim is POLITE, so a load in flight elsewhere skips it while the LFO still owns`() {
+    @Test fun `the create claim is FORCED, so a load in flight elsewhere does not drop it`() {
         OnboardingPool.claim(ob1, LoadMode.FORCED)
         launch()
-        assertTrue(loader.callsFor("language1").isEmpty())
+        assertEquals(1, loader.callsFor("language1").size)
         assertEquals("language1", engine.owner)
-        assertTrue(engine.gateSkipCount >= 1)
     }
 
     @Test fun `the splash handoff is consumed on a fresh LFO`() {

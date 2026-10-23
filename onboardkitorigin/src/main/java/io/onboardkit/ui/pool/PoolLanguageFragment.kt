@@ -178,7 +178,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
             PoolSplashAdoption.run(handoff, flow)
             handoff = false
         }
-        claimCurrent()
+        claimCurrent(if (currentKey == AdPlacement.Language1) LoadMode.FORCED else LoadMode.POLITE)
         if (loadingLeftMs > 0L) runLoading(b)
         if (tapCount > 0 && selectedCode != null && !confirmRevealed) scheduleReveal()
         OnboardingSdk.track(AnalyticsEvent.LanguageViewed(screenIndex(currentKey), variant = variant(currentKey)))
@@ -268,11 +268,13 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
 
     /**
      * DashDrama's LanguageFirstFragment.h: the slot of a placement refused for this run collapses.
-     * A transient refusal keeps it: the pool may still lend another screen's ad.
+     * A transient refusal keeps it: the pool may still lend another screen's ad. The screen opens
+     * LFO1 FORCED, unlike DashDrama: the splash's native_fs, the pool's first ad, may still be
+     * loading, and the gate it closes would drop a POLITE claim for good.
      */
-    private fun claimCurrent() {
+    private fun claimCurrent(mode: LoadMode = LoadMode.POLITE) {
         val key = currentKey
-        val result = OnboardingPool.claim(key, LoadMode.POLITE)
+        val result = OnboardingPool.claim(key, mode)
         if (result.reportsSuccess) ownedKey = key
         binding?.obAdBlock?.isVisible = result !is LoadResult.SkippedByConfig
     }
