@@ -224,4 +224,35 @@ class PoolSplashNativeTest {
         assertTrue(loader.callsFor(nativeFs).isEmpty())
         assertTrue(openScreen().isFinishing)
     }
+
+    @Test fun `a click on the pooled native_fs closes the screen on return, whatever click_action says`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"native_fs":{"ids":[{"id":"fs"}],"isEnable":true,"click_action":"none"}}""")
+        requestAtSplash()
+        val screen = openScreen()
+        val ad = loader.fill(nativeFs)
+        main.idle()
+        loader.click(ad)
+        main.idle()
+        val controller = controllers.last()
+        controller.pause().stop()
+        main.idle()
+        assertFalse(screen.isFinishing)
+        controller.restart().start().resume()
+        main.idle()
+        assertTrue("Back from the ad, the screen moves on", screen.isFinishing)
+    }
+
+    @Test fun `leaving and coming back without a click keeps the pooled native_fs screen`() {
+        requestAtSplash()
+        val screen = openScreen()
+        loader.fill(nativeFs)
+        main.idle()
+        val controller = controllers.last()
+        controller.pause().stop()
+        main.idle()
+        controller.restart().start().resume()
+        main.idle()
+        assertFalse(screen.isFinishing)
+    }
 }

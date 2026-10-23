@@ -71,7 +71,8 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
 
     /**
      * SHARED_POOL: the screen is the pool's first slot. It owns native_fs and requests nothing; the
-     * ad, shown or still loading, stays in the pool for the LFO after it.
+     * ad, shown or still loading, stays in the pool for the LFO after it. `click_action` does not
+     * apply to pooled slots, so a click always closes the screen on return, as AUTO_NEXT.
      */
     private fun bindPoolSlot() {
         OnboardingPool.setOwner(AdPlacement.SplashNative)
@@ -84,7 +85,7 @@ class ObSplashNativeActivity : BaseOnboardActivity() {
             callbacks = StepSlotCallbacks(
                 onBound = ::startSkipTimer,
                 onUnavailable = { close() },
-                onAdEngaged = ::onAdEngaged,
+                onAdEngaged = { onAdEngaged(NativeClickAction.AUTO_NEXT) },
             ),
             destroyOnTeardown = OnboardingSettings.nativeFlowSnapshot().viewDestroyOnTeardown,
         ).start()
