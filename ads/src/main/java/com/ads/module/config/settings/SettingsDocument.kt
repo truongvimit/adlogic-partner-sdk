@@ -231,7 +231,7 @@ class SettingsDocument(
             if (path.contains("banner") && path.endsWith("reload.interval_ms")) return n >= 1_000
             if (path.endsWith("reload.interval_ms")) return n > 0
             if (path.endsWith("wait_timeout_ms")) return true
-            if (path.endsWith("timeout_ms") || path.endsWith("min_after_bind_ms") || path.endsWith("min_tick_ms") || path.endsWith("idle_tick_ms") || path.endsWith("refresh_throttle_ms") || path.endsWith("offline_recheck_ms")) return n > 0
+            if (path.endsWith("timeout_ms") || path.endsWith("min_after_bind_ms") || path.endsWith("refresh_throttle_ms") || path.endsWith("offline_recheck_ms")) return n > 0
         }
         if (value is String) {
             if (path == "onboarding.primary_color" || path == "native_resume.start_button.color") {

@@ -54,7 +54,7 @@ class InterstitialPreloadScreensTest {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
         InterstitialAutoBuffer.setPreloadScreens(emptyMap())
         InterstitialAutoBuffer.setCurrentScreen(null)
-        InterstitialFrequency.reset()
+        InterstitialFrequency.resetAll()
         InterstitialAdManager.releaseAll()
         ConsentCenter.setHostConsent(true, false)
         Entitlement.install(object : EntitlementSource {
@@ -171,13 +171,13 @@ class InterstitialPreloadScreensTest {
 
     @Test
     fun `screen entry does not invent taps and preserves actions accumulated on home`() {
-        arm(taps = 2)
+        arm(taps = 3)
         InterstitialAutoBuffer.setCurrentScreen("home")
         advance(35_000)
         click(timeoutMs = 0)
         InterstitialAutoBuffer.setCurrentScreen("translate")
         main.idle()
-        assertEquals("One action still falls short of the two-action rule", 0, requests.size)
+        assertEquals("One action is still two short of a three-action rule", 0, requests.size)
         InterstitialAutoBuffer.setCurrentScreen("home")
         click(timeoutMs = 0)
         main.idle()
@@ -250,11 +250,12 @@ class InterstitialPreloadScreensTest {
         InterstitialAutoBuffer.setPreloadScreens(mapOf(BACK to setOf("translate")))
         InterstitialAutoBuffer.setCurrentScreen("home")
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = setOf(ALL, BACK), placements = listOf(ALL, BACK),
+            placements = listOf(ALL, BACK),
             tapThresholds = mapOf(ALL to 0, BACK to 0),
-            intervalMsByPlacement = mapOf(ALL to 30_000L, BACK to 0L), tickMs = 60_000L,
+            intervalMsByPlacement = mapOf(ALL to 30_000L, BACK to 0L),
         ))
         InterstitialAutoBuffer.start(host)
+        dismissAfterOnboarding()
         advance(27_999)
         assertEquals(0, requests.size)
         advance(1)
@@ -314,11 +315,11 @@ class InterstitialPreloadScreensTest {
     private fun arm(taps: Int = 0, intervalMs: Long = 30_000L) {
         InterstitialAutoBuffer.setPreloadScreens(mapOf(BACK to setOf("translate", "camera")))
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = setOf(BACK), placements = listOf(BACK),
+            placements = listOf(BACK),
             tapThresholds = mapOf(BACK to taps), intervalMsByPlacement = mapOf(BACK to intervalMs),
-            tickMs = 60_000L,
         ))
         InterstitialAutoBuffer.start(host)
+        dismissAfterOnboarding()
     }
 
     private fun click(placement: String = BACK, timeoutMs: Long = 5_000): Outcome = Outcome().also {

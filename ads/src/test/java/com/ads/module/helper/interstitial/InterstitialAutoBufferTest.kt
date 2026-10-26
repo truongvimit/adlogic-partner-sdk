@@ -69,11 +69,10 @@ class InterstitialAutoBufferTest {
 
     @Test
     fun `period follows the interval, floored and capped`() {
-        assertEquals(30_000L, InterstitialAutoBuffer.periodMs(0L, 30, 45_000L, 5_000L))
-        assertEquals(45_000L, InterstitialAutoBuffer.periodMs(0L, 0, 45_000L, 5_000L))
-        assertEquals(7_000L, InterstitialAutoBuffer.periodMs(7_000L, 30, 45_000L, 5_000L))
-        assertEquals(5_000L, InterstitialAutoBuffer.periodMs(0L, 1, 45_000L, 5_000L))
+        assertEquals(30_000L, InterstitialAutoBuffer.periodMs(30))
+        assertEquals(InterstitialAutoBuffer.IDLE_TICK_MS, InterstitialAutoBuffer.periodMs(0))
+        assertEquals(5_000L, InterstitialAutoBuffer.periodMs(1))
         // A pathological interval must not let the buffer expire between checks.
-        assertEquals(30 * 60 * 1_000L, InterstitialAutoBuffer.periodMs(0L, 7_200, 45_000L, 5_000L))
+        assertEquals(30 * 60 * 1_000L, InterstitialAutoBuffer.periodMs(7_200))
     }
 }

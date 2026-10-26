@@ -305,10 +305,12 @@ Explicit timer/resume refresh options remain separate and are disabled by defaul
 
 ## Automatic interstitial preload
 
-Set `intervalInterstitialAd = 30` (seconds, choose your own interval) in the
-`ERainAdConfig(...).apply` block before initialization; `0` disables the interval gate.
-Configure the group once after ads initialization. Include only your in-app content placements;
-keep splash and `inter_after_ob3` outside this group. Define each placement in your ad JSON.
+Each buffered placement keeps its own interval and tap threshold. The bundled rules give
+`inter_all` 30 seconds / 2 taps and `inter_back` 30 seconds / 1 tap; remote or app-asset
+`interstitial_auto_buffer.rules` tune them (see
+[remote settings](../partner-integration/remote-settings.md)). Configure the group once after ads
+initialization. Include only your in-app content placements; keep splash and `inter_after_ob3`
+outside this group. Define each placement in your ad JSON.
 
 ```kotlin
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
@@ -324,12 +326,24 @@ InterstitialAutoBuffer.configure(
 InterstitialAutoBuffer.start(applicationContext)
 ```
 
-Keep using `InterstitialAdManager.show` at navigation opportunities. The first preload
-waits for the configured interstitial interval; closing a group ad or a final load failure
-starts the next interval. The SDK pauses scheduling in background and retains ready ads.
+Keep using `InterstitialAdManager.show` at navigation opportunities. `start()` starts no
+interval: closing a buffer ad, closing the onboarding exit interstitial or a final load failure
+does. Until one of those happens, a placement preloads as soon as it is one tap short of its
+threshold. Background pauses scheduling and the interval clock, so only foreground time counts;
+ready ads are kept.
 Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass the interval.
 Use the manager APIs for these placements and remove app-side refill timers or temporary
 interval overrides. Call `stop()` only when you want to disable buffering.
+
+OnboardKit registers `inter_after_ob3` so its dismissal starts every buffered placement's
+interval. To give another interstitial you show outside the buffer the same effect, register its
+key once:
+
+```kotlin
+InterstitialAutoBuffer.countTowardInterval(AppAdPlacement.INTER_WELCOME)
+```
+
+Its own show is never capped by the buffer; only a real dismissal counts.
 
 ### Limit automatic preload to selected screens
 
@@ -363,10 +377,10 @@ the same ID transfers ownership without restarting scheduling; there is no stack
 to restore when a handle closes.
 
 This gate controls auto-buffer preload/refill and `topUpNow()` only. Explicit manager `load`,
-`loadAndShow` and `show` retain their existing behavior. Remove explicit Home/splash Back preloads
+`loadAndShow` and `show` are not gated by screens. Remove explicit Home/splash Back preloads
 if the buffer should own that inventory. Leaving an allowed screen retains ready ads and pending
 loads, so Back can still show a ready ad after navigation returns to Home. There is no automatic
-show on entry and no change to the existing dismissal/final-failure clock semantics.
+show on entry, and screen changes never move the dismissal/final-failure clock.
 
 Use one active screen source for each navigation hierarchy and report Home/other destinations
 too. See the [Vietnamese integration guide](../partner-integration/interstitial-preload-screens.vi.md)
@@ -376,16 +390,15 @@ and the TranslatorGuru mapping.
 ### Opt-in content wait and independent placement clocks
 
 For selected content placements, use the existing buffer with independent clocks. The buffer
-only requests an ad when both the placement's tap threshold and
-`max(0, interval_ms - preload_lead_ms)` have been satisfied. This applies to automatic preload,
-explicit manager loads and refills after dismissal. A ready or in-flight ad does not trigger
-another request. Presentation still requires the full interval and a new action.
-A final load failure retries after the full placement interval (or the positive
-idle cadence when the interval is zero).
+only requests an ad once the placement is one action short of its tap threshold and
+`max(0, interval_ms - preload_lead_ms)` has elapsed, so the action that reaches the threshold
+finds the ad bought. This applies to automatic preload, explicit manager loads and refills after
+dismissal. A ready or in-flight ad does not trigger another request. Presentation still requires
+the full interval and a new action. A final load failure retries after the full placement
+interval (or 30 seconds when the interval is zero).
 
 ```kotlin
 InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-    independentIntervalPlacements = setOf(AppAdPlacement.INTER_ALL, AppAdPlacement.INTER_BACK),
     placements = listOf(AppAdPlacement.INTER_ALL, AppAdPlacement.INTER_BACK),
     tapThresholds = mapOf(AppAdPlacement.INTER_ALL to 2),
     intervalMsByPlacement = mapOf(AppAdPlacement.INTER_ALL to 30_000L, AppAdPlacement.INTER_BACK to 30_000L),
@@ -405,17 +418,15 @@ InterstitialAdManager.loadAndShow(activity, placement, callback,
 ```
 
 Do not pre-check `canShow()` in this wrapper: the action must reach the manager to count once
-and take the ready/join/cold path. With `interstitial_auto_buffer.shared_config: true`,
-independent placements share a two-action presentation guard; it does not gate preload or combine
-their clocks. Counters reset on the vendor's actual
-show callback. Back that exits the app is outside this flow. Wire navigation only to `onComplete`.
+and take the ready/join/cold path. Counters reset on the vendor's actual show callback. Back that
+exits the app is outside this flow. Wire navigation only to `onComplete`.
 
-Set `interstitial_auto_buffer.shared_config` to `false` in `ad_behavior_config` to isolate every
-buffer placement, including `inter_all` and `inter_back`. Each uses its own `interval_ms`
-and `tap_threshold` from `rules` (or the host's `intervalMsByPlacement` / `tapThresholds`).
-The shared two-action guard is disabled: taps, actual shows, closes and final load failures only
-affect that placement. A threshold of `0` needs no taps; `1` allows the first action to show once
-the cooldown has elapsed. Ads still cannot present simultaneously.
+`interstitial_auto_buffer.shared_config` is `false` by default in `ad_behavior_config`: every
+buffer placement, including `inter_all` and `inter_back`, uses its own `interval_ms` and
+`tap_threshold` from `rules` (or the host's `intervalMsByPlacement` / `tapThresholds`). Taps,
+actual shows, closes and final load failures only affect that placement. With a threshold of `N`,
+action `N` shows once the cooldown has elapsed; the ad is bought after action `N - 1` (from the
+start for `0` and `1`). Ads still cannot present simultaneously.
 
 ```json
 {
@@ -431,11 +442,11 @@ the cooldown has elapsed. Ads still cannot present simultaneously.
 
 The bundled asset uses `shared_config: false`, with ALL at 30 seconds / 2 taps and BACK at
 30 seconds / 1 tap. With the bundled 2-second preload lead, loading starts no earlier than
-28 seconds and still needs the placement's taps; showing waits the full 30 seconds. Remote or app-asset rules override host options, which override these
-bundled values. `false` takes precedence over each rule's `independent_interval`; no
-per-placement opt-in is needed. Placements without a rule or host value inherit the global
-interval with separate clocks and a tap threshold of `0`. `true` preserves the shared guard, including explicit
-`independentIntervalPlacements` / `independent_interval` overrides. The flag does not start
+28 seconds once the placement is one tap short of its threshold; showing waits the full
+30 seconds. Remote or app-asset rules override host options, which override these bundled
+values. Placements without a rule or host value inherit the global interval with
+separate clocks and a tap threshold of `0`. `true` puts every placement on one clock paced by
+`interstitial.frequency.interval_ms`; tap counters stay per placement. The flag does not start
 the buffer or enable disabled placements; keep the content-entry `start()` call above.
 
 The content wait is on by default (bundled `interstitial.load_and_show.allow_wait_for_auto_buffer`
@@ -607,7 +618,7 @@ for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone exam
 Settings resolve as remote > delivered legacy settings > app root asset > host configuration > bundled SDK defaults. Within one source, screen/group overrides precede placement and format overrides. Empty behavior objects add no leaf values and allow fallback. A full default JSON copied into the app asset root is still an explicit override of host values. See [remote settings](../partner-integration/remote-settings.md) for the complete schema.
 
 - `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through ERainAd and tracking wrappers.
-- An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; only its tap threshold applies until its first show or failure. `tickMs = 0` follows the resolved interstitial interval.
+- An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; only its tap threshold applies until its first show or failure.
 - `BannerAdConfig.forPlacement` reads the placement's current `enable_ua_check` after refresh unless the host explicitly sets `forceUaCheck`. A non-positive `reloadIntervalSeconds` falls back to host cadence; it does not cause immediate reload.
 - Native `components: []` preserves the XML layout. A scoped `presentation.cta_corner_radius_dp` applies even without an explicit native style; a CTA color is needed to replace the XML background.
 - App-open `failure_backoff_ms` accepts 1–10 integers in 1–3,600,000 ms. Empty/invalid arrays fall back to the app/SDK schedule. Consent timeout and interstitial daily click-cap logs report the effective resolved values.

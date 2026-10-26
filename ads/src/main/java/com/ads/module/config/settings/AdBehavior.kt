@@ -13,7 +13,7 @@ object AdBehavior {
             return if (supportsPlacementField(format, suffix)) document.defaultValue("$format.$suffix") else null
         }
         if (path.startsWith("interstitial_auto_buffer.rules.")) return when (path.substringAfterLast('.')) {
-            "enabled", "independent_interval" -> false
+            "enabled" -> false
             "tap_threshold", "interval_ms" -> 0L
             else -> null
         }

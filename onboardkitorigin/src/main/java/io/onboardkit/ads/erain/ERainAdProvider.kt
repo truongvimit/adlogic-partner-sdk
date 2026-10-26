@@ -66,6 +66,7 @@ class ERainAdProvider : OnboardingAdProvider() {
 
     init {
         InterstitialAutoBuffer.reserve(*interKeys.toTypedArray())
+        InterstitialAutoBuffer.countTowardInterval(AdPlacement.AfterOnboardingInterstitial.key)
     }
 
     /** The `ad_config` key each interstitial was last loaded under; its show reads the same overrides. */

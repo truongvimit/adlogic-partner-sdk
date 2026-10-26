@@ -18,7 +18,7 @@ class InterstitialBufferDefaultsTest {
         InterstitialAutoBuffer.stop()
         AdBehavior.document.acceptSuccessfulFetch(null)
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
-        InterstitialFrequency.reset()
+        InterstitialFrequency.resetAll()
     }
 
     @After fun cleanup() = reset()
@@ -32,6 +32,8 @@ class InterstitialBufferDefaultsTest {
         assertTrue(options.isPlacementEnabled(BACK))
         InterstitialFrequency.activate()
         val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals("Arming alone starts no interval", 0L, InterstitialFrequency.remainingMs(context, ALL))
+        dismissAfterOnboarding()
         assertEquals(30_000L, InterstitialFrequency.remainingMs(context, ALL))
         assertEquals(30_000L, InterstitialFrequency.remainingMs(context, BACK))
         InterstitialFrequency.recordAction(ALL)
@@ -48,7 +50,6 @@ class InterstitialBufferDefaultsTest {
 
     @Test fun `host values override bundled rules and remote values override host`() {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = setOf(ALL, BACK),
             placements = listOf(ALL, BACK),
             tapThresholds = mapOf(ALL to 0),
             intervalMsByPlacement = mapOf(ALL to 0L),

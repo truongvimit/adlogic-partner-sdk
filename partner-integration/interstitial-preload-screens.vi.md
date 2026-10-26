@@ -20,6 +20,9 @@ object AdScreen {
 // Sau configure(...) hiện tại, trước khi start buffer.
 InterstitialAutoBuffer.setPreloadScreens(
     mapOf(
+        // ALL show khi bấm feature ở Home: mua ad lúc đang ở Home.
+        AppAdPlacement.INTER_ALL to setOf(AdScreen.HOME),
+        // BACK show khi rời màn feature: chỉ mua ad lúc đang ở màn feature.
         AppAdPlacement.INTER_BACK to setOf(
             AdScreen.TRANSLATE,
             AdScreen.CAMERA,
@@ -44,18 +47,25 @@ Mỗi lần gọi `setPreloadScreens` thay thế toàn bộ map. Giữ `configur
 tại; API màn hình không tự sửa threshold. Đừng dùng `isPlacementEnabled` làm whitelist vì gate đó
 còn ảnh hưởng quyền show.
 
-## 2. Bắt đầu đồng hồ ngay khi vào nội dung, kể cả Home
+## 2. Gọi `start()` ngay khi vào nội dung, kể cả Home
 
 Giữ `InterstitialAutoBuffer.start(applicationContext)` ở điểm vào nội dung đầu tiên sau
 onboarding/consent, bao gồm Home và các đường deep link/restore. Gọi lại `start()` được phép và
-không reset delay đang chạy. Không dời `start()` sang lúc vào function; làm vậy khiến lần đầu
-ở Home chưa bắt đầu tính thời gian.
+không reset interval đang chạy. Không dời `start()` sang lúc vào function; làm vậy khiến buffer
+không chạy trong lúc user ở Home.
+
+`start()` không tạo mốc. Interval tính từ lần đóng interstitial của chính placement hoặc lần đóng
+inter cuối onboarding (`inter_after_ob3`), lấy mốc muộn hơn, và chỉ đếm thời gian app ở
+foreground. Chưa có lần đóng nào (inter cuối onboarding tắt hoặc không fill, user cũ không qua OB)
+thì placement request ngay khi chỉ còn thiếu một tap. Ad được mua sớm một thao tác nên thao tác
+làm đủ tap show luôn, không phải chờ load.
 
 Giả sử placement dùng interval 30 giây, preload lead 2 giây, tap threshold **0**, không có ad
-sẵn/request đang chạy, các gate còn lại cho phép và `t = 0` là mốc đồng hồ hiện tại:
+sẵn/request đang chạy, các gate còn lại cho phép và `t = 0` là lần đóng gần nhất (ví dụ after OB3):
 
 | Tình huống | Kết quả |
 | --- | --- |
+| Không có lần đóng nào | Request ngay khi `start()` chạy |
 | Vào function ở giây 10 | Chờ 18 giây còn lại, request ở giây 28 |
 | Ở Home đến giây 35 rồi vào function | Home không request; vào function sẽ kiểm tra để request ngay |
 | Vào function giây 10, về Home giây 20 | Không auto request ở giây 28 |
@@ -67,15 +77,15 @@ request trên main loop, không đảm bảo ad đã tải xong. Điều kiện 
 khi chờ ở Home; chuyển màn không reset đồng hồ hoặc tap. Các gate động vẫn được kiểm tra lại,
 chẳng hạn người dùng đã mua premium thì không request.
 
-**Chu kỳ cũ vẫn giữ nguyên:** đóng interstitial hoặc waterfall thất bại cuối cùng cập nhật mốc
-tương ứng như trước. Chuyển màn hoặc bắt đầu tải thành công không tự tạo mốc cooldown mới.
-Show vẫn cần đủ interval đầy đủ và một hành động show hợp lệ; vào function không tự show.
+**Mốc cooldown:** đóng interstitial hoặc waterfall thất bại cuối cùng đặt mốc cho chính placement
+đó; đóng inter cuối onboarding đặt mốc cho mọi placement. `start()`, chuyển màn hoặc bắt đầu tải
+thành công không tạo mốc. Show vẫn cần đủ interval và một hành động show hợp lệ; vào function
+không tự show.
 
-Bundled config hiện có BACK 30 giây / **1 tap**, ALL 30 giây / 2 taps, lead 2 giây. Ví dụ ở trên
-chỉ đúng với threshold hiệu lực bằng 0; nếu vẫn là 1 thì đủ thời gian và đúng màn vẫn phải chờ
-tap theo chính sách cũ. Chỉ đổi `interstitial_auto_buffer.rules.inter_back.tap_threshold` sang
-0 khi chủ đích muốn preload trước lần Back đầu tiên. Remote/app asset có thể ghi đè cấu hình
-Kotlin; xem [thứ tự cấu hình](../ads/README.md#opt-in-content-wait-and-independent-placement-clocks).
+Bundled config có BACK 30 giây / **1 tap**, ALL 30 giây / 2 taps, lead 2 giây. Ví dụ ở trên
+đúng với threshold hiệu lực bằng 0 hoặc 1: cả hai đều preload trước lần Back đầu tiên và show ở
+chính lần Back đó. ALL 2 taps thì preload sau tap đầu tiên và show ở tap thứ hai. Remote/app
+asset có thể ghi đè cấu hình Kotlin; xem [thứ tự cấu hình](../ads/README.md#opt-in-content-wait-and-independent-placement-clocks).
 
 ## 3. App báo màn đang hoạt động
 

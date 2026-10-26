@@ -104,8 +104,9 @@ public class ERainAd {
     }
 
     /**
-     * Shared AutoBuffer interval in seconds, counted from activation, dismissal or final load
-     * failure. It gates both preload and show; {@code 0} disables the time interval.
+     * Shared AutoBuffer interval in seconds, counted from a dismissal (a counted placement's
+     * included) or a final load failure, counting foreground time only. It gates both preload
+     * and show; {@code 0} disables it.
      *
      * <p>Read by the AutoBuffer placement group for preload and show eligibility. Remote
      * changes reschedule its next check; splash and other non-group placements are exempt.

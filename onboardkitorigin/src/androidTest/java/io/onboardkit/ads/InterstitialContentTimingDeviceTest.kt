@@ -120,7 +120,7 @@ class InterstitialContentTimingDeviceTest {
 
     private fun arm(interval: Long) {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = setOf(ALL), placements = listOf(ALL),
+            placements = listOf(ALL),
             tapThresholds = mapOf(ALL to 2), intervalMsByPlacement = mapOf(ALL to interval),
         ))
         InterstitialAutoBuffer.start(host)

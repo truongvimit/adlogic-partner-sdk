@@ -98,8 +98,7 @@ class InterstitialPreloadScreensDeviceTest {
             // Host options below provide the per-case clock and tap count.
             assertTrue(AdBehavior.document.acceptSuccessfulFetch("""{
                 "interstitial_auto_buffer":{
-                    "enabled":true,"shared_config":false,
-                    "tick_ms":60000,"idle_tick_ms":60000,"preload_lead_ms":2000
+                    "shared_config":false,"preload_lead_ms":2000
                 }
             }"""))
             MobileAds.initialize(app) { initialized.countDown() }
@@ -244,11 +243,9 @@ class InterstitialPreloadScreensDeviceTest {
 
     private fun arm(intervalMs: Long, taps: Int = 0): Long {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = setOf(BACK),
             placements = listOf(BACK),
             tapThresholds = mapOf(BACK to taps),
             intervalMsByPlacement = mapOf(BACK to intervalMs),
-            tickMs = 60_000,
         ))
         InterstitialAutoBuffer.setPreloadScreens(mapOf(BACK to setOf(TRANSLATE)))
         reportScreen(HOME)

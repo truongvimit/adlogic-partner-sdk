@@ -82,6 +82,7 @@ class InterstitialBufferLifecycleTest {
         ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
+        InterstitialFrequency.resetAll()
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
         host = controller.get()
         main.idle()
@@ -124,9 +125,8 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `remote auto buffer switch only blocks managed placements and can reenable them`() {
-        assertTrue(AdBehavior.defaultBool("interstitial_auto_buffer.enabled"))
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":false}}""")
+    fun `remote rule switch only blocks its own placement and can reenable it`() {
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"rules":{"inter_all":{"enabled":false}}}}""")
         arm(listOf(ALL))
         advance(30_000)
         assertEquals(0, requests.size)
@@ -134,7 +134,7 @@ class InterstitialBufferLifecycleTest {
         assertEquals(0, requests.size)
         InterstitialAdManager.load(host, "outside", listOf("outside-unit"))
         assertEquals(1, requests.size)
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"rules":{"inter_all":{"enabled":true}}}}""")
         InterstitialAutoBuffer.topUpNow()
         main.idle()
         assertEquals(2, requests.size)
@@ -142,14 +142,14 @@ class InterstitialBufferLifecycleTest {
 
     @Test
     fun `remote buffer timeout above five seconds remains captured until its deadline`() {
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":12000}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":12000}}}""")
         arm(listOf(ALL))
         advance(30_000)
         assertEquals(1, requests.size)
         val result = Outcome()
         val deadline = SystemClock.elapsedRealtime() + 12_000
         InterstitialAdManager.loadAndShow(host, ALL, listOf("buffer-all-unit"), result)
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true,"enabled":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":1000}}}""")
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true},"interstitial":{"load_and_show":{"buffer_wait_timeout_ms":1000}}}""")
         advance(deadline - SystemClock.elapsedRealtime() - 1)
         assertEquals("Remote 12000ms must not be capped at 5000ms or changed mid-wait", 0, result.completed)
         advance(1)
@@ -251,7 +251,7 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `activation waits remote interval and successful fill is immediately showable without refill`() {
+    fun `after ob3 dismissal gates the group for the remote interval and a fill is showable without refill`() {
         arm()
         val started = SystemClock.elapsedRealtime()
         advance(10_000)
@@ -345,18 +345,24 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `background pauses preload and retains late fills on foreground return`() {
+    fun `background pauses the interval and retains late fills on foreground return`() {
         arm()
         advance(10_000)
         leaveProcess()
+        val left = InterstitialFrequency.remainingMs(host)
         advance(60_000)
+        assertEquals("Background time does not count toward the interval", left, InterstitialFrequency.remainingMs(host))
         InterstitialAdManager.load(host, ALL, listOf("buffer-all-unit"))
         InterstitialAutoBuffer.topUpNow()
         main.idle()
         assertEquals(0, requests.size)
         returnToProcess()
-        advance(1_000)
-        assertEquals("Resume uses elapsed gate instead of starting thirty seconds again", 2, requests.size)
+        val resumed = InterstitialFrequency.remainingMs(host)
+        assertTrue("Foreground resumes the interval where it stopped", resumed in left - 10..left)
+        advance(resumed - 1)
+        assertEquals(0, requests.size)
+        advance(1)
+        assertEquals(2, requests.size)
         leaveProcess()
         fill(0, ALL)
         fill(1, BACK)
@@ -370,38 +376,54 @@ class InterstitialBufferLifecycleTest {
     }
 
     @Test
-    fun `splash and after ob3 never read or stamp the managed interval`() {
-        arm()
-        val activated = SystemClock.elapsedRealtime()
-        advance(10_000)
-        for (placement in listOf("inter_splash", "inter_after_ob3")) {
-            InterstitialAdManager.load(host, placement, listOf("outside-unit"))
-            val raw = fill(requests.lastIndex, placement)
-            assertTrue(InterstitialAdManager.canShow(host, placement))
-            val outcome = Outcome()
-            InterstitialAdManager.show(host, placement, outcome)
-            advance(800)
-            assertEquals(listOf(host), raw.hosts)
-            raw.callback.onAdDismissedFullScreenContent()
-            assertEquals(1, outcome.completed)
-        }
-        advance(activated + 29_999 - SystemClock.elapsedRealtime())
+    fun `without an after ob3 dismissal start opens the group at once`() {
+        InterstitialAutoBuffer.configure(InterstitialBufferOptions(
+            placements = listOf(ALL, BACK),
+            tapThresholds = mapOf(ALL to 0, BACK to 0),
+        ))
+        InterstitialAutoBuffer.start(host)
+        advance(1_000)
         assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `splash never stamps the group and after ob3 always shows and restarts it`() {
+        arm()
+        val armedAt = SystemClock.elapsedRealtime()
+        advance(10_000)
+        InterstitialAdManager.load(host, "inter_splash", listOf("outside-unit"))
+        val splash = fill(0, "inter_splash")
+        InterstitialAdManager.show(host, "inter_splash", Outcome())
+        advance(800)
+        assertEquals(listOf(host), splash.hosts)
+        splash.callback.onAdDismissedFullScreenContent()
+        advance(armedAt + 29_999 - SystemClock.elapsedRealtime())
+        assertEquals(1, requests.size)
         advance(1)
-        assertEquals("Splash and OB dismissal must not postpone group activation", 4, requests.size)
-        val all = fill(2, ALL)
-        fill(3, BACK)
+        assertEquals("Splash dismissal must not postpone the group", 3, requests.size)
+        val all = fill(1, ALL)
+        fill(2, BACK)
         InterstitialAdManager.show(host, ALL, Outcome())
         advance(800)
         all.callback.onAdDismissedFullScreenContent()
-        assertFalse(InterstitialAdManager.canShow(host, BACK))
-        InterstitialAdManager.load(host, "inter_after_ob3", listOf("outside-unit"))
-        val ob = fill(4, "inter_after_ob3")
-        assertTrue(InterstitialAdManager.canShow(host, "inter_after_ob3"))
-        InterstitialAdManager.show(host, "inter_after_ob3", Outcome())
+        val allClosedAt = SystemClock.elapsedRealtime()
+        advance(10_000)
+        InterstitialAdManager.load(host, AFTER_OB, listOf("outside-unit"))
+        val ob = fill(3, AFTER_OB)
+        assertTrue("The group gate never caps after ob3", InterstitialAdManager.canShow(host, AFTER_OB))
+        InterstitialAdManager.show(host, AFTER_OB, Outcome())
         advance(800)
         assertEquals(listOf(host), ob.hosts)
+        advance(allClosedAt + 35_000 - SystemClock.elapsedRealtime())
+        assertEquals("No refill while after ob3 is on screen", 4, requests.size)
         ob.callback.onAdDismissedFullScreenContent()
+        val obClosedAt = SystemClock.elapsedRealtime()
+        advance(obClosedAt + 29_999 - SystemClock.elapsedRealtime())
+        assertEquals(4, requests.size)
+        assertFalse(InterstitialAdManager.canShow(host, BACK))
+        advance(1)
+        assertEquals("The after ob3 dismissal restarts the group interval", 5, requests.size)
+        assertTrue(InterstitialAdManager.canShow(host, BACK))
     }
 
     @Test
@@ -477,7 +499,7 @@ class InterstitialBufferLifecycleTest {
     @Test
     fun `a failed high tier does not gate the group when base is still loading`() {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = emptySet(), placements = listOf(ALL, BACK),
+            placements = listOf(ALL, BACK),
             tapThresholds = mapOf(ALL to 0, BACK to 0),
         ))
         // Explicit loading uses the same group policy and the same waterfall as the buffer.
@@ -524,10 +546,11 @@ class InterstitialBufferLifecycleTest {
 
     private fun arm(placements: List<String> = listOf(ALL, BACK)) {
         InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-            independentIntervalPlacements = emptySet(), placements = placements,
+            placements = placements,
             tapThresholds = placements.associateWith { 0 },
         ))
         InterstitialAutoBuffer.start(host)
+        dismissAfterOnboarding()
     }
 
     private fun advance(ms: Long) = main.idleFor(ms, TimeUnit.MILLISECONDS)

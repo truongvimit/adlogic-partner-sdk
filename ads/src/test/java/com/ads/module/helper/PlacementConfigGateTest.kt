@@ -39,7 +39,7 @@ class PlacementConfigGateTest {
     fun tearDown() {
         InterstitialAutoBuffer.stop()
         InterstitialAutoBuffer.configure(InterstitialBufferOptions())
-        InterstitialFrequency.reset()
+        InterstitialFrequency.resetAll()
         InterstitialAdManager.releaseAll()
         ConsentCenter.setHostConsent(canRequestAds = false, personalized = false)
         AdRemoteConfig.reset()
@@ -141,12 +141,12 @@ class PlacementConfigGateTest {
         install("inter_all" to unit("all-price"))
         InterstitialAutoBuffer.configure(
             InterstitialBufferOptions(
-                independentIntervalPlacements = setOf("inter_all"),
                 placements = listOf("inter_all"),
                 intervalMsByPlacement = mapOf("inter_all" to 30_000L),
             ),
         )
         InterstitialAutoBuffer.start(context)
+        com.ads.module.helper.interstitial.dismissAfterOnboarding()
         InterstitialFrequency.recordAction("inter_all")
         InterstitialFrequency.recordAction("inter_all")
 

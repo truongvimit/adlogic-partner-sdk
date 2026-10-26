@@ -23,13 +23,9 @@ class BehaviorConfigTest {
     @After fun clearRemote() { AdBehavior.document.acceptSuccessfulFetch(null) }
 
     @Test fun `auto buffer rules resolve under the dedicated top level group`() {
-        assertTrue(AdBehavior.defaultBool("interstitial_auto_buffer.enabled"))
-        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"enabled":false,"rules":{"inter_home":{"enabled":true,"interval_ms":12000}}}}""")
-        assertFalse(AdBehavior.bool("interstitial_auto_buffer.enabled"))
+        AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"rules":{"inter_home":{"enabled":true,"interval_ms":12000}}}}""")
         assertTrue(AdBehavior.bool("interstitial_auto_buffer.rules.inter_home.enabled"))
         assertEquals(12000L, AdBehavior.number("interstitial_auto_buffer.rules.inter_home.interval_ms"))
-        AdBehavior.document.acceptSuccessfulFetch(null)
-        assertTrue(AdBehavior.bool("interstitial_auto_buffer.enabled"))
     }
 
     @Test fun `existing config receives remote then restores explicit local options`() {

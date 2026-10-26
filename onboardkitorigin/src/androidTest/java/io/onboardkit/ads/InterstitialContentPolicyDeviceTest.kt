@@ -101,7 +101,6 @@ class InterstitialContentPolicyDeviceTest {
                     assertFalse("New placement starts without a fill", InterstitialAdManager.isReady(PLACEMENT))
                     AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"$TEST_UNIT"}],"isEnable":true}}""")
                     InterstitialAutoBuffer.configure(InterstitialBufferOptions(
-                        independentIntervalPlacements = setOf(PLACEMENT),
                         placements = listOf(PLACEMENT),
                         tapThresholds = mapOf(PLACEMENT to 2),
                         intervalMsByPlacement = mapOf(PLACEMENT to 0L),
