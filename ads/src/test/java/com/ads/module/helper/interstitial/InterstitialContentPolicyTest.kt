@@ -147,7 +147,6 @@ class InterstitialContentPolicyTest {
     @Test
     fun `prepare rejection retains taps while actual shown resets them`() {
         arm(0)
-        click()
         val first = click()
         val ad = fill()
         controller.pause()
@@ -174,7 +173,6 @@ class InterstitialContentPolicyTest {
     @Test
     fun `remote disabling the placement during preparation prevents vendor show`() {
         arm(0)
-        click()
         val outcome = click()
         val ad = fill()
         AdRemoteConfig.initializeFromJson("""{"inter_all":{"ids":[{"id":"content-unit"}],"isEnable":false}}""")
@@ -310,18 +308,28 @@ class InterstitialContentPolicyTest {
     }
 
     @Test
-    fun `with the interval elapsed the first tap buys the ad and the second shows it`() {
+    fun `the first tap of the process shows and later shows need the full threshold`() {
         arm()
+        advance(28_000)
+        assertTrue("Before its first show ALL preloads without a tap", InterstitialAdManager.isLoading(ALL))
+        val first = fill(0)
+        advance(2_000)
+        val firstOutcome = click()
+        advance(800)
+        assertEquals(listOf(host), first.hosts)
+        first.callback.onAdShowedFullScreenContent()
+        first.callback.onAdDismissedFullScreenContent()
+        assertEquals(1, firstOutcome.completed)
         advance(30_000)
         assertFalse(InterstitialAdManager.isLoading(ALL))
-        val first = click()
-        assertEquals(listOf(AdSkipReason.CAPPED_BY_MODULE), first.skipped)
+        val capped = click()
+        assertEquals(listOf(AdSkipReason.CAPPED_BY_MODULE), capped.skipped)
         advance(1)
         assertTrue("One tap short of the threshold buys the ad", InterstitialAdManager.isLoading(ALL))
-        val ad = fill()
+        val second = fill()
         click()
         advance(800)
-        assertEquals(listOf(host), ad.hosts)
+        assertEquals(listOf(host), second.hosts)
     }
 
     @Test
@@ -333,9 +341,8 @@ class InterstitialContentPolicyTest {
         ))
         InterstitialAutoBuffer.start(host)
         assertEquals(0L, InterstitialFrequency.remainingMs(host, ALL))
-        click()
         advance(1)
-        assertEquals("Both preload at once: BACK needs no tap, ALL is one tap short", 2, requests.size)
+        assertEquals("Both preload at arming: before a first show no placement needs a tap", 2, requests.size)
         val ad = fill(0)
         click()
         advance(800)
@@ -427,6 +434,12 @@ class InterstitialContentPolicyTest {
         dismissAfterOnboarding()
         assertEquals(10_000L, InterstitialFrequency.remainingMs(host, ALL))
         assertEquals(20_000L, InterstitialFrequency.remainingMs(host, BACK))
+        click(ALL, timeoutMs = 0)
+        click(BACK, timeoutMs = 0)
+        assertTrue("A first show needs one tap", InterstitialFrequency.hasTaps(ALL))
+        assertTrue(InterstitialFrequency.hasTaps(BACK))
+        InterstitialFrequency.onShown(ALL)
+        InterstitialFrequency.onShown(BACK)
         click(ALL, timeoutMs = 0)
         click(BACK, timeoutMs = 0)
         assertFalse(InterstitialFrequency.hasTaps(ALL))

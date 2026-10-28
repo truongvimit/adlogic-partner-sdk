@@ -329,7 +329,8 @@ InterstitialAutoBuffer.start(applicationContext)
 Keep using `InterstitialAdManager.show` at navigation opportunities. `start()` starts no
 interval: closing a buffer ad, closing the onboarding exit interstitial or a final load failure
 does. Until one of those happens, a placement preloads as soon as it is one tap short of its
-threshold. Background pauses scheduling and the interval clock, so only foreground time counts;
+threshold. A placement's first show in a process needs only one tap, so it preloads with no tap
+and the first action shows it; from its second show on, the full threshold applies. Background pauses scheduling and the interval clock, so only foreground time counts;
 ready ads are kept.
 Repeated `start()` is safe. `topUpNow()` checks eligibility and cannot bypass the interval.
 Use the manager APIs for these placements and remove app-side refill timers or temporary
@@ -618,7 +619,7 @@ for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone exam
 Settings resolve as remote > delivered legacy settings > app root asset > host configuration > bundled SDK defaults. Within one source, screen/group overrides precede placement and format overrides. Empty behavior objects add no leaf values and allow fallback. A full default JSON copied into the app asset root is still an explicit override of host values. See [remote settings](../partner-integration/remote-settings.md) for the complete schema.
 
 - `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through ERainAd and tracking wrappers.
-- An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; only its tap threshold applies until its first show or failure.
+- An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; like every placement, its first show needs one tap.
 - `BannerAdConfig.forPlacement` reads the placement's current `enable_ua_check` after refresh unless the host explicitly sets `forceUaCheck`. A non-positive `reloadIntervalSeconds` falls back to host cadence; it does not cause immediate reload.
 - Native `components: []` preserves the XML layout. A scoped `presentation.cta_corner_radius_dp` applies even without an explicit native style; a CTA color is needed to replace the XML background.
 - App-open `failure_backoff_ms` accepts 1–10 integers in 1–3,600,000 ms. Empty/invalid arrays fall back to the app/SDK schedule. Consent timeout and interstitial daily click-cap logs report the effective resolved values.

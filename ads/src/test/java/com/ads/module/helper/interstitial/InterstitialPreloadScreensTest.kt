@@ -172,6 +172,7 @@ class InterstitialPreloadScreensTest {
     @Test
     fun `screen entry does not invent taps and preserves actions accumulated on home`() {
         arm(taps = 3)
+        InterstitialFrequency.onShown(BACK)
         InterstitialAutoBuffer.setCurrentScreen("home")
         advance(35_000)
         click(timeoutMs = 0)

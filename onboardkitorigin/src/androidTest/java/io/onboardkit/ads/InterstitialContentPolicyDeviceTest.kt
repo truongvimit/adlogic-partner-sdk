@@ -106,11 +106,7 @@ class InterstitialContentPolicyDeviceTest {
                         intervalMsByPlacement = mapOf(PLACEMENT to 0L),
                     ))
                     InterstitialAutoBuffer.start(host)
-                    val firstAction = RecordingShow()
-                    InterstitialAdManager.loadAndShow(host, PLACEMENT, listOf(TEST_UNIT), firstAction,
-                        InterLoadAndShowOptions(allowWaitForAutoBuffer = true))
-                    assertEquals(listOf("capped_by_module"), firstAction.skips.toList())
-                    assertFalse(InterstitialAdManager.isLoading(PLACEMENT))
+                    // Before its first show the placement needs one tap, so this first action waits.
                     triggerAt.set(SystemClock.elapsedRealtime())
                     InterstitialAdManager.loadAndShow(host, PLACEMENT, listOf(TEST_UNIT), expired,
                         InterLoadAndShowOptions(allowWaitForAutoBuffer = true, timeoutMs = 50))

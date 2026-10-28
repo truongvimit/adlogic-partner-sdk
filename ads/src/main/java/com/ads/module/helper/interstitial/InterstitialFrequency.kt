@@ -31,6 +31,7 @@ object InterstitialFrequency {
         var closedAt = -1L
         var failedAt = -1L
         var taps = 0
+        var shown = false
     }
 
     private fun now(): Long {
@@ -70,10 +71,12 @@ object InterstitialFrequency {
                 ?: (globalIntervalMs())
         } else globalIntervalMs()
 
-    private fun threshold(placement: String): Int =
-        if (InterstitialAutoBuffer.owns(placement)) {
-            InterstitialAutoBuffer.options().tapThresholds[placement] ?: 0
-        } else 0
+    /** Until a placement first shows in this process, one tap is enough. */
+    private fun threshold(placement: String): Int {
+        if (!InterstitialAutoBuffer.owns(placement)) return 0
+        val configured = InterstitialAutoBuffer.options().tapThresholds[placement] ?: 0
+        return if (placements[placement]?.shown == true) configured else configured.coerceAtMost(1)
+    }
 
     private fun tracks(placement: String): Boolean =
         InterstitialAutoBuffer.owns(placement) || InterstitialAutoBuffer.counts(placement)
@@ -93,7 +96,9 @@ object InterstitialFrequency {
     }
 
     internal fun onShown(placement: String) {
-        placements[placement]?.taps = 0
+        val state = placements.getOrPut(placement) { PlacementClock() }
+        state.taps = 0
+        state.shown = true
     }
 
     internal fun preloadRemainingMs(placement: String): Long = remainingMs(placement, preload = true)
