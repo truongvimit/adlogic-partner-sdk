@@ -98,19 +98,20 @@ class PoolResumeTest {
         main.idle()
     }
 
-    @Test fun `the resume screen never owns and shows the underlying owner's ad`() {
+    @Test fun `the resume screen never owns and shows its own fill ahead of the owner's ad`() {
         OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
         val owner = fill("language1")
         val screen = openResume()
         assertEquals("language1", engine.owner)
-        assertSame(owner.admobNativeAd, screen.slot().shownAd())
+        assertSame("It borrows the owner's ad until its own fills", owner.admobNativeAd, screen.slot().shownAd())
         assertEquals(View.VISIBLE, screen.block().visibility)
-        assertEquals("Its own POLITE request goes out with the gate open", 1, loader.callsFor("native_resume").size)
+        assertEquals(1, loader.callsFor("native_resume").size)
 
-        fill("native_resume")
+        val own = fill("native_resume")
+        assertSame("Its own fill takes over at once", own.admobNativeAd, screen.slot().shownAd())
         screen.backAndForth()
-        assertEquals("language1", engine.owner)
-        assertSame("The owner's ad beats the screen's own fill", owner.admobNativeAd, screen.slot().shownAd())
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        assertEquals("The owner is untouched", "language1", engine.owner)
         assertEquals(0, PoolUiSdk.suppressDepth())
     }
 
@@ -123,19 +124,63 @@ class PoolResumeTest {
         assertSame(ad.admobNativeAd, screen.slot().shownAd())
     }
 
-    @Test fun `native_resume is asked POLITE on create and on resume, refreshed on resume`() {
+    @Test fun `native_resume goes out FORCED past another load, never twice while its own runs`() {
         OnboardingPool.claim(ob1, LoadMode.FORCED)
         val screen = openResume()
-        assertTrue("Gated on create and on its first resume", loader.callsFor("native_resume").isEmpty())
+        assertEquals("FORCED past ob1's load", 1, loader.callsFor("native_resume").size)
+
+        screen.backAndForth()
+        assertEquals("Its own load still runs: no second request", 1, loader.callsFor("native_resume").size)
 
         fill("step_ob1")
+        val own = fill("native_resume")
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
         screen.backAndForth()
-        assertEquals("A later resume asks again", 1, loader.callsFor("native_resume").size)
-
-        fill("native_resume")
-        screen.backAndForth()
-        assertEquals("The held fill is refreshed, the POLITE load is a no-op", 2, loader.callsFor("native_resume").size)
+        assertEquals("The held fill is refreshed", 2, loader.callsFor("native_resume").size)
+        assertTrue(requireNotNull(engine.debugSnapshot().loader("native_resume")).refreshing)
+        assertSame("The held ad stays drawn meanwhile", own.admobNativeAd, screen.slot().shownAd())
         assertEquals("step_ob1", engine.owner)
+    }
+
+    @Test fun `a native_resume that filled after its screen closed shows first on the next one`() {
+        OnboardingPool.claim(ob1, LoadMode.FORCED)
+        val first = openResume()
+        first.close()
+        controllers -= first
+        val owner = fill("step_ob1")
+        val behind = fill("native_resume")
+
+        val next = openResume()
+        assertSame(behind.admobNativeAd, next.slot().shownAd())
+        assertTrue("Still in the pool for the next screen", owner.admobNativeAd !== next.slot().shownAd())
+    }
+
+    @Test fun `after an ad click the screen neither loads nor shows inter_resume`() {
+        PoolUiSdk.configure(POOL_UI_ADS.copy(resumeInterstitial = InterstitialAdUnit("resume-inter")))
+        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
+        ObNativeResume.show(host, afterAdClick = true)
+        val screen = openResume(shadowOf(host).nextStartedActivity)
+        assertTrue(PoolUiSdk.provider.interstitialLoads.isEmpty())
+        assertEquals("Its native still goes out", 1, loader.callsFor("native_resume").size)
+
+        screen.get().findViewById<View>(R.id.ob_resume_start).performClick()
+        main.idle()
+        assertTrue(PoolUiSdk.provider.presentations.isEmpty())
+        assertTrue("Start only closes the screen", screen.get().isFinishing)
+    }
+
+    @Test fun `without an ad click the screen preloads inter_resume and Start shows it`() {
+        PoolUiSdk.configure(POOL_UI_ADS.copy(resumeInterstitial = InterstitialAdUnit("resume-inter")))
+        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
+        ObNativeResume.show(host, afterAdClick = false)
+        val screen = openResume(shadowOf(host).nextStartedActivity)
+        assertEquals(listOf<AdPlacement>(AdPlacement.ResumeInterstitial), PoolUiSdk.provider.interstitialLoads)
+
+        screen.get().findViewById<View>(R.id.ob_resume_start).performClick()
+        main.idle()
+        assertEquals(1, PoolUiSdk.provider.presentations.size)
+        assertFalse(screen.get().isFinishing)
+        PoolUiSdk.provider.endPresentations()
     }
 
     @Test fun `after the flow, back from inter_resume draws the native_resume that filled behind it, then closes`() {
@@ -145,7 +190,7 @@ class PoolResumeTest {
         OnboardingPool.setOwner(null)
         val screen = openResume()
         assertSame(leftover.admobNativeAd, screen.slot().shownAd())
-        assertEquals("Its own POLITE request", 1, loader.callsFor("native_resume").size)
+        assertEquals("Its own request", 1, loader.callsFor("native_resume").size)
 
         screen.get().findViewById<View>(R.id.ob_resume_start).performClick()
         main.idle()
@@ -167,7 +212,7 @@ class PoolResumeTest {
         assertTrue(screen.get().isFinishing)
     }
 
-    @Test fun `the host refreshes first and the screen's own refresh is POLITE, skipped while that runs`() {
+    @Test fun `the host refreshes first and the screen's own refresh still goes out past it`() {
         val host = hub()
         fill("language1")
         ObNativeResume.show(host.get())
@@ -177,8 +222,7 @@ class PoolResumeTest {
 
         val before = loader.attempts.size
         returnOver(host)
-        assertEquals("No native_resume refresh jumps the host's request", listOf("language1"),
-            loader.attempts.drop(before).map { it.request.key })
+        assertEquals(listOf("language1", "native_resume"), loader.attempts.drop(before).map { it.request.key })
     }
 
     @Test fun `with no other request in flight the screen refreshes its held native_resume`() {
@@ -195,17 +239,20 @@ class PoolResumeTest {
         assertTrue(requireNotNull(engine.debugSnapshot().loader("native_resume")).refreshing)
     }
 
-    @Test fun `while the host's owner refreshes the screen's POLITE load is skipped and the slot follows the owner`() {
+    @Test fun `under the host's owner refresh the screen loads its own and borrows the owner's ad until it fills`() {
         val host = hub()
         val old = fill("language1")
         val screen = returnOver(host)
         assertTrue(requireNotNull(engine.debugSnapshot().loader("language1")).refreshing)
-        assertTrue("Case B: no native_resume request under the host's refresh", loader.callsFor("native_resume").isEmpty())
+        assertEquals("FORCED past the host's refresh", 1, loader.callsFor("native_resume").size)
         assertEquals("language1", engine.owner)
         assertSame("The old owner ad shows meanwhile", old.admobNativeAd, screen.slot().shownAd())
 
         val refreshed = fill("language1")
         assertSame(refreshed.admobNativeAd, screen.slot().shownAd())
+        val own = fill("native_resume")
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        assertEquals("language1", engine.owner)
     }
 
     @Test fun `a failed host refresh keeps the old ad on the resume screen`() {

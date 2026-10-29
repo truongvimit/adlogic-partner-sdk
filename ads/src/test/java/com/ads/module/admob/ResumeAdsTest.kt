@@ -21,6 +21,7 @@ import com.ads.module.helper.interstitial.Int02FacebookShadow
 import com.ads.module.helper.interstitial.Int02InterstitialShadow
 import com.ads.module.helper.interstitial.Int02MobileAdsShadow
 import com.ads.module.helper.interstitial.InterstitialAdManager
+import com.google.android.gms.ads.AdActivity
 import io.trackkit.TrackSink
 import io.trackkit.Tracker
 import org.junit.After
@@ -56,6 +57,7 @@ class ResumeAdsTest {
     private val screen = object : ResumeAds.NativeScreen {
         override fun prepare(context: Context) { calls += "prepare" }
         override fun show(host: Activity) { calls += "show" }
+        override fun show(host: Activity, afterAdClick: Boolean) { calls += if (afterAdClick) "show:click" else "show" }
     }
 
     @Before
@@ -208,8 +210,59 @@ class ResumeAdsTest {
         ResumeAds.onStop(owner)
         main.idle()
         ResumeAds.onStart(owner)
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("prepare", "show:click"), calls)
         manager.setResumeSkipPolicy(null)
+    }
+
+    @Test
+    fun `a click marks only the trip it starts, whatever the click-skip policy`() {
+        manager.noteAdClick()
+        ResumeAds.onStop(owner)
+        main.idle()
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show:click"), calls)
+
+        calls.clear()
+        ResumeAds.onStop(owner)
+        main.idle()
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show"), calls)
+    }
+
+    @Test
+    fun `the host back in front before any trip drops the click`() {
+        manager.noteAdClick()
+        manager.onActivityResumed(host)
+        ResumeAds.onStop(owner)
+        main.idle()
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare", "show"), calls)
+    }
+
+    @Test
+    fun `a click through AdActivity opens native resume once the host is back in front`() {
+        val adActivity = Robolectric.buildActivity(AdActivity::class.java).get()
+        manager.noteAdClick()
+        manager.onActivityStarted(adActivity)
+        ResumeAds.onStop(owner)
+        main.idle()
+        ResumeAds.onStart(owner)
+        assertEquals(listOf("prepare"), calls)
+
+        controller.pause().resume()
+        main.idle()
+        assertEquals(listOf("prepare", "show:click"), calls)
+    }
+
+    @Test
+    fun `AdActivity in front without a click keeps native resume idle`() {
+        manager.onActivityStarted(Robolectric.buildActivity(AdActivity::class.java).get())
+        ResumeAds.onStop(owner)
+        main.idle()
+        ResumeAds.onStart(owner)
+        controller.pause().resume()
+        main.idle()
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test

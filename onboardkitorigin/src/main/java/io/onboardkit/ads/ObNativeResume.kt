@@ -23,11 +23,13 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         )
     }
 
-    override fun show(host: Activity) {
+    override fun show(host: Activity) = show(host, afterAdClick = false)
+
+    override fun show(host: Activity, afterAdClick: Boolean) {
         // Both screens exclude themselves; this also covers a routing switch while one is open.
         if (host is ObResumeActivity || host is ObPoolResumeActivity) return
         // Without config the screen's guard would restart the whole flow from the launcher.
         if (!OnboardingSdk.isReady()) return
-        if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host) else ObResumeActivity.start(host)
+        if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host, afterAdClick) else ObResumeActivity.start(host)
     }
 }

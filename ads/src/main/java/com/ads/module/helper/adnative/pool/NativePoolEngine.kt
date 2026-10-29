@@ -112,6 +112,10 @@ class NativePoolEngine<H : Any>(
 
     fun debugSnapshot(): PoolSnapshot<H> = mutableSnapshot.value
 
+    /** [selectOwnFirst] of [snapshot] on this engine's parity, clock and expiry. */
+    fun ownFirstSelection(snapshot: PoolSnapshot<H>, ownKey: String): PoolSelection<H> =
+        selectOwnFirst(snapshot, ownKey, parity, clock.nowMs(), expiry.maxAgeMs())
+
     /** [selectCarouselPages] of [snapshot] on this engine's parity, clock and expiry. */
     fun carouselSelection(
         snapshot: PoolSnapshot<H>,

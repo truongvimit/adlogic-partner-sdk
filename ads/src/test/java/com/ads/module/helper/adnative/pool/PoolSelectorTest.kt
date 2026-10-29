@@ -148,4 +148,40 @@ class PoolSelectorTest {
         val shownSecond = loader("second", PoolState.Showing(50), index = 1)
         assertLender("first", select(shownSecond, shownFirst), listOf(shownFirst, shownSecond))
     }
+
+    private fun selectOwn(
+        vararg loaders: PoolLoaderView<FakeAd>,
+        ownKey: String,
+        owner: String? = null,
+        maxAgeMs: Long = 0L,
+    ): PoolSelection<FakeAd> =
+        selectOwnFirst(PoolSnapshot(loaders.toList(), owner, 1L), ownKey, PoolParity(), now, maxAgeMs)
+
+    @Test fun `own first - the slot's own Loaded ad beats the owner's`() {
+        val loaders = listOf(loader("lfo1", PoolState.Loaded(10)), loader("resume", PoolState.Loaded(5)))
+        assertLender("resume", selectOwn(*loaders.toTypedArray(), ownKey = "resume", owner = "lfo1"), loaders)
+    }
+
+    @Test fun `own first - a Showing own ad stays ahead of the owner's, as an owner's would`() {
+        val loaders = listOf(loader("lfo1", PoolState.Loaded(10)), loader("resume", PoolState.Showing(5)))
+        assertLender("resume", selectOwn(*loaders.toTypedArray(), ownKey = "resume", owner = "lfo1"), loaders)
+    }
+
+    @Test fun `own first - without an own ad the usual owner rule applies`() {
+        val loaders = listOf(
+            loader("lfo1", PoolState.Showing(10)),
+            loader("other", PoolState.Loaded(20)),
+            loader("resume", PoolState.None, inFlight = true),
+        )
+        assertLender("lfo1", selectOwn(*loaders.toTypedArray(), ownKey = "resume", owner = "lfo1"), loaders)
+    }
+
+    @Test fun `own first - an expired own ad falls back to the owner's`() {
+        val loaders = listOf(
+            loader("lfo1", PoolState.Loaded(10), fillAtMs = now - 100),
+            loader("resume", PoolState.Loaded(20), fillAtMs = now - 5_000),
+        )
+        assertLender("lfo1", selectOwn(*loaders.toTypedArray(), ownKey = "resume", owner = "lfo1", maxAgeMs = 1_000),
+            loaders)
+    }
 }

@@ -75,6 +75,21 @@ internal object OnboardingPool {
         if (engine == null) emit(PoolSelection.hidden()) else emitAll(engine.selection)
     }
 
+    /** [selection] with [placement]'s own ad ahead of the owner's; the owner stays untouched. */
+    fun ownFirstSelection(placement: AdPlacement): Flow<PoolSelection<ApNativeAd>> = flow {
+        val engine = engineOrNull()
+        if (engine == null) {
+            emit(PoolSelection.hidden())
+        } else {
+            emitAll(engine.snapshot.map { engine.ownFirstSelection(it, placement.key) }.distinctUntilChanged())
+        }
+    }
+
+    /** [ownFirstSelection] of the pool as it is now. */
+    @MainThread
+    fun currentOwnFirstSelection(placement: AdPlacement): PoolSelection<ApNativeAd>? =
+        engineOrNull()?.let { it.ownFirstSelection(it.debugSnapshot(), placement.key) }
+
     /** The two keys an LFO carousel's pages show, and the ad each page's view holds now. */
     class CarouselPages(
         val firstKey: () -> String,
@@ -183,20 +198,6 @@ internal object OnboardingPool {
     fun refresh(placement: AdPlacement): Boolean {
         val engine = engineOrNull() ?: return false
         return engine.refresh(placement.key)
-    }
-
-    /**
-     * [refresh] that waits its turn like a POLITE load: skipped, not queued, while any loader has a
-     * request in flight. The pooled resume screen renews its ad this way and never jumps the gate.
-     */
-    @MainThread
-    fun refreshPolite(placement: AdPlacement): Boolean {
-        val engine = engineOrNull() ?: return false
-        if (!engine.gateOpen.value) {
-            ObLog.d(ObLog.Section.LOAD, "pool | gate_skip refresh key=${placement.key}")
-            return false
-        }
-        return refresh(placement)
     }
 
     @MainThread

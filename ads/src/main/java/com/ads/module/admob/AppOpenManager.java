@@ -126,6 +126,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private boolean enableScreenContentCallback = false; // default =  true when use splash & false after show splash
     private final AtomicReference<String> pendingResumeSkipReason = new AtomicReference<>();
     private volatile String currentReturnSkipReason;
+    private volatile boolean adClickAway;
     private long resumeReturnGeneration;
     private ResumeSkipPolicy resumeSkipPolicy;
     private final List<Class> disabledAppOpenList;
@@ -245,14 +246,28 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** Marks the next host return as coming from an ad click; does not enable app-open mode. */
     public void disableAdResumeByClickAction() {
+        noteAdClick();
         skipNextResume(AD_CLICK_RETURN);
     }
 
-    /** Compatibility setter. False clears both the pending skip and the current-return snapshot. */
+    /** Marks an ad click for {@link ResumeAds} whatever the skip policy; a host resume drops it. */
+    public void noteAdClick() {
+        adClickAway = true;
+    }
+
+    /** Spends the click mark for the trip to the background now starting. */
+    boolean takeAdClickAway() {
+        boolean clicked = adClickAway;
+        adClickAway = false;
+        return clicked;
+    }
+
+    /** Compatibility setter. False clears the click mark, the pending skip and the return snapshot. */
     public void setDisableAdResumeByClickAction(boolean disabled) {
         if (disabled) {
             disableAdResumeByClickAction();
         } else {
+            adClickAway = false;
             pendingResumeSkipReason.set(null);
             currentReturnSkipReason = null;
             resumeReturnGeneration++;
@@ -872,6 +887,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         currentActivity = activity;
         resumedActivity = activity;
         Log.d(TAG, "onActivityResumed: " + currentActivity);
+        if (!(activity instanceof AdActivity)) adClickAway = false;
         captureResumeReturn(activity);
 
     }

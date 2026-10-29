@@ -4,7 +4,9 @@ import androidx.appcompat.app.AppCompatActivity
 import com.ads.module.config.settings.AdBehavior
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.loadAndShowInterstitial
+import io.onboardkit.ads.trackSkipped
 import io.onboardkit.ads.whenResumed
 import io.onboardkit.core.ObLog
 import io.onboardkit.remote.OnboardingSettings
@@ -21,6 +23,9 @@ import io.onboardkit.remote.OnboardingSettings
 internal class ResumeStart(private val screen: AppCompatActivity) {
 
     private var pressed = false
+
+    /** Opened on the way back from an ad's landing page: no inter_resume is loaded or shown. */
+    var afterAdClick = false
 
     /** From the moment inter_resume is on screen: the screen comes back only to close. */
     var closingAfterInter = false
@@ -61,6 +66,7 @@ internal class ResumeStart(private val screen: AppCompatActivity) {
 
     /** Warms the fill when the screen opens, so Start rarely waits on the loading dialog. */
     fun preload() {
+        if (afterAdClick) return
         val placement = AdPlacement.ResumeInterstitial
         val unit = OnboardingSdk.configOrNull()?.ads?.resumeInterstitial ?: return
         if (OnboardingSdk.guard().skipReason(screen, placement, unit) != null) return
@@ -71,6 +77,11 @@ internal class ResumeStart(private val screen: AppCompatActivity) {
         // A second tap under the loading dialog would be refused as overlapping and close the screen.
         if (pressed) return
         pressed = true
+        if (afterAdClick) {
+            AdPlacement.ResumeInterstitial.trackSkipped(AdSkipReason.RETURNING_FROM_AD_CLICK)
+            screen.finish()
+            return
+        }
         screen.loadAndShowInterstitial(
             AdPlacement.ResumeInterstitial,
             timeoutMs = OnboardingSettings.behavior(AdPlacement.ResumeInterstitial)

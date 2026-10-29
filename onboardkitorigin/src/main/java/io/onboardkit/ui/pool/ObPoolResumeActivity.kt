@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
+import com.ads.module.helper.adnative.pool.LoadMode
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.pool.OnboardingPool
@@ -20,11 +21,13 @@ import kotlinx.coroutines.launch
 
 /**
  * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
- * it shows the owner of the screen underneath, or after the flow the newest leftover, and asks for
- * its own native only POLITE, a refresh included. Start and back both run the `inter_resume`
- * load-and-show ([ResumeStart]), AFTER_AD: the screen closes once it is back in front after that ad. A config refusal of native_resume hides it, as in DashDrama and the
- * classic screen. A return to it opens nothing: it keeps the base exclusion from app-resume, and its
- * own onResume refreshes the ad. It never holds the shared suppression; an ad click is the only mark.
+ * it shows native_resume's own ad first, else the owner of the screen underneath, or after the flow
+ * the newest leftover. Its own request goes out FORCED past the pool's gate, never doubling one of
+ * its own already running. Start and back both run the `inter_resume` load-and-show
+ * ([ResumeStart]), AFTER_AD, except after an ad click, when they only close the screen. A config
+ * refusal of native_resume hides it, as in DashDrama and the classic screen. A return to it opens
+ * nothing: it keeps the base exclusion from app-resume, and its own onResume refreshes the ad. It
+ * never holds the shared suppression; an ad click is the only mark.
  *
  * A click pauses the slot while the landing page owns the window. When the user returns, the
  * held selection is drawn again instead of collapsing the ad block; the click itself still marks
@@ -57,6 +60,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
         views.start.setOnClickListener { startAction.press() }
         revealStart(views.start)
+        startAction.afterAdClick = intent.getBooleanExtra(EXTRA_AFTER_AD_CLICK, false)
         startAction.preload()
 
         val flow = runSnapshot()
@@ -68,6 +72,8 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             kind = PoolNativeSlot.Kind.OWNER,
             minState = SCREEN_SLOT_MIN_STATE,
             container = views.ad,
+            selection = { OnboardingPool.ownFirstSelection(AdPlacement.ResumeNative) },
+            currentSelection = { OnboardingPool.currentOwnFirstSelection(AdPlacement.ResumeNative) },
             callbacks = StepSlotCallbacks(
                 onLoading = {
                     if (!adClicked) views.adBlock.isVisible = true
@@ -118,9 +124,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Every request of this screen is POLITE: a held native_resume is refreshed only while no other
-     * request is in flight, otherwise it is asked for POLITE. Returning from its ad's landing page
-     * only redraws the held selection; it must not start a replacement request.
+     * Renews native_resume past the pool's gate: a held ad is refreshed and stays drawn until the new
+     * one fills, an empty loader loads FORCED, and one already loading is left alone. Returning from
+     * its ad's landing page only redraws the held selection; it must not start a replacement request.
      */
     override fun onResume() {
         super.onResume()
@@ -131,7 +137,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         }
         // Back from inter_resume only to close: the held ad is drawn for the exit, nothing is requested.
         if (startAction.closingAfterInter) return
-        if (!OnboardingPool.refreshPolite(AdPlacement.ResumeNative)) OnboardingPool.preload(AdPlacement.ResumeNative)
+        if (!OnboardingPool.refresh(AdPlacement.ResumeNative)) {
+            OnboardingPool.preload(AdPlacement.ResumeNative, LoadMode.FORCED)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -148,9 +156,12 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
 
     internal companion object {
         private const val KEY_AD_CLICKED = "ob_pool_resume_ad_clicked"
+        private const val EXTRA_AFTER_AD_CLICK = "ob_pool_resume_after_ad_click"
 
-        fun start(host: Activity) {
-            host.startActivity(Intent(host, ObPoolResumeActivity::class.java))
+        fun start(host: Activity, afterAdClick: Boolean = false) {
+            host.startActivity(
+                Intent(host, ObPoolResumeActivity::class.java).putExtra(EXTRA_AFTER_AD_CLICK, afterAdClick),
+            )
         }
 
         /** The run's latched knobs; a later classic or Welcome Back start clears the latch, not the routing. */

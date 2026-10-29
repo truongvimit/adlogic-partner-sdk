@@ -27,6 +27,21 @@ fun <H : Any> selectFromPool(
     return PoolSelection(null, null, anyInFlight(snapshot))
 }
 
+/** [selectFromPool] for a slot that ranks [ownKey]'s ad above the owner's without claiming it. */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+fun <H : Any> selectOwnFirst(
+    snapshot: PoolSnapshot<H>,
+    ownKey: String,
+    parity: PoolParity,
+    nowMs: Long,
+    maxAgeMs: Long,
+): PoolSelection<H> {
+    val own = snapshot.loaders.firstOrNull {
+        it.key == ownKey && it.holdsAd() && !isExpiredAt(it.fillAtMs, nowMs, maxAgeMs)
+    }
+    return own?.selected() ?: selectFromPool(snapshot, parity, nowMs, maxAgeMs)
+}
+
 /** What the two pages of a carousel render, decided together so they never show one ad twice. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 data class CarouselSelection<H : Any>(val first: PoolSelection<H>, val second: PoolSelection<H>)

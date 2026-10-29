@@ -40,6 +40,7 @@ class ObAppResume internal constructor(
      * `app_open.presentation.skip_after_ad_click` to false.
      */
     fun onAdClicked() {
+        AppOpenManager.getInstance().noteAdClick()
         // Resolve the complete field chain. Checking only the remote map treated an app asset
         // `false` as missing and incorrectly disabled the click suppression policy.
         if (!AdBehavior.bool(SKIP_AFTER_AD_CLICK, AdBehavior.defaultBool(SKIP_AFTER_AD_CLICK))) return

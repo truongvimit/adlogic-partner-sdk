@@ -3,6 +3,7 @@ package com.ads.module.admob
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -39,13 +40,21 @@ object ResumeAds : DefaultLifecycleObserver {
 
         /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
         fun show(host: Activity)
+
+        /** [show] where [afterAdClick] says the user is back from an ad's landing page. */
+        fun show(host: Activity, afterAdClick: Boolean) = show(host)
     }
 
     @JvmStatic
     @Volatile
     var nativeScreen: NativeScreen? = null
 
-    private class Stay(val type: ResumeAdType, val placement: String, val delayMs: Long) {
+    private class Stay(
+        val type: ResumeAdType,
+        val placement: String,
+        val delayMs: Long,
+        val afterAdClick: Boolean,
+    ) {
         val leftAtMs = SystemClock.elapsedRealtime()
         var requested = false
     }
@@ -55,6 +64,7 @@ object ResumeAds : DefaultLifecycleObserver {
     private var stay: Stay? = null
     private var pendingRequest: Runnable? = null
     private var pendingPresentation: Runnable? = null
+    private var hostReturn: Pair<Application, Application.ActivityLifecycleCallbacks>? = null
 
     /**
      * Activity/process callbacks can straddle the deadline by a frame or two on a real device.
@@ -73,11 +83,13 @@ object ResumeAds : DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         endStay()
+        val manager = AppOpenManager.getInstance()
+        // Before any early return: a click left unspent here would mark a later, unrelated trip.
+        val afterAdClick = manager.takeAdClickAway()
         val type = ResumeAdType.current()
         if (type != ResumeAdType.NATIVE && type != ResumeAdType.INTER) return
         val placement = type.placement ?: return
         if (type == ResumeAdType.NATIVE && nativeScreen == null) return
-        val manager = AppOpenManager.getInstance()
         // The SDK's own fullscreen and an external trip the partner excused are not a new
         // opportunity, exactly as for app-open. A return from an ad click still is one for native.
         val honorAdClick = type != ResumeAdType.NATIVE
@@ -86,8 +98,10 @@ object ResumeAds : DefaultLifecycleObserver {
         if (!manager.isInitialized || !manager.isAppResumeEnabled || manager.isShowingAd ||
             manager.isInterstitialShowing || returnReason != null) return
         val host = manager.currentActivity
-        if (host is AdActivity) return
-        if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host, honorAdClick) != null)) return
+        // A native ad's click opens its landing page through AdActivity; any other is the SDK's fullscreen.
+        val clickVendor = host is AdActivity && afterAdClick && !honorAdClick
+        if (host is AdActivity && !clickVendor) return
+        if (host != null && !clickVendor && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host, honorAdClick) != null)) return
         if (placementSkipReason(placement) != null) return
         val config = AdRemoteConfig.getInstance()
         val delayMs = if (type == ResumeAdType.NATIVE) {
@@ -95,7 +109,7 @@ object ResumeAds : DefaultLifecycleObserver {
         } else {
             AdRemoteConfig.normalizeAppResumeLoadDelayMs(config.appResumeLoadDelayMs)
         }
-        val next = Stay(type, placement, delayMs)
+        val next = Stay(type, placement, delayMs, afterAdClick)
         stay = next
         val request = Runnable {
             pendingRequest = null
@@ -138,10 +152,14 @@ object ResumeAds : DefaultLifecycleObserver {
         handler.postDelayed(presentation, remainingMs)
     }
 
-    private fun present(left: Stay) {
+    private fun present(left: Stay, resumed: Activity? = null) {
         if (ResumeAdType.current() != left.type) return
         val manager = AppOpenManager.getInstance()
-        val host = manager.currentActivity ?: return
+        val host = resumed ?: manager.currentActivity ?: return
+        if (host is AdActivity && left.afterAdClick && left.type == ResumeAdType.NATIVE) {
+            presentOnHostReturn(left, host)
+            return
+        }
         if (host is AdActivity || host.isFinishing || host.isDestroyed || !manager.isAppResumeEnabled ||
             manager.isResumeSuppressedFor(host) || manager.isShowingAd || manager.isInterstitialShowing) return
         val reason = manager.resumeSkipReasonFor(host, left.type != ResumeAdType.NATIVE)
@@ -155,7 +173,7 @@ object ResumeAds : DefaultLifecycleObserver {
             // are visible at the return deadline; the native request can run while that screen is
             // on top. A provider may do synchronous setup before dispatching its async load.
             ResumeAdType.NATIVE -> {
-                nativeScreen?.show(host)
+                nativeScreen?.show(host, left.afterAdClick)
                 request(left)
             }
             ResumeAdType.INTER -> {
@@ -164,6 +182,26 @@ object ResumeAds : DefaultLifecycleObserver {
             }
             else -> Unit
         }
+    }
+
+    /** The landing page's AdActivity came back first; the screen opens over the host it uncovers. */
+    private fun presentOnHostReturn(left: Stay, vendor: Activity) {
+        clearHostReturn()
+        val app = vendor.application
+        val callbacks = object : ActivityCallbacks() {
+            override fun onActivityResumed(activity: Activity) {
+                if (activity is AdActivity) return
+                clearHostReturn()
+                present(left, activity)
+            }
+        }
+        hostReturn = app to callbacks
+        app.registerActivityLifecycleCallbacks(callbacks)
+    }
+
+    private fun clearHostReturn() {
+        hostReturn?.let { (app, callbacks) -> app.unregisterActivityLifecycleCallbacks(callbacks) }
+        hostReturn = null
     }
 
     private fun request(left: Stay) {
@@ -217,5 +255,15 @@ object ResumeAds : DefaultLifecycleObserver {
         pendingRequest = null
         pendingPresentation = null
         stay = null
+        clearHostReturn()
+    }
+
+    private abstract class ActivityCallbacks : Application.ActivityLifecycleCallbacks {
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+        override fun onActivityStarted(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
     }
 }
