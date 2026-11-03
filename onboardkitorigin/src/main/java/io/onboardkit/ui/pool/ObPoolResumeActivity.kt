@@ -30,8 +30,9 @@ import kotlinx.coroutines.launch
  * never holds the shared suppression; an ad click is the only mark.
  *
  * A click pauses the slot while the landing page owns the window. When the user returns, the
- * held selection is drawn again instead of collapsing the ad block; the click itself still marks
- * the next foreground return as an ad return through the shared resume guard.
+ * held selection is drawn again instead of collapsing the ad block, and native_resume is requested
+ * as on an opening; the click itself still marks the next foreground return as an ad return
+ * through the shared resume guard.
  */
 internal class ObPoolResumeActivity : BaseOnboardActivity() {
 
@@ -126,15 +127,12 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     /**
      * Renews native_resume past the pool's gate: a held ad is refreshed and stays drawn until the new
      * one fills, an empty loader loads FORCED, and one already loading is left alone. Returning from
-     * its ad's landing page only redraws the held selection; it must not start a replacement request.
+     * an ad's landing page redraws the held selection first, then renews the same way.
      */
     override fun onResume() {
         super.onResume()
         if (isFinishing || !OnboardingPool.isActive) return
-        if (adClicked) {
-            restoreAfterAdClick()
-            return
-        }
+        if (adClicked) restoreAfterAdClick()
         // Back from inter_resume only to close: the held ad is drawn for the exit, nothing is requested.
         if (startAction.closingAfterInter) return
         if (!OnboardingPool.refresh(AdPlacement.ResumeNative)) {

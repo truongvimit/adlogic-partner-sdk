@@ -193,6 +193,25 @@ class ResumeStartTest {
         main.idle()
     }
 
+    @Test fun `after an ad click the classic screen neither loads nor shows inter_resume`() {
+        withResumeInter()
+        provider.loadAndShows.clear()
+        provider.interstitialLoads.clear()
+        val host = Robolectric.buildActivity(android.app.Activity::class.java).also { controllers += it }.setup().get()
+        ObResumeActivity.start(host, afterAdClick = true)
+        val screen = Robolectric.buildActivity(ObResumeActivity::class.java, shadowOf(host).nextStartedActivity).also {
+            controllers += it
+            it.get().setTheme(R.style.ob_Theme_OnboardKit)
+            it.setup()
+            main.idle()
+        }.get()
+        assertFalse("No inter_resume warm-up", AdPlacement.ResumeInterstitial in provider.interstitialLoads)
+
+        screen.tapStart()
+        assertTrue(provider.loadAndShows.isEmpty())
+        assertTrue("Start only closes it", screen.isFinishing)
+    }
+
     @Test fun `a replacement bound over a seen ad holds back again until its own impression`() {
         withResumeInter()
         provider.loadAndShows.clear()

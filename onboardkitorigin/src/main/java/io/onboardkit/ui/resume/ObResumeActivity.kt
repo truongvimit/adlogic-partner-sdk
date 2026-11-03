@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 /**
  * Native resume, opened when the app returns from the background. Start and back both run the
  * `inter_resume` load-and-show ([ResumeStart]), AFTER_AD: once back in front after that ad it closes
- * onto the screen the user left. Its shown ad outlives
+ * onto the screen the user left, except after an ad click, when they only close it. Its shown ad outlives
  * it, so the next return shows that ad at once and binds a newer one over it when that loads. A return to this screen itself opens nothing: it keeps the
  * base exclusion from app-resume, like the splash and the ad screens.
  */
@@ -37,6 +37,7 @@ class ObResumeActivity : BaseOnboardActivity() {
         (views.start as? android.widget.TextView)?.let { OnboardingSettings.resumeStartColor()?.let(it::setTextColor) }
         views.start.setOnClickListener { startAction.press() }
         revealStart(views.start)
+        startAction.afterAdClick = intent.getBooleanExtra(EXTRA_AFTER_AD_CLICK, false)
         startAction.preload()
         // Before the bind: a retained ad shows at once and the new request replaces it on fill.
         ObNativeResume.prepare(this)
@@ -80,8 +81,10 @@ class ObResumeActivity : BaseOnboardActivity() {
     override fun handleBack() = startAction.pressBack()
 
     internal companion object {
-        fun start(host: Activity) {
-            host.startActivity(Intent(host, ObResumeActivity::class.java))
+        private const val EXTRA_AFTER_AD_CLICK = "ob_resume_after_ad_click"
+
+        fun start(host: Activity, afterAdClick: Boolean = false) {
+            host.startActivity(Intent(host, ObResumeActivity::class.java).putExtra(EXTRA_AFTER_AD_CLICK, afterAdClick))
         }
     }
 }

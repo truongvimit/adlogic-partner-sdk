@@ -317,23 +317,50 @@ class PoolResumeTest {
         assertTrue(loader.attempts.isEmpty())
     }
 
-    @Test fun `back from its ad's landing page restores the native resume layout`() {
+    @Test fun `back from its ad's landing page redraws the held native and requests native_resume again`() {
         val screen = openResume()
         val own = fill("native_resume")
         assertSame(own.admobNativeAd, screen.slot().shownAd())
         val view = screen.slot().getChildAt(0)
-        val requests = loader.attempts.size
+        val requests = loader.callsFor("native_resume").size
 
         loader.click(own)
         main.idle()
         screen.backAndForth()
         assertEquals(View.VISIBLE, screen.block().visibility)
-        assertEquals("The click return does not start a replacement", requests, loader.attempts.size)
+        assertEquals("The click return requests native_resume", requests + 1, loader.callsFor("native_resume").size)
         assertTrue("The held native is drawn again", screen.slot().getChildAt(0) !== view)
-        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        assertSame("It stays drawn until the new one fills", own.admobNativeAd, screen.slot().shownAd())
 
-        // The same held native is restored after a recreation while the landing page owns the
-        // window. The click-return path above already proves that no replacement was requested.
+        val renewed = fill("native_resume")
+        assertSame("The new fill shows as on an opening", renewed.admobNativeAd, screen.slot().shownAd())
+    }
+
+    @Test fun `back from a borrowed ad's landing page requests native_resume into the pool`() {
+        OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
+        val owner = fill("language1")
+        val screen = openResume()
+        loader.exhaust("native_resume")
+        main.idle()
+        assertSame(owner.admobNativeAd, screen.slot().shownAd())
+        val requests = loader.callsFor("native_resume").size
+
+        loader.click(owner)
+        main.idle()
+        screen.backAndForth()
+        assertEquals(requests + 1, loader.callsFor("native_resume").size)
+        assertSame("The owner's ad stays drawn meanwhile", owner.admobNativeAd, screen.slot().shownAd())
+
+        val own = fill("native_resume")
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        assertEquals("It still never owns", "language1", engine.owner)
+    }
+
+    @Test fun `a screen destroyed under its ad's landing page restores the held native and requests again`() {
+        val screen = openResume()
+        val own = fill("native_resume")
+        val requests = loader.callsFor("native_resume").size
+
         loader.click(own)
         main.idle()
         val state = Bundle()
@@ -346,10 +373,9 @@ class PoolResumeTest {
             it.setup(state)
             main.idle()
         }
-        assertEquals("A screen destroyed under the landing page restores its ad", View.VISIBLE,
-            restored.block().visibility)
+        assertEquals(View.VISIBLE, restored.block().visibility)
         assertSame(own.admobNativeAd, restored.slot().shownAd())
-        assertEquals(requests, loader.attempts.size)
+        assertEquals(requests + 1, loader.callsFor("native_resume").size)
     }
 
     @Test fun `native resume opens the pooled screen only while the run routes it`() {

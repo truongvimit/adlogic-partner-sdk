@@ -30,6 +30,6 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         if (host is ObResumeActivity || host is ObPoolResumeActivity) return
         // Without config the screen's guard would restart the whole flow from the launcher.
         if (!OnboardingSdk.isReady()) return
-        if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host, afterAdClick) else ObResumeActivity.start(host)
+        if (OnboardingPool.routeResume) ObPoolResumeActivity.start(host, afterAdClick) else ObResumeActivity.start(host, afterAdClick)
     }
 }
