@@ -8,6 +8,7 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
+import com.ads.module.admob.ResumeAds
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.OnboardingSdk
@@ -296,6 +297,21 @@ class OnboardingAdLifecycleTest {
             assertEquals(action.remoteValue, 0, pager.currentItem)
             assertTrue(completions.isEmpty())
         }
+    }
+
+    @Test fun `only an auto next click excuses its trip from native resume`() {
+        ResumeAds.resetForTest()
+        launch()
+        for (action in listOf(NativeClickAction.RELOAD, NativeClickAction.NONE)) {
+            pagerClickAction(action)
+            listener().onClicked()
+            listener().onAdOpened()
+            assertFalse(action.remoteValue, ResumeAds.isNativeClickExcused)
+        }
+        pagerClickAction(NativeClickAction.AUTO_NEXT)
+        listener().onClicked()
+        assertTrue(ResumeAds.isNativeClickExcused)
+        ResumeAds.resetForTest()
     }
 
     @Test fun `an ad_config change to auto next reaches the next click on the pager key`() {

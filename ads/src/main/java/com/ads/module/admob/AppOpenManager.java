@@ -46,7 +46,6 @@ import com.ads.module.helper.AdSkipReason;
 import com.ads.module.consent.ConsentCenter;
 import com.ads.module.config.AdRemoteConfig;
 import com.ads.module.config.AdUnitConfig;
-import com.google.android.gms.ads.AdActivity;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
@@ -115,6 +114,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private Application myApplication;
 
     private static boolean isShowingAd = false;
+    private static long fullscreenShows = 0;
     private long appResumeLoadTime = 0;
     private long splashLoadTime = 0;
     private int splashTimeout = 0;
@@ -238,6 +238,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      * Only its real completion may clear this bit: elapsed time cannot prove an ad has closed.
      */
     public void setInterstitialShowing(boolean interstitialShowing) {
+        if (interstitialShowing) fullscreenShows++;
         isInterstitialShowing = interstitialShowing;
     }
 
@@ -250,7 +251,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         skipNextResume(AD_CLICK_RETURN);
     }
 
-    /** Marks an ad click for {@link ResumeAds} whatever the skip policy; a host resume drops it. */
+    /** Marks an ad click for interstitial resume's next trip whatever the skip policy; a host resume drops it. Native resume reads only {@link ResumeAds#noteNativeClick()}. */
     public void noteAdClick() {
         adClickAway = true;
     }
@@ -277,7 +278,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     /**
      * Suppresses the next host return, without changing OPEN/WELCOME/NONE mode.
      * A host return consumes the pending reason even while an interstitial or another gate blocks
-     * resume. AdActivity is not a host return. An overlay return can be an Activity resume without
+     * resume. An ad SDK's Activity ({@link AdSurfaces}) is not a host return. An overlay return can be an Activity resume without
      * a process restart; no timer is needed. Repeated calls before a return keep the latest reason.
      */
     public void skipNextResume(@NonNull String reason) {
@@ -320,7 +321,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
      */
     @Nullable
     public String resumeSkipReasonFor(@NonNull Activity activity, boolean honorAdClickReturn) {
-        if (activity instanceof AdActivity) return "ad_activity";
+        if (AdSurfaces.contains(activity)) return "ad_activity";
         String returnReason = getResumeReturnSkipReason();
         if (returnReason != null && (honorAdClickReturn || !AD_CLICK_RETURN.equals(returnReason))) return returnReason;
         com.ads.module.helper.AdSkipReason core = AdGate.skipReason(activity, true, true, false);
@@ -349,7 +350,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     }
 
     private void captureResumeReturn(@Nullable Activity activity) {
-        if (activity == null || activity instanceof AdActivity) return;
+        if (activity == null || AdSurfaces.contains(activity)) return;
         String reason = pendingResumeSkipReason.getAndSet(null);
         if (reason != null) {
             currentReturnSkipReason = reason;
@@ -413,7 +414,16 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
 
     /** A dispatched ad stays busy until its actual terminal callback, without a time-based unlock. */
     private static void setShowingAd(boolean showing) {
+        if (showing) fullscreenShows++;
         isShowingAd = showing;
+    }
+
+    /**
+     * Counts every fullscreen presentation, app-open, interstitial or reward, the moment it is
+     * marked: a native resume trip that saw one go up was that ad, not a landing page.
+     */
+    static long fullscreenShows() {
+        return fullscreenShows;
     }
 
     /**
@@ -880,6 +890,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         cancelBackgroundLoad();
         currentActivity = activity;
         Log.d(TAG, "onActivityStarted: " + currentActivity);
+        ResumeAds.onActivityStarted(activity);
     }
 
     @Override
@@ -887,9 +898,10 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         currentActivity = activity;
         resumedActivity = activity;
         Log.d(TAG, "onActivityResumed: " + currentActivity);
-        if (!(activity instanceof AdActivity)) adClickAway = false;
+        if (!AdSurfaces.contains(activity)) adClickAway = false;
         captureResumeReturn(activity);
-
+        // After the capture: native resume reads this return's one-shot skip.
+        ResumeAds.onActivityResumed(activity);
     }
 
     @Override
@@ -897,6 +909,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         if (dialog != null && dialog.getOwnerActivity() == activity) {
             dismissResumeDialog(dialog);
         }
+        ResumeAds.onActivityStopped(activity);
     }
 
     @Override
@@ -906,6 +919,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             resumeHostGeneration++;
             if (pendingResumeCancellation != null) pendingResumeCancellation.run();
         }
+        ResumeAds.onActivityPaused(activity);
     }
 
     @Override
@@ -925,6 +939,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             currentActivity = null;
             Log.d(TAG, "onActivityDestroyed: null");
         }
+        ResumeAds.onActivityDestroyed(activity);
     }
 
     public void showAdIfAvailable(final boolean isSplash) {
@@ -1049,7 +1064,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
     private boolean canShowResumeOn(Activity host) {
         return isInitialized && isAppResumeEnabled && isOpenSelected() && !isInterstitialShowing
                 && host != null && host == currentActivity && host == resumedActivity
-                && !host.isFinishing() && !host.isDestroyed() && !(host instanceof AdActivity)
+                && !host.isFinishing() && !host.isDestroyed() && !AdSurfaces.contains(host)
                 && ProcessLifecycleOwner.get().getLifecycle().getCurrentState()
                         .isAtLeast(Lifecycle.State.RESUMED)
                 && !isResumeSuppressedFor(host)
@@ -2118,7 +2133,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
             return;
         }
 
-        if (currentActivity instanceof AdActivity) {
+        if (AdSurfaces.contains(currentActivity)) {
             Log.d(TAG, "onResume: vendor ad Activity is not a host return");
             return;
         }
@@ -2181,7 +2196,7 @@ public class AppOpenManager implements Application.ActivityLifecycleCallbacks, L
         // opportunity to buy a resume ad. Their return remains governed by the same policy.
         if (!isAppResumeEnabled || !isInitialized || !isOpenSelected() || isShowingAd || isInterstitialShowing
                 || pendingResumeSkipReason.get() != null
-                || currentActivity instanceof AdActivity) return;
+                || AdSurfaces.contains(currentActivity)) return;
         if (currentActivity != null && (isResumeSuppressedFor(currentActivity)
                 || resumeSkipReasonFor(currentActivity) != null
                 || appOpenPolicySkipReasonFor(currentActivity) != null)) return;

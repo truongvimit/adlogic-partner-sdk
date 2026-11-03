@@ -5,6 +5,7 @@ import android.view.View
 import androidx.fragment.app.Fragment
 import io.onboardkit.core.StepHost
 import io.onboardkit.core.analytics.StepExit
+import com.ads.module.admob.ResumeAds
 import com.ads.module.helper.adnative.NativeClickAction
 import io.onboardkit.ui.AdClickReturnTracker
 import java.util.concurrent.atomic.AtomicBoolean
@@ -91,6 +92,8 @@ abstract class LazyStepFragment : Fragment() {
         if (!selected) return
         adTrip.arm()
         adClickReturn.onEngaged(action)
+        // The page moves on as the user comes back; native resume would land over the next one.
+        if (action == NativeClickAction.AUTO_NEXT) ResumeAds.excuseNativeClick()
     }
 
     /** The ad's destination taking the screen is what pauses this page. */

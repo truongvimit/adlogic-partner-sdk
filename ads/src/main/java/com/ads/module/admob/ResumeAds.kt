@@ -3,10 +3,10 @@ package com.ads.module.admob
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.MainThread
 import androidx.annotation.RestrictTo
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -20,16 +20,27 @@ import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.interstitial.InterShowCallback
 import com.ads.module.helper.interstitial.InterstitialAdManager
 import com.ads.module.tracking.AdTracking
-import com.google.android.gms.ads.AdActivity
 import io.trackkit.AdFormat
+import java.lang.ref.WeakReference
+import java.util.Collections
+import java.util.IdentityHashMap
 
 /**
  * Native and interstitial resume; app-open stays with [AppOpenManager]. The request goes out once
- * the app has stayed in the background for the type's delay, and only a return after that delay
- * shows anything: `native_resume.app_resume_load_delay_ms` (default 0) for native,
- * `open_resume.app_resume_load_delay_ms` for interstitial. Native opens its screen at once, a
- * skeleton standing in until the fill, a return from an ad click included; interstitial waits for
- * its fill with the placement's load-and-show timeout.
+ * the user has been away for the type's delay, and only a return after that delay shows anything:
+ * `native_resume.app_resume_load_delay_ms` (default 0) for native, `open_resume.app_resume_load_delay_ms`
+ * for interstitial. Native opens its screen at once, a skeleton standing in until the fill;
+ * interstitial waits for its fill with the placement's load-and-show timeout.
+ *
+ * Native follows the Activity callbacks [AppOpenManager] forwards, not the process lifecycle, whose
+ * stop lags the last pause by 700 ms and never comes for a landing page inside the process. The
+ * user is away when no Activity is started any more (a configuration change aside), or when an
+ * [AdSurfaces] Activity came in front of the host after a click on a native ad: GMA's AdActivity,
+ * which also carries Play's install sheet, or a network's landing page, see-through or not. An
+ * overlay with no ad Activity (a dialog, a permission prompt) is not a trip. The return is the next
+ * Activity outside [AdSurfaces] to resume: decided right then, opened once no [AdSurfaces] Activity
+ * is visible any more, so the screen never opens over an ad. Interstitial keeps the process
+ * lifecycle.
  */
 object ResumeAds : DefaultLifecycleObserver {
 
@@ -41,7 +52,7 @@ object ResumeAds : DefaultLifecycleObserver {
         /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
         fun show(host: Activity)
 
-        /** [show] where [afterAdClick] says the user is back from an ad's landing page. */
+        /** [show] where [afterAdClick] says the user is back from a native ad's landing page. */
         fun show(host: Activity, afterAdClick: Boolean) = show(host)
     }
 
@@ -53,9 +64,10 @@ object ResumeAds : DefaultLifecycleObserver {
         val type: ResumeAdType,
         val placement: String,
         val delayMs: Long,
-        val afterAdClick: Boolean,
+        var afterAdClick: Boolean,
     ) {
         val leftAtMs = SystemClock.elapsedRealtime()
+        val fullscreenShowsAtLeave = AppOpenManager.fullscreenShows()
         var requested = false
     }
 
@@ -64,7 +76,25 @@ object ResumeAds : DefaultLifecycleObserver {
     private var stay: Stay? = null
     private var pendingRequest: Runnable? = null
     private var pendingPresentation: Runnable? = null
-    private var hostReturn: Pair<Application, Application.ActivityLifecycleCallbacks>? = null
+
+    private val started: MutableSet<Activity> = Collections.newSetFromMap(IdentityHashMap())
+
+    /** The last Activity outside [AdSurfaces] to resume: the screen a trip leaves from. */
+    private var host: WeakReference<Activity>? = null
+
+    /** The last Activity to resume is an [AdSurfaces] one. */
+    private var adSurfaceInFront = false
+
+    /** A native ad was clicked since the host last resumed. */
+    private var nativeClicked = false
+
+    /** That click's screen moves on by itself on the way back: its trip opens no native resume. */
+    private var nativeClickExcused = false
+
+    /** A return admitted while an [AdSurfaces] Activity was still visible: it opens once that is gone. */
+    private class Admitted(val left: Stay, val host: WeakReference<Activity>)
+
+    private var admitted: Admitted? = null
 
     /**
      * Activity/process callbacks can straddle the deadline by a frame or two on a real device.
@@ -81,46 +111,172 @@ object ResumeAds : DefaultLifecycleObserver {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
     }
 
+    /**
+     * A native ad reported a click or an opened destination: mediation adapters each report only
+     * one of the two. Its landing page covering the host is then a trip; the mark ends when the
+     * host resumes.
+     */
+    @JvmStatic
+    @MainThread
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun noteNativeClick() {
+        nativeClicked = true
+        // Reported after the user already left: the host has not resumed since, so it is this trip's.
+        stay?.takeIf { it.type == ResumeAdType.NATIVE }?.afterAdClick = true
+        if (nativeClickExcused) dropClickTrip()
+        leaveIfAway()
+    }
+
+    /**
+     * The native click just reported belongs to a screen that moves on by itself once the user
+     * is back (an onboarding page whose click action is auto next): that trip opens no native
+     * resume, so the screen can never land over the page it moves to. A plain trip to the
+     * background still does. Either order with [noteNativeClick] works.
+     */
+    @JvmStatic
+    @MainThread
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun excuseNativeClick() {
+        nativeClickExcused = true
+        dropClickTrip()
+    }
+
+    /** Already gone on the excused click: the host has not resumed since, so the trip is that click's. */
+    private fun dropClickTrip() {
+        if (stay?.let { it.type == ResumeAdType.NATIVE && it.afterAdClick } == true) endStay()
+    }
+
+    @get:RestrictTo(RestrictTo.Scope.TESTS)
+    @JvmStatic
+    val isNativeClickExcused: Boolean get() = nativeClickExcused
+
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun onActivityStarted(activity: Activity) {
+        started += activity
+    }
+
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun onActivityResumed(activity: Activity) {
+        // Resumed implies started, also for an Activity that started before the callbacks attached.
+        started += activity
+        adSurfaceInFront = AdSurfaces.contains(activity)
+        if (adSurfaceInFront) {
+            leaveIfAway()
+            return
+        }
+        val left = stay?.takeIf { it.type == ResumeAdType.NATIVE }
+        host = WeakReference(activity)
+        nativeClicked = false
+        nativeClickExcused = false
+        admitted = null
+        if (left != null) returnTo(left, activity)
+    }
+
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun onActivityPaused(activity: Activity) {
+        if (activity === admitted?.host?.get()) admitted = null
+    }
+
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun onActivityStopped(activity: Activity) {
+        started -= activity
+        if (returnOnceAdSurfacesGone()) return
+        // A configuration change stops one instance and starts its replacement: never a trip.
+        if (activity.isChangingConfigurations) return
+        leaveIfAway()
+    }
+
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun onActivityDestroyed(activity: Activity) {
+        started -= activity
+        returnOnceAdSurfacesGone()
+    }
+
+    private fun adSurfaceVisible(): Boolean = started.any(AdSurfaces::contains)
+
+    /** Opens a return admitted under a closing ad Activity, once none is visible any more. */
+    private fun returnOnceAdSurfacesGone(): Boolean {
+        val waiting = admitted ?: return false
+        if (adSurfaceVisible()) return false
+        admitted = null
+        val back = waiting.host.get() ?: return false
+        open(waiting.left, back)
+        return true
+    }
+
+    /** Starts a native trip once the user is gone: every Activity stopped, or a native ad's page in front. */
+    private fun leaveIfAway() {
+        if (stay != null || nativeClicked && nativeClickExcused) return
+        val away = started.isEmpty()
+        val onLandingPage = nativeClicked && adSurfaceInFront
+        if (!away && !onLandingPage) return
+        if (ResumeAdType.current() != ResumeAdType.NATIVE || nativeScreen == null) return
+        val from = host?.get() ?: return
+        // Back out of the last screen closes the app: the next launch is a cold entry, not a return.
+        if (from.isFinishing) return
+        val manager = AppOpenManager.getInstance()
+        // An external trip the partner excused is not a new opportunity. A return from an ad click is.
+        val returnReason = manager.resumeReturnSkipReason?.takeIf { it != AppOpenManager.AD_CLICK_RETURN }
+        if (!manager.isInitialized || !manager.isAppResumeEnabled || manager.isShowingAd ||
+            manager.isInterstitialShowing || returnReason != null) return
+        if (manager.isResumeSuppressedFor(from) || manager.resumeSkipReasonFor(from, false) != null) return
+        val placement = ResumeAdType.NATIVE.placement ?: return
+        if (placementSkipReason(placement) != null) return
+        val delayMs = AdRemoteConfig.getInstance().nativeResumeLoadDelayMs
+            .coerceIn(0L, AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS)
+        begin(Stay(ResumeAdType.NATIVE, placement, delayMs, afterAdClick = nativeClicked))
+    }
+
     override fun onStop(owner: LifecycleOwner) {
-        endStay()
         val manager = AppOpenManager.getInstance()
         // Before any early return: a click left unspent here would mark a later, unrelated trip.
         val afterAdClick = manager.takeAdClickAway()
-        val type = ResumeAdType.current()
-        if (type != ResumeAdType.NATIVE && type != ResumeAdType.INTER) return
-        val placement = type.placement ?: return
-        if (type == ResumeAdType.NATIVE && nativeScreen == null) return
-        // The SDK's own fullscreen and an external trip the partner excused are not a new
-        // opportunity, exactly as for app-open. A return from an ad click still is one for native.
-        val honorAdClick = type != ResumeAdType.NATIVE
-        val returnReason = manager.resumeReturnSkipReason
-            ?.takeIf { honorAdClick || it != AppOpenManager.AD_CLICK_RETURN }
+        if (ResumeAdType.current() != ResumeAdType.INTER) return
+        if (stay != null) endStay()
+        val placement = ResumeAdType.INTER.placement ?: return
+        // The SDK's own fullscreen and an external trip the partner excused, an ad click
+        // included, are not a new opportunity, exactly as for app-open.
         if (!manager.isInitialized || !manager.isAppResumeEnabled || manager.isShowingAd ||
-            manager.isInterstitialShowing || returnReason != null) return
+            manager.isInterstitialShowing || manager.resumeReturnSkipReason != null) return
         val host = manager.currentActivity
-        // A native ad's click opens its landing page through AdActivity; any other is the SDK's fullscreen.
-        val clickVendor = host is AdActivity && afterAdClick && !honorAdClick
-        if (host is AdActivity && !clickVendor) return
-        if (host != null && !clickVendor && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host, honorAdClick) != null)) return
+        if (AdSurfaces.contains(host)) return
+        if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host) != null)) return
         if (placementSkipReason(placement) != null) return
-        val config = AdRemoteConfig.getInstance()
-        val delayMs = if (type == ResumeAdType.NATIVE) {
-            config.nativeResumeLoadDelayMs.coerceIn(0L, AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS)
-        } else {
-            AdRemoteConfig.normalizeAppResumeLoadDelayMs(config.appResumeLoadDelayMs)
+        val delayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
+        begin(Stay(ResumeAdType.INTER, placement, delayMs, afterAdClick))
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        val left = stay?.takeIf { it.type == ResumeAdType.INTER } ?: return
+        val host = AppOpenManager.getInstance().currentActivity
+        if (host == null) {
+            endStay()
+            return
         }
-        val next = Stay(type, placement, delayMs, afterAdClick)
+        returnTo(left, host)
+    }
+
+    private fun begin(next: Stay) {
         stay = next
+        // Native's leave is now exact, so its request goes out at once rather than a loop later.
+        if (next.delayMs == 0L && next.type == ResumeAdType.NATIVE) {
+            request(next)
+            return
+        }
         val request = Runnable {
             pendingRequest = null
             request(next)
         }
         pendingRequest = request
-        handler.postDelayed(request, delayMs)
+        handler.postDelayed(request, next.delayMs)
     }
 
-    override fun onStart(owner: LifecycleOwner) {
-        val left = stay ?: return
+    private fun returnTo(left: Stay, host: Activity) {
         // Judged on the elapsed clock, which the timer is not: a device asleep through the delay
         // returns with the request still owed.
         val remainingMs = left.delayMs - (SystemClock.elapsedRealtime() - left.leftAtMs)
@@ -129,14 +285,14 @@ object ResumeAds : DefaultLifecycleObserver {
                 endStay()
                 return
             }
-            schedulePresentation(left, remainingMs)
+            schedulePresentation(left, host, remainingMs)
             return
         }
         endStay()
-        present(left)
+        present(left, host)
     }
 
-    private fun schedulePresentation(left: Stay, remainingMs: Long) {
+    private fun schedulePresentation(left: Stay, host: Activity, remainingMs: Long) {
         // The background request has the same deadline. If the user is already returning, keep
         // the screen's show-first ordering even when both callbacks become due in this frame.
         pendingRequest?.let(handler::removeCallbacks)
@@ -146,28 +302,50 @@ object ResumeAds : DefaultLifecycleObserver {
             pendingPresentation = null
             if (stay !== left) return@Runnable
             endStay()
-            present(left)
+            present(left, host)
         }
         pendingPresentation = presentation
         handler.postDelayed(presentation, remainingMs)
     }
 
-    private fun present(left: Stay, resumed: Activity? = null) {
-        if (ResumeAdType.current() != left.type) return
-        val manager = AppOpenManager.getInstance()
-        val host = resumed ?: manager.currentActivity ?: return
-        if (host is AdActivity && left.afterAdClick && left.type == ResumeAdType.NATIVE) {
-            presentOnHostReturn(left, host)
+    /**
+     * Decided the moment the host is back, as the user left it and with this return's one-shot
+     * skip still readable; a page the click itself moves on afterwards cannot refuse it. An ad
+     * Activity still closing over the host defers only the opening.
+     */
+    private fun present(left: Stay, host: Activity) {
+        if (!admit(left, host)) return
+        if (adSurfaceVisible()) {
+            admitted = Admitted(left, WeakReference(host))
             return
         }
-        if (host is AdActivity || host.isFinishing || host.isDestroyed || !manager.isAppResumeEnabled ||
-            manager.isResumeSuppressedFor(host) || manager.isShowingAd || manager.isInterstitialShowing) return
+        open(left, host)
+    }
+
+    private fun admit(left: Stay, host: Activity): Boolean {
+        if (!canOpen(left, host) || AdSurfaces.contains(host)) return false
+        val manager = AppOpenManager.getInstance()
+        if (manager.isResumeSuppressedFor(host)) return false
         val reason = manager.resumeSkipReasonFor(host, left.type != ResumeAdType.NATIVE)
             ?: placementSkipReason(left.placement)
         if (reason != null) {
             AdTracking.skipped(left.placement, formatOf(left.type), reason)
-            return
+            return false
         }
+        return true
+    }
+
+    /** Never over an ad: an ad Activity still visible, an app-open or an interstitial on screen. */
+    private fun canOpen(left: Stay, host: Activity): Boolean {
+        val manager = AppOpenManager.getInstance()
+        if (ResumeAdType.current() != left.type || host.isFinishing || host.isDestroyed ||
+            !manager.isAppResumeEnabled || manager.isShowingAd || manager.isInterstitialShowing) return false
+        // A fullscreen ad shown while away covered the host itself; its close is not a return.
+        return left.type != ResumeAdType.NATIVE || AppOpenManager.fullscreenShows() == left.fullscreenShowsAtLeave
+    }
+
+    private fun open(left: Stay, host: Activity) {
+        if (!canOpen(left, host) || adSurfaceVisible()) return
         when (left.type) {
             // Native resume owns a real screen. Open it first so its skeleton and surrounding UI
             // are visible at the return deadline; the native request can run while that screen is
@@ -182,26 +360,6 @@ object ResumeAds : DefaultLifecycleObserver {
             }
             else -> Unit
         }
-    }
-
-    /** The landing page's AdActivity came back first; the screen opens over the host it uncovers. */
-    private fun presentOnHostReturn(left: Stay, vendor: Activity) {
-        clearHostReturn()
-        val app = vendor.application
-        val callbacks = object : ActivityCallbacks() {
-            override fun onActivityResumed(activity: Activity) {
-                if (activity is AdActivity) return
-                clearHostReturn()
-                present(left, activity)
-            }
-        }
-        hostReturn = app to callbacks
-        app.registerActivityLifecycleCallbacks(callbacks)
-    }
-
-    private fun clearHostReturn() {
-        hostReturn?.let { (app, callbacks) -> app.unregisterActivityLifecycleCallbacks(callbacks) }
-        hostReturn = null
     }
 
     private fun request(left: Stay) {
@@ -255,15 +413,18 @@ object ResumeAds : DefaultLifecycleObserver {
         pendingRequest = null
         pendingPresentation = null
         stay = null
-        clearHostReturn()
     }
 
-    private abstract class ActivityCallbacks : Application.ActivityLifecycleCallbacks {
-        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-        override fun onActivityStarted(activity: Activity) = Unit
-        override fun onActivityPaused(activity: Activity) = Unit
-        override fun onActivityStopped(activity: Activity) = Unit
-        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-        override fun onActivityDestroyed(activity: Activity) = Unit
+    /** Forgets every tracked Activity and mark; for tests that build their own lifecycles. */
+    @JvmStatic
+    @RestrictTo(RestrictTo.Scope.TESTS)
+    fun resetForTest() {
+        endStay()
+        started.clear()
+        host = null
+        adSurfaceInFront = false
+        nativeClicked = false
+        nativeClickExcused = false
+        admitted = null
     }
 }

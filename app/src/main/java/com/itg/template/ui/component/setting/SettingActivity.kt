@@ -108,10 +108,9 @@ class SettingActivity : BaseActivity<ActivitySettingBinding>() {
             val browserIntent = Intent(Intent.ACTION_VIEW, uri)
             if (browserIntent.resolveActivity(packageManager) != null) {
                 startActivity(browserIntent)
-                // One trip out, one resume skipped. The durable switch used to be used here, and
-                // its counterpart in onResume then turned app-resume back ON for the whole
-                // session — overwriting whatever the entry mode had decided.
-                AppOpenManager.getInstance().disableAdResumeByClickAction()
+                // One trip out, one resume skipped, whatever the resume type: the ad-click mark
+                // would still let native resume open, since a return from an ad click opens it.
+                AppOpenManager.getInstance().skipNextResume("external_link")
             } else {
                 Toast.makeText(this, "No app available to open this link", Toast.LENGTH_SHORT).show()
             }

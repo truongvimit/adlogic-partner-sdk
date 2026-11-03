@@ -4,9 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.view.isVisible
-import com.ads.module.helper.adnative.pool.LoadMode
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
+import io.onboardkit.ads.ObNativeResume
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolNativeSlot
 import io.onboardkit.ads.pool.SCREEN_SLOT_MIN_STATE
@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
 /**
  * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
  * it shows native_resume's own ad first, else the owner of the screen underneath, or after the flow
- * the newest leftover. Its own request goes out FORCED past the pool's gate, never doubling one of
- * its own already running. Start and back both run the `inter_resume` load-and-show
- * ([ResumeStart]), AFTER_AD, except after an ad click, when they only close the screen. A config
+ * the newest leftover. Its own request goes out FORCED past the pool's gate as the user leaves the
+ * app, or on opening when it did not, never doubling one of its own already running. Start and
+ * back both run the `inter_resume` load-and-show ([ResumeStart]), AFTER_AD, except after an ad
+ * click, when they only close the screen. A config
  * refusal of native_resume hides it, as in DashDrama and the classic screen. A return to it opens
  * nothing: it keeps the base exclusion from app-resume, and its own onResume refreshes the ad. It
  * never holds the shared suppression; an ad click is the only mark.
@@ -47,6 +48,9 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     /** DashDrama's f23721c; saved, as its click flag survives a screen destroyed under the landing page. */
     private var adClicked = false
 
+    /** The opening's renewal already went out as the user left; a restored screen renews again. */
+    private var renewedAhead = false
+
     override fun onCreateSafe(savedInstanceState: Bundle?) {
         // Restored after the run went classic, or in a process whose pool is gone: nothing to borrow.
         if (!OnboardingPool.isActive) {
@@ -54,6 +58,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
             return
         }
         adClicked = savedInstanceState?.getBoolean(KEY_AD_CLICKED) == true
+        renewedAhead = savedInstanceState == null && intent.getBooleanExtra(EXTRA_RENEWED_AHEAD, false)
         val views = ResumeScreenViews.inflate(layoutInflater)
         setContentView(views.root)
         val cfg = sdk.requireConfig().resumeScreen
@@ -125,19 +130,19 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     }
 
     /**
-     * Renews native_resume past the pool's gate: a held ad is refreshed and stays drawn until the new
-     * one fills, an empty loader loads FORCED, and one already loading is left alone. Returning from
-     * an ad's landing page redraws the held selection first, then renews the same way.
+     * Renews native_resume ([ObNativeResume.renewPooled]), except on the opening whose renewal went
+     * out as the user left: a second one would replace that fill unseen. Returning from an ad's
+     * landing page redraws the held selection first, then renews the same way.
      */
     override fun onResume() {
         super.onResume()
+        val skipRenewal = renewedAhead
+        renewedAhead = false
         if (isFinishing || !OnboardingPool.isActive) return
         if (adClicked) restoreAfterAdClick()
         // Back from inter_resume only to close: the held ad is drawn for the exit, nothing is requested.
-        if (startAction.closingAfterInter) return
-        if (!OnboardingPool.refresh(AdPlacement.ResumeNative)) {
-            OnboardingPool.preload(AdPlacement.ResumeNative, LoadMode.FORCED)
-        }
+        if (startAction.closingAfterInter || skipRenewal) return
+        ObNativeResume.renewPooled()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -155,10 +160,13 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     internal companion object {
         private const val KEY_AD_CLICKED = "ob_pool_resume_ad_clicked"
         private const val EXTRA_AFTER_AD_CLICK = "ob_pool_resume_after_ad_click"
+        private const val EXTRA_RENEWED_AHEAD = "ob_pool_resume_renewed_ahead"
 
-        fun start(host: Activity, afterAdClick: Boolean = false) {
+        fun start(host: Activity, afterAdClick: Boolean = false, renewedAhead: Boolean = false) {
             host.startActivity(
-                Intent(host, ObPoolResumeActivity::class.java).putExtra(EXTRA_AFTER_AD_CLICK, afterAdClick),
+                Intent(host, ObPoolResumeActivity::class.java)
+                    .putExtra(EXTRA_AFTER_AD_CLICK, afterAdClick)
+                    .putExtra(EXTRA_RENEWED_AHEAD, renewedAhead),
             )
         }
 

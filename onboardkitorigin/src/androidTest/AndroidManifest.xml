@@ -51,5 +51,16 @@
             android:name="io.onboardkit.ui.pool.PoolCoverDeviceActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.bytedance.sdk.openadsdk.fake.LandingPageDeviceActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.facebook.ads.fake.TranslucentAdDeviceActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="io.onboardkit.ads.NativeResumeOwnScreenDeviceActivity"
+            android:exported="false"
+            android:theme="@style/ob_Theme_OnboardKit" />
     </application>
 </manifest>

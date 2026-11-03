@@ -1583,6 +1583,7 @@ public class Admob {
                     @Override
                     public void onAdOpened() {
                         super.onAdOpened();
+                        ResumeAds.noteNativeClick();
                         if (callback != null) {
                             callback.onAdOpened();
                         }
@@ -1591,6 +1592,7 @@ public class Admob {
                     @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
@@ -1637,8 +1639,15 @@ public class Admob {
                     }
 
                     @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        ResumeAds.noteNativeClick();
+                    }
+
+                    @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
@@ -1703,8 +1712,15 @@ public class Admob {
                     }
 
                     @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        ResumeAds.noteNativeClick();
+                    }
+
+                    @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         ERainLogEventManager.logClickAdsEvent(context, id);
@@ -1767,8 +1783,15 @@ public class Admob {
 
 
                     @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        ResumeAds.noteNativeClick();
+                    }
+
+                    @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
@@ -1817,8 +1840,15 @@ public class Admob {
                     }
 
                     @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        ResumeAds.noteNativeClick();
+                    }
+
+                    @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
@@ -1881,8 +1911,15 @@ public class Admob {
 
 
                     @Override
+                    public void onAdOpened() {
+                        super.onAdOpened();
+                        ResumeAds.noteNativeClick();
+                    }
+
+                    @Override
                     public void onAdClicked() {
                         super.onAdClicked();
+                        ResumeAds.noteNativeClick();
                         if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                             AppOpenManager.getInstance().disableAdResumeByClickAction();
                         if (callback != null) {
