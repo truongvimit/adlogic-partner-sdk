@@ -470,7 +470,7 @@ class PoolLegacyIsolationTest {
         val from = appScreen()
         ObNativeResume.show(from)
         assertEquals(ObResumeActivity::class.java.name, shadowOf(from).nextStartedActivity.component?.className)
-        ObNativeResume.prepare(app)
+        ObNativeResume.requestClassic(app)
         assertEquals("Classic resume warms its own native", listOf<AdPlacement>(AdPlacement.ResumeNative),
             vendor.backgroundPreloads)
 

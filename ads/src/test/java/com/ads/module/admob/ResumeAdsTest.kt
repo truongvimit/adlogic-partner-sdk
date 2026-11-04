@@ -39,7 +39,6 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowNetworkInfo
-import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
@@ -58,7 +57,6 @@ class ResumeAdsTest {
     private lateinit var host: Activity
     private val calls = mutableListOf<String>()
     private val screen = object : ResumeAds.NativeScreen {
-        override fun prepare(context: Context) { calls += "prepare" }
         override fun show(host: Activity) { calls += "show" }
         override fun show(host: Activity, afterAdClick: Boolean) { calls += if (afterAdClick) "show:click" else "show" }
     }
@@ -132,12 +130,6 @@ class ResumeAdsTest {
         AdBehavior.document.acceptSuccessfulFetch(null)
     }
 
-    /** native_resume carrying its own [delayMs], open_resume keeping the 2 s default. */
-    private fun nativeDelay(delayMs: Long) = AdRemoteConfig.initializeFromJson(
-        """{"native_resume":{"app_resume_load_delay_ms":$delayMs,"ids":[{"id":"native-unit"}],"isEnable":true},""" +
-            """"open_resume":{"ids":[{"id":"open-unit"}],"isEnable":true}}""",
-    )
-
     /** Home, recents or the screen off: every Activity stops. */
     private fun leave() {
         controller.pause().stop()
@@ -164,12 +156,12 @@ class ResumeAdsTest {
     }
 
     @Test
-    fun `native waits 0 by default, requesting the moment the user leaves and opening on the return`() {
-        assertEquals(0L, AdRemoteConfig.getInstance().nativeResumeLoadDelayMs)
+    fun `native requests nothing as the user leaves and opens its screen on every return`() {
         leave()
-        assertEquals("No frame later, no 700 ms debounce", listOf("prepare"), calls)
+        main.idleFor(Duration.ofMillis(60_000))
+        assertEquals("The screen requests its own ad as it shows", emptyList<String>(), calls)
         back()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
     }
 
     @Test
@@ -177,58 +169,23 @@ class ResumeAdsTest {
         leave()
         back()
         main.idleFor(Duration.ofMillis(5))
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
         // The process callbacks that arrive late, or never, change nothing for native.
         ResumeAds.onStop(owner)
         ResumeAds.onStart(owner)
         main.idle()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
     }
 
     @Test
-    fun `native requests once its own delay elapses away and opens on the return`() {
-        nativeDelay(2_000)
+    fun `native_resume's app_resume_load_delay_ms is ignored`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"native_resume":{"app_resume_load_delay_ms":60000,"ids":[{"id":"native-unit"}],"isEnable":true},""" +
+                """"open_resume":{"ids":[{"id":"open-unit"}],"isEnable":true}}""",
+        )
         leave()
-        main.idleFor(Duration.ofMillis(1_999))
-        assertEquals(emptyList<String>(), calls)
-        main.idleFor(Duration.ofMillis(1))
-        assertEquals(listOf("prepare"), calls)
         back()
-        assertEquals(listOf("prepare", "show"), calls)
-    }
-
-    @Test
-    fun `a return inside the delay neither requests nor opens`() {
-        nativeDelay(2_000)
-        leave()
-        main.idleFor(Duration.ofMillis(1_000))
-        back()
-        main.idleFor(Duration.ofMillis(5_000))
-        assertEquals(emptyList<String>(), calls)
-    }
-
-    @Test
-    fun `a native screen opens at the exact deadline before its load starts`() {
-        nativeDelay(2_000)
-        leave()
-        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
-        back()
-        main.idle()
-        assertEquals(listOf("show", "prepare"), calls)
-    }
-
-    @Test
-    fun `a return just before the deadline waits the remainder then opens before loading`() {
-        nativeDelay(2_000)
-        leave()
-        ShadowSystemClock.advanceBy(Duration.ofMillis(1_850))
-        back()
-        main.idle()
-        assertEquals(emptyList<String>(), calls)
-
-        ShadowSystemClock.advanceBy(Duration.ofMillis(150))
-        main.idle()
-        assertEquals(listOf("show", "prepare"), calls)
+        assertEquals(listOf("show"), calls)
     }
 
     @Test
@@ -240,7 +197,7 @@ class ResumeAdsTest {
         )
         leave()
         back()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
 
         AdBehavior.document.install("""{"app_resume":{"type":"inter_resume"}}""", null)
         ResumeAds.onStop(owner)
@@ -266,15 +223,15 @@ class ResumeAdsTest {
         // GMA's AdActivity carrying Play's install sheet, or a translucent landing page.
         ResumeAds.noteNativeClick()
         val sheet = cover(FakeTranslucentAdActivity::class.java, stopsHost = false)
-        assertEquals("Requested as the ad comes in front", listOf("prepare"), calls)
+        assertEquals("Nothing requested as the ad comes in front", emptyList<String>(), calls)
         sheet.pause()
         controller.resume()
         main.idle()
-        assertEquals("Still visible while it closes: never over it", listOf("prepare"), calls)
+        assertEquals("Still visible while it closes: never over it", emptyList<String>(), calls)
         sheet.stop()
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
         sheet.destroy()
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -286,7 +243,7 @@ class ResumeAdsTest {
         // The page's click-return auto next starts while the ad Activity is still closing.
         manager.setResumeSkipPolicy(ResumeSkipPolicy { "suppressed_by_flow" })
         sheet.stop()
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
         manager.setResumeSkipPolicy(null)
     }
 
@@ -300,7 +257,7 @@ class ResumeAdsTest {
         main.idle()
         sheet.stop()
         main.idle()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -311,7 +268,7 @@ class ResumeAdsTest {
         controller.resume()
         manager.setInterstitialShowing(true)
         sheet.stop()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -322,7 +279,7 @@ class ResumeAdsTest {
         controller.resume()
         controller.pause()
         sheet.stop()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -333,9 +290,9 @@ class ResumeAdsTest {
         controller.stop()
         page.restart().start().resume()
         main.idle()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         uncover(page)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -346,7 +303,7 @@ class ResumeAdsTest {
         assertEquals(emptyList<String>(), calls)
         leave()
         back()
-        assertEquals("The click died with the next host resume", listOf("prepare", "show"), calls)
+        assertEquals("The click died with the next host resume", listOf("show"), calls)
     }
 
     @Test
@@ -368,9 +325,9 @@ class ResumeAdsTest {
     fun `a native ad's landing page inside the process is a trip and opens native resume on the way back`() {
         ResumeAds.noteNativeClick()
         val landing = cover(FakeLandingPageActivity::class.java)
-        assertEquals("Requested as the page covers the host", listOf("prepare"), calls)
+        assertEquals("Nothing requested as the page covers the host", emptyList<String>(), calls)
         uncover(landing)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -378,9 +335,9 @@ class ResumeAdsTest {
         val landing = cover(FakeLandingPageActivity::class.java)
         assertEquals(emptyList<String>(), calls)
         ResumeAds.noteNativeClick()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         uncover(landing)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -388,7 +345,7 @@ class ResumeAdsTest {
         leave()
         ResumeAds.noteNativeClick()
         back()
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -402,7 +359,7 @@ class ResumeAdsTest {
         // The excuse ends with the host's resume: the next click, on another screen, opens it.
         ResumeAds.noteNativeClick()
         uncover(cover(FakeTranslucentAdActivity::class.java, stopsHost = false))
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
 
         calls.clear()
         ResumeAds.noteNativeClick()
@@ -413,24 +370,24 @@ class ResumeAdsTest {
 
         leave()
         back()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
     }
 
     @Test
     fun `an excuse reported after the trip began ends it, whichever callback comes first`() {
         val landing = cover(FakeLandingPageActivity::class.java)
         ResumeAds.noteNativeClick()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         ResumeAds.excuseNativeClick()
         uncover(landing)
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
 
         calls.clear()
         leave()
         ResumeAds.excuseNativeClick()
         ResumeAds.noteNativeClick()
         back()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -447,28 +404,28 @@ class ResumeAdsTest {
         ResumeAds.noteNativeClick()
         val landing = cover(FakeLandingPageActivity::class.java)
         landing.pause().stop()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         landing.restart().start().resume()
         main.idle()
-        assertEquals("Never over the landing page itself", listOf("prepare"), calls)
+        assertEquals("Never over the landing page itself", emptyList<String>(), calls)
         uncover(landing)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
     fun `a native click through a translucent ad Activity to another app opens native resume once the host is back`() {
         ResumeAds.noteNativeClick()
         val proxy = cover(FakeTranslucentAdActivity::class.java, stopsHost = false)
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         // The browser or the store opens: the proxy and the host stop.
         proxy.pause().stop()
         controller.stop()
-        assertEquals("One trip, one request", listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         proxy.restart().start().resume()
         main.idle()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         uncover(proxy)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -478,19 +435,19 @@ class ResumeAdsTest {
         controller.pause()
         manager.onActivityStarted(adActivity)
         manager.onActivityResumed(adActivity)
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         manager.onActivityPaused(adActivity)
         manager.onActivityStopped(adActivity)
         controller.stop()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         manager.onActivityStarted(adActivity)
         manager.onActivityResumed(adActivity)
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
         manager.onActivityPaused(adActivity)
         back()
         manager.onActivityStopped(adActivity)
         manager.onActivityDestroyed(adActivity)
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
     }
 
     @Test
@@ -500,7 +457,7 @@ class ResumeAdsTest {
         manager.setResumeSkipPolicy(ResumeSkipPolicy { AppOpenManager.AD_CLICK_RETURN })
         leave()
         back()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
         manager.setResumeSkipPolicy(null)
     }
 
@@ -509,12 +466,12 @@ class ResumeAdsTest {
         ResumeAds.noteNativeClick()
         leave()
         back()
-        assertEquals(listOf("prepare", "show:click"), calls)
+        assertEquals(listOf("show:click"), calls)
 
         calls.clear()
         leave()
         back()
-        assertEquals(listOf("prepare", "show"), calls)
+        assertEquals(listOf("show"), calls)
     }
 
     @Test
@@ -526,7 +483,7 @@ class ResumeAdsTest {
         manager.setInterstitialShowing(false)
         uncover(reward)
         main.idle()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
 
         calls.clear()
         manager.setInterstitialShowing(true)
@@ -560,7 +517,7 @@ class ResumeAdsTest {
         main.idleFor(Duration.ofMillis(2_000))
         AdBehavior.document.install("""{"app_resume":{"type":"none"}}""", null)
         back()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -589,7 +546,7 @@ class ResumeAdsTest {
         manager.disableAppResumeWithActivity(Int02Activity::class.java)
         back()
         main.idle()
-        assertEquals(listOf("prepare"), calls)
+        assertEquals(emptyList<String>(), calls)
     }
 
     @Test
@@ -609,7 +566,7 @@ class ResumeAdsTest {
             manager.setResumeSkipPolicy(ResumeSkipPolicy { "suppressed_by_flow" })
             back()
             assertEquals(listOf<Any?>("native_resume"), skipped)
-            assertEquals(listOf("prepare"), calls)
+            assertEquals(emptyList<String>(), calls)
         } finally {
             Tracker.removeSink(sink)
             manager.setResumeSkipPolicy(null)

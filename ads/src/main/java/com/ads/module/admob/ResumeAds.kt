@@ -2,7 +2,6 @@ package com.ads.module.admob
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -26,11 +25,11 @@ import java.util.Collections
 import java.util.IdentityHashMap
 
 /**
- * Native and interstitial resume; app-open stays with [AppOpenManager]. The request goes out once
- * the user has been away for the type's delay, and only a return after that delay shows anything:
- * `native_resume.app_resume_load_delay_ms` (default 0) for native, `open_resume.app_resume_load_delay_ms`
- * for interstitial. Native opens its screen at once, a skeleton standing in until the fill;
- * interstitial waits for its fill with the placement's load-and-show timeout.
+ * Native and interstitial resume; app-open stays with [AppOpenManager]. Native requests nothing
+ * while the user is away: every return opens its screen, which requests its own ad as it shows.
+ * Interstitial requests once the user has been away for `open_resume.app_resume_load_delay_ms`, and
+ * only a return after that delay shows it, waiting for its fill with the placement's load-and-show
+ * timeout.
  *
  * Native follows the Activity callbacks [AppOpenManager] forwards, not the process lifecycle, whose
  * stop lags the last pause by 700 ms and never comes for a landing page inside the process. The
@@ -46,10 +45,7 @@ object ResumeAds : DefaultLifecycleObserver {
 
     /** The screen native resume opens. OnboardKit registers one; without it native resume shows nothing. */
     interface NativeScreen {
-        /** Requests the screen's ad, on main; a load already running is joined, never doubled. */
-        fun prepare(context: Context)
-
-        /** Opens the screen over [host], or renews its ad when [host] is the screen itself. */
+        /** Opens the screen over [host]; the screen requests its own ad. */
         fun show(host: Activity)
 
         /** [show] where [afterAdClick] says the user is back from a native ad's landing page. */
@@ -227,9 +223,7 @@ object ResumeAds : DefaultLifecycleObserver {
         if (manager.isResumeSuppressedFor(from) || manager.resumeSkipReasonFor(from, false) != null) return
         val placement = ResumeAdType.NATIVE.placement ?: return
         if (placementSkipReason(placement) != null) return
-        val delayMs = AdRemoteConfig.getInstance().nativeResumeLoadDelayMs
-            .coerceIn(0L, AdRemoteConfig.MAX_APP_RESUME_LOAD_DELAY_MS)
-        begin(Stay(ResumeAdType.NATIVE, placement, delayMs, afterAdClick = nativeClicked))
+        stay = Stay(ResumeAdType.NATIVE, placement, delayMs = 0L, afterAdClick = nativeClicked)
     }
 
     override fun onStop(owner: LifecycleOwner) {
@@ -263,11 +257,6 @@ object ResumeAds : DefaultLifecycleObserver {
 
     private fun begin(next: Stay) {
         stay = next
-        // Native's leave is now exact, so its request goes out at once rather than a loop later.
-        if (next.delayMs == 0L && next.type == ResumeAdType.NATIVE) {
-            request(next)
-            return
-        }
         val request = Runnable {
             pendingRequest = null
             request(next)
@@ -347,13 +336,7 @@ object ResumeAds : DefaultLifecycleObserver {
     private fun open(left: Stay, host: Activity) {
         if (!canOpen(left, host) || adSurfaceVisible()) return
         when (left.type) {
-            // Native resume owns a real screen. Open it first so its skeleton and surrounding UI
-            // are visible at the return deadline; the native request can run while that screen is
-            // on top. A provider may do synchronous setup before dispatching its async load.
-            ResumeAdType.NATIVE -> {
-                nativeScreen?.show(host, left.afterAdClick)
-                request(left)
-            }
+            ResumeAdType.NATIVE -> nativeScreen?.show(host, left.afterAdClick)
             ResumeAdType.INTER -> {
                 request(left)
                 showInterstitial(host, left.placement)
@@ -366,11 +349,7 @@ object ResumeAds : DefaultLifecycleObserver {
         if (left.requested) return
         left.requested = true
         val app = application ?: return
-        when (left.type) {
-            ResumeAdType.NATIVE -> nativeScreen?.prepare(app)
-            ResumeAdType.INTER -> InterstitialAdManager.load(app, left.placement)
-            else -> Unit
-        }
+        if (left.type == ResumeAdType.INTER) InterstitialAdManager.load(app, left.placement)
     }
 
     private fun showInterstitial(host: Activity, placement: String) {

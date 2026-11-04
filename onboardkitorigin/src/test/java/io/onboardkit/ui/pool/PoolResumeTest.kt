@@ -395,51 +395,32 @@ class PoolResumeTest {
         assertNull("The classic screen never opens over the pooled one", shadowOf(screen.get()).nextStartedActivity)
     }
 
-    @Test fun `prepare renews native_resume in the pool, FORCED, and stays out of the provider while routed`() {
+    @Test fun `the return requests nothing until the screen opens, which renews FORCED past the provider`() {
         OnboardingPool.claim(ob1, LoadMode.FORCED)
-        ObNativeResume.prepare(app)
+        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
+        ObNativeResume.show(host)
+        val started = shadowOf(host).nextStartedActivity
         main.idle()
+        assertTrue("Nothing goes out before the screen shows", loader.callsFor("native_resume").isEmpty())
+
+        val screen = openResume(started)
         assertEquals("FORCED past ob1's load", 1, loader.callsFor("native_resume").size)
         assertTrue(PoolUiSdk.provider.backgroundPreloads.isEmpty())
 
+        val own = fill("native_resume")
+        assertSame(own.admobNativeAd, screen.slot().shownAd())
+        screen.close()
+        controllers -= screen
+        ObNativeResume.show(host)
+        val next = openResume(shadowOf(host).nextStartedActivity)
+        assertEquals("Every opening renews the held ad", 2, loader.callsFor("native_resume").size)
+        assertSame("The held ad stays drawn until the new one fills", own.admobNativeAd, next.slot().shownAd())
+    }
+
+    @Test fun `the classic screen's request goes to the provider`() {
         OnboardingPool.onClassicRun()
         main.idle()
-        ObNativeResume.prepare(app)
+        ObNativeResume.requestClassic(app)
         assertEquals(listOf<AdPlacement>(AdPlacement.ResumeNative), PoolUiSdk.provider.backgroundPreloads)
-    }
-
-    @Test fun `the screen opened after the way-out renewal shows its fill without requesting again`() {
-        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
-        ObNativeResume.prepare(app)
-        val own = fill("native_resume")
-        ObNativeResume.show(host)
-        val screen = openResume(shadowOf(host).nextStartedActivity)
-        assertSame(own.admobNativeAd, screen.slot().shownAd())
-        assertEquals("The unseen fill is not refreshed away", 1, loader.callsFor("native_resume").size)
-
-        screen.backAndForth()
-        assertEquals("A later return to the screen renews as before", 2, loader.callsFor("native_resume").size)
-    }
-
-    @Test fun `a way-out renewal still loading is joined by the screen it opens`() {
-        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
-        ObNativeResume.prepare(app)
-        ObNativeResume.show(host)
-        val screen = openResume(shadowOf(host).nextStartedActivity)
-        assertEquals(1, loader.callsFor("native_resume").size)
-        val own = fill("native_resume")
-        assertSame(own.admobNativeAd, screen.slot().shownAd())
-    }
-
-    @Test fun `a screen opened without a way-out renewal, or restored, renews on opening`() {
-        val host = Robolectric.buildActivity(Activity::class.java).also { controllers += it }.setup().get()
-        ObNativeResume.prepare(app)
-        fill("native_resume")
-        ObNativeResume.show(host)
-        shadowOf(host).nextStartedActivity
-        // The ticket went with that opening; the next one renews by itself.
-        ObNativeResume.show(host)
-        openResume(shadowOf(host).nextStartedActivity)
-        assertEquals(2, loader.callsFor("native_resume").size)
     }
 }

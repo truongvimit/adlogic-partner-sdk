@@ -29,21 +29,11 @@ data class AdRemoteConfig @JvmOverloads constructor(
     val appResumeLoadDelayMs: Long
         get() = ads["open_resume"]?.appResumeLoadDelayMs ?: DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
-    /** native_resume's own wait, read the same way; 0 opens the screen on every return. */
-    val nativeResumeLoadDelayMs: Long
-        get() = ads[NATIVE_RESUME_KEY]?.appResumeLoadDelayMs ?: DEFAULT_NATIVE_RESUME_LOAD_DELAY_MS
-
     companion object {
         private const val TAG = "AdRemoteConfig"
 
         const val DEFAULT_APP_RESUME_LOAD_DELAY_MS = 2_000L
-        const val DEFAULT_NATIVE_RESUME_LOAD_DELAY_MS = 0L
         const val MAX_APP_RESUME_LOAD_DELAY_MS = 86_400_000L
-        private const val NATIVE_RESUME_KEY = "native_resume"
-
-        /** What an entry that leaves out `app_resume_load_delay_ms` waits. */
-        internal fun defaultAppResumeLoadDelayMs(key: String): Long =
-            if (key == NATIVE_RESUME_KEY) DEFAULT_NATIVE_RESUME_LOAD_DELAY_MS else DEFAULT_APP_RESUME_LOAD_DELAY_MS
 
         @JvmStatic
         fun normalizeAppResumeLoadDelayMs(value: Long): Long =
@@ -60,8 +50,8 @@ data class AdRemoteConfig @JvmOverloads constructor(
             "templateId", "carousel",
         )
 
-        private fun defaultUnit(key: String) =
-            AdUnitConfig(ids = emptyList(), isEnable = false, appResumeLoadDelayMs = defaultAppResumeLoadDelayMs(key))
+        private val defaultUnit =
+            AdUnitConfig(ids = emptyList(), isEnable = false)
 
         /** Drop placement objects whose every field was invalid; they must not shadow code/assets. */
         private fun validPatch(source: AdRemoteConfig): AdRemoteConfig {
@@ -76,7 +66,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             if (upper.ads.isEmpty()) return lower
             val keys = LinkedHashSet<String>().apply { addAll(lower.ads.keys); addAll(upper.ads.keys) }
             val merged = keys.associateWith { key ->
-                val base = lower.ads[key] ?: defaultUnit(key)
+                val base = lower.ads[key] ?: defaultUnit
                 val top = upper.ads[key]
                 if (top == null) base else mergeUnit(base, top, upper.fieldsFor(key))
             }
@@ -88,7 +78,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
             if (upper.ads.isEmpty()) return lower
             val keys = LinkedHashSet<String>().apply { addAll(lower.ads.keys); addAll(upper.ads.keys) }
             val merged = keys.associateWith { key ->
-                val base = lower.ads[key] ?: defaultUnit(key)
+                val base = lower.ads[key] ?: defaultUnit
                 val top = upper.ads[key]
                 if (top == null) base else mergeUnit(base, top, upper.fieldsFor(key))
             }

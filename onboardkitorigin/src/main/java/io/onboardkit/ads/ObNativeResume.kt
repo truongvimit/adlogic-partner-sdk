@@ -10,17 +10,11 @@ import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ui.pool.ObPoolResumeActivity
 import io.onboardkit.ui.resume.ObResumeActivity
 
-/** The screen `:ads` opens for native resume. */
+/** The screen `:ads` opens for native resume; each screen requests native_resume as it shows. */
 internal object ObNativeResume : ResumeAds.NativeScreen {
 
-    /** The pool's native_resume renewal [prepare] started on the way out, for the screen it opens to skip. */
-    private var renewedAhead = false
-
-    override fun prepare(context: Context) {
-        if (OnboardingPool.routeResume) {
-            preparePooled()
-            return
-        }
+    /** The classic screen's request; a load already running is joined, never doubled. */
+    fun requestClassic(context: Context) {
         if (!OnboardingSdk.isReady()) return
         val placement = AdPlacement.ResumeNative
         val unit = OnboardingSdk.configOrNull()?.ads?.nativeUnitFor(placement) ?: return
@@ -28,14 +22,6 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         OnboardingSdk.provider()?.preloadNativeInBackground(
             context, NativeAdRequest(placement, unit, NativeTemplates.layoutForPlacement(placement)),
         )
-    }
-
-    /** The renewal the pooled screen runs on opening, moved to the moment the user leaves. */
-    private fun preparePooled() {
-        renewedAhead = false
-        if (!OnboardingSdk.isReady() || !OnboardingPool.isActive) return
-        renewPooled()
-        renewedAhead = OnboardingPool.isLoading(AdPlacement.ResumeNative)
     }
 
     /**
@@ -57,9 +43,7 @@ internal object ObNativeResume : ResumeAds.NativeScreen {
         // Without config the screen's guard would restart the whole flow from the launcher.
         if (!OnboardingSdk.isReady()) return
         if (OnboardingPool.routeResume) {
-            val renewed = renewedAhead
-            renewedAhead = false
-            ObPoolResumeActivity.start(host, afterAdClick, renewed)
+            ObPoolResumeActivity.start(host, afterAdClick)
         } else {
             ObResumeActivity.start(host, afterAdClick)
         }

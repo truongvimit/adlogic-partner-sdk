@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
@@ -74,11 +73,6 @@ class NativeResumeTripDeviceTest {
         override fun onStop(owner: LifecycleOwner) = processStopped.set(true)
     }
     private val screen = object : ResumeAds.NativeScreen {
-        override fun prepare(context: Context) {
-            calls += "prepare"
-            mark("prepare")
-        }
-
         override fun show(host: Activity) = show(host, false)
 
         override fun show(host: Activity, afterAdClick: Boolean) {
@@ -118,12 +112,12 @@ class NativeResumeTripDeviceTest {
     fun aReturnFasterThanTheProcessStopOpensNativeResume() = withHost { scenario, host ->
         home()
         eventually("Home stops the host") { scenario.state == Lifecycle.State.CREATED }
-        assertEquals("Requested the moment the host stopped", listOf("prepare"), calls.toList())
+        assertEquals("Nothing requested as the host stops", emptyList<String>(), calls.toList())
         processStopped.set(false)
         bringToFront(host)
         eventually("Back in front") { scenario.state == Lifecycle.State.RESUMED }
         instrumentation.waitForIdleSync()
-        assertEquals(listOf("prepare", "show"), calls.toList())
+        assertEquals(listOf("show"), calls.toList())
         mark("fast return processStopped=${processStopped.get()}")
         assertFalse("The process lifecycle never saw this trip", processStopped.get())
     }
@@ -135,7 +129,7 @@ class NativeResumeTripDeviceTest {
         bringToFront(host)
         eventually("Back in front") { scenario.state == Lifecycle.State.RESUMED }
         instrumentation.waitForIdleSync()
-        assertEquals(listOf("prepare", "show"), calls.toList())
+        assertEquals(listOf("show"), calls.toList())
     }
 
     @Test
@@ -143,12 +137,12 @@ class NativeResumeTripDeviceTest {
         instrumentation.runOnMainSync { ResumeAds.noteNativeClick() }
         host.startActivity(Intent(host, LandingPageDeviceActivity::class.java))
         eventually("The landing page covers the host") { scenario.state == Lifecycle.State.CREATED }
-        assertEquals(listOf("prepare"), calls.toList())
+        assertEquals(emptyList<String>(), calls.toList())
         assertEquals("No process stop for an in-process page", Lifecycle.State.RESUMED, processState())
         finish { LandingPageDeviceActivity.current }
         eventually("Back on the host") { scenario.state == Lifecycle.State.RESUMED }
         mark("HOST_RESUMED")
-        eventually("Opened once the page is gone") { calls.toList() == listOf("prepare", "show:click") }
+        eventually("Opened once the page is gone") { calls.toList() == listOf("show:click") }
     }
 
     @Test
@@ -173,11 +167,11 @@ class NativeResumeTripDeviceTest {
         bringToFront(host)
         eventually("The landing page is back") { processState() == Lifecycle.State.RESUMED }
         instrumentation.waitForIdleSync()
-        assertEquals("Never over the landing page", listOf("prepare"), calls.toList())
+        assertEquals("Never over the landing page", emptyList<String>(), calls.toList())
         finish { LandingPageDeviceActivity.current }
         eventually("Back on the host") { scenario.state == Lifecycle.State.RESUMED }
         mark("HOST_RESUMED")
-        eventually("Opened once the page is gone") { calls.toList() == listOf("prepare", "show:click") }
+        eventually("Opened once the page is gone") { calls.toList() == listOf("show:click") }
     }
 
     @Test
@@ -185,11 +179,12 @@ class NativeResumeTripDeviceTest {
         instrumentation.runOnMainSync { ResumeAds.noteNativeClick() }
         host.startActivity(Intent(host, TranslucentAdDeviceActivity::class.java))
         eventually("The host pauses") { scenario.state == Lifecycle.State.STARTED }
-        eventually("Requested as the ad page comes in front") { calls.toList() == listOf("prepare") }
+        instrumentation.waitForIdleSync()
+        assertEquals("Nothing requested as the ad page comes in front", emptyList<String>(), calls.toList())
         assertEquals("The host under a see-through page is not stopped", Lifecycle.State.STARTED, scenario.state)
         finish { TranslucentAdDeviceActivity.current }
         eventually("Back on the host") { scenario.state == Lifecycle.State.RESUMED }
-        eventually("Opened once the page is gone") { calls.toList() == listOf("prepare", "show:click") }
+        eventually("Opened once the page is gone") { calls.toList() == listOf("show:click") }
         val gone = AtomicBoolean(false)
         instrumentation.runOnMainSync { gone.set(TranslucentAdDeviceActivity.current == null || TranslucentAdDeviceActivity.current!!.isFinishing) }
         assertTrue(gone.get())
@@ -206,10 +201,10 @@ class NativeResumeTripDeviceTest {
         eventually("The ad page is back in front") { processState() == Lifecycle.State.RESUMED }
         instrumentation.waitForIdleSync()
         SystemClock.sleep(500)
-        assertEquals("Never over the ad page", listOf("prepare"), calls.toList())
+        assertEquals("Never over the ad page", emptyList<String>(), calls.toList())
         finish { TranslucentAdDeviceActivity.current }
         eventually("Back on the host") { scenario.state == Lifecycle.State.RESUMED }
-        eventually("Opened once the page is gone") { calls.toList() == listOf("prepare", "show:click") }
+        eventually("Opened once the page is gone") { calls.toList() == listOf("show:click") }
     }
 
     @Test

@@ -40,7 +40,7 @@ class ObResumeActivity : BaseOnboardActivity() {
         startAction.afterAdClick = intent.getBooleanExtra(EXTRA_AFTER_AD_CLICK, false)
         startAction.preload()
         // Before the bind: a retained ad shows at once and the new request replaces it on fill.
-        ObNativeResume.prepare(this)
+        ObNativeResume.requestClassic(this)
 
         val placement = AdPlacement.ResumeNative
         var bound = false
