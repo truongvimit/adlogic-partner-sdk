@@ -14,5 +14,8 @@
       "color": "#1E88E5",
       "delay_ms": 0
     }
+  },
+  "native_flow": {
+    "type": "SHARED_POOL"
   }
 }
