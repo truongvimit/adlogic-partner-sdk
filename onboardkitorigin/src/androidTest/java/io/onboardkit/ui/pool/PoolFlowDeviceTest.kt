@@ -35,9 +35,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
@@ -302,7 +302,7 @@ class PoolFlowDeviceTest {
         }
     }
 
-    private fun loadOneFill(): Pair<PoolProbe, ApNativeAd> {
+    private fun loadOneFill(): Pair<PoolProbe, NativeAdWrapper> {
         ensureAdsInitialized()
         onMain { ConsentCenter.setHostConsent(true, false) }
         val refusal = onMain { AdGate.skipReason(app, true) }
@@ -330,7 +330,7 @@ class PoolFlowDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
@@ -387,14 +387,14 @@ class PoolFlowDeviceTest {
         eventually("Host resumes once the cover is gone") { onMain { host.lifecycle.currentState == Lifecycle.State.RESUMED } }
     }
 
-    private fun assertPopulated(view: NativeAdView, ad: ApNativeAd) = onMain {
+    private fun assertPopulated(view: NativeAdView, ad: NativeAdWrapper) = onMain {
         val native = requireNotNull(ad.admobNativeAd)
         assertEquals(native.headline, (view.headlineView as TextView).text.toString())
         native.callToAction?.let { assertEquals(it, (view.callToActionView as TextView).text.toString()) }
         assertNotNull("The slot template registers its MediaView", view.mediaView)
     }
 
-    private fun assertExactlyOneImpression(pool: PoolProbe, ad: ApNativeAd) {
+    private fun assertExactlyOneImpression(pool: PoolProbe, ad: NativeAdWrapper) {
         assertEquals("onAdImpression count for one NativeAd", 1, pool.impressions.size)
         assertSame(ad, pool.impressions.single())
         assertEquals(1, pool.events.count { it is PoolEvent.Impression })
@@ -455,16 +455,16 @@ class PoolFlowDeviceTest {
 }
 
 private class PoolProbe(context: Context) {
-    val impressions = CopyOnWriteArrayList<ApNativeAd>()
-    val clicks = CopyOnWriteArrayList<ApNativeAd>()
-    val events = CopyOnWriteArrayList<PoolEvent<ApNativeAd>>()
+    val impressions = CopyOnWriteArrayList<NativeAdWrapper>()
+    val clicks = CopyOnWriteArrayList<NativeAdWrapper>()
+    val events = CopyOnWriteArrayList<PoolEvent<NativeAdWrapper>>()
     val settled = CountDownLatch(1)
 
     /** Runs on main as the sink hears each click. */
     @Volatile var onClick: () -> Unit = {}
 
     private val adMob = AdMobPoolLoader(context)
-    private val engine = NativePoolEngine<ApNativeAd>(
+    private val engine = NativePoolEngine<NativeAdWrapper>(
         loader = PoolAdLoader { request, id, sink -> adMob.load(request, id, RecordingSink(sink)) },
         policy = PoolRequestPolicy.ALLOW_ALL,
         parity = PoolParity(asyncGate = false, asyncSelector = false),
@@ -486,9 +486,9 @@ private class PoolProbe(context: Context) {
     fun requestFill(): LoadResult =
         engine.load(PoolRequest(POOL_KEY, listOf(TEST_NATIVE_UNIT), SLOT_LAYOUT), LoadMode.FORCED)
 
-    fun selection(): PoolSelection<ApNativeAd> = engine.currentSelection()
+    fun selection(): PoolSelection<NativeAdWrapper> = engine.currentSelection()
 
-    fun heldAd(): ApNativeAd? = engine.debugSnapshot().loader(POOL_KEY)?.ad
+    fun heldAd(): NativeAdWrapper? = engine.debugSnapshot().loader(POOL_KEY)?.ad
 
     fun state(): PoolState? = engine.debugSnapshot().loader(POOL_KEY)?.state
 
@@ -508,17 +508,17 @@ private class PoolProbe(context: Context) {
         engine.close()
     }
 
-    private inner class RecordingSink(private val next: PoolLoadSink<ApNativeAd>) : PoolLoadSink<ApNativeAd> {
-        override fun onLoaded(ad: ApNativeAd) = next.onLoaded(ad)
+    private inner class RecordingSink(private val next: PoolLoadSink<NativeAdWrapper>) : PoolLoadSink<NativeAdWrapper> {
+        override fun onLoaded(ad: NativeAdWrapper) = next.onLoaded(ad)
 
         override fun onFailed() = next.onFailed()
 
-        override fun onImpression(ad: ApNativeAd) {
+        override fun onImpression(ad: NativeAdWrapper) {
             impressions += ad
             next.onImpression(ad)
         }
 
-        override fun onClicked(ad: ApNativeAd) {
+        override fun onClicked(ad: NativeAdWrapper) {
             clicks += ad
             onClick()
             next.onClicked(ad)

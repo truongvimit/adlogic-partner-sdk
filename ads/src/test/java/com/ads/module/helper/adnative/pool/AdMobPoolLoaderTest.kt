@@ -4,10 +4,10 @@ import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
@@ -57,7 +57,7 @@ class AdMobPoolLoaderTest {
         AdRemoteConfig.reset()
         PlacementRegistry.clear()
         allowAds(app)
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("pool-test") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("pool-test") })
         Tracker.install(app)
         Tracker.addSink(sinkSpy)
         gma = GmaRequests()
@@ -248,7 +248,7 @@ class AdMobPoolLoaderTest {
     }
 
     @Test fun `a show failure before the fill fails the id, after it is ignored`() {
-        // GMA has no show failure for natives; only ERainAd's wrapper can forward one.
+        // GMA has no show failure for natives; only AdsSdk's wrapper can forward one.
         val handed = mutableListOf<AdCallback>()
         val seamed = AdMobPoolLoader(app) { _, _, _, callback -> handed += callback }
         val early = RecordingSink()
@@ -260,7 +260,7 @@ class AdMobPoolLoaderTest {
 
         val late = RecordingSink()
         seamed.load(request(), "unit-b", late)
-        val ad = ApNativeAd(R.layout.custom_native_admob_medium, PoolVendorAd())
+        val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
         handed.last().onNativeAdLoaded(ad)
         handed.last().onAdFailedToShow(AdError(0, "late", "test"))
         handed.last().onAdImpression()

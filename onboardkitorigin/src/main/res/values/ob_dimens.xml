@@ -17,7 +17,7 @@
     <dimen name="ob_language_list_bottom_gap">8dp</dimen>
     <!-- GMS minimum for a MediaView that plays video. -->
     <dimen name="ob_native_media_min_video">120dp</dimen>
-    <!-- Figma LFO: header ends y=100, first row starts y=116. -->
+    <!-- LFO: header ends y=100, first row starts y=116. -->
     <dimen name="ob_language_list_top">16dp</dimen>
     <dimen name="ob_flag_size">28dp</dimen>
     <dimen name="ob_radio_size">20dp</dimen>
@@ -49,7 +49,7 @@
     <dimen name="ob_text_language_native">12sp</dimen>
     <dimen name="ob_text_header">18sp</dimen>
     <dimen name="ob_text_ad_badge">8sp</dimen>
-    <!-- Confirm Language modal, Figma node 3584:24369. Card is 328dp wide: the close glyph sits
+    <!-- Confirm Language modal. Card is 328dp wide: the close glyph sits
          at x=296 with a 16dp glyph and a 16dp inset. -->
     <dimen name="ob_confirm_dialog_width">328dp</dimen>
     <dimen name="ob_confirm_dialog_radius">16dp</dimen>
@@ -66,7 +66,7 @@
     <dimen name="ob_confirm_close_inset">8dp</dimen>
     <dimen name="ob_confirm_close_touch">32dp</dimen>
 
-    <!-- Native panel inside the modal (Figma node 3607:20394). -->
+    <!-- Native panel inside the modal. -->
     <dimen name="ob_confirm_native_radius">8dp</dimen>
     <dimen name="ob_confirm_native_padding">8dp</dimen>
     <dimen name="ob_confirm_native_gap">8dp</dimen>
@@ -91,7 +91,7 @@
     <dimen name="ob_text_confirm_ad_body">10sp</dimen>
     <dimen name="ob_text_confirm_ad_meta">10sp</dimen>
 
-    <!-- Splash bottom-slot native, Figma "native_med_4_3_media_left" (node 1:28). The card is
+    <!-- Splash bottom-slot native, template 2. The card is
          360dp wide and 147dp tall; 12dp padding on each side leaves a 123dp row, and the two equal
          columns are (360 - 24 - 8) / 2 = 164dp — exactly the design's 4:3 media. The row is driven
          by that ratio rather than a pinned height, so the proportion holds at every width instead
@@ -109,7 +109,7 @@
     <dimen name="ob_text_splash_native_body">12sp</dimen>
     <dimen name="ob_text_splash_native_cta">16sp</dimen>
 
-    <!-- Figma "native_med_1_91" (node 465:1360): native template 3. -->
+    <!-- Native template 3. -->
     <dimen name="ob_native_med_1_91_radius">12dp</dimen>
     <dimen name="ob_native_med_1_91_padding">8dp</dimen>
     <dimen name="ob_native_med_1_91_gap">8dp</dimen>

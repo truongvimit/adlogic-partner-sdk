@@ -6,7 +6,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.os.Bundle
 import android.os.Looper
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -155,18 +155,18 @@ fun setOnline(context: Context, online: Boolean) {
 }
 
 /** Every sink call, with the thread it arrived on. */
-class RecordingSink : PoolLoadSink<ApNativeAd> {
-    data class Call(val name: String, val ad: ApNativeAd?, val onMain: Boolean)
+class RecordingSink : PoolLoadSink<NativeAdWrapper> {
+    data class Call(val name: String, val ad: NativeAdWrapper?, val onMain: Boolean)
 
     val calls = mutableListOf<Call>()
     val names: List<String> get() = calls.map { it.name }
 
-    override fun onLoaded(ad: ApNativeAd) = record("loaded", ad)
+    override fun onLoaded(ad: NativeAdWrapper) = record("loaded", ad)
     override fun onFailed() = record("failed", null)
-    override fun onImpression(ad: ApNativeAd) = record("impression", ad)
-    override fun onClicked(ad: ApNativeAd) = record("clicked", ad)
+    override fun onImpression(ad: NativeAdWrapper) = record("impression", ad)
+    override fun onClicked(ad: NativeAdWrapper) = record("clicked", ad)
 
-    private fun record(name: String, ad: ApNativeAd?) {
+    private fun record(name: String, ad: NativeAdWrapper?) {
         calls += Call(name, ad, Looper.myLooper() === Looper.getMainLooper())
     }
 }

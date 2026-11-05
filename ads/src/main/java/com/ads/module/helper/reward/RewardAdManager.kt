@@ -4,7 +4,7 @@ import com.ads.module.config.settings.AdBehavior
 import android.app.Activity
 import android.content.Context
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
@@ -375,7 +375,7 @@ object RewardAdManager {
             }
         }
         try {
-            ERainAd.getInstance().showRewardAds(activity, ad, vendorCallback, false)
+            AdsSdk.getInstance().showRewardAds(activity, ad, vendorCallback, false)
         } catch (_: RuntimeException) {
             vendorCallback.onRewardedAdFailedToShow(0)
         }

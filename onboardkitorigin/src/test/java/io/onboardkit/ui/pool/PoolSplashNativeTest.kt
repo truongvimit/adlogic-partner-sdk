@@ -7,7 +7,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import com.ads.module.helper.adnative.pool.PoolState
@@ -15,7 +15,7 @@ import com.facebook.shimmer.ShimmerFrameLayout
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.setPremium
@@ -47,13 +47,13 @@ import org.robolectric.util.ReflectionHelpers
 class PoolSplashNativeTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private val controllers = mutableListOf<ActivityController<out ComponentActivity>>()
     private val nativeFs = AdPlacement.SplashNative.key
 
     @Before fun setUp() {
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = PoolUiSdk.install(app, loader)
         PoolUiSdk.configure(POOL_UI_ADS.copy(splashNative = NativeAdUnit("native-fs")))
         ReflectionHelpers.setField(OnboardingSdk, "plannedNativeFlow", NativeFlowType.SHARED_POOL)

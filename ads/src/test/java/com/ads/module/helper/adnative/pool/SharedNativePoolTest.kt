@@ -4,9 +4,9 @@ import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
@@ -42,27 +42,27 @@ class SharedNativePoolTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
     private lateinit var gma: GmaRequests
-    private val destroyed = mutableListOf<ApNativeAd>()
-    private val events = mutableListOf<PoolEvent<ApNativeAd>>()
+    private val destroyed = mutableListOf<NativeAdWrapper>()
+    private val events = mutableListOf<PoolEvent<NativeAdWrapper>>()
 
     /** Ads the fake loader produced, per pool key, so tests can fill an attempt. */
-    private class ApFakeLoader : PoolAdLoader<ApNativeAd> {
-        val sinks = mutableListOf<Pair<String, PoolLoadSink<ApNativeAd>>>()
-        override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<ApNativeAd>) {
+    private class FakeAdLoader : PoolAdLoader<NativeAdWrapper> {
+        val sinks = mutableListOf<Pair<String, PoolLoadSink<NativeAdWrapper>>>()
+        override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<NativeAdWrapper>) {
             sinks += request.key to sink
         }
 
-        fun fill(key: String): ApNativeAd =
-            ApNativeAd(R.layout.custom_native_admob_medium, PoolVendorAd()).also { ad ->
+        fun fill(key: String): NativeAdWrapper =
+            NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd()).also { ad ->
                 sinks.last { it.first == key }.second.onLoaded(ad)
             }
     }
 
-    private val fakeLoader = ApFakeLoader()
+    private val fakeLoader = FakeAdLoader()
 
     private val request = PoolRequest("language1", listOf("unit-a"), R.layout.custom_native_admob_medium, "native_lang")
 
-    private fun installEngine(): NativePoolEngine<ApNativeAd> {
+    private fun installEngine(): NativePoolEngine<NativeAdWrapper> {
         val clock = FakeClock()
         return NativePoolEngine(
             loader = fakeLoader,
@@ -89,24 +89,24 @@ class SharedNativePoolTest {
         SharedNativePool.engineOrNull()!!.debugSnapshot().loader(key)
 
     /** Whether NativeAdManager still keeps a listener entry, and so a reference, for [ad]. */
-    private fun managerObserves(ad: ApNativeAd): Boolean {
+    private fun managerObserves(ad: NativeAdWrapper): Boolean {
         val field = NativeAdManager::class.java.getDeclaredField("adListeners").apply { isAccessible = true }
         return (field.get(NativeAdManager) as Map<*, *>).containsKey(ad)
     }
 
     /** Counts events without keeping the ads they carry. */
-    private class CountingSink : PoolLoadSink<ApNativeAd> {
+    private class CountingSink : PoolLoadSink<NativeAdWrapper> {
         var impressions = 0
         var clicks = 0
-        override fun onLoaded(ad: ApNativeAd) = Unit
+        override fun onLoaded(ad: NativeAdWrapper) = Unit
         override fun onFailed() = Unit
-        override fun onImpression(ad: ApNativeAd) { impressions++ }
-        override fun onClicked(ad: ApNativeAd) { clicks++ }
+        override fun onImpression(ad: NativeAdWrapper) { impressions++ }
+        override fun onClicked(ad: NativeAdWrapper) { clicks++ }
     }
 
     /** Built in its own frame, so only the callback's reference to the ad is left on return. */
-    private fun observedCallback(sink: CountingSink): Pair<AdCallback, WeakReference<ApNativeAd>> {
-        val ad = ApNativeAd(R.layout.custom_native_admob_medium, PoolVendorAd())
+    private fun observedCallback(sink: CountingSink): Pair<AdCallback, WeakReference<NativeAdWrapper>> {
+        val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
         val callback = SharedNativePool.eventsInto(ad, sink)
         callback.onAdImpression()
         callback.onAdClicked()
@@ -128,7 +128,7 @@ class SharedNativePoolTest {
         NativeAdManager.releaseAll()
         AdBehavior.document.install(null, null)
         allowAds(app)
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("pool-test") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("pool-test") })
         gma = GmaRequests()
         main.idle()
     }
@@ -259,7 +259,7 @@ class SharedNativePoolTest {
     }
 
     @Test fun `an adopted ad reports one click per tap whatever its adapter sends`() {
-        val ad = ApNativeAd(R.layout.custom_native_admob_medium, PoolVendorAd())
+        val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
         val gmaLike = CountingSink()
         SharedNativePool.eventsInto(ad, gmaLike).apply { onAdOpened(); onAdClicked() }
         assertEquals(1, gmaLike.clicks)

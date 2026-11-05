@@ -20,13 +20,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Native resume while a SHARED_POOL run routes it (DashDrama ResumeActivity). Its slot never owns:
+ * Native resume while a SHARED_POOL run routes it. Its slot never owns:
  * it shows native_resume's own ad first, else the owner of the screen underneath, or after the flow
  * the newest leftover. Its own request goes out FORCED past the pool's gate as it shows, never while
  * the user is away and never doubling one of its own already running. Start and
  * back both run the `inter_resume` load-and-show ([ResumeStart]), AFTER_AD, except after an ad
  * click, when they only close the screen. A config
- * refusal of native_resume hides it, as in DashDrama and the classic screen. A return to it opens
+ * refusal of native_resume hides it, as on the classic screen. A return to it opens
  * nothing: it keeps the base exclusion from app-resume, and its own onResume refreshes the ad. It
  * never holds the shared suppression; an ad click is the only mark.
  *
@@ -45,7 +45,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
     private var slot: PoolNativeSlot? = null
     private val startAction = ResumeStart(this)
 
-    /** DashDrama's f23721c; saved, as its click flag survives a screen destroyed under the landing page. */
+    /** Saved, as the click flag must survive a screen destroyed under the landing page. */
     private var adClicked = false
 
     override fun onCreateSafe(savedInstanceState: Bundle?) {
@@ -69,7 +69,7 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         slot = PoolNativeSlot(
             owner = this,
             placement = AdPlacement.ResumeNative,
-            // OWNER only for visibility: like DashDrama's p(k()), the frame collapses when native_resume
+            // OWNER only for visibility: the frame collapses when native_resume
             // itself is refused instead of lending another screen's ad. The screen still never claims.
             kind = PoolNativeSlot.Kind.OWNER,
             minState = SCREEN_SLOT_MIN_STATE,

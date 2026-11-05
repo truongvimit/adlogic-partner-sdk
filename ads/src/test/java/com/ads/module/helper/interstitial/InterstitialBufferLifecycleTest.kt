@@ -11,10 +11,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.consent.ConsentOptions
 import com.ads.module.consent.PlatformUmpClient
@@ -73,13 +73,13 @@ class InterstitialBufferLifecycleTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("buffer-test") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("buffer-test") })
         // This suite exercises the shared group policy, independently of bundled defaults.
         AdBehavior.document.acceptSuccessfulFetch("""{"interstitial_auto_buffer":{"shared_config":true}}""")
-        ERainAd.getInstance().setIntervalInterstitialAd(30)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setIntervalInterstitialAd(30)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         InterstitialFrequency.resetAll()
@@ -491,7 +491,7 @@ class InterstitialBufferLifecycleTest {
     fun `shortening remote interval rechecks an already eligible empty buffer promptly`() {
         arm()
         advance(10_000)
-        ERainAd.getInstance().setIntervalInterstitialAd(5)
+        AdsSdk.getInstance().setIntervalInterstitialAd(5)
         advance(1_000)
         assertEquals("No additional five-second polling interval after gate already elapsed", 2, requests.size)
     }

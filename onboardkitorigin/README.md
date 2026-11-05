@@ -22,12 +22,12 @@ Pager natives stay bound while their page view survives, so revisiting content o
 
 Optional Privacy → Goal screens run after the pager and the exit interstitial (when enabled; off by default) as the final part of onboarding. Enable `privacy_goals_screen.enabled` and supply goal options; see [Privacy → Goal](../partner-integration/privacy-goals-screen.md).
 
-`native_flow.type = SHARED_POOL` replaces the default `PER_SCREEN` flow after the splash: LFO, the onboarding pager and Privacy → Goal run in one SDK screen, and every native slot draws from one shared pool, following the first-open rules of DashDrama 1.0.6, the reference app the pool was modelled on. It needs the built-in `ERainAdProvider`, is read once per run and leaves the splash unchanged; see [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.md#shared_pool-native-flow).
+`native_flow.type = SHARED_POOL` replaces the default `PER_SCREEN` flow after the splash: LFO, the onboarding pager and Privacy → Goal run in one SDK screen, and every native slot draws from one shared pool, following the first-open rules of the reference flow the pool was modelled on. It needs the built-in `AdsSdkProvider`, is read once per run and leaves the splash unchanged; see [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.md#shared_pool-native-flow).
 
 ## Before you start
 
 - Use minSdk 24, compileSdk 36 and JDK 17. Follow the [shared build setup](../README.md) and use the same published tag for every module.
-- For the built-in ad provider, first complete the [ads guide](../ads/README.md): AdMob/Meta manifest values, ad config assets and `ERainAd.init()` in your Application.
+- For the built-in ad provider, first complete the [ads guide](../ads/README.md): AdMob/Meta manifest values, ad config assets and `AdsSdk.init()` in your Application.
 - Install `Tracker` and a sink before OnboardKit if you need the funnel; see [Trackkit](../trackkit/README.md).
 - Add both dependencies below. OnboardKit exports Trackkit, but partner code using `com.ads.module.*` needs an explicit `ads` dependency. Firebase and PayKit setup are optional.
 
@@ -43,7 +43,7 @@ dependencies {
 
 ## 1. Install and configure in your Application
 
-Merge this into your existing Application **after `ERainAd.getInstance().init(...)` from the [ads guide](../ads/README.md)**; do not initialize ERain twice.
+Merge this into your existing Application **after `AdsSdk.getInstance().init(...)` from the [ads guide](../ads/README.md)**; do not initialize AdsSdk twice.
 The snippet contains Google test ad units. Replace them with your units for release and use your own `MainActivity`.
 Import your app's `R`, `BuildConfig` and `MainActivity` if they are in different packages; `io.onboardkit.config.*` covers all config types below.
 
@@ -51,8 +51,8 @@ Import your app's `R`, `BuildConfig` and `MainActivity` if they are in different
 import android.app.Application
 import android.content.Intent
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.ads.sdk.AdsSdkProvider
+import io.onboardkit.ads.sdk.AdsSdkTuning
 import io.onboardkit.config.*
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -60,11 +60,11 @@ import io.onboardkit.core.OnboardingOutcome
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Complete ERainAd.init here; add Tracker/sinks if needed (ads guide).
-        ERainTuning.install()
+        // Complete AdsSdk.init here; add Tracker/sinks if needed (ads guide).
+        AdsSdkTuning.install()
 
         OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
+            adProvider = AdsSdkProvider()
             listener = OnboardingListener { context, outcome ->
                 val extras = when (outcome) {
                     is OnboardingOutcome.Completed -> outcome.passthrough
@@ -187,7 +187,7 @@ Native/interstitial waterfalls accept `tiers = listOf(highId, fallbackId)` in re
 `AdsConfig.fromAdConfig()`, the `onboardKitConfig` default, binds the standard JSON names such as `inter_splash` or `native_lang` and keeps them live after each fetch; pass it a map for names that differ in your app.
 A standard key that your `ad_config.json` or the backend's `ad_remote_config` declares applies without a binding and outranks any unit written in code, including `stepNatives` and `splashInterstitialOldUser`, so there is no need to rebuild the config in `onRemoteFetched()`.
 A placement key declared `isEnable: false` turns off its whole waterfall, as does a key whose every floor in `ids` is off, so the slot gets no ad unit and the flow skips it.
-The sample's [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
+The sample's [OnboardKitSetup](../app/src/main/java/io/adlogic/sample/app/OnboardKitSetup.kt) shows the complete mapping and native templates.
 
 ## Fullscreen page and onboarding exit ad
 
@@ -275,7 +275,7 @@ class SplashActivity : ObSplashActivity() {
 ```
 
 `Billing.awaitReady()` returns `Ready`, `Timeout` or `Error`; use the result for your app's error policy. The existing `SplashConfig.billingTimeoutMs` (5,000 ms by default) also bounds the whole hook, so its own timeout or Activity destruction may cancel it before a result returns; a timeout does not establish purchase status.
-See the [sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) for the integration point.
+See the [sample splash](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt) for the integration point.
 
 For notification/widget/uninstall launches, target your splash with [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt):
 
@@ -302,7 +302,7 @@ Entries use `inter_noti`, `inter_widget` or `inter_uninstall`; a key that is mis
 Use `OnboardingSdk.setFlowLogging(true)` during integration (`OB_FLOW` in Logcat).
 For a later language change, call `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
 
-[Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
+[Sample Application](../app/src/main/java/io/adlogic/sample/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
 
 ## Grouped remote settings
 

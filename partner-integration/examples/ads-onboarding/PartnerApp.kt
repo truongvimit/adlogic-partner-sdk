@@ -2,13 +2,13 @@ package com.example.app
 
 import android.app.Application
 import android.content.Intent
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.AdjustConfig
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.ads.sdk.AdsSdkProvider
+import io.onboardkit.ads.sdk.AdsSdkTuning
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
 import io.trackkit.Tracker
@@ -20,10 +20,10 @@ class PartnerApp : Application() {
         Tracker.install(this, TrackerConfig(appVersionCode = BuildConfig.VERSION_CODE.toLong()))
         AdRemoteConfig.initializeFromAssets(this)
 
-        val environment = if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP
-                          else ERainAdConfig.ENVIRONMENT_PRODUCTION
+        val environment = if (BuildConfig.DEBUG) AdsSdkConfig.ENVIRONMENT_DEVELOP
+                          else AdsSdkConfig.ENVIRONMENT_PRODUCTION
         val adjustToken = getString(R.string.adjust_token).trim()
-        val adsConfig = ERainAdConfig(this, environment).apply {
+        val adsConfig = AdsSdkConfig(this, environment).apply {
             if (adjustToken.isNotEmpty()) {
                 adjustConfig = AdjustConfig(true, adjustToken).apply {
                     fbAppId = getString(R.string.facebook_app_id)
@@ -32,11 +32,11 @@ class PartnerApp : Application() {
                 }
             }
         }
-        ERainAd.getInstance().init(this, adsConfig)
-        ERainTuning.install()
+        AdsSdk.getInstance().init(this, adsConfig)
+        AdsSdkTuning.install()
 
         OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
+            adProvider = AdsSdkProvider()
             listener = OnboardingListener { context, outcome ->
                 if (outcome is OnboardingOutcome.Completed) {
                     outcome.selectedLanguage?.let { code ->

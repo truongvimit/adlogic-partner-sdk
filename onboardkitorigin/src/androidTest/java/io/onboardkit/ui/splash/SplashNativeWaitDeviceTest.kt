@@ -17,9 +17,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.Entitlement
@@ -35,7 +35,7 @@ import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeStatus
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -64,7 +64,7 @@ class SplashNativeWaitDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
@@ -78,7 +78,7 @@ class SplashNativeWaitDeviceTest {
             }.getOrThrow()).getOrThrow()
             assertEquals(3_000L, OnboardingSettings.number("splash.native.skip.delay_ms"))
             NativeAdPreload.getInstance().registerAdCallback(AdPlacement.SplashNative.key, object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) { fills++ }
+                override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) { fills++ }
             })
         }
         assertTrue("Google Mobile Ads initializes", initialized.await(45, TimeUnit.SECONDS))
@@ -156,7 +156,7 @@ class SplashNativeWaitDeviceTest {
     }
 
     private class CountingNativeProvider : FakeAdProvider() {
-        private val real = ERainAdProvider()
+        private val real = AdsSdkProvider()
         var requests = 0
         override fun preloadNative(activity: Activity, request: NativeAdRequest) {
             requests++

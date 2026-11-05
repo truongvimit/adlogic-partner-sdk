@@ -19,10 +19,10 @@ data class WelcomeBackScreenConfig(
 ) {
     companion object {
         val DEFAULT_OPTIONS: List<GoalOption> = listOf(
-            GoalOption("edit", titleRes = R.string.ob_welcome_back_option_edit, imageRes = R.drawable.ob_welcome_back_ic_edit),
-            GoalOption("add_text", titleRes = R.string.ob_welcome_back_option_add_text, imageRes = R.drawable.ob_welcome_back_ic_add_text),
-            GoalOption("sign", titleRes = R.string.ob_welcome_back_option_sign, imageRes = R.drawable.ob_welcome_back_ic_sign),
-            GoalOption("split_merge", titleRes = R.string.ob_welcome_back_option_split_merge, imageRes = R.drawable.ob_welcome_back_ic_split_merge),
+            GoalOption("resume", titleRes = R.string.ob_welcome_back_option_resume, imageRes = R.drawable.ob_welcome_back_ic_resume),
+            GoalOption("discover", titleRes = R.string.ob_welcome_back_option_discover, imageRes = R.drawable.ob_welcome_back_ic_discover),
+            GoalOption("favorites", titleRes = R.string.ob_welcome_back_option_favorites, imageRes = R.drawable.ob_welcome_back_ic_favorites),
+            GoalOption("settings", titleRes = R.string.ob_welcome_back_option_settings, imageRes = R.drawable.ob_welcome_back_ic_settings),
         )
     }
 }

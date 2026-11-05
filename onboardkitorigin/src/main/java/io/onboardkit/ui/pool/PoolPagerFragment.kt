@@ -34,7 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * The SHARED_POOL onboarding pager (DashDrama Style5 over its E6/a page base). Each selection
+ * The SHARED_POOL onboarding pager. Each selection
  * claims the page's placement politely and preloads the next page's; the pool decides what every
  * slot shows. Swipe stays locked, a full page moves on by itself a fixed time after it was
  * selected, and the last page hands over to Privacy or ends the flow, with no interstitial.
@@ -59,10 +59,10 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
     private var ob1BackEnabled = false
     private var returningToLanguage = false
 
-    /** The placement whose load last reported success, given the slot back on every resume (DD f1379c). */
+    /** The placement whose load last reported success, given the slot back on every resume. */
     private var ownerKey: AdPlacement? = null
 
-    /** The last page placement tried; a page without a slot leaves it, and the owner, alone (DD f1380d). */
+    /** The last page placement tried; a page without a slot leaves it, and the owner, alone. */
     private var currentAttempt: AdPlacement? = null
 
     override val currentIndex: StateFlow<Int> get() = _currentIndex
@@ -120,7 +120,6 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
             return
         }
         val pager = b.obPoolPager
-        // DD Style5.java:158-163: adapter, offscreen limit, input lock, callback, initial dispatch.
         pager.adapter = PoolPagerAdapter(this, pages).also { adapter = it }
         // Keep only the selected page and its neighbour alive: the next page is prepared without
         // inflating every page (and every native slot) in the pager at once.
@@ -135,7 +134,7 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         showOb1Back(pager.currentItem, 0f)
     }
 
-    /** DD Style5.k with E6/a.i: a repeat of the current page is ignored, whichever path reported it. */
+    /** A repeat of the current page is ignored, whichever path reported it. */
     private fun select(position: Int) {
         val pager = binding?.obPoolPager ?: return
         val pagerAdapter = adapter ?: return
@@ -183,8 +182,8 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
     }
 
     /**
-     * DD Style5.java:105-109: counted from selection and kept running in the background. Like DD's
-     * STARTED collector (J6/m), the move itself waits until the user is back.
+     * Counted from selection and kept running in the background. Like a STARTED collector, the
+     * move itself waits until the user is back.
      */
     private fun scheduleAutoNext(stepId: StepId) {
         val task = Runnable {
@@ -240,7 +239,7 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         return if (selectedAt == 0L) 0L else System.currentTimeMillis() - selectedAt
     }
 
-    /** DD Style5 -> Favorite: no interstitial and no preload; the next screen claims its own ad on open. */
+    /** Pager -> select screen: no interstitial and no preload; the next screen claims its own ad on open. */
     private fun leave() {
         cancelAutoNext()
         val host = host ?: return
@@ -297,7 +296,7 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         adapter?.fragmentAt(pager.currentItem)?.onWindowTouched()
     }
 
-    /** DD E6/a.java:248-264: back in front, the stage takes its owner back, refreshes it and retries its page. */
+    /** Back in front, the stage takes its owner back, refreshes it and retries its page. */
     override fun onResume() {
         super.onResume()
         ownerKey?.let { owner ->

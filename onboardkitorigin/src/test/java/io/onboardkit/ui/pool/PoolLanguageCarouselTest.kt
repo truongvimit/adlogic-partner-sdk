@@ -11,14 +11,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.LFO1
 import io.onboardkit.ads.pool.LFO2
 import io.onboardkit.ads.pool.OnboardingPool
@@ -49,8 +49,8 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolLanguageCarouselTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private var controller: ActivityController<ObPoolFlowActivity>? = null
     private val activity get() = requireNotNull(controller).get()
     private val block get() = activity.findViewById<FrameLayout>(R.id.ob_ad_block)
@@ -58,7 +58,7 @@ class PoolLanguageCarouselTest {
     private val autoScrollMs get() = OnboardingSettings.carouselAutoScrollMs()
 
     @Before fun setUp() {
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = PoolUiSdk.install(app, loader)
     }
 
@@ -85,7 +85,7 @@ class PoolLanguageCarouselTest {
         main.idle()
     }
 
-    private fun fill(key: String): ApNativeAd = loader.fill(key).also { main.idle() }
+    private fun fill(key: String): NativeAdWrapper = loader.fill(key).also { main.idle() }
 
     private fun calls(key: String) = loader.callsFor(key).size
 
@@ -119,7 +119,7 @@ class PoolLanguageCarouselTest {
     }
 
     /** LFO1 on page 0 and page 1's own ad, both filled. */
-    private fun bothFilled(): Pair<ApNativeAd, ApNativeAd> {
+    private fun bothFilled(): Pair<NativeAdWrapper, NativeAdWrapper> {
         launch()
         val first = fill("language1")
         val second = fill("language1_carousel")

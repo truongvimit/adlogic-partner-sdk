@@ -13,7 +13,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.LoadResult
 import com.ads.module.helper.adnative.pool.MainLooperPoolScheduler
@@ -27,7 +27,7 @@ import com.google.android.gms.ads.nativead.NativeAdView
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.POOL_ADS
 import io.onboardkit.ads.pool.PoolGlueViewShadow
@@ -87,8 +87,8 @@ import kotlin.coroutines.CoroutineContext
 class PoolPagerTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private var controller: ActivityController<ObPoolFlowActivity>? = null
     private val activity get() = requireNotNull(controller).get()
     private val stage get() = activity.supportFragmentManager.findFragmentByTag("ob_pool_stage")
@@ -117,7 +117,7 @@ class PoolPagerTest {
         // until the reset clock caught up with it.
         AnimationUtils.currentAnimationTimeMillis()
         PoolTestSdk.install(app)
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = installTestEngine(loader)
     }
 
@@ -260,7 +260,7 @@ class PoolPagerTest {
     }
 
     @Test fun `a full page whose preload is still loading shows the newest ad and requests nothing more`() {
-        var newest: ApNativeAd? = null
+        var newest: NativeAdWrapper? = null
         launch(steps = listOf(ob1, full1, ob2)) {
             OnboardingPool.claim(stepOb1, LoadMode.FORCED)
             newest = loader.fill(stepOb1.key)
@@ -461,7 +461,7 @@ class PoolPagerTest {
 
         requireNotNull(controller).start()
         pump()
-        assertEquals("Moves at STARTED, as DD's collector", 2, pager.currentItem)
+        assertEquals("moves at STARTED, like a STARTED collector", 2, pager.currentItem)
         requireNotNull(controller).resume()
         settle(pager)
         assertEquals(2, pager.currentItem)
@@ -724,7 +724,7 @@ class PoolPagerTest {
         assertSame(ad.admobNativeAd, shownAd(1))
     }
 
-    @Test fun `OC1 a late LFO2 fill shows on page 0`() {
+    @Test fun `a late LFO2 fill shows on page 0`() {
         launch(steps = listOf(ob1, ob2), ads = POOL_ADS) {
             OnboardingPool.claim(AdPlacement.Language2, LoadMode.FORCED)
         }
@@ -737,10 +737,10 @@ class PoolPagerTest {
         assertSame(language2.admobNativeAd, shownAd(0))
     }
 
-    @Test fun `OC2 with LFO2 loading at Done page 0 is gate-skipped and shows LFO1 then LFO2`() {
+    @Test fun `with LFO2 loading at Done page 0 is gate-skipped and shows LFO1 then LFO2`() {
         // The fill itself, not the loader's latest attempt: the real LFO stage requests again
         // (its resume refresh) after this ad filled, and that attempt holds no ad.
-        var language1: ApNativeAd? = null
+        var language1: NativeAdWrapper? = null
         launch(steps = listOf(ob1, ob2), ads = POOL_ADS) {
             OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
             language1 = loader.fill(AdPlacement.Language1.key).also(loader::impress)

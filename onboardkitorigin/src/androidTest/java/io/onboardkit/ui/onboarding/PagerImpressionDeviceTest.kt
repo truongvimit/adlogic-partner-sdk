@@ -20,17 +20,17 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.viewpager2.widget.ViewPager2
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.nativead.NativeAdView
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.*
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.*
 import io.onboardkit.core.StepId
 import io.onboardkit.remote.OnboardingSettings
@@ -69,7 +69,7 @@ class PagerImpressionDeviceTest {
         instrumentation.runOnMainSync {
             monitor.addLifecycleCallback(observer)
             ConsentCenter.setHostConsent(true, false)
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
@@ -126,7 +126,7 @@ class PagerImpressionDeviceTest {
     }
 
     private class RecordingProvider(val padding: Int, val ids: List<StepId>) : FakeAdProvider() {
-        private val real = ERainAdProvider()
+        private val real = AdsSdkProvider()
         private val start = SystemClock.elapsedRealtime()
         private val containers = mutableMapOf<StepId, FrameLayout>()
         private val selectionTimes = mutableMapOf<StepId, Long>()

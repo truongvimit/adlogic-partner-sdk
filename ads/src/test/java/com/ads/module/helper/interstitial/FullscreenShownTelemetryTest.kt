@@ -9,9 +9,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
@@ -79,13 +79,13 @@ class FullscreenShownTelemetryTest {
         Entitlement.install(object : EntitlementSource {
             override fun isPremium(context: Context): Boolean = false
         })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("tel02-test-client-token")
         })
-        ERainAd.getInstance().setIntervalInterstitialAd(0)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setIntervalInterstitialAd(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         Tracker.install(app)
@@ -136,12 +136,12 @@ class FullscreenShownTelemetryTest {
     }
 
     @Test
-    fun `ERain UnderAd navigation stays before vendor show but display waits for real callback`() {
+    fun `AdsSdk UnderAd navigation stays before vendor show but display waits for real callback`() {
         val raw = interstitial()
-        val wrapper = loadThroughERain(raw)
+        val wrapper = loadThroughSdk(raw)
         val callback = RecordingAdCallback()
         raw.beforeShow = { assertEquals("UnderAd next stays before vendor show", 1, callback.next) }
-        ERainAd.getInstance().forceShowInterstitial(activity, wrapper, callback, false, true)
+        AdsSdk.getInstance().forceShowInterstitial(activity, wrapper, callback, false, true)
         assertEquals(1, callback.committed)
         assertEquals(0, count("ad_show"))
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
@@ -159,9 +159,9 @@ class FullscreenShownTelemetryTest {
     @Test
     fun `Home during preparation emits failure without display and INT02 retains the raw fill`() {
         val raw = interstitial()
-        val wrapper = loadThroughERain(raw)
+        val wrapper = loadThroughSdk(raw)
         val callback = RecordingAdCallback()
-        ERainAd.getInstance().forceShowInterstitial(activity, wrapper, callback, false, false)
+        AdsSdk.getInstance().forceShowInterstitial(activity, wrapper, callback, false, false)
         assertEquals(1, callback.committed)
         controller.pause().stop()
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
@@ -177,7 +177,7 @@ class FullscreenShownTelemetryTest {
     fun `real interstitial vendor failure after show is not a display`() {
         val raw = interstitial()
         val callback = RecordingAdCallback()
-        ERainAd.getInstance().forceShowInterstitial(activity, loadThroughERain(raw), callback, false, false)
+        AdsSdk.getInstance().forceShowInterstitial(activity, loadThroughSdk(raw), callback, false, false)
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         assertEquals(1, raw.hosts.size)
         val error = AdError(3, "vendor could not present", "com.google.android.gms.ads")
@@ -244,9 +244,9 @@ class FullscreenShownTelemetryTest {
     @Test
     fun `buffered reward reports actual display once with captured format and unit`() {
         val raw = Tel02RewardedAd(UNIT).also { rewards += it.state }
-        ERainAd.getInstance().initRewardAds(activity, UNIT, AdCallback())
+        AdsSdk.getInstance().initRewardAds(activity, UNIT, AdCallback())
         Tel02RewardedShadow.requests.single().onAdLoaded(raw)
-        ERainAd.getInstance().showRewardAds(activity, RecordingRewardCallback())
+        AdsSdk.getInstance().showRewardAds(activity, RecordingRewardCallback())
         assertRewardDisplay(raw.state, "rewarded")
     }
 
@@ -254,7 +254,7 @@ class FullscreenShownTelemetryTest {
     fun `supplied reward reports actual display once without changing earned or close timing`() {
         val raw = Tel02RewardedAd(UNIT).also { rewards += it.state }
         val callback = RecordingRewardCallback()
-        ERainAd.getInstance().showRewardAds(activity, raw, callback)
+        AdsSdk.getInstance().showRewardAds(activity, raw, callback)
         assertEquals(0, callback.earned)
         assertEquals(0, callback.closed)
         assertRewardDisplay(raw.state, "rewarded")
@@ -269,7 +269,7 @@ class FullscreenShownTelemetryTest {
     @Test
     fun `rewarded interstitial reports its actual display with its own format`() {
         val raw = Tel02RewardedInterstitialAd(UNIT).also { rewards += it.state }
-        ERainAd.getInstance().showRewardInterstitial(activity, raw, RecordingRewardCallback())
+        AdsSdk.getInstance().showRewardInterstitial(activity, raw, RecordingRewardCallback())
         assertRewardDisplay(raw.state, "rewarded_interstitial")
     }
 
@@ -277,7 +277,7 @@ class FullscreenShownTelemetryTest {
     fun `actual reward vendor failure emits only show failure and preserves legacy error code`() {
         val raw = Tel02RewardedInterstitialAd(UNIT).also { rewards += it.state }
         val callback = RecordingRewardCallback()
-        ERainAd.getInstance().showRewardInterstitial(activity, raw, callback)
+        AdsSdk.getInstance().showRewardInterstitial(activity, raw, callback)
         val error = AdError(3, "vendor could not present", "com.google.android.gms.ads")
         raw.state.callback!!.onAdFailedToShowFullScreenContent(error)
         assertEquals(listOf(3), callback.failures)
@@ -301,10 +301,10 @@ class FullscreenShownTelemetryTest {
 
     private fun interstitial() = Int02VendorAd(UNIT).also { interstitials += it }
 
-    private fun loadThroughERain(raw: Int02VendorAd): ApInterstitialAd {
-        var loaded: ApInterstitialAd? = null
-        ERainAd.getInstance().getInterstitialAds(activity, UNIT, object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded = ad }
+    private fun loadThroughSdk(raw: Int02VendorAd): InterstitialAdWrapper {
+        var loaded: InterstitialAdWrapper? = null
+        AdsSdk.getInstance().getInterstitialAds(activity, UNIT, object : AdCallback() {
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded = ad }
         })
         Int02InterstitialShadow.requests.last().onAdLoaded(raw)
         return requireNotNull(loaded)

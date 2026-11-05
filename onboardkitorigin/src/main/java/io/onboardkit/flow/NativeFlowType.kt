@@ -14,7 +14,7 @@ internal enum class NativeFlowType {
 
 /** How the pooled flow applies the language picked on its LFO before the next stage. */
 internal enum class PoolLocaleApply {
-    /** Updates the activity's resources and replaces the stage fragment, as DashDrama does. */
+    /** Updates the activity's resources and replaces the stage fragment. */
     IN_PLACE,
 
     /** Recreates the activity so its base context carries the new locale. */
@@ -23,8 +23,8 @@ internal enum class PoolLocaleApply {
 
 /**
  * Every `native_flow` value a SHARED_POOL run uses, latched at the run's start so a remote refresh
- * cannot change the flow halfway through. Defaults equal the bundled document: DashDrama 1.0.6's,
- * apart from the deviations [PoolParity] names; the classic keys these mirror keep their own
+ * cannot change the flow halfway through. Defaults equal the bundled document: the reference
+ * behaviour, apart from the deviations [PoolParity] names; the classic keys these mirror keep their own
  * defaults for PER_SCREEN.
  */
 internal data class NativeFlowSnapshot(

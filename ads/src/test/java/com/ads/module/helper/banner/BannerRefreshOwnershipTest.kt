@@ -18,8 +18,8 @@ import com.ads.module.admob.Admob
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.funtion.AdCallback
 import com.facebook.shimmer.ShimmerFrameLayout
-import com.ads.module.ads.ERainAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
@@ -57,7 +57,7 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowNetworkInfo
 import java.util.concurrent.TimeUnit
 
-/** Real public helper/ERain/Admob; only BaseAdView's external dispatch/storage is replaced. */
+/** Real public helper/AdsSdk/Admob; only BaseAdView's external dispatch/storage is replaced. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -89,7 +89,7 @@ class BannerRefreshOwnershipTest {
         ))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("ban04-test-token") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("ban04-test-token") })
         AppOpenManager.getInstance().disableAppResume()
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
         activity = controller.get()

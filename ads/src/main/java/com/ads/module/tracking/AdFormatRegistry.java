@@ -12,7 +12,7 @@ import io.trackkit.AdFormat;
  *
  * <p>Same out-of-band trick as {@code PlacementRegistry}, for the other half of the context the SDK
  * cannot supply: AdMob's click and paid callbacks know the ad unit and nothing else. Written once at
- * load time by {@link TrackingAdCallback}, read at click time by {@code ERainLogEventManager}
+ * load time by {@link TrackingAdCallback}, read at click time by {@code AdEventLogger}
  * (ironSource {@code addImpressionDataListener} does the same for its placement).
  *
  * <p>Lives in {@code :ads}, not in the frozen port — only this module knows about ad units.

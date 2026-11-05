@@ -178,12 +178,12 @@ class ObPreloadEligibilityTest {
 
     @Test fun `UA gate blocks all mapped slots even with enabled screens and IDs`() {
         adConfig(ids.associate { "native_$it" to AdUnitConfig(listOf("unit_$it"), true, enableUaCheck = true) })
-        val erain = Mockito.mock(com.ads.module.ads.ERainAd::class.java)
-        Mockito.mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
-            singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(erain)
-            Mockito.`when`(erain.shouldDisplayForUa(true)).thenReturn(false)
+        val adsSdk = Mockito.mock(com.ads.module.ads.AdsSdk::class.java)
+        Mockito.mockStatic(com.ads.module.ads.AdsSdk::class.java).use { singleton ->
+            singleton.`when`<com.ads.module.ads.AdsSdk> { com.ads.module.ads.AdsSdk.getInstance() }.thenReturn(adsSdk)
+            Mockito.`when`(adsSdk.shouldDisplayForUa(true)).thenReturn(false)
             assertRequested(emptyList())
-            Mockito.`when`(erain.shouldDisplayForUa(true)).thenReturn(true)
+            Mockito.`when`(adsSdk.shouldDisplayForUa(true)).thenReturn(true)
             assertRequested(ids)
         }
     }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Native template 2 — Figma "native_med_4_3_media_left" (node 1:28), Mode=True: the default of the
+  Native template 2: the default of the
   splash bottom slot and the Privacy/Goal card; `ad_config.<key>.templateId = 2` elsewhere.
 
   A horizontal split — 4:3 media on the left, badge/headline/body over a CTA on the right — so,
@@ -68,7 +68,7 @@
             app:layout_constraintStart_toEndOf="@id/ob_splash_native_media_well"
             app:layout_constraintTop_toTopOf="parent">
 
-            <!-- Figma "Tag/ads/2" — the same chip the Confirm Language native uses. -->
+            <!-- The same chip the Confirm Language native uses. -->
             <TextView
                 android:id="@+id/ad_icon"
                 android:layout_width="wrap_content"
@@ -96,7 +96,7 @@
                 android:maxLines="2"
                 android:textColor="@color/ob_splash_native_headline"
                 android:textSize="@dimen/ob_text_splash_native_headline"
-                tools:text="Tiki 11.01 Shopping" />
+                tools:text="Sample App" />
 
             <TextView
                 android:id="@+id/ad_body"

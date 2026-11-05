@@ -154,7 +154,7 @@ internal class PoolConfirmLanguageDialog(
         OnboardingSdk.track(event)
     }
 
-    /** Figma's 328dp card is a maximum: a narrower device keeps a side margin. */
+    /** The 328dp card is a maximum: a narrower device keeps a side margin. */
     private fun cardWidthPx(): Int {
         val metrics = activity.resources.displayMetrics
         fun dp(value: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, metrics)

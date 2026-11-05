@@ -8,8 +8,8 @@
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="vertical" android:paddingHorizontal="20dp" android:paddingTop="24dp" android:paddingBottom="8dp"
         app:layout_constraintTop_toTopOf="parent">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="@font/ob_poppins_semibold" android:text="What is your goal with PDFs?" android:textColor="@color/ob_black" android:textSize="20sp" />
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:fontFamily="@font/ob_poppins_medium" android:text="Show strengths, work efficiently." android:textColor="@color/ob_text_secondary" android:textSize="14sp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="@font/ob_poppins_semibold" android:text="@string/ob_goal_title" android:textColor="@color/ob_black" android:textSize="20sp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:fontFamily="@font/ob_poppins_medium" android:text="@string/ob_goal_subtitle" android:textColor="@color/ob_text_secondary" android:textSize="14sp" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView

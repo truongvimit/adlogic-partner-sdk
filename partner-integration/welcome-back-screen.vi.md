@@ -12,7 +12,7 @@ SDK mặc định ẩn. Bật trong asset app hoặc remote `onboarding_config`:
 
 Khi tắt, cả hai native Welcome Back không được preload. Lần mở từ launcher của user cũ vào thẳng app, mở dưới ad splash, với `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
 
-SDK có sẵn 4 mục tiêu PDF (Edit PDF, Add text, Sign & fill, Split & merge). Thay bằng của app:
+SDK có sẵn 4 mục tiêu chung (Pick up where I left off, Discover something new, Open my favorites, Adjust my settings), id lần lượt là `resume`, `discover`, `favorites`, `settings`. Thay bằng của app:
 
 ```kotlin
 welcomeBackScreen = WelcomeBackScreenConfig(

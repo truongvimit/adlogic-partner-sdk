@@ -18,15 +18,15 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], application = Application::class)
 class GoalOptionAdapterTest {
     @Test
-    fun `recycled holder replaces Edit PDF with Compress and current selection`() {
+    fun `recycled holder replaces Edit with Compress and current selection`() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val adapter = GoalOptionAdapter(
-            listOf(GoalOption("edit", title = "Edit PDF"), GoalOption("compress", title = "Compress")),
+            listOf(GoalOption("edit", title = "Edit"), GoalOption("compress", title = "Compress")),
             GoalsScreenConfig().optionLayoutRes,
         ) { _, _ -> }
         val holder = adapter.onCreateViewHolder(FrameLayout(context), 0)
         adapter.onBindViewHolder(holder, 0)
-        assertEquals("Edit PDF", holder.itemView.findViewById<TextView>(R.id.ob_goal_option_title).text.toString())
+        assertEquals("Edit", holder.itemView.findViewById<TextView>(R.id.ob_goal_option_title).text.toString())
         adapter.selectedIds = setOf("compress")
         adapter.onBindViewHolder(holder, 1)
         assertEquals("Compress", holder.itemView.findViewById<TextView>(R.id.ob_goal_option_title).text.toString())

@@ -10,9 +10,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.dialog.PrepareLoadingAdsDialog
@@ -70,13 +70,13 @@ class InterstitialPlacementBehaviorTest {
             NetworkCapabilities().also {
                 shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("placement-behavior-test")
         })
-        ERainAd.getInstance().setIntervalInterstitialAd(0)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setIntervalInterstitialAd(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -175,7 +175,7 @@ class InterstitialPlacementBehaviorTest {
 
         assertEquals(listOf(AdSkipReason.CAPPED_BY_MODULE), result.skipped)
         assertEquals(0, raw.hosts.size)
-        val messages = ShadowLog.getLogsForTag("ERainStudio").map { it.msg }
+        val messages = ShadowLog.getLogsForTag("AdsSdk").map { it.msg }
         assertTrue(messages.toString(), messages.any { it.startsWith("Interstitial click cap enabled: 3 ") })
         assertTrue(messages.toString(), messages.any { it.contains("daily click cap (3/3)") })
     }
@@ -185,9 +185,9 @@ class InterstitialPlacementBehaviorTest {
 
     private fun loadAndFill(): Int02VendorAd {
         val raw = Int02VendorAd(UNIT).also { vendorAds += it }
-        var loaded: ApInterstitialAd? = null
+        var loaded: InterstitialAdWrapper? = null
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded = ad }
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded = ad }
         })
         requests.last().onAdLoaded(raw)
         mainLooper.idle()

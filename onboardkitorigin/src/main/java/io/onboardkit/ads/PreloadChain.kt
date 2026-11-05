@@ -33,8 +33,8 @@ class PreloadChain internal constructor(
     private var welcome1HandoffPending = false
 
     /**
-     * True when this run's LFO will be the SHARED_POOL one. That LFO requests LFO1 itself, as
-     * DashDrama does, so the splash does not preload it. Set by [io.onboardkit.OnboardingSdk].
+     * True when this run's LFO will be the SHARED_POOL one. That LFO requests LFO1 itself,
+     * so the splash does not preload it. Set by [io.onboardkit.OnboardingSdk].
      */
     internal var pooledLanguageRun: () -> Boolean = { false }
 

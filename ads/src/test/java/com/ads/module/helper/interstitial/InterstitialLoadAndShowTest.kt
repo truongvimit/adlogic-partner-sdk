@@ -11,9 +11,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.admob.Admob
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.config.settings.SettingsDocument
 import com.ads.module.consent.ConsentCenter
@@ -40,7 +40,7 @@ import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowNetworkInfo
 import java.util.concurrent.TimeUnit
 
-/** Public manager/ERain/Admob flow; reuse only INT-02's external GMA/bootstrap boundaries. */
+/** Public manager/AdsSdk/Admob flow; reuse only INT-02's external GMA/bootstrap boundaries. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -72,13 +72,13 @@ class InterstitialLoadAndShowTest {
             NetworkCapabilities().also {
                 shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("int01-test-client-token")
         })
-        ERainAd.getInstance().setIntervalInterstitialAd(0)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setIntervalInterstitialAd(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -183,7 +183,7 @@ class InterstitialLoadAndShowTest {
         val waitingDialog = requireNotNull(ShadowDialog.getLatestDialog())
         assertTrue(waitingDialog.isShowing)
         assertEquals(1, requests.size)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         mainLooper.idleFor(1, TimeUnit.SECONDS)
         val raw = newVendor().apply {
             beforeShow = { assertEquals("UnderAd advances before the vendor invocation", 1, result.completed) }
@@ -205,7 +205,7 @@ class InterstitialLoadAndShowTest {
         var loaded = 0
         var clicked = 0
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded++ }
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded++ }
             override fun onAdClicked() { clicked++ }
         })
         val result = RecordingShow()
@@ -363,7 +363,7 @@ class InterstitialLoadAndShowTest {
         InterstitialAdManager.show(activity, PLACEMENT, RecordingShow())
         mainLooper.idleFor(800, TimeUnit.MILLISECONDS)
         raw.callback.onAdDismissedFullScreenContent()
-        ERainAd.getInstance().setIntervalInterstitialAd(60)
+        AdsSdk.getInstance().setIntervalInterstitialAd(60)
         val blocked = RecordingShow()
         InterstitialAdManager.loadAndShow(activity, PLACEMENT, listOf(UNIT), blocked)
         assertEquals(listOf(AdSkipReason.CAPPED_BY_MODULE), blocked.skipped)
@@ -415,7 +415,7 @@ class InterstitialLoadAndShowTest {
         val persistentShow = RecordingShow()
         var firstFill = true
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) {
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) {
                 if (!firstFill) return
                 firstFill = false
                 InterstitialAdManager.show(activity, PLACEMENT, persistentShow)
@@ -455,12 +455,12 @@ class InterstitialLoadAndShowTest {
     private fun assertReleaseDuringDeliveryKeepsReplacement(release: () -> Unit) {
         val rawA = newVendor()
         val rawB = newVendor()
-        var bufferedB: ApInterstitialAd? = null
+        var bufferedB: InterstitialAdWrapper? = null
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) {
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) {
                 release()
                 InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-                    override fun onApInterstitialLoad(ad: ApInterstitialAd?) { bufferedB = ad }
+                    override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { bufferedB = ad }
                 })
                 requests.last().onAdLoaded(rawB)
             }
@@ -508,10 +508,10 @@ class InterstitialLoadAndShowTest {
 
     private fun newVendor() = Int02VendorAd(UNIT).also { vendorAds += it }
 
-    private fun loadAndFill(raw: Int02VendorAd): ApInterstitialAd {
-        var loaded: ApInterstitialAd? = null
+    private fun loadAndFill(raw: Int02VendorAd): InterstitialAdWrapper {
+        var loaded: InterstitialAdWrapper? = null
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded = ad }
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded = ad }
         })
         requests.last().onAdLoaded(raw)
         mainLooper.idle()

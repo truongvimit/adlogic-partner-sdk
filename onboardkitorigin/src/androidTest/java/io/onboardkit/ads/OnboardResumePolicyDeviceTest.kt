@@ -13,7 +13,7 @@ import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
 import com.ads.module.helper.EntitlementSource
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.InterstitialAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -55,7 +55,7 @@ class OnboardResumePolicyDeviceTest {
                 adsAppResume = phase != "open_off" && phase != "master_off",
             ))
             OnboardingSdk.install(app) {
-                adProvider = ERainAdProvider()
+                adProvider = AdsSdkProvider()
                 trackkitAutoTracking(false)
             }
             OnboardingSdk.configure(onboardKitConfig {

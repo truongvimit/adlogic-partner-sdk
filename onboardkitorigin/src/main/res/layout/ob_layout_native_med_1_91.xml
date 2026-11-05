@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Native template 3 — Figma "native_med_1_91" (node 465:1360), Mode=True. Picked by
+  Native template 3. Picked by
   `ad_config.<key>.templateId = 3`.
 
-  Figma layouts A–D are the same three blocks in four orders, so they are this one file plus the
+  Layouts A–D are the same three blocks in four orders, so they are this one file plus the
   placement's `components`: the blocks are direct children of the vertical `ad_container`, which
-  NativeAdStyler reorders. The body rides inside `block_icon_headline` as in every Figma layout, so
+  NativeAdStyler reorders. The body rides inside `block_icon_headline` as in every layout, so
   `components` only toggles it. XML order is layout C, the order the default `components` gives.
   Layout E (small inline button) is not shipped.
 
@@ -57,7 +57,7 @@
                     android:minHeight="@dimen/ob_native_med_1_91_title_row_height"
                     android:orientation="horizontal">
 
-                    <!-- Figma "Tag/ads/2" — the chip the splash and Confirm Language natives use. -->
+                    <!-- The chip the splash and Confirm Language natives use. -->
                     <TextView
                         android:id="@+id/ad_icon"
                         android:layout_width="wrap_content"
@@ -85,7 +85,7 @@
                         android:maxLines="2"
                         android:textColor="@color/ob_native_med_1_91_headline"
                         android:textSize="@dimen/ob_text_native_med_1_91_headline"
-                        tools:text="Tiki 11.01 Shopping" />
+                        tools:text="Sample App" />
                 </LinearLayout>
 
                 <TextView

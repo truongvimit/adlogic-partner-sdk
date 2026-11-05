@@ -8,7 +8,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.poolSnapshot
@@ -40,10 +40,10 @@ class ResumeStartTest {
     private val provider get() = PoolUiSdk.provider
     private val controllers = mutableListOf<ActivityController<*>>()
 
-    private lateinit var loader: ApFakeLoader
+    private lateinit var loader: FakeAdLoader
 
     @Before fun setUp() {
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         PoolUiSdk.install(app, loader)
         val flow = poolSnapshot()
         OnboardingSdk.session.nativeFlow = flow

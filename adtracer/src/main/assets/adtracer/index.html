@@ -878,7 +878,7 @@ const CLICK_BLIND = new Set(['splash_inter', 'open_resume']);
 
 /**
  * NATIVE sums both signals: app-side natives report a display via `rendered` (first bind of an
- * ApNativeAd) while OnboardKit natives report it via `shown` (bindNative true). The two paths
+ * NativeAdWrapper) while OnboardKit natives report it via `shown` (bindNative true). The two paths
  * never target the same placement key, so no ad is counted twice.
  */
 function shownOf(a) {

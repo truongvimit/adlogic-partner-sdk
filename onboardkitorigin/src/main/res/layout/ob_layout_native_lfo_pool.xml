@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Native template 4 — DashDrama's SHARED_POOL LFO card.
+  Native template 4 — the SHARED_POOL LFO card.
 
   The runtime LFO card is a short native: headline/body first, a wide media well below it, and a
   full-width CTA at the bottom. Its media measures about 3.14:1 on the captured device, unlike
   template 1's 1.68:1 card, but never under 120dp high: GMS requires that of a video MediaView, and
   the LFO carousel's 85% page is narrower than the screen. The headline is one line so the loading
   skeleton has the height of the card it stands in for. The body stays inside the headline block so `components` can still
-  show or hide it without pulling it out of the DashDrama-shaped header.
+  show or hide it without pulling it out of the header.
 -->
 <com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

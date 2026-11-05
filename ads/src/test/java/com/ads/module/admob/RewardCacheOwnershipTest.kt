@@ -5,8 +5,8 @@ import android.content.Context
 import android.os.Looper
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.ERainAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
@@ -70,10 +70,10 @@ class RewardCacheOwnershipTest {
         Entitlement.install(object : EntitlementSource {
             override fun isPremium(context: Context): Boolean = false
         })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("reward-ownership-test")
         })
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -98,7 +98,7 @@ class RewardCacheOwnershipTest {
     fun `cache only show with no ad fails without starting a request`() {
         val callback = RecordingReward()
 
-        ERainAd.getInstance().showRewardAds(activity, null, callback, false)
+        AdsSdk.getInstance().showRewardAds(activity, null, callback, false)
         main.idleFor(5, TimeUnit.MINUTES)
 
         assertEquals(listOf("failed:0"), callback.events)
@@ -110,13 +110,13 @@ class RewardCacheOwnershipTest {
         val ad = Tel02RewardedAd(UNIT)
         val callback = RecordingReward()
         var loaded = 0
-        ERainAd.getInstance().initRewardAds(activity, UNIT, object : AdCallback() {
+        AdsSdk.getInstance().initRewardAds(activity, UNIT, object : AdCallback() {
             override fun onRewardAdLoaded(rewardedAd: RewardedAd) {
                 loaded++
                 assertSame(ad, rewardedAd)
                 assertSame(ad, Admob.getInstance().rewardedAd)
                 assertNotNull("Paid listener must be ready before partner code can show", ad.state.paid)
-                ERainAd.getInstance().showRewardAds(activity, rewardedAd, callback, false)
+                AdsSdk.getInstance().showRewardAds(activity, rewardedAd, callback, false)
                 assertNull(Admob.getInstance().rewardedAd)
             }
         })
@@ -137,7 +137,7 @@ class RewardCacheOwnershipTest {
     fun `existing supplied ad overload retains refill when the vendor reports shown`() {
         val ad = load(Tel02RewardedAd(UNIT))
 
-        ERainAd.getInstance().showRewardAds(activity, ad, RecordingReward())
+        AdsSdk.getInstance().showRewardAds(activity, ad, RecordingReward())
         assertEquals(1, requests.size)
         ad.state.callback!!.onAdShowedFullScreenContent()
 
@@ -148,7 +148,7 @@ class RewardCacheOwnershipTest {
     fun `existing null supplied ad overload retains its request and failure callback`() {
         val callback = RecordingReward()
 
-        ERainAd.getInstance().showRewardAds(activity, null, callback)
+        AdsSdk.getInstance().showRewardAds(activity, null, callback)
 
         assertEquals(1, requests.size)
         assertEquals(listOf("failed:0"), callback.events)
@@ -158,7 +158,7 @@ class RewardCacheOwnershipTest {
     fun `presentation callbacks only follow actual vendor events even after a long wait`() {
         val ad = load(Tel02RewardedAd(UNIT))
         val callback = RecordingReward()
-        ERainAd.getInstance().showRewardAds(activity, ad, callback, false)
+        AdsSdk.getInstance().showRewardAds(activity, ad, callback, false)
 
         main.idleFor(5, TimeUnit.MINUTES)
         assertEquals(emptyList<String>(), callback.events)
@@ -182,7 +182,7 @@ class RewardCacheOwnershipTest {
     fun `failed cache only presentation stays consumed and forwards the vendor error`() {
         val ad = load(Tel02RewardedAd(UNIT))
         val callback = RecordingReward()
-        ERainAd.getInstance().showRewardAds(activity, ad, callback, false)
+        AdsSdk.getInstance().showRewardAds(activity, ad, callback, false)
 
         ad.state.callback!!.onAdFailedToShowFullScreenContent(AdError(7, "Cannot present", "test.gma"))
         ad.state.callback!!.onAdFailedToShowFullScreenContent(AdError(7, "Duplicate", "test.gma"))
@@ -199,7 +199,7 @@ class RewardCacheOwnershipTest {
         val first = load(Tel02RewardedAd(UNIT))
         val second = load(Tel02RewardedAd("reward-other-unit"))
 
-        ERainAd.getInstance().showRewardAds(activity, first, RecordingReward(), false)
+        AdsSdk.getInstance().showRewardAds(activity, first, RecordingReward(), false)
         first.state.callback!!.onAdShowedFullScreenContent()
 
         assertSame(second, Admob.getInstance().rewardedAd)
@@ -219,11 +219,11 @@ class RewardCacheOwnershipTest {
             override fun onRewardedAdClosed() {
                 firstEvents.onRewardedAdClosed()
                 assertFalse("Old presentation must be cleared before partner callback", AppOpenManager.getInstance().isInterstitialShowing)
-                ERainAd.getInstance().showRewardAds(activity, second, secondEvents, false)
+                AdsSdk.getInstance().showRewardAds(activity, second, secondEvents, false)
                 second.state.callback!!.onAdShowedFullScreenContent()
             }
         }
-        ERainAd.getInstance().showRewardAds(activity, first, firstCallback, false)
+        AdsSdk.getInstance().showRewardAds(activity, first, firstCallback, false)
         first.state.callback!!.onAdShowedFullScreenContent()
 
         first.state.callback!!.onAdDismissedFullScreenContent()
@@ -245,7 +245,7 @@ class RewardCacheOwnershipTest {
     fun `a real earned callback arriving after close is still forwarded`() {
         val ad = load(Tel02RewardedAd(UNIT))
         val callback = RecordingReward()
-        ERainAd.getInstance().showRewardAds(activity, ad, callback, false)
+        AdsSdk.getInstance().showRewardAds(activity, ad, callback, false)
         ad.state.callback!!.onAdShowedFullScreenContent()
         ad.state.callback!!.onAdDismissedFullScreenContent()
 
@@ -265,14 +265,14 @@ class RewardCacheOwnershipTest {
         `when`(first.adUnitId).thenReturn(UNIT)
         `when`(first.responseInfo).thenReturn(firstResponse)
         `when`(firstResponse.mediationAdapterClassName).thenReturn("test.first.Adapter")
-        ERainAd.getInstance().initRewardAds(activity, UNIT, AdCallback())
+        AdsSdk.getInstance().initRewardAds(activity, UNIT, AdCallback())
         requests.last().onAdLoaded(first)
         val paid = ArgumentCaptor.forClass(OnPaidEventListener::class.java)
         verify(first).setOnPaidEventListener(paid.capture())
 
         val second = mock(RewardedAd::class.java)
         `when`(second.adUnitId).thenReturn("reward-other-unit")
-        ERainAd.getInstance().initRewardAds(activity, "reward-other-unit", AdCallback())
+        AdsSdk.getInstance().initRewardAds(activity, "reward-other-unit", AdCallback())
         requests.last().onAdLoaded(second)
         val value = mock(AdValue::class.java)
         `when`(value.currencyCode).thenReturn("USD")
@@ -285,14 +285,14 @@ class RewardCacheOwnershipTest {
     }
 
     private fun load(ad: Tel02RewardedAd): Tel02RewardedAd {
-        ERainAd.getInstance().initRewardAds(activity, ad.adUnitId, AdCallback())
+        AdsSdk.getInstance().initRewardAds(activity, ad.adUnitId, AdCallback())
         requests.last().onAdLoaded(ad)
         return ad
     }
 
     /** Clear through an ordinary failed load; do not overwrite manager internals in the test. */
     private fun clearLegacyBuffer() {
-        ERainAd.getInstance().initRewardAds(activity, UNIT, AdCallback())
+        AdsSdk.getInstance().initRewardAds(activity, UNIT, AdCallback())
         requests.last().onAdFailedToLoad(LoadAdError(3, "Fixture cleanup", "test.gma", null, null))
         requests.clear()
     }

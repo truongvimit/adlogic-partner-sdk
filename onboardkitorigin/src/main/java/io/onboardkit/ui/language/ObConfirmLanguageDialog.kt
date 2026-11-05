@@ -52,7 +52,7 @@ internal class ConfirmAdSlot {
 }
 
 /**
- * Figma "Modal" (node 3584:24369) — the LFO's Confirm Language prompt.
+ * The LFO's Confirm Language prompt.
  *
  * Raised from the fourth language-item tap onward, including the selected language.
  *
@@ -191,7 +191,7 @@ internal class ObConfirmLanguageDialog(
     }
 
     /**
-     * Figma's card is 328dp. On a narrower device that would run under the screen edges, so the
+     * The card is 328dp. On a narrower device that would run under the screen edges, so the
      * design width is a maximum rather than a fixed size.
      */
     private fun cardWidthPx(): Int {
@@ -218,7 +218,7 @@ internal class ObConfirmLanguageDialog(
         /** Back or a tap outside the card — one reason, because Dialog reports them alike. */
         const val REASON_DISMISS = "dismiss"
 
-        /** Figma Shadow/xl reads as a soft scrim rather than the platform's default 0.6. */
+        /** The design reads as a soft scrim rather than the platform's default 0.6. */
         const val SCRIM_ALPHA = 0.4f
         const val MIN_SIDE_MARGIN_DP = 16f
     }

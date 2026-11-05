@@ -23,7 +23,7 @@ import io.onboardkit.ui.applyFullScreenSkip
 import io.onboardkit.ui.pager.LazyStepFragment
 
 /**
- * A full-screen page of the pooled pager (DashDrama J6/f). The pool's selection fills it from
+ * A full-screen page of the pooled pager. The pool's selection fills it from
  * RESUMED, X appears a fixed time after the page first resumes, and a page left with nothing to
  * show while selected skips itself. Auto-next belongs to the pager, which counts it from selection.
  */
@@ -96,7 +96,7 @@ internal class PoolFullAdPageFragment : LazyStepFragment() {
         onScreen = false
     }
 
-    /** DD J6/c: an empty page moves on, but only once it is the page the user is on. */
+    /** An empty page moves on, but only once it is the page the user is on. */
     private fun onAdUnavailable() {
         unavailable = true
         if (onScreen) complete(StepExit.AD_FAILED)
@@ -108,7 +108,7 @@ internal class PoolFullAdPageFragment : LazyStepFragment() {
         OnboardingSdk.emitEvent(OnboardingEvent.AdShown(AdPlacement.StepFullScreen(stepId).key))
     }
 
-    /** DD J6/d.java: X shows a fixed time after the first resume, whatever the ad does meanwhile. */
+    /** X shows a fixed time after the first resume, whatever the ad does meanwhile. */
     override fun onResume() {
         super.onResume()
         if (skipScheduled) return

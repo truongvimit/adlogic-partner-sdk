@@ -1,15 +1,15 @@
 {
   "inter_splash": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1200371069", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1200371069", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1200371069", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true }
     ],
     "isEnable": true,
     "enable_ua_check": false
   },
   "banner_splash": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/6261126058" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/9214589741" }],
     "isEnable": true,
     "reloadIntervalSeconds": 30,
     "enable_ua_check": false
@@ -24,12 +24,12 @@
   },
   "open_resume": {
     "app_resume_load_delay_ms": 2000,
-    "ids": [{ "id": "ca-app-pub-7208941695689653/4237597942" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/9257395921" }],
     "isEnable": true,
     "enable_ua_check": false
   },
   "native_onboarding_fullscreen_1_4": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/8727507290" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "default",
@@ -43,7 +43,7 @@
     "enable_ua_check": true
   },
   "native_permission": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/9849017274" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "default",
@@ -57,7 +57,7 @@
     "enable_ua_check": false
   },
   "native_home": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/9849017274" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "#1E88E5",
@@ -72,14 +72,14 @@
   },
   "inter_after_ob3": {
     "ids": [
-      { "id": "ca-app-pub-8736026111298299/7318554179", "isEnable": true },
-      { "id": "ca-app-pub-8736026111298299/8259888721", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true }
     ],
     "isEnable": true,
     "enable_ua_check": false
   },
   "inter_onboarding": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/1200371069" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/1033173712" }],
     "isEnable": true,
     "enable_ua_check": true
   },
@@ -96,7 +96,7 @@
     "enable_ua_check": false
   },
   "native_survey": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/9849017274" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "default",
@@ -110,7 +110,7 @@
     "enable_ua_check": false
   },
   "native_confirm_uninstall": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/9849017274" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "default",
@@ -125,8 +125,8 @@
   },
   "native_resume": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/9849017274", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/9849017274", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -142,8 +142,8 @@
   },
   "inter_resume": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1200371069", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1200371069", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/1033173712", "isEnable": true }
     ],
     "isEnable": true,
     "enable_ua_check": false
@@ -154,15 +154,15 @@
     "enable_ua_check": false
   },
   "inter_back": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/1200371069" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/1033173712" }],
     "isEnable": true,
     "enable_ua_check": false
   },
   "native_lang": {
     "carousel": true,
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -179,8 +179,8 @@
   "native_lang_alt": {
     "carousel": true,
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -196,8 +196,8 @@
   },
   "native_select": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -208,8 +208,8 @@
   },
   "native_select_alt": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1519348533", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -220,8 +220,8 @@
   },
   "native_popup_lang": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/1611434606", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -237,8 +237,8 @@
   },
   "native_ob1": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/5251296713", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/5251296713", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -254,8 +254,8 @@
   },
   "native_ob2": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/5251296713", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/8919078982", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -272,7 +272,7 @@
   "native_full1": {
     "ids": [
       { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/8727507290", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -288,8 +288,8 @@
   },
   "native_ob3": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/8727507290", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/4756472697", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -305,8 +305,8 @@
   },
   "native_fs": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/8727507290", "isEnable": true },
-      { "id": "ca-app-pub-7208941695689653/8727507290", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -321,7 +321,7 @@
     "enable_ua_check": false
   },
   "native_uninstall": {
-    "ids": [{ "id": "ca-app-pub-7208941695689653/9849017274" }],
+    "ids": [{ "id": "ca-app-pub-3940256099942544/2247696110" }],
     "isEnable": true,
     "click_action": "reload",
     "colorCTA": "default",
@@ -337,7 +337,7 @@
   "native_full2": {
     "ids": [
       { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/9849017274", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -353,8 +353,8 @@
   },
   "native_ob4": {
     "ids": [
-      { "id": "ca-app-pub-7208941695689653/8727507290", "isEnable": false },
-      { "id": "ca-app-pub-7208941695689653/4967638957", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": false },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "auto_next",
@@ -370,8 +370,8 @@
   },
   "native_welcome1": {
     "ids": [
-      { "id": "ca-app-pub-9664999052523111/2888052227", "isEnable": true },
-      { "id": "ca-app-pub-9664999052523111/6294444717", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",
@@ -387,8 +387,8 @@
   },
   "native_welcome2": {
     "ids": [
-      { "id": "ca-app-pub-9664999052523111/8616786727", "isEnable": true },
-      { "id": "ca-app-pub-9664999052523111/8455995467", "isEnable": true }
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true },
+      { "id": "ca-app-pub-3940256099942544/2247696110", "isEnable": true }
     ],
     "isEnable": true,
     "click_action": "reload",

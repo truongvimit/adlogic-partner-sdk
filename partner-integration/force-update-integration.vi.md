@@ -2,7 +2,7 @@
 
 ## Chính sách update tại splash
 
-`ITGUpdateManager` hỗ trợ Play IMMEDIATE/FLEXIBLE và dọn listener theo lifecycle. `ForceUpdateGate` giữ navigation khi app cần cập nhật bắt buộc.
+`InAppUpdateManager` hỗ trợ Play IMMEDIATE/FLEXIBLE và dọn listener theo lifecycle. `ForceUpdateGate` giữ navigation khi app cần cập nhật bắt buộc.
 
 UMP, remote và billing chạy song song. Sau consent, SDK đọc policy hiện đã activate: policy bắt buộc đã biết giữ khóa request, không tải ads và không mở paywall/navigation. Nếu chưa biết policy bắt buộc, SDK nhả khóa và request ads ngay, không chờ fetch.
 
@@ -131,10 +131,10 @@ com.ads.module.update.ForceUpdateGate.await(this, config)
 Gate dùng Play **IMMEDIATE** sau khi bấm Update now, cả với gợi ý lẫn bắt buộc; gợi ý có Later để đi tiếp. Nếu muốn tải nền FLEXIBLE hoặc tự xây UI/policy, dùng manager trực tiếp:
 
 ```kotlin
-private lateinit var updates: com.ads.module.ump.ITGUpdateManager
+private lateinit var updates: com.ads.module.ump.InAppUpdateManager
 
 // onCreate:
-updates = com.ads.module.ump.ITGUpdateManager(
+updates = com.ads.module.ump.InAppUpdateManager(
     this, 7101,
     object : com.ads.module.ump.IUpdateInstanceCallback {
         override fun updateAvailableListener(
@@ -154,7 +154,7 @@ Trả `IMMEDIATE`, `FLEXIBLE` hoặc `-1` để bỏ qua. Manager không tự đ
 AndroidX Activity được tự đăng ký lifecycle: resume immediate dang dở / complete flexible đã tải, dispose khi destroy. Với Activity thuần, gọi `updates.onResume()` và `updates.dispose()` từ lifecycle tương ứng. Forward `onActivityResult` nếu muốn nhận callback kết quả:
 
 ```kotlin
-@Deprecated("Legacy result forwarding for ITGUpdateManager")
+@Deprecated("Legacy result forwarding for InAppUpdateManager")
 override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
     super.onActivityResult(requestCode, resultCode, data)
     updates.onActivityResult(requestCode, resultCode)

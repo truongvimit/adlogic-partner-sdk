@@ -178,7 +178,7 @@ class NativeTemplateIdTest {
         }
     }
 
-    @Test fun `components arranges template 3 into Figma layouts A to D`() {
+    @Test fun `components arranges template 3 into layouts A to D`() {
         val head = com.ads.module.R.id.block_icon_headline
         val media = com.ads.module.R.id.block_media
         val cta = com.ads.module.R.id.ad_call_to_action

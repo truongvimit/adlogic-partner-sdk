@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma "Welcome Screen / Choose Goal" (node 2103:2807). Partners override this layout by name;
+<!-- Partners override this layout by name;
      the SDK needs ob_welcome_back_options (RecyclerView), ob_welcome_back_continue and
      ob_welcome_back_ad (FrameLayout). -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"

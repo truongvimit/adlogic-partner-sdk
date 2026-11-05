@@ -26,7 +26,7 @@ for a standalone bridge, declare `trackkit` explicitly at the same tag.
 
 ## Connect SDK events
 
-**1. Copy the complete [AdTracerSink.kt](../app/src/debug/java/com/itg/template/tracking/AdTracerSink.kt)**
+**1. Copy the complete [AdTracerSink.kt](../app/src/debug/java/io/adlogic/sample/tracking/AdTracerSink.kt)**
 into `app/src/debug/java/com/example/app/debug/AdTracerSink.kt`. Change its package to
 `com.example.app.debug` (or your own package). Keep its event and format mappings: they translate
 Trackkit events into the names the dashboard counts.

@@ -9,7 +9,7 @@ import androidx.annotation.LayoutRes
 import androidx.annotation.MainThread
 import androidx.annotation.RestrictTo
 import com.ads.module.admob.Admob
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.adnative.NativeAdShimmer
@@ -48,7 +48,7 @@ class PoolSlotBinder(
         IGNORED,
     }
 
-    private var bound: ApNativeAd? = null
+    private var bound: NativeAdWrapper? = null
     private var boundView: NativeAdView? = null
     private var registered: NativeAd? = null
     private var skeleton: ShimmerFrameLayout? = null
@@ -58,7 +58,7 @@ class PoolSlotBinder(
     private val registrations = mutableListOf<Pair<WeakReference<NativeAd>, WeakReference<NativeAdView>>>()
 
     /** The ad whose view the container holds, shown or hidden; null under a skeleton. */
-    fun boundAd(): ApNativeAd? = bound?.takeIf { boundView?.parent === container }
+    fun boundAd(): NativeAdWrapper? = bound?.takeIf { boundView?.parent === container }
 
     /** The next delivered ad is inflated anew even when it is the one already bound (a replay). */
     fun forceFreshOnNextRender() {
@@ -72,7 +72,7 @@ class PoolSlotBinder(
     /** The container's view is its ad's last registrant, the one view the vendor reports clicks from. */
     fun holdsRegistration(): Boolean = boundAd() != null && isLastRegistrant(registered, boundView)
 
-    fun render(selection: PoolSelection<ApNativeAd>): Outcome {
+    fun render(selection: PoolSelection<NativeAdWrapper>): Outcome {
         val ad = selection.ad
         return when {
             !selection.show -> hide()
@@ -116,7 +116,7 @@ class PoolSlotBinder(
         registered = null
     }
 
-    private fun bind(ad: ApNativeAd): Outcome {
+    private fun bind(ad: NativeAdWrapper): Outcome {
         val nativeAd = ad.admobNativeAd ?: return Outcome.IGNORED
         val current = boundView
         if (!forceFresh && ad === bound && nativeAd === registered && current?.parent === container) {

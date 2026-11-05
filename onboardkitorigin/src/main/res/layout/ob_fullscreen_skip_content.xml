@@ -2,7 +2,7 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Figma 14:44698: 36dp circle, 12dp glyph; transparent inset extends touch to 48dp. -->
+    <!-- 36dp circle, 12dp glyph; transparent inset extends touch to 48dp. -->
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/ob_skip_close"
         android:layout_width="48dp"

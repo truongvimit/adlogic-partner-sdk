@@ -20,7 +20,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <com.itg.template.ui.component.custom.LoadingDotsTextView
+    <io.adlogic.sample.ui.component.custom.LoadingDotsTextView
         android:id="@+id/loadingText"
         style="@style/text_bold_10"
         android:layout_width="wrap_content"

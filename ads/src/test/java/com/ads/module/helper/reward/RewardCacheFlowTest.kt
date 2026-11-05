@@ -6,10 +6,10 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.Admob
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.AdUnitConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.Entitlement
@@ -46,7 +46,7 @@ import org.robolectric.annotation.Implements
 import org.robolectric.annotation.LooperMode
 import java.util.concurrent.TimeUnit
 
-/** Exercise manager -> waterfall -> ERain -> Admob; replace only the external GMA objects. */
+/** Exercise manager -> waterfall -> AdsSdk -> Admob; replace only the external GMA objects. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -74,7 +74,7 @@ class RewardCacheFlowTest {
         Entitlement.install(object : EntitlementSource {
             override fun isPremium(context: Context): Boolean = premium
         })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("reward-cache-test-client-token")
         })
         AppOpenManager.getInstance().disableAppResume()

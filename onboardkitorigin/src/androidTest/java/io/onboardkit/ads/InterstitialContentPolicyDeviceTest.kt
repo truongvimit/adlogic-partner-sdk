@@ -15,12 +15,12 @@ import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
 import com.ads.module.helper.interstitial.InterstitialBufferOptions
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdSkipReason
@@ -70,14 +70,14 @@ class InterstitialContentPolicyDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
-            ERainAd.getInstance().setIntervalInterstitialAd(0)
-            ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setCountClickToShowAds(1, 0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            AdsSdk.getInstance().setIntervalInterstitialAd(0)
+            AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+            AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+            AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
         }
@@ -206,11 +206,11 @@ class InterstitialContentPolicyDeviceTest {
     }
 
     private class RecordingLoad : AdCallback() {
-        val ads = CopyOnWriteArrayList<ApInterstitialAd>()
+        val ads = CopyOnWriteArrayList<InterstitialAdWrapper>()
         val errors = CopyOnWriteArrayList<String>()
         val loadedAt = AtomicLong()
         val finished = CountDownLatch(1)
-        override fun onApInterstitialLoad(ad: ApInterstitialAd?) {
+        override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) {
             loadedAt.set(SystemClock.elapsedRealtime())
             if (ad == null) errors += "Null fill" else ads += ad
             finished.countDown()

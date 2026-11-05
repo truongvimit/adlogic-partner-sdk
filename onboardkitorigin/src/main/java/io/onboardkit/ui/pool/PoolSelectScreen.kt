@@ -16,13 +16,13 @@ import io.onboardkit.flow.NativeFlowSnapshot
 import io.onboardkit.remote.OnboardingSettings
 
 /**
- * DashDrama's Favorite ad pattern, shared by every two-ad select screen: [ad1] is claimed
+ * The ad pattern shared by every two-ad select screen: [ad1] is claimed
  * politely when the screen opens, [ad2] forcibly on every selection, and the forward button stays
  * hidden until a fixed time after the first selection. Back in front, the screen gives the slot
- * back to its owner, refreshes it and retries its last claim politely (FavoriteFragment.java:110-124).
+ * back to its owner, refreshes it and retries its last claim politely.
  *
- * The one slot keeps [ad1]'s template whichever ad the pool selects. Like Favorite's collector
- * (C6/h), it hides only when ads are refused for the whole flow, never on [ad1]'s own refusal:
+ * The one slot keeps [ad1]'s template whichever ad the pool selects. It hides only when ads are
+ * refused for the whole flow, never on [ad1]'s own refusal:
  * an [ad2] the screen owns, or a leftover, still shows.
  */
 internal class PoolSelectScreen(
@@ -71,7 +71,7 @@ internal class PoolSelectScreen(
         ).start()
     }
 
-    /** DD C6/b: every selection claims [ad2] forcibly; the engine requests it only while it holds nothing. */
+    /** Every selection claims [ad2] forcibly; the engine requests it only while it holds nothing. */
     fun onSelection() {
         attempt(ad2, LoadMode.FORCED)
         if (selectedOnce) return

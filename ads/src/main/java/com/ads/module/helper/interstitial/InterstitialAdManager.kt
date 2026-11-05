@@ -11,9 +11,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ads.module.admob.Admob
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.ads.wrapper.ApInterstitialAd
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.dialog.PrepareLoadingAdsDialog
 import com.ads.module.helper.AdGate
@@ -138,24 +138,24 @@ object InterstitialAdManager {
      * the box.
      *
      * Backed by the module's own `openActivityAfterShowInterAds` — the same switch the legacy
-     * splash paths read and the one `ERainAd.setOpenActivityAfterShowInterAds` writes — so this is
+     * splash paths read and the one `AdsSdk.setOpenActivityAfterShowInterAds` writes — so this is
      * a view onto one value, never a second copy that can drift.
      *
      * Set it once from `Application.onCreate`.
      */
     @JvmStatic
     var defaultNextAction: InterNextAction
-        get() = if (AdBehavior.text("interstitial.presentation.next_screen_timing", if (ERainAd.getInstance().isOpenActivityAfterShowInterAds) "UNDER_AD" else "AFTER_AD") == "UNDER_AD") {
+        get() = if (AdBehavior.text("interstitial.presentation.next_screen_timing", if (AdsSdk.getInstance().isOpenActivityAfterShowInterAds) "UNDER_AD" else "AFTER_AD") == "UNDER_AD") {
             InterNextAction.UnderAd
         } else {
             InterNextAction.AfterDismiss
         }
         set(value) {
-            ERainAd.getInstance()
+            AdsSdk.getInstance()
                 .setOpenActivityAfterShowInterAds(value == InterNextAction.UnderAd)
         }
 
-    private val cache = ConcurrentHashMap<String, CachedAd<ApInterstitialAd>>()
+    private val cache = ConcurrentHashMap<String, CachedAd<InterstitialAdWrapper>>()
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
     // A release invalidates restoration of a fill already removed for an in-progress show.
     // This does not cancel or change the existing background load behavior.
@@ -223,7 +223,7 @@ object InterstitialAdManager {
     ) {
         // Re-requesting over a ready ad burns a request and the fill
         cache[placement]?.takeIf { it.isFresh && it.ad.isReady }?.let { cached ->
-            notifyListener(placement) { it.onApInterstitialLoad(cached.ad) }
+            notifyListener(placement) { it.onInterstitialAdLoaded(cached.ad) }
             extra?.let { runCatching { it(null) } }
             return
         }
@@ -256,15 +256,15 @@ object InterstitialAdManager {
             ids,
             behavior.long("load.tier_timeout_ms", options.tierTimeoutMs),
             object : AdCallback() {
-                override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {
+                override fun onInterstitialAdLoaded(interstitialAdWrapper: InterstitialAdWrapper?) {
                     inFlight.remove(placement)
-                    if (apInterstitialAd == null || !apInterstitialAd.isReady) {
+                    if (interstitialAdWrapper == null || !interstitialAdWrapper.isReady) {
                         InterstitialFrequency.onLoadFailed(placement)
                         notifyLoadResult(placement, AdSkipReason.NOT_READY) { it.onAdFailedToLoad(null) }
                         return
                     }
-                    cache[placement] = CachedAd(apInterstitialAd, maxAgeMs = maxAgeMs)
-                    notifyLoadResult(placement, null) { it.onApInterstitialLoad(apInterstitialAd) }
+                    cache[placement] = CachedAd(interstitialAdWrapper, maxAgeMs = maxAgeMs)
+                    notifyLoadResult(placement, null) { it.onInterstitialAdLoaded(interstitialAdWrapper) }
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError?) {
@@ -652,7 +652,7 @@ object InterstitialAdManager {
         val completed = AtomicBoolean(false)
         val complete = { if (completed.compareAndSet(false, true)) runCatching { callback.onComplete() }; Unit }
         InterstitialFrequency.beginShow(placement)
-        ERainAd.getInstance().forceShowInterstitial(
+        AdsSdk.getInstance().forceShowInterstitial(
             context,
             ad,
             object : AdCallback() {
@@ -772,7 +772,7 @@ object InterstitialAdManager {
     }
 
     /** Drops an expired buffer so a caller never shows a stale wrapper that no-ops. */
-    private fun takeFresh(placement: String): ApInterstitialAd? {
+    private fun takeFresh(placement: String): InterstitialAdWrapper? {
         val cached = cache[placement] ?: return null
         if (!cached.isFresh) {
             cache.remove(placement)

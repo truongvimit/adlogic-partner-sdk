@@ -13,7 +13,7 @@ import android.content.SharedPreferences;
  */
 final class PurchasePrefs {
 
-    private static final String FILE = "erain_billing";
+    private static final String FILE = "billing_entitlement";
     private static final String KEY_PREMIUM = "premium_cached";
     private static final String KEY_PREMIUM_SOURCE = "premium_source";
 

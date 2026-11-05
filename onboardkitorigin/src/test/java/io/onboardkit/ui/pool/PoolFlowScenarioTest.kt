@@ -17,7 +17,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.adnative.pool.LoadResult
 import com.ads.module.helper.adnative.pool.MainLooperPoolScheduler
@@ -35,7 +35,7 @@ import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.ObNativeResume
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.installTestEngine
@@ -88,7 +88,7 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 
 /**
  * Whole SHARED_POOL runs through the real host, LFO to completion, with only the pool's ad loader
- * and the interstitial vendor faked: the DashDrama outcomes OC1-OC5, a purchase mid-flow, the
+ * and the interstitial vendor faked: the cross-stage outcomes, a purchase mid-flow, the
  * in-place locale and the analytics funnel against the classic flow for the same taps.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -100,8 +100,8 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolFlowScenarioTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private lateinit var vendor: ScenarioVendor
     private lateinit var locale: Locale
     private val controllers = mutableListOf<ActivityController<*>>()
@@ -136,7 +136,7 @@ class PoolFlowScenarioTest {
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(FRAME_MS))
         // Animation time never rewinds: a slide left running by another test would freeze this one's.
         AnimationUtils.currentAnimationTimeMillis()
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         vendor = ScenarioSdk.install(app)
         engine = installTestEngine(loader)
     }
@@ -205,7 +205,7 @@ class PoolFlowScenarioTest {
         pump()
     }
 
-    private fun fill(key: String): ApNativeAd = loader.fill(key).also { pump() }
+    private fun fill(key: String): NativeAdWrapper = loader.fill(key).also { pump() }
 
     private fun lfoSlot(): FrameLayout = host.findViewById(R.id.ob_native_container)
 
@@ -268,8 +268,8 @@ class PoolFlowScenarioTest {
     }
 
     /** Every pool state published while [block] runs. */
-    private fun recordPool(block: () -> Unit): List<PoolSnapshot<ApNativeAd>> {
-        val seen = mutableListOf<PoolSnapshot<ApNativeAd>>()
+    private fun recordPool(block: () -> Unit): List<PoolSnapshot<NativeAdWrapper>> {
+        val seen = mutableListOf<PoolSnapshot<NativeAdWrapper>>()
         val job = CoroutineScope(Dispatchers.Unconfined).launch { engine.snapshot.collect { seen += it } }
         try {
             block()
@@ -280,7 +280,7 @@ class PoolFlowScenarioTest {
     }
 
     /** Production's async gate and selector, derived in later main-looper messages. */
-    private fun installAsyncEngine(): NativePoolEngine<ApNativeAd> {
+    private fun installAsyncEngine(): NativePoolEngine<NativeAdWrapper> {
         SharedNativePool.resetForTest()
         return NativePoolEngine(
             loader = loader,
@@ -293,9 +293,9 @@ class PoolFlowScenarioTest {
         ).also(SharedNativePool::installForTest)
     }
 
-    // ── OC1-OC5 ──
+    // ── Cross-stage outcomes ──
 
-    @Test fun `OC1 a late LFO2 fill shows on page 0`() {
+    @Test fun `a late LFO2 fill shows on page 0`() {
         ScenarioSdk.configure(listOf(ob1, ob2))
         start()
         loader.exhaust(language1)
@@ -315,11 +315,11 @@ class PoolFlowScenarioTest {
         assertEquals("Page 0 still owns the slot it borrows into", stepOb1.key, engine.owner)
     }
 
-    @Test fun `OC2 with LFO2 loading at Done, page 0 is gate-skipped and shows LFO1 then LFO2 (sync parity)`() {
+    @Test fun `with LFO2 loading at Done, page 0 is gate-skipped and shows LFO1 then LFO2 (sync parity)`() {
         oc2(poolSnapshot())
     }
 
-    @Test fun `OC2 with LFO2 loading at Done, page 0 is gate-skipped and shows LFO1 then LFO2 (default async parity)`() {
+    @Test fun `with LFO2 loading at Done, page 0 is gate-skipped and shows LFO1 then LFO2 (default async parity)`() {
         engine = installAsyncEngine()
         oc2(poolSnapshot(PoolParity()))
     }
@@ -348,7 +348,7 @@ class PoolFlowScenarioTest {
         assertEquals(stepOb1.key, engine.owner)
     }
 
-    @Test fun `OC3 a late FULL1 fill shows on Goal by rule 2`() {
+    @Test fun `a late FULL1 fill shows on Goal by rule 2`() {
         ScenarioSdk.configure(listOf(ob1, full1, ob2), privacyGoals = goals)
         start()
         fill(language1)
@@ -384,7 +384,7 @@ class PoolFlowScenarioTest {
         assertEquals(View.VISIBLE, selectSlot().visibility)
     }
 
-    @Test fun `OC4 nothing is cancelled across stage changes or completeFlow`() {
+    @Test fun `nothing is cancelled across stage changes or completeFlow`() {
         ScenarioSdk.configure(listOf(ob1, full1, ob2), privacyGoals = goals)
         start()
         // FULL1 is warmed FORCED from page 0, so its chain also runs across every later stage.
@@ -429,7 +429,7 @@ class PoolFlowScenarioTest {
         assertTrue(OnboardingPool.routeResume)
     }
 
-    @Test fun `OC5 after completeFlow the pooled resume screen shows the newest leftover`() {
+    @Test fun `after completeFlow the pooled resume screen shows the newest leftover`() {
         ScenarioSdk.configure(listOf(ob1))
         start()
         val lfo1 = fill(language1)

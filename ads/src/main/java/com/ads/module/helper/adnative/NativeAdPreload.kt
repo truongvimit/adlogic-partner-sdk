@@ -2,7 +2,7 @@ package com.ads.module.helper.adnative
 
 import android.app.Activity
 import android.content.Context
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 
@@ -37,12 +37,12 @@ class NativeAdPreload private constructor() {
         isPreloadAvailable(key) || preloadWithKey(key, activity, config)
 
     fun canRequestLoad(context: Context): Boolean = AdGate.skipReason(context, enabled = true) == null
-    fun getAdNative(key: String): ApNativeAd? = NativeAdManager.peek(key)
-    fun pollAdNative(key: String): ApNativeAd? = NativeAdManager.poll(key)
+    fun getAdNative(key: String): NativeAdWrapper? = NativeAdManager.peek(key)
+    fun pollAdNative(key: String): NativeAdWrapper? = NativeAdManager.poll(key)
     fun isPreloadAvailable(key: String): Boolean = NativeAdManager.isReady(key) || NativeAdManager.isLoading(key)
     fun isPreloadInProgress(key: String): Boolean = NativeAdManager.isLoading(key)
-    fun getNativeAdBuffer(key: String): List<ApNativeAd> = listOfNotNull(getAdNative(key))
-    fun awaitNext(key: String, onResult: (ApNativeAd?) -> Unit) { NativeAdManager.awaitNext(key, onResult) }
+    fun getNativeAdBuffer(key: String): List<NativeAdWrapper> = listOfNotNull(getAdNative(key))
+    fun awaitNext(key: String, onResult: (NativeAdWrapper?) -> Unit) { NativeAdManager.awaitNext(key, onResult) }
     fun registerAdCallback(key: String, adCallback: AdCallback) { NativeAdManager.register(key, adCallback) }
     fun unregisterAdCallback(key: String, adCallback: AdCallback) { NativeAdManager.unregister(key, adCallback) }
     fun release(key: String) { NativeAdManager.release(key) }

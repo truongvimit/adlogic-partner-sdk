@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 
 /**
  * The gate and the selection, each derived from the snapshot either on [dispatcher] (so it can
- * lag the main thread, as DashDrama's do) or synchronously in [onPublish]. The two choices are
+ * lag the main thread) or synchronously in [onPublish]. The two choices are
  * independent and fixed for the life of the engine.
  */
 internal class PoolDerived<H : Any>(

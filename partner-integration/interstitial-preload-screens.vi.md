@@ -252,16 +252,16 @@ Nếu app tự điều hướng bằng state, gọi helper một lần ở navig
 và lifecycle owner của host. Nếu giữ nhiều page trong composition, truyền `selected` đúng cho
 từng page hoặc báo tập trung tại root; không coi “có trong composition” là “đang được chọn”.
 
-## 4. Phạm vi của gate và ví dụ TranslatorGuru
+## 4. Phạm vi của gate và ví dụ app dạng dashboard
 
 Whitelist chỉ áp dụng cho **auto preload/refill và `topUpNow()`**. Các lệnh chủ động
 `InterstitialAdManager.load`, `loadAndShow`, `show` tiếp tục dùng điều kiện cũ. Vì vậy, nếu muốn
 Home không request BACK tự động, bỏ các lệnh explicit preload BACK ở Home/splash hoặc timer app
 đang trùng với buffer. Không cần gọi `topUpNow()` sau `setCurrentScreen`.
 
-Với TranslatorGuru, dashboard có Home và các tab chức năng trong cùng
-`FragmentsDashboardActivity`: ID màn phải theo selected tab. `TranslateActivity` xử lý Back
-trước khi finish; một số function khác trả về dashboard rồi mới show BACK. Dashboard có thể
+Ví dụ một app có dashboard chứa Home và các tab chức năng trong cùng một Activity: ID màn phải
+theo selected tab. Một màn chức năng mở riêng xử lý Back trước khi finish; một số function khác
+trả về dashboard rồi mới show BACK. Dashboard có thể
 đóng quyền preload mới nhưng vẫn dùng ad đã cache cho lượt Back đó. Không chặn `show` dựa trên
 whitelist và không xóa cache lúc rời function.
 

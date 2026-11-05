@@ -3,7 +3,7 @@ package com.ads.module.helper.adnative.pool
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
-/** Identity-equal, like ApNativeAd; [destroyed] counts calls so double destroys show up. */
+/** Identity-equal, like NativeAdWrapper; [destroyed] counts calls so double destroys show up. */
 class FakeAd(val key: String, val id: String, private val serial: Int) {
     var destroyed = 0
     override fun toString(): String = "FakeAd($key/$id#$serial)"

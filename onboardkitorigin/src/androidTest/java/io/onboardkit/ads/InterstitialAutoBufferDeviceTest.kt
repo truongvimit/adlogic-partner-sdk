@@ -15,9 +15,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdSkipReason
 import com.ads.module.helper.interstitial.*
@@ -55,15 +55,15 @@ class InterstitialAutoBufferDeviceTest {
             Tracker.install(app)
             Tracker.addSink(sink)
             ConsentCenter.setHostConsent(true, false)
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
             AppOpenManager.getInstance().disableAppResume()
-            ERainAd.getInstance().setIntervalInterstitialAd(5)
-            ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setCountClickToShowAds(1, 0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            AdsSdk.getInstance().setIntervalInterstitialAd(5)
+            AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+            AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+            AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
             AdRemoteConfig.initializeFromJson("""{
                 "inter_all":{"ids":[{"id":"$UNIT"}],"isEnable":true},
                 "inter_back":{"ids":[{"id":"$UNIT"}],"isEnable":true}
@@ -114,7 +114,7 @@ class InterstitialAutoBufferDeviceTest {
                 assertTrue(onMain { listOf(ALL, BACK, OB).all { InterstitialAdManager.isReady(it) } })
                 Log.i(TAG, "CACHE_AND_FOREGROUND_VERIFIED requests=$countWithCache")
 
-                onMain { ERainAd.getInstance().setIntervalInterstitialAd(30) }
+                onMain { AdsSdk.getInstance().setIntervalInterstitialAd(30) }
                 eventually("Remote interval permits the first group show", 40_000) {
                     onMain { InterstitialAdManager.canShow(host, ALL) }
                 }

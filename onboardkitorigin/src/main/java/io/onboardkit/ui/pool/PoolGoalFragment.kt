@@ -19,7 +19,7 @@ import io.onboardkit.core.StepId
 import io.onboardkit.ui.widget.GoalOptionAdapter
 
 /**
- * The Goal step as a pooled select screen (DashDrama Favorite): every option tap is a selection,
+ * The Goal step as a pooled select screen: every option tap is a selection,
  * Next is enabled while enough options are picked, and Next ends the run after the leftover
  * splash interstitial, with no paywall.
  */
@@ -89,7 +89,7 @@ internal class PoolGoalFragment : Fragment(), PoolStage {
         select.onSelection()
     }
 
-    /** DD Favorite Done: the picks, then the leftover splash interstitial, then completion once. */
+    /** Done: the picks, then the leftover splash interstitial, then completion once. */
     private fun finishGoal(options: List<GoalOption>) {
         val host = activity as? ObPoolFlowActivity ?: return
         if (exiting) return

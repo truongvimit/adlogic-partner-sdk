@@ -36,12 +36,18 @@
     <string name="ob_confirm_language_close">Close</string>
     <string name="ob_ad_badge_plural" translatable="false">Ads</string>
     <string name="ob_goal_continue">Continue</string>
+    <string name="ob_goal_title">What brings you here?</string>
+    <string name="ob_goal_subtitle">Pick what matters to you. You can change it later.</string>
+    <!-- Privacy screen -->
+    <string name="ob_privacy_title">Welcome</string>
+    <string name="ob_privacy_subtitle">Before you start, please review how we handle your data.</string>
+    <string name="ob_privacy_consent">By tapping Continue, you agree to our Terms of Use and Privacy Policy.</string>
     <!-- Welcome Back: returning user, launcher tap -->
-    <string name="ob_welcome_back_title">What do you want to do with PDFs?</string>
-    <string name="ob_welcome_back_subtitle">Pick a goal and we’ll put the right tools up front.</string>
-    <string name="ob_welcome_back_option_edit">Edit PDF</string>
-    <string name="ob_welcome_back_option_add_text">Add text</string>
-    <string name="ob_welcome_back_option_sign">Sign &amp; fill</string>
-    <string name="ob_welcome_back_option_split_merge">Split &amp; merge</string>
+    <string name="ob_welcome_back_title">Welcome back! What would you like to do?</string>
+    <string name="ob_welcome_back_subtitle">Pick one and we’ll take you there.</string>
+    <string name="ob_welcome_back_option_resume">Pick up where I left off</string>
+    <string name="ob_welcome_back_option_discover">Discover something new</string>
+    <string name="ob_welcome_back_option_favorites">Open my favorites</string>
+    <string name="ob_welcome_back_option_settings">Adjust my settings</string>
     <string name="ob_welcome_back_continue">Continue</string>
 </resources>

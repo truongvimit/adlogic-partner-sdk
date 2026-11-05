@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Figma "Native_Ads" (node 3607:20394): the ad that rides inside the Confirm Language modal.
+  The ad that rides inside the Confirm Language modal.
 
   A horizontal split — media on the left, headline/body/rating/CTA stacked on the right — so it is
   deliberately absent from NativeLayoutContractTest's reorderable list: there is no `ad_container`
@@ -39,7 +39,7 @@
 
             <!-- Two lines, not the design's one: AdMob's native ad validator counts a clipped
                  asset as an implementation issue, and a real headline rarely fits 144dp on one
-                 line. The Figma sample ("Tiki 11.01 Shopping") still renders as a single line.
+                 line.
 
                  paddingEnd reserves the panel's top-right corner: the loader never calls
                  setAdChoicesPlacement, so GMA drops the AdChoices badge there, straight onto the
@@ -55,7 +55,7 @@
                 android:maxLines="2"
                 android:textColor="@color/ob_confirm_ad_headline"
                 android:textSize="@dimen/ob_text_confirm_ad_headline"
-                tools:text="Tiki 11.01 Shopping" />
+                tools:text="Sample App" />
 
             <TextView
                 android:id="@+id/ad_body"
@@ -70,7 +70,7 @@
                 android:textSize="@dimen/ob_text_confirm_ad_body"
                 tools:text="Festival &amp; shoping online" />
 
-            <!-- Figma node 3607:20405: "Ads" chip, then the numeric rating and its stars. -->
+            <!-- "Ads" chip, then the numeric rating and its stars. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -91,7 +91,7 @@
                     android:textSize="@dimen/ob_text_confirm_ad_meta" />
 
                 <!-- Vector stars cannot tile in a progressDrawable (ProgressBar.tileify only
-                     tiles BitmapDrawables), so the platform small bar is tinted to the Figma
+                     tiles BitmapDrawables), so the platform small bar is tinted to the design
                      amber instead of shipping a stretched custom one. -->
                 <RatingBar
                     android:id="@+id/ad_stars"
@@ -108,7 +108,7 @@
                     tools:rating="4.3" />
             </LinearLayout>
 
-            <!-- Figma node 3607:20433. Height is overridden at bind time by `heightCTA`
+            <!-- Height is overridden at bind time by `heightCTA`
                  (NativeAdStyler.applyLayout), so the XML value is the design's resting state. -->
             <TextView
                 android:id="@+id/ad_call_to_action"

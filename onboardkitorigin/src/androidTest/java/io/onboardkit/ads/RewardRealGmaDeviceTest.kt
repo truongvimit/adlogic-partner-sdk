@@ -16,8 +16,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.funtion.RewardCallback
@@ -75,7 +75,7 @@ class RewardRealGmaDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
@@ -106,7 +106,7 @@ class RewardRealGmaDeviceTest {
                     }
                 }
                 val load = RecordingLoad()
-                instrumentation.runOnMainSync { ERainAd.getInstance().initRewardAds(host, TEST_UNIT, load) }
+                instrumentation.runOnMainSync { AdsSdk.getInstance().initRewardAds(host, TEST_UNIT, load) }
                 assertTrue("Real rewarded load must settle", load.finished.await(45, TimeUnit.SECONDS))
                 assertTrue("Real test fill required: ${load.errors}", load.errors.isEmpty())
                 assertEquals(1, load.ads.size)
@@ -118,7 +118,7 @@ class RewardRealGmaDeviceTest {
                 instrumentation.runOnMainSync {
                     // Explicit supplied-ad overload; public init above supplies the same unit
                     // and exercises the existing refill path without an invented nativeId.
-                    ERainAd.getInstance().showRewardAds(host, reward, callback)
+                    AdsSdk.getInstance().showRewardAds(host, reward, callback)
                 }
                 val monitor = ActivityLifecycleMonitorRegistry.getInstance()
                 eventually("Show must reach a visible focused real GMA AdActivity; errors=${callback.failures}", 15_000) {

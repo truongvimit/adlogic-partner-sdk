@@ -9,8 +9,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.ads.module.ads.wrapper.ApInterstitialAd;
-import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.ads.wrapper.InterstitialAdWrapper;
+import com.ads.module.ads.wrapper.NativeAdWrapper;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.helper.AdGate;
 import com.google.android.gms.ads.LoadAdError;
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * dropped, so a half-filled remote payload cannot open a hole in the order.
  * <p>
  * All state lives on the stack of a single call, which is what lets several placements load at
- * once — the fixed-4 helpers on {@link ERainAd} keep their tier state in instance fields and
+ * once — the fixed-4 helpers on {@link AdsSdk} keep their tier state in instance fields and
  * clobber each other when two screens preload together.
  */
 public final class AdWaterfall {
@@ -104,10 +104,10 @@ public final class AdWaterfall {
         if (!canContinue(activity, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadNativeTier(activity, tiers, layoutRes, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().loadNativeAdResultCallback(activity, tiers.get(index), layoutRes,
+        AdsSdk.getInstance().loadNativeAdResultCallback(activity, tiers.get(index), layoutRes,
                 new AdCallback() {
                     @Override
-                    public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
+                    public void onNativeAdLoaded(@NonNull NativeAdWrapper nativeAd) {
                         // A fill from a tier the waterfall already moved past has nowhere to go
                         if (!tier.settle()) {
                             if (nativeAd.getAdmobNativeAd() != null) {
@@ -147,7 +147,7 @@ public final class AdWaterfall {
     /**
      * Walks {@code adUnitIds} until one interstitial fills.
      *
-     * @param callback {@code onApInterstitialLoad} on the first fill, {@code onAdFailedToLoad}
+     * @param callback {@code onInterstitialAdLoaded} on the first fill, {@code onAdFailedToLoad}
      *                 once every tier has failed.
      */
     public static void loadInterstitial(
@@ -185,9 +185,9 @@ public final class AdWaterfall {
         if (!canContinue(context, callback)) return;
         final Tier tier = new Tier(tierTimeoutMs, () ->
                 loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback));
-        ERainAd.getInstance().getInterstitialAds(context, tiers.get(index), new AdCallback() {
+        AdsSdk.getInstance().getInterstitialAds(context, tiers.get(index), new AdCallback() {
             @Override
-            public void onApInterstitialLoad(@Nullable ApInterstitialAd interstitialAd) {
+            public void onInterstitialAdLoaded(@Nullable InterstitialAdWrapper interstitialAd) {
                 if (!tier.settle()) return;
                 // A null wrapper is how the module reports a purchased or capped user; that is
                 // this tier declining, not a fill.
@@ -195,7 +195,7 @@ public final class AdWaterfall {
                     loadInterstitialTier(context, tiers, tierTimeoutMs, index + 1, callback);
                     return;
                 }
-                callback.onApInterstitialLoad(interstitialAd);
+                callback.onInterstitialAdLoaded(interstitialAd);
             }
 
             @Override
@@ -271,7 +271,7 @@ public final class AdWaterfall {
             }
         };
         try {
-            ERainAd.getInstance().initRewardAds(context, tiers.get(index), tierCallback);
+            AdsSdk.getInstance().initRewardAds(context, tiers.get(index), tierCallback);
         } catch (RuntimeException error) {
             // A dispatch failure must settle the same tier as a vendor load failure; otherwise
             // its already-armed timeout can start another request after the caller has finished.

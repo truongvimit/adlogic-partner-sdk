@@ -13,9 +13,9 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * Replays a trace taken from a DashDrama 1.0.6 device log (see the fixture header) and checks that
- * the engine issues exactly DD's requests, in DD's order, and that every impression DD logged comes
- * from the ad the selector hands the slot on screen.
+ * Replays a trace taken from a reference device log (see the fixture header) and checks that the
+ * engine issues exactly the logged requests, in the logged order, and that every logged impression
+ * comes from the ad the selector hands the slot on screen.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PoolGoldenTraceTest {
@@ -125,7 +125,7 @@ class PoolGoldenTraceTest {
     }
 
     private fun load(name: String): Trace {
-        val text = requireNotNull(javaClass.classLoader?.getResource("pool/dashdrama/$name")) { "missing $name" }.readText()
+        val text = requireNotNull(javaClass.classLoader?.getResource("pool/reference/$name")) { "missing $name" }.readText()
         val placements = linkedMapOf<String, List<String>>()
         val steps = mutableListOf<Step>()
         for (raw in text.lines()) {

@@ -10,7 +10,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.adnative.pool.LoadMode
@@ -53,8 +53,8 @@ class PoolNativeSlotTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
     private val themed by lazy { ContextThemeWrapper(app, R.style.ob_Theme_OnboardKit) }
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private val slots = mutableListOf<Slot>()
     private val ob1 = AdPlacement.StepNative(StepId.OB1)
     private val ob2 = AdPlacement.StepNative(StepId.OB2)
@@ -103,7 +103,7 @@ class PoolNativeSlotTest {
 
     @Before fun setUp() {
         PoolTestSdk.install(app)
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = installTestEngine(loader)
         OnboardingPool.activate(app, poolSnapshot())
         main.idle()
@@ -119,7 +119,7 @@ class PoolNativeSlotTest {
     private fun clickReturn(): AtomicReference<String?> =
         ReflectionHelpers.getField(AppOpenManager.getInstance(), "pendingResumeSkipReason")
 
-    private fun filledLfo1(): ApNativeAd {
+    private fun filledLfo1(): NativeAdWrapper {
         OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
         return loader.fill("language1").also { main.idle() }
     }

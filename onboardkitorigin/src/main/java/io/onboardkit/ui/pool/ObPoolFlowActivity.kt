@@ -69,11 +69,10 @@ internal interface PoolPagerStage : PoolStage {
 
 /**
  * SHARED_POOL host. LFO, the onboarding pager, Privacy and Goal are fragments of this one
- * activity, and every native slot in them renders the one selection of the process-wide pool
- * (DashDrama 1.0.6's single-activity first-open flow).
+ * activity, and every native slot in them renders the one selection of the process-wide pool.
  *
  * Stage switches always wait for STARTED: a switch requested from an interstitial callback must
- * not commit after onSaveInstanceState. Back is a no-op on every stage, as in DashDrama.
+ * not commit after onSaveInstanceState. Back is a no-op on every stage.
  */
 internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
@@ -182,7 +181,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     /**
      * Moves to [target] once this activity is at least STARTED. The picked language is applied
-     * first: in place by default (DashDrama updates the activity resources and keeps going), or
+     * first: in place by default (the activity resources are updated and the flow keeps going), or
      * by recreating the activity when `native_flow.pool.locale_apply` is RECREATE.
      *
      * @param restoredLanguage for the OB1 back return: the LFO comes back with this pick.
@@ -212,7 +211,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         return resources.configuration.locales[0] != picked
     }
 
-    /** DD W5/h.java:23-45: Locale.setDefault plus updateConfiguration on this activity's resources. */
+    /** Locale.setDefault plus updateConfiguration on this activity's resources. */
     private fun applyLocaleInPlace() {
         val locale = pickedLocale() ?: return
         if (resources.configuration.locales[0] == locale) return
@@ -233,7 +232,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     /**
      * Offers the splash interstitial that was loaded but never shown, then carries out [exit]:
-     * after the ad closes (AFTER_AD, DashDrama's Done) or once it is on screen (UNDER_AD).
+     * after the ad closes (AFTER_AD) or once it is on screen (UNDER_AD).
      *
      * The ad can outlive this instance (a configuration change, "Don't keep activities"), so its
      * callbacks hold neither this host nor the screen: the exit runs once, on whichever host is
@@ -271,7 +270,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     }
 
     /**
-     * DashDrama's Done: save, then move on. Only a full first page is warmed here, without owning
+     * Done: save, then move on. Only a full first page is warmed here, without owning
      * it; any other first screen claims its own ad when it opens.
      */
     private fun completeLanguage(code: String) {
@@ -326,7 +325,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         pagerStage()?.completeAdStep(stepId, exitReason)
     }
 
-    /** Swipe never unlocks in this flow (DashDrama Style5 disables user input). */
+    /** Swipe never unlocks in this flow: the pager disables user input. */
     override fun setAdStepSwipeEnabled(stepId: StepId, enabled: Boolean) = Unit
 
     override fun back(): Boolean = false
@@ -350,7 +349,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     ): Boolean {
         // The engine, not the routing flag: after reset() mid-run the pages keep the pool they started on.
         if (OnboardingPool.engineOrNull() == null) return false
-        // A page planned without a placement draws nothing in DashDrama; a slot would borrow other ads.
+        // A page planned without a placement draws nothing; a slot would borrow other ads.
         if (placement is AdPlacement.StepNative && pagerStage()?.pagePlacement(placement.stepId) == null) {
             callbacks.onUnavailable(AdSkipReason.NO_AD_UNIT)
             return true
@@ -375,7 +374,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         return super.dispatchTouchEvent(ev)
     }
 
-    /** DD A0/c.java:71-78, 109-112: back does nothing on LFO, the pager and the select screens. */
+    /** Back does nothing on LFO, the pager and the select screens. */
     override fun handleBack() = Unit
 
     override fun onSaveInstanceState(outState: Bundle) {

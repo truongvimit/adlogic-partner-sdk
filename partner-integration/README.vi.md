@@ -52,4 +52,8 @@ Firebase dùng `google-services.json` do Console cấp đúng app; không có fi
 
 Các ví dụ dependency đọc chung `adlogicSdkVersion` trong `gradle.properties` của app; xem [cấu hình build](../README.vi.md#cấu-hình-build). Khi nâng SDK, cập nhật property của app.
 
+### Đổi tên ở 5.6.17
+
+Từ 5.6.17 các class lõi mang tên mới (`AdsSdk`, `AdsSdkConfig`, `NativeAdWrapper`, `InterstitialAdWrapper`, `io.onboardkit.ads.sdk.AdsSdkProvider`). Hành vi không đổi; cập nhật import rồi build lại. Mục tiêu mặc định của Welcome Back cũng đổi (xem [Welcome Back](welcome-back-screen.vi.md)).
+
 [README SDK](../README.vi.md) · [Bắt đầu tích hợp Ads + OnboardKit](ads-onboarding-integration.vi.md)

@@ -13,12 +13,12 @@ Pager page का view बने रहने तक native bound रहता �
 
 वैकल्पिक Privacy → Goal, pager और उसके exit interstitial (चालू होने पर; default रूप से बंद) के बाद onboarding का अंतिम भाग है। `privacy_goals_screen.enabled` चालू करें और goal options दें; [Privacy → Goal](../partner-integration/privacy-goals-screen.hi.md) देखें।
 
-`native_flow.type = SHARED_POOL` splash के बाद default `PER_SCREEN` flow की जगह लेता है: LFO, onboarding pager और Privacy → Goal SDK की एक screen में चलते हैं, और हर native slot एक साझा pool से ad लेता है, DashDrama 1.0.6, यानी उस reference app के first-open नियमों के अनुसार जिस पर pool बना है। इसके लिए built-in `ERainAdProvider` चाहिए, यह हर run में एक बार पढ़ा जाता है और splash नहीं बदलता; [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.hi.md#shared_pool-native-flow) देखें।
+`native_flow.type = SHARED_POOL` splash के बाद default `PER_SCREEN` flow की जगह लेता है: LFO, onboarding pager और Privacy → Goal SDK की एक screen में चलते हैं, और हर native slot एक साझा pool से ad लेता है, उस reference flow के first-open नियमों के अनुसार जिस पर pool बना है। इसके लिए built-in `AdsSdkProvider` चाहिए, यह हर run में एक बार पढ़ा जाता है और splash नहीं बदलता; [SHARED_POOL native flow](../partner-integration/ads-onboarding-integration.hi.md#shared_pool-native-flow) देखें।
 
 ## शुरू करने से पहले
 
 - minSdk 24, compileSdk 36 और JDK 17 इस्तेमाल करें। [साझा build setup](../README.hi.md) पूरा करें और सभी modules में एक ही प्रकाशित tag रखें।
-- Built-in ad provider के लिए पहले [ads guide](../ads/README.md) पूरा करें: AdMob/Meta manifest values, ad config assets और Application में `ERainAd.init()`।
+- Built-in ad provider के लिए पहले [ads guide](../ads/README.md) पूरा करें: AdMob/Meta manifest values, ad config assets और Application में `AdsSdk.init()`।
 - Funnel चाहिए तो OnboardKit से पहले `Tracker` और sink install करें; [Trackkit](../trackkit/README.hi.md) देखें।
 - नीचे दोनों dependencies जोड़ें। OnboardKit, Trackkit को export करता है; `com.ads.module.*` इस्तेमाल करने वाले app code को स्पष्ट `ads` dependency चाहिए। Firebase और PayKit वैकल्पिक हैं।
 
@@ -34,7 +34,7 @@ dependencies {
 
 ## 1. Application में install और configure करें
 
-इसे अपनी मौजूदा Application में **[ads guide](../ads/README.md) के `ERainAd.getInstance().init(...)` के बाद** जोड़ें; ERain को दो बार initialize न करें।
+इसे अपनी मौजूदा Application में **[ads guide](../ads/README.md) के `AdsSdk.getInstance().init(...)` के बाद** जोड़ें; AdsSdk को दो बार initialize न करें।
 उदाहरण Google test ad units इस्तेमाल करता है। Release के लिए अपने units और अपनी `MainActivity` रखें।
 App के `R`, `BuildConfig` और `MainActivity` अलग packages में हों तो उन्हें import करें; नीचे के सभी config types `io.onboardkit.config.*` में शामिल हैं।
 
@@ -42,8 +42,8 @@ App के `R`, `BuildConfig` और `MainActivity` अलग packages में
 import android.app.Application
 import android.content.Intent
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.ads.sdk.AdsSdkProvider
+import io.onboardkit.ads.sdk.AdsSdkTuning
 import io.onboardkit.config.*
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -51,11 +51,11 @@ import io.onboardkit.core.OnboardingOutcome
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Complete ERainAd.init here; add Tracker/sinks if needed (ads guide).
-        ERainTuning.install()
+        // Complete AdsSdk.init here; add Tracker/sinks if needed (ads guide).
+        AdsSdkTuning.install()
 
         OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
+            adProvider = AdsSdkProvider()
             listener = OnboardingListener { context, outcome ->
                 val extras = when (outcome) {
                     is OnboardingOutcome.Completed -> outcome.passthrough
@@ -177,7 +177,7 @@ Native/interstitial waterfall में `tiers = listOf(highId, fallbackId)` req
 `AdsConfig.fromAdConfig()`, जो `onboardKitConfig` का default है, `inter_splash` या `native_lang` जैसे standard JSON नाम जोड़ता है और हर fetch के बाद उन्हें live रखता है; आपकी app में अलग नामों के लिए उसे map दें।
 आपकी `ad_config.json` या backend के `ad_remote_config` में घोषित standard key बिना binding के लागू होती है और code में लिखी हर unit से ऊपर रहती है, `stepNatives` और `splashInterstitialOldUser` सहित, इसलिए `onRemoteFetched()` में config दोबारा बनाने की ज़रूरत नहीं है।
 `isEnable: false` घोषित placement key उसका पूरा waterfall बंद करती है, और जिस key के `ids` के सभी floors बंद हों वह भी, इसलिए slot को कोई ad unit नहीं मिलता और flow उसे छोड़ देता है।
-Sample का [OnboardKitSetup](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) पूरी mapping और native templates दिखाता है।
+Sample का [OnboardKitSetup](../app/src/main/java/io/adlogic/sample/app/OnboardKitSetup.kt) पूरी mapping और native templates दिखाता है।
 
 ## Fullscreen page और onboarding के बाद interstitial
 
@@ -263,7 +263,7 @@ class SplashActivity : ObSplashActivity() {
 ```
 
 `Billing.awaitReady()` से `Ready`, `Timeout` या `Error` मिलता है; परिणाम के अनुसार अपनी app की error policy लागू करें। मौजूदा `SplashConfig.billingTimeoutMs` (default 5,000 ms) पूरे hook को भी सीमित करता है, इसलिए उसका timeout या Activity destruction परिणाम आने से पहले hook cancel कर सकता है; timeout purchase status तय नहीं करता।
-Integration point के लिए [sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) देखें।
+Integration point के लिए [sample splash](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt) देखें।
 
 Notification/widget/uninstall entry को [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt) से अपनी splash पर भेजें:
 
@@ -290,4 +290,4 @@ Entries `inter_noti`, `inter_widget` या `inter_uninstall` इस्तेम
 Integration के दौरान `OnboardingSdk.setFlowLogging(true)` रखें (`OB_FLOW` in Logcat)।
 बाद में भाषा बदलने के लिए `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` बुलाएँ (`io.onboardkit.ui.language`)।
 
-[Sample Application](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)
+[Sample Application](../app/src/main/java/io/adlogic/sample/app/GlobalApp.kt) · [Sample splash](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt) · [MIT license](../LICENSE)

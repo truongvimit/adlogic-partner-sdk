@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Figma "Modal" (node 3584:24369) — the LFO's Confirm Language prompt.
+  The LFO's Confirm Language prompt.
 
   Root is a FrameLayout because the close glyph is absolutely placed against the card (x=296,
   y=8), above the 32dp top padding the rest of the content sits inside.
@@ -92,7 +92,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 32dp target with 8dp padding puts the 16dp glyph exactly at Figma's x=296 / y=8. -->
+    <!-- 32dp target with 8dp padding puts the 16dp glyph at x=296 / y=8 of the 328dp card. -->
     <ImageView
         android:id="@+id/ob_confirm_close"
         android:layout_width="@dimen/ob_confirm_close_touch"

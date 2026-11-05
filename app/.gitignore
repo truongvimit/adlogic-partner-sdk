@@ -1,5 +1,4 @@
 /build
 
-# Firebase config: carries the project's API key and is environment-specific.
-# Each developer supplies their own; see README for setup.
-google-services.json
+# google-services.json is committed on purpose: it is a placeholder with fake values so the
+# sample builds. Replace it with the file your own Firebase project issues.

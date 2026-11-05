@@ -14,9 +14,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdSkipReason
@@ -84,14 +84,14 @@ class InterstitialPreloadScreensDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
-            ERainAd.getInstance().setIntervalInterstitialAd(0)
-            ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setCountClickToShowAds(1, 0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            AdsSdk.getInstance().setIntervalInterstitialAd(0)
+            AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+            AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+            AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
             AppOpenManager.getInstance().disableAppResume()
             AdRemoteConfig.initializeFromJson("""{"inter_back":{"ids":[{"id":"$UNIT"}],"isEnable":true}}""")
             // Normalize test-package remote state, preserving/restoring the original document.

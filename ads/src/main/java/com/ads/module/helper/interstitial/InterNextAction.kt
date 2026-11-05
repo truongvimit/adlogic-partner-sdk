@@ -18,7 +18,7 @@ sealed interface InterNextAction {
      * `onComplete` fires once the ad is gone — after `onClosed`, or after the skip that stood in
      * for it. The next screen starts on an empty stage.
      *
-     * The module's default, and Apero's `openActivityAfterShowInterAds = false`.
+     * The module's default.
      */
     data object AfterDismiss : InterNextAction
 
@@ -27,7 +27,7 @@ sealed interface InterNextAction {
      * inflates and binds *underneath* the ad and is already painted when it closes. `onClosed`
      * still follows later.
      *
-     * Apero's `openActivityAfterShowInterAds = true`. Start the destination from `onComplete` and
+     * Start the destination from `onComplete` and
      * nothing else — a caller that also calls `finish()` there tears the host out from under the
      * ad it just paid for.
      *

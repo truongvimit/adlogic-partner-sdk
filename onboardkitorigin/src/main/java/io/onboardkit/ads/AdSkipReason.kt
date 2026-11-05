@@ -57,7 +57,7 @@ enum class AdSkipReason(val key: String) {
      *
      * In practice that is its daily click cap,
      * `ad_behavior_config.interstitial.frequency.max_clicks_per_24h`, with
-     * `ERainAd.setMaxClickAdsPerDay` as the host fallback. The interstitial interval never applies
+     * `AdsSdk.setMaxClickAdsPerDay` as the host fallback. The interstitial interval never applies
      * to onboarding placements.
      */
     CAPPED_BY_ADS_MODULE("capped_by_module"),

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Native template 1 — Figma "Ad Layout 1", the LFO / Welcome Back / onboarding content frame.
+  Native template 1 — the LFO / Welcome Back / onboarding content frame.
   Picked by `ad_config.<key>.templateId = 1`, and the default of those slots.
 
   Three blocks are direct children of the vertical `ad_container`, so the placement's `components`

@@ -21,7 +21,7 @@ import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.nativead.NativeAd
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.NativeAdUnit
 import org.junit.After
 import org.junit.Before
@@ -43,7 +43,7 @@ import org.robolectric.shadows.ShadowNetworkInfo
 @LooperMode(LooperMode.Mode.PAUSED)
 class NativeProviderOwnershipTest {
     private lateinit var controller: ActivityController<NativeProviderHost>
-    private lateinit var provider: ERainAdProvider
+    private lateinit var provider: AdsSdkProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
     private val requestedUnits = mutableListOf<String>()
@@ -87,7 +87,7 @@ class NativeProviderOwnershipTest {
             }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
         // OnboardingSdk is process-scoped and install is intentionally idempotent.
-        provider = io.onboardkit.OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
+        provider = io.onboardkit.OnboardingSdk.provider() as? AdsSdkProvider ?: AdsSdkProvider()
         provider.releaseAll()
         controller = Robolectric.buildActivity(NativeProviderHost::class.java).setup().visible().windowFocusChanged(true)
     }
@@ -297,7 +297,7 @@ class NativeProviderOwnershipTest {
 
     @Test fun `the splash banner reports its load, click and failure to the slot listener`() {
         val host = controller.get()
-        val ads = mock(com.ads.module.ads.ERainAd::class.java)
+        val ads = mock(com.ads.module.ads.AdsSdk::class.java)
         doReturn(true).`when`(ads).shouldDisplayForUa(anyBoolean())
         var callback: com.ads.module.funtion.AdCallback? = null
         doAnswer {
@@ -310,8 +310,8 @@ class NativeProviderOwnershipTest {
             override fun onFailedToLoad() { events += "failed" }
             override fun onClicked() { events += "clicked" }
         }
-        mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
-            singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(ads)
+        mockStatic(com.ads.module.ads.AdsSdk::class.java).use { singleton ->
+            singleton.`when`<com.ads.module.ads.AdsSdk> { com.ads.module.ads.AdsSdk.getInstance() }.thenReturn(ads)
             provider.loadBanner(host, io.onboardkit.config.BannerAdUnit("banner-unit"), listener)
         }
         checkNotNull(callback).onAdLoaded()
@@ -328,7 +328,7 @@ class NativeProviderOwnershipTest {
         sdk.configure(io.onboardkit.config.onboardKitConfig {
             ads = io.onboardkit.config.AdsConfig.fromAdConfig()
         }.getOrThrow())
-        val ads = mock(com.ads.module.ads.ERainAd::class.java)
+        val ads = mock(com.ads.module.ads.AdsSdk::class.java)
         doReturn(true).`when`(ads).shouldDisplayForUa(anyBoolean())
         val units = mutableListOf<String>()
         doAnswer {
@@ -339,8 +339,8 @@ class NativeProviderOwnershipTest {
             val key = checkNotNull(sdk.configuredPlacementKey(AdPlacement.SplashBanner))
             adConfig.update(com.ads.module.config.AdRemoteConfig(mapOf(key to
                 com.ads.module.config.AdUnitConfig(listOf("declared-banner"), true))))
-            mockStatic(com.ads.module.ads.ERainAd::class.java).use { singleton ->
-                singleton.`when`<com.ads.module.ads.ERainAd> { com.ads.module.ads.ERainAd.getInstance() }.thenReturn(ads)
+            mockStatic(com.ads.module.ads.AdsSdk::class.java).use { singleton ->
+                singleton.`when`<com.ads.module.ads.AdsSdk> { com.ads.module.ads.AdsSdk.getInstance() }.thenReturn(ads)
                 provider.loadBanner(host, io.onboardkit.config.BannerAdUnit("banner-unit"), silent)
             }
             assertEquals(listOf("declared-banner"), units)

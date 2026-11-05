@@ -3,7 +3,7 @@ package io.onboardkit.ads.pool
 import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.LoadResult
 import com.ads.module.helper.adnative.pool.NativePoolEngine
@@ -39,8 +39,8 @@ import org.robolectric.shadows.ShadowLog
 class OnboardingPoolTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private val ob1 = AdPlacement.StepNative(StepId.OB1)
     private val ob2 = AdPlacement.StepNative(StepId.OB2)
 
@@ -54,7 +54,7 @@ class OnboardingPoolTest {
 
     @Before fun setUp() {
         PoolTestSdk.install(app, ads)
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = installTestEngine(loader)
         ShadowLog.clear()
         activate()
@@ -169,7 +169,7 @@ class OnboardingPoolTest {
         activate()
         assertNull("A new run has no owner", engine.owner)
         assertSame(engine, OnboardingPool.engineOrNull())
-        assertSame("DashDrama keeps loaders across runs", ad, engine.debugSnapshot().loader("language1")?.ad)
+        assertSame("loaders are kept across runs", ad, engine.debugSnapshot().loader("language1")?.ad)
         assertNull(OnboardingPool.lastResult(AdPlacement.Language1))
         assertTrue(OnboardingPool.isActive)
         assertTrue(OnboardingPool.routeResume)
@@ -260,7 +260,7 @@ class OnboardingPoolTest {
         assertEquals(1, seen.size)
     }
 
-    @Test fun `the pool runs only on the ERain stack or a test engine`() {
+    @Test fun `the pool runs only on the AdsSdk stack or a test engine`() {
         assertTrue(OnboardingPool.canRun())
         SharedNativePool.resetForTest()
         assertFalse("A fake provider cannot drive AdMob", OnboardingPool.canRun())

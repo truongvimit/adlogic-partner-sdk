@@ -26,8 +26,8 @@ interface PoolLoadSink<H : Any> {
 /**
  * Why a request may not go out. A config refusal is permanent for this run (premium, placement
  * off, no ad unit, UA gate): no loader is created and the caller does not become the owner. A
- * transient refusal (offline, no consent, requests held) saves the request and reports success,
- * as DashDrama's silent network check does.
+ * transient refusal (offline, no consent, requests held) saves the request and reports success
+ * without telling the user.
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 interface PoolRequestPolicy {

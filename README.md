@@ -68,7 +68,7 @@ Register your existing `Application` class in the manifest. In `Application.onCr
 | Step | What to do | Guide |
 | --- | --- | --- |
 | 1 · Analytics | To collect SDK events, install `Tracker` and register a destination before other kits emit events. | [Trackkit](trackkit/README.md) |
-| 2 · Ads | Provide AdMob/Meta metadata and your ad JSON, then initialize `ERainAd`. | [Ads quickstart](ads/README.md) |
+| 2 · Ads | Provide AdMob/Meta metadata and your ad JSON, then initialize `AdsSdk`. | [Ads quickstart](ads/README.md) |
 | 3 · Purchases | Install `PayKit`, or initialize `BillingKit` for your own UI. PayKit owns billing initialization when used. | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
 | 4 · Onboarding | Install and configure `OnboardingSdk`, then register your `ObSplashActivity` subclass. | [OnboardKit](onboardkitorigin/README.md) |
 

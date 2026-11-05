@@ -9,7 +9,7 @@ import io.onboardkit.flow.NativeFlowType
 /**
  * Which SDK layout each native placement inflates: the `ad_config.<key>.templateId` catalog for
  * card slots, a fixed frame for the confirm modal and the full-screen format. The pooled LFO has
- * its own default (template 4) so its frame matches DashDrama; an explicit templateId still wins.
+ * its own default (template 4); an explicit templateId still wins.
  *
  * Only the frame is chosen here. Block order is the placement's `components`, applied at bind
  * time by the templates that can reorder.

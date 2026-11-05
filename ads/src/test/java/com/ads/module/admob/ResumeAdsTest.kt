@@ -10,9 +10,9 @@ import android.os.Looper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.Entitlement
@@ -80,7 +80,7 @@ class ResumeAdsTest {
         ))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("resume-test-token") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("resume-test-token") })
         manager.enableAppResume()
         manager.setInterstitialShowing(false)
         manager.setDisableAdResumeByClickAction(false)

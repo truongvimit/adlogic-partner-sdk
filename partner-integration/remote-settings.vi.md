@@ -32,7 +32,7 @@ Welcome Back mặc định ẩn; bật `welcome_back.enabled` để user cũ m�
 
 ```kotlin
 OnboardingSdk.install(application) {
-    adProvider = ERainAdProvider()
+    adProvider = AdsSdkProvider()
 }
 OnboardingSdk.configure(onboardKitConfig {
     splash = SplashConfig(logoRes = R.drawable.logo)
@@ -190,7 +190,7 @@ Ví dụ trong `ad_config`: OB1 giữ nguyên trang sau khi click ad, LFO2 tự 
 
 ## Template và CTA để UA/MO thử nghiệm
 
-- `ad_remote_config.<placement>.templateId` (số) chọn khung: `1` LFO classic, `2` card media-left 4:3, `3` card 1.91:1, `4` card LFO rộng theo DashDrama. Không có, `null` hoặc số lạ thì giữ mặc định của slot — `4` cho LFO1/2 trong `SHARED_POOL`, `1` cho LFO classic/Welcome Back/OB content, `2` cho Privacy/Goal và splash inline. Remote > asset app > code như mọi field.
+- `ad_remote_config.<placement>.templateId` (số) chọn khung: `1` LFO classic, `2` card media-left 4:3, `3` card 1.91:1, `4` card LFO rộng. Không có, `null` hoặc số lạ thì giữ mặc định của slot — `4` cho LFO1/2 trong `SHARED_POOL`, `1` cho LFO classic/Welcome Back/OB content, `2` cho Privacy/Goal và splash inline. Remote > asset app > code như mọi field.
 - `components` là thứ duy nhất sắp thứ tự native. Template `1` và `3` theo nó; không có thì thứ tự mặc định đặt CTA ở dưới. Template `1`: `["icon_headline","media","cta"]` (mặc định) hoặc `["cta","media","icon_headline"]` để đưa CTA lên trên.
 - `positionCTA` đã bỏ; payload vẫn gửi field này sẽ bị bỏ qua. Các field `lfo.native_template`, `onboarding.ads.content_template` và `onboarding.steps.<id>.native_template` cũng đã bỏ; payload cũ chứa chúng sẽ bị bỏ qua.
 - Template 3 là một layout, bốn cách sắp xếp của thiết kế lấy từ thứ tự `components`: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (thứ tự mặc định), D `["cta","media","icon_headline","body"]`. Body nằm trong header nên bỏ `body` chỉ làm ẩn nó.

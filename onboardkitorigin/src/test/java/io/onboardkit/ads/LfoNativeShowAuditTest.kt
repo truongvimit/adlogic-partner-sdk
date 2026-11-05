@@ -21,7 +21,7 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -53,7 +53,7 @@ import org.robolectric.shadows.ShadowNetworkInfo
 class LfoNativeShowAuditTest {
     private lateinit var host: ActivityController<NativeProviderHost>
     private var language: ActivityController<ObLanguageActivity>? = null
-    private lateinit var provider: ERainAdProvider
+    private lateinit var provider: AdsSdkProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private lateinit var connectivity: ConnectivityManager
     private val requests = mutableListOf<Pair<String, NativeAd.OnNativeAdLoadedListener>>()
@@ -80,7 +80,7 @@ class LfoNativeShowAuditTest {
             doReturn(loader).`when`(builder).build()
             doAnswer { requests += id to checkNotNull(loaded); null }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
-        provider = OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
+        provider = OnboardingSdk.provider() as? AdsSdkProvider ?: AdsSdkProvider()
         provider.releaseAll()
         OnboardingSdk.install(app) { adProvider = provider; trackkitAutoTracking(false) }
         OnboardingSettings.document.acceptSuccessfulFetch(null)

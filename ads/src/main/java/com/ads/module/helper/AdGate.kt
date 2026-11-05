@@ -6,7 +6,7 @@ import android.net.NetworkCapabilities
 import com.ads.module.admob.AppOpenManager
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.consent.ConsentCenter
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.helper.adnative.NativeAdPreload
 import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.interstitial.InterstitialAdManager
@@ -106,7 +106,7 @@ object AdGate {
     @JvmStatic
     @JvmOverloads
     fun passesUaGate(forceUaCheck: Boolean, bypass: Boolean = false): Boolean =
-        bypass || ERainAd.getInstance().shouldDisplayForUa(forceUaCheck)
+        bypass || AdsSdk.getInstance().shouldDisplayForUa(forceUaCheck)
 
     @JvmStatic
     fun isPurchased(context: Context): Boolean = Entitlement.isPremium(context)

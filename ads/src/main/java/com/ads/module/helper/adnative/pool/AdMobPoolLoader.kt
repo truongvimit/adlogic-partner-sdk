@@ -5,8 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.annotation.RestrictTo
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.tracking.AdTracking
@@ -14,7 +14,7 @@ import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
 
 /**
- * One `ERainAd` native request per id; the glue, not this loader, reports `ad_request`.
+ * One `AdsSdk` native request per id; the glue, not this loader, reports `ad_request`.
  * An [AdGate] refusal is posted as a failure, never left silent like `Admob.loadNativeAd`'s.
  * A tap reaches the sink as one click, however many of clicked and opened report it.
  */
@@ -22,15 +22,15 @@ import com.google.android.gms.ads.LoadAdError
 class AdMobPoolLoader internal constructor(
     context: Context,
     private val requestNative: (Context, String, Int, AdCallback) -> Unit,
-) : PoolAdLoader<ApNativeAd> {
+) : PoolAdLoader<NativeAdWrapper> {
     constructor(context: Context) : this(context, { appContext, id, layoutRes, callback ->
-        ERainAd.getInstance().loadNativeAdResultCallback(appContext, id, layoutRes, callback)
+        AdsSdk.getInstance().loadNativeAdResultCallback(appContext, id, layoutRes, callback)
     })
 
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
 
-    override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<ApNativeAd>) {
+    override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<NativeAdWrapper>) {
         val passesUaGate = AdGate.placementPassesUaGate(request.adConfigKey ?: request.key)
         if (AdGate.skipReason(appContext, true, passesUaGate) != null) {
             main.post { sink.onFailed() }
@@ -46,12 +46,12 @@ class AdMobPoolLoader internal constructor(
         }
     }
 
-    private inner class IdCallback(private val sink: PoolLoadSink<ApNativeAd>) : AdCallback() {
-        private var ad: ApNativeAd? = null
+    private inner class IdCallback(private val sink: PoolLoadSink<NativeAdWrapper>) : AdCallback() {
+        private var ad: NativeAdWrapper? = null
         private var settled = false
         private val gesture = PoolClickGesture(SystemPoolClock)
 
-        override fun onNativeAdLoaded(nativeAd: ApNativeAd) = onMain {
+        override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) = onMain {
             if (settled) {
                 nativeAd.destroy()
                 return@onMain
@@ -95,7 +95,7 @@ class MainLooperPoolScheduler : PoolScheduler {
     }
 }
 
-/** The time base `ApNativeAd` ages on, so pool expiry and `isUsable` agree. */
+/** The time base `NativeAdWrapper` ages on, so pool expiry and `isUsable` agree. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 object SystemPoolClock : PoolClock {
     override fun nowMs(): Long = SystemClock.elapsedRealtime()

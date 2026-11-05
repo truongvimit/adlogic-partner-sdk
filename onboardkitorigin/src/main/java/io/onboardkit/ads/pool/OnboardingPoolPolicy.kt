@@ -15,7 +15,7 @@ import io.onboardkit.config.OnboardKitConfig
 import io.onboardkit.remote.RemoteFlags
 
 /**
- * The SDK guard split the way DashDrama splits its refusals: a cause that holds for the whole run
+ * The SDK guard split in two: a cause that holds for the whole run
  * keeps the caller from owning the slot, a passing one (offline, consent pending) does not. Every
  * reason is an [AdSkipReason] key, so [skipReasonOf] turns it back into the analytics value.
  *

@@ -11,10 +11,10 @@ import io.trackkit.TrackkitEvents;
 import io.trackkit.PlacementRegistry;
 
 /**
- * What the host app still needs to say about ads that {@code ERainAd} cannot know by itself:
+ * What the host app still needs to say about ads that {@code AdsSdk} cannot know by itself:
  * which placement an ad unit belongs to, and when a show opportunity was declined by policy.
  *
- * <p>The lifecycle itself is no longer the app's business — {@code ERainAd} attaches
+ * <p>The lifecycle itself is no longer the app's business — {@code AdsSdk} attaches
  * {@link TrackingAdCallback} to every callback it hands to the SDK.
  *
  * <pre>

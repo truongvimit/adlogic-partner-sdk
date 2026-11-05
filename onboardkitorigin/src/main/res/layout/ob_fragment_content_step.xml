@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma "OB1": full-bleed image, translucent text card over its bottom edge, dots + Next
+<!-- OB1: full-bleed image, translucent text card over its bottom edge, dots + Next
      inside the card, native ad block anchored bottom and as tall as its card. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

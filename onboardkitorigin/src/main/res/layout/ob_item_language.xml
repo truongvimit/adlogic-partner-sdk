@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><!-- Figma 18:57855: 64dp #F5F5F5 r8 row, 8dp gap and side inset, flag 28, radio 20 at end. -->
+<?xml version="1.0" encoding="utf-8"?><!-- 64dp #F5F5F5 r8 row, 8dp gap and side inset, flag 28, radio 20 at end. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"

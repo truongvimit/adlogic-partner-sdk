@@ -29,8 +29,8 @@ sealed interface PoolState {
  * One placement's request, saved on its loader so a later refresh repeats it.
  *
  * @param key the pool key, `AdPlacement.key` on the onboarding side (`language1`, `step_ob1`…)
- * @param ids the waterfall in order. Blank ids are skipped; duplicates are kept (DashDrama drops
- *   one id per failure and never dedups).
+ * @param ids the waterfall in order. Blank ids are skipped; duplicates are kept: each failure drops
+ *   one id and the list is never deduplicated.
  * @param layoutRes the template the loading call inflates against; slots bind into their own
  * @param adConfigKey the `ad_config` key the ids came from, for the UA gate and logging
  * @param tierDeadlineMs per-id wait; a silent id counts as a failure after it. 0 waits forever.
@@ -52,7 +52,7 @@ data class PoolRequest(
 enum class LoadMode { POLITE, FORCED }
 
 /**
- * What [NativePoolEngine.load] did. Mirrors DashDrama's return values: only a config refusal
+ * What [NativePoolEngine.load] did. Only a config refusal
  * reports failure, so only it keeps the caller from becoming the owner.
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -73,7 +73,7 @@ sealed interface LoadResult {
     data class SkippedByConfig(val reason: String) : LoadResult
 }
 
-/** DashDrama returns true for every outcome but a config refusal; the caller sets the owner on it. */
+/** True for every outcome but a config refusal; the caller sets the owner on it. */
 @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 val LoadResult.reportsSuccess: Boolean get() = this !is LoadResult.SkippedByConfig
 
@@ -100,7 +100,7 @@ data class PoolLoaderView<H : Any>(
     val key: String,
     val state: PoolState,
     val ad: H?,
-    /** A normal chain is running (DashDrama's LOADING). */
+    /** A normal chain is running. */
     val inFlight: Boolean,
     /** A refresh chain is running; the held ad and [state] are unchanged meanwhile. */
     val refreshing: Boolean,

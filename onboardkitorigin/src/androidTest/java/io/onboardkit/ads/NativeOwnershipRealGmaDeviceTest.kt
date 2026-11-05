@@ -15,9 +15,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApNativeAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.NativeAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.Entitlement
@@ -48,11 +48,11 @@ class NativeOwnershipRealGmaDeviceTest {
         onMain {
             ConsentCenter.setHostConsent(true, false)
             Entitlement.install(object : EntitlementSource { override fun isPremium(context: Context) = false })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("123456789"); setIdAdResume("") })
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("123456789"); setIdAdResume("") })
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
             NativeAdPreload.getInstance().registerAdCallback(f.key, object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) { f.fills += nativeAd }
+                override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) { f.fills += nativeAd }
                 override fun onAdFailedToLoad(error: LoadAdError?) { f.errors += error.toString() }
             })
         }
@@ -136,7 +136,7 @@ class NativeOwnershipDeviceActivity : AppCompatActivity() {
         helper.placement = NativeDeviceFixture.key
         if (NativeDeviceFixture.refresh) helper.applyReloadByTime(3_000)
         helper.registerAdListener(object : AdCallback() {
-            override fun onNativeAdLoaded(nativeAd: ApNativeAd) { NativeDeviceFixture.binds += nativeAd }
+            override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) { NativeDeviceFixture.binds += nativeAd }
             override fun onAdFailedToLoad(error: LoadAdError?) { NativeDeviceFixture.errors += error.toString() }
         })
     }
@@ -145,8 +145,8 @@ class NativeOwnershipDeviceActivity : AppCompatActivity() {
 private object NativeDeviceFixture {
     const val key = "device_native_ownership"
     var refresh = false
-    val fills = CopyOnWriteArrayList<ApNativeAd>()
-    val binds = CopyOnWriteArrayList<ApNativeAd>()
+    val fills = CopyOnWriteArrayList<NativeAdWrapper>()
+    val binds = CopyOnWriteArrayList<NativeAdWrapper>()
     val errors = CopyOnWriteArrayList<String>()
     fun config() = NativeAdConfig("ca-app-pub-3940256099942544/2247696110", true, refresh,
         com.ads.module.R.layout.custom_native_admob_medium)

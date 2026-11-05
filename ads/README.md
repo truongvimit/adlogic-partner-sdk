@@ -44,7 +44,7 @@ you have one; the `PartnerApp` below is an example.
 ```
 
 Create `res/values/ad_keys.xml` with your real Meta values. Both are required by the current
-`ERainAd.init`, which initializes `FacebookSdk` even when Adjust is disabled.
+`AdsSdk.init`, which initializes `FacebookSdk` even when Adjust is disabled.
 
 ```xml
 <resources>
@@ -56,7 +56,7 @@ Create `res/values/ad_keys.xml` with your real Meta values. Both are required by
 The SDK supplies `AutoInitEnabled`, `AutoLogAppEventsEnabled` and
 `AdvertiserIDCollectionEnabled` as `true` in its library manifest. A host can override an
 entry with `android:value="false" tools:replace="android:value"` (declare the `tools` XML
-namespace). `facebookClientToken` in `ERainAdConfig` is optional when the manifest supplies it.
+namespace). `facebookClientToken` in `AdsSdkConfig` is optional when the manifest supplies it.
 
 Meta mediation and Facebook Core are bundled; no additional Meta dependency is needed.
 
@@ -64,9 +64,9 @@ Meta mediation and Facebook Core are bundled; no additional Meta dependency is n
 
 ```kotlin
 import android.app.Application
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import io.trackkit.Tracker
 import io.trackkit.TrackerConfig
 
@@ -75,9 +75,9 @@ class PartnerApp : Application() {
         super.onCreate()
         Tracker.install(this, TrackerConfig(appVersionCode = BuildConfig.VERSION_CODE.toLong()))
         AdRemoteConfig.initializeFromAssets(this)
-        val environment = if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP
-                          else ERainAdConfig.ENVIRONMENT_PRODUCTION
-        ERainAd.getInstance().init(this, ERainAdConfig(this, environment).apply {
+        val environment = if (BuildConfig.DEBUG) AdsSdkConfig.ENVIRONMENT_DEVELOP
+                          else AdsSdkConfig.ENVIRONMENT_PRODUCTION
+        AdsSdk.getInstance().init(this, AdsSdkConfig(this, environment).apply {
             facebookClientToken = getString(R.string.facebook_client_token)
         })
     }
@@ -297,11 +297,11 @@ Explicit timer/resume refresh options remain separate and are disabled by defaul
 | Need | Add or configure |
 |---|---|
 | Remote placements / Firebase analytics | [suite-firebase](../suite-firebase/README.md); install `FirebaseAdConfigSource`, then call `AdConfig.refresh()` from a custom splash. Installing applies the document the backend last delivered right away; the refresh fetches a newer one. The supplied onboarding splash already refreshes. |
-| Adjust attribution/revenue | Set `ERainAdConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. Every AdMob paid impression, app-open included, reports Adjust ad revenue; also set `eventAdImpression` on it to send the token-keyed impression event that networks such as Meta and TikTok read. UA-gated placements require attribution. |
+| Adjust attribution/revenue | Set `AdsSdkConfig.adjustConfig` before init; see [AdjustConfig](src/main/java/com/ads/module/config/AdjustConfig.java). Leave it unset to keep Adjust off. Every AdMob paid impression, app-open included, reports Adjust ad revenue; also set `eventAdImpression` on it to send the token-keyed impression event that networks such as Meta and TikTok read. UA-gated placements require attribution. |
 | Premium users without ads | Follow [PayKit](../paykit/README.md) for a prebuilt paywall; it initializes billing. For your own UI, follow [BillingKit](../billingkit/README.md). Complete that setup before ad requests. |
 | Rewarded ads | `RewardAdManager.preload(context, placement)` (or `load`) shares one cache/request per placement. `show(activity, placement) { earned -> }` consumes a ready ad; `loadAndShow(activity, placement, onSuccess, onFailed)` uses cache, waits for an active request, or loads. Grant only when earned; the manager does not refill automatically. `show` keeps the placement's config, UA, premium and consent gates. |
 | Automatic interstitial preload | Configure placements and start [InterstitialAutoBuffer](src/main/java/com/ads/module/helper/interstitial/InterstitialAutoBuffer.kt) from the first content screen after onboarding. It pauses in background and shares the manager cache and group gate. |
-| App-open on return | Declare `open_resume` in `ad_config.json` or the backend's `ad_remote_config`; `ERainAdConfig.idAdResume` is only the fallback when neither declares it. Exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`; keep app-open off with `AppOpenManager.getInstance().disableAppResume()`. See [App-open on return](#app-open-on-return). |
+| App-open on return | Declare `open_resume` in `ad_config.json` or the backend's `ad_remote_config`; `AdsSdkConfig.idAdResume` is only the fallback when neither declares it. Exclude splash/sensitive Activities with `AppOpenManager.disableAppResumeWithActivity`; keep app-open off with `AppOpenManager.getInstance().disableAppResume()`. See [App-open on return](#app-open-on-return). |
 
 ## Automatic interstitial preload
 
@@ -316,7 +316,7 @@ outside this group. Define each placement in your ad JSON.
 import com.ads.module.helper.interstitial.InterstitialAutoBuffer
 import com.ads.module.helper.interstitial.InterstitialBufferOptions
 
-// Application.onCreate(), after ERainAd.init(...).
+// Application.onCreate(), after AdsSdk.init(...).
 InterstitialAutoBuffer.configure(
     InterstitialBufferOptions(placements = listOf(AppAdPlacement.INTER_BACK, AppAdPlacement.INTER_ALL)),
 )
@@ -386,7 +386,7 @@ show on entry, and screen changes never move the dismissal/final-failure clock.
 Use one active screen source for each navigation hierarchy and report Home/other destinations
 too. See the [Vietnamese integration guide](../partner-integration/interstitial-preload-screens.vi.md)
 for lifecycle-safe Activity, Fragment, custom navigation and Compose examples, timing scenarios
-and the TranslatorGuru mapping.
+and a worked mapping of a typical app's screens.
 
 ### Opt-in content wait and independent placement clocks
 
@@ -465,10 +465,10 @@ and `wait_ms`; `dispatch` means handing off to show, not an impression. Use exis
 
 ## App-open on return
 
-Declare the unit under `open_resume` in your ad JSON, then seed it before `ERainAd.init(...)`:
+Declare the unit under `open_resume` in your ad JSON, then seed it before `AdsSdk.init(...)`:
 
 ```kotlin
-// Inside the ERainAdConfig(...).apply block from step 1:
+// Inside the AdsSdkConfig(...).apply block from step 1:
 idAdResume = AdGate.adUnitIds(AppAdPlacement.OPEN_RESUME).firstOrNull().orEmpty()
 ```
 
@@ -598,7 +598,7 @@ Java supports `AdSystemBars.setFullscreen(getWindow())` with the same defaults.
 
 ## App updates
 
-`com.ads.module.ump.ITGUpdateManager` and `IUpdateInstanceCallback` restore the Play update API
+`com.ads.module.ump.InAppUpdateManager` and `IUpdateInstanceCallback` restore the Play update API
 (IMMEDIATE / FLEXIBLE), with lifecycle cleanup and update resumption. Consent stays in ConsentCenter.
 `com.ads.module.update.ForceUpdateGate.await(activity, config)` holds startup navigation for outdated
 versions; a mandatory policy remains blocking after Play cancellation or a Store round trip.
@@ -618,7 +618,7 @@ for dependencies, Remote Config JSON, cache behavior, OnboardKit/standalone exam
 
 Settings resolve as remote > delivered legacy settings > app root asset > host configuration > bundled SDK defaults. Within one source, screen/group overrides precede placement and format overrides. Empty behavior objects add no leaf values and allow fallback. A full default JSON copied into the app asset root is still an explicit override of host values. See [remote settings](../partner-integration/remote-settings.md) for the complete schema.
 
-- `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through ERainAd and tracking wrappers.
+- `InterstitialAdManager.show(..., behavior)` accepts optional screen behavior; ordinary `show` uses the placement behavior. `loadAndShow` carries its captured behavior into presentation, including the ready-cache path. `presentation.loading_enabled` controls the loading dialog; the global pre-show delay remains separate. `AdCallback.showsInterstitialLoadingDialog()` is forwarded through AdsSdk and tracking wrappers.
 - An AutoBuffer rule in remote or the app asset adds its placement to the host's managed list. Only an explicit `"enabled": true` runs a placement the host did not list; without it that placement is managed but off, so preload, load and `show` skip with `DISABLED_CONFIG`. The host predicate and `enabled: false` can still block a listed one. The bundled rules cover `inter_all` and `inter_back` only and opt nothing in by themselves. The host must configure and start the buffer. A placement added while running has no initial cooldown on its own clock; like every placement, its first show needs one tap.
 - `BannerAdConfig.forPlacement` reads the placement's current `enable_ua_check` after refresh unless the host explicitly sets `forceUaCheck`. A non-positive `reloadIntervalSeconds` falls back to host cadence; it does not cause immediate reload.
 - Native `components: []` preserves the XML layout. A scoped `presentation.cta_corner_radius_dp` applies even without an explicit native style; a CTA color is needed to replace the XML background.

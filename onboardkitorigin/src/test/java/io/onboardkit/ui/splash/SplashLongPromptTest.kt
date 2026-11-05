@@ -346,7 +346,7 @@ class SplashLongPromptTest {
     @Test
     fun pooledRunAsksSplashNativeIntoThePoolAndOpensItsScreenAsAPoolSlot() {
         io.onboardkit.remote.OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"SHARED_POOL"}}""")
-        val loader = io.onboardkit.ads.pool.ApFakeLoader()
+        val loader = io.onboardkit.ads.pool.FakeAdLoader()
         io.onboardkit.ads.pool.installTestEngine(loader)
         io.onboardkit.ads.pool.allowAds(app)
         try {

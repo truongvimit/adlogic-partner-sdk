@@ -18,9 +18,9 @@ import androidx.startup.InitializationProvider
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.R
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdSkipReason
@@ -59,7 +59,7 @@ import org.robolectric.shadows.ShadowSystem
 import org.robolectric.shadows.ShadowSystemClock
 import java.util.concurrent.TimeUnit
 
-/** Real manager -> waterfall -> ERain -> Admob; only the external ad SDK dispatch is replaced. */
+/** Real manager -> waterfall -> AdsSdk -> Admob; only the external ad SDK dispatch is replaced. */
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [28],
@@ -91,13 +91,13 @@ class InterstitialLifecycleRestoreTest {
             NetworkCapabilities().also {
                 shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
             setFacebookClientToken("int02-test-client-token")
         })
-        ERainAd.getInstance().setIntervalInterstitialAd(0)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().setIntervalInterstitialAd(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         controller = Robolectric.buildActivity(Int02Activity::class.java).setup()
@@ -150,7 +150,7 @@ class InterstitialLifecycleRestoreTest {
         assertEquals(0, raw.hosts.size)
         assertFalse(ShadowDialog.getLatestDialog()?.isShowing == true)
         assertTrue(InterstitialAdManager.isReady(PLACEMENT))
-        assertTrue("ERain must not clear the wrapper after manager restores it", original.isReady)
+        assertTrue("AdsSdk must not clear the wrapper after manager restores it", original.isReady)
         assertSame(raw, original.interstitialAd)
         assertSame(original, cachedThroughPublicLoad())
 
@@ -407,11 +407,11 @@ class InterstitialLifecycleRestoreTest {
         assertFalse(activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
 
-    private fun loadAndFill(raw: Int02VendorAd): ApInterstitialAd {
-        var loaded: ApInterstitialAd? = null
+    private fun loadAndFill(raw: Int02VendorAd): InterstitialAdWrapper {
+        var loaded: InterstitialAdWrapper? = null
         val before = requests.size
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded = ad }
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded = ad }
         })
         assertEquals(before + 1, requests.size)
         requests.last().onAdLoaded(raw)
@@ -422,11 +422,11 @@ class InterstitialLifecycleRestoreTest {
         return result
     }
 
-    private fun cachedThroughPublicLoad(): ApInterstitialAd {
-        var loaded: ApInterstitialAd? = null
+    private fun cachedThroughPublicLoad(): InterstitialAdWrapper {
+        var loaded: InterstitialAdWrapper? = null
         val before = requests.size
         InterstitialAdManager.load(activity, PLACEMENT, listOf(UNIT), listener = object : AdCallback() {
-            override fun onApInterstitialLoad(ad: ApInterstitialAd?) { loaded = ad }
+            override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) { loaded = ad }
         })
         assertEquals(before, requests.size)
         return requireNotNull(loaded)

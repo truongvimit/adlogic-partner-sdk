@@ -12,7 +12,7 @@ It is hidden by default. Enable it in the app asset or remote `onboarding_config
 
 When disabled, neither Welcome Back native slot is preloaded. A returning launcher launch goes straight to the app, opened underneath the splash ad, with `OnboardingOutcome.Skipped(ALREADY_COMPLETED)`.
 
-The SDK ships four PDF goals (Edit PDF, Add text, Sign & fill, Split & merge). Replace them with your own:
+The SDK ships four generic goals (Pick up where I left off, Discover something new, Open my favorites, Adjust my settings), with ids `resume`, `discover`, `favorites` and `settings`. Replace them with your own:
 
 ```kotlin
 welcomeBackScreen = WelcomeBackScreenConfig(

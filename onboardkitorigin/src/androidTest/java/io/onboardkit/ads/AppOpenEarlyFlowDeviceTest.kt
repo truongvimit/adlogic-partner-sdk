@@ -20,7 +20,7 @@ import com.ads.module.consent.ConsentCenter
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.MobileAds
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
 import io.onboardkit.config.InterstitialAdUnit
@@ -63,7 +63,7 @@ class AppOpenEarlyFlowDeviceTest {
         onMain {
             Tracker.install(app)
             Tracker.addSink(sink)
-            OnboardingSdk.install(app) { adProvider = ERainAdProvider(); trackkitAutoTracking(false) }
+            OnboardingSdk.install(app) { adProvider = AdsSdkProvider(); trackkitAutoTracking(false) }
             OnboardingSdk.configure(onboardKitConfig {
                 step(ContentStepDefinition(StepId.OB1, title = "Resume device verification"))
                 ads = AdsConfig(appResume = InterstitialAdUnit(UNIT))

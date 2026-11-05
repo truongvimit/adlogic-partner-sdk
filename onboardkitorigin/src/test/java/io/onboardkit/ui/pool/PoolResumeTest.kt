@@ -8,14 +8,14 @@ import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.ObNativeResume
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.SYNC_PARITY
@@ -48,13 +48,13 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolResumeTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private val controllers = mutableListOf<ActivityController<*>>()
     private val ob1 = AdPlacement.StepNative(StepId.OB1)
 
     @Before fun setUp() {
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = PoolUiSdk.install(app, loader)
         val flow = poolSnapshot()
         OnboardingSdk.session.nativeFlow = flow
@@ -67,7 +67,7 @@ class PoolResumeTest {
         PoolUiSdk.tearDown()
     }
 
-    private fun fill(key: String): ApNativeAd = loader.fill(key).also { main.idle() }
+    private fun fill(key: String): NativeAdWrapper = loader.fill(key).also { main.idle() }
 
     private fun openResume(intent: Intent? = null): ActivityController<ObPoolResumeActivity> =
         Robolectric.buildActivity(ObPoolResumeActivity::class.java, intent).also {
@@ -305,7 +305,7 @@ class PoolResumeTest {
         fill("language1")
         val screen = openResume()
         assertTrue(loader.callsFor("native_resume").isEmpty())
-        assertEquals("DashDrama's p(k()) hides a refused native_resume", View.GONE, screen.block().visibility)
+        assertEquals("a refused native_resume hides the frame", View.GONE, screen.block().visibility)
         assertNull(screen.slot().shownAd())
         assertEquals("It still never owns", "language1", engine.owner)
     }

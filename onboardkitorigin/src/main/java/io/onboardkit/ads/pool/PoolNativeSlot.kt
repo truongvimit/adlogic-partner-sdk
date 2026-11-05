@@ -10,7 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.adnative.NativeAdStyle
@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 
 /**
  * One native slot of the pooled flow. It renders the pool's selection while [owner] is at least
- * [minState] and inflates a fresh view on every re-entry, replay included, as DashDrama does.
+ * [minState] and inflates a fresh view on every re-entry, replay included.
  * Every slot hides while ads are refused for the whole flow; an [Kind.OWNER] slot also hides on
  * its own placement's config refusal, while a [Kind.NON_OWNER] slot keeps showing what it borrows.
  *
@@ -61,9 +61,9 @@ internal class PoolNativeSlot(
      */
     private val placeholderUntilLive: Boolean = false,
     /** What the slot renders; an LFO carousel's second page passes [OnboardingPool.carouselSelection]. */
-    private val selection: () -> Flow<PoolSelection<ApNativeAd>> = { OnboardingPool.selection },
+    private val selection: () -> Flow<PoolSelection<NativeAdWrapper>> = { OnboardingPool.selection },
     /** [selection] as it is now, for an unfreeze. */
-    private val currentSelection: () -> PoolSelection<ApNativeAd>? = {
+    private val currentSelection: () -> PoolSelection<NativeAdWrapper>? = {
         OnboardingPool.engineOrNull()?.currentSelection()
     },
 ) {
@@ -81,10 +81,10 @@ internal class PoolNativeSlot(
 
     /** fo_ad_bound is once per slot, for the placement the slot had at its first bind. */
     private var boundReported = false
-    private var latest: PoolSelection<ApNativeAd>? = null
+    private var latest: PoolSelection<NativeAdWrapper>? = null
     private var lastOutcome: Outcome? = null
     private var lastHiddenReason: AdSkipReason? = null
-    private var shownAd: ApNativeAd? = null
+    private var shownAd: NativeAdWrapper? = null
     private var frozen = false
     private var started = false
     private var tornDown = false
@@ -165,7 +165,7 @@ internal class PoolNativeSlot(
     }
 
     /** The ad this slot's view holds, shown or hidden; null under a skeleton. */
-    fun shownAd(): ApNativeAd? = binder.boundAd()
+    fun shownAd(): NativeAdWrapper? = binder.boundAd()
 
     /** The container shows an ad, not a skeleton and not hidden. */
     fun showsAd(): Boolean = binder.boundAd() != null && container.visibility == View.VISIBLE
@@ -181,7 +181,7 @@ internal class PoolNativeSlot(
         latest?.let(::render)
     }
 
-    private fun render(selection: PoolSelection<ApNativeAd>) {
+    private fun render(selection: PoolSelection<NativeAdWrapper>) {
         if (tornDown) return
         val refusal = refusal()
         val outcome = binder.render(if (refusal != null) PoolSelection.hidden() else selection)
@@ -195,7 +195,7 @@ internal class PoolNativeSlot(
     private fun resumed(): Boolean = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
     /** Every RESUMED slot that shows [ad] re-inflates once the binds of this emission are done. */
-    private fun handBackRegistration(ad: ApNativeAd) {
+    private fun handBackRegistration(ad: NativeAdWrapper) {
         live.forEach { slot ->
             if (slot !== this && slot.binder.boundAd() === ad && !slot.reclaimPosted) {
                 slot.reclaimPosted = true
@@ -247,7 +247,7 @@ internal class PoolNativeSlot(
         }
     }
 
-    private fun onEvent(event: PoolEvent<ApNativeAd>) {
+    private fun onEvent(event: PoolEvent<NativeAdWrapper>) {
         if (tornDown) return
         when (event) {
             // Another slot may show the same ad; a frozen or paused one keeps its view but not the event.
@@ -319,7 +319,7 @@ internal class PoolNativeSlot(
 }
 
 /**
- * LFO, its confirm popup, Privacy, Goal and the resume screen bind from STARTED, as DashDrama does:
+ * LFO, its confirm popup, Privacy, Goal and the resume screen bind from STARTED:
  * a fill under the interstitial is drawn already, and GMA reports its impression once the screen
  * is back on top.
  */

@@ -32,7 +32,7 @@ internal data class NativeAdRequest(
 
 internal enum class NativeStatus { IDLE, LOADING, READY, FAILED }
 
-/** The flow's ad engine; [io.onboardkit.ads.erain.ERainAdProvider] is the only implementation. */
+/** The flow's ad engine; [io.onboardkit.ads.sdk.AdsSdkProvider] is the only implementation. */
 abstract class OnboardingAdProvider internal constructor() {
 
     internal abstract fun pendingClickAction(placement: AdPlacement): NativeClickAction?

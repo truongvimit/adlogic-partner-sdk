@@ -1,6 +1,5 @@
 include ':app'
 rootProject.name = "adlogic-partner-sdk"
-include ':crash_screen'
 include ':ads'
 include ':onboardkitorigin'
 include ':adtracer'

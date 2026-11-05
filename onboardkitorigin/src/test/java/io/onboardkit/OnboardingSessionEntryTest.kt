@@ -9,7 +9,7 @@ import com.ads.module.config.settings.SettingsDocument
 import com.ads.module.config.settings.SettingsSnapshot
 import com.ads.module.helper.adnative.pool.SharedNativePool
 import io.onboardkit.ads.FakeAdProvider
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.installTestEngine
 import io.onboardkit.config.onboardKitConfig
@@ -126,7 +126,7 @@ class OnboardingSessionEntryTest {
         }
         repeat(2) { launch ->
             startResolved(FlowDestination.WELCOME_BACK, "launcher$launch")
-            OnboardingSdk.recordGoals(listOf(GoalAnswer("edit", "Edit PDF")))
+            OnboardingSdk.recordGoals(listOf(GoalAnswer("edit", "Edit")))
             OnboardingSdk.finishWelcomeBack(activity.get())
             OnboardingSdk.finishWelcomeBack(activity.get())
         }
@@ -191,7 +191,7 @@ class OnboardingSessionEntryTest {
     @Test
     fun `only a valid SHARED_POOL opens the pooled flow, whatever source says it`() {
         // A pool that can run, so only the type decides below.
-        installTestEngine(ApFakeLoader())
+        installTestEngine(FakeAdLoader())
         assertRoutes(CLASSIC_LFO, "missing")
 
         OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"shared_pool"}}""")
@@ -218,18 +218,18 @@ class OnboardingSessionEntryTest {
         OnboardingSettings.document.acceptSuccessfulFetch(SHARED_POOL)
         assertRoutes(CLASSIC_LFO, "no provider")
         ReflectionHelpers.setField(OnboardingSdk, "adProvider", FakeAdProvider())
-        assertRoutes(CLASSIC_LFO, "a provider other than ERain, no test engine")
+        assertRoutes(CLASSIC_LFO, "a provider other than AdsSdk, no test engine")
     }
 
     @Test
     fun `a throwing knob read runs the classic LFO and leaves no pool run behind`() {
-        installTestEngine(ApFakeLoader())
+        installTestEngine(FakeAdLoader())
         withThrowingPoolKnobs { assertRoutes(CLASSIC_LFO, "snapshot throws") }
     }
 
     @Test
     fun `SHARED_POOL opens the pooled flow and latches its knobs for the run`() {
-        installTestEngine(ApFakeLoader())
+        installTestEngine(FakeAdLoader())
         OnboardingSettings.document.acceptSuccessfulFetch(
             """{"native_flow":{"type":"SHARED_POOL","pool":{"lfo":{"confirm_button":{"reveal_delay_ms":11}}}}}""")
         assertRoutes(POOLED_FLOW, "shared pool")
@@ -251,7 +251,7 @@ class OnboardingSessionEntryTest {
 
     @Test
     fun `ONBOARDING and WELCOME_BACK stay classic under SHARED_POOL`() {
-        installTestEngine(ApFakeLoader())
+        installTestEngine(FakeAdLoader())
         OnboardingSettings.document.acceptSuccessfulFetch(SHARED_POOL)
         startResolved(FlowDestination.ONBOARDING, "resume")
         assertEquals("io.onboardkit.ui.onboarding.ObOnboardingHostActivity", nextStarted())

@@ -56,7 +56,6 @@ public class AppPurchase {
     private static volatile AppPurchase instance;
 
     private String price = "1.49$";
-    private String oldPrice = "2.99$";
 
     private ArrayList<QueryProductDetailsParams.Product> listSubscriptionId;
     private ArrayList<QueryProductDetailsParams.Product> listINAPId;
@@ -68,7 +67,6 @@ public class AppPurchase {
     private final CopyOnWriteArrayList<PurchaseItem> purchaseItems = new CopyOnWriteArrayList<>();
 
     private PurchaseListener purchaseListener;
-    private UpdatePurchaseListener updatePurchaseListener;
     private BillingListener billingListener;
     private final CopyOnWriteArrayList<PurchaseCallback> purchaseCallbacks = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<BillingListener> verifyCompletionListeners = new CopyOnWriteArrayList<>();
@@ -119,10 +117,6 @@ public class AppPurchase {
     private Handler handlerTimeout;
     private Runnable rdTimeout;
 
-    public void setPurchaseListener(PurchaseListener purchaseListener) {
-        this.purchaseListener = purchaseListener;
-    }
-
     /**
      * Registers an additional listener; unlike {@link #setPurchaseListener} it never displaces one
      * a host app already installed.
@@ -133,10 +127,6 @@ public class AppPurchase {
         }
     }
 
-    public void removePurchaseCallback(PurchaseCallback callback) {
-        purchaseCallbacks.remove(callback);
-    }
-
     /**
      * Server-side receipt check applied to purchases arriving from a billing flow, not to those
      * restored by {@link #verifyPurchased(boolean)}. Unset means every purchase is treated as verified.
@@ -145,95 +135,12 @@ public class AppPurchase {
         this.purchaseVerifier = purchaseVerifier;
     }
 
-    public void setUpdatePurchaseListener(UpdatePurchaseListener listener) {
-        this.updatePurchaseListener = listener;
-    }
-
-    /**
-     * Replaces the single init listener; fires immediately with 0 when verification already ran.
-     */
-    public void setBillingListener(BillingListener billingListener) {
-        this.billingListener = billingListener;
-        if (isAvailable && verifyFinish) {
-            isInitBillingFinish = true;
-            initCallbackDelivered.set(true);
-            billingListener.onInitBillingFinished(0);
-        }
-    }
-
     public boolean isAvailable() {
         return isAvailable;
     }
 
-    public Boolean getInitBillingFinish() {
-        return isInitBillingFinish;
-    }
-
     boolean isVerifyFinish() {
         return verifyFinish;
-    }
-
-    public void setEventConsumePurchaseTest(View view) {
-        view.setOnClickListener(view1 -> {
-            if (BillingKit.isDevMode()) {
-                Log.d(TAG, "setEventConsumePurchaseTest: success");
-                AppPurchase.getInstance().consumePurchase(PRODUCT_ID_TEST);
-            }
-        });
-    }
-
-    /**
-     * As {@link #setBillingListener(BillingListener)}, but gives up after {@code timeout} ms so a
-     * splash screen is never held by an unreachable Play service.
-     */
-    public void setBillingListener(BillingListener billingListener, int timeout) {
-        Log.d(TAG, "setBillingListener: timeout " + timeout);
-        this.billingListener = billingListener;
-        if (isAvailable && verifyFinish) {
-            Log.d(TAG, "setBillingListener: finish");
-            isInitBillingFinish = true;
-            initCallbackDelivered.set(true);
-            billingListener.onInitBillingFinished(0);
-            return;
-        }
-        isInitBillingFinish = false;
-        initCallbackDelivered.set(false);
-        if (handlerTimeout != null && rdTimeout != null) {
-            // a timeout left behind by an earlier listener would consume the one-shot latch
-            handlerTimeout.removeCallbacks(rdTimeout);
-        }
-        handlerTimeout = new Handler(Looper.getMainLooper());
-        rdTimeout = () -> {
-            Log.d(TAG, "setBillingListener: timeout run ");
-            BillingListener current = this.billingListener;
-            if (current != null && initCallbackDelivered.compareAndSet(false, true)) {
-                isInitBillingFinish = true;
-                current.onInitBillingFinished(BillingClient.BillingResponseCode.ERROR);
-            }
-        };
-        handlerTimeout.postDelayed(rdTimeout, timeout);
-    }
-
-    /**
-     * @deprecated write-only, nothing in the SDK reads it. Read prices from
-     * {@link #getPrice(String, int, String)} instead.
-     */
-    @Deprecated
-    public void setPrice(String price) {
-        this.price = price;
-    }
-
-    public void setConsumePurchase(boolean consumePurchase) {
-        isConsumePurchase = consumePurchase;
-    }
-
-    /**
-     * @deprecated write-only, nothing in the SDK reads it. Use
-     * {@link #getOldPriceFormatted(String, int, int)} instead.
-     */
-    @Deprecated
-    public void setOldPrice(String oldPrice) {
-        this.oldPrice = oldPrice;
     }
 
     /**
@@ -359,17 +266,6 @@ public class AppPurchase {
     /**
      * @return an unmodifiable snapshot taken at call time; re-call after
      * {@link BillingListener#onInitBillingFinished} rather than caching the reference
-     * @deprecated product ids only. Use {@link #getOwnedInAppPurchases()} for the full receipts;
-     * this stays because changing the return type would break source compatibility.
-     */
-    @Deprecated
-    public List<String> getOwnerIdInapps() {
-        return Collections.unmodifiableList(new ArrayList<>(ownerIdInapps));
-    }
-
-    /**
-     * @return an unmodifiable snapshot taken at call time; re-call after
-     * {@link BillingListener#onInitBillingFinished} rather than caching the reference
      */
     public List<PurchaseResult> getOwnedInAppPurchases() {
         return Collections.unmodifiableList(new ArrayList<>(ownedInAppPurchases));
@@ -437,7 +333,7 @@ public class AppPurchase {
                 Log.i(TAG, warning);
             } else {
                 Log.e(TAG, warning + " Call BillingKit.setDevMode(false) - or "
-                        + "ERainAdConfig.variantDev(false) when :ads is present - for release.");
+                        + "AdsSdkConfig.variantDev(false) when :ads is present - for release.");
             }
             if (!inAppIdList.contains(PRODUCT_ID_TEST)) {
                 inAppIdList.add(PRODUCT_ID_TEST);
@@ -808,84 +704,6 @@ public class AppPurchase {
         }
     }
 
-    public void updatePurchaseStatus() {
-        if (billingClient == null || !billingClient.isReady()) {
-            Log.e(TAG, "updatePurchaseStatus: BillingClient is not ready");
-            return;
-        }
-
-        isUpdateInapps = false;
-        isUpdateSubs = false;
-        ownerIdInapps.clear();
-        ownerIdSubs.clear();
-        ownedInAppPurchases.clear();
-        isPurchase = false;
-
-        if (listINAPId != null) {
-            billingClient.queryPurchasesAsync(
-                    QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build(),
-                    (billingResult, list) -> {
-                        if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK && list != null) {
-                            for (Purchase purchase : list) {
-                                if (purchase.getPurchaseState() != Purchase.PurchaseState.PURCHASED) {
-                                    continue;
-                                }
-                                boolean matched = false;
-                                for (String id : inAppIds) {
-                                    if (!purchase.getProducts().contains(id)) {
-                                        continue;
-                                    }
-                                    matched = true;
-                                    if (!ownerIdInapps.contains(id)) {
-                                        ownerIdInapps.add(id);
-                                    }
-                                    if (resolveType(id, TYPE_IAP.PURCHASE) != TYPE_IAP.CONSUMABLE) {
-                                        isPurchase = true;
-                                    }
-                                }
-                                if (matched) {
-                                    ownedInAppPurchases.add(PurchaseResult.from(purchase));
-                                }
-                            }
-                        }
-                        isUpdateInapps = true;
-                        if (isUpdateSubs) {
-                            if (updatePurchaseListener != null) {
-                                updatePurchaseListener.onUpdateFinished();
-                            }
-                        }
-                    }
-            );
-        }
-
-        if (listSubscriptionId != null) {
-            billingClient.queryPurchasesAsync(
-                    QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).build(),
-                    (billingResult, list) -> {
-                        if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK && list != null) {
-                            for (Purchase purchase : list) {
-                                if (purchase.getPurchaseState() != Purchase.PurchaseState.PURCHASED) {
-                                    continue;
-                                }
-                                for (String id : subsIds) {
-                                    if (purchase.getProducts().contains(id)) {
-                                        addOrUpdateOwnerIdSub(ownerIdSubs, PurchaseResult.from(purchase), id);
-                                        isPurchase = true;
-                                    }
-                                }
-                            }
-                        }
-                        isUpdateSubs = true;
-                        if (isUpdateInapps) {
-                            if (updatePurchaseListener != null) {
-                                updatePurchaseListener.onUpdateFinished();
-                            }
-                        }
-                    }
-            );
-        }
-    }
-
     /**
      * Launches the one-time purchase flow.
      *
@@ -911,28 +729,6 @@ public class AppPurchase {
     @Deprecated
     public String purchase(Activity activity, String productId) {
         return dispatch(purchaseInternal(activity, productId)).legacyMessage;
-    }
-
-    /**
-     * @deprecated use {@link #subscribeProduct(Activity, String, String)} with a null offer token.
-     */
-    @Deprecated
-    public String subscribe(Activity activity, String SubsId) {
-        return dispatch(subscribeInternal(activity, SubsId, null, false)).legacyMessage;
-    }
-
-    /**
-     * Subscribe with specific offer token
-     *
-     * @param activity   current activity
-     * @param SubsId     subscription product ID
-     * @param offerToken specific offer token to use
-     * @return status message
-     * @deprecated use {@link #subscribeProduct(Activity, String, String)}.
-     */
-    @Deprecated
-    public String subscribe(Activity activity, String SubsId, String offerToken) {
-        return dispatch(subscribeInternal(activity, SubsId, offerToken, true)).legacyMessage;
     }
 
     private LaunchOutcome purchaseInternal(Activity activity, String productId) {
@@ -1184,49 +980,6 @@ public class AppPurchase {
 
         Log.w(TAG, "resolveOfferToken: falling back to first offer of " + productId);
         return offers.get(0).getOfferToken();
-    }
-
-    public void consumePurchase(String productId) {
-        if (billingClient == null || !billingClient.isReady()) {
-            Log.e(TAG, "BillingClient is not ready");
-            return;
-        }
-
-        QueryPurchasesParams params = QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build();
-        billingClient.queryPurchasesAsync(params, (billingResult, list) -> {
-            Purchase pc = null;
-            if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK && list != null) {
-                for (Purchase purchase : list) {
-                    if (purchase.getProducts().contains(productId)) {
-                        pc = purchase;
-                    }
-                }
-            }
-
-            if (pc == null) {
-                Log.e(TAG, "No purchases found to consume.");
-                // developer-facing only: this is not a flow the user started, so no error is shown
-                notifyCallbacksError(BillingClient.BillingResponseCode.ITEM_NOT_OWNED,
-                        "No purchase to consume for " + productId);
-                return;
-            }
-
-            try {
-                ConsumeParams consumeParams =
-                        ConsumeParams.newBuilder()
-                                .setPurchaseToken(pc.getPurchaseToken())
-                                .build();
-
-                billingClient.consumeAsync(consumeParams, (billingResult1, purchaseToken) -> {
-                    if (billingResult1.getResponseCode() == BillingClient.BillingResponseCode.OK) {
-                        Log.e(TAG, "onConsumeResponse: OK");
-                        verifyPurchased(false);
-                    }
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "consumePurchase failed for " + productId, e);
-            }
-        });
     }
 
     private void handlePurchase(Purchase purchase) {
@@ -1499,48 +1252,6 @@ public class AppPurchase {
     }
 
     /**
-     * Pricing phases of the last offer, i.e. trial and introductory phases before the renewal one.
-     */
-    public List<ProductDetails.PricingPhase> getPricePricingPhaseList(String productId) {
-        ProductDetails skuDetails = skuDetailsSubsMap.get(productId);
-        if (skuDetails == null)
-            return null;
-
-        List<ProductDetails.SubscriptionOfferDetails> subsDetail = skuDetails.getSubscriptionOfferDetails();
-        if (subsDetail == null || subsDetail.isEmpty()) {
-            return null;
-        }
-        return subsDetail.get(subsDetail.size() - 1).getPricingPhases().getPricingPhaseList();
-    }
-
-    /**
-     * Localised renewal price, falling back to the one-time price for a product that has both.
-     */
-    public String getIntroductorySubPrice(String productId) {
-        ProductDetails skuDetails = skuDetailsSubsMap.get(productId);
-        if (skuDetails == null) {
-            return "";
-        }
-        if (skuDetails.getOneTimePurchaseOfferDetails() != null)
-            return skuDetails.getOneTimePurchaseOfferDetails().getFormattedPrice();
-        else if (skuDetails.getSubscriptionOfferDetails() != null) {
-            List<ProductDetails.SubscriptionOfferDetails> subsDetail = skuDetails.getSubscriptionOfferDetails();
-            if (subsDetail.isEmpty()) {
-                return "";
-            }
-            List<ProductDetails.PricingPhase> pricingPhaseList =
-                    subsDetail.get(subsDetail.size() - 1).getPricingPhases().getPricingPhaseList();
-            if (pricingPhaseList == null || pricingPhaseList.isEmpty()) {
-                return "";
-            }
-            return pricingPhaseList.get(pricingPhaseList.size() - 1).getFormattedPrice();
-        } else {
-            return "";
-        }
-
-    }
-
-    /**
      * ISO 4217 code Play prices this product in for the current user.
      */
     public String getCurrency(String productId, int typeIAP) {
@@ -1566,32 +1277,6 @@ public class AppPurchase {
             return "";
         }
         return pricingPhaseList.get(0).getPriceCurrencyCode();
-    }
-
-    public Map<String, ProductDetails> getSkuDetailsINAPMap() {
-        return Collections.unmodifiableMap(new HashMap<>(skuDetailsINAPMap));
-    }
-
-    public Map<String, ProductDetails> getSkuDetailsSubsMap() {
-        return Collections.unmodifiableMap(new HashMap<>(skuDetailsSubsMap));
-    }
-
-    /**
-     * @deprecated the value is micros, not currency units — use
-     * {@link #getPriceMicros(String, int)}.
-     */
-    @Deprecated
-    public double getPriceWithoutCurrency(String productId, int typeIAP) {
-        return getPriceMicros(productId, typeIAP, "");
-    }
-
-    /**
-     * @deprecated the value is micros, not currency units — use
-     * {@link #getPriceMicros(String, int, String)}.
-     */
-    @Deprecated
-    public double getPriceWithoutCurrency(String productId, int typeIAP, String offerToken) {
-        return getPriceMicros(productId, typeIAP, offerToken);
     }
 
     public double getPriceMicros(String productId, int typeIAP) {
@@ -1714,84 +1399,6 @@ public class AppPurchase {
     }
 
     /**
-     * Get formatted free trial period string
-     *
-     * @param productId subscription product ID
-     * @return formatted string (e.g., "7 days free", "1 month free"), or empty string if no trial
-     */
-    public String getFormattedFreeTrialPeriod(String productId) {
-        String period = getFreeTrialPeriod(productId);
-        if (period.isEmpty()) {
-            return "";
-        }
-        return formatIsoPeriod(period);
-    }
-
-    /**
-     * Play emits compound periods such as "P1M15D", which a single Integer.parseInt cannot read.
-     */
-    private static String formatIsoPeriod(String period) {
-        if (!period.startsWith("P")) {
-            return period;
-        }
-        int years = 0, months = 0, weeks = 0, days = 0;
-        int value = 0;
-        boolean hasDigits = false;
-        for (int i = 1; i < period.length(); i++) {
-            char c = period.charAt(i);
-            if (c >= '0' && c <= '9') {
-                value = value * 10 + (c - '0');
-                hasDigits = true;
-                continue;
-            }
-            if (!hasDigits) {
-                return period;
-            }
-            switch (c) {
-                case 'Y':
-                    years += value;
-                    break;
-                case 'M':
-                    months += value;
-                    break;
-                case 'W':
-                    weeks += value;
-                    break;
-                case 'D':
-                    days += value;
-                    break;
-                default:
-                    return period;
-            }
-            value = 0;
-            hasDigits = false;
-        }
-
-        StringBuilder label = new StringBuilder();
-        appendPeriodUnit(label, years, "year");
-        appendPeriodUnit(label, months, "month");
-        appendPeriodUnit(label, weeks, "week");
-        appendPeriodUnit(label, days, "day");
-        if (label.length() == 0) {
-            return period;
-        }
-        return label + " free";
-    }
-
-    private static void appendPeriodUnit(StringBuilder label, int amount, String unit) {
-        if (amount <= 0) {
-            return;
-        }
-        if (label.length() > 0) {
-            label.append(' ');
-        }
-        label.append(amount).append(' ').append(unit);
-        if (amount != 1) {
-            label.append('s');
-        }
-    }
-
-    /**
      * Get the offer token for free trial subscription
      *
      * @param productId subscription product ID
@@ -1813,40 +1420,6 @@ public class AppPurchase {
         return null;
     }
 
-    /**
-     * Purchase subscription with free trial if available
-     * If free trial is not available, it will use the default subscription offer
-     *
-     * @param activity  current activity
-     * @param productId subscription product ID
-     */
-    public void subscribeWithFreeTrial(Activity activity, String productId) {
-        if (skuDetailsSubsMap.containsKey(productId)) {
-            subscribeProduct(activity, productId, getFreeTrialOfferToken(productId));
-        } else {
-            Log.e(TAG, "subscribeWithFreeTrial: Product not found - " + productId);
-        }
-    }
-
-    private double discount = 1;
-
-    /**
-     * @deprecated nothing in the SDK reads it; use
-     * {@link #getOldPriceFormatted(String, int, int)} to render a discount.
-     */
-    @Deprecated
-    public void setDiscount(double discount) {
-        this.discount = discount;
-    }
-
-    /**
-     * @deprecated nothing in the SDK reads it; use
-     * {@link #getOldPriceFormatted(String, int, int)} to render a discount.
-     */
-    @Deprecated
-    public double getDiscount() {
-        return discount;
-    }
 
     private ArrayList<QueryProductDetailsParams.Product> listIdToListProduct(List<String> listId,
                                                                             String styleBilling,

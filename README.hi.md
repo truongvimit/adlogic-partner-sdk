@@ -68,7 +68,7 @@ Manifest में अपनी `Application` class दर्ज करें।
 | चरण | क्या करें | गाइड |
 | --- | --- | --- |
 | 1 · Analytics | SDK events लेने हों तो दूसरे kits से events आने से पहले `Tracker` install करें और destination जोड़ें। | [Trackkit](trackkit/README.hi.md) |
-| 2 · Ads | AdMob/Meta metadata और अपनी ad JSON दें, फिर `ERainAd` initialize करें। | [Ads quickstart](ads/README.md) |
+| 2 · Ads | AdMob/Meta metadata और अपनी ad JSON दें, फिर `AdsSdk` initialize करें। | [Ads quickstart](ads/README.md) |
 | 3 · खरीदारी | `PayKit` install करें, या अपने UI के लिए `BillingKit` initialize करें। PayKit इस्तेमाल होने पर billing initialization उसी को करने दें। | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
 | 4 · Onboarding | `OnboardingSdk` install/configure करें और `ObSplashActivity` की अपनी subclass दर्ज करें। | [OnboardKit](onboardkitorigin/README.hi.md) |
 

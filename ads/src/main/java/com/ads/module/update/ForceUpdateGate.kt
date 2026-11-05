@@ -11,7 +11,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import com.ads.module.R
 import com.ads.module.helper.AdGate
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ump.ITGUpdateManager
+import com.ads.module.ump.InAppUpdateManager
 import com.ads.module.ump.IUpdateInstanceCallback
 import com.google.android.play.core.appupdate.AppUpdateInfo
 import com.google.android.play.core.install.model.AppUpdateType
@@ -56,7 +56,7 @@ object ForceUpdateGate {
                     if (!required) setNegativeButton(R.string.adlogic_update_later) { _, _ -> }
                 }
                 .create()
-            var updateManager: ITGUpdateManager? = null
+            var updateManager: InAppUpdateManager? = null
             fun release() { updateManager?.dispose(); updateManager = null }
             fun openStore() {
                 if (!continuation.isActive || activity.isFinishing || activity.isDestroyed) return
@@ -81,7 +81,7 @@ object ForceUpdateGate {
             dialog.setCanceledOnTouchOutside(!required)
             dialog.show()
             if (config.storeLink.isBlank()) {
-                updateManager = ITGUpdateManager(activity, REQUEST_CODE,
+                updateManager = InAppUpdateManager(activity, REQUEST_CODE,
                     object : IUpdateInstanceCallback {
                         override fun updateAvailableListener(updateAvailability: AppUpdateInfo) = AppUpdateType.IMMEDIATE
                         override fun onUpdateUnavailable() = openStore()

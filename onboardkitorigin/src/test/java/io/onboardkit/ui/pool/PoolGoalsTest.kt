@@ -10,7 +10,7 @@ import android.widget.CheckBox
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.LoadResult
 import com.ads.module.helper.adnative.pool.NativePoolEngine
@@ -21,7 +21,7 @@ import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.POOL_ADS
 import io.onboardkit.ads.pool.PoolGlueViewShadow
@@ -79,8 +79,8 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolGoalsTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private var controller: ActivityController<ObPoolFlowActivity>? = null
     private val activity get() = requireNotNull(controller).get()
     private val stage get() = activity.supportFragmentManager.findFragmentByTag("ob_pool_stage")
@@ -118,7 +118,7 @@ class PoolGoalsTest {
             }
         })
         OnboardingSdk.setListener { _, outcome -> outcomes += outcome }
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = installTestEngine(loader)
     }
 
@@ -247,7 +247,7 @@ class PoolGoalsTest {
         pump()
         val goalAd = loader.fill(goal.key)
         pump()
-        assertSame("DashDrama's STARTED collector", goalAd.admobNativeAd, shownAd())
+        assertSame("the slot collects while STARTED", goalAd.admobNativeAd, shownAd())
     }
 
     @Test fun `the forward button stays hidden until a fixed time after the first selection`() {
@@ -481,7 +481,7 @@ class PoolGoalsTest {
         assertEquals(listOf("edit", "sign"), OnboardingSdk.session.goals.map { it.id })
     }
 
-    @Test fun `OC3 a late FULL1 fill shows on Goal by rule 2`() {
+    @Test fun `a late FULL1 fill shows on Goal by rule 2`() {
         val full1 = AdPlacement.StepFullScreen(StepId.FULL1)
         open(Stage.GOAL) {
             assertEquals(LoadResult.Requested, OnboardingPool.claim(full1, LoadMode.POLITE))

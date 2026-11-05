@@ -18,7 +18,7 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -58,7 +58,7 @@ import java.util.concurrent.TimeUnit
 @LooperMode(LooperMode.Mode.PAUSED)
 class ScopedNativeReleaseTest {
     private lateinit var controller: ActivityController<NativeProviderHost>
-    private lateinit var provider: ERainAdProvider
+    private lateinit var provider: AdsSdkProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
     private val vendorEvents = mutableListOf<AdListener>()
@@ -88,7 +88,7 @@ class ScopedNativeReleaseTest {
             doAnswer { requests += checkNotNull(loaded); null }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
         // OnboardingSdk is process-scoped and install is intentionally idempotent.
-        provider = OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
+        provider = OnboardingSdk.provider() as? AdsSdkProvider ?: AdsSdkProvider()
         provider.releaseAll()
         OnboardingSdk.install(app) { adProvider = provider; trackkitAutoTracking(false) }
         OnboardingSdk.configure(onboardKitConfig {

@@ -10,9 +10,9 @@ import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdRemoteConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.AdSkipReason
@@ -65,11 +65,11 @@ class InterstitialPreloadScreensTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("content-test") })
-        ERainAd.getInstance().setIntervalInterstitialAd(0)
-        ERainAd.getInstance().setMaxClickAdsPerDay(0)
-        ERainAd.getInstance().setCountClickToShowAds(1, 0)
-        ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("content-test") })
+        AdsSdk.getInstance().setIntervalInterstitialAd(0)
+        AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+        AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+        AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
         AppOpenManager.getInstance().disableAppResume()
         AppOpenManager.getInstance().setInterstitialShowing(false)
         AdRemoteConfig.initializeFromJson("""{

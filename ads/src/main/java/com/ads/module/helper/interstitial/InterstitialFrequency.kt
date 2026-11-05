@@ -8,7 +8,7 @@ import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 
 /**
  * Process-local clocks and tap counters for placements owned by AutoBuffer. The clocks stand
@@ -63,7 +63,7 @@ object InterstitialFrequency {
     internal fun isIndependent(placement: String): Boolean =
         InterstitialAutoBuffer.owns(placement) && !AdBehavior.bool("interstitial_auto_buffer.shared_config")
 
-    private fun globalIntervalMs(): Long = AdBehavior.number("interstitial.frequency.interval_ms", (ERainAd.getInstance().adConfig?.intervalInterstitialAd ?: 0).coerceAtLeast(0) * 1000L)
+    private fun globalIntervalMs(): Long = AdBehavior.number("interstitial.frequency.interval_ms", (AdsSdk.getInstance().adConfig?.intervalInterstitialAd ?: 0).coerceAtLeast(0) * 1000L)
 
     internal fun intervalMs(placement: String): Long =
         if (isIndependent(placement)) {

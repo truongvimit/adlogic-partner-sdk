@@ -32,7 +32,7 @@ import io.trackkit.TrackkitEvents;
  */
 public final class AdjustInstallReferrer {
 
-    private static final String TAG = "ERainAdjust";
+    private static final String TAG = "AdjustTracker";
 
     private AdjustInstallReferrer() {
     }

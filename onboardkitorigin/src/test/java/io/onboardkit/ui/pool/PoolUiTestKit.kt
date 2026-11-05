@@ -9,7 +9,7 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.adnative.pool.MainLooperPoolScheduler
@@ -28,7 +28,7 @@ import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.FakeAdProvider
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObInterstitialCallback
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.LFO1
 import io.onboardkit.ads.pool.LFO2
 import io.onboardkit.ads.pool.OnboardingPool
@@ -147,7 +147,7 @@ internal object PoolUiSdk {
     lateinit var provider: PoolUiProvider
         private set
 
-    fun install(app: Application, loader: ApFakeLoader): NativePoolEngine<ApNativeAd> {
+    fun install(app: Application, loader: FakeAdLoader): NativePoolEngine<NativeAdWrapper> {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
         AdRemoteConfig.reset()
         OnboardingSettings.document.acceptSuccessfulFetch(null)
@@ -200,7 +200,7 @@ internal object PoolUiSdk {
  * `async_selector` derives it on another thread: a slot hears a pool change only after the call
  * that made it has returned.
  */
-internal fun installLaggingSelectorEngine(loader: ApFakeLoader): NativePoolEngine<ApNativeAd> {
+internal fun installLaggingSelectorEngine(loader: FakeAdLoader): NativePoolEngine<NativeAdWrapper> {
     SharedNativePool.resetForTest()
     return NativePoolEngine(
         loader = loader,

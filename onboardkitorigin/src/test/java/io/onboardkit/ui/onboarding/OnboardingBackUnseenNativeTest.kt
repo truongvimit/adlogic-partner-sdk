@@ -26,7 +26,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeStatus
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdFullScreenStepDefinition
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.ContentStepDefinition
@@ -95,7 +95,7 @@ class OnboardingBackUnseenNativeTest {
 
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var provider: ERainAdProvider
+    private lateinit var provider: AdsSdkProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<VendorRequest>()
     private var controller: ActivityController<ObOnboardingHostActivity>? = null
@@ -127,8 +127,8 @@ class OnboardingBackUnseenNativeTest {
             }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
         OnboardingSettings.document.acceptSuccessfulFetch(null)
-        OnboardingSdk.install(app) { adProvider = ERainAdProvider(); trackkitAutoTracking(false) }
-        provider = checkNotNull(OnboardingSdk.provider() as? ERainAdProvider) {
+        OnboardingSdk.install(app) { adProvider = AdsSdkProvider(); trackkitAutoTracking(false) }
+        provider = checkNotNull(OnboardingSdk.provider() as? AdsSdkProvider) {
             "Another test class installed its provider in this sandbox first"
         }
         provider.releaseAll()

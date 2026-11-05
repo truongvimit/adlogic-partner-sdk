@@ -50,7 +50,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * The pooled LFO (DashDrama LanguageFirstFragment). One owner slot renders the pool's selection
+ * The pooled LFO. One owner slot renders the pool's selection
  * under the Language1 template until a tap's Language2 claim succeeds, then under Language2; the
  * confirm control appears a fixed delay after the first tap, never before.
  *
@@ -93,7 +93,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     private var selectedCode: String? = null
     private var tapCount = 0
 
-    /** DashDrama's screen index: Language1 until a tap's Language2 claim reports success. */
+    /** The screen index: Language1 until a tap's Language2 claim reports success. */
     private var currentKey: AdPlacement = AdPlacement.Language1
 
     /** What onDestroyView clears: the LFO key this screen last made the owner. */
@@ -267,9 +267,9 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     }
 
     /**
-     * DashDrama's LanguageFirstFragment.h: the slot of a placement refused for this run collapses.
-     * A transient refusal keeps it: the pool may still lend another screen's ad. The screen opens
-     * LFO1 FORCED, unlike DashDrama: the splash's native_fs, the pool's first ad, may still be
+     * The slot of a placement refused for this run collapses. A transient refusal keeps it: the
+     * pool may still lend another screen's ad. The screen opens LFO1 FORCED: the splash's
+     * native_fs, the pool's first ad, may still be
      * loading, and the gate it closes would drop a POLITE claim for good.
      */
     private fun claimCurrent(mode: LoadMode = LoadMode.POLITE) {
@@ -281,7 +281,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
 
     private fun onLanguageTapped(language: ObLanguage) {
         if (exitLatched || loadingLeftMs > 0L) return
-        // The DashDrama preselection is not a pick: only a row the user already tapped is a re-tap.
+        // The preselection is not a pick: only a row the user already tapped is a re-tap.
         val reselected = tapCount > 0 && selectedCode == language.code
         if (tapCount < Int.MAX_VALUE) tapCount++
         selectedCode = language.code
@@ -294,8 +294,8 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     }
 
     /**
-     * DashDrama requests LFO2 FORCED on every tap; the pool turns a repeat into a no-op. Like its
-     * h(2, true), a successful claim opens the ad frame a refused Language1 collapsed.
+     * Every tap requests LFO2 FORCED; the pool turns a repeat into a no-op. A successful claim
+     * opens the ad frame a refused Language1 collapsed.
      */
     private fun claimLanguage2(code: String) {
         val result = OnboardingPool.claim(AdPlacement.Language2, LoadMode.FORCED)
@@ -345,9 +345,8 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
     }
 
     /**
-     * DashDrama LanguageFirstFragment.onResume: refresh the current key without touching the owner,
-     * then claim it POLITE. A Language1 the splash already filled is not refreshed on the first
-     * resume (DashDrama's LFO1 is still loading there). An open dialog keeps the owner. Once the
+     * Refresh the current key without touching the owner, then claim it POLITE. A Language1 the
+     * splash already filled is not refreshed on the first resume. An open dialog keeps the owner. Once the
      * exit is latched nothing is requested: a refresh would close the gate on the next stage's preload.
      */
     override fun onResume() {
@@ -402,7 +401,7 @@ internal class PoolLanguageFragment : Fragment(), PoolStage {
         revealJob = null
         loadingJob?.cancel()
         loadingJob = null
-        // DashDrama clears only its own key: the next stage may already own the pool.
+        // Clears only its own keys: the next stage may already own the pool.
         dialog?.let {
             it.dismiss()
             OnboardingPool.clearOwnerIf(AdPlacement.LanguageConfirm)

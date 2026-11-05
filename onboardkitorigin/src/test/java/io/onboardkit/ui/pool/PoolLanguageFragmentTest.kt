@@ -10,7 +10,7 @@ import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.LoadMode
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import com.ads.module.helper.adnative.pool.PoolSnapshot
@@ -21,7 +21,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.R
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NextScreenTiming
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.PoolPlacementMapper
@@ -73,8 +73,8 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolLanguageFragmentTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private lateinit var locale: Locale
     private var controller: ActivityController<ObPoolFlowActivity>? = null
     private val activity get() = requireNotNull(controller).get()
@@ -90,7 +90,7 @@ class PoolLanguageFragmentTest {
 
     @Before fun setUp() {
         locale = Locale.getDefault()
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = PoolUiSdk.install(app, loader)
     }
 
@@ -124,7 +124,7 @@ class PoolLanguageFragmentTest {
         main.idle()
     }
 
-    private fun fill(key: String): ApNativeAd = loader.fill(key).also { main.idle() }
+    private fun fill(key: String): NativeAdWrapper = loader.fill(key).also { main.idle() }
 
     private fun backgroundAndReturn() {
         requireNotNull(controller).pause().stop().restart().start().resume()
@@ -170,8 +170,8 @@ class PoolLanguageFragmentTest {
     }
 
     /** Every pool state published while [block] runs, so an order inside one callback is visible. */
-    private fun recordPool(block: () -> Unit): List<PoolSnapshot<ApNativeAd>> {
-        val seen = mutableListOf<PoolSnapshot<ApNativeAd>>()
+    private fun recordPool(block: () -> Unit): List<PoolSnapshot<NativeAdWrapper>> {
+        val seen = mutableListOf<PoolSnapshot<NativeAdWrapper>>()
         val job = CoroutineScope(Dispatchers.Unconfined).launch { engine.snapshot.collect { seen += it } }
         try {
             block()
@@ -229,7 +229,7 @@ class PoolLanguageFragmentTest {
 
         tap(0)
         assertEquals("language2", engine.owner)
-        assertEquals("DashDrama's h(2, true) opens the frame", View.VISIBLE, adBlock.visibility)
+        assertEquals("a successful Language2 claim opens the frame", View.VISIBLE, adBlock.visibility)
         val ad2 = fill("language2")
         assertSame(ad2.admobNativeAd, shown())
         assertEquals(View.VISIBLE, adBlock.visibility)
@@ -241,7 +241,7 @@ class PoolLanguageFragmentTest {
         assertNull(adapter.selectedCode)
         assertEquals(View.GONE, confirm.visibility)
         reveal()
-        assertEquals("DashDrama reveals Done only after a tap", View.GONE, confirm.visibility)
+        assertEquals("Done is revealed only after a tap", View.GONE, confirm.visibility)
     }
 
     @Test fun `a fresh pooled LFO requires a real tap before a repeat raises the dialog`() {
@@ -346,7 +346,7 @@ class PoolLanguageFragmentTest {
 
     @Test fun `an adopted unshown language1 is not refreshed on the first resume`() {
         val request = requireNotNull(PoolPlacementMapper.requestFor(AdPlacement.Language1, poolSnapshot()))
-        val ad = ApNativeAd(R.layout.ob_layout_native_lfo, mock(NativeAd::class.java))
+        val ad = NativeAdWrapper(R.layout.ob_layout_native_lfo, mock(NativeAd::class.java))
         engine.adoptReady(request, ad)
         launch()
         assertTrue(loader.callsFor("language1").isEmpty())
@@ -390,7 +390,7 @@ class PoolLanguageFragmentTest {
         assertTrue(runBlocking { withTimeout(5_000) { store.state.first { it.isLfoCompleted } }.isLfoCompleted })
     }
 
-    @Test fun `the LFO binds a fill while it is only started, as DashDrama`() {
+    @Test fun `the LFO binds a fill while it is only started`() {
         launch()
         requireNotNull(controller).pause()
         main.idle()

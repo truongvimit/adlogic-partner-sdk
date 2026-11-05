@@ -1,6 +1,6 @@
 package com.ads.module.helper.adnative
 
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 
 /** Native placement lifecycle, exposed by [NativeAdHelper.nativeAdState]. */
 sealed interface AdNativeState {
@@ -9,7 +9,7 @@ sealed interface AdNativeState {
 
     data object Loading : AdNativeState
 
-    data class Loaded(val nativeAd: ApNativeAd) : AdNativeState
+    data class Loaded(val nativeAd: NativeAdWrapper) : AdNativeState
 
     /** Nothing filled and no earlier ad is on screen. */
     data object Fail : AdNativeState

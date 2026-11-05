@@ -63,10 +63,6 @@ public class PurchaseResult {
         return autoRenewing;
     }
 
-    public void setAutoRenewing(boolean autoRenewing) {
-        this.autoRenewing = autoRenewing;
-    }
-
     public String getOrderId() {
         return orderId;
     }

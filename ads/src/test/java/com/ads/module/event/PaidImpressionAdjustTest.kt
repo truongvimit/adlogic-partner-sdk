@@ -5,9 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import com.adjust.sdk.Adjust
 import com.adjust.sdk.AdjustAdRevenue
 import com.adjust.sdk.AdjustEvent
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.config.AdjustConfig
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.funtion.AdType
 import com.ads.module.helper.interstitial.Int02Application
 import com.ads.module.helper.interstitial.Int02MobileAdsShadow
@@ -37,7 +37,7 @@ class PaidImpressionAdjustTest {
     private lateinit var adjust: MockedStatic<Adjust>
     private lateinit var config: AdjustConfig
     private var wasInitialized = false
-    private val initializedField = ERainAdjust::class.java.getDeclaredField("initialized").apply {
+    private val initializedField = AdjustTracker::class.java.getDeclaredField("initialized").apply {
         isAccessible = true
     }
 
@@ -57,11 +57,11 @@ class PaidImpressionAdjustTest {
             eventNamePurchase = "iap123"
         }
         mockStatic(FacebookSdk::class.java).use {
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply { adjustConfig = config })
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { adjustConfig = config })
         }
         // Exercise the production relay with Adjust enabled; only the SDK transport is mocked.
         config.setEnableAdjust(true)
-        ERainAdjust.markInitialized()
+        AdjustTracker.markInitialized()
         PlacementRegistry.register("paid-test-unit", "paid-test-placement")
     }
 
@@ -107,14 +107,14 @@ class PaidImpressionAdjustTest {
     }
 
     @Test fun `null paid value sends nothing`() {
-        ERainLogEventManager.logPaidAdImpression(app, null, "paid-test-unit", "adapter", AdType.APP_OPEN)
-        ERainLogEventManager.logPaidAdjustWithToken(null, "paid-test-unit")
+        AdEventLogger.logPaidAdImpression(app, null, "paid-test-unit", "adapter", AdType.APP_OPEN)
+        AdEventLogger.logPaidAdjustWithToken(null, "paid-test-unit")
         assertTrue(adRevenues.isEmpty())
         assertTrue(events.isEmpty())
     }
 
     @Test fun `legacy token helper sends the impression value`() {
-        ERainLogEventManager.logPaidAdjustWithToken(paidValue(), "paid-test-unit")
+        AdEventLogger.logPaidAdjustWithToken(paidValue(), "paid-test-unit")
         assertTrue(adRevenues.isEmpty())
         assertEquals("imp123", events.single().eventToken)
         assertEquals(1.5, events.single().revenue!!, 0.0)
@@ -131,7 +131,7 @@ class PaidImpressionAdjustTest {
     }
 
     private fun paidImpression(format: AdType = AdType.APP_OPEN) {
-        ERainLogEventManager.logPaidAdImpression(app, paidValue(), "paid-test-unit", "adapter", format)
+        AdEventLogger.logPaidAdImpression(app, paidValue(), "paid-test-unit", "adapter", format)
     }
 
     private fun paidValue(): AdValue = mock(AdValue::class.java).also {

@@ -103,16 +103,15 @@
 
                     </LinearLayout>
 
-                    <com.airbnb.lottie.LottieAnimationView
+                    <ImageView
                         android:id="@+id/animLoading"
                         android:layout_width="@dimen/_60sdp"
                         android:layout_height="@dimen/_55sdp"
                         android:layout_gravity="end"
                         android:layout_marginTop="@dimen/_18sdp"
+                        android:contentDescription="@null"
                         android:elevation="8dp"
-                        app:lottie_autoPlay="false"
-                        app:lottie_loop="false"
-                        app:lottie_rawRes="@raw/anim_gif_hand_json" />
+                        android:src="@drawable/img_hand_pointer" />
 
                 </FrameLayout>
 

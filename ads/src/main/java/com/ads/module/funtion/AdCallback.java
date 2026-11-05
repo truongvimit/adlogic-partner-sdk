@@ -3,8 +3,8 @@ package com.ads.module.funtion;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.ads.module.ads.wrapper.ApInterstitialAd;
-import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.ads.wrapper.InterstitialAdWrapper;
+import com.ads.module.ads.wrapper.NativeAdWrapper;
 import com.ads.module.config.settings.AdBehavior;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.LoadAdError;
@@ -62,7 +62,7 @@ public class AdCallback {
     }
 
 
-    public void onApInterstitialLoad(@Nullable ApInterstitialAd apInterstitialAd) {
+    public void onInterstitialAdLoaded(@Nullable InterstitialAdWrapper interstitialAdWrapper) {
 
     }
 
@@ -94,7 +94,7 @@ public class AdCallback {
 
     }
 
-    public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
+    public void onNativeAdLoaded(@NonNull NativeAdWrapper nativeAd) {
 
     }
 

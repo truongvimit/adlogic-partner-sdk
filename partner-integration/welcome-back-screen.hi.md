@@ -12,7 +12,7 @@ Welcome Back वह स्क्रीन है जो लौटने वा�
 
 बंद होने पर लौटने वाले user का launcher launch सीधे app में जाता है, जो splash ad के नीचे खुलता है, `OnboardingOutcome.Skipped(ALREADY_COMPLETED)` के साथ।
 
-SDK चार PDF goals देता है (Edit PDF, Add text, Sign & fill, Split & merge)। अपने goals दें:
+SDK चार सामान्य goals देता है (Pick up where I left off, Discover something new, Open my favorites, Adjust my settings), जिनके ids `resume`, `discover`, `favorites` और `settings` हैं। अपने goals दें:
 
 ```kotlin
 welcomeBackScreen = WelcomeBackScreenConfig(

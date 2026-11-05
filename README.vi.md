@@ -68,7 +68,7 @@ Khai báo class `Application` của app trong manifest. Trong `Application.onCre
 | Bước | Cần làm | Hướng dẫn |
 | --- | --- | --- |
 | 1 · Analytics | Nếu thu thập event SDK, khởi tạo `Tracker` và đăng ký nơi nhận trước khi các kit phát event. | [Trackkit](trackkit/README.vi.md) |
-| 2 · Ads | Cung cấp metadata AdMob/Meta và JSON quảng cáo, rồi khởi tạo `ERainAd`. | [Quickstart Ads](ads/README.md) |
+| 2 · Ads | Cung cấp metadata AdMob/Meta và JSON quảng cáo, rồi khởi tạo `AdsSdk`. | [Quickstart Ads](ads/README.md) |
 | 3 · Mua hàng | Cài `PayKit` hoặc khởi tạo `BillingKit` nếu dùng UI riêng. Khi dùng PayKit, để PayKit khởi tạo billing. | [PayKit](paykit/README.md) / [BillingKit](billingkit/README.md) |
 | 4 · Onboarding | Install/configure `OnboardingSdk` rồi đăng ký Activity kế thừa `ObSplashActivity`. | [OnboardKit](onboardkitorigin/README.vi.md) |
 

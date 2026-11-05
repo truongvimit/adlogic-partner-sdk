@@ -70,7 +70,7 @@
                         android:paddingBottom="6dp"
                         android:textColor="@color/color_main"
                         android:textSize="12sp"
-                        tools:text="ERain Studio v3.2.0 • Ads SDK v23.0.0" />
+                        tools:text="AdLogic SDK v5.6.16 • Ads SDK v25.3.0" />
                 </LinearLayout>
 
                 <!-- ═══════════════════════════════════════ -->
@@ -1247,7 +1247,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:fontFamily="@font/regular"
-                        android:text="Read-only status from ERainAd SDK"
+                        android:text="Read-only status from AdsSdk SDK"
                         android:textColor="@color/color_text_secondary"
                         android:textSize="11sp" />
 

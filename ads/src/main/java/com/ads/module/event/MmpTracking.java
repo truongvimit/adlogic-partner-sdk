@@ -121,25 +121,25 @@ public final class MmpTracking {
         @Override
         public void onEvent(@NonNull String token, @Nullable String callbackId) {
             if (callbackId == null) {
-                ERainAdjust.onTrackEvent(token);
+                AdjustTracker.onTrackEvent(token);
             } else {
-                ERainAdjust.onTrackEvent(token, callbackId);
+                AdjustTracker.onTrackEvent(token, callbackId);
             }
         }
 
         @Override
         public void onRevenue(@NonNull String token, double value, @Nullable String currency) {
-            ERainAdjust.onTrackRevenue(token, value, currency);
+            AdjustTracker.onTrackRevenue(token, value, currency);
         }
 
         @Override
         public void onPurchaseRevenue(double revenueMicros, @Nullable String currency) {
-            ERainAdjust.onTrackRevenuePurchase(revenueMicros, currency);
+            AdjustTracker.onTrackRevenuePurchase(revenueMicros, currency);
         }
 
         @Override
         public void onConsent(boolean analyticsGranted, boolean adsGranted) {
-            ERainAdjust.setConsent(analyticsGranted, adsGranted);
+            AdjustTracker.setConsent(analyticsGranted, adsGranted);
         }
     }
 

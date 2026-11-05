@@ -5,7 +5,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Looper
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
@@ -56,12 +56,12 @@ internal fun poolSnapshot(parity: PoolParity = SYNC_PARITY) =
     NativeFlowSnapshot(type = NativeFlowType.SHARED_POOL, parity = parity)
 
 /** Records each id attempt; the test settles it through that attempt's sink. */
-internal class ApFakeLoader : PoolAdLoader<ApNativeAd> {
-    inner class Attempt(val request: PoolRequest, val id: String, val sink: PoolLoadSink<ApNativeAd>) {
-        var ad: ApNativeAd? = null
+internal class FakeAdLoader : PoolAdLoader<NativeAdWrapper> {
+    inner class Attempt(val request: PoolRequest, val id: String, val sink: PoolLoadSink<NativeAdWrapper>) {
+        var ad: NativeAdWrapper? = null
             private set
 
-        fun fill(): ApNativeAd = ApNativeAd(R.layout.ob_layout_native_lfo, mock(NativeAd::class.java)).also {
+        fun fill(): NativeAdWrapper = NativeAdWrapper(R.layout.ob_layout_native_lfo, mock(NativeAd::class.java)).also {
             ad = it
             sink.onLoaded(it)
         }
@@ -69,13 +69,13 @@ internal class ApFakeLoader : PoolAdLoader<ApNativeAd> {
 
     val attempts = mutableListOf<Attempt>()
 
-    override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<ApNativeAd>) {
+    override fun load(request: PoolRequest, id: String, sink: PoolLoadSink<NativeAdWrapper>) {
         attempts += Attempt(request, id, sink)
     }
 
     fun callsFor(key: String): List<String> = attempts.filter { it.request.key == key }.map { it.id }
     fun last(key: String): Attempt = attempts.last { it.request.key == key }
-    fun fill(key: String): ApNativeAd = last(key).fill()
+    fun fill(key: String): NativeAdWrapper = last(key).fill()
 
     /** Fails every id of the running chain until it is exhausted. */
     fun exhaust(key: String) {
@@ -86,12 +86,12 @@ internal class ApFakeLoader : PoolAdLoader<ApNativeAd> {
         }
     }
 
-    fun impress(ad: ApNativeAd) = attempts.first { it.ad === ad }.sink.onImpression(ad)
-    fun click(ad: ApNativeAd) = attempts.first { it.ad === ad }.sink.onClicked(ad)
+    fun impress(ad: NativeAdWrapper) = attempts.first { it.ad === ad }.sink.onImpression(ad)
+    fun click(ad: NativeAdWrapper) = attempts.first { it.ad === ad }.sink.onClicked(ad)
 }
 
 /** A sync engine on the real main-looper scheduler, installed as the process pool. */
-internal fun installTestEngine(loader: ApFakeLoader): NativePoolEngine<ApNativeAd> = NativePoolEngine(
+internal fun installTestEngine(loader: FakeAdLoader): NativePoolEngine<NativeAdWrapper> = NativePoolEngine(
     loader = loader,
     policy = PoolRequestPolicy.ALLOW_ALL,
     parity = SYNC_PARITY,

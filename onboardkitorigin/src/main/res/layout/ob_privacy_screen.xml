@@ -25,51 +25,31 @@
             android:paddingBottom="24dp">
 
             <ImageView
-                android:layout_width="200dp"
+                android:layout_width="160dp"
                 android:layout_height="160dp"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="16dp"
                 android:contentDescription="@null"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ob_privacy_hero" />
 
-            <ImageView
-                android:layout_width="170dp"
-                android:layout_height="28dp"
-                android:contentDescription="@null"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ob_privacy_pdf_reader" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/ob_poppins_semibold"
+                android:gravity="center"
+                android:text="@string/ob_privacy_title"
+                android:textColor="@color/ob_black"
+                android:textSize="22sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:fontFamily="@font/ob_poppins_medium"
+                android:layout_marginTop="8dp"
+                android:fontFamily="@font/ob_poppins_regular"
                 android:gravity="center"
-                android:text="All your files in one place"
+                android:text="@string/ob_privacy_subtitle"
                 android:textColor="@color/ob_text_secondary"
                 android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:fontFamily="@font/ob_poppins_semibold"
-                android:text="Enjoy useful tools in a PDF"
-                android:textColor="@color/ob_black"
-                android:textSize="15sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center"
-                android:orientation="horizontal">
-
-                <include layout="@layout/ob_privacy_tool_merge" />
-                <include layout="@layout/ob_privacy_tool_split" />
-                <include layout="@layout/ob_privacy_tool_sign" />
-                <include layout="@layout/ob_privacy_tool_lock" />
-            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -96,7 +76,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:fontFamily="@font/ob_poppins_regular"
-                    android:text="By tapping Continue, you agree to our Terms of Use and Privacy Policy."
+                    android:text="@string/ob_privacy_consent"
                     android:textColor="@color/ob_black"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -112,7 +92,7 @@
                 android:enabled="false"
                 android:fontFamily="@font/ob_poppins_semibold"
                 android:gravity="center"
-                android:text="Continue"
+                android:text="@string/ob_goal_continue"
                 android:textColor="@color/ob_white"
                 android:textSize="18sp" />
         </LinearLayout>

@@ -5,7 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.adnative.pool.CarouselSelection
 import com.ads.module.helper.adnative.pool.LoadMode
@@ -23,7 +23,7 @@ import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.ads.carouselBase
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.ads.trackRequest
 import io.onboardkit.ads.trackSkipped
 import io.onboardkit.core.ObLog
@@ -49,8 +49,8 @@ internal object OnboardingPool {
     private val epoch = AtomicLong()
     private val results = ConcurrentHashMap<String, LoadResult>()
     private val runGateSkips = ConcurrentHashMap<String, Int>()
-    private val listeners = CopyOnWriteArrayList<(PoolEvent<ApNativeAd>) -> Unit>()
-    private var attached: NativePoolEngine<ApNativeAd>? = null
+    private val listeners = CopyOnWriteArrayList<(PoolEvent<NativeAdWrapper>) -> Unit>()
+    private var attached: NativePoolEngine<NativeAdWrapper>? = null
     private var detach: List<PoolCancellable> = emptyList()
     private val trace = PoolTraceSink { line -> ObLog.d(ObLog.Section.LOAD, "pool | $line") }
 
@@ -70,13 +70,13 @@ internal object OnboardingPool {
     val isActive: Boolean get() = routeResume && engineOrNull() != null
 
     /** What every pooled slot renders; hidden while no pool exists. */
-    val selection: Flow<PoolSelection<ApNativeAd>> = flow {
+    val selection: Flow<PoolSelection<NativeAdWrapper>> = flow {
         val engine = engineOrNull()
         if (engine == null) emit(PoolSelection.hidden()) else emitAll(engine.selection)
     }
 
     /** [selection] with [placement]'s own ad ahead of the owner's; the owner stays untouched. */
-    fun ownFirstSelection(placement: AdPlacement): Flow<PoolSelection<ApNativeAd>> = flow {
+    fun ownFirstSelection(placement: AdPlacement): Flow<PoolSelection<NativeAdWrapper>> = flow {
         val engine = engineOrNull()
         if (engine == null) {
             emit(PoolSelection.hidden())
@@ -87,19 +87,19 @@ internal object OnboardingPool {
 
     /** [ownFirstSelection] of the pool as it is now. */
     @MainThread
-    fun currentOwnFirstSelection(placement: AdPlacement): PoolSelection<ApNativeAd>? =
+    fun currentOwnFirstSelection(placement: AdPlacement): PoolSelection<NativeAdWrapper>? =
         engineOrNull()?.let { it.ownFirstSelection(it.debugSnapshot(), placement.key) }
 
     /** The two keys an LFO carousel's pages show, and the ad each page's view holds now. */
     class CarouselPages(
         val firstKey: () -> String,
         val secondKey: () -> String,
-        val firstShown: () -> ApNativeAd?,
-        val secondShown: () -> ApNativeAd?,
+        val firstShown: () -> NativeAdWrapper?,
+        val secondShown: () -> NativeAdWrapper?,
     )
 
     /** What an LFO carousel's two pages render, re-decided on every pool change. */
-    fun carouselSelection(pages: CarouselPages): Flow<CarouselSelection<ApNativeAd>?> = flow {
+    fun carouselSelection(pages: CarouselPages): Flow<CarouselSelection<NativeAdWrapper>?> = flow {
         val engine = engineOrNull()
         if (engine == null) {
             emit(null)
@@ -110,14 +110,14 @@ internal object OnboardingPool {
 
     /** [carouselSelection] of the pool as it is now. */
     @MainThread
-    fun currentCarouselSelection(pages: CarouselPages): CarouselSelection<ApNativeAd>? =
+    fun currentCarouselSelection(pages: CarouselPages): CarouselSelection<NativeAdWrapper>? =
         engineOrNull()?.let { carouselSelectionOf(it, it.debugSnapshot(), pages) }
 
     private fun carouselSelectionOf(
-        engine: NativePoolEngine<ApNativeAd>,
-        snapshot: PoolSnapshot<ApNativeAd>,
+        engine: NativePoolEngine<NativeAdWrapper>,
+        snapshot: PoolSnapshot<NativeAdWrapper>,
         pages: CarouselPages,
-    ): CarouselSelection<ApNativeAd> =
+    ): CarouselSelection<NativeAdWrapper> =
         engine.carouselSelection(snapshot, pages.firstKey(), pages.secondKey(), pages.firstShown(), pages.secondShown())
 
     /** [placement]'s loader state; null before anything loaded it. */
@@ -153,10 +153,10 @@ internal object OnboardingPool {
         return load(placement, LoadMode.POLITE) == LoadResult.Requested
     }
 
-    /** The pool loads through the ERain ad stack; a test engine stands in for it. */
-    fun canRun(): Boolean = OnboardingSdk.provider() is ERainAdProvider || engineOrNull() != null
+    /** The pool loads through the AdsSdk ad stack; a test engine stands in for it. */
+    fun canRun(): Boolean = OnboardingSdk.provider() is AdsSdkProvider || engineOrNull() != null
 
-    fun engineOrNull(): NativePoolEngine<ApNativeAd>? = SharedNativePool.engineOrNull()
+    fun engineOrNull(): NativePoolEngine<NativeAdWrapper>? = SharedNativePool.engineOrNull()
 
     /** Every activation starts a new run: no owner, the pool keeps its ads. */
     fun activate(appContext: Context, snapshot: NativeFlowSnapshot) {
@@ -182,7 +182,7 @@ internal object OnboardingPool {
     /** [onClassicRun] for `OnboardingSdk.reset()`. */
     fun deactivate() = stop("deactivate")
 
-    /** Owns the slot whenever DashDrama would: on every outcome but a config refusal. */
+    /** Owns the slot on every outcome but a config refusal. */
     @MainThread
     fun claim(placement: AdPlacement, mode: LoadMode): LoadResult {
         val result = load(placement, mode)
@@ -214,7 +214,7 @@ internal object OnboardingPool {
     fun releaseAll() = SharedNativePool.releaseAllIfCreated()
 
     /** Survives an engine swap; listeners hear Skipped events after [lastResult] already holds them. */
-    fun addEventListener(listener: (PoolEvent<ApNativeAd>) -> Unit): PoolCancellable {
+    fun addEventListener(listener: (PoolEvent<NativeAdWrapper>) -> Unit): PoolCancellable {
         listeners += listener
         return PoolCancellable { listeners -= listener }
     }
@@ -288,7 +288,7 @@ internal object OnboardingPool {
         else ObLog.w(ObLog.Section.LOAD, "pool | untracked_skip key=${placement.key} reason=$reason")
     }
 
-    private fun attach(engine: NativePoolEngine<ApNativeAd>) {
+    private fun attach(engine: NativePoolEngine<NativeAdWrapper>) {
         if (attached === engine) return
         detach.forEach(PoolCancellable::cancel)
         attached = engine
@@ -302,7 +302,7 @@ internal object OnboardingPool {
         )
     }
 
-    private fun dispatch(event: PoolEvent<ApNativeAd>) {
+    private fun dispatch(event: PoolEvent<NativeAdWrapper>) {
         // A refusal is emitted inside load(), before claim() returns: record it first so a slot
         // reacting to the event already reads it through lastResult.
         if (event is PoolEvent.Skipped) results[event.key] = event.result
@@ -320,7 +320,7 @@ internal object OnboardingPool {
      * The classic slot's ob_ad_failed, once per load chain that ends holding nothing, as
      * ad_request is once per chain. A refresh that fails keeps its ad and is no failure.
      */
-    private fun reportNoFill(event: PoolEvent.Exhausted<ApNativeAd>) {
+    private fun reportNoFill(event: PoolEvent.Exhausted<NativeAdWrapper>) {
         if (event.refresh || engineOrNull()?.debugSnapshot()?.loader(event.key)?.ad != null) return
         val placement = PoolPlacementMapper.placementFor(event.key)?.carouselBase ?: return
         if (AdBehavior.bool("diagnostics.ads_telemetry_enabled")) {

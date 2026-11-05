@@ -21,9 +21,9 @@ import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.ads.ERainAd
-import com.ads.module.ads.wrapper.ApInterstitialAd
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.ads.AdsSdk
+import com.ads.module.ads.wrapper.InterstitialAdWrapper
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdSkipReason
@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Run alone in a fresh instrumentation process on an awake, unlocked, online device.
- * Real ERain -> waterfall -> GMA test interstitial. No vendor callback is replaced or invoked.
+ * Real AdsSdk -> waterfall -> GMA test interstitial. No vendor callback is replaced or invoked.
  *
  * After INT02_DEVICE AD_ACTIVITY_VISIBLE, close the displayed test ad with its real Close UI.
  * The test waits 90 seconds by default; -e int02_close_timeout_ms can shorten that manual phase.
@@ -93,16 +93,16 @@ class InterstitialRealGmaDeviceTest {
             Entitlement.install(object : EntitlementSource {
                 override fun isPremium(context: Context) = false
             })
-            ERainAd.getInstance().init(app, ERainAdConfig(app).apply {
-                // Existing sample placeholders satisfy ERain's unconditional Facebook bootstrap.
+            AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply {
+                // Existing sample placeholders satisfy AdsSdk's unconditional Facebook bootstrap.
                 // Test manifest disables Facebook auto-init, automatic events and ID collection.
                 setFacebookClientToken("123456789")
                 setIdAdResume("")
             })
-            ERainAd.getInstance().setIntervalInterstitialAd(0)
-            ERainAd.getInstance().setMaxClickAdsPerDay(0)
-            ERainAd.getInstance().setCountClickToShowAds(1, 0)
-            ERainAd.getInstance().setOpenActivityAfterShowInterAds(false)
+            AdsSdk.getInstance().setIntervalInterstitialAd(0)
+            AdsSdk.getInstance().setMaxClickAdsPerDay(0)
+            AdsSdk.getInstance().setCountClickToShowAds(1, 0)
+            AdsSdk.getInstance().setOpenActivityAfterShowInterAds(false)
             AppOpenManager.getInstance().disableAppResume()
             MobileAds.initialize(app) { initialized.countDown() }
             Tracker.install(app)
@@ -247,10 +247,10 @@ class InterstitialRealGmaDeviceTest {
     }
 
     private class RecordingRealLoad : AdCallback() {
-        val ads = CopyOnWriteArrayList<ApInterstitialAd>()
+        val ads = CopyOnWriteArrayList<InterstitialAdWrapper>()
         val errors = CopyOnWriteArrayList<String>()
         val finished = CountDownLatch(1)
-        override fun onApInterstitialLoad(ad: ApInterstitialAd?) {
+        override fun onInterstitialAdLoaded(ad: InterstitialAdWrapper?) {
             if (ad == null) errors += "Null real fill" else ads += ad
             finished.countDown()
         }

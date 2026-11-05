@@ -4,8 +4,8 @@ import com.ads.module.config.settings.AdBehavior;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.ads.module.ads.wrapper.ApInterstitialAd;
-import com.ads.module.ads.wrapper.ApNativeAd;
+import com.ads.module.ads.wrapper.InterstitialAdWrapper;
+import com.ads.module.ads.wrapper.NativeAdWrapper;
 import com.ads.module.funtion.AdCallback;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.LoadAdError;
@@ -35,7 +35,7 @@ import io.trackkit.PlacementRegistry;
  * forwards to the delegate. Actual display is reported by {@code onAdImpression}, including
  * the fullscreen vendor shown callback routed through that hook.
  *
- * <p>{@code ad_click} is deliberately not emitted here — {@code ERainLogEventManager.logClickAdsEvent}
+ * <p>{@code ad_click} is deliberately not emitted here — {@code AdEventLogger.logClickAdsEvent}
  * owns it, from the vendor callback that every click path reaches.
  *
  * <p>Applied by the ads SDK itself, never by the host app: the layer that creates the ad object
@@ -124,9 +124,9 @@ public class TrackingAdCallback extends AdCallback {
     }
 
     @Override
-    public void onApInterstitialLoad(@Nullable ApInterstitialAd apInterstitialAd) {
+    public void onInterstitialAdLoaded(@Nullable InterstitialAdWrapper interstitialAdWrapper) {
         reportLoaded();
-        if (delegate != null) delegate.onApInterstitialLoad(apInterstitialAd);
+        if (delegate != null) delegate.onInterstitialAdLoaded(interstitialAdWrapper);
     }
 
     @Override
@@ -148,7 +148,7 @@ public class TrackingAdCallback extends AdCallback {
     }
 
     @Override
-    public void onNativeAdLoaded(@NonNull ApNativeAd nativeAd) {
+    public void onNativeAdLoaded(@NonNull NativeAdWrapper nativeAd) {
         reportLoaded();
         if (delegate != null) delegate.onNativeAdLoaded(nativeAd);
     }

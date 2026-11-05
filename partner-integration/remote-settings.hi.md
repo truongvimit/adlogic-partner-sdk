@@ -170,7 +170,7 @@ Pager page ads timer या resume पर कभी refresh नहीं हो�
 
 ## Native template, CTA और X/Skip प्रयोग
 
-- `ad_remote_config.<placement>.templateId` (number) frame चुनता है: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` DashDrama-shaped wide LFO card। न हो, `null` हो या अनजान number हो तो slot का default रहता है — `SHARED_POOL` में LFO1/2 पर `4`, classic LFO/Welcome Back/OB content पर `1`, Privacy/Goal और splash inline पर `2`। हर field की तरह remote > app asset > code।
+- `ad_remote_config.<placement>.templateId` (number) frame चुनता है: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` wide LFO card। न हो, `null` हो या अनजान number हो तो slot का default रहता है — `SHARED_POOL` में LFO1/2 पर `4`, classic LFO/Welcome Back/OB content पर `1`, Privacy/Goal और splash inline पर `2`। हर field की तरह remote > app asset > code।
 - `components` ही अकेली चीज़ है जो native का क्रम तय करती है। Templates `1` और `3` इसका पालन करते हैं; न हो तो default क्रम CTA को नीचे रखता है। Template `1`: `["icon_headline","media","cta"]` (default) या CTA ऊपर रखने के लिए `["cta","media","icon_headline"]`।
 - `positionCTA` हटा दिया गया है; जो payload अब भी इसे भेजता है, उसे अनदेखा किया जाता है। `lfo.native_template`, `onboarding.ads.content_template` और `onboarding.steps.<id>.native_template` भी हटा दिए गए हैं; पुराने payload में ये fields अनदेखे होते हैं।
 - Template 3 एक layout है; design की चार arrangements `components` के क्रम से आती हैं: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (default क्रम), D `["cta","media","icon_headline","body"]`। Body header के अंदर है, इसलिए `body` हटाने से वह सिर्फ़ छिपता है।

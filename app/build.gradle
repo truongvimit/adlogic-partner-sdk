@@ -12,14 +12,14 @@ android {
     compileSdk compile_sdk_version
 
     defaultConfig {
-        applicationId "com.itg.template"
+        applicationId "io.adlogic.sample"
         minSdkVersion min_sdk_version
         targetSdk target_sdk_version
         versionCode 100
         versionName "1.0.0"
 
         def formattedDate = new Date().format('MM.dd.yyyy')
-        archivesBaseName = "ITG_Base_Project_v${versionName}_v${versionCode}_${formattedDate}"
+        archivesBaseName = "AdLogic_Sample_v${versionName}_v${versionCode}_${formattedDate}"
     }
     bundle {
 
@@ -37,12 +37,10 @@ android {
         def DEV_MODE = "DEV_MODE"
 
         debug {
-            buildConfigField "String", "email_feedback", "\"glorymobile88@gmail.com\""
             manifestPlaceholders = [app_id: "ca-app-pub-3940256099942544~3347511713"]
 
-            buildConfigField "String", "ERAIN_STUDIO_VERSION", "\"$erain_studio_version\""
+            buildConfigField "String", "ADLOGIC_SDK_VERSION", "\"$adlogic_sdk_version\""
             buildConfigField "String", "PLAY_SERVICES_ADS_VERSION", "\"$play_services_ads_version\""
-            buildConfigField "String", "GDPR_MODULE_VERSION", "\"$module_update_gdpr_version\""
 
             buildConfigField "Boolean", "build_debug", "true"
             buildConfigField(BOOLEAN, DEV_MODE, TRUE)
@@ -55,13 +53,10 @@ android {
         }
 
         release {
-            // ADS CONFIG BEGIN (required)
-            buildConfigField "String", "email_feedback", "\"glorymobile88@gmail.com\""
-            manifestPlaceholders = [app_id: "ca-app-pub-7208941695689653~1614717305"]
+            manifestPlaceholders = [app_id: "ca-app-pub-3940256099942544~3347511713"]
 
-            buildConfigField "String", "ERAIN_STUDIO_VERSION", "\"$erain_studio_version\""
+            buildConfigField "String", "ADLOGIC_SDK_VERSION", "\"$adlogic_sdk_version\""
             buildConfigField "String", "PLAY_SERVICES_ADS_VERSION", "\"$play_services_ads_version\""
-            buildConfigField "String", "GDPR_MODULE_VERSION", "\"$module_update_gdpr_version\""
 
             buildConfigField "Boolean", "build_debug", "false"
             buildConfigField(BOOLEAN, DEV_MODE, FALSE)
@@ -94,7 +89,7 @@ android {
         viewBinding = true
         buildConfig = true
     }
-    namespace 'com.itg.template'
+    namespace 'io.adlogic.sample'
 }
 
 dependencies {
@@ -162,7 +157,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics'
     implementation 'com.google.firebase:firebase-config'
 
-    // Ads (local module thay cho com.github.trongluan99:ERain-Studio)
+    // Ads
     implementation project(':ads')
 
     // Billing engine — split out of :ads; this app sells IAP, so it declares the module itself
@@ -182,12 +177,6 @@ dependencies {
 
     // Debug-only ad lifecycle tracker + embedded dashboard; absent from release builds
     debugImplementation project(':adtracer')
-    // DevConfig still drags in the published ERain-Studio AAR, whose classes are the same
-    // com.ads.module.* types this project builds locally as :ads. R8 fails on the duplicate
-    // (com.ads.module.ump.IAdConsentCallBack$DefaultImpls). The local module wins.
-    implementation('com.github.Infinity-Technologies-Global:DevConfig:1.0.7-partner') {
-        exclude group: 'com.github.trongluan99', module: 'ERain-Studio'
-    }
     implementation "com.google.android.play:review-ktx:$play_review_ktx_version"
     implementation "com.google.android.gms:play-services-ads:$play_services_ads_version"
 
@@ -195,9 +184,6 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-livedata-ktx:$androidx_lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$androidx_lifecycle_version"
     implementation "androidx.fragment:fragment-ktx:$androidx_fragment_ktx_version"
-
-    // Lottie
-    implementation "com.airbnb.android:lottie:$lottie_version"
 
     // Rate
     implementation "com.github.ome450901:SimpleRatingBar:$simpleratingbar_version"
@@ -209,8 +195,6 @@ dependencies {
     // BlurView
     implementation "com.github.Dimezis:BlurView:$blurview_version"
 
-    // Crash Module
-    implementation project(':crash_screen')
 
     // Unit Test
     testImplementation 'junit:junit:4.13.2'

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Figma "goal / Edit PDF" (node 282:2853). The SDK binds the first ImageView and TextView and
+<!-- The SDK binds the first ImageView and TextView and
      drives the selected state through the root. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

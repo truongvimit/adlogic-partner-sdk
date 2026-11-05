@@ -50,4 +50,8 @@ Firebase वही `google-services.json` इस्तेमाल करता 
 
 सभी dependency उदाहरण आपकी app की `gradle.properties` से एक ही `adlogicSdkVersion` पढ़ते हैं; [build setup](../README.hi.md#build-setup) देखें। SDK upgrade करने के लिए अपनी app में वह property बदलें।
 
+### 5.6.17 में नाम बदले
+
+5.6.17 में core classes के नाम बदले गए (`AdsSdk`, `AdsSdkConfig`, `NativeAdWrapper`, `InterstitialAdWrapper`, `io.onboardkit.ads.sdk.AdsSdkProvider`)। Behaviour वही है; imports बदलें और rebuild करें। Welcome Back के default goals भी बदले हैं ([Welcome Back](welcome-back-screen.hi.md) देखें)।
+
 [SDK README](../README.hi.md) · [Ads + OnboardKit से शुरू करें](ads-onboarding-integration.hi.md)

@@ -13,7 +13,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
 import com.google.android.gms.ads.nativead.NativeAdView
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.config.AdRemoteConfig
 import com.ads.module.config.toNativeStyle
@@ -65,7 +65,7 @@ class NativeAdHelper @JvmOverloads constructor(
     fun interface NativeAdBinder {
         fun bind(
             activity: Activity,
-            nativeAd: ApNativeAd,
+            nativeAd: NativeAdWrapper,
             container: FrameLayout,
             shimmer: ShimmerFrameLayout?,
         )
@@ -74,7 +74,7 @@ class NativeAdHelper @JvmOverloads constructor(
     private val _nativeAdState = MutableStateFlow<AdNativeState>(AdNativeState.None)
     val nativeAdState: StateFlow<AdNativeState> = _nativeAdState.asStateFlow()
 
-    var nativeAd: ApNativeAd? = null
+    var nativeAd: NativeAdWrapper? = null
         private set
 
     /** Store and telemetry key; set it before the first request, or pass it to the constructor. */
@@ -627,7 +627,7 @@ class NativeAdHelper @JvmOverloads constructor(
         }
     }
 
-    private fun onLoadedAd(ad: ApNativeAd) {
+    private fun onLoadedAd(ad: NativeAdWrapper) {
         if (isActiveState() && canShowAds() && ad.isUsable && (adClickPending || contentView == null || !isResumed())) {
             NativeAdManager.returnUnused(preloadKey, ad)
             awaitingHost = true
@@ -706,7 +706,7 @@ class NativeAdHelper @JvmOverloads constructor(
         }
     }
 
-    private fun bindLoadedAd(ad: ApNativeAd): Boolean {
+    private fun bindLoadedAd(ad: NativeAdWrapper): Boolean {
         val container = contentView ?: return false
         ad.layoutCustomNative = config.layoutId
         val bound = runCatching { binder.bind(activity, ad, container, shimmerView) }
@@ -805,7 +805,7 @@ class NativeAdHelper @JvmOverloads constructor(
         AdTracking.skipped(key, AdFormat.NATIVE, reason.key)
     }
 
-    private fun destroyNative(ad: ApNativeAd) {
+    private fun destroyNative(ad: NativeAdWrapper) {
         NativeAdManager.dispose(ad)
     }
 

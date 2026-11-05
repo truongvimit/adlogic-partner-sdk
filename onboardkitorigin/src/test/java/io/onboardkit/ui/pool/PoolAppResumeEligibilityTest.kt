@@ -7,7 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.ads.module.admob.AppOpenManager
 import io.onboardkit.R
 import io.onboardkit.ads.AdSkipReason
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -38,7 +38,7 @@ class PoolAppResumeEligibilityTest {
     private val controllers = mutableListOf<ActivityController<*>>()
 
     @Before fun setUp() {
-        PoolUiSdk.install(app, ApFakeLoader())
+        PoolUiSdk.install(app, FakeAdLoader())
     }
 
     @After fun tearDown() {

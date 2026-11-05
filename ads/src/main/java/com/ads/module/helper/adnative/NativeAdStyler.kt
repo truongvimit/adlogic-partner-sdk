@@ -14,7 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.ads.module.R
 import com.ads.module.admob.Admob
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.nativead.NativeAdView
 
@@ -105,12 +105,12 @@ object NativeAdStyler {
     /**
      * Styled counterpart of the classic populate: inflate detached, style, bind, then swap
      * into [container] in one frame (replacing the skeleton). With a null [style] this is
-     * behavior-identical to `ERainAd.populateNativeAdView`.
+     * behavior-identical to `AdsSdk.populateNativeAdView`.
      */
     @JvmStatic
     fun populate(
         activity: Activity,
-        nativeAd: ApNativeAd,
+        nativeAd: NativeAdWrapper,
         style: NativeAdStyle?,
         container: FrameLayout,
         shimmer: ShimmerFrameLayout?,

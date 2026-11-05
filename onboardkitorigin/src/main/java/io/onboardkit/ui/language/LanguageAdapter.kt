@@ -19,7 +19,7 @@ import io.onboardkit.databinding.ObItemLanguageBinding
 import java.util.Locale
 
 /**
- * Flat language list per Figma 18:57855: flag, name with native label, and a radio that
+ * Flat language list: flag, name with native label, and a radio that
  * carries the selection.
  */
 internal class LanguageAdapter(

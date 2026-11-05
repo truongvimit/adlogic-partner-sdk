@@ -25,7 +25,7 @@ import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.NativeProviderHost
 import io.onboardkit.ads.NativeProviderViewShadow
 import io.onboardkit.ads.NativeStatus
-import io.onboardkit.ads.erain.ERainAdProvider
+import io.onboardkit.ads.sdk.AdsSdkProvider
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.config.onboardKitConfig
@@ -55,7 +55,7 @@ import java.time.Duration
 class SplashNativeBindingTest {
     private lateinit var preloadHost: ActivityController<NativeProviderHost>
     private var screen: ActivityController<ObSplashNativeActivity>? = null
-    private lateinit var provider: ERainAdProvider
+    private lateinit var provider: AdsSdkProvider
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val requests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
     private val loadListeners = mutableListOf<AdListener>()
@@ -84,7 +84,7 @@ class SplashNativeBindingTest {
             doReturn(loader).`when`(builder).build()
             doAnswer { requests += checkNotNull(loaded); null }.`when`(loader).loadAd(any(AdRequest::class.java))
         }
-        provider = OnboardingSdk.provider() as? ERainAdProvider ?: ERainAdProvider()
+        provider = OnboardingSdk.provider() as? AdsSdkProvider ?: AdsSdkProvider()
         provider.releaseAll()
         OnboardingSdk.install(app) { adProvider = provider; trackkitAutoTracking(false) }
         OnboardingSettings.document.acceptSuccessfulFetch(null)

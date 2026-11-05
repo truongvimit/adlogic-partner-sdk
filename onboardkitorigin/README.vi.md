@@ -13,12 +13,12 @@ Native trong pager được giữ khi view của trang còn tồn tại; quay l�
 
 Cụm Privacy → Goal tùy chọn là phần cuối onboarding, sau pager và interstitial cuối pager (nếu được bật; mặc định tắt). Bật `privacy_goals_screen.enabled` và cung cấp lựa chọn goal; xem [Privacy → Goal](../partner-integration/privacy-goals-screen.vi.md).
 
-`native_flow.type = SHARED_POOL` thay flow mặc định `PER_SCREEN` sau splash: LFO, pager onboarding và Privacy → Goal chạy trong một màn SDK, mọi slot native lấy ad từ một pool dùng chung, theo luật mở lần đầu của DashDrama 1.0.6, app tham chiếu mà pool được mô phỏng theo. Kiểu này cần `ERainAdProvider` có sẵn, được đọc một lần mỗi lượt chạy và không đổi splash; xem [Native flow SHARED_POOL](../partner-integration/ads-onboarding-integration.vi.md#native-flow-shared_pool).
+`native_flow.type = SHARED_POOL` thay flow mặc định `PER_SCREEN` sau splash: LFO, pager onboarding và Privacy → Goal chạy trong một màn SDK, mọi slot native lấy ad từ một pool dùng chung, theo luật mở lần đầu của flow tham chiếu mà pool được mô phỏng theo. Kiểu này cần `AdsSdkProvider` có sẵn, được đọc một lần mỗi lượt chạy và không đổi splash; xem [Native flow SHARED_POOL](../partner-integration/ads-onboarding-integration.vi.md#native-flow-shared_pool).
 
 ## Trước khi tích hợp
 
 - Dùng minSdk 24, compileSdk 36 và JDK 17. Làm theo [cấu hình build chung](../README.vi.md) và dùng cùng một tag đã phát hành cho mọi module.
-- Với provider quảng cáo tích hợp sẵn, hoàn thành [hướng dẫn ads](../ads/README.md) trước: metadata AdMob/Meta, asset cấu hình quảng cáo và `ERainAd.init()` trong Application.
+- Với provider quảng cáo tích hợp sẵn, hoàn thành [hướng dẫn ads](../ads/README.md) trước: metadata AdMob/Meta, asset cấu hình quảng cáo và `AdsSdk.init()` trong Application.
 - Nếu cần funnel, cài `Tracker` và sink trước OnboardKit; xem [Trackkit](../trackkit/README.vi.md).
 - Thêm cả hai dependency bên dưới. OnboardKit export Trackkit; code app dùng `com.ads.module.*` vẫn cần khai báo `ads` tường minh. Firebase và PayKit là tùy chọn.
 
@@ -34,7 +34,7 @@ dependencies {
 
 ## 1. Install và configure trong Application
 
-Ghép đoạn này vào Application hiện có **sau `ERainAd.getInstance().init(...)` theo [hướng dẫn ads](../ads/README.md)**; không khởi tạo ERain hai lần.
+Ghép đoạn này vào Application hiện có **sau `AdsSdk.getInstance().init(...)` theo [hướng dẫn ads](../ads/README.md)**; không khởi tạo AdsSdk hai lần.
 Ví dụ dùng ad unit test của Google. Thay bằng unit của bạn khi phát hành và dùng `MainActivity` của app.
 Import `R`, `BuildConfig` và `MainActivity` của app nếu khác package; `io.onboardkit.config.*` đã bao gồm mọi kiểu config bên dưới.
 
@@ -42,8 +42,8 @@ Import `R`, `BuildConfig` và `MainActivity` của app nếu khác package; `io.
 import android.app.Application
 import android.content.Intent
 import io.onboardkit.OnboardingSdk
-import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.erain.ERainTuning
+import io.onboardkit.ads.sdk.AdsSdkProvider
+import io.onboardkit.ads.sdk.AdsSdkTuning
 import io.onboardkit.config.*
 import io.onboardkit.core.OnboardingListener
 import io.onboardkit.core.OnboardingOutcome
@@ -51,11 +51,11 @@ import io.onboardkit.core.OnboardingOutcome
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Complete ERainAd.init here; add Tracker/sinks if needed (ads guide).
-        ERainTuning.install()
+        // Complete AdsSdk.init here; add Tracker/sinks if needed (ads guide).
+        AdsSdkTuning.install()
 
         OnboardingSdk.install(this) {
-            adProvider = ERainAdProvider()
+            adProvider = AdsSdkProvider()
             listener = OnboardingListener { context, outcome ->
                 val extras = when (outcome) {
                     is OnboardingOutcome.Completed -> outcome.passthrough
@@ -177,7 +177,7 @@ Waterfall native/interstitial nhận `tiers = listOf(highId, fallbackId)` theo t
 `AdsConfig.fromAdConfig()`, mặc định của `onboardKitConfig`, gắn các tên JSON chuẩn như `inter_splash`, `native_lang` và giữ chúng cập nhật sau mỗi lần fetch; truyền thêm map cho các tên khác trong app.
 Key chuẩn mà `ad_config.json` của app hoặc `ad_remote_config` trên backend khai báo được áp dụng không cần gắn và được ưu tiên hơn mọi unit viết trong code, kể cả `stepNatives` và `splashInterstitialOldUser`, nên không cần dựng lại config trong `onRemoteFetched()`.
 Key placement khai báo `isEnable: false` tắt cả waterfall, key có mọi tầng trong `ids` đều tắt cũng vậy, nên slot không có ad unit và flow bỏ qua.
-[OnboardKitSetup của app mẫu](../app/src/main/java/com/itg/template/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
+[OnboardKitSetup của app mẫu](../app/src/main/java/io/adlogic/sample/app/OnboardKitSetup.kt) có đầy đủ cách ánh xạ và chọn native template.
 
 ## Trang fullscreen và interstitial sau onboarding
 
@@ -262,7 +262,7 @@ class SplashActivity : ObSplashActivity() {
 ```
 
 `Billing.awaitReady()` trả `Ready`, `Timeout` hoặc `Error`; dùng kết quả theo chính sách xử lý lỗi của app. `SplashConfig.billingTimeoutMs` hiện có (mặc định 5.000 ms) cũng giới hạn toàn bộ hook, nên timeout riêng hoặc Activity bị hủy có thể hủy hook trước khi có kết quả; timeout không xác định trạng thái mua hàng.
-Xem vị trí tích hợp trong [splash mẫu](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt).
+Xem vị trí tích hợp trong [splash mẫu](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt).
 
 Với entry từ thông báo/widget/uninstall, trỏ về splash bằng [SplashEntry](src/main/java/io/onboardkit/ui/splash/SplashEntry.kt):
 
@@ -289,4 +289,4 @@ Entry dùng `inter_noti`, `inter_widget` hoặc `inter_uninstall`; key thiếu h
 Bật `OnboardingSdk.setFlowLogging(true)` khi tích hợp (`OB_FLOW` trong Logcat).
 Để đổi ngôn ngữ về sau, gọi `OnboardingSdk.openLanguagePicker(activity, LanguageScreenMode.SETTINGS)` (`io.onboardkit.ui.language`).
 
-[Application mẫu](../app/src/main/java/com/itg/template/app/GlobalApp.kt) · [Splash mẫu](../app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt) · [Giấy phép MIT](../LICENSE)
+[Application mẫu](../app/src/main/java/io/adlogic/sample/app/GlobalApp.kt) · [Splash mẫu](../app/src/main/java/io/adlogic/sample/ui/component/splash/SplashActivity.kt) · [Giấy phép MIT](../LICENSE)

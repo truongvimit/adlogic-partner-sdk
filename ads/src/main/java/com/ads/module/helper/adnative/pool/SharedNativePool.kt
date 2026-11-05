@@ -6,7 +6,7 @@ import android.os.Looper
 import androidx.annotation.MainThread
 import androidx.annotation.RestrictTo
 import androidx.annotation.VisibleForTesting
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.adnative.NativeAdManager
@@ -17,13 +17,13 @@ import java.lang.ref.WeakReference
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 object SharedNativePool {
     @Volatile
-    private var engine: NativePoolEngine<ApNativeAd>? = null
+    private var engine: NativePoolEngine<NativeAdWrapper>? = null
 
     /**
      * The adoption each joined manager load completes. One manager waiter per key: a second join
      * of the same load re-adopts instead of adding a waiter that would split its fill.
      */
-    private val joined = HashMap<String, PoolAdoption<ApNativeAd>>()
+    private val joined = HashMap<String, PoolAdoption<NativeAdWrapper>>()
     private val main by lazy { Handler(Looper.getMainLooper()) }
 
     /** Later calls update the same engine; its async gate and selector keep their first values. */
@@ -34,7 +34,7 @@ object SharedNativePool {
         policy: PoolRequestPolicy,
         trace: PoolTraceSink,
         stuckLoadingLogMs: Long,
-    ): NativePoolEngine<ApNativeAd> {
+    ): NativePoolEngine<NativeAdWrapper> {
         assertMain()
         engine?.let { current ->
             current.policy = policy
@@ -57,7 +57,7 @@ object SharedNativePool {
         ).also { engine = it }
     }
 
-    fun engineOrNull(): NativePoolEngine<ApNativeAd>? = engine
+    fun engineOrNull(): NativePoolEngine<NativeAdWrapper>? = engine
 
     /** Creates nothing. Callable from any thread: off main the release is posted, not refused. */
     fun releaseAllIfCreated() {
@@ -100,7 +100,7 @@ object SharedNativePool {
     }
 
     @VisibleForTesting
-    fun installForTest(engine: NativePoolEngine<ApNativeAd>) {
+    fun installForTest(engine: NativePoolEngine<NativeAdWrapper>) {
         this.engine = engine
     }
 
@@ -119,7 +119,7 @@ object SharedNativePool {
      * the loader holding it, keeps it alive while its events still matter.
      */
     @VisibleForTesting
-    internal fun eventsInto(ad: ApNativeAd, sink: PoolLoadSink<ApNativeAd>): AdCallback {
+    internal fun eventsInto(ad: NativeAdWrapper, sink: PoolLoadSink<NativeAdWrapper>): AdCallback {
         val ref = WeakReference(ad)
         val gesture = PoolClickGesture(SystemPoolClock)
         return object : AdCallback() {
@@ -137,7 +137,7 @@ object SharedNativePool {
         }
     }
 
-    private fun deliver(key: String, ad: ApNativeAd?) {
+    private fun deliver(key: String, ad: NativeAdWrapper?) {
         val adoption = joined.remove(key)
         if (adoption == null) {
             // The pool was reset while waiting: nobody else will spend the fill the manager handed over.

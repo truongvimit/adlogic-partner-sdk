@@ -9,7 +9,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.ads.module.R
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.helper.adnative.NativeAdStyle
 import com.ads.module.helper.adnative.NativeComponent
@@ -72,11 +72,11 @@ class PoolSlotBinderTest {
     ) = PoolSlotBinder(into, slotLayout, { style }, destroyOnTeardown)
 
     private fun ad(body: String? = null) =
-        ApNativeAd(R.layout.custom_native_admob_free_size, PoolVendorAd(body))
+        NativeAdWrapper(R.layout.custom_native_admob_free_size, PoolVendorAd(body))
 
-    private fun shown(ad: ApNativeAd, lender: String = "language1") = PoolSelection(lender, ad, true)
-    private val shimmer = PoolSelection.shimmer<ApNativeAd>()
-    private val hidden = PoolSelection.hidden<ApNativeAd>()
+    private fun shown(ad: NativeAdWrapper, lender: String = "language1") = PoolSelection(lender, ad, true)
+    private val shimmer = PoolSelection.shimmer<NativeAdWrapper>()
+    private val hidden = PoolSelection.hidden<NativeAdWrapper>()
 
     private fun adView(of: FrameLayout = container) = of.getChildAt(0) as NativeAdView
     private fun skeleton() = container.getChildAt(0) as ShimmerFrameLayout
@@ -100,7 +100,7 @@ class PoolSlotBinderTest {
         assertEquals(View.VISIBLE, container.visibility)
         assertSame(second, binder.boundAd())
         assertNull(firstView.parent)
-        assertEquals("DashDrama swaps without destroy", 0, firstView.gma.destroyCount)
+        assertEquals("a swap does not destroy the replaced view", 0, firstView.gma.destroyCount)
         assertEquals(0, (first.admobNativeAd as PoolVendorAd).destroyed)
     }
 
@@ -354,7 +354,7 @@ class PoolSlotBinderTest {
         binder.render(shown(ad))
         val view = adView()
 
-        val empty = ApNativeAd(slotLayout, null as NativeAd?)
+        val empty = NativeAdWrapper(slotLayout, null as NativeAd?)
         assertEquals(Outcome.IGNORED, binder.render(shown(empty)))
         val released = ad().also { it.destroy() }
         assertEquals(Outcome.IGNORED, binder.render(shown(released)))

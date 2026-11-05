@@ -50,7 +50,7 @@ internal object PoolPlacementMapper {
     }
 
     /**
-     * DashDrama requests the declared list as is, a repeated id included. The parser already
+     * The pool requests the declared list as is, a repeated id included. The parser already
      * dropped disabled and blank floors; only the dedup of the classic waterfall is skipped.
      */
     private fun idsFor(placement: AdPlacement, adConfigKey: String?): List<String> {

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">ITG Project Base</string>
+    <string name="app_name" translatable="false">AdLogic Sample</string>
     <string name="language" translatable="false">Language</string>
     <string name="ads_are_about_to_be_shown">Ads are about to be shown...</string>
     <string name="please_select_language">Please select language</string>
@@ -12,14 +12,14 @@
     <string name="txt_later" translatable="false"><u>Later</u></string>
     <string name="txt_rate_5_star" translatable="false">If you like this app, please rate our app 5 stars in store!</string>
     <string name="txt_do_you_like_our_app" translatable="false">Do you like our app?</string>
-    <string name="onboarding_title_1">Dive into endless love stories</string>
-    <string name="onboarding_des_1">Discover fresh romance, drama, and unforgettable moments anytime.</string>
-    <string name="onboarding_title_2">Your romance world, reimagined</string>
-    <string name="onboarding_des_2">Experience stories your way with seamless reading and curated vibes.</string>
-    <string name="onboarding_title_3">Fall in love with every story</string>
-    <string name="onboarding_des_3">Unlock a universe of passion, twists, and heartwarming journeys.</string>
-    <string name="onboarding_title_4">Your personal story library</string>
-    <string name="onboarding_des_4">Organize, revisit, and enjoy all your favorite stories in one place.</string>
+    <string name="onboarding_title_1">Welcome to the sample app</string>
+    <string name="onboarding_des_1">Take a quick tour of what this demo app can do.</string>
+    <string name="onboarding_title_2">Everything in one place</string>
+    <string name="onboarding_des_2">Find the features you use most, right where you expect them.</string>
+    <string name="onboarding_title_3">Make it your own</string>
+    <string name="onboarding_des_3">Choose a language and settings that suit the way you work.</string>
+    <string name="onboarding_title_4">You are all set</string>
+    <string name="onboarding_des_4">Start exploring now. You can change your choices anytime in Settings.</string>
 
     <string name="applying_selected_language" translatable="false">Applying selected language...</string>
     <string name="text_restart_app">Restart App</string>
@@ -27,7 +27,7 @@
     <string name="close">Close</string>
     <string name="ad_config_invalid_message">Invalid ad configuration. Please verify ad_config.json.</string>
     <!--    Uninstall-->
-    <string name="content_confirm_uninstall">Why remvove the app</string>
+    <string name="content_confirm_uninstall">Why remove the app</string>
     <string name="try_again">Try Again</string>
     <string name="still_want_to_uninstall">Still want to uninstall</string>
     <string name="issues_encountered_during_usage">Issues encountered during usage</string>
@@ -46,7 +46,6 @@
     <string name="update_later">Maybe Later</string>
     <string name="setting">Setting</string>
     <string name="rate">Rate</string>
-    <string name="feedback">Feedback</string>
     <string name="share_with_friend">Share with friend</string>
     <string name="privacy_policy">Privacy Policy</string>
     <string name="let_me_recommend">Let me recommend</string>
@@ -58,19 +57,10 @@
     <string name="paywall_privacy_url" translatable="false">https://example.com/privacy</string>
     <string name="we_re_better_than_ever">We’re better than ever</string>
     <string name="start">Start</string>
-    <string name="privacy_goal_title">PDF Reader</string>
-    <string name="privacy_goal_subtitle">Read, edit and convert all your documents in one place.</string>
-    <string name="privacy_goal_tools">Handy tools, built in</string>
-    <string name="privacy_goal_consent">By tapping Get started you agree to our Terms of Use and Privacy Policy.</string>
-    <string name="privacy_goal_get_started">GET STARTED</string>
-    <string name="privacy_goal_hint">Pick a goal and we’ll put the right tools up front.</string>
-    <string name="goal_edit">Edit PDF</string>
-    <string name="goal_annotate">Annotate</string>
-    <string name="goal_add_text">Add text</string>
-    <string name="goal_sign_fill">Sign &amp; fill</string>
-    <string name="goal_compress">Compress</string>
-    <string name="goal_split_merge">Split &amp; merge</string>
-    <string name="goal_organise">Organise pages</string>
-    <string name="goal_protect">Protect</string>
-    <string name="privacy_goal_next">Continue</string>
+    <string name="goal_learn">Learn something new</string>
+    <string name="goal_save_time">Save time</string>
+    <string name="goal_organise">Stay organised</string>
+    <string name="goal_fun">Have fun</string>
+    <string name="goal_connect">Stay connected</string>
+    <string name="goal_progress">Track progress</string>
 </resources>

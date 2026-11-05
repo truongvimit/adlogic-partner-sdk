@@ -8,9 +8,9 @@ import android.net.NetworkInfo
 import android.os.Bundle
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.admob.AppOpenManager
-import com.ads.module.config.ERainAdConfig
+import com.ads.module.config.AdsSdkConfig
 import com.ads.module.config.settings.AdBehavior
 import com.ads.module.consent.ConsentCenter
 import com.ads.module.helper.interstitial.Int02Application
@@ -75,7 +75,7 @@ class NativeOwnershipTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true))
         shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork,
             NetworkCapabilities().also { shadowOf(it).addTransportType(NetworkCapabilities.TRANSPORT_WIFI) })
-        ERainAd.getInstance().init(app, ERainAdConfig(app).apply { setFacebookClientToken("native-test") })
+        AdsSdk.getInstance().init(app, AdsSdkConfig(app).apply { setFacebookClientToken("native-test") })
         AppOpenManager.getInstance().disableAppResume()
         controller = Robolectric.buildActivity(NativeHostActivity::class.java).setup()
         main.idle()
@@ -893,10 +893,10 @@ class NativeOwnershipTest {
     @Test fun `a load result is told once after listeners and before waiters and leaves the fill to them`() {
         val order = mutableListOf<String>()
         NativeAdManager.register("a", object : com.ads.module.funtion.AdCallback() {
-            override fun onNativeAdLoaded(nativeAd: com.ads.module.ads.wrapper.ApNativeAd) { order += "listener" }
+            override fun onNativeAdLoaded(nativeAd: com.ads.module.ads.wrapper.NativeAdWrapper) { order += "listener" }
         })
         assertTrue(NativeAdManager.preload(activity, "a", config, onResult = { order += "result:$it" }))
-        var taken: com.ads.module.ads.wrapper.ApNativeAd? = null
+        var taken: com.ads.module.ads.wrapper.NativeAdWrapper? = null
         NativeAdManager.awaitNext("a") { order += "waiter"; taken = it }
         requests.single().fill(NativeVendorAd())
         assertEquals(listOf("listener", "result:null", "waiter"), order)
@@ -1098,7 +1098,7 @@ class NativeOwnershipTest {
         controller.pause().stop().destroy()
         controller = Robolectric.buildActivity(NativeHostActivity::class.java).create()
         val ad = NativeVendorAd()
-        val saved = com.ads.module.ads.wrapper.ApNativeAd(config.layoutId, ad)
+        val saved = com.ads.module.ads.wrapper.NativeAdWrapper(config.layoutId, ad)
         androidx.lifecycle.ViewModelProvider(activity)[NativePresentationStore::class.java]
             .retain("a", NativePresentationStore.Presentation(saved, 0, 0, false))
         val restored = helper()

@@ -149,8 +149,6 @@ internal class TrackkitPrefs(context: Context) {
 
 /**
  * Values attached to every event so any funnel can be sliced by cohort without a join.
- * The audited Apero build had none of these — no user property, no user id, no default params —
- * which is why its A/B variants were unattributable.
  */
 internal class SessionState(prefs: TrackkitPrefs) {
 
@@ -183,15 +181,13 @@ internal class SessionState(prefs: TrackkitPrefs) {
 // ---------------------------------------------------------------------------
 
 /**
- * The one genuinely valuable piece of the old Apero pipeline, reimplemented with correct units.
- *
  * Emits, per impression:
  *  - `ad_revenue_total`      cumulative LTV so far
  *  - `ad_revenue_micro_flush` once the un-flushed bucket crosses 0.01 of the reporting currency
  *  - `ad_revenue_d3` / `ad_revenue_d7` one-shot milestones
  *
  * These are the signals that feed Meta VO/AEO and Adjust ROAS models. Everything is kept in
- * **micros (Long)**; the old code mixed micros and units in the same variable.
+ * **micros (Long)**.
  */
 internal class AdRevenueAccumulator(
     private val prefs: TrackkitPrefs,

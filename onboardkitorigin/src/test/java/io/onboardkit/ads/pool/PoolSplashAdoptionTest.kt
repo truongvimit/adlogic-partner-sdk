@@ -4,7 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdManager
 import com.ads.module.helper.adnative.pool.LoadMode
@@ -58,8 +58,8 @@ class PoolSplashAdoptionTest {
     private lateinit var builders: MockedConstruction<AdLoader.Builder>
     private val splashRequests = mutableListOf<NativeAd.OnNativeAdLoadedListener>()
     private val splashListeners = mutableListOf<AdListener>()
-    private lateinit var loader: ApFakeLoader
-    private lateinit var engine: NativePoolEngine<ApNativeAd>
+    private lateinit var loader: FakeAdLoader
+    private lateinit var engine: NativePoolEngine<NativeAdWrapper>
     private val key = AdPlacement.Language1.key
 
     @Before fun setUp() {
@@ -79,7 +79,7 @@ class PoolSplashAdoptionTest {
                 null
             }.`when`(adLoader).loadAd(any(AdRequest::class.java))
         }
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
         engine = installTestEngine(loader)
         OnboardingPool.activate(app, poolSnapshot())
         main.idle()

@@ -14,7 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import androidx.viewpager2.widget.ViewPager2
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.helper.adnative.pool.NativePoolEngine
 import com.ads.module.helper.adnative.pool.SharedNativePool
 import io.onboardkit.OnboardingSdk
@@ -23,8 +23,8 @@ import io.onboardkit.StartOptions
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.NativeAdRequest
 import io.onboardkit.ads.ObNativeResume
-import io.onboardkit.ads.erain.ERainAdProvider
-import io.onboardkit.ads.pool.ApFakeLoader
+import io.onboardkit.ads.sdk.AdsSdkProvider
+import io.onboardkit.ads.pool.FakeAdLoader
 import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.allowAds
@@ -86,7 +86,7 @@ import java.util.concurrent.TimeUnit.MILLISECONDS
 class PoolLegacyIsolationTest {
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
     private val main get() = shadowOf(Looper.getMainLooper())
-    private lateinit var loader: ApFakeLoader
+    private lateinit var loader: FakeAdLoader
     private lateinit var locale: Locale
     private val controllers = mutableListOf<ActivityController<*>>()
     private val ob1 = ContentStepDefinition(StepId.OB1, title = "One")
@@ -98,7 +98,7 @@ class PoolLegacyIsolationTest {
         ShadowChoreographer.setPaused(true)
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(FRAME_MS))
         AnimationUtils.currentAnimationTimeMillis()
-        loader = ApFakeLoader()
+        loader = FakeAdLoader()
     }
 
     @After fun tearDown() {
@@ -115,7 +115,7 @@ class PoolLegacyIsolationTest {
     // ── Harness ──
 
     /** One install per test: a second one would open a second store on the same file. */
-    private fun installVendor(steps: List<StepDefinition> = listOf(ob1)): NativePoolEngine<ApNativeAd> {
+    private fun installVendor(steps: List<StepDefinition> = listOf(ob1)): NativePoolEngine<NativeAdWrapper> {
         ScenarioSdk.install(app)
         ScenarioSdk.configure(steps)
         vendor.interstitialReady = false
@@ -238,12 +238,12 @@ class PoolLegacyIsolationTest {
         ReflectionHelpers.setField(OnboardingSdk, "application", null)
         OnboardingSettings.document.acceptSuccessfulFetch(null)
         OnboardingSdk.install(app) {
-            adProvider = ERainAdProvider()
+            adProvider = AdsSdkProvider()
             trackkitAutoTracking(false)
         }
         OnboardingSdk.configure(onboardKitConfig { step(ob1) }.getOrThrow()).getOrThrow()
         allowAds(app)
-        assertTrue("The ERain stack could run the pool", OnboardingPool.canRun())
+        assertTrue("The AdsSdk stack could run the pool", OnboardingPool.canRun())
 
         val from = appScreen()
         startFlow(from)
@@ -280,7 +280,7 @@ class PoolLegacyIsolationTest {
         main.idle()
         assertEquals(NativeFlowType.SHARED_POOL, OnboardingSdk.session.nativeFlow?.type)
         runPooled(requireNotNull(shadowOf(from).nextStartedActivity))
-        assertTrue("OC5: the pooled run keeps resume routing", OnboardingPool.routeResume)
+        assertTrue("the pooled run keeps resume routing", OnboardingPool.routeResume)
         assertTrue(loader.callsFor(AdPlacement.Language1.key).isNotEmpty())
         loader.fill(AdPlacement.Language1.key)
         main.idle()
@@ -361,7 +361,7 @@ class PoolLegacyIsolationTest {
             ObSplashNativeActivity::class.java.name, pooled.next)
 
         assertEquals(listOf(AdPlacement.Language1, AdPlacement.SplashNative), classic.natives.map { it.placement })
-        // The pooled LFO requests LFO1 itself, as DashDrama does; native_fs is the pool's first ad.
+        // The pooled LFO requests LFO1 itself; native_fs is the pool's first ad.
         assertTrue(pooled.natives.isEmpty())
         assertEquals(classic.interstitials, pooled.interstitials)
         assertTrue("Only the classic splash leaves an LFO1 handoff", classic.handoff && !pooled.handoff)

@@ -3,7 +3,7 @@ package com.ads.module.helper.adnative
 import android.content.Context
 import androidx.annotation.MainThread
 import com.ads.module.ads.AdWaterfall
-import com.ads.module.ads.wrapper.ApNativeAd
+import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdSkipReason
@@ -21,17 +21,17 @@ object NativeAdManager {
     fun interface Subscription { fun cancel() }
 
     private class Entry {
-        var ready: ApNativeAd? = null
+        var ready: NativeAdWrapper? = null
         var loading = false
         var failed = false
         var discardResult = false
-        val waiters = linkedSetOf<(ApNativeAd?) -> Unit>()
+        val waiters = linkedSetOf<(NativeAdWrapper?) -> Unit>()
         val outcomeListeners = mutableListOf<(AdSkipReason?) -> Unit>()
         val listeners = linkedSetOf<AdCallback>()
     }
 
     private val entries = mutableMapOf<String, Entry>()
-    private val adListeners = java.util.WeakHashMap<ApNativeAd, MutableSet<AdCallback>>()
+    private val adListeners = java.util.WeakHashMap<NativeAdWrapper, MutableSet<AdCallback>>()
 
     /** A stable placement is preferred; this fallback preserves existing unnamed callers. */
     fun keyOf(config: NativeAdConfig): String = config.adUnitIds.joinToString(separator = "\u0000")
@@ -86,10 +86,10 @@ object NativeAdManager {
         onResult?.let { entry.outcomeListeners += it }
         tiers.forEach { AdTracking.registerPlacement(it, placement) }
         if (reportTelemetry) AdTracking.request(placement, AdFormat.NATIVE, tiers.first())
-        var filled: ApNativeAd? = null
+        var filled: NativeAdWrapper? = null
         AdWaterfall.loadNative(app, tiers, config.layoutId, config.tierTimeoutMs,
             object : AdCallback() {
-                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {
+                override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) {
                     filled = nativeAd
                     finish(entry, nativeAd, null)
                 }
@@ -108,7 +108,7 @@ object NativeAdManager {
 
     /** Claims a ready ad or joins/starts the placement load. Cancellation only detaches this UI. */
     internal fun acquire(context: Context, placement: String, config: NativeAdConfig,
-        reportTelemetry: Boolean, joinOnly: Boolean, result: (ApNativeAd?) -> Unit): Subscription {
+        reportTelemetry: Boolean, joinOnly: Boolean, result: (NativeAdWrapper?) -> Unit): Subscription {
         poll(placement)?.let { result(it); return Subscription {} }
         if (joinOnly && !isLoading(placement)) {
             result(null)
@@ -123,7 +123,7 @@ object NativeAdManager {
         return Subscription { entry.waiters.remove(result) }
     }
 
-    internal fun peek(placement: String): ApNativeAd? {
+    internal fun peek(placement: String): NativeAdWrapper? {
         val entry = entries[placement] ?: return null
         val ad = entry.ready ?: return null
         if (!ad.isUsable) {
@@ -135,9 +135,9 @@ object NativeAdManager {
     }
 
     /** Removes an unused ad before binding, so two screens cannot spend the same fill. */
-    internal fun poll(placement: String): ApNativeAd? = peek(placement)?.also { entries[placement]?.ready = null }
+    internal fun poll(placement: String): NativeAdWrapper? = peek(placement)?.also { entries[placement]?.ready = null }
 
-    internal fun awaitNext(placement: String, result: (ApNativeAd?) -> Unit): Subscription {
+    internal fun awaitNext(placement: String, result: (NativeAdWrapper?) -> Unit): Subscription {
         val entry = entries[placement]
         if (peek(placement) != null || entry?.loading != true) {
             result(poll(placement))
@@ -147,17 +147,17 @@ object NativeAdManager {
         return Subscription { entry.waiters.remove(result) }
     }
 
-    internal fun claim(ad: ApNativeAd) {
+    internal fun claim(ad: NativeAdWrapper) {
         entries.values.forEach { if (it.ready === ad) it.ready = null }
     }
 
-    internal fun returnUnused(placement: String, ad: ApNativeAd) {
+    internal fun returnUnused(placement: String, ad: NativeAdWrapper) {
         val entry = entries.getOrPut(placement) { Entry() }
         if (ad.isUsable && !entry.discardResult && entry.ready == null) entry.ready = ad
         else dispose(ad)
     }
 
-    internal fun observe(ad: ApNativeAd, callback: AdCallback): Subscription {
+    internal fun observe(ad: NativeAdWrapper, callback: AdCallback): Subscription {
         adListeners.getOrPut(ad) { linkedSetOf() }.add(callback)
         return Subscription { adListeners[ad]?.remove(callback) }
     }
@@ -167,7 +167,7 @@ object NativeAdManager {
     }
     internal fun unregister(placement: String, callback: AdCallback) { entries[placement]?.listeners?.remove(callback) }
 
-    private fun finish(entry: Entry, ad: ApNativeAd?, error: LoadAdError?) {
+    private fun finish(entry: Entry, ad: NativeAdWrapper?, error: LoadAdError?) {
         entry.loading = false
         val accepted = ad?.takeIf { !entry.discardResult && it.isUsable }
         if (accepted == null && ad != null) dispose(ad)
@@ -212,7 +212,7 @@ object NativeAdManager {
 
     @JvmStatic fun releaseAll() { entries.keys.toList().forEach(::release) }
 
-    internal fun dispose(ad: ApNativeAd) {
+    internal fun dispose(ad: NativeAdWrapper) {
         adListeners.remove(ad)
         runCatching { ad.destroy() }
     }

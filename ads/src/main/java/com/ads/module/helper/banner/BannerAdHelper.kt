@@ -8,7 +8,7 @@ import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.ads.module.R
-import com.ads.module.ads.ERainAd
+import com.ads.module.ads.AdsSdk
 import com.ads.module.admob.Admob
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
@@ -291,43 +291,43 @@ class BannerAdHelper(
             }
         }
         val root = rootView
-        val erain = ERainAd.getInstance()
+        val adsSdk = AdsSdk.getInstance()
         when (val type = effectiveType) {
             is BannerType.Normal ->
-                if (root == null) erain.loadBanner(activity, adUnitId, callback)
-                else erain.loadBannerFragment(activity, adUnitId, root, callback)
+                if (root == null) adsSdk.loadBanner(activity, adUnitId, callback)
+                else adsSdk.loadBannerFragment(activity, adUnitId, root, callback)
 
             is BannerType.LargeAnchored ->
-                if (root == null) erain.loadLargeAnchoredBanner(activity, adUnitId, callback)
-                else erain.loadLargeAnchoredBannerFragment(activity, adUnitId, root, callback)
+                if (root == null) adsSdk.loadLargeAnchoredBanner(activity, adUnitId, callback)
+                else adsSdk.loadLargeAnchoredBannerFragment(activity, adUnitId, root, callback)
 
             is BannerType.Inline ->
-                if (root == null) erain.loadInlineBanner(activity, adUnitId, type.style, callback)
-                else erain.loadBannerInlineFragment(activity, adUnitId, root, type.style, callback)
+                if (root == null) adsSdk.loadInlineBanner(activity, adUnitId, type.style, callback)
+                else adsSdk.loadBannerInlineFragment(activity, adUnitId, root, type.style, callback)
 
             is BannerType.InlineMaxHeight ->
                 if (root == null) {
-                    erain.loadInlineBanner(activity, adUnitId, type.maxHeightDp, callback)
+                    adsSdk.loadInlineBanner(activity, adUnitId, type.maxHeightDp, callback)
                 } else {
-                    erain.loadBannerInlineFragment(
+                    adsSdk.loadBannerInlineFragment(
                         activity, adUnitId, root, type.maxHeightDp, callback,
                     )
                 }
 
             is BannerType.Fixed ->
                 if (root == null) {
-                    erain.loadFixedSizeBanner(activity, adUnitId, type.size.adSize, callback)
+                    adsSdk.loadFixedSizeBanner(activity, adUnitId, type.size.adSize, callback)
                 } else {
-                    erain.loadFixedSizeBannerFragment(
+                    adsSdk.loadFixedSizeBannerFragment(
                         activity, adUnitId, root, type.size.adSize, callback,
                     )
                 }
 
             is BannerType.Collapsible ->
                 if (root == null) {
-                    erain.loadCollapsibleBanner(activity, adUnitId, type.gravity, callback)
+                    adsSdk.loadCollapsibleBanner(activity, adUnitId, type.gravity, callback)
                 } else {
-                    erain.loadCollapsibleBannerFragment(
+                    adsSdk.loadCollapsibleBannerFragment(
                         activity, adUnitId, root, type.gravity, callback,
                     )
                 }

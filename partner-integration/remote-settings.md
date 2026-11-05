@@ -170,7 +170,7 @@ Example in `ad_config`: OB1 stays on its page after an ad click, and LFO2 confir
 
 ## Native templates, CTA and X/Skip experiments
 
-- `ad_remote_config.<placement>.templateId` (number) picks the frame: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` DashDrama-shaped wide LFO card. Absent, `null` or an unknown number keeps the slot's default — `4` on LFO1/2 in `SHARED_POOL`, `1` on classic LFO/Welcome Back/OB content, `2` on Privacy/Goal and splash inline. Remote > app asset > code like every field.
+- `ad_remote_config.<placement>.templateId` (number) picks the frame: `1` classic LFO frame, `2` 4:3 media-left card, `3` 1.91:1 card, `4` wide LFO card. Absent, `null` or an unknown number keeps the slot's default — `4` on LFO1/2 in `SHARED_POOL`, `1` on classic LFO/Welcome Back/OB content, `2` on Privacy/Goal and splash inline. Remote > app asset > code like every field.
 - `components` is the only thing that orders a native. Templates `1` and `3` follow it; absent, the default order puts the CTA at the bottom. Template `1`: `["icon_headline","media","cta"]` (default) or `["cta","media","icon_headline"]` for the CTA on top.
 - `positionCTA` has been removed; a payload that still sends it is ignored. `lfo.native_template`, `onboarding.ads.content_template` and `onboarding.steps.<id>.native_template` are removed too; old payloads containing them are ignored.
 - Template 3's four design arrangements are `components` orders: A `["media","icon_headline","body","cta"]`, B `["cta","icon_headline","body","media"]`, C `["icon_headline","body","media","cta"]` (the default order), D `["cta","media","icon_headline","body"]`. The body sits in the header, so leaving out `body` only hides it.

@@ -20,7 +20,7 @@ enum class AdSkipReason(val key: String) {
     /** No network — the request would only burn the waterfall's timeout budget. */
     OFFLINE("offline"),
 
-    /** Blocked by the UA/organic gate ([com.ads.module.ads.ERainAd.shouldDisplayForUa]). */
+    /** Blocked by the UA/organic gate ([com.ads.module.ads.AdsSdk.shouldDisplayForUa]). */
     UA_GATE("ua_gate"),
 
     /** Neither UMP nor the explicitly configured host consent source permits requests. */

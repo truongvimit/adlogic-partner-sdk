@@ -75,7 +75,7 @@ data class StartOptions(
  *
  * ```
  * OnboardingSdk.install(app) {
- *     adProvider = ERainAdProvider()
+ *     adProvider = AdsSdkProvider()
  *     listener = OnboardingListener { ctx, outcome -> /* navigate to main */ }
  * }
  * OnboardingSdk.configure(config)   // config from onboardKitConfig { … }

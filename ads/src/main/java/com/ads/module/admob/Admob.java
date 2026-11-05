@@ -32,7 +32,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.ads.module.R;
 import com.ads.module.dialog.PrepareLoadingAdsDialog;
-import com.ads.module.event.ERainLogEventManager;
+import com.ads.module.event.AdEventLogger;
 import com.ads.module.funtion.AdCallback;
 import com.ads.module.funtion.AdType;
 import com.ads.module.funtion.AdmobHelper;
@@ -82,9 +82,9 @@ import io.trackkit.AdFormat;
 import io.trackkit.PlacementRegistry;
 
 public class Admob {
-    private static final String TAG = "ERainStudio";
+    private static final String TAG = "AdsSdk";
 
-    /** Internal pre-show lifecycle rejection in the ERainStudio error domain; not a GMA error. */
+    /** Internal pre-show lifecycle rejection in the AdsSdk error domain; not a GMA error. */
     public static final int ERROR_CODE_SHOW_IN_BACKGROUND = 9001;
 
     /** Only this module's rejection before vendor show permits a cached fill to be reused. */
@@ -109,7 +109,6 @@ public class Admob {
     private Handler handlerTimeout;
     private Runnable rdTimeout;
     private PrepareLoadingAdsDialog dialog;
-    private boolean isTimeout;
     private boolean disableAdResumeWhenClickAds = AdBehavior.defaultBool("app_open.presentation.skip_after_ad_click");
     private boolean isShowLoadingSplash = false;
     boolean isTimeDelay = false;
@@ -163,7 +162,7 @@ public class Admob {
     /**
      * Records one ad click against the daily cap.
      *
-     * <p>Called from {@code ERainLogEventManager.logClickAdsEvent}, the module's single click choke
+     * <p>Called from {@code AdEventLogger.logClickAdsEvent}, the module's single click choke
      * point, so a newly added ad format cannot ship with its clicks uncounted. Counts are per ad
      * unit, so clicks on a native only ever gate that native's own unit.
      */
@@ -273,202 +272,6 @@ public class Admob {
         return new AdRequest.Builder().build();
     }
 
-    public boolean interstitialSplashLoaded() {
-        return mInterstitialSplash != null;
-    }
-
-    public InterstitialAd getInterstitialSplash() {
-        return mInterstitialSplash;
-    }
-
-    /**
-     * Loads the splash interstitial and hands control back to the caller when it is ready.
-     *
-     * @param timeOut   ms to wait for the ad; {@code <= 0} disables the timeout
-     * @param timeDelay ms to hold the loaded ad before it is shown
-     */
-    public void loadSplashInterstitialAds(final Context context, String id, long timeOut, long timeDelay, AdCallback adListener) {
-        isTimeDelay = false;
-        isTimeout = false;
-
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            if (adListener != null) {
-                adListener.onNextAction();
-            }
-            return;
-        }
-        new Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                //check delay show ad splash
-                if (mInterstitialSplash != null) {
-                    onShowSplash((AppCompatActivity) context, adListener);
-                    return;
-                }
-                isTimeDelay = true;
-            }
-        }, timeDelay);
-
-        if (timeOut > 0) {
-            handlerTimeout = new Handler();
-            rdTimeout = new Runnable() {
-                @Override
-                public void run() {
-                    isTimeout = true;
-                    if (mInterstitialSplash != null) {
-                        onShowSplash((AppCompatActivity) context, adListener);
-                        return;
-                    }
-                    if (adListener != null) {
-                        adListener.onNextAction();
-                        isShowLoadingSplash = false;
-                    }
-                }
-            };
-            handlerTimeout.postDelayed(rdTimeout, timeOut);
-        }
-
-
-        isShowLoadingSplash = true;
-        getInterstitialAds(context, id, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                if (isTimeout)
-                    return;
-                if (interstitialAd != null) {
-                    mInterstitialSplash = interstitialAd;
-                    if (isTimeDelay) {
-                        onShowSplash((AppCompatActivity) context, adListener);
-                    }
-                }
-            }
-
-
-            @Override
-            public void onAdFailedToLoad(LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                isShowLoadingSplash = false;
-                if (isTimeout)
-                    return;
-                if (adListener != null) {
-                    if (handlerTimeout != null && rdTimeout != null) {
-                        handlerTimeout.removeCallbacks(rdTimeout);
-                    }
-                    adListener.onAdFailedToLoad(i);
-                    adListener.onNextAction();
-                }
-            }
-
-            @Override
-            public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
-                if (adListener != null) {
-                    adListener.onAdFailedToShow(adError);
-                    adListener.onNextAction();
-                }
-            }
-        });
-
-    }
-
-    /**
-     * Loads the splash interstitial and hands control back to the caller when it is ready.
-     *
-     * @param timeOut           ms to wait for the ad; {@code <= 0} disables the timeout
-     * @param timeDelay         ms to hold the loaded ad before it is shown
-     * @param showSplashIfReady show the ad as soon as it loads, without a further call
-     */
-    public void loadSplashInterstitialAds(final Context context, String id, long timeOut, long timeDelay, boolean showSplashIfReady, AdCallback adListener) {
-        isTimeDelay = false;
-        isTimeout = false;
-
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            if (adListener != null) {
-                adListener.onNextAction();
-            }
-            return;
-        }
-        new Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (mInterstitialSplash != null) {
-                    if (showSplashIfReady)
-                        onShowSplash((AppCompatActivity) context, adListener);
-                    else
-                        adListener.onAdSplashReady();
-                    return;
-                }
-                isTimeDelay = true;
-            }
-        }, timeDelay);
-
-        if (timeOut > 0) {
-            handlerTimeout = new Handler();
-            rdTimeout = new Runnable() {
-                @Override
-                public void run() {
-                    isTimeout = true;
-                    if (mInterstitialSplash != null) {
-                        if (showSplashIfReady)
-                            onShowSplash((AppCompatActivity) context, adListener);
-                        else
-                            adListener.onAdSplashReady();
-                        return;
-                    }
-                    if (adListener != null) {
-                        adListener.onNextAction();
-                        isShowLoadingSplash = false;
-                    }
-                }
-            };
-            handlerTimeout.postDelayed(rdTimeout, timeOut);
-        }
-
-        isShowLoadingSplash = true;
-        getInterstitialAds(context, id, new AdCallback() {
-            @Override
-            public void onInterstitialLoad(InterstitialAd interstitialAd) {
-                super.onInterstitialLoad(interstitialAd);
-                if (isTimeout)
-                    return;
-                if (interstitialAd != null) {
-                    mInterstitialSplash = interstitialAd;
-                    if (isTimeDelay) {
-                        if (showSplashIfReady)
-                            onShowSplash((AppCompatActivity) context, adListener);
-                        else
-                            adListener.onAdSplashReady();
-                    }
-                }
-            }
-
-            @Override
-            public void onAdFailedToShow(@Nullable AdError adError) {
-                super.onAdFailedToShow(adError);
-                if (adListener != null) {
-                    adListener.onAdFailedToShow(adError);
-                    adListener.onNextAction();
-                }
-            }
-
-            @Override
-            public void onAdFailedToLoad(LoadAdError i) {
-                super.onAdFailedToLoad(i);
-                if (isTimeout)
-                    return;
-                if (adListener != null) {
-                    adListener.onNextAction();
-                    if (handlerTimeout != null && rdTimeout != null) {
-                        handlerTimeout.removeCallbacks(rdTimeout);
-                    }
-                    adListener.onAdFailedToLoad(i);
-                }
-            }
-        });
-
-    }
-
     public void onShowSplash(AppCompatActivity activity, AdCallback adListener) {
         final boolean openNextUnderAd = isOpenActivityAfterShowInterAds();
         isShowLoadingSplash = true;
@@ -479,7 +282,7 @@ public class Admob {
         }
 
         mInterstitialSplash.setOnPaidEventListener(adValue -> {
-            ERainLogEventManager.logPaidAdImpression(context,
+            AdEventLogger.logPaidAdImpression(context,
                     adValue,
                     mInterstitialSplash.getAdUnitId(),
                     mInterstitialSplash.getResponseInfo()
@@ -548,7 +351,7 @@ public class Admob {
                 super.onAdClicked();
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
             }
 
             @Override
@@ -622,7 +425,7 @@ public class Admob {
         }
 
         mInterstitialSplash.setOnPaidEventListener(adValue -> {
-            ERainLogEventManager.logPaidAdImpression(context,
+            AdEventLogger.logPaidAdImpression(context,
                     adValue,
                     mInterstitialSplash.getAdUnitId(),
                     mInterstitialSplash.getResponseInfo()
@@ -691,7 +494,7 @@ public class Admob {
                 super.onAdClicked();
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterstitialSplash.getAdUnitId());
             }
 
             @Override
@@ -753,17 +556,6 @@ public class Admob {
         }
     }
 
-    public void onCheckShowSplashWhenFail(AppCompatActivity activity, AdCallback callback, int timeDelay) {
-        new Handler(activity.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (interstitialSplashLoaded() && !isShowLoadingSplash()) {
-                    Admob.getInstance().onShowSplash(activity, callback);
-                }
-            }
-        }, timeDelay);
-    }
-
     /**
      * Requests an interstitial and returns it through {@code adCallback}.
      */
@@ -781,7 +573,7 @@ public class Admob {
                             adCallback.onInterstitialLoad(interstitialAd);
 
                         interstitialAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     interstitialAd.getAdUnitId(),
                                     interstitialAd.getResponseInfo()
@@ -915,7 +707,7 @@ public class Admob {
                 if (callback != null) {
                     callback.onAdClicked();
                 }
-                ERainLogEventManager.logClickAdsEvent(context, mInterstitialAd.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterstitialAd.getAdUnitId());
             }
         });
 
@@ -1296,7 +1088,7 @@ public class Admob {
                         adView.setOnPaidEventListener(adValue -> {
                             Log.d(TAG, "OnPaidEvent banner:" + adValue.getValueMicros());
 
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     adView.getAdUnitId(),
                                     adView.getResponseInfo()
@@ -1318,7 +1110,7 @@ public class Admob {
                         callback.onAdClicked();
                         Log.d(TAG, "onAdClicked");
                     }
-                    ERainLogEventManager.logClickAdsEvent(context, id);
+                    AdEventLogger.logClickAdsEvent(context, id);
                 }
 
                 @Override
@@ -1384,7 +1176,7 @@ public class Admob {
                     adView.setOnPaidEventListener(adValue -> {
                         Log.d(TAG, "OnPaidEvent banner:" + adValue.getValueMicros());
 
-                        ERainLogEventManager.logPaidAdImpression(context,
+                        AdEventLogger.logPaidAdImpression(context,
                                 adValue,
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
@@ -1400,7 +1192,7 @@ public class Admob {
                     super.onAdClicked();
                     if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    ERainLogEventManager.logClickAdsEvent(context, id);
+                    AdEventLogger.logClickAdsEvent(context, id);
                     if (callback != null) {
                         callback.onAdClicked();
                     }
@@ -1459,7 +1251,7 @@ public class Admob {
                     adView.setOnPaidEventListener(adValue -> {
                         Log.d(TAG, "OnPaidEvent banner:" + adValue.getValueMicros());
 
-                        ERainLogEventManager.logPaidAdImpression(context,
+                        AdEventLogger.logPaidAdImpression(context,
                                 adValue,
                                 adView.getAdUnitId(),
                                 adView.getResponseInfo()
@@ -1475,7 +1267,7 @@ public class Admob {
                     super.onAdClicked();
                     if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    ERainLogEventManager.logClickAdsEvent(context, id);
+                    AdEventLogger.logClickAdsEvent(context, id);
                     if (callback != null) {
                         callback.onAdClicked();
                     }
@@ -1518,33 +1310,6 @@ public class Admob {
         return builder.build();
     }
 
-    /**
-     * Loads a native ad into the activity's {@code fl_adplaceholder}.
-     */
-    public void loadNative(final Activity mActivity, String id) {
-        final FrameLayout frameLayout = mActivity.findViewById(R.id.fl_adplaceholder);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_native);
-        loadNative(mActivity, containerShimmer, frameLayout, id, R.layout.custom_native_admob_free_size);
-    }
-
-    public void loadNativeFragment(final Activity mActivity, String id, View parent) {
-        final FrameLayout frameLayout = parent.findViewById(R.id.fl_adplaceholder);
-        final ShimmerFrameLayout containerShimmer = parent.findViewById(R.id.shimmer_container_native);
-        loadNative(mActivity, containerShimmer, frameLayout, id, R.layout.custom_native_admob_free_size);
-    }
-
-    public void loadSmallNative(final Activity mActivity, String adUnitId) {
-        final FrameLayout frameLayout = mActivity.findViewById(R.id.fl_adplaceholder);
-        final ShimmerFrameLayout containerShimmer = mActivity.findViewById(R.id.shimmer_container_native);
-        loadNative(mActivity, containerShimmer, frameLayout, adUnitId, R.layout.custom_native_admob_medium);
-    }
-
-    public void loadSmallNativeFragment(final Activity mActivity, String adUnitId, View parent) {
-        final FrameLayout frameLayout = parent.findViewById(R.id.fl_adplaceholder);
-        final ShimmerFrameLayout containerShimmer = parent.findViewById(R.id.shimmer_container_native);
-        loadNative(mActivity, containerShimmer, frameLayout, adUnitId, R.layout.custom_native_admob_medium);
-    }
-
     public void loadNativeAd(Context context, String id, final AdCallback callback) {
         if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
             return;
@@ -1560,7 +1325,7 @@ public class Admob {
                 .forNativeAd(nativeAd -> {
                     callback.onUnifiedNativeAdLoaded(nativeAd);
                     nativeAd.setOnPaidEventListener(adValue -> {
-                        ERainLogEventManager.logPaidAdImpression(context,
+                        AdEventLogger.logPaidAdImpression(context,
                                 adValue,
                                 id,
                                 nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
@@ -1598,7 +1363,7 @@ public class Admob {
                         if (callback != null) {
                             callback.onAdClicked();
                         }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
+                        AdEventLogger.logClickAdsEvent(context, id);
                     }
                 })
                 .withNativeAdOptions(adOptions)
@@ -1625,7 +1390,7 @@ public class Admob {
                     public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
                         callback.onUnifiedNativeAdLoaded(nativeAd);
                         nativeAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     id,
                                     nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
@@ -1653,287 +1418,12 @@ public class Admob {
                         if (callback != null) {
                             callback.onAdClicked();
                         }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
+                        AdEventLogger.logClickAdsEvent(context, id);
                     }
                 })
                 .withNativeAdOptions(adOptions)
                 .build();
         adLoader.loadAds(getAdRequest(), countAd);
-    }
-
-    private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            containerShimmer.setVisibility(View.GONE);
-            return;
-        }
-        frameLayout.removeAllViews();
-        frameLayout.setVisibility(View.GONE);
-        containerShimmer.setVisibility(View.VISIBLE);
-        containerShimmer.startShimmer();
-
-        VideoOptions videoOptions = new VideoOptions.Builder()
-                .setStartMuted(true)
-                .build();
-
-        NativeAdOptions adOptions = new NativeAdOptions.Builder()
-                .setVideoOptions(videoOptions)
-                .build();
-
-
-        AdLoader adLoader = new AdLoader.Builder(context, id)
-                .forNativeAd(new NativeAd.OnNativeAdLoadedListener() {
-
-                    @Override
-                    public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
-                        containerShimmer.stopShimmer();
-                        containerShimmer.setVisibility(View.GONE);
-                        frameLayout.setVisibility(View.VISIBLE);
-                        @SuppressLint("InflateParams") NativeAdView adView = (NativeAdView) LayoutInflater.from(context)
-                                .inflate(layout, null);
-                        nativeAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
-                                    adValue,
-                                    id,
-                                    nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        });
-                        populateUnifiedNativeAdView(nativeAd, adView);
-                        frameLayout.removeAllViews();
-                        frameLayout.addView(adView);
-                    }
-
-
-                })
-                .withAdListener(new AdListener() {
-                    @Override
-                    public void onAdFailedToLoad(LoadAdError error) {
-                        containerShimmer.stopShimmer();
-                        containerShimmer.setVisibility(View.GONE);
-                        frameLayout.setVisibility(View.GONE);
-                    }
-
-                    @Override
-                    public void onAdOpened() {
-                        super.onAdOpened();
-                        ResumeAds.noteNativeClick();
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        ResumeAds.noteNativeClick();
-                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                            AppOpenManager.getInstance().disableAdResumeByClickAction();
-                        ERainLogEventManager.logClickAdsEvent(context, id);
-                    }
-                })
-                .withNativeAdOptions(adOptions)
-                .build();
-
-        adLoader.loadAd(getAdRequest());
-    }
-
-    private void loadNative(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            containerShimmer.setVisibility(View.GONE);
-            return;
-        }
-        frameLayout.removeAllViews();
-        frameLayout.setVisibility(View.GONE);
-        containerShimmer.setVisibility(View.VISIBLE);
-        containerShimmer.startShimmer();
-
-        VideoOptions videoOptions = new VideoOptions.Builder()
-                .setStartMuted(true)
-                .build();
-
-        NativeAdOptions adOptions = new NativeAdOptions.Builder()
-                .setVideoOptions(videoOptions)
-                .build();
-
-
-        AdLoader adLoader = new AdLoader.Builder(context, id)
-                .forNativeAd(new NativeAd.OnNativeAdLoadedListener() {
-
-                    @Override
-                    public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
-                        containerShimmer.stopShimmer();
-                        containerShimmer.setVisibility(View.GONE);
-                        frameLayout.setVisibility(View.VISIBLE);
-                        @SuppressLint("InflateParams") NativeAdView adView = (NativeAdView) LayoutInflater.from(context)
-                                .inflate(layout, null);
-                        nativeAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
-                                    adValue,
-                                    id,
-                                    nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        });
-                        populateUnifiedNativeAdView(nativeAd, adView);
-                        frameLayout.removeAllViews();
-                        frameLayout.addView(adView);
-                    }
-
-                })
-                .withAdListener(new AdListener() {
-                    @Override
-                    public void onAdFailedToLoad(LoadAdError error) {
-                        containerShimmer.stopShimmer();
-                        containerShimmer.setVisibility(View.GONE);
-                        frameLayout.setVisibility(View.GONE);
-                    }
-
-
-                    @Override
-                    public void onAdOpened() {
-                        super.onAdOpened();
-                        ResumeAds.noteNativeClick();
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        ResumeAds.noteNativeClick();
-                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                            AppOpenManager.getInstance().disableAdResumeByClickAction();
-                        if (callback != null) {
-                            callback.onAdClicked();
-                        }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
-                    }
-                })
-                .withNativeAdOptions(adOptions)
-                .build();
-
-
-        adLoader.loadAd(getAdRequest());
-    }
-
-    public void loadNativeAdsFullScreen(Context context, String id, final AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            return;
-        }
-
-        VideoOptions videoOptions =
-                new VideoOptions.Builder().setStartMuted(false).build();
-        NativeAdOptions adOptions =
-                new NativeAdOptions.Builder()
-                        .setMediaAspectRatio(MediaAspectRatio.PORTRAIT)
-                        .setVideoOptions(videoOptions)
-                        .build();
-        AdLoader adLoader = new AdLoader.Builder(context, id)
-                .forNativeAd(new NativeAd.OnNativeAdLoadedListener() {
-
-                    @Override
-                    public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
-                        callback.onUnifiedNativeAdLoaded(nativeAd);
-                        nativeAd.setOnPaidEventListener(adValue -> {
-                            ERainLogEventManager.logPaidAdImpression(context,
-                                    adValue,
-                                    id,
-                                    nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                        });
-                    }
-                })
-                .withAdListener(new AdListener() {
-                    @Override
-                    public void onAdFailedToLoad(LoadAdError error) {
-                        callback.onAdFailedToLoad(error);
-                    }
-
-                    @Override
-                    public void onAdOpened() {
-                        super.onAdOpened();
-                        ResumeAds.noteNativeClick();
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        ResumeAds.noteNativeClick();
-                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                            AppOpenManager.getInstance().disableAdResumeByClickAction();
-                        if (callback != null) {
-                            callback.onAdClicked();
-                        }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
-                    }
-                })
-                .withNativeAdOptions(adOptions)
-                .build();
-        adLoader.loadAds(getAdRequest(), 5);
-
-    }
-
-    public void loadNativeAdsFullScreen(final Context context, final ShimmerFrameLayout containerShimmer, final FrameLayout frameLayout, final String id, final int layout, final AdCallback callback) {
-        if (AdGate.areRequestsHeld() || !AdBehavior.bool("global.ads_enabled") || AdGate.isPurchased(context)) {
-            containerShimmer.setVisibility(View.GONE);
-            return;
-        }
-        frameLayout.removeAllViews();
-        frameLayout.setVisibility(View.GONE);
-        containerShimmer.setVisibility(View.VISIBLE);
-        containerShimmer.startShimmer();
-
-        VideoOptions videoOptions = new VideoOptions.Builder()
-                .setStartMuted(true)
-                .build();
-
-        NativeAdOptions adOptions = new NativeAdOptions.Builder()
-                .setMediaAspectRatio(MediaAspectRatio.PORTRAIT)
-                .setVideoOptions(videoOptions)
-                .build();
-
-
-        AdLoader adLoader = new AdLoader.Builder(context, id)
-                .forNativeAd(nativeAd -> {
-                    containerShimmer.stopShimmer();
-                    containerShimmer.setVisibility(View.GONE);
-                    frameLayout.setVisibility(View.VISIBLE);
-                    @SuppressLint("InflateParams") NativeAdView adView = (NativeAdView) LayoutInflater.from(context)
-                            .inflate(layout, null);
-                    nativeAd.setOnPaidEventListener(adValue -> {
-
-                        ERainLogEventManager.logPaidAdImpression(context,
-                                adValue,
-                                id,
-                                nativeAd.getResponseInfo().getMediationAdapterClassName(), AdType.NATIVE);
-                    });
-                    populateUnifiedNativeAdView(nativeAd, adView);
-                    frameLayout.removeAllViews();
-                    frameLayout.addView(adView);
-                })
-                .withAdListener(new AdListener() {
-                    @Override
-                    public void onAdFailedToLoad(LoadAdError error) {
-                        containerShimmer.stopShimmer();
-                        containerShimmer.setVisibility(View.GONE);
-                        frameLayout.setVisibility(View.GONE);
-                    }
-
-
-                    @Override
-                    public void onAdOpened() {
-                        super.onAdOpened();
-                        ResumeAds.noteNativeClick();
-                    }
-
-                    @Override
-                    public void onAdClicked() {
-                        super.onAdClicked();
-                        ResumeAds.noteNativeClick();
-                        if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
-                            AppOpenManager.getInstance().disableAdResumeByClickAction();
-                        if (callback != null) {
-                            callback.onAdClicked();
-                        }
-                        ERainLogEventManager.logClickAdsEvent(context, id);
-                    }
-                })
-                .withNativeAdOptions(adOptions)
-                .build();
-
-
-        adLoader.loadAds(getAdRequest(), 5);
-
     }
 
     public void populateUnifiedNativeAdView(NativeAd nativeAd, NativeAdView adView) {
@@ -2044,7 +1534,7 @@ public class Admob {
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
                 Admob.this.rewardedAd = rewardedAd;
                 Admob.this.rewardedAd.setOnPaidEventListener(adValue -> {
-                    ERainLogEventManager.logPaidAdImpression(context,
+                    AdEventLogger.logPaidAdImpression(context,
                             adValue,
                             rewardedAd.getAdUnitId(), Admob.this.rewardedAd.getResponseInfo().getMediationAdapterClassName()
                             , AdType.REWARDED);
@@ -2071,7 +1561,7 @@ public class Admob {
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
                 Admob.this.rewardedAd = rewardedAd;
                 rewardedAd.setOnPaidEventListener(adValue -> {
-                    ERainLogEventManager.logPaidAdImpression(context,
+                    AdEventLogger.logPaidAdImpression(context,
                             adValue,
                             rewardedAd.getAdUnitId(),
                             rewardedAd.getResponseInfo().getMediationAdapterClassName()
@@ -2104,7 +1594,7 @@ public class Admob {
             public void onAdLoaded(@NonNull RewardedInterstitialAd rewardedAd) {
                 callback.onRewardAdLoaded(rewardedAd);
                 rewardedAd.setOnPaidEventListener(adValue -> {
-                    ERainLogEventManager.logPaidAdImpression(context,
+                    AdEventLogger.logPaidAdImpression(context,
                             adValue,
                             rewardedAd.getAdUnitId(),
                             rewardedAd.getResponseInfo().getMediationAdapterClassName()
@@ -2173,7 +1663,7 @@ public class Admob {
                     super.onAdClicked();
                     if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
-                    ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
+                    AdEventLogger.logClickAdsEvent(context, rewardedAd.getAdUnitId());
                 }
             });
             rewardedAd.show(context, new OnUserEarnedRewardListener() {
@@ -2238,7 +1728,7 @@ public class Admob {
 
                 public void onAdClicked() {
                     super.onAdClicked();
-                    ERainLogEventManager.logClickAdsEvent(activity, rewardedAd.getAdUnitId());
+                    AdEventLogger.logClickAdsEvent(activity, rewardedAd.getAdUnitId());
                     if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                         AppOpenManager.getInstance().disableAdResumeByClickAction();
                 }
@@ -2326,7 +1816,7 @@ public class Admob {
                     if (adCallback != null) {
                         adCallback.onAdClicked();
                     }
-                    ERainLogEventManager.logClickAdsEvent(context, rewardedAd.getAdUnitId());
+                    AdEventLogger.logClickAdsEvent(context, rewardedAd.getAdUnitId());
                 }
             });
             rewardedAd.show(context, new OnUserEarnedRewardListener() {
@@ -2342,43 +1832,8 @@ public class Admob {
     }
 
 
-    @SuppressLint("HardwareIds")
-    public String getDeviceId(Activity activity) {
-        String android_id = Settings.Secure.getString(activity.getContentResolver(),
-                Settings.Secure.ANDROID_ID);
-        return md5(android_id).toUpperCase();
-    }
-
-    private String md5(final String s) {
-        try {
-            // Create MD5 Hash
-            MessageDigest digest = MessageDigest
-                    .getInstance("MD5");
-            digest.update(s.getBytes());
-            byte messageDigest[] = digest.digest();
-
-            // Create Hex String
-            StringBuffer hexString = new StringBuffer();
-            for (int i = 0; i < messageDigest.length; i++) {
-                String h = Integer.toHexString(0xFF & messageDigest[i]);
-                while (h.length() < 2)
-                    h = "0" + h;
-                hexString.append(h);
-            }
-            return hexString.toString();
-
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-        return "";
-    }
-
     public final static int SPLASH_ADS = 0;
     public final static int RESUME_ADS = 1;
-    private final static int BANNER_ADS = 2;
-    private final static int INTERS_ADS = 3;
-    private final static int REWARD_ADS = 4;
-    private final static int NATIVE_ADS = 5;
 
 
     private boolean isShowInterstitialSplashSuccess = false;
@@ -2940,7 +2395,7 @@ public class Admob {
                     mInterSplashHigh1.setOnPaidEventListener(new OnPaidEventListener() {
                         @Override
                         public void onPaidEvent(@NonNull AdValue adValue) {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     mInterSplashHigh1.getAdUnitId(),
                                     mInterSplashHigh1.getResponseInfo()
@@ -3059,7 +2514,7 @@ public class Admob {
                 }
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh1.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterSplashHigh1.getAdUnitId());
             }
 
             @Override
@@ -3182,7 +2637,7 @@ public class Admob {
                     mInterSplashHigh2.setOnPaidEventListener(new OnPaidEventListener() {
                         @Override
                         public void onPaidEvent(@NonNull AdValue adValue) {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     mInterSplashHigh2.getAdUnitId(),
                                     mInterSplashHigh2.getResponseInfo()
@@ -3301,7 +2756,7 @@ public class Admob {
                 }
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh2.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterSplashHigh2.getAdUnitId());
             }
 
             @Override
@@ -3357,12 +2812,12 @@ public class Admob {
                         dialog.dismiss();
                     isShowLoadingSplash = false;
                     Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
-                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "Admob"));
                 }
             }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
-            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "Admob"));
             Log.e(TAG, "onShowSplash: fail on background");
             isShowLoadingSplash = false;
         }
@@ -3423,7 +2878,7 @@ public class Admob {
                     mInterSplashHigh3.setOnPaidEventListener(new OnPaidEventListener() {
                         @Override
                         public void onPaidEvent(@NonNull AdValue adValue) {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     mInterSplashHigh3.getAdUnitId(),
                                     mInterSplashHigh3.getResponseInfo()
@@ -3542,7 +2997,7 @@ public class Admob {
                 }
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterSplashHigh3.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterSplashHigh3.getAdUnitId());
             }
 
             @Override
@@ -3598,12 +3053,12 @@ public class Admob {
                         dialog.dismiss();
                     isShowLoadingSplash = false;
                     Log.e(TAG, "onShowSplash: show fail in background after show loading ad");
-                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+                    adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "Admob"));
                 }
             }, AdBehavior.number("interstitial.presentation.pre_show_delay_ms"));
 
         } else {
-            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "AperoAd"));
+            adListener.onAdFailedToShow(new AdError(0, " show fail in background after show loading ad", "Admob"));
             Log.e(TAG, "onShowSplash: fail on background");
             isShowLoadingSplash = false;
         }
@@ -3664,7 +3119,7 @@ public class Admob {
                     mInterSplashNormal.setOnPaidEventListener(new OnPaidEventListener() {
                         @Override
                         public void onPaidEvent(@NonNull AdValue adValue) {
-                            ERainLogEventManager.logPaidAdImpression(context,
+                            AdEventLogger.logPaidAdImpression(context,
                                     adValue,
                                     mInterSplashNormal.getAdUnitId(),
                                     mInterSplashNormal.getResponseInfo()
@@ -3707,7 +3162,7 @@ public class Admob {
         }
 
         mInterSplashNormal.setOnPaidEventListener(adValue -> {
-            ERainLogEventManager.logPaidAdImpression(context,
+            AdEventLogger.logPaidAdImpression(context,
                     adValue,
                     mInterSplashNormal.getAdUnitId(),
                     mInterSplashNormal.getResponseInfo()
@@ -3777,7 +3232,7 @@ public class Admob {
                 super.onAdClicked();
                 if (AdBehavior.bool("app_open.presentation.skip_after_ad_click", disableAdResumeWhenClickAds))
                     AppOpenManager.getInstance().disableAdResumeByClickAction();
-                ERainLogEventManager.logClickAdsEvent(context, mInterSplashNormal.getAdUnitId());
+                AdEventLogger.logClickAdsEvent(context, mInterSplashNormal.getAdUnitId());
             }
 
             @Override
