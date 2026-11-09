@@ -70,7 +70,7 @@
                         android:paddingBottom="6dp"
                         android:textColor="@color/color_main"
                         android:textSize="12sp"
-                        tools:text="AdLogic SDK v5.6.17 • Ads SDK v25.3.0" />
+                        tools:text="AdLogic SDK v5.6.18 • Ads SDK v25.3.0" />
                 </LinearLayout>
 
                 <!-- ═══════════════════════════════════════ -->
