@@ -94,13 +94,22 @@ object NativeAdManager {
                     finish(entry, nativeAd, null)
                 }
                 override fun onAdFailedToLoad(error: LoadAdError?) = finish(entry, null, error)
-                override fun onAdClicked() = events { it.onAdClicked() }
-                override fun onAdOpened() = events { it.onAdOpened() }
-                override fun onAdImpression() = events { it.onAdImpression() }
+                override fun onAdClicked() {
+                    filled?.markClicked()
+                    events { it.onAdClicked() }
+                }
+                override fun onAdOpened() {
+                    filled?.markClicked()
+                    events { it.onAdOpened() }
+                }
+                override fun onAdImpression() {
+                    filled?.markImpressed()
+                    events { it.onAdImpression() }
+                }
                 private fun events(block: (AdCallback) -> Unit) {
                     val ad = filled?.takeIf { it.isUsable } ?: return
                     entry.listeners.toList().forEach { runCatching { block(it) } }
-                    adListeners[ad]?.toList()?.forEach { runCatching { block(it) } }
+                    notifyObservers(ad, block)
                 }
             })
         return true
@@ -160,6 +169,16 @@ object NativeAdManager {
     internal fun observe(ad: NativeAdWrapper, callback: AdCallback): Subscription {
         adListeners.getOrPut(ad) { linkedSetOf() }.add(callback)
         return Subscription { adListeners[ad]?.remove(callback) }
+    }
+
+    /** Ends an [observe] without keeping its [Subscription], which would hold [ad] strongly. */
+    internal fun stopObserving(ad: NativeAdWrapper, callback: AdCallback) {
+        adListeners[ad]?.remove(callback)
+    }
+
+    /** Runs [block] for every [observe] of [ad]; the pool's loader calls it for the ads it loads. */
+    internal fun notifyObservers(ad: NativeAdWrapper, block: (AdCallback) -> Unit) {
+        adListeners[ad]?.toList()?.forEach { runCatching { block(it) } }
     }
 
     internal fun register(placement: String, callback: AdCallback) {

@@ -20,6 +20,7 @@ import com.ads.module.config.toNativeStyle
 import com.ads.module.helper.AdGate
 import com.ads.module.helper.AdOptionVisibility
 import com.ads.module.helper.AdsHelper
+import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.tracking.AdTracking
 import com.facebook.shimmer.Shimmer
 import com.facebook.shimmer.ShimmerFrameLayout
@@ -163,6 +164,16 @@ class NativeAdHelper @JvmOverloads constructor(
     @set:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
     var retainShownAdOnDestroy: Boolean = false
 
+    /**
+     * Shares ads with the app's native pool once it is open and its onboarding run has ended:
+     * while its own request runs with nothing bound, the slot shows an ad the pool lends, and an
+     * ad leaving the slot goes to the pool instead of being disposed. A retaining helper
+     * ([retainShownAdOnDestroy]) hands its ad to the pool and restores from it. Requests, their
+     * timing and click handling stay as they are. Default: true for [NativeAdConfig.forPlacement].
+     */
+    @set:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    var joinsSharedPool: Boolean = config.isPlacement
+
     /** A consumed presentation awaiting its recreated host; it must not trigger a preload. */
     val isRestoringPresentation: Boolean get() = pendingRestoration != null
     private val presentationStore by lazy {
@@ -174,7 +185,7 @@ class NativeAdHelper @JvmOverloads constructor(
             armReload()
             return@Runnable
         }
-        if (isResumed() && contentView?.isShown == true && resumeCount.get() > 1 &&
+        if (isResumed() && slotShown() && resumeCount.get() > 1 &&
             canRequestAds() && canReloadAd() && isActiveState()) {
             requestAds(NativeAdParam.Reload)
         }
@@ -228,10 +239,14 @@ class NativeAdHelper @JvmOverloads constructor(
 
     private fun reloadWhenVisible() {
         if (!isResumed() || !isActiveState() || !canReloadAd()) return
-        if (contentView?.isShown != true) {
+        if (!slotShown()) {
             mainHandler.postDelayed(reloadByTimeRunnable, reloadByTimeMs.coerceAtLeast(maxValueDebounceAdLoaded))
         } else if (conditionReloadAdAvailable()) requestAds(NativeAdParam.Reload)
     }
+
+    /** A failed slot drawing a lent ad reloads as the hidden, empty slot it stands in for. */
+    private fun slotShown(): Boolean = contentView?.isShown == true &&
+        !(showsLentAd() && _nativeAdState.value is AdNativeState.Fail)
 
     init {
         bindLifecycle()
@@ -407,7 +422,7 @@ class NativeAdHelper @JvmOverloads constructor(
 
     override fun cancel() {
         requestVersion++
-        pendingRestoration?.ad?.let(::destroyNative)
+        pendingRestoration?.ad?.let(::releaseAd)
         pendingRestoration = null
         awaitingHost = false
         adClickPending = false
@@ -417,9 +432,14 @@ class NativeAdHelper @JvmOverloads constructor(
         flagActive.compareAndSet(true, false)
         mainHandler.removeCallbacks(reloadByTimeRunnable)
         mainHandler.removeCallbacks(resumeReloadRunnable)
-        nativeAd?.let(::destroyNative)
+        val shown = nativeAd
         nativeAd = null
+        lentAd = null
+        // Only an ad the pool takes leaves its views first; any other is disposed as before them.
+        val pooled = shown?.takeIf { joinsSharedPool && SharedNativePool.keepsAds() }
+        if (pooled == null) shown?.let(::destroyNative)
         detachAdViews()
+        pooled?.let(::releaseAd)
         dropGeneratedShimmer()
         setState(AdNativeState.Cancel)
     }
@@ -495,6 +515,8 @@ class NativeAdHelper @JvmOverloads constructor(
                 } else if (awaitingHost && isActiveState() && contentView != null) {
                     if (!restorePresentation()) requestSharedAd(config.joinOnly)
                 } else if (nativeAd != null) armReload()
+                // A request sent before the screen resumed had no shown slot to fill yet.
+                showLentAd()
                 resumeCount.incrementAndGet()
                 mainHandler.removeCallbacks(resumeReloadRunnable)
                 mainHandler.postDelayed(resumeReloadRunnable, config.timeDebounceResume)
@@ -515,7 +537,7 @@ class NativeAdHelper @JvmOverloads constructor(
                         nativeAd = null
                         pendingRestoration = null
                     }
-                } else if (retainShownAdOnDestroy) {
+                } else if (retainShownAdOnDestroy && !(joinsSharedPool && SharedNativePool.keepsAds())) {
                     nativeAd?.takeIf { it.isUsable && canShowAds() }?.let { ad ->
                         RetainedPresentations.retain(preloadKey,
                             NativePresentationStore.Presentation(ad, timeShowAdRecent, nextReloadAtMs, awaiting = true))
@@ -554,6 +576,39 @@ class NativeAdHelper @JvmOverloads constructor(
             }
         }
         if (version == requestVersion) loadSubscription = subscription else subscription.cancel()
+        if (version == requestVersion) showLentAd()
+    }
+
+    /**
+     * The bound ad when the pool lent it and no fill of this slot has replaced it. The slot's
+     * state then says what its own request did: a no-fill is [AdNativeState.Fail], as for an
+     * empty slot, while the lent ad stays on screen.
+     */
+    private var lentAd: NativeAdWrapper? = null
+
+    private fun showsLentAd(): Boolean = nativeAd != null && nativeAd === lentAd
+
+    /** Fills the empty slot with an ad the pool lends; the request keeps running and replaces it. */
+    private fun showLentAd() {
+        if (!joinsSharedPool || nativeAd != null || _nativeAdState.value !is AdNativeState.Loading) return
+        if (contentView == null || !isResumed() || adClickPending || !isActiveState() || !canShowAds()) return
+        val ad = SharedNativePool.lend() ?: return
+        if (!bindLoadedAd(ad)) {
+            releaseAd(ad)
+            return
+        }
+        nativeAd = ad
+        lentAd = ad
+        boundAdSeen = ad.wasImpressed()
+        // Its clicks follow this slot's click_action, like the slot's own ads.
+        eventSubscription?.cancel()
+        eventSubscription = NativeAdManager.observe(ad, preloadObserver)
+        applyState(_nativeAdState.value)
+    }
+
+    private fun lentPresentation(): NativePresentationStore.Presentation? {
+        if (!retainShownAdOnDestroy || !joinsSharedPool) return null
+        return SharedNativePool.lend()?.let { NativePresentationStore.Presentation(it, 0L, 0L, awaiting = true) }
     }
 
     private fun currentPresentation(): NativePresentationStore.Presentation? {
@@ -571,7 +626,8 @@ class NativeAdHelper @JvmOverloads constructor(
         val saved = pendingRestoration ?: run {
             if (restoreChecked) return false
             restoreChecked = true
-            presentationStore?.take(preloadKey) ?: RetainedPresentations.take(preloadKey) ?: return false
+            presentationStore?.take(preloadKey) ?: RetainedPresentations.take(preloadKey)
+                ?: lentPresentation() ?: return false
         }
         if (!isResumed() || contentView == null) {
             pendingRestoration = saved
@@ -591,6 +647,11 @@ class NativeAdHelper @JvmOverloads constructor(
         }
         if (saved.failed && nativeAd == null) {
             setState(AdNativeState.Fail)
+            notifyLoadFailed()
+        } else if (saved.failed) {
+            // Only a lent ad is saved beside a failure; it keeps the failure across the rotation.
+            lentAd = nativeAd
+            _nativeAdState.value = AdNativeState.Fail
             notifyLoadFailed()
         } else if (saved.awaiting || nativeAd == null) requestSharedAd(joinOnly = true)
         return true
@@ -652,12 +713,13 @@ class NativeAdHelper @JvmOverloads constructor(
             return
         }
         nativeAd = ad
+        lentAd = null
         boundAdSeen = restoring
         eventSubscription?.cancel()
         eventSubscription = NativeAdManager.observe(ad, preloadObserver)
         setState(AdNativeState.Loaded(ad))
         onAdImpressionInternal()
-        if (previous != null && previous !== ad) destroyNative(previous)
+        if (previous != null && previous !== ad) releaseAd(previous)
         refillAfterShow()
         listeners.forEach { it.onNativeAdLoaded(ad) }
     }
@@ -676,6 +738,9 @@ class NativeAdHelper @JvmOverloads constructor(
         val survivor = nativeAd
         if (survivor == null) {
             setState(AdNativeState.Fail)
+        } else if (showsLentAd()) {
+            // The slot's own request found nothing, as an empty slot's would: Fail, the lent ad still drawn.
+            _nativeAdState.value = AdNativeState.Fail
         } else {
             // Failed reload keeps the old ad. Write the flow directly: going through
             // setState would re-bind the same ad; staying Loading would gate every
@@ -691,8 +756,8 @@ class NativeAdHelper @JvmOverloads constructor(
 
     private fun applyState(state: AdNativeState) {
         if (state is AdNativeState.Loading) ensureShimmer()
-        val showContent = state !is AdNativeState.Cancel && state !is AdNativeState.Fail &&
-            canShowAds()
+        val showContent = state !is AdNativeState.Cancel &&
+            (state !is AdNativeState.Fail || showsLentAd()) && canShowAds()
         contentView?.let { checkAdVisibility(it, showContent) }
         val showShimmer = state is AdNativeState.Loading && nativeAd == null
         shimmerView?.let { shimmer ->
@@ -807,6 +872,12 @@ class NativeAdHelper @JvmOverloads constructor(
 
     private fun destroyNative(ad: NativeAdWrapper) {
         NativeAdManager.dispose(ad)
+    }
+
+    /** An ad leaving this slot: to the pool when it takes it, else disposed as before. */
+    private fun releaseAd(ad: NativeAdWrapper) {
+        if (joinsSharedPool && canShowAds() && SharedNativePool.keep(placement ?: preloadKey, ad)) return
+        destroyNative(ad)
     }
 
     companion object {

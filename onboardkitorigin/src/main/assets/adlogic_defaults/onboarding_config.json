@@ -191,7 +191,6 @@
         "async_gate": true,
         "async_selector": true,
         "borrow_showing": true,
-        "destroy_replaced_ads": false,
         "pager_slots_bind_resumed": false
       },
       "locale_apply": "IN_PLACE",

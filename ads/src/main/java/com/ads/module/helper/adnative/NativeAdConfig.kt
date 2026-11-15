@@ -34,6 +34,9 @@ open class NativeAdConfig(
      */
     private var placementKey: String? = null
 
+    /** Built by [forPlacement]: an app placement. */
+    internal val isPlacement: Boolean get() = placementKey != null
+
     private var overridesKey: String? = null
 
     /** Lets a containing flow forbid the replacement preloads that setEnablePreload asks for. */

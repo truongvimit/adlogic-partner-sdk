@@ -21,6 +21,7 @@ import com.ads.module.helper.adnative.NativeAdConfig
 import com.ads.module.helper.adnative.NativeAdHelper
 import com.ads.module.helper.adnative.NativeAdManager
 import com.ads.module.helper.adnative.NativeClickAction
+import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.banner.BannerAdConfig
 import com.ads.module.helper.banner.BannerAdHelper
 import com.ads.module.helper.banner.BannerAdParam
@@ -222,6 +223,7 @@ class AdsSdkProvider : OnboardingAdProvider() {
                 it.reportTelemetry = false
                 // The resume screen closes on Start; its ad stays on screen at the next return.
                 it.retainShownAdOnDestroy = placement == AdPlacement.ResumeNative
+                it.joinsSharedPool = true
                 it.registerAdListener(this)
             }
         private var listener: AdEventListener? = null
@@ -319,7 +321,9 @@ class AdsSdkProvider : OnboardingAdProvider() {
         override fun onNativeAdLoaded(nativeAd: NativeAdWrapper) {
             waiting = false
             if (!binding) report { onLoaded() }
-            if (impressedNatives[nativeAd] == true) report { onImpression() }
+            // An ad the app pool lent may have had its impression on another screen.
+            val lentSeen = SharedNativePool.appPoolOpen && nativeAd.wasImpressed()
+            if (impressedNatives[nativeAd] == true || lentSeen) report { onImpression() }
         }
 
         override fun onAdImpression() {

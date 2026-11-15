@@ -57,7 +57,14 @@ class PoolSlotBinderTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
+    private val released = mutableListOf<NativeAdWrapper>()
+
+    @Before fun listenForReleases() {
+        PoolSlotBinder.onViewReleased = { released += it }
+    }
+
     @After fun tearDown() {
+        PoolSlotBinder.onViewReleased = PoolSlotBinder.DEFAULT_ON_VIEW_RELEASED
         AdBehavior.document.install(null, null)
         setPremium(false)
         controller.pause().stop().destroy()
@@ -370,5 +377,87 @@ class PoolSlotBinderTest {
         val view = adView()
         assertSame(ad.admobNativeAd, view.gma.registered)
         assertNotNull(view.findViewById(R.id.fl_adplaceholder))
+    }
+
+    // Which ads a view draws: the pool destroys an ad that left its loader only once none does.
+
+    @Test fun `a bound ad is drawn until another ad or a skeleton replaces its view, and each release is heard once`() {
+        val binder = binder()
+        val first = ad()
+        val second = ad()
+        binder.render(shown(first))
+        assertTrue(PoolSlotBinder.draws(first))
+
+        assertEquals(Outcome.BOUND_SAME, binder.render(shown(first)))
+        assertTrue(released.isEmpty())
+
+        binder.render(shown(second, lender = "language2"))
+        assertFalse(PoolSlotBinder.draws(first))
+        assertTrue(PoolSlotBinder.draws(second))
+        assertEquals(listOf(first), released)
+
+        binder.render(shimmer)
+        assertFalse(PoolSlotBinder.draws(second))
+        assertEquals(listOf(first, second), released)
+    }
+
+    @Test fun `a hidden slot still draws its ad, a re-inflation of the same ad releases nothing`() {
+        val binder = binder()
+        val ad = ad()
+        binder.render(shown(ad))
+        binder.render(hidden)
+        assertTrue("its view stays in the container", PoolSlotBinder.draws(ad))
+        binder.forceFreshOnNextRender()
+        assertEquals(Outcome.BOUND_NEW, binder.render(shown(ad)))
+        assertTrue(PoolSlotBinder.draws(ad))
+        assertTrue(released.isEmpty())
+    }
+
+    @Test fun `an ad two slots draw is drawn until both let it go`() {
+        val other = newContainer().also { root.addView(it) }
+        val a = binder()
+        val b = binder(into = other)
+        val ad = ad()
+        a.render(shown(ad))
+        b.render(shown(ad))
+        a.teardown()
+        assertTrue(PoolSlotBinder.draws(ad))
+        b.teardown()
+        assertFalse(PoolSlotBinder.draws(ad))
+        assertEquals(listOf(ad, ad), released)
+    }
+
+    @Test fun `teardown releases the ad, but a view kept on screen by the toggle still draws it`() {
+        val destroying = binder()
+        val ad = ad()
+        destroying.render(shown(ad))
+        destroying.teardown()
+        assertFalse(PoolSlotBinder.draws(ad))
+        assertEquals(listOf(ad), released)
+
+        released.clear()
+        val other = newContainer().also { root.addView(it) }
+        val keeping = binder(destroyOnTeardown = false, into = other)
+        val kept = ad()
+        keeping.render(shown(kept))
+        keeping.teardown()
+        assertEquals(listOf(kept), released)
+        assertTrue("its view is still in a window", PoolSlotBinder.draws(kept))
+        other.removeAllViews()
+        assertFalse(PoolSlotBinder.draws(kept))
+    }
+
+    @Test fun `a finishing screen's ad may move on, and the view it leaves is not destroyed with its slot`() {
+        val binder = binder()
+        val ad = ad()
+        binder.render(shown(ad))
+        assertTrue(PoolSlotBinder.drawsOnStayingScreen(ad))
+        controller.get().finish()
+        assertFalse(PoolSlotBinder.drawsOnStayingScreen(ad))
+        assertTrue("it is still on screen until the slot goes", PoolSlotBinder.draws(ad))
+        val view = adView()
+        PoolSlotBinder.forgetRegistration(ad)
+        binder.teardown()
+        assertEquals(0, view.gma.destroyCount)
     }
 }

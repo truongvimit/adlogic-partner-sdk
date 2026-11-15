@@ -42,7 +42,6 @@ class NativeFlowSettingsTest {
         "native_flow.pool.parity.async_gate" to true,
         "native_flow.pool.parity.async_selector" to true,
         "native_flow.pool.parity.borrow_showing" to true,
-        "native_flow.pool.parity.destroy_replaced_ads" to false,
         "native_flow.pool.parity.pager_slots_bind_resumed" to false,
         "native_flow.pool.locale_apply" to "IN_PLACE",
         "native_flow.pool.exit.next_screen_timing" to "AFTER_AD",
@@ -61,7 +60,7 @@ class NativeFlowSettingsTest {
         type = NativeFlowType.PER_SCREEN,
         parity = PoolParity(
             refreshOverwritesUnshown = true, retrySkippedPolite = false, asyncGate = true, asyncSelector = true,
-            borrowShowing = true, destroyReplacedAds = false, pagerSlotsBindResumed = false,
+            borrowShowing = true, pagerSlotsBindResumed = false,
         ),
         localeApply = PoolLocaleApply.IN_PLACE,
         exitNextScreenTiming = NextScreenTiming.AFTER_AD,
@@ -127,7 +126,7 @@ class NativeFlowSettingsTest {
         assertTrue(OnboardingSettings.document.acceptSuccessfulFetch("""
             {"native_flow":{"type":"SHARED_POOL","pool":{
               "parity":{"refresh_overwrites_unshown":false,"retry_skipped_polite":true,"async_gate":false,
-                "async_selector":false,"borrow_showing":false,"destroy_replaced_ads":true,
+                "async_selector":false,"borrow_showing":false,
                 "pager_slots_bind_resumed":true},
               "locale_apply":"RECREATE","exit":{"next_screen_timing":"UNDER_AD"},
               "pager":{"offscreen_pages":2},
@@ -138,7 +137,7 @@ class NativeFlowSettingsTest {
         """.trimIndent()))
         val flipped = PoolParity(
             refreshOverwritesUnshown = false, retrySkippedPolite = true, asyncGate = false, asyncSelector = false,
-            borrowShowing = false, destroyReplacedAds = true, pagerSlotsBindResumed = true,
+            borrowShowing = false, pagerSlotsBindResumed = true,
         )
         assertEquals(NativeFlowSnapshot(
             type = NativeFlowType.SHARED_POOL,

@@ -245,7 +245,6 @@ Both flows read the same key for the language confirmation dialog (`lfo.confirm_
 | `parity.async_gate` | `true` | Whether a request is running is computed off the main thread and may lag a frame; `false` computes it at once. |
 | `parity.async_selector` | `true` | The ad each slot shows is chosen off the main thread; `false` chooses it at once. |
 | `parity.borrow_showing` | `true` | A slot with nothing else to show may show an ad already shown elsewhere; `false` hides it. |
-| `parity.destroy_replaced_ads` | `false` | A replaced or expired ad is dropped without being destroyed; `true` destroys it. |
 | `parity.pager_slots_bind_resumed` | `false` | Pager pages bind ads once started, so the next page can show the newest held ad before the swipe settles; `true` waits for resumed. |
 
 The `parity.*` switches reproduce the reference app the pool was modelled on. Leave them at their defaults unless you are tuning that behaviour on purpose.
@@ -405,7 +404,6 @@ Times below are milliseconds except explicitly named seconds in ad_config/legacy
 | `native_flow.pool.parity.async_gate` | `true` |
 | `native_flow.pool.parity.async_selector` | `true` |
 | `native_flow.pool.parity.borrow_showing` | `true` |
-| `native_flow.pool.parity.destroy_replaced_ads` | `false` |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `false` |
 | `native_flow.pool.locale_apply` | `"IN_PLACE"` — `IN_PLACE` / `RECREATE` |
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` — `AFTER_AD` / `UNDER_AD` |

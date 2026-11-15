@@ -265,7 +265,6 @@ Hai flow đọc chung key cho popup xác nhận ngôn ngữ (`lfo.confirm_dialog
 | `parity.async_gate` | `true` | Trạng thái có request đang chạy được tính ngoài main thread và có thể trễ một frame; `false` tính ngay. |
 | `parity.async_selector` | `true` | Ad mỗi slot hiện được chọn ngoài main thread; `false` chọn ngay. |
 | `parity.borrow_showing` | `true` | Slot không còn gì khác để hiện có thể hiện ad đã hiển thị ở nơi khác; `false` ẩn slot. |
-| `parity.destroy_replaced_ads` | `false` | Ad bị thay hoặc hết hạn được bỏ mà không destroy; `true` destroy nó. |
 | `parity.pager_slots_bind_resumed` | `false` | Trang pager bind ad ngay khi đã start để page kế bên hiện ad đang giữ mới nhất trước khi swipe kết thúc; `true` thì đợi resume. |
 
 Các công tắc `parity.*` tái hiện app tham chiếu mà pool được mô phỏng theo. Giữ mặc định trừ khi bạn chủ đích tinh chỉnh hành vi đó.
@@ -425,7 +424,6 @@ Thời gian dùng milliseconds, trừ `reloadIntervalSeconds` trong ad_config v�
 | `native_flow.pool.parity.async_gate` | `true` | Trạng thái request đang chạy tính ngoài main thread. |
 | `native_flow.pool.parity.async_selector` | `true` | Ad của slot được chọn ngoài main thread. |
 | `native_flow.pool.parity.borrow_showing` | `true` | Slot được mượn ad đã hiển thị ở nơi khác. |
-| `native_flow.pool.parity.destroy_replaced_ads` | `false` | Ad bị thay không bị destroy. |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `false` | Trang pager bind khi start. |
 | `native_flow.pool.locale_apply` | `"IN_PLACE"` | `IN_PLACE` / `RECREATE`. |
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` | `AFTER_AD` / `UNDER_AD` cho lối thoát LFO và Goal. |

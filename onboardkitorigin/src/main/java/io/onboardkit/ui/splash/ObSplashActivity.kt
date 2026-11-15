@@ -335,6 +335,7 @@ open class ObSplashActivity : BaseOnboardActivity() {
     // Not windowed here: the provider holds each request until this splash's window opens.
     internal fun requestSplashPreloads(interResult: InterResult?) {
         val destination = (attempt.startDecision as? StartDecision.Start)?.destination
+        if (interResult != null && attempt.startDecision != null) sdk.openAppPool(this, destination)
         // Welcome Back slot 1 rides the LFO1 trigger and mode; native_fs stays LANGUAGE-only.
         val firstNative = when (destination) {
             FlowDestination.LANGUAGE -> AdPlacement.Language1

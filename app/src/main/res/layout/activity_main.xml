@@ -377,6 +377,59 @@
                         android:layout_marginBottom="12dp"
                         android:background="@color/color_divider" />
 
+                    <!-- Native Home: a real placement, so it shares the native pool -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/medium"
+                        android:text="Native Home (shared pool)"
+                        android:textColor="@color/textPrimary"
+                        android:textSize="13sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_open_native_dialog"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:fontFamily="@font/medium"
+                            android:minWidth="0dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="12dp"
+                            android:text="Open dialog native"
+                            android:textColor="@color/color_main"
+                            android:textSize="12sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_log_pool"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:fontFamily="@font/medium"
+                            android:minWidth="0dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="12dp"
+                            android:text="Log pool"
+                            android:textColor="@color/color_main"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <FrameLayout
+                        android:id="@+id/fl_native_home"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="@color/color_divider" />
+
                     <!-- Native Small -->
                     <TextView
                         android:layout_width="wrap_content"

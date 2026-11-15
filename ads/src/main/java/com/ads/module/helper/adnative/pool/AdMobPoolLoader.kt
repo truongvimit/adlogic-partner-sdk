@@ -9,6 +9,7 @@ import com.ads.module.ads.AdsSdk
 import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.AdGate
+import com.ads.module.helper.adnative.NativeAdManager
 import com.ads.module.tracking.AdTracking
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.LoadAdError
@@ -65,11 +66,24 @@ class AdMobPoolLoader internal constructor(
 
         override fun onAdFailedToShow(adError: AdError?) = fail()
 
-        override fun onAdImpression() = onMain { ad?.let(sink::onImpression) }
+        // A screen outside the pool that shows a lent ad observes it through the manager.
+        override fun onAdImpression() = onMain {
+            ad?.markImpressed()
+            ad?.let(sink::onImpression)
+            ad?.let { NativeAdManager.notifyObservers(it) { observer -> observer.onAdImpression() } }
+        }
 
-        override fun onAdClicked() = onMain { ad?.takeIf { gesture.clicked() }?.let(sink::onClicked) }
+        override fun onAdClicked() = onMain {
+            ad?.markClicked()
+            ad?.takeIf { gesture.clicked() }?.let(sink::onClicked)
+            ad?.let { NativeAdManager.notifyObservers(it) { observer -> observer.onAdClicked() } }
+        }
 
-        override fun onAdOpened() = onMain { ad?.takeIf { gesture.opened() }?.let(sink::onClicked) }
+        override fun onAdOpened() = onMain {
+            ad?.markClicked()
+            ad?.takeIf { gesture.opened() }?.let(sink::onClicked)
+            ad?.let { NativeAdManager.notifyObservers(it) { observer -> observer.onAdOpened() } }
+        }
 
         fun fail() = onMain {
             if (settled) return@onMain

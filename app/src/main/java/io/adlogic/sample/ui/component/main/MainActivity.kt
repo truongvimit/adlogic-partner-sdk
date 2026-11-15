@@ -13,6 +13,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.LayoutRes
 import androidx.appcompat.app.AlertDialog
+import androidx.lifecycle.lifecycleScope
+import io.onboardkit.OnboardingSdk
+import kotlinx.coroutines.launch
 import com.ads.module.ads.AdsSdk
 import com.ads.module.ads.wrapper.InterstitialAdWrapper
 import com.ads.module.admob.Admob
@@ -96,6 +99,26 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setupBanner(defaultBannerType, AppAdPlacement.BANNER_HOME)
+        NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, mBinding.flNativeHome,
+            R.layout.layout_native_ad_medium)
+    }
+
+    /** A second native of the same placement on top of Home; closing it hands its ad to the pool. */
+    private fun openNativeDialog() {
+        val container = android.widget.FrameLayout(this)
+        var helper: NativeAdHelper? = null
+        AlertDialog.Builder(this)
+            .setTitle("Dialog native")
+            .setView(container)
+            .setPositiveButton("Close", null)
+            .setOnDismissListener { helper?.destroy() }
+            .show()
+        helper = NativeAdHelper.forPlacement(this, this, AppAdPlacement.NATIVE_HOME, container,
+            R.layout.layout_native_ad_medium)
+    }
+
+    private fun logPool() {
+        lifecycleScope.launch { android.util.Log.d("PoolQA", OnboardingSdk.dumpState()) }
     }
 
     override fun initViews() {
@@ -169,6 +192,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         super.onClickViews()
 
         // Utilities
+        mBinding.btnOpenNativeDialog.click { openNativeDialog() }
+        mBinding.btnLogPool.click { logPool() }
         mBinding.buttonHello.click {
             SampleTrackingHelper.logEventClick(this::class.java.simpleName, "buttonHello", null)
         }

@@ -409,7 +409,6 @@ object OnboardingSettings {
                 asyncGate = flag("parity.async_gate"),
                 asyncSelector = flag("parity.async_selector"),
                 borrowShowing = flag("parity.borrow_showing"),
-                destroyReplacedAds = flag("parity.destroy_replaced_ads"),
                 pagerSlotsBindResumed = flag("parity.pager_slots_bind_resumed"),
             ),
             localeApply = choice("$POOL_PATH.locale_apply", PoolLocaleApply::valueOf, defaults.localeApply),

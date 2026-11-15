@@ -186,6 +186,24 @@ class AdMobPoolLoaderTest {
         assertTrue(sink.calls.all { it.ad === ad && it.onMain })
     }
 
+    @Test fun `a screen observing a produced ad hears its impression and both tap callbacks`() {
+        val sink = RecordingSink()
+        loader.load(request(), "unit-a", sink)
+        gma.last().fill()
+        val ad = sink.calls.single().ad!!
+        val heard = mutableListOf<String>()
+        com.ads.module.helper.adnative.NativeAdManager.observe(ad, object : AdCallback() {
+            override fun onAdImpression() { heard += "impression" }
+            override fun onAdClicked() { heard += "clicked" }
+            override fun onAdOpened() { heard += "opened" }
+        })
+        gma.last().listener.onAdImpression()
+        gma.last().listener.onAdClicked()
+        gma.last().listener.onAdOpened()
+        assertEquals(listOf("impression", "clicked", "opened"), heard)
+        assertTrue(ad.wasImpressed() && ad.wasClicked())
+    }
+
     @Test fun `one tap is one click in either callback order, and a second tap is another`() {
         listOf<(AdListener) -> Unit>(
             { it.onAdClicked(); it.onAdOpened() },

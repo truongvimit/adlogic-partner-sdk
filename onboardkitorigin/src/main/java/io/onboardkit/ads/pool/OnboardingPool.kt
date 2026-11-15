@@ -172,7 +172,28 @@ internal object OnboardingPool {
             attach(engine)
             engine.onNewRun()
             liveRun = run
+            SharedNativePool.appPoolOpen = true
             ObLog.d(ObLog.Section.LOAD, "pool | activate")
+        }
+    }
+
+    /**
+     * A SHARED_POOL launch that runs no first-open flow: the pool opens for the app's natives and
+     * native resume opens the pooled screen, as after a first-open run. No run starts, so the
+     * trim rule stays as the last run left it. A pool already open stays as it is.
+     */
+    fun openForApp(appContext: Context, snapshot: NativeFlowSnapshot) {
+        val run = epoch.get()
+        onMain {
+            if (epoch.get() != run || SharedNativePool.appPoolOpen) return@onMain
+            val engine = SharedNativePool.configure(
+                appContext, snapshot.parity, OnboardingPoolPolicy(appContext), trace, snapshot.stuckLoadingLogMs,
+            )
+            this.snapshot = snapshot
+            attach(engine)
+            liveRun = run
+            SharedNativePool.appPoolOpen = true
+            ObLog.d(ObLog.Section.LOAD, "pool | open_for_app")
         }
     }
 
@@ -210,6 +231,9 @@ internal object OnboardingPool {
         engineOrNull()?.clearOwnerIf(placement.key)
     }
 
+    /** The run handed its outcome to the app: from now on each new ad trims the shown ones. */
+    fun onFlowDelivered() = onMain { engineOrNull()?.afterFlow = true }
+
     /** Drops the pooled ads but keeps the run's routing: a purchase, or the end of a non-keeping flow. */
     fun releaseAll() = SharedNativePool.releaseAllIfCreated()
 
@@ -242,6 +266,7 @@ internal object OnboardingPool {
         runGateSkips.clear()
         liveRun = NO_RUN
         snapshot = NativeFlowSnapshot()
+        SharedNativePool.appPoolOpen = false
     }
 
     /** The epoch bump alone turns routing off: a flag written here could land after a later activation. */
@@ -250,6 +275,7 @@ internal object OnboardingPool {
         onMain {
             if (epoch.get() != run) return@onMain
             results.clear()
+            SharedNativePool.appPoolOpen = false
             engineOrNull()?.releaseAll()
             ObLog.d(ObLog.Section.LOAD, "pool | $why")
         }

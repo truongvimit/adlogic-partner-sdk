@@ -244,7 +244,6 @@ Type हर run में एक बार तय होता है: splash �
 | `parity.async_gate` | `true` | कोई request चल रही है या नहीं, यह main thread से बाहर गिना जाता है और एक frame पीछे रह सकता है; `false` तुरंत गिनता है। |
 | `parity.async_selector` | `true` | हर slot कौन सा ad दिखाए, यह main thread से बाहर चुना जाता है; `false` तुरंत चुनता है। |
 | `parity.borrow_showing` | `true` | जिस slot के पास दिखाने को और कुछ नहीं, वह कहीं और दिखाया जा चुका ad दिखा सकता है; `false` उसे छिपाता है। |
-| `parity.destroy_replaced_ads` | `false` | बदला गया या expire हुआ ad destroy किए बिना छोड़ा जाता है; `true` उसे destroy करता है। |
 | `parity.pager_slots_bind_resumed` | `false` | Pager pages started होते ही ads bind करते हैं, ताकि अगला page swipe पूरा होने से पहले रखा हुआ नया ad दिखा सके; `true` resumed तक रुकता है। |
 
 `parity.*` switches उस reference app का व्यवहार दोहराते हैं जिस पर pool बना है। जब तक आप जान-बूझकर वह व्यवहार tune न कर रहे हों, इन्हें default पर छोड़ें।
@@ -404,7 +403,6 @@ Firebase in-flight fetch साझा करता है; एक caller का 
 | `native_flow.pool.parity.async_gate` | `true` |
 | `native_flow.pool.parity.async_selector` | `true` |
 | `native_flow.pool.parity.borrow_showing` | `true` |
-| `native_flow.pool.parity.destroy_replaced_ads` | `false` |
 | `native_flow.pool.parity.pager_slots_bind_resumed` | `false` |
 | `native_flow.pool.locale_apply` | `"IN_PLACE"` — `IN_PLACE` / `RECREATE` |
 | `native_flow.pool.exit.next_screen_timing` | `"AFTER_AD"` — `AFTER_AD` / `UNDER_AD` |

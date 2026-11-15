@@ -10,11 +10,16 @@ import com.ads.module.helper.adnative.pool.NativePoolEngine
 import com.ads.module.helper.adnative.pool.PoolEvent
 import com.ads.module.helper.adnative.pool.PoolState
 import com.ads.module.helper.adnative.pool.SharedNativePool
+import io.onboardkit.OnboardingSdk
 import io.onboardkit.ads.AdPlacement
 import io.onboardkit.ads.AdSkipReason
 import io.onboardkit.config.AdsConfig
 import io.onboardkit.config.NativeAdUnit
 import io.onboardkit.core.ObLog
+import io.onboardkit.flow.FlowDestination
+import io.onboardkit.remote.OnboardingSettings
+import io.onboardkit.core.OnboardingOutcome
+import io.onboardkit.core.SkipReason
 import io.onboardkit.core.StepId
 import io.onboardkit.core.analytics.AnalyticsEvent
 import io.trackkit.AdFormat
@@ -227,6 +232,60 @@ class OnboardingPoolTest {
         OnboardingPool.resetForTest()
         assertFalse(OnboardingPool.routeResume)
         assertFalse(OnboardingPool.isActive)
+    }
+
+    @Test fun `a run never trims its shown ads, the delivered outcome switches trimming on, the next run off`() {
+        assertFalse("a run in progress keeps every shown ad", engine.afterFlow)
+        OnboardingSdk.deliverOutcome(app, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, null))
+        main.idle()
+        assertTrue(engine.afterFlow)
+
+        activate()
+        assertFalse(engine.afterFlow)
+    }
+
+    @Test fun `a run opens the app pool and a classic run closes it`() {
+        assertTrue(SharedNativePool.appPoolOpen)
+        OnboardingPool.onClassicRun()
+        main.idle()
+        assertFalse(SharedNativePool.appPoolOpen)
+    }
+
+    @Test fun `a launch without a first-open run opens the app pool and the pooled resume screen without starting a run`() {
+        OnboardingPool.onClassicRun()
+        main.idle()
+        OnboardingPool.openForApp(app, poolSnapshot())
+        main.idle()
+        assertTrue(SharedNativePool.appPoolOpen)
+        assertTrue("resume opens the pooled screen for every SHARED_POOL user", OnboardingPool.routeResume)
+        assertTrue(OnboardingPool.isActive)
+        assertSame(engine, OnboardingPool.engineOrNull())
+        assertEquals("the pooled resume screen loads native_resume", LoadResult.Requested,
+            OnboardingPool.preload(AdPlacement.ResumeNative, LoadMode.FORCED))
+
+        OnboardingPool.onClassicRun()
+        main.idle()
+        assertFalse("a classic run sends resume back to the classic screen", OnboardingPool.routeResume)
+    }
+
+    @Test fun `the SDK opens the app pool after the splash interstitial for every launch but a first-open one`() {
+        OnboardingPool.onClassicRun()
+        main.idle()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"SHARED_POOL"}}""")
+        OnboardingSdk.openAppPool(app, FlowDestination.LANGUAGE)
+        main.idle()
+        assertFalse("a first-open run decides on its own", SharedNativePool.appPoolOpen)
+        OnboardingSdk.openAppPool(app, FlowDestination.WELCOME_BACK)
+        main.idle()
+        assertTrue(SharedNativePool.appPoolOpen)
+
+        OnboardingPool.onClassicRun()
+        main.idle()
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"native_flow":{"type":"PER_SCREEN"}}""")
+        OnboardingSdk.openAppPool(app, null)
+        main.idle()
+        assertFalse("PER_SCREEN opens nothing", SharedNativePool.appPoolOpen)
+        assertFalse("PER_SCREEN resume keeps the classic screen", OnboardingPool.routeResume)
     }
 
     @Test fun `releaseAll drops the ads but keeps the run`() {

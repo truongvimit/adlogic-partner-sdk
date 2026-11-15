@@ -104,6 +104,9 @@ class PoolHarness(
     val loader = FakeLoader()
     val policy = FakePolicy()
     val destroyed = mutableListOf<FakeAd>()
+
+    /** Ads a slot's view shows; the engine destroys an ad that left its loader only once it is not here. */
+    val drawn = mutableSetOf<FakeAd>()
     val traces = mutableListOf<String>()
     val events = mutableListOf<PoolEvent<FakeAd>>()
 
@@ -116,6 +119,7 @@ class PoolHarness(
         expiry = PoolExpiry { maxAgeMs },
         derivedDispatcher = dispatcher,
         destroyAd = { it.destroyed++; destroyed += it },
+        isDrawn = { it in drawn },
         trace = PoolTraceSink { traces += it },
         stuckLoadingLogMs = stuckLoadingLogMs,
     ).also { engine -> engine.addEventListener { events += it } }

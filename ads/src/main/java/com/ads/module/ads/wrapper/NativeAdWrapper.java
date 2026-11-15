@@ -8,6 +8,28 @@ import com.google.android.gms.ads.nativead.NativeAd;
 public class NativeAdWrapper extends AdWrapperBase {
     private final long loadedAtMs = android.os.SystemClock.elapsedRealtime();
     private boolean destroyed;
+    private volatile boolean impressed;
+    private volatile boolean clicked;
+
+    /** The vendor reported an impression for this ad, on whichever view showed it. */
+    public boolean wasImpressed() {
+        return impressed;
+    }
+
+    /** The vendor reported a click or an open for this ad. */
+    public boolean wasClicked() {
+        return clicked;
+    }
+
+    @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
+    public void markImpressed() {
+        impressed = true;
+    }
+
+    @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
+    public void markClicked() {
+        clicked = true;
+    }
 
     public boolean isUsable() {
         return !destroyed && isReady()

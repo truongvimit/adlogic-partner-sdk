@@ -12,6 +12,7 @@ import com.ads.module.funtion.AdCallback
 import com.ads.module.helper.adnative.NativeAdManager
 import kotlinx.coroutines.Dispatchers
 import java.lang.ref.WeakReference
+import java.util.WeakHashMap
 
 /** The process's one native pool, built by the first [configure] and never before. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -25,6 +26,41 @@ object SharedNativePool {
      */
     private val joined = HashMap<String, PoolAdoption<NativeAdWrapper>>()
     private val main by lazy { Handler(Looper.getMainLooper()) }
+
+    /** The pool's own event route for each ad a native outside it handed back; it holds the ad weakly. */
+    private val keptEvents = WeakHashMap<NativeAdWrapper, AdCallback>()
+
+    /**
+     * Natives outside the pool (app screens, the SDK's classic slots) lend from it and hand their
+     * ads back to it. Opened by a SHARED_POOL launch, closed when a run falls back to PER_SCREEN.
+     */
+    @Volatile
+    var appPoolOpen: Boolean = false
+        @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP) set
+
+    /** Ads handed back are kept, not disposed: the pool is open and its run has ended. */
+    fun keepsAds(): Boolean = appPoolOpen && engine?.afterFlow == true
+
+    /** An ad the caller shows while its own request runs, taken out of the pool; null when none may go. */
+    @MainThread
+    fun lend(): NativeAdWrapper? {
+        if (!appPoolOpen) return null
+        val ad = engine?.lend { it.isUsable && !it.wasClicked() && !PoolSlotBinder.drawsOnStayingScreen(it) }
+        // A leaving screen may still draw it: its teardown must not destroy the view the ad moved from.
+        ad?.let(PoolSlotBinder::forgetRegistration)
+        return ad
+    }
+
+    /** Takes [ad] from a native outside the pool, under its [placement]; false: the caller disposes it. */
+    @MainThread
+    fun keep(placement: String, ad: NativeAdWrapper): Boolean {
+        val pool = engine?.takeIf { appPoolOpen } ?: return false
+        if (!ad.isUsable || ad.wasClicked()) return false
+        val sink = pool.keep("$KEPT_KEY_PREFIX$placement", ad, seen = ad.wasImpressed()) ?: return false
+        keptEvents.remove(ad)?.let { NativeAdManager.stopObserving(ad, it) }
+        keptEvents[ad] = eventsInto(ad, sink).also { NativeAdManager.observe(ad, it) }
+        return true
+    }
 
     /** Later calls update the same engine; its async gate and selector keep their first values. */
     @MainThread
@@ -54,10 +90,17 @@ object SharedNativePool {
             destroyAd = { it.destroy() },
             trace = trace,
             stuckLoadingLogMs = stuckLoadingLogMs,
+            isDrawn = PoolSlotBinder::draws,
         ).also { engine = it }
     }
 
     fun engineOrNull(): NativePoolEngine<NativeAdWrapper>? = engine
+
+    /** A slot's view stopped drawing [ad]; the pool destroys it if it already let it go. */
+    @MainThread
+    fun onViewReleased(ad: NativeAdWrapper) {
+        engine?.onViewReleased(ad)
+    }
 
     /** Creates nothing. Callable from any thread: off main the release is posted, not refused. */
     fun releaseAllIfCreated() {
@@ -106,6 +149,8 @@ object SharedNativePool {
 
     @VisibleForTesting
     fun resetForTest() {
+        appPoolOpen = false
+        keptEvents.clear()
         joined.clear()
         val current = engine ?: return
         engine = null
@@ -152,6 +197,9 @@ object SharedNativePool {
     }
 
     private fun isMainThread(): Boolean = Looper.myLooper() === Looper.getMainLooper()
+
+    /** Pool keys of handed-back ads; no placement of the pool's own requests starts with it. */
+    private const val KEPT_KEY_PREFIX = "kept:"
 
     private fun assertMain() = check(isMainThread()) { "SharedNativePool is main-thread only" }
 }

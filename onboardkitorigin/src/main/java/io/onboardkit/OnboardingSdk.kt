@@ -387,6 +387,21 @@ object OnboardingSdk {
         return true
     }
 
+    /**
+     * Every launch but a first-open one opens a SHARED_POOL app's pool once the splash
+     * interstitial settled, whatever the result. A first-open run keeps its own decision
+     * ([requestSplashNativeInPool], [startLanguage]), so the type it latches is read as before.
+     */
+    internal fun openAppPool(context: Context, destination: FlowDestination?) {
+        if (destination == FlowDestination.LANGUAGE) return
+        val type = runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowTypeOrDefault() }
+            .getOrDefault(NativeFlowType.PER_SCREEN)
+        if (type != NativeFlowType.SHARED_POOL || !OnboardingPool.canRun()) return
+        val snapshot = runCatching { io.onboardkit.remote.OnboardingSettings.nativeFlowSnapshot() }
+            .getOrElse { return }
+        OnboardingPool.openForApp(context.applicationContext, snapshot)
+    }
+
     /** Re-usable language picker; SETTINGS mode shows no ads and never touches flow state. */
     fun openLanguagePicker(activity: Activity, mode: LanguageScreenMode) {
         ObLanguageActivity.start(activity, mode)
@@ -559,6 +574,8 @@ object OnboardingSdk {
         if (!session.finished.compareAndSet(false, true)) return
         val store = stateStore
         if (store != null) sdkScope.launch { store.markFlowCompleted() }
+        // Before the release: the slots it closes hand their ads to the pool.
+        OnboardingPool.onFlowDelivered()
         adProvider?.releaseAll()
         eventBus.emit(OnboardingEvent.FlowCompleted(session.stepsShown.toList()))
         track(AnalyticsEvent.FlowCompleted(session.stepsShown.size, session.elapsedMs))
@@ -580,11 +597,13 @@ object OnboardingSdk {
      */
     internal fun finishWelcomeBack(context: Context) {
         if (!session.finished.compareAndSet(false, true)) return
+        OnboardingPool.onFlowDelivered()
         adProvider?.releaseAll()
         deliverOutcome(context, OnboardingOutcome.Skipped(SkipReason.ALREADY_COMPLETED, session.passthrough))
     }
 
     internal fun deliverOutcome(context: Context, outcome: OnboardingOutcome) {
+        OnboardingPool.onFlowDelivered()
         listener?.onFinished(context, outcome)
             ?: Log.w(TAG, "No OnboardingListener registered — outcome dropped: $outcome")
     }

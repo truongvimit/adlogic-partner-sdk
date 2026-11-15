@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Collections
+import java.util.IdentityHashMap
+import java.util.WeakHashMap
 
 /** A splash load the pool takes over while it is still running. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -23,6 +26,9 @@ interface PoolAdoption<H : Any> {
  * Main thread only; the gate and the selection may be derived on `derivedDispatcher`. A late fill of
  * a timed-out, superseded or released attempt is destroyed unshown; impressions and clicks are never
  * filtered, they carry the ad that produced them.
+ *
+ * An ad that leaves its loader (replaced or expired) is destroyed once no slot draws it
+ * ([isDrawn]); a slot letting go of one reports it through [onViewReleased].
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @MainThread
@@ -37,6 +43,7 @@ class NativePoolEngine<H : Any>(
     private val destroyAd: (H) -> Unit = {},
     trace: PoolTraceSink = PoolTraceSink.NONE,
     stuckLoadingLogMs: Long = 60_000,
+    private val isDrawn: (H) -> Boolean = { false },
 ) {
     private class Loader<H : Any>(val key: String, val index: Int) {
         var state: PoolState = PoolState.None
@@ -86,6 +93,13 @@ class NativePoolEngine<H : Any>(
     private var version = 0L
     private var replaying = false
 
+    /** Left their loader while a slot still drew them; destroyed when the last view lets go. */
+    private val retired: MutableSet<H> = Collections.newSetFromMap(IdentityHashMap())
+
+    /** Order of each ad's first impression. Weak: a destroyed ad leaves no entry behind. */
+    private val impressedAt = WeakHashMap<H, Long>()
+    private var impressionSeq = 0L
+
     private val mutableSnapshot = MutableStateFlow(PoolSnapshot.empty<H>())
     val snapshot: StateFlow<PoolSnapshot<H>> = mutableSnapshot.asStateFlow()
 
@@ -106,6 +120,20 @@ class NativePoolEngine<H : Any>(
 
     var gateSkipCount: Int = 0
         private set
+
+    /**
+     * The run handed its outcome to the app. While true, the pool [lend]s and [keep]s ads, and
+     * every new ad (a fill, an adoption, a kept ad) checks the shown ads: more than [SEEN_AD_CAP]
+     * and all of them are destroyed but the newest one no slot draws (the one to lend), the
+     * owner's, one a slot draws and one whose loader is requesting. Switching it on checks at once; [onNewRun] switches it off, so
+     * a run in progress keeps every ad it showed and lends none.
+     */
+    var afterFlow: Boolean = false
+        set(value) {
+            if (value == field) return
+            field = value
+            if (value) trimSeenAds()
+        }
 
     fun currentSelection(): PoolSelection<H> =
         selectFromPool(mutableSnapshot.value, parity, clock.nowMs(), expiry.maxAgeMs())
@@ -176,6 +204,7 @@ class NativePoolEngine<H : Any>(
         l.adopted = true
         log("adopt key=${l.key} status=ready")
         publish(PoolEvent.Filled(l.key, ad, refresh = false))
+        trimSeenAds()
         return ForwardingSink(l, onResult = null)
     }
 
@@ -231,7 +260,65 @@ class NativePoolEngine<H : Any>(
         return PoolCancellable { replayListeners -= listener }
     }
 
-    /** Ends every chain, destroys every held ad and forgets every loader and the owner. */
+    /**
+     * Takes out of its loader the ad a slot outside the pool may show while its own request runs:
+     * the newest unshown one, else (with [PoolParity.borrowShowing]) the newest shown one. Never
+     * the owner's, one whose loader is requesting, or one [lendable] refuses; the caller decides
+     * which slots' views may give an ad up.
+     * The loader keeps its request. Null before [afterFlow].
+     */
+    fun lend(lendable: (H) -> Boolean): H? {
+        if (!afterFlow) return null
+        val candidates = loaders.values.filter { l ->
+            val ad = l.ad
+            ad != null && l.key != owner && !l.inFlight && !l.refreshing && !isExpired(l) && lendable(ad)
+        }
+        val pick = candidates.filter { it.state is PoolState.Loaded }.maxByOrNull { (it.state as PoolState.Loaded).ts }
+            ?: candidates.takeIf { parity.borrowShowing }
+                ?.filter { it.state is PoolState.Showing }?.maxByOrNull { (it.state as PoolState.Showing).ts }
+            ?: return null
+        val ad = checkNotNull(pick.ad)
+        empty(pick)
+        log("lend key=${pick.key}")
+        publish()
+        return ad
+    }
+
+    /**
+     * Holds [ad], handed back by a slot outside the pool, under [key] as shown when it [seen]
+     * an impression, else as unshown. While [key] holds another ad it goes under `key#2`, `key#3`…,
+     * the first one empty: a hand-back never drops an ad, only [trimSeenAds] and expiry do.
+     * False before [afterFlow]: the caller disposes the ad itself. The sink carries its events.
+     */
+    fun keep(key: String, ad: H, seen: Boolean): PoolLoadSink<H>? {
+        if (!afterFlow) return null
+        val l = generateSequence(1) { it + 1 }
+            .map { n -> if (n == 1) key else "$key#$n" }
+            .first { loaders[it]?.ad == null }
+            .let(::loaderFor)
+        cancelChain(l)
+        pendingPolite.remove(key)
+        hold(l, ad)
+        l.adopted = false
+        if (seen) {
+            if (ad !in impressedAt) impressedAt[ad] = ++impressionSeq
+            l.state = PoolState.Showing(nextTs())
+        }
+        log("keep key=${l.key} seen=$seen")
+        publish()
+        trimSeenAds()
+        return KeptSink(l)
+    }
+
+    /** A slot's view stopped drawing [ad]: a retired ad no other view draws is destroyed now. */
+    fun onViewReleased(ad: H) {
+        if (ad !in retired || isDrawn(ad)) return
+        retired.remove(ad)
+        log("retired_destroyed")
+        destroyAd(ad)
+    }
+
+    /** Ends every chain, destroys every held and retired ad and forgets every loader and the owner. */
     fun releaseAll() {
         val released = loaders.values.toList()
         released.forEach {
@@ -246,9 +333,13 @@ class NativePoolEngine<H : Any>(
         publish()
         released.forEach { l -> l.ad?.let(destroyAd) }
         released.forEach { it.ad = null }
+        val drawnOff = retired.toList()
+        retired.clear()
+        drawnOff.forEach(destroyAd)
     }
 
     fun onNewRun() {
+        afterFlow = false
         owner = null
         clearPendingPolite()
         publish()
@@ -364,11 +455,12 @@ class NativePoolEngine<H : Any>(
         l.adopted = false
         log("fill key=${l.key} refresh=$isRefresh")
         publish(PoolEvent.Filled(l.key, ad, isRefresh))
+        trimSeenAds()
     }
 
     private fun hold(l: Loader<H>, ad: H) {
         val old = l.ad
-        if (old != null && old !== ad && parity.destroyReplacedAds) destroyAd(old)
+        if (old != null && old !== ad) retire(old)
         l.ad = ad
         l.loadedTs = nextTs()
         l.state = PoolState.Loaded(l.loadedTs)
@@ -413,6 +505,8 @@ class NativePoolEngine<H : Any>(
     }
 
     private fun markImpression(l: Loader<H>, ad: H) {
+        // Its own counter: the loader timestamps the selector ranks by must not move.
+        if (ad !in impressedAt) impressedAt[ad] = ++impressionSeq
         val marks = loaders[l.key] === l && l.ad != null
         if (marks) {
             l.state = PoolState.Showing(nextTs())
@@ -441,8 +535,48 @@ class NativePoolEngine<H : Any>(
         l.expirySweep?.cancel()
         l.expirySweep = null
         log("expired key=${l.key}")
-        if (parity.destroyReplacedAds) destroyAd(old)
+        retire(old)
         return true
+    }
+
+    /** Back to None like an expiry; the saved request stays for a later load. */
+    private fun empty(l: Loader<H>) {
+        l.ad = null
+        l.state = PoolState.None
+        l.fillAtMs = 0L
+        l.loadedTs = 0L
+        l.adopted = false
+        l.expirySweep?.cancel()
+        l.expirySweep = null
+    }
+
+    /** No selection returns an ad its loader let go, so the views drawing it are its last users. */
+    private fun retire(ad: H) {
+        if (isDrawn(ad)) {
+            retired += ad
+        } else {
+            destroyAd(ad)
+        }
+    }
+
+    /**
+     * Seen means the ad itself reported an impression, not its loader's state: a replaced ad's
+     * late impression marks the loader Showing while the ad it now holds was never on screen.
+     */
+    private fun trimSeenAds() {
+        if (!afterFlow) return
+        val seen = loaders.values.filter { l -> l.ad?.let(impressedAt::containsKey) == true }
+        if (seen.size <= SEEN_AD_CAP) return
+        val newest = seen.filterNot { isDrawn(checkNotNull(it.ad)) }
+            .maxByOrNull { l -> impressedAt.getValue(checkNotNull(l.ad)) }
+        val dropped = seen.filter { l ->
+            l !== newest && l.key != owner && !l.inFlight && !l.refreshing && !isDrawn(checkNotNull(l.ad))
+        }
+        if (dropped.isEmpty()) return
+        val ads = dropped.map { l -> checkNotNull(l.ad).also { empty(l) } }
+        log("trim_seen dropped=${dropped.size} kept=${seen.size - dropped.size}")
+        publish()
+        ads.forEach(destroyAd)
     }
 
     private fun scheduleExpiry(l: Loader<H>, ad: H, delayMs: Long) {
@@ -529,6 +663,11 @@ class NativePoolEngine<H : Any>(
 
     private fun newToken(): Long = ++lastToken
 
+    private companion object {
+        /** Shown ads the pool keeps before a new ad trims them to one. */
+        const val SEEN_AD_CAP = 5
+    }
+
     private inner class Attempt(
         val loader: Loader<H>,
         val request: PoolRequest,
@@ -550,6 +689,27 @@ class NativePoolEngine<H : Any>(
         }
 
         override fun onImpression(ad: H) = markImpression(loader, ad)
+
+        override fun onClicked(ad: H) = emit(PoolEvent.Clicked(loader.key, ad))
+    }
+
+    /**
+     * A kept ad's events; an impression marks the loader only while it still holds that ad. It holds
+     * no ad itself: the manager keys its observers weakly by the ad, and a sink pinning it would leak.
+     */
+    private inner class KeptSink(private val loader: Loader<H>) : PoolLoadSink<H> {
+        override fun onLoaded(ad: H) = Unit
+
+        override fun onFailed() = Unit
+
+        override fun onImpression(ad: H) {
+            if (loaders[loader.key] === loader && loader.ad === ad) {
+                markImpression(loader, ad)
+            } else {
+                if (ad !in impressedAt) impressedAt[ad] = ++impressionSeq
+                emit(PoolEvent.Impression(loader.key, ad))
+            }
+        }
 
         override fun onClicked(ad: H) = emit(PoolEvent.Clicked(loader.key, ad))
     }

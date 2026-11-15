@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
 import androidx.annotation.MainThread
 import androidx.annotation.RestrictTo
+import androidx.annotation.VisibleForTesting
 import com.ads.module.admob.Admob
 import com.ads.module.ads.wrapper.NativeAdWrapper
 import com.ads.module.config.settings.AdBehavior
@@ -19,11 +20,13 @@ import com.facebook.shimmer.ShimmerFrameLayout
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import java.lang.ref.WeakReference
+import java.util.Collections
 import java.util.WeakHashMap
 
 /**
  * Binds each delivered ad into a fresh view from the SLOT's layout and never destroys the one it
  * replaces: other slots may still show that ad. The skeleton keeps `NativeAdHelper`'s rules.
+ * Every binder answers [draws] for the pool, and reports each ad its view stops drawing.
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @MainThread
@@ -54,6 +57,10 @@ class PoolSlotBinder(
     private var skeleton: ShimmerFrameLayout? = null
     private var forceFresh = false
 
+    init {
+        live += this
+    }
+
     /** Each view bound here that is still its ad's last registrant, held weakly, swapped out or not. */
     private val registrations = mutableListOf<Pair<WeakReference<NativeAd>, WeakReference<NativeAdView>>>()
 
@@ -72,9 +79,9 @@ class PoolSlotBinder(
     /** The container's view is its ad's last registrant, the one view the vendor reports clicks from. */
     fun holdsRegistration(): Boolean = boundAd() != null && isLastRegistrant(registered, boundView)
 
-    fun render(selection: PoolSelection<NativeAdWrapper>): Outcome {
+    fun render(selection: PoolSelection<NativeAdWrapper>): Outcome = reportingRelease {
         val ad = selection.ad
-        return when {
+        when {
             !selection.show -> hide()
             ad != null -> bind(ad)
             canShowAds() -> showSkeleton()
@@ -88,10 +95,12 @@ class PoolSlotBinder(
      * e.g. a pager page laid out offscreen: the page slides in at its final layout instead of
      * growing from no ad to a full one. A container already showing something keeps it.
      */
-    fun placeholder(): Outcome {
-        if (container.childCount > 0 && container.visibility == View.VISIBLE) return Outcome.IGNORED
-        if (!canShowAds()) return Outcome.IGNORED
-        return showSkeleton(animate = false)
+    fun placeholder(): Outcome = reportingRelease {
+        when {
+            container.childCount > 0 && container.visibility == View.VISIBLE -> Outcome.IGNORED
+            !canShowAds() -> Outcome.IGNORED
+            else -> showSkeleton(animate = false)
+        }
     }
 
     /**
@@ -99,6 +108,10 @@ class PoolSlotBinder(
      * to, including one a later bind swapped out: nothing else would release that registration.
      */
     fun teardown() {
+        val drawn = boundAd()
+        // The toggle keeps the view where it is: the pool must not destroy what it still shows.
+        if (drawn != null && !destroyOnTeardown) boundView?.let { kept[it] = WeakReference(drawn) }
+        live -= this
         skeleton?.stopShimmer()
         if (destroyOnTeardown) {
             registrations.forEach { (adRef, viewRef) ->
@@ -114,6 +127,23 @@ class PoolSlotBinder(
         bound = null
         boundView = null
         registered = null
+        if (drawn != null) onViewReleased(drawn)
+    }
+
+    private fun hostActivity(): android.app.Activity? {
+        var context = container.context
+        while (context is android.content.ContextWrapper) {
+            if (context is android.app.Activity) return context
+            context = context.baseContext
+        }
+        return null
+    }
+
+    private inline fun reportingRelease(block: () -> Outcome): Outcome {
+        val before = boundAd()
+        val outcome = block()
+        if (before != null && boundAd() !== before) onViewReleased(before)
+        return outcome
     }
 
     private fun bind(ad: NativeAdWrapper): Outcome {
@@ -195,9 +225,40 @@ class PoolSlotBinder(
     private fun canShowAds(): Boolean =
         !AdGate.isPurchased(container.context) && AdBehavior.bool("global.ads_enabled")
 
-    private companion object {
-        const val TAG = "PoolSlotBinder"
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    companion object {
+        private const val TAG = "PoolSlotBinder"
 
-        val lastRegistrant = WeakHashMap<NativeAd, WeakReference<NativeAdView>>()
+        private val lastRegistrant = WeakHashMap<NativeAd, WeakReference<NativeAdView>>()
+
+        /** Binders not torn down yet; main thread only. */
+        private val live: MutableSet<PoolSlotBinder> = Collections.newSetFromMap(WeakHashMap())
+
+        /** Views a binder left in place at teardown, with the ad each still shows. */
+        private val kept = WeakHashMap<NativeAdView, WeakReference<NativeAdWrapper>>()
+
+        @VisibleForTesting
+        internal val DEFAULT_ON_VIEW_RELEASED: (NativeAdWrapper) -> Unit = SharedNativePool::onViewReleased
+
+        @VisibleForTesting
+        internal var onViewReleased: (NativeAdWrapper) -> Unit = DEFAULT_ON_VIEW_RELEASED
+
+        /** [draws], leaving out slots of an activity that is finishing: their ads may move on. */
+        @MainThread
+        fun drawsOnStayingScreen(ad: NativeAdWrapper): Boolean =
+            live.any { it.boundAd() === ad && it.hostActivity()?.isFinishing != true } ||
+                kept.entries.any { (view, shown) -> shown.get() === ad && view.isAttachedToWindow }
+
+        /** [ad] moves to a view no binder knows: the views bound here no longer own its registration. */
+        @MainThread
+        fun forgetRegistration(ad: NativeAdWrapper) {
+            ad.admobNativeAd?.let(lastRegistrant::remove)
+        }
+
+        /** Some view shows [ad]: a live slot's, hidden or not, or one a teardown left on screen. */
+        @MainThread
+        fun draws(ad: NativeAdWrapper): Boolean =
+            live.any { it.boundAd() === ad } ||
+                kept.entries.any { (view, shown) -> shown.get() === ad && view.isAttachedToWindow }
     }
 }

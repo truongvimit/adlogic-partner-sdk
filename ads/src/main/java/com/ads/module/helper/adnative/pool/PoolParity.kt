@@ -22,8 +22,6 @@ data class PoolParity(
     val asyncSelector: Boolean = true,
     /** Selector rule 3 re-binds an ad already shown elsewhere. false: hide instead. */
     val borrowShowing: Boolean = true,
-    /** A loader's ad is replaced without destroying the old one. true: destroy it. */
-    val destroyReplacedAds: Boolean = false,
     /** Pager pages collect while STARTED so an offscreen neighbour can show the pool's held ad. */
     val pagerSlotsBindResumed: Boolean = false,
 )

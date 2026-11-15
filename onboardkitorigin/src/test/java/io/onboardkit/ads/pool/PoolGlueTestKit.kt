@@ -19,6 +19,7 @@ import com.ads.module.helper.adnative.pool.PoolLoadSink
 import com.ads.module.helper.adnative.pool.PoolParity
 import com.ads.module.helper.adnative.pool.PoolRequest
 import com.ads.module.helper.adnative.pool.PoolRequestPolicy
+import com.ads.module.helper.adnative.pool.PoolSlotBinder
 import com.ads.module.helper.adnative.pool.SharedNativePool
 import com.ads.module.helper.adnative.pool.SystemPoolClock
 import com.google.android.gms.ads.nativead.NativeAd
@@ -99,6 +100,7 @@ internal fun installTestEngine(loader: FakeAdLoader): NativePoolEngine<NativeAdW
     scheduler = MainLooperPoolScheduler(),
     expiry = PoolExpiry { 0L },
     derivedDispatcher = Dispatchers.Unconfined,
+    isDrawn = PoolSlotBinder::draws,
 ).also(SharedNativePool::installForTest)
 
 /** The provider every pool test installs; only what adoption reads is controllable. */

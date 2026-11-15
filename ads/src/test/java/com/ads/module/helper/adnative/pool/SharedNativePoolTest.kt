@@ -258,6 +258,33 @@ class SharedNativePoolTest {
         assertEquals(1, sink.clicks)
     }
 
+    /** Kept, lent out and dropped in its own frame: only the pool's own references can remain. */
+    private fun keptThenLent(): WeakReference<NativeAdWrapper> {
+        val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
+        assertTrue(SharedNativePool.keep("native_home", ad))
+        assertSame(ad, SharedNativePool.lend())
+        return WeakReference(ad)
+    }
+
+    @Test fun `an ad the pool kept and let go is not held by its event route`() {
+        installEngine().afterFlow = true
+        SharedNativePool.appPoolOpen = true
+        awaitCollected(keptThenLent())
+    }
+
+    @Test fun `an ad kept again reports each event once, to the loader holding it now`() {
+        val engine = installEngine().apply { afterFlow = true }
+        SharedNativePool.appPoolOpen = true
+        val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
+        assertTrue(SharedNativePool.keep("native_home", ad))
+        assertSame(ad, SharedNativePool.lend())
+        assertTrue(SharedNativePool.keep("native_dialog", ad))
+        events.clear()
+        NativeAdManager.notifyObservers(ad) { it.onAdImpression() }
+        assertEquals(listOf<PoolEvent<NativeAdWrapper>>(PoolEvent.Impression("kept:native_dialog", ad)), events)
+        assertTrue(engine.debugSnapshot().loader("kept:native_dialog")?.state is PoolState.Showing)
+    }
+
     @Test fun `an adopted ad reports one click per tap whatever its adapter sends`() {
         val ad = NativeAdWrapper(R.layout.custom_native_admob_medium, PoolVendorAd())
         val gmaLike = CountingSink()

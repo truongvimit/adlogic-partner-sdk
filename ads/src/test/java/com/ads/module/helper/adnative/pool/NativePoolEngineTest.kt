@@ -90,16 +90,32 @@ class NativePoolEngineTest {
         assertEquals(PoolState.Loaded(6_000), h.state("c"))
     }
 
-    @Test fun `E2 a replacement keeps the old ad alive unless destroyReplacedAds`() {
-        for (destroy in listOf(false, true)) {
-            val h = harness(SYNC.copy(destroyReplacedAds = destroy))
-            val old = h.showing("a")
-            assertTrue(h.engine.refresh("a"))
-            val fresh = h.loader.fill("a")
-            assertSame(fresh, h.view("a")!!.ad)
-            assertEquals("destroyReplacedAds=$destroy", if (destroy) 1 else 0, old.destroyed)
-            assertEquals(0, fresh.destroyed)
-        }
+    @Test fun `E2 a replaced ad no slot draws is destroyed at once`() {
+        val h = harness()
+        val old = h.showing("a")
+        assertTrue(h.engine.refresh("a"))
+        val fresh = h.loader.fill("a")
+        assertSame(fresh, h.view("a")!!.ad)
+        assertEquals(1, old.destroyed)
+        assertEquals(0, fresh.destroyed)
+    }
+
+    @Test fun `E2 a replaced ad a slot still draws is destroyed once no view draws it`() {
+        val h = harness()
+        val old = h.showing("a")
+        h.drawn += old
+        assertTrue(h.engine.refresh("a"))
+        val fresh = h.loader.fill("a")
+        assertEquals(0, old.destroyed)
+        h.engine.onViewReleased(old)
+        assertEquals("another view still draws it", 0, old.destroyed)
+        h.drawn -= old
+        h.engine.onViewReleased(old)
+        assertEquals(1, old.destroyed)
+        h.engine.onViewReleased(old)
+        assertEquals("destroyed once", 1, old.destroyed)
+        h.engine.onViewReleased(fresh)
+        assertEquals("a held ad is never destroyed by a release", 0, fresh.destroyed)
     }
 
     @Test fun `E2 fillAtMs is the engine clock at the fill`() {
@@ -532,21 +548,31 @@ class NativePoolEngineTest {
     // Expiry (decision 3)
 
     @Test fun `expiry - the scheduled sweep returns the loader to None and a later claim reloads`() {
-        for (destroy in listOf(false, true)) {
-            val h = harness(SYNC.copy(destroyReplacedAds = destroy), maxAgeMs = 10_000)
-            val ad = h.showing("a")
-            h.engine.setOwner("a")
-            h.scheduler.advanceBy(9_999)
-            assertSame(ad, h.view("a")!!.ad)
-            h.scheduler.advanceBy(1)
-            assertEquals(PoolState.None, h.state("a"))
-            assertNull(h.view("a")!!.ad)
-            assertTrue("expired key=a" in h.traces)
-            assertEquals("destroyReplacedAds=$destroy", if (destroy) 1 else 0, ad.destroyed)
-            assertEquals(PoolSelection.hidden<FakeAd>(), h.selection())
-            assertEquals(LoadResult.Requested, h.engine.load(request("a"), POLITE))
-            assertEquals(listOf("t0", "t0"), h.loader.callsFor("a"))
-        }
+        val h = harness(maxAgeMs = 10_000)
+        val ad = h.showing("a")
+        h.engine.setOwner("a")
+        h.scheduler.advanceBy(9_999)
+        assertSame(ad, h.view("a")!!.ad)
+        h.scheduler.advanceBy(1)
+        assertEquals(PoolState.None, h.state("a"))
+        assertNull(h.view("a")!!.ad)
+        assertTrue("expired key=a" in h.traces)
+        assertEquals(1, ad.destroyed)
+        assertEquals(PoolSelection.hidden<FakeAd>(), h.selection())
+        assertEquals(LoadResult.Requested, h.engine.load(request("a"), POLITE))
+        assertEquals(listOf("t0", "t0"), h.loader.callsFor("a"))
+    }
+
+    @Test fun `expiry - an expired ad a slot still draws is destroyed when that slot lets it go`() {
+        val h = harness(maxAgeMs = 10_000)
+        val ad = h.showing("a")
+        h.drawn += ad
+        h.scheduler.advanceBy(10_000)
+        assertNull(h.view("a")!!.ad)
+        assertEquals(0, ad.destroyed)
+        h.drawn -= ad
+        h.engine.onViewReleased(ad)
+        assertEquals(1, ad.destroyed)
     }
 
     @Test fun `expiry - refresh, load, setOwner and clearOwnerIf sweep an expired ad before the timer`() {
@@ -730,7 +756,7 @@ class NativePoolEngineTest {
         assertSame(splash, h.view("language1")!!.ad)
         assertTrue(h.state("language1") is PoolState.Loaded)
         assertFalse(h.engine.isAdoptedUnshown("language1"))
-        assertEquals(0, held.destroyed)
+        assertEquals("the replaced ad is drawn nowhere", 1, held.destroyed)
     }
 
     @Test fun `an adopted ad expires on the scheduled sweep and is no longer adopted-unshown`() {
@@ -805,6 +831,209 @@ class NativePoolEngineTest {
         assertTrue(h.state("a") is PoolState.Showing)
         assertEquals(0, ad.destroyed)
         assertEquals(PoolSelection("a", ad, true), h.selection())
+    }
+
+    // Seen-ad trim and ads that left their loader
+
+    private fun PoolHarness.shownAds(count: Int): List<FakeAd> = (1..count).map { showing("k$it") }
+
+    @Test fun `trim - off by default, so a run keeps every shown ad`() {
+        val h = harness()
+        val ads = h.shownAds(7)
+        h.loaded("fresh")
+        assertTrue(ads.all { it.destroyed == 0 })
+        assertEquals(7, h.engine.debugSnapshot().loaders.count { it.state is PoolState.Showing })
+    }
+
+    @Test fun `trim - six shown ads at a new fill keep only the newest, and fresh ads stay`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val ads = h.shownAds(6)
+        val unshown = h.loaded("unshown")
+        assertEquals(listOf(1, 1, 1, 1, 1, 0), ads.map { it.destroyed })
+        ads.dropLast(1).forEach { ad ->
+            assertNull(h.view(ad.key)!!.ad)
+            assertEquals(PoolState.None, h.state(ad.key))
+        }
+        assertSame(ads.last(), h.view("k6")!!.ad)
+        assertSame(unshown, h.view("unshown")!!.ad)
+        assertEquals(0, unshown.destroyed)
+        assertTrue("trim_seen dropped=5 kept=1" in h.traces)
+    }
+
+    @Test fun `trim - five shown ads are left alone`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val ads = h.shownAds(5)
+        h.loaded("fresh")
+        assertTrue(ads.all { it.destroyed == 0 })
+    }
+
+    @Test fun `trim - a drawn ad, the owner's ad and a loader with a request running are kept`() {
+        val h = harness()
+        val ads = h.shownAds(6)
+        h.drawn += ads[0]
+        h.engine.setOwner("k2")
+        assertTrue(h.engine.refresh("k3"))
+        h.engine.afterFlow = true
+        assertEquals(listOf(0, 0, 0, 1, 1, 0), ads.map { it.destroyed })
+        assertSame(ads[2], h.view("k3")!!.ad)
+        assertTrue(h.view("k3")!!.refreshing)
+    }
+
+    @Test fun `trim - the ad kept to lend is the newest one no slot draws`() {
+        val h = harness()
+        val ads = h.shownAds(6)
+        h.drawn += ads[5]
+        h.engine.afterFlow = true
+        assertEquals(listOf(1, 1, 1, 1, 0, 0), ads.map { it.destroyed })
+    }
+
+    @Test fun `trim - switching it on trims at once, and a new run switches it off`() {
+        val h = harness()
+        val ads = h.shownAds(6)
+        h.engine.afterFlow = true
+        assertEquals(5, ads.count { it.destroyed == 1 })
+
+        h.engine.onNewRun()
+        assertFalse(h.engine.afterFlow)
+        val more = (7..12).map { h.showing("k$it") }
+        h.loaded("fresh")
+        assertTrue(more.all { it.destroyed == 0 })
+    }
+
+    @Test fun `trim - an ad its loader shows as Showing only because of an older ad's impression is kept`() {
+        val h = harness()
+        h.shownAds(5)
+        val old = h.loaded("a")
+        h.drawn += old
+        assertTrue(h.engine.refresh("a"))
+        val unseen = h.loader.fill("a")
+        h.loader.impress(old)
+        assertTrue("today's marking", h.state("a") is PoolState.Showing)
+        h.showing("k6")
+        h.engine.afterFlow = true
+        assertEquals(0, unseen.destroyed)
+        assertSame(unseen, h.view("a")!!.ad)
+    }
+
+    @Test fun `trim - a new adopted ad is a new ad too`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val ads = h.shownAds(6)
+        h.engine.adoptReady(request("language1"), FakeAd("language1", "splash", 1))
+        assertEquals(5, ads.count { it.destroyed == 1 })
+    }
+
+    @Test fun `trim - a trimmed loader keeps its request, so a refresh has nothing to refresh and a load requests`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        h.shownAds(6)
+        h.loaded("fresh")
+        assertFalse(h.engine.refresh("k1"))
+        assertEquals(LoadResult.Requested, h.engine.load(request("k1"), FORCED))
+        assertEquals(listOf("t0", "t0"), h.loader.callsFor("k1"))
+    }
+
+    @Test fun `releaseAll also destroys an ad that left its loader while still drawn`() {
+        val h = harness()
+        val old = h.showing("a")
+        h.drawn += old
+        assertTrue(h.engine.refresh("a"))
+        val fresh = h.loader.fill("a")
+        h.engine.releaseAll()
+        assertEquals(1, old.destroyed)
+        assertEquals(1, fresh.destroyed)
+        h.drawn -= old
+        h.engine.onViewReleased(old)
+        assertEquals(1, old.destroyed)
+    }
+
+    // Lending to and keeping from natives outside the pool
+
+    @Test fun `lend - nothing before the flow ends`() {
+        val h = harness()
+        h.loaded("a")
+        assertNull(h.engine.lend { true })
+        assertNull(h.engine.keep("kept:home", FakeAd("home", "x", 1), seen = true))
+    }
+
+    @Test fun `lend - the newest unshown ad first, then the newest shown one, each taken out of its loader`() {
+        val h = harness()
+        val shown = h.showing("a")
+        val older = h.loaded("b")
+        val newer = h.loaded("c")
+        h.engine.afterFlow = true
+        assertSame(newer, h.engine.lend { true })
+        assertNull(h.view("c")!!.ad)
+        assertEquals(PoolState.None, h.state("c"))
+        assertSame(older, h.engine.lend { true })
+        assertSame(shown, h.engine.lend { true })
+        assertNull(h.engine.lend { true })
+        assertTrue("lend key=c" in h.traces)
+        assertEquals(LoadResult.Requested, h.engine.load(request("c"), FORCED))
+    }
+
+    @Test fun `lend - never the owner's ad, a busy loader's ad or one the caller refuses, such as a drawn one`() {
+        val h = harness()
+        val owned = h.loaded("owner")
+        h.engine.setOwner("owner")
+        val drawn = h.loaded("drawn")
+        h.drawn += drawn
+        val busy = h.showing("busy")
+        assertTrue(h.engine.refresh("busy"))
+        val refused = h.loaded("refused")
+        h.engine.afterFlow = true
+        assertNull(h.engine.lend { it !== refused && it !in h.drawn })
+        listOf(owned, drawn, busy, refused).forEach { assertSame(it, h.view(it.key)!!.ad) }
+    }
+
+    @Test fun `lend - a shown ad is not lent without borrowShowing`() {
+        val h = harness(SYNC.copy(borrowShowing = false))
+        h.showing("a")
+        h.engine.afterFlow = true
+        assertNull(h.engine.lend { true })
+    }
+
+    @Test fun `keep - a seen ad is held as shown and the next lend returns it, its events reach the pool`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val home = FakeAd("home", "x", 1)
+        val sink = checkNotNull(h.engine.keep("kept:home", home, seen = true))
+        assertTrue(h.state("kept:home") is PoolState.Showing)
+        sink.onClicked(home)
+        assertEquals(PoolEvent.Clicked("kept:home", home), h.events.last())
+        assertSame(home, h.engine.lend { true })
+        sink.onImpression(home)
+        assertEquals("a lent ad's impression marks no loader", PoolState.None, h.state("kept:home"))
+    }
+
+    @Test fun `keep - an unseen ad is held as unshown, a second one under the same key drops nothing`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val first = FakeAd("home", "x", 1)
+        val second = FakeAd("home", "x", 2)
+        val third = FakeAd("home", "x", 3)
+        h.engine.keep("kept:home", first, seen = false)
+        assertTrue(h.state("kept:home") is PoolState.Loaded)
+        h.engine.keep("kept:home", second, seen = true)
+        assertEquals(0, first.destroyed)
+        assertSame(first, h.view("kept:home")!!.ad)
+        assertSame(second, h.view("kept:home#2")!!.ad)
+        assertTrue(h.state("kept:home#2") is PoolState.Showing)
+
+        assertSame("the unshown one goes first", first, h.engine.lend { true })
+        h.engine.keep("kept:home", third, seen = true)
+        assertSame("the first empty key takes the next one", third, h.view("kept:home")!!.ad)
+        assertSame(second, h.view("kept:home#2")!!.ad)
+    }
+
+    @Test fun `keep - kept shown ads count toward the trim`() {
+        val h = harness()
+        h.engine.afterFlow = true
+        val ads = h.shownAds(5)
+        h.engine.keep("kept:home", FakeAd("home", "x", 1), seen = true)
+        assertEquals(5, ads.count { it.destroyed == 1 })
     }
 
     // Parity and diagnostics
