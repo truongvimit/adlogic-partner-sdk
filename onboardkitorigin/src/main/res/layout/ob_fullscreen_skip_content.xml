@@ -2,14 +2,14 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- 36dp circle, 12dp glyph; transparent inset extends touch to 48dp. -->
+    <!-- 36dp circle, 14dp glyph; transparent inset extends touch to 48dp. -->
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/ob_skip_close"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:background="@drawable/ob_bg_skip_close"
         android:contentDescription="@string/ob_skip"
-        android:padding="18dp"
+        android:padding="17dp"
         android:scaleType="fitCenter"
         app:backgroundTint="@null"
         app:srcCompat="@drawable/ob_ic_skip_close"
