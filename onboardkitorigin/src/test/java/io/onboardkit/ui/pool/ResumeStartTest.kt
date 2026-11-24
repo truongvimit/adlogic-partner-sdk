@@ -13,6 +13,7 @@ import io.onboardkit.ads.pool.OnboardingPool
 import io.onboardkit.ads.pool.PoolGlueViewShadow
 import io.onboardkit.ads.pool.poolSnapshot
 import io.onboardkit.config.InterstitialAdUnit
+import io.onboardkit.remote.OnboardingSettings
 import io.onboardkit.ui.resume.ObResumeActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -54,6 +55,26 @@ class ResumeStartTest {
     @After fun tearDown() {
         controllers.asReversed().forEach { it.close() }
         PoolUiSdk.tearDown()
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+    }
+
+    private fun skipAfterNativeClick(skip: Boolean?) {
+        OnboardingSettings.document.acceptSuccessfulFetch(
+            skip?.let { """{"native_resume":{"interstitial":{"skip_after_native_click":$it}}}""" },
+        )
+    }
+
+    /** The screen as a return from a native ad's landing page opens it. */
+    private fun <T : AppCompatActivity> openAfterNativeClick(type: Class<T>): ActivityController<T> {
+        val host = Robolectric.buildActivity(android.app.Activity::class.java).also { controllers += it }.setup().get()
+        if (type == ObResumeActivity::class.java) ObResumeActivity.start(host, afterAdClick = true)
+        else ObPoolResumeActivity.start(host, afterAdClick = true)
+        return Robolectric.buildActivity(type, shadowOf(host).nextStartedActivity).also {
+            controllers += it
+            it.get().setTheme(R.style.ob_Theme_OnboardKit)
+            it.setup()
+            main.idle()
+        }
     }
 
     private fun withResumeInter() =
@@ -210,6 +231,103 @@ class ResumeStartTest {
         screen.tapStart()
         assertTrue(provider.loadAndShows.isEmpty())
         assertTrue("Start only closes it", screen.isFinishing)
+    }
+
+    @Test fun `after a native click Start and back skip inter_resume by default and when remote says so`() =
+        listOf(null, true).forEach { remote ->
+            skipAfterNativeClick(remote)
+            screens().forEach { type ->
+                val label = "${type.simpleName} remote=$remote"
+                withResumeInter()
+                provider.interstitialLoads.clear()
+                provider.loadAndShows.clear()
+                val started = openAfterNativeClick(type).get()
+                assertFalse("$label: no inter_resume warm-up", AdPlacement.ResumeInterstitial in provider.interstitialLoads)
+                started.tapStart()
+                assertTrue(label, provider.loadAndShows.isEmpty())
+                assertTrue("$label: Start only closes it", started.isFinishing)
+
+                val backed = openAfterNativeClick(type).get()
+                nativeShown(type)
+                backed.pressBack()
+                assertTrue(label, provider.loadAndShows.isEmpty())
+                assertTrue(label, provider.presentations.isEmpty())
+                assertTrue("$label: back only closes it", backed.isFinishing)
+            }
+        }
+
+    @Test fun `with skip_after_native_click false a native click return shows inter_resume like any return`() {
+        skipAfterNativeClick(false)
+        screens().forEach { type ->
+            withResumeInter()
+            provider.interstitialLoads.clear()
+            provider.loadAndShows.clear()
+            val controller = openAfterNativeClick(type)
+            val screen = controller.get()
+            assertTrue("${type.simpleName} warms the fill on open", AdPlacement.ResumeInterstitial in provider.interstitialLoads)
+
+            screen.tapStart()
+            screen.tapStart()
+            assertEquals("${type.simpleName}: one presentation per Start", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+            assertFalse("${type.simpleName} stays under its ad", screen.isFinishing)
+            showAndCloseInter(controller)
+            assertFalse(screen.isFinishing)
+            assertEquals(0, PoolUiSdk.suppressDepth())
+            backInFront(controller)
+            assertTrue("${type.simpleName}: closed AFTER_AD", screen.isFinishing)
+
+            provider.loadAndShows.clear()
+            val backController = openAfterNativeClick(type)
+            nativeShown(type)
+            backController.get().pressBack()
+            assertEquals("${type.simpleName}: back shows it too", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+            showAndCloseInter(backController)
+            backInFront(backController)
+            assertTrue(backController.get().isFinishing)
+        }
+    }
+
+    @Test fun `the remote in force at Start decides, whatever it was when the screen opened`() = screens().forEach { type ->
+        withResumeInter()
+        skipAfterNativeClick(true)
+        provider.interstitialLoads.clear()
+        provider.loadAndShows.clear()
+        val turnedOff = openAfterNativeClick(type)
+        assertTrue(provider.interstitialLoads.isEmpty())
+        skipAfterNativeClick(false)
+        turnedOff.get().tapStart()
+        assertEquals("${type.simpleName}: shown without a warm-up", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+        provider.endPresentations()
+        main.idle()
+
+        skipAfterNativeClick(false)
+        provider.loadAndShows.clear()
+        val turnedOn = openAfterNativeClick(type)
+        skipAfterNativeClick(true)
+        turnedOn.get().tapStart()
+        assertTrue("${type.simpleName}: the warmed fill is left unused", provider.loadAndShows.isEmpty())
+        assertTrue(turnedOn.get().isFinishing)
+    }
+
+    @Test fun `without a native click the setting changes nothing`() = listOf(false, true).forEach { skip ->
+        skipAfterNativeClick(skip)
+        screens().forEach { type ->
+            withResumeInter()
+            provider.interstitialLoads.clear()
+            provider.loadAndShows.clear()
+            val controller = Robolectric.buildActivity(type).also {
+                controllers += it
+                it.get().setTheme(R.style.ob_Theme_OnboardKit)
+                it.setup()
+                main.idle()
+            }
+            assertTrue(AdPlacement.ResumeInterstitial in provider.interstitialLoads)
+            controller.get().tapStart()
+            assertEquals("${type.simpleName} skip=$skip", listOf(AdPlacement.ResumeInterstitial), provider.loadAndShows)
+            showAndCloseInter(controller)
+            backInFront(controller)
+            assertTrue(controller.get().isFinishing)
+        }
     }
 
     @Test fun `a replacement bound over a seen ad holds back again until its own impression`() {

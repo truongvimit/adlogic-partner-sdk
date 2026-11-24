@@ -11,7 +11,9 @@ import io.onboardkit.R
  * by overriding `ob_resume_screen` by resource name. The only required views are `ob_resume_ad`
  * (a FrameLayout) and `ob_resume_start` (or one discoverable Button/TextView); image, copy and the
  * ad block are optional. The Start color and reveal delay are the remote settings
- * `native_resume.start_button.color` and `native_resume.start_button.delay_ms`.
+ * `native_resume.start_button.color` and `native_resume.start_button.delay_ms`. On a return from a
+ * native ad's landing page, Start and Back skip `inter_resume` unless remote sets
+ * `native_resume.interstitial.skip_after_native_click` to false.
  */
 data class ResumeScreenConfig(
     @StringRes val titleRes: Int = R.string.ob_resume_title,

@@ -29,6 +29,54 @@ class OnboardingSettingsTest {
         assertEquals(0L, OnboardingSettings.resumeStartDelayMs())
     }
 
+    @Test fun `native resume skips inter_resume after a native click unless remote turns it off`() {
+        val path = OnboardingSettings.RESUME_INTER_SKIP_AFTER_NATIVE_CLICK_PATH
+        assertEquals("native_resume.interstitial.skip_after_native_click", path)
+        assertEquals(true, OnboardingSettings.document.defaultValue(path))
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertTrue("Remote silent keeps the skip", OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"native_resume":{"interstitial":{"skip_after_native_click":false}}}""",
+        ))
+        assertEquals(false, OnboardingSettings.values.remoteValue(path))
+        assertFalse(OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"native_resume":{"interstitial":{"skip_after_native_click":true}}}""",
+        ))
+        assertTrue(OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+
+        for (raw in listOf("\"false\"", "0", "null", "{}")) {
+            OnboardingSettings.document.acceptSuccessfulFetch(
+                """{"native_resume":{"interstitial":{"skip_after_native_click":$raw}}}""",
+            )
+            assertNull(raw, OnboardingSettings.values.remoteValue(path))
+            assertTrue("$raw is ignored", OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+        }
+
+        // Neighbouring fields, and the app-open click policy in ad_behavior_config, neither need nor touch it.
+        OnboardingSettings.document.acceptSuccessfulFetch("""{"native_resume":{"start_button":{"delay_ms":500}}}""")
+        assertTrue(AdBehavior.document.acceptSuccessfulFetch("""{"app_open":{"presentation":{"skip_after_ad_click":true}}}"""))
+        assertTrue(OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+        assertEquals(500L, OnboardingSettings.resumeStartDelayMs())
+        OnboardingSettings.document.acceptSuccessfulFetch(
+            """{"native_resume":{"interstitial":{"skip_after_native_click":false}}}""",
+        )
+        assertFalse(OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+        assertTrue(AdBehavior.bool("app_open.presentation.skip_after_ad_click"))
+        AdBehavior.document.acceptSuccessfulFetch(null)
+
+        // The partner sample declares it, as a known path with the SDK default.
+        assertTrue(OnboardingSettings.document.acceptSuccessfulFetch(
+            java.io.File("../partner-integration/examples/ads-onboarding/onboarding_config.json").readText(),
+        ))
+        assertEquals(true, OnboardingSettings.values.remoteValue(path))
+
+        OnboardingSettings.document.acceptSuccessfulFetch(null)
+        assertTrue(OnboardingSettings.resumeInterstitialSkipsAfterNativeClick())
+    }
+
     @Test fun `language confirm style accepts icon and text and rejects malformed remote values`() {
         val config = onboardKitConfig {
             language = LanguageConfig(confirmButtonStyle = LanguageConfirmButtonStyle.TEXT)

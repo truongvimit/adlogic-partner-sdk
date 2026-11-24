@@ -88,6 +88,12 @@ object OnboardingSettings {
     /** Delay before the partner/SDK native resume Start action becomes visible. */
     internal fun resumeStartDelayMs(): Long = number(RESUME_START_DELAY_PATH).coerceAtLeast(0L)
 
+    /**
+     * Whether Start and Back of the native resume screen skip `inter_resume` when the screen opened
+     * on the way back from a native ad's landing page. Default `true`.
+     */
+    internal fun resumeInterstitialSkipsAfterNativeClick(): Boolean = bool(RESUME_INTER_SKIP_AFTER_NATIVE_CLICK_PATH)
+
     private fun color(path: String): Int? {
         val snapshot = values
         fun parse(raw: String): Int? = raw.takeIf { it.isNotEmpty() }
@@ -101,6 +107,7 @@ object OnboardingSettings {
     private const val PRIMARY_COLOR_PATH = "onboarding.primary_color"
     internal const val RESUME_START_COLOR_PATH = "native_resume.start_button.color"
     internal const val RESUME_START_DELAY_PATH = "native_resume.start_button.delay_ms"
+    internal const val RESUME_INTER_SKIP_AFTER_NATIVE_CLICK_PATH = "native_resume.interstitial.skip_after_native_click"
 
     private fun slotPath(p: io.onboardkit.ads.AdPlacement): String = when (p) {
         io.onboardkit.ads.AdPlacement.SplashBanner -> "splash.ads.banner"

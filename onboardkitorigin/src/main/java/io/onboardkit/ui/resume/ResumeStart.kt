@@ -24,8 +24,15 @@ internal class ResumeStart(private val screen: AppCompatActivity) {
 
     private var pressed = false
 
-    /** Opened on the way back from an ad's landing page: no inter_resume is loaded or shown. */
+    /** Opened on the way back from a native ad's landing page. */
     var afterAdClick = false
+
+    /**
+     * After a native click no inter_resume is loaded or shown, unless remote turns
+     * `native_resume.interstitial.skip_after_native_click` off. Read at each use, so the latest remote decides.
+     */
+    private val skipsInterstitial: Boolean
+        get() = afterAdClick && OnboardingSettings.resumeInterstitialSkipsAfterNativeClick()
 
     /** From the moment inter_resume is on screen: the screen comes back only to close. */
     var closingAfterInter = false
@@ -66,7 +73,7 @@ internal class ResumeStart(private val screen: AppCompatActivity) {
 
     /** Warms the fill when the screen opens, so Start rarely waits on the loading dialog. */
     fun preload() {
-        if (afterAdClick) return
+        if (skipsInterstitial) return
         val placement = AdPlacement.ResumeInterstitial
         val unit = OnboardingSdk.configOrNull()?.ads?.resumeInterstitial ?: return
         if (OnboardingSdk.guard().skipReason(screen, placement, unit) != null) return
@@ -77,7 +84,7 @@ internal class ResumeStart(private val screen: AppCompatActivity) {
         // A second tap under the loading dialog would be refused as overlapping and close the screen.
         if (pressed) return
         pressed = true
-        if (afterAdClick) {
+        if (skipsInterstitial) {
             AdPlacement.ResumeInterstitial.trackSkipped(AdSkipReason.RETURNING_FROM_AD_CLICK)
             screen.finish()
             return

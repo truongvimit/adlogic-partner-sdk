@@ -180,6 +180,9 @@
     "start_button": {
       "color": "#FF375E",
       "delay_ms": 0
+    },
+    "interstitial": {
+      "skip_after_native_click": true
     }
   },
   "native_flow": {
