@@ -222,7 +222,7 @@ object ResumeAds : DefaultLifecycleObserver {
             manager.isInterstitialShowing || returnReason != null) return
         if (manager.isResumeSuppressedFor(from) || manager.resumeSkipReasonFor(from, false) != null) return
         val placement = ResumeAdType.NATIVE.placement ?: return
-        if (placementSkipReason(placement) != null) return
+        if (placementSkipReason(placement, ResumeAdType.NATIVE) != null) return
         stay = Stay(ResumeAdType.NATIVE, placement, delayMs = 0L, afterAdClick = nativeClicked)
     }
 
@@ -240,7 +240,7 @@ object ResumeAds : DefaultLifecycleObserver {
         val host = manager.currentActivity
         if (AdSurfaces.contains(host)) return
         if (host != null && (manager.isResumeSuppressedFor(host) || manager.resumeSkipReasonFor(host) != null)) return
-        if (placementSkipReason(placement) != null) return
+        if (placementSkipReason(placement, ResumeAdType.INTER) != null) return
         val delayMs = AdRemoteConfig.normalizeAppResumeLoadDelayMs(AdRemoteConfig.getInstance().appResumeLoadDelayMs)
         begin(Stay(ResumeAdType.INTER, placement, delayMs, afterAdClick))
     }
@@ -316,7 +316,7 @@ object ResumeAds : DefaultLifecycleObserver {
         val manager = AppOpenManager.getInstance()
         if (manager.isResumeSuppressedFor(host)) return false
         val reason = manager.resumeSkipReasonFor(host, left.type != ResumeAdType.NATIVE)
-            ?: placementSkipReason(left.placement)
+            ?: placementSkipReason(left.placement, left.type)
         if (reason != null) {
             AdTracking.skipped(left.placement, formatOf(left.type), reason)
             return false
@@ -377,8 +377,14 @@ object ResumeAds : DefaultLifecycleObserver {
         })
     }
 
-    private fun placementSkipReason(placement: String): String? = when {
-        !AdGate.placementEnabled(placement) -> AdSkipReason.DISABLED_CONFIG.key
+    /**
+     * Native resume is a screen as well as an ad: the placement's own `isEnable` decides whether
+     * the screen opens, and its ids only whether it carries an ad, so every id switched off leaves
+     * the screen up without one. Inter resume is nothing but its ad and needs a usable id.
+     */
+    private fun placementSkipReason(placement: String, type: ResumeAdType): String? = when {
+        type == ResumeAdType.NATIVE && !AdGate.placementSwitchedOn(placement) -> AdSkipReason.DISABLED_CONFIG.key
+        type != ResumeAdType.NATIVE && !AdGate.placementEnabled(placement) -> AdSkipReason.DISABLED_CONFIG.key
         !AdGate.placementPassesUaGate(placement) -> AdSkipReason.UA_GATE.key
         else -> null
     }

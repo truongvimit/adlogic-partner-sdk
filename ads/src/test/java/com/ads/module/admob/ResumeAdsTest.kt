@@ -512,6 +512,46 @@ class ResumeAdsTest {
     }
 
     @Test
+    fun `native resume with every id switched off still opens its screen, which carries no ad`() {
+        AdRemoteConfig.initializeFromJson(
+            """{"native_resume":{"isEnable":true,"ids":[""" +
+                """{"id":"native-high","isEnable":false},{"id":"native-unit","isEnable":false}]}}""",
+        )
+        leave()
+        main.idle()
+        back()
+        main.idle()
+        assertEquals("isEnable decides the screen; the ids decide only its ad", listOf("show"), calls)
+        assertEquals(0, ResumeLoadGmaShadow.requests.size)
+    }
+
+    @Test
+    fun `native resume left undeclared opens no screen`() {
+        AdRemoteConfig.initializeFromJson("""{"open_resume":{"ids":[{"id":"open-unit"}],"isEnable":true}}""")
+        leave()
+        main.idle()
+        back()
+        main.idle()
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test
+    fun `inter resume with every id switched off shows nothing`() {
+        AdBehavior.document.install("""{"app_resume":{"type":"inter_resume"}}""", null)
+        AdRemoteConfig.initializeFromJson(
+            """{"inter_resume":{"isEnable":true,"ids":[{"id":"inter-unit","isEnable":false}]}}""",
+        )
+        leave()
+        manager.onStop()
+        main.idleFor(Duration.ofMillis(3_000))
+        back()
+        manager.onResume()
+        main.idle()
+        assertEquals(emptyList<String>(), calls)
+        assertEquals(0, Int02InterstitialShadow.requests.size)
+    }
+
+    @Test
     fun `a type changed while away cancels the return`() {
         leave()
         main.idleFor(Duration.ofMillis(2_000))

@@ -310,6 +310,18 @@ class PoolResumeTest {
         assertEquals("It still never owns", "language1", engine.owner)
     }
 
+    @Test fun `with every native_resume id off the screen binds no ad at all and back closes it at once`() {
+        PoolUiSdk.configure(POOL_UI_ADS.copy(resumeNative = null))
+        OnboardingPool.claim(AdPlacement.Language1, LoadMode.FORCED)
+        fill("language1")
+        val screen = openResume()
+        assertEquals("Not even the pool's leftover is inflated for a frame", 0, screen.slot().childCount)
+        assertEquals(View.GONE, screen.block().visibility)
+        screen.get().onBackPressedDispatcher.onBackPressed()
+        main.idle()
+        assertTrue(screen.get().isFinishing)
+    }
+
     @Test fun `a resume screen restored with the pool inactive finishes at once`() {
         OnboardingPool.resetForTest()
         val screen = openResume()

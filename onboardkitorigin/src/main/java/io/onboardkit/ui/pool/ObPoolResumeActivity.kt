@@ -65,6 +65,15 @@ internal class ObPoolResumeActivity : BaseOnboardActivity() {
         startAction.afterAdClick = intent.getBooleanExtra(EXTRA_AFTER_AD_CLICK, false)
         startAction.preload()
 
+        // native_resume on with every id off: the screen keeps Start and inter_resume but carries no
+        // ad, its own or one the pool would lend while the refusal is still on its way.
+        val unit = sdk.requireConfig().ads.nativeUnitFor(AdPlacement.ResumeNative)
+        if (unit == null || unit.tierCount == 0) {
+            views.adBlock.isVisible = false
+            startAction.onNativeUnavailable()
+            return
+        }
+
         val flow = runSnapshot()
         slot = PoolNativeSlot(
             owner = this,

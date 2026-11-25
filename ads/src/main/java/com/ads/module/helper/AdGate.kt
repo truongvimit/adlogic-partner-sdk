@@ -97,6 +97,15 @@ object AdGate {
     @JvmStatic
     fun placementEnabled(placement: String): Boolean = adUnitIds(placement).isNotEmpty()
 
+    /**
+     * True when [placement] is declared with its own `isEnable` on, whatever its ids say. A screen
+     * that exists for the placement, such as native resume, opens on this and leaves the ad to the
+     * ids; [placementEnabled] is the stricter "an ad can be requested".
+     */
+    @JvmStatic
+    fun placementSwitchedOn(placement: String): Boolean =
+        AdRemoteConfig.getInstance().ads[placement]?.isEnable == true
+
     /** The UA/organic gate resolved from the placement's own `enable_ua_check`. */
     @JvmStatic
     fun placementPassesUaGate(placement: String): Boolean =

@@ -212,6 +212,24 @@ class PoolNativeSlotTest {
         assertEquals("The refusal outlives a re-entry", View.GONE, page.container.visibility)
     }
 
+    @Test fun `the resume screen's owner slot drops a borrowed ad when its own request has no unit`() {
+        // native_resume declared but every id off: the screen still opens and must carry no ad,
+        // not another placement's. The refusal hides it at once, with nothing else to re-render it.
+        PoolTestSdk.configure(AdsConfig(languageNative = LFO1))
+        val borrowed = filledLfo1()
+        val resume = Slot(AdPlacement.ResumeNative)
+        resume.moveTo(Lifecycle.State.STARTED)
+        main.idle()
+        assertSame(borrowed.admobNativeAd, resume.shownAd())
+
+        assertEquals(
+            LoadResult.SkippedByConfig(AdSkipReason.NO_AD_UNIT.key),
+            OnboardingPool.preload(AdPlacement.ResumeNative, LoadMode.FORCED),
+        )
+        assertEquals(View.GONE, resume.container.visibility)
+        assertEquals(listOf("bound", "unavailable:${AdSkipReason.NO_AD_UNIT.key}"), resume.log)
+    }
+
     @Test fun `a refusal for the whole flow hides every slot at the next resume`() {
         filledLfo1()
         val owner = Slot(AdPlacement.Language1)
