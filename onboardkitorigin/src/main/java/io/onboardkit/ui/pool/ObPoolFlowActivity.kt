@@ -86,6 +86,9 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     override val excludeFromAppResume: Boolean = false
 
     internal var stage: Stage = Stage.LANGUAGE
+
+    /** Set by [returnToLanguage], read by the pager it reopens. See [takePagerReload]. */
+    private var pagerReloads: Boolean = false
         private set
 
     /** Latched at the flow's final exit; app-resume stays off from then on. */
@@ -138,6 +141,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
         if (pending?.exit == PoolExit.Goal) exitInProgress = true
         stage = savedInstanceState?.getString(KEY_STAGE)
             ?.let { runCatching { Stage.valueOf(it) }.getOrNull() } ?: Stage.LANGUAGE
+        pagerReloads = savedInstanceState?.getBoolean(KEY_PAGER_RELOAD) == true
         if (supportFragmentManager.findFragmentByTag(STAGE_TAG) == null) {
             commitStage(stage, newStageFragment(stage, restoredLanguage = null))
         }
@@ -225,8 +229,17 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
     internal fun returnToLanguage(code: String?) {
         if (exitInProgress || isFinishing) return
         ObLog.d(ObLog.Section.NAV, "pool | ob1 back -> language")
+        // Both ends of the trip show a new ad: the LFO2 this returns to (the language fragment
+        // reads its own restore for that) and the first page the next Done reopens.
+        pagerReloads = true
         goTo(Stage.LANGUAGE, restoredLanguage = code)
     }
+
+    /**
+     * Whether the pager about to open was left by the OB1 back button, so its first page asks for a
+     * new ad. True at most once per trip: the next Done consumes it.
+     */
+    internal fun takePagerReload(): Boolean = pagerReloads.also { pagerReloads = false }
 
     // ── Exits ──
 
@@ -379,6 +392,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(KEY_STAGE, stage.name)
+        outState.putBoolean(KEY_PAGER_RELOAD, pagerReloads)
         super.onSaveInstanceState(outState)
     }
 
@@ -389,6 +403,7 @@ internal class ObPoolFlowActivity : BaseOnboardActivity(), StepHost {
 
     internal companion object {
         private const val KEY_STAGE = "ob_pool_stage"
+        private const val KEY_PAGER_RELOAD = "ob_pool_pager_reload"
         private const val STAGE_TAG = "ob_pool_stage"
 
         /**

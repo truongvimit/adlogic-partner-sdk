@@ -59,6 +59,9 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
     private var ob1BackEnabled = false
     private var returningToLanguage = false
 
+    /** Set from [ObPoolFlowActivity.takePagerReload]: this pager was reopened by the OB1 back. */
+    private var reloadFirstPage = false
+
     /** The placement whose load last reported success, given the slot back on every resume. */
     private var ownerKey: AdPlacement? = null
 
@@ -128,6 +131,9 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
         pager.registerOnPageChangeCallback(pageCallback)
         pager.post { if (binding?.obPoolPager === pager) select(pager.currentItem) }
 
+        // Consumed here so a recreation of this fragment does not spend a second request; a
+        // configuration change in the moment between Done and the first page simply keeps the ad.
+        if (savedInstanceState == null) reloadFirstPage = host?.takePagerReload() == true
         ob1BackEnabled = pages.first().id == StepId.OB1 &&
             OnboardingSettings.bool("onboarding.steps.ob1.back.enabled")
         b.obPoolStepBack.setOnClickListener { returnToLanguage() }
@@ -178,7 +184,14 @@ internal class PoolPagerFragment : Fragment(), PoolPagerStage {
 
     private fun attempt(placement: AdPlacement) {
         currentAttempt = placement
-        if (OnboardingPool.claim(placement, LoadMode.POLITE).reportsSuccess) ownerKey = placement
+        // The first page of a pager the OB1 back button reopened shows a new ad: FORCED gets the
+        // request past a busy pool, and the refresh is what replaces an ad the loader still holds
+        // (a claim over one is a NoOpState in either mode). Every later page asks as it always has.
+        val reload = reloadFirstPage
+        reloadFirstPage = false
+        val mode = if (reload) LoadMode.FORCED else LoadMode.POLITE
+        if (OnboardingPool.claim(placement, mode).reportsSuccess) ownerKey = placement
+        if (reload) OnboardingPool.refresh(placement)
     }
 
     /**

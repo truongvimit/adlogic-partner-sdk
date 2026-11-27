@@ -747,6 +747,30 @@ class PoolLanguageFragmentTest {
             PoolUiSdk.events<AnalyticsEvent.LanguageConfirmDismissed>().size)
     }
 
+    /**
+     * NAV-12, the LFO end of the trip: the screen the OB1 back reopens shows a new LFO2 ad, not the
+     * one already seen. No code of its own — `onResume` refreshes `currentKey`, which is Language2
+     * on this path — so this pins the behaviour the pager end has to match.
+     */
+    @Test fun `the OB1 back reopens the LFO on a new language2 request`() {
+        PoolUiSdk.provider.interstitialReady = false
+        launch()
+        fill("language1")
+        tap(1)
+        val seen = fill("language2")
+        reveal()
+        done()
+        main.idle()
+        val before = loader.callsFor("language2").size
+
+        activity.returnToLanguage("es")
+        main.idle()
+        assertEquals("the back asks the language2 loader again", before + 1, loader.callsFor("language2").size)
+        val fresh = fill("language2")
+        main.idle()
+        assertNotSame("and the new fill replaces the ad the user had seen", seen, fresh)
+    }
+
     @Test fun `OB1 back restores the pick on language2 with Done visible at once`() {
         PoolUiSdk.provider.interstitialReady = false
         launch()

@@ -234,6 +234,56 @@ class PoolPagerTest {
 
     private fun completedAs(stepId: StepId) = completed().single { it.stepId == stepId }.exitReason
 
+    /**
+     * NAV-12: the pager the OB1 back button reopens asks for a new ad on its first page. A claim over
+     * a loader that still holds the ad is a NoOpState whatever the mode, so the request only happens
+     * because `attempt` follows it with a refresh.
+     */
+    @Test fun `the pager reopened by the OB1 back button requests its first page again`() {
+        val ads = pagerAds.copy(contentStepNative = null, stepNatives = mapOf(StepId.OB1 to NativeAdUnit("ob1")))
+        launch(steps = listOf(ob1, ob2), ads = ads, settings = """{"onboarding":{"steps":{"ob1":{"back":{"enabled":true}}}}}""")
+        val first = loader.fill(stepOb1.key)
+        pump()
+        assertEquals(1, loader.callsFor(stepOb1.key).size)
+        assertSame(first.admobNativeAd, shownAd(0))
+
+        back.performClick()
+        pump()
+        assertEquals(ObPoolFlowActivity.Stage.LANGUAGE, activity.stage)
+
+        // Done: the LFO hands the flow back to a fresh pager.
+        activity.goTo(ObPoolFlowActivity.Stage.PAGER)
+        pump()
+        assertEquals("OB1 opens again on a new request, not on the ad already seen", 2,
+            loader.callsFor(stepOb1.key).size)
+
+        val second = loader.fill(stepOb1.key)
+        pump()
+        assertSame("the fill replaces what the slot was drawing", second.admobNativeAd, shownAd(0))
+    }
+
+    /** The reload is spent by the trip that armed it: the pages after OB1, and a later run, ask as always. */
+    @Test fun `only the first page of a reopened pager reloads`() {
+        val ads = pagerAds.copy(contentStepNative = null,
+            stepNatives = mapOf(StepId.OB1 to NativeAdUnit("ob1"), StepId.OB2 to NativeAdUnit("ob2")))
+        launch(steps = listOf(ob1, ob2), ads = ads, settings = """{"onboarding":{"steps":{"ob1":{"back":{"enabled":true}}}}}""")
+        loader.fill(stepOb1.key)
+        pump()
+        back.performClick()
+        pump()
+        activity.goTo(ObPoolFlowActivity.Stage.PAGER)
+        pump()
+        loader.fill(stepOb1.key)
+        pump()
+        val ob2Before = loader.callsFor(stepOb2.key).size
+
+        nextPage()
+        assertEquals("OB2 claims as it always does", ob2Before + 1, loader.callsFor(stepOb2.key).size)
+        loader.fill(stepOb2.key)
+        pump()
+        assertEquals("and does not refresh on top of its own fill", ob2Before + 1, loader.callsFor(stepOb2.key).size)
+    }
+
     @Test fun `a selection claims its page and preloads only a full next page, without making it the owner`() {
         launch(steps = listOf(ob1, full1, ob2)) {
             OnboardingPool.claim(stepOb1, LoadMode.FORCED)
