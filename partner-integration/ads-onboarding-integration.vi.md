@@ -95,7 +95,7 @@ AdMob App ID test chứa **`~`**. Phải thay `YOUR_META_*` bằng credential te
 Copy hai file đúng tên vào `assets` (tạo folder nếu thiếu):
 
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** cấu hình cho bản release; hiện toàn bộ ID là test.
-- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** chỉ có `ids` test cho mỗi key placement (thường một tầng); mọi field khác lấy từ `ad_config.json`.
+- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** chỉ có `ids` test cho mỗi key placement (thường một tầng); mọi field khác lấy từ `ad_config.json`. Key có mọi tầng bị tắt ở đó hoặc trên remote thì bản debug cũng tắt theo, nên test được "màn không có ad" trên bản debug.
 
 Ad unit ID chứa **`/`**. `ad_config.json` chứa style, UA, app-resume delay và waterfall cho mọi build; [example debug](examples/ads-onboarding/ad_config_debug.json) chỉ map mỗi key placement sang một tầng test (interstitial `1033173712`). Dưới đây là các slot OB; `fromAdConfig()` ở bước 4 còn liên kết `native_resume` (native resume), `open_resume` (app-open), `native_welcome1/2` (Welcome Back) và `native_onboarding_fullscreen_1_4` (OB5). Các key còn lại dành cho màn app, chưa tự tạo vị trí hiển thị. Giá trị mẫu có thể khác default parser; xem [bảng field JSON](#field-trong-json-mẫu).
 

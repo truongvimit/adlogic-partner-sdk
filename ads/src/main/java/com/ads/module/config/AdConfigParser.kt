@@ -60,6 +60,8 @@ internal object AdConfigParser {
 
     private data class ParsedUnit(val value: AdUnitConfig, val fields: Set<String>)
     private data class Parsed<T>(val value: T?, val valid: Boolean, val raw: String? = null)
+    /** The enabled floors, and whether floors were listed with every one switched off. */
+    private data class Floors(val enabled: List<String>, val allOff: Boolean)
 
     private fun readAdUnit(key: String, reader: JsonReader): ParsedUnit {
         val fields = linkedSetOf<String>()
@@ -74,6 +76,7 @@ internal object AdConfigParser {
         var heightCTA = AdUnitConfig.DEFAULT_HEIGHT_CTA
         var components: List<String> = AdUnitConfig.DEFAULT_COMPONENTS
         var ids: List<String> = emptyList()
+        var idsSwitchedOff = false
         var clickAction: NativeClickAction? = null
         var templateId: Int? = null
         var carousel = false
@@ -128,7 +131,11 @@ internal object AdConfigParser {
                     } else invalid(key, field, parsed.raw)
                 }
                 "ids" -> readFloors(key, reader).also { parsed ->
-                    if (parsed.valid) { ids = parsed.value!!; fields += field } else invalid(key, field, parsed.raw)
+                    if (parsed.valid) {
+                        ids = parsed.value!!.enabled
+                        idsSwitchedOff = parsed.value.allOff
+                        fields += field
+                    } else invalid(key, field, parsed.raw)
                 }
                 else -> {
                     warn("$key.$field ignored (unknown field value=${readValueForLog(reader)})")
@@ -151,6 +158,7 @@ internal object AdConfigParser {
             clickAction = clickAction,
             templateId = templateId,
             carousel = carousel,
+            idsSwitchedOff = idsSwitchedOff,
         ), fields)
     }
 
@@ -236,7 +244,7 @@ internal object AdConfigParser {
      * is the master switch. A malformed floor is skipped alone; a non-empty list with no valid
      * floor is invalid as a whole, so a broken patch falls back to the lower tier, not to no ad.
      */
-    private fun readFloors(key: String, reader: JsonReader): Parsed<List<String>> {
+    private fun readFloors(key: String, reader: JsonReader): Parsed<Floors> {
         if (reader.peek() != JsonToken.BEGIN_ARRAY) return Parsed(null, false, readValueForLog(reader))
         val enabled = mutableListOf<String>()
         var floors = 0
@@ -273,7 +281,7 @@ internal object AdConfigParser {
         reader.endArray()
         if (floors > 0 && valid == 0) return Parsed(null, false, "no valid floor")
         if (valid > 0 && enabled.isEmpty()) warn("$key.ids has every floor off; the placement requests nothing")
-        return Parsed(enabled, true)
+        return Parsed(Floors(enabled, allOff = valid > 0 && enabled.isEmpty()), true)
     }
 
     private fun readValueForLog(reader: JsonReader): String = when (reader.peek()) {

@@ -95,7 +95,7 @@ The test AdMob App ID contains **`~`**. Replace `YOUR_META_*` with the credentia
 Copy both files into `assets` under exactly these names (create the folder if it is missing):
 
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** the release configuration; every ID is currently a test ID.
-- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** test `ids` per placement key (normally one floor), nothing else; every other field comes from `ad_config.json`.
+- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** test `ids` per placement key (normally one floor), nothing else; every other field comes from `ad_config.json`. A key whose floors are all switched off there or in remote stays off in debug too, so "screen without ad" can be tested on a debug build.
 
 Ad unit IDs contain **`/`**. `ad_config.json` carries style, UA, app-resume delay and waterfalls for every build; the [debug example](examples/ads-onboarding/ad_config_debug.json) only maps each placement key to a test floor (interstitials `1033173712`). The OB slots are listed below; `fromAdConfig()` in step 4 also binds `native_resume` (native resume), `open_resume` (app-open), `native_welcome1/2` (Welcome Back) and `native_onboarding_fullscreen_1_4` (OB5). The remaining keys are for your app screens and do not create a display position by themselves. Sample values may differ from the parser defaults; see the [JSON field table](#fields-in-the-sample-json).
 

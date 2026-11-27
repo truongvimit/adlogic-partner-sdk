@@ -105,6 +105,46 @@ class AdRemoteConfigTiersTest {
     }
 
     @Test
+    fun `the debug file's ids do not revive a waterfall the remote switched off`() {
+        AdRemoteConfig.installAssets(
+            parse(placement("native_resume", floor("high"), floor("all"))),
+            parse("""{"native_resume": {"ids": [{"id": "test"}]}}"""),
+        )
+        AdRemoteConfig.applyRemote(parse(placement("native_resume", floor("high", false), floor("all", false))))
+        val active = AdRemoteConfig.getInstance()
+        assertEquals(emptyList<String>(), active.tiersFor("native_resume"))
+        assertTrue(active.unit("native_resume").isEnable)
+    }
+
+    @Test
+    fun `the debug file's ids do not revive a waterfall the asset switched off`() {
+        AdRemoteConfig.installAssets(
+            parse(placement("native_resume", floor("high", false))),
+            parse("""{"native_resume": {"ids": [{"id": "test"}]}}"""),
+        )
+        assertEquals(emptyList<String>(), AdRemoteConfig.getInstance().tiersFor("native_resume"))
+    }
+
+    @Test
+    fun `remote switching one floor back on gives a debuggable build its test ids again`() {
+        AdRemoteConfig.installAssets(
+            parse(placement("native_resume", floor("high", false))),
+            parse("""{"native_resume": {"ids": [{"id": "test"}]}}"""),
+        )
+        AdRemoteConfig.applyRemote(parse(placement("native_resume", floor("high", false), floor("all"))))
+        assertEquals(listOf("test"), AdRemoteConfig.getInstance().tiersFor("native_resume"))
+    }
+
+    @Test
+    fun `an empty ids list still takes the debug file's ids`() {
+        AdRemoteConfig.installAssets(
+            parse("""{"native_resume": {"ids": [], "isEnable": true}}"""),
+            parse("""{"native_resume": {"ids": [{"id": "test"}]}}"""),
+        )
+        assertEquals(listOf("test"), AdRemoteConfig.getInstance().tiersFor("native_resume"))
+    }
+
+    @Test
     fun `unknown placement has no floors`() {
         assertEquals(emptyList<String>(), AdRemoteConfig().tiersFor("does_not_exist"))
     }

@@ -95,7 +95,7 @@ Test AdMob App ID में **`~`** होता है। चलाने स�
 दोनों files को ठीक इन्हीं नामों से `assets` में copy करें (folder न हो तो बनाएँ):
 
 - **[ad_config.json](examples/ads-onboarding/ad_config.json):** release का configuration; अभी हर ID test ID है।
-- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** हर placement key के लिए सिर्फ test `ids` (आम तौर पर एक floor); बाकी हर field `ad_config.json` से आता है।
+- **[ad_config_debug.json](examples/ads-onboarding/ad_config_debug.json):** हर placement key के लिए सिर्फ test `ids` (आम तौर पर एक floor); बाकी हर field `ad_config.json` से आता है। जिस key के सारे floors वहाँ या remote में बंद हैं, वह debug में भी बंद रहती है, ताकि debug build पर "बिना ad की screen" test की जा सके।
 
 Ad unit IDs में **`/`** होता है। `ad_config.json` हर build के लिए style, UA, app-resume delay और waterfalls रखती है; [debug example](examples/ads-onboarding/ad_config_debug.json) हर placement key को सिर्फ एक test floor से map करता है (interstitials `1033173712`)। नीचे OB slots दिए हैं; कदम 4 का `fromAdConfig()` `native_resume` (native resume), `open_resume` (app-open), `native_welcome1/2` (Welcome Back) और `native_onboarding_fullscreen_1_4` (OB5) भी bind करता है। बाकी keys आपकी app screens के लिए हैं और खुद से कोई display position नहीं बनातीं। नमूने की values parser के defaults से अलग हो सकती हैं; [JSON field तालिका](#नमूना-json-के-fields) देखें।
 

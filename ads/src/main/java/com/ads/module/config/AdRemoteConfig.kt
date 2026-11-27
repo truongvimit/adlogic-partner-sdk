@@ -91,6 +91,7 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         private fun mergeUnit(base: AdUnitConfig, top: AdUnitConfig, fields: Set<String>): AdUnitConfig = base.copy(
             ids = if ("ids" in fields) top.ids else base.ids,
+            idsSwitchedOff = if ("ids" in fields) top.idsSwitchedOff else base.idsSwitchedOff,
             isEnable = if ("isEnable" in fields) top.isEnable else base.isEnable,
             enableUaCheck = if ("enable_ua_check" in fields) top.enableUaCheck else base.enableUaCheck,
             reloadIntervalSeconds = if ("reloadIntervalSeconds" in fields) top.reloadIntervalSeconds else base.reloadIntervalSeconds,
@@ -229,15 +230,17 @@ data class AdRemoteConfig @JvmOverloads constructor(
 
         /**
          * [resolved] with each key's `ids` replaced by its debug test ids (none when
-         * `ad_config_debug.json` lists none). Every other field stays as resolved. Outside a
-         * debuggable build with a debug file, [resolved] as is.
+         * `ad_config_debug.json` lists none). Every other field stays as resolved. A key whose
+         * floors are all switched off keeps requesting nothing, as it does in release, so a
+         * debuggable build can test "screen without ad". Outside a debuggable build with a debug
+         * file, [resolved] as is.
          */
         internal fun withTestIds(resolved: AdRemoteConfig): AdRemoteConfig {
             val testIds = debugTestIds ?: return resolved
             val remote = remotePatch.takeIf { allowRemoteOverrideInDebug }
             val merged = resolved.ads.mapValues { (key, unit) ->
                 val remoteFields = remote?.takeIf { key in it.ads }?.fieldsFor(key).orEmpty()
-                if ("ids" in remoteFields) unit else unit.copy(ids = testIds[key].orEmpty())
+                if ("ids" in remoteFields || unit.idsSwitchedOff) unit else unit.copy(ids = testIds[key].orEmpty())
             }
             val missing = merged.filter { (_, unit) -> unit.isEnable && unit.waterfallIds.isEmpty() }
                 .keys.toSortedSet()

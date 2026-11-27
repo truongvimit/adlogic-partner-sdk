@@ -54,6 +54,11 @@ data class AdUnitConfig(
      * natives); every other placement ignores it.
      */
     val carousel: Boolean = false,
+    /**
+     * True when `ids` lists floors and every one is switched off: the placement deliberately
+     * requests nothing. A debuggable build keeps it that way rather than handing it test ids.
+     */
+    val idsSwitchedOff: Boolean = false,
 ) {
 
     /**
